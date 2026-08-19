@@ -59,7 +59,7 @@ USE_CHINA_PROXY = (
 MAX_PROXY_ATTEMPTS = int(
     os.environ.get(
         "MAX_PROXY_ATTEMPTS",
-        "30"
+        "200"
     )
 )
 
