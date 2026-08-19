@@ -1,6 +1,4 @@
-
-# 生成完整的 scraper.py 代码，确保缩进正确
-scraper_code = r'''#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 多播客字幕爬取器 (RSS-first + 搜索架构)
 流程：
@@ -485,12 +483,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-'''
-
-# 验证语法
-import ast
-try:
-    ast.parse(scraper_code)
-    print("语法验证通过！")
-except SyntaxError as e:
-    print(f"语法错误: {e}")
