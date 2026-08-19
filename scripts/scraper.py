@@ -10,7 +10,7 @@ import json
 import time
 import urllib.parse
 import requests
-import html
+import html as html_module
 from datetime import datetime, timezone
 from pathlib import Path
 from lxml import etree
@@ -59,6 +59,12 @@ def get_podcast_progress(progress, slug):
             "updated_at": None,
         }
     return pcs[slug]
+
+
+def display_name(podcast):
+    """返回带 Unofficial 后缀的播客名称"""
+    base = podcast.get("name", podcast["slug"])
+    return f"{base} (Unofficial)"
 
 
 # ============ 网络请求（带 429 处理） ============
@@ -156,42 +162,31 @@ def titles_match(rss_title, result_title):
 def parse_transcript(html_text):
     """
     解析 podscripts.co 单集字幕。
-    关键修复：
-    1. 只提取 <body> 内容，忽略 <head> 中的脚本
+    1. 只提取 <body> 内容
     2. 主动移除 <script> 和 <style> 标签及其内容
-    3. 只在遇到明确的页脚标记时停止
+    3. 遇到页脚/版权标记时停止
     """
-    # 1. 只提取 body 内容
     body_match = re.search(r'<body[^>]*>(.*?)</body>', html_text, re.DOTALL | re.IGNORECASE)
     if body_match:
         body = body_match.group(1)
     else:
         body = html_text
 
-    # 2. 移除 script 和 style 标签及其内容
     body = re.sub(r'<script[^>]*>.*?</script>', '', body, flags=re.DOTALL | re.IGNORECASE)
     body = re.sub(r'<style[^>]*>.*?</style>', '', body, flags=re.DOTALL | re.IGNORECASE)
 
-    # 3. 解码 HTML 实体
-    text = html.unescape(body)
-
-    # 4. 去除所有 HTML 标签，保留换行
+    text = html_module.unescape(body)
     text = re.sub(r'<[^>]+>', '\n', text)
-
-    # 5. 清理多余空白
     lines = [line.strip() for line in text.split('\n') if line.strip()]
 
-    # 6. 提取 cues
     cues = []
     current_time = None
     current_texts = []
 
     for line in lines:
-        # 遇到页脚/版权标记就停止
         if "© PodScripts.co" in line or "Privacy Policy" in line:
             break
 
-        # 匹配时间戳行
         m = re.match(r"Starting\s+point\s+is\s+(\d{1,2}):(\d{2}):(\d{2})", line, re.IGNORECASE)
         if m:
             if current_time is not None and current_texts:
@@ -200,12 +195,10 @@ def parse_transcript(html_text):
             current_time = f"{int(h):02d}:{mi}:{s}"
             current_texts = []
         elif current_time is not None:
-            # 跳过页面提示语
             if line.startswith("Click on any sentence") or line.startswith("There aren't comments"):
                 continue
             current_texts.append(line)
 
-    # 最后一个 cue
     if current_time is not None and current_texts:
         cues.append({"start": current_time, "text": "\n".join(current_texts)})
 
@@ -225,12 +218,12 @@ def _seconds_to_vtt(sec):
     return f"{h:02d}:{m:02d}:{s:02d}.{ms:03d}"
 
 
-def cues_to_vtt(cues):
+def cues_to_vtt(cues, offset_seconds=0):
     lines = ["WEBVTT", ""]
     for i, cue in enumerate(cues):
-        start_sec = _time_to_seconds(cue["start"])
+        start_sec = _time_to_seconds(cue["start"]) + offset_seconds
         end_sec = (
-            _time_to_seconds(cues[i + 1]["start"])
+            _time_to_seconds(cues[i + 1]["start"]) + offset_seconds
             if i + 1 < len(cues)
             else start_sec + 5
         )
@@ -253,8 +246,10 @@ def process_podcast(podcast, progress):
     pc_prog = get_podcast_progress(progress, slug)
     processed = pc_prog.get("processed", {})
 
+    name = display_name(podcast)
+
     print(f"\n{'='*50}")
-    print(f"播客: {podcast['name']} ({slug})")
+    print(f"播客: {name} ({slug})")
 
     if not podcast.get("feed_url"):
         print("   未配置 feed_url，跳过")
@@ -321,12 +316,16 @@ def process_podcast(podcast, progress):
             changed = True
             continue
 
+        ad_offset = processed.get(guid, {}).get("ad_offset", podcast.get("default_ad_offset", 0))
+
         vtt_filename = f"{safe_filename(title)}.vtt"
         vtt_path = SITE_DIR / slug / "transcripts" / vtt_filename
         vtt_path.parent.mkdir(parents=True, exist_ok=True)
+
+        vtt_content = cues_to_vtt(cues, offset_seconds=ad_offset)
         with open(vtt_path, "w", encoding="utf-8") as f:
-            f.write(cues_to_vtt(cues))
-        print(f"      VTT: {vtt_filename} ({len(cues)} cues)")
+            f.write(vtt_content)
+        print(f"      VTT: {vtt_filename} ({len(cues)} cues, offset={ad_offset}s)")
 
         processed[guid] = {
             "title": title,
@@ -334,6 +333,7 @@ def process_podcast(podcast, progress):
             "processed_at": datetime.now(timezone.utc).isoformat(),
             "guid": guid,
             "source_url": ep_url,
+            "ad_offset": ad_offset,
         }
         pc_prog["total_processed"] = pc_prog.get("total_processed", 0) + 1
         changed = True
@@ -371,6 +371,13 @@ def generate_podcast_feed(pc_prog, podcast, base_url):
         new_root.tail = root.tail
         root = new_root
 
+    # 修改 channel title 为 Unofficial 版本
+    channel = root.find("channel")
+    if channel is not None:
+        title_elem = channel.find("title")
+        if title_elem is not None and title_elem.text:
+            title_elem.text = f"{display_name(podcast)} - Transcripts"
+
     processed = pc_prog.get("processed", {})
     added = 0
 
@@ -405,6 +412,7 @@ def generate_podcast_feed(pc_prog, podcast, base_url):
 
 def generate_podcast_index(pc_prog, podcast, base_url):
     slug = podcast["slug"]
+    name = display_name(podcast)
     total = pc_prog.get("total_processed", 0)
     missing = sum(
         1 for v in pc_prog.get("processed", {}).values()
@@ -415,7 +423,7 @@ def generate_podcast_index(pc_prog, podcast, base_url):
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{podcast["name"]} - Transcripts</title>
+<title>{name} - Transcripts</title>
 <style>
 body{{font-family:system-ui,-apple-system,sans-serif;max-width:720px;margin:40px auto;padding:0 20px;line-height:1.6;color:#333}}
 a{{color:#0366d6}}
@@ -424,7 +432,7 @@ code{{background:#f4f4f4;padding:2px 6px;border-radius:4px;word-break:break-all}
 </style>
 </head>
 <body>
-<h1>🎙️ {podcast["name"]}</h1>
+<h1>🎙️ {name}</h1>
 <p><strong>官方 Feed:</strong> <a href="{podcast["feed_url"]}" target="_blank">{podcast["feed_url"]}</a></p>
 <p><strong>增强 Feed (含字幕):</strong><br><code><a href="{base_url}/{slug}/feed.xml">{base_url}/{slug}/feed.xml</a></code></p>
 <p>已处理 <strong>{total}</strong> 集字幕
@@ -439,10 +447,11 @@ def generate_master_index(progress, podcasts, base_url):
     items = ""
     for pc in podcasts:
         slug = pc["slug"]
+        name = display_name(pc)
         pc_prog = progress.get("podcasts", {}).get(slug, {})
         total = pc_prog.get("total_processed", 0)
         items += (
-            f'<li><a href="{base_url}/{slug}/">{pc["name"]}</a> — '
+            f'<li><a href="{base_url}/{slug}/">{name}</a> — '
             f'已处理 {total} 集 '
             f'<small>(<a href="{base_url}/{slug}/feed.xml">Feed</a>)</small></li>\n'
         )
@@ -452,7 +461,7 @@ def generate_master_index(progress, podcasts, base_url):
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Podcast Transcripts Hub</title>
+<title>Podcast Transcripts Hub (Unofficial)</title>
 <style>
 body{{font-family:system-ui,-apple-system,sans-serif;max-width:720px;margin:40px auto;padding:0 20px;line-height:1.6;color:#333}}
 a{{color:#0366d6}}
@@ -461,7 +470,7 @@ li{{margin:8px 0}}
 </head>
 <body>
 <h1>🎙️ Podcast Transcripts Hub</h1>
-<p>以下播客均已自动生成 VTT 字幕：</p>
+<p>以下播客均已自动生成 VTT 字幕（非官方）：</p>
 <ul>
 {items}</ul>
 </body>
@@ -506,7 +515,7 @@ def main():
     for pc in podcasts:
         slug = pc["slug"]
         total = progress.get("podcasts", {}).get(slug, {}).get("total_processed", 0)
-        print(f"   • {pc['name']}: {total} 集")
+        print(f"   • {display_name(pc)}: {total} 集")
 
 
 if __name__ == "__main__":
