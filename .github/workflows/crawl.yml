@@ -25,8 +25,18 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Cache Whisper models
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/whisper
+            ~/.cache/huggingface
+          key: whisper-models-${{ runner.os }}-${{ hashFiles('scripts/align.py') }}
+          restore-keys: |
+            whisper-models-${{ runner.os }}-
+
       - name: Install dependencies
-        run: pip install requests lxml
+        run: pip install requests lxml faster-whisper
 
       - name: Setup BASE_URL
         run: |
@@ -48,9 +58,10 @@ jobs:
           tar -xf *.tar.xz -C ffmpeg-static --strip-components=2
           rm *.tar.xz
 
+
       - run: echo "${{ github.workspace }}/ffmpeg-static" >> $GITHUB_PATH
       - run: ffmpeg -version
-      
+
       - name: Run scraper
         run: python scripts/scraper.py
 
