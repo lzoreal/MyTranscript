@@ -15,6 +15,14 @@ FEED_URL = os.environ.get("FEED_URL")
 MODEL_SIZE = os.environ.get("WHISPER_MODEL", "base")
 BASE_URL = os.environ.get("BASE_URL", "").rstrip("/")
 
+# 兜底：如果 BASE_URL 为空，尝试从 GITHUB_REPOSITORY 构造
+if not BASE_URL:
+    gh_repo = os.environ.get("GITHUB_REPOSITORY", "")
+    if gh_repo and "/" in gh_repo:
+        owner, repo = gh_repo.split("/", 1)
+        BASE_URL = f"https://{owner}.github.io/{repo}"
+        print(f"⚠️ BASE_URL 未设置，从 GITHUB_REPOSITORY 推断: {BASE_URL}")
+
 STATE_FILE = Path("state.json")
 SITE_DIR = Path("site")
 PODCAST_DIR = SITE_DIR / PODCAST_SLUG
@@ -219,6 +227,7 @@ def generate_podcast_feed(pc_state):
     print(f"💾 Feed 已保存 ({added} 个字幕标签): {feed_path}")
 
     total = pc_state.get("total_processed", 0)
+    # 子页链接使用完整 BASE_URL
     html = f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -234,7 +243,7 @@ a{{color:#0366d6}}
 <body>
 <h1>🎙️ {PODCAST_SLUG}</h1>
 <p><strong>原 RSS：</strong><a href="{FEED_URL}" target="_blank">{FEED_URL}</a></p>
-<p><strong>带字幕 Feed：</strong><br><code><a href="feed.xml">{BASE_URL}/{PODCAST_SLUG}/feed.xml</a></code></p>
+<p><strong>带字幕 Feed：</strong><br><code><a href="{BASE_URL}/{PODCAST_SLUG}/feed.xml">{BASE_URL}/{PODCAST_SLUG}/feed.xml</a></code></p>
 <p>已处理 <strong>{total}</strong> 集（中英双语字幕）。</p>
 </body>
 </html>"""
@@ -247,7 +256,8 @@ def generate_master_index(state):
     for slug, pc in podcasts.items():
         total = pc.get("total_processed", 0)
         feed = pc.get("feed_url", "")
-        items += f'<li><a href="/{slug}/">{slug}</a> — 已处理 {total} 集 <small>(<a href="/{slug}/feed.xml">Feed</a>)</small></li>\n'
+        # 修复：所有链接都拼接 BASE_URL
+        items += f'<li><a href="{BASE_URL}/{slug}/">{slug}</a> — 已处理 {total} 集 <small>(<a href="{BASE_URL}/{slug}/feed.xml">Feed</a>)</small></li>\n'
 
     html = f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -278,7 +288,7 @@ def main():
 
     print(f"🎙️ 播客: {PODCAST_SLUG}")
     print(f"📡 RSS: {FEED_URL}")
-    print(f"🌐 Pages: {BASE_URL}/{PODCAST_SLUG}/")
+    print(f"🌐 BASE_URL: {BASE_URL}")
     print(f"🧠 模型: {MODEL_SIZE}")
 
     state = load_state()
