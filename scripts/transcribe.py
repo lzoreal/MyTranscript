@@ -18,27 +18,69 @@ from lxml import etree
 # 配置
 # ============================================================
 
-PODCAST_SLUG = os.environ.get("PODCAST_SLUG", "default")
-FEED_URL = os.environ.get("FEED_URL")
-MODEL_SIZE = os.environ.get("WHISPER_MODEL", "base")
-BASE_URL = os.environ.get("BASE_URL", "").rstrip("/")
+PODCAST_SLUG = os.environ.get(
+    "PODCAST_SLUG",
+    "default"
+)
+
+FEED_URL = os.environ.get(
+    "FEED_URL"
+)
+
+MODEL_SIZE = os.environ.get(
+    "WHISPER_MODEL",
+    "base"
+)
+
+BASE_URL = os.environ.get(
+    "BASE_URL",
+    ""
+).rstrip("/")
+
 
 # 中国免费代理
-USE_CHINA_PROXY = os.environ.get("USE_CHINA_PROXY", "true").lower() == "true"
+USE_CHINA_PROXY = (
+    os.environ.get(
+        "USE_CHINA_PROXY",
+        "true"
+    ).lower()
+    == "true"
+)
+
 
 # 最多尝试多少个中国代理
 MAX_PROXY_ATTEMPTS = int(
-    os.environ.get("MAX_PROXY_ATTEMPTS", "30")
+    os.environ.get(
+        "MAX_PROXY_ATTEMPTS",
+        "30"
+    )
 )
 
-# 代理连接超时
+
+# 代理连接测试超时
 PROXY_TEST_TIMEOUT = int(
-    os.environ.get("PROXY_TEST_TIMEOUT", "10")
+    os.environ.get(
+        "PROXY_TEST_TIMEOUT",
+        "8"
+    )
 )
+
 
 # 音频下载超时
 AUDIO_TIMEOUT = int(
-    os.environ.get("AUDIO_TIMEOUT", "300")
+    os.environ.get(
+        "AUDIO_TIMEOUT",
+        "300"
+    )
+)
+
+
+# 代理缓存时间，单位秒
+PROXY_CACHE_TTL = int(
+    os.environ.get(
+        "PROXY_CACHE_TTL",
+        "1800"
+    )
 )
 
 
@@ -47,10 +89,20 @@ AUDIO_TIMEOUT = int(
 # ============================================================
 
 if not BASE_URL:
-    gh_repo = os.environ.get("GITHUB_REPOSITORY", "")
+
+    gh_repo = os.environ.get(
+        "GITHUB_REPOSITORY",
+        ""
+    )
 
     if gh_repo and "/" in gh_repo:
-        owner, repo = gh_repo.split("/", 1)
+
+        owner, repo = (
+            gh_repo.split(
+                "/",
+                1
+            )
+        )
 
         BASE_URL = (
             f"https://{owner}.github.io/{repo}"
@@ -58,7 +110,8 @@ if not BASE_URL:
 
         print(
             f"⚠️ BASE_URL 未设置，"
-            f"从 GITHUB_REPOSITORY 推断: {BASE_URL}"
+            f"从 GITHUB_REPOSITORY 推断: "
+            f"{BASE_URL}"
         )
 
 
@@ -66,16 +119,22 @@ if not BASE_URL:
 # 目录
 # ============================================================
 
-STATE_FILE = Path("state.json")
+STATE_FILE = Path(
+    "state.json"
+)
 
-SITE_DIR = Path("site")
+SITE_DIR = Path(
+    "site"
+)
 
 PODCAST_DIR = (
-    SITE_DIR / PODCAST_SLUG
+    SITE_DIR /
+    PODCAST_SLUG
 )
 
 TRANSCRIPTS_DIR = (
-    PODCAST_DIR / "transcripts"
+    PODCAST_DIR /
+    "transcripts"
 )
 
 PODCAST_DIR.mkdir(
@@ -87,6 +146,19 @@ TRANSCRIPTS_DIR.mkdir(
     parents=True,
     exist_ok=True
 )
+
+
+# ============================================================
+# 代理缓存
+# ============================================================
+
+PROXY_CACHE_FILE = Path(
+    ".china_proxy_cache.json"
+)
+
+
+# 本次运行已经确认无效的代理
+BAD_PROXIES = set()
 
 
 # ============================================================
@@ -190,7 +262,9 @@ def safe_filename(title):
 
 def format_vtt_time(seconds):
 
-    hours = int(seconds // 3600)
+    hours = int(
+        seconds // 3600
+    )
 
     minutes = int(
         (seconds % 3600) // 60
@@ -261,7 +335,6 @@ def resegment(raw_segments):
                 "text": text
             })
 
-
     merged = []
 
     buf = {
@@ -269,7 +342,6 @@ def resegment(raw_segments):
         "start": 0,
         "end": 0
     }
-
 
     for e in entries:
 
@@ -284,7 +356,6 @@ def resegment(raw_segments):
             )
 
             buf["end"] = e["end"]
-
 
         if re.search(
             r'[.!?]["\']?$',
@@ -301,11 +372,11 @@ def resegment(raw_segments):
                 "end": 0
             }
 
-
     if buf["text"]:
 
-        merged.append(buf)
-
+        merged.append(
+            buf
+        )
 
     final = []
 
@@ -317,10 +388,11 @@ def resegment(raw_segments):
 
         if len(sentences) <= 1:
 
-            final.append(m)
+            final.append(
+                m
+            )
 
             continue
-
 
         total_chars = sum(
             len(s)
@@ -330,16 +402,15 @@ def resegment(raw_segments):
         t = m["start"]
 
         duration = (
-            m["end"] -
-            m["start"]
+            m["end"]
+            - m["start"]
         )
-
 
         for sent in sentences:
 
             ratio = (
-                len(sent) /
-                total_chars
+                len(sent)
+                / total_chars
                 if total_chars > 0
                 else
                 1 / len(sentences)
@@ -357,7 +428,6 @@ def resegment(raw_segments):
             })
 
             t += seg_dur
-
 
     return final
 
@@ -435,10 +505,14 @@ def translate_with_retry(
             attempt += 1
 
             sleep_time = (
-                base_delay *
-                (
-                    1.5 **
-                    min(attempt, 10)
+                base_delay
+                * (
+                    1.5
+                    **
+                    min(
+                        attempt,
+                        10
+                    )
                 )
             )
 
@@ -464,7 +538,9 @@ def translate_sentences(sentences):
         target="zh-CN"
     )
 
-    total = len(sentences)
+    total = len(
+        sentences
+    )
 
     results = []
 
@@ -485,7 +561,6 @@ def translate_sentences(sentences):
 
             continue
 
-
         zh = translate_with_retry(
             text,
             translator
@@ -497,7 +572,6 @@ def translate_sentences(sentences):
             "zh": zh
         })
 
-
         if (
             i % 20 == 0
             or i == total
@@ -507,7 +581,6 @@ def translate_sentences(sentences):
                 f"   翻译进度: "
                 f"{i}/{total}"
             )
-
 
     return results
 
@@ -575,21 +648,19 @@ def resolve_enclosure_url(
     把 pdst.fm 嵌套的真实音频 URL
     提取出来。
 
-    支持任意出现于 URL path 中的：
+    支持：
+
         serve.castfire.com
         traffic.megaphone.fm
-
-    后续如果增加其他平台，
-    可以继续增加 host。
     """
 
     if not enclosure_url:
 
         return None, "unknown"
 
-
-    lower = enclosure_url.lower()
-
+    lower = (
+        enclosure_url.lower()
+    )
 
     # --------------------------------------------------------
     # 已经是直接地址
@@ -597,14 +668,20 @@ def resolve_enclosure_url(
 
     if "pdst.fm/" not in lower:
 
-        if "traffic.megaphone.fm" in lower:
+        if (
+            "traffic.megaphone.fm"
+            in lower
+        ):
 
             return (
                 enclosure_url,
                 "megaphone"
             )
 
-        if "serve.castfire.com" in lower:
+        if (
+            "serve.castfire.com"
+            in lower
+        ):
 
             return (
                 enclosure_url,
@@ -615,7 +692,6 @@ def resolve_enclosure_url(
             enclosure_url,
             "direct"
         )
-
 
     # --------------------------------------------------------
     # 支持的平台
@@ -634,7 +710,6 @@ def resolve_enclosure_url(
         ),
 
     ]
-
 
     for host, source in patterns:
 
@@ -671,7 +746,6 @@ def resolve_enclosure_url(
                 source
             )
 
-
     # --------------------------------------------------------
     # 未识别
     # --------------------------------------------------------
@@ -691,111 +765,260 @@ def resolve_enclosure_url(
 # 中国免费代理
 # ============================================================
 
-PROXY_API_URL = (
-    "https://api.proxyscrape.com/v4/"
-    "free-proxy-list/get"
-    "?request=display_proxies"
-    "&proxy_format=protocolipport"
-    "&format=text"
-    "&country=cn"
+PROXY_API_URLS = [
+
+    (
+        "ProxyScrape",
+        "https://api.proxyscrape.com/v4/"
+        "free-proxy-list/get"
+        "?request=display_proxies"
+        "&proxy_format=protocolipport"
+        "&format=text"
+        "&country=cn"
+    ),
+
+]
+
+
+GEOIP_URL = (
+    "https://ipwho.is/"
 )
 
 
-def get_china_proxies():
+PROXY_HEADERS = {
 
-    """
-    从 ProxyScrape 获取中国代理。
+    "User-Agent":
+        "Mozilla/5.0 "
+        "(Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 "
+        "(KHTML, like Gecko) "
+        "Chrome/138.0 Safari/537.36"
 
-    返回：
-        [
-            "http://IP:PORT",
-            "socks5://IP:PORT"
-        ]
+}
 
-    注意：
-    免费代理经常失效，所以后面还会逐个测试。
-    """
 
-    print(
-        "🇨🇳 获取中国免费代理列表..."
-    )
+# ============================================================
+# 代理缓存
+# ============================================================
+
+def load_proxy_cache():
+
+    if not PROXY_CACHE_FILE.exists():
+
+        return []
 
     try:
 
-        response = requests.get(
-            PROXY_API_URL,
-            timeout=30,
-            headers={
-                "User-Agent":
-                    "Mozilla/5.0"
-            }
+        with open(
+            PROXY_CACHE_FILE,
+            "r",
+            encoding="utf-8"
+        ) as f:
+
+            data = json.load(
+                f
+            )
+
+        created_at = data.get(
+            "created_at",
+            0
         )
 
-        response.raise_for_status()
+        if (
+            time.time()
+            - created_at
+            > PROXY_CACHE_TTL
+        ):
 
-        text = response.text
+            print(
+                "   ℹ️ 中国代理缓存已过期"
+            )
+
+            return []
+
+        proxies = data.get(
+            "proxies",
+            []
+        )
+
+        if not isinstance(
+            proxies,
+            list
+        ):
+
+            return []
+
+        print(
+            f"   ♻️ 使用代理缓存: "
+            f"{len(proxies)} 个"
+        )
+
+        return proxies
 
     except Exception as e:
 
         print(
-            f"❌ 获取代理列表失败: {e}"
+            f"   ⚠️ 读取代理缓存失败: "
+            f"{e}"
         )
 
         return []
 
 
-    proxies = []
+def save_proxy_cache(
+    proxies
+):
 
-    for line in text.splitlines():
+    try:
 
-        line = line.strip()
+        with open(
+            PROXY_CACHE_FILE,
+            "w",
+            encoding="utf-8"
+        ) as f:
 
-        if not line:
-            continue
+            json.dump(
+                {
+                    "created_at":
+                        time.time(),
 
-        # API 返回：
-        # http://IP:PORT
-        # socks5://IP:PORT
-        # 或 IP:PORT
-
-        if "://" not in line:
-
-            line = (
-                "http://"
-                + line
+                    "proxies":
+                        proxies
+                },
+                f,
+                ensure_ascii=False,
+                indent=2
             )
 
-        if line not in proxies:
+    except Exception as e:
 
-            proxies.append(line)
+        print(
+            f"   ⚠️ 保存代理缓存失败: "
+            f"{e}"
+        )
 
 
-    random.shuffle(proxies)
+# ============================================================
+# 获取中国代理
+# ============================================================
+
+def get_china_proxies():
+
+    cached = load_proxy_cache()
+
+    if cached:
+
+        random.shuffle(
+            cached
+        )
+
+        return cached
 
     print(
-        f"   获取到 "
-        f"{len(proxies)} 个代理"
+        "🇨🇳 获取中国免费代理列表..."
     )
 
-    return proxies
+    all_proxies = []
+
+    for source_name, api_url in (
+        PROXY_API_URLS
+    ):
+
+        print(
+            f"   📡 来源: "
+            f"{source_name}"
+        )
+
+        try:
+
+            response = requests.get(
+                api_url,
+                timeout=30,
+                headers=PROXY_HEADERS
+            )
+
+            response.raise_for_status()
+
+            text = response.text
+
+        except Exception as e:
+
+            print(
+                f"   ⚠️ {source_name} "
+                f"获取失败: {e}"
+            )
+
+            continue
+
+        count = 0
+
+        for line in text.splitlines():
+
+            line = line.strip()
+
+            if not line:
+                continue
+
+            line = line.replace(
+                " ",
+                ""
+            )
+
+            if "://" not in line:
+
+                line = (
+                    "http://"
+                    + line
+                )
+
+            if not re.match(
+                r"^(http|https|socks4|socks5)://"
+                r"[^:]+:\d+$",
+                line,
+                re.I
+            ):
+
+                continue
+
+            if line not in all_proxies:
+
+                all_proxies.append(
+                    line
+                )
+
+                count += 1
+
+        print(
+            f"      获取 {count} 个"
+        )
+
+    random.shuffle(
+        all_proxies
+    )
+
+    print(
+        f"   📦 合计代理: "
+        f"{len(all_proxies)}"
+    )
+
+    if all_proxies:
+
+        save_proxy_cache(
+            all_proxies
+        )
+
+    return all_proxies
 
 
 # ============================================================
-# 测试代理
+# GeoIP
 # ============================================================
 
-def test_proxy(proxy):
+def get_proxy_geoip(
+    proxy
+):
 
-    """
-    测试：
-        1. 代理是否能建立 HTTPS 请求
-        2. 是否能正常返回公网 IP
-
-    不强制再次验证 GeoIP，
-    因为代理列表本身已经筛选 country=cn。
-    """
-
-    proxies = {
+    request_proxies = {
         "http": proxy,
         "https": proxy
     }
@@ -803,27 +1026,212 @@ def test_proxy(proxy):
     try:
 
         response = requests.get(
-            "https://api.ipify.org",
+            GEOIP_URL,
             timeout=PROXY_TEST_TIMEOUT,
-            proxies=proxies,
-            headers={
-                "User-Agent":
-                    "Mozilla/5.0"
-            }
+            proxies=request_proxies,
+            headers=PROXY_HEADERS
         )
 
         response.raise_for_status()
 
-        public_ip = response.text.strip()
+        data = response.json()
 
-        if not public_ip:
-            return False, None
+        if not data.get(
+            "success",
+            False
+        ):
 
-        return True, public_ip
+            return None
+
+        ip = data.get(
+            "ip"
+        )
+
+        country_code = data.get(
+            "country_code"
+        )
+
+        country = data.get(
+            "country"
+        )
+
+        return {
+            "ip":
+                ip,
+
+            "country_code":
+                country_code,
+
+            "country":
+                country
+        }
 
     except Exception:
 
-        return False, None
+        return None
+
+
+# ============================================================
+# 测试代理
+# ============================================================
+
+def test_proxy(
+    proxy,
+    target_url=None
+):
+
+    """
+    测试代理：
+
+    1. HTTPS 是否可用
+    2. 是否有公网出口
+    3. GeoIP 是否为 CN
+    4. 目标音频服务器是否可访问
+    """
+
+    request_proxies = {
+        "http": proxy,
+        "https": proxy
+    }
+
+    # --------------------------------------------------------
+    # 第一阶段：GeoIP
+    # --------------------------------------------------------
+
+    geo = get_proxy_geoip(
+        proxy
+    )
+
+    if not geo:
+
+        return {
+            "ok":
+                False,
+
+            "reason":
+                "GeoIP 请求失败"
+        }
+
+    public_ip = geo.get(
+        "ip"
+    )
+
+    country_code = (
+        geo.get(
+            "country_code"
+        )
+        or ""
+    ).upper()
+
+    country = (
+        geo.get(
+            "country"
+        )
+        or ""
+    )
+
+    print(
+        f"   🌍 出口 IP: "
+        f"{public_ip}"
+    )
+
+    print(
+        f"   🌏 地区: "
+        f"{country} "
+        f"({country_code})"
+    )
+
+    # --------------------------------------------------------
+    # 必须是中国大陆
+    # --------------------------------------------------------
+
+    if country_code != "CN":
+
+        return {
+            "ok":
+                False,
+
+            "reason":
+                f"不是中国大陆 IP: "
+                f"{country_code}"
+        }
+
+    # --------------------------------------------------------
+    # 第二阶段：测试目标服务器
+    # --------------------------------------------------------
+
+    if target_url:
+
+        try:
+
+            response = requests.head(
+                target_url,
+                timeout=PROXY_TEST_TIMEOUT,
+                proxies=request_proxies,
+                headers=PROXY_HEADERS,
+                allow_redirects=True
+            )
+
+            # 某些 CDN 不支持 HEAD
+            if response.status_code in (
+                403,
+                405,
+                501
+            ):
+
+                response = requests.get(
+                    target_url,
+                    timeout=PROXY_TEST_TIMEOUT,
+                    proxies=request_proxies,
+                    headers={
+                        **PROXY_HEADERS,
+                        "Range":
+                            "bytes=0-1023"
+                    },
+                    allow_redirects=True,
+                    stream=True
+                )
+
+            if response.status_code >= 400:
+
+                return {
+                    "ok":
+                        False,
+
+                    "reason":
+                        f"目标服务器 HTTP "
+                        f"{response.status_code}"
+                }
+
+            print(
+                f"   🎯 目标服务器测试: "
+                f"HTTP {response.status_code}"
+            )
+
+        except Exception as e:
+
+            return {
+                "ok":
+                    False,
+
+                "reason":
+                    f"目标服务器不可访问: "
+                    f"{e}"
+            }
+
+    return {
+        "ok":
+            True,
+
+        "public_ip":
+            public_ip,
+
+        "country_code":
+            country_code,
+
+        "country":
+            country
+    }
 
 
 # ============================================================
@@ -835,23 +1243,8 @@ def download_audio(
     output_path
 ):
 
-    """
-    使用中国免费代理下载已经解析后的 audio_url。
-
-    例如：
-
-    pdst.fm
-       ↓
-    resolve_enclosure_url()
-       ↓
-    serve.castfire.com
-       ↓
-    中国代理
-       ↓
-    MP3
-    """
-
     headers = {
+
         "User-Agent":
             "Mozilla/5.0 "
             "(Windows NT 10.0; Win64; x64) "
@@ -862,10 +1255,9 @@ def download_audio(
         "Accept":
             "audio/mpeg,"
             "audio/*;q=0.9,"
-            "*/*;q=0.8",
+            "*/*;q=0.8"
 
     }
-
 
     # ========================================================
     # 不使用代理
@@ -874,17 +1266,24 @@ def download_audio(
     if not USE_CHINA_PROXY:
 
         print(
-            "ℹ️ USE_CHINA_PROXY=false"
-            "，直接下载"
+            "ℹ️ USE_CHINA_PROXY=false，"
+            "直接下载"
         )
 
-        return download_with_proxy(
+        download_with_proxy(
             audio_url,
             output_path,
             headers,
             None
         )
 
+        return {
+            "proxy":
+                None,
+
+            "public_ip":
+                None
+        }
 
     # ========================================================
     # 获取代理
@@ -902,13 +1301,20 @@ def download_audio(
             "➡️ 回退到直接下载"
         )
 
-        return download_with_proxy(
+        download_with_proxy(
             audio_url,
             output_path,
             headers,
             None
         )
 
+        return {
+            "proxy":
+                None,
+
+            "public_ip":
+                None
+        }
 
     # ========================================================
     # 限制尝试数量
@@ -918,21 +1324,23 @@ def download_audio(
         :MAX_PROXY_ATTEMPTS
     ]
 
-
     print(
         f"🔀 准备测试 "
         f"{len(proxies)} 个中国代理..."
     )
 
-
     # ========================================================
-    # 逐个代理
+    # 逐个测试
     # ========================================================
 
     for index, proxy in enumerate(
         proxies,
         1
     ):
+
+        if proxy in BAD_PROXIES:
+
+            continue
 
         print(
             f"\n🌐 代理 "
@@ -943,33 +1351,33 @@ def download_audio(
             f"   {proxy}"
         )
 
-
-        # ----------------------------------------------------
-        # 测试代理
-        # ----------------------------------------------------
-
-        ok, public_ip = test_proxy(
-            proxy
+        result = test_proxy(
+            proxy,
+            target_url=audio_url
         )
 
-        if not ok:
+        if not result.get(
+            "ok"
+        ):
 
             print(
-                "   ❌ 代理不可用"
+                "   ❌ 代理不可用: "
+                f"{result.get('reason')}"
+            )
+
+            BAD_PROXIES.add(
+                proxy
             )
 
             continue
 
-
-        print(
-            f"   ✅ 代理可用"
+        public_ip = result.get(
+            "public_ip"
         )
 
         print(
-            f"   🌍 出口 IP: "
-            f"{public_ip}"
+            "   ✅ 中国大陆代理可用"
         )
-
 
         # ----------------------------------------------------
         # 下载
@@ -984,28 +1392,33 @@ def download_audio(
                 proxy
             )
 
-            # 成功
             return {
-                "proxy": proxy,
-                "public_ip": public_ip
-            }
+                "proxy":
+                    proxy,
 
+                "public_ip":
+                    public_ip
+            }
 
         except Exception as e:
 
             print(
-                f"   ❌ 下载失败: {e}"
+                f"   ❌ 下载失败: "
+                f"{e}"
+            )
+
+            BAD_PROXIES.add(
+                proxy
             )
 
             if output_path.exists():
 
                 try:
+
                     output_path.unlink()
+
                 except Exception:
                     pass
-
-            continue
-
 
     # ========================================================
     # 所有代理失败
@@ -1019,7 +1432,6 @@ def download_audio(
         "➡️ 最后尝试直接下载..."
     )
 
-
     try:
 
         download_with_proxy(
@@ -1030,14 +1442,18 @@ def download_audio(
         )
 
         return {
-            "proxy": None,
-            "public_ip": None
+            "proxy":
+                None,
+
+            "public_ip":
+                None
         }
 
     except Exception as e:
 
         print(
-            f"❌ 直接下载也失败: {e}"
+            f"❌ 直接下载也失败: "
+            f"{e}"
         )
 
         raise
@@ -1059,19 +1475,21 @@ def download_with_proxy(
     if proxy:
 
         request_proxies = {
-            "http": proxy,
-            "https": proxy
-        }
+            "http":
+                proxy,
 
+            "https":
+                proxy
+        }
 
     print(
         "⬇️ 下载音频..."
     )
 
     print(
-        f"   URL: {audio_url}"
+        f"   URL: "
+        f"{audio_url}"
     )
-
 
     with requests.get(
         audio_url,
@@ -1090,6 +1508,7 @@ def download_with_proxy(
                 "Content-Type",
                 ""
             )
+            .lower()
         )
 
         content_length = (
@@ -1099,7 +1518,6 @@ def download_with_proxy(
                 ""
             )
         )
-
 
         print(
             f"   HTTP: "
@@ -1121,6 +1539,19 @@ def download_with_proxy(
             f"{response.url}"
         )
 
+        # ----------------------------------------------------
+        # 防止下载到 HTML
+        # ----------------------------------------------------
+
+        if (
+            "text/html"
+            in content_type
+        ):
+
+            raise RuntimeError(
+                "服务器返回 HTML，"
+                "不是音频文件"
+            )
 
         # ----------------------------------------------------
         # 流式写入
@@ -1140,16 +1571,22 @@ def download_with_proxy(
                 if not chunk:
                     continue
 
-                f.write(chunk)
+                f.write(
+                    chunk
+                )
 
-                total_bytes += len(chunk)
-
+                total_bytes += len(
+                    chunk
+                )
 
         print(
             f"   下载完成: "
             f"{total_bytes / 1024 / 1024:.1f} MB"
         )
 
+    # --------------------------------------------------------
+    # 最小文件检查
+    # --------------------------------------------------------
 
     if total_bytes < 1024:
 
@@ -1158,6 +1595,74 @@ def download_with_proxy(
             "文件小于 1 KB"
         )
 
+    # --------------------------------------------------------
+    # 文件头检查
+    # --------------------------------------------------------
+
+    with open(
+        output_path,
+        "rb"
+    ) as f:
+
+        header = f.read(
+            32
+        )
+
+    valid_audio = (
+
+        # ID3 / MP3
+        header.startswith(
+            b"ID3"
+        )
+
+        or
+
+        # MPEG Audio Frame
+        (
+            len(header) >= 2
+            and
+            header[0] == 0xFF
+            and
+            (
+                header[1] & 0xE0
+            ) == 0xE0
+        )
+
+        or
+
+        # MP4 / M4A
+        (
+            len(header) >= 12
+            and
+            header[4:8] == b"ftyp"
+        )
+
+        or
+
+        # Ogg
+        header.startswith(
+            b"OggS"
+        )
+
+        or
+
+        # ADTS AAC
+        (
+            len(header) >= 2
+            and
+            header[0] == 0xFF
+            and
+            (
+                header[1] & 0xF6
+            ) == 0xF0
+        )
+    )
+
+    if not valid_audio:
+
+        raise RuntimeError(
+            "下载内容不是已识别的音频格式"
+        )
 
     # --------------------------------------------------------
     # SHA256
@@ -1171,19 +1676,24 @@ def download_with_proxy(
     ) as f:
 
         for chunk in iter(
-            lambda: f.read(
-                1024 * 1024
-            ),
+            lambda:
+                f.read(
+                    1024 * 1024
+                ),
             b""
         ):
 
-            sha256.update(chunk)
+            sha256.update(
+                chunk
+            )
 
-
-    digest = sha256.hexdigest()
+    digest = (
+        sha256.hexdigest()
+    )
 
     print(
-        f"   SHA256: {digest}"
+        f"   SHA256: "
+        f"{digest}"
     )
 
 
@@ -1210,13 +1720,13 @@ def find_next_entry(
             time.gmtime(0)
         )
 
-        return time.mktime(t)
-
+        return time.mktime(
+            t
+        )
 
     entries.sort(
         key=sort_key
     )
-
 
     for entry in entries:
 
@@ -1229,7 +1739,6 @@ def find_next_entry(
         if guid not in processed:
 
             return entry
-
 
     return None
 
@@ -1246,7 +1755,6 @@ def generate_podcast_feed(
         "🔄 生成播客 RSS feed..."
     )
 
-
     # --------------------------------------------------------
     # 获取原始 RSS
     # --------------------------------------------------------
@@ -1262,11 +1770,9 @@ def generate_podcast_feed(
 
     resp.raise_for_status()
 
-
     root = etree.fromstring(
         resp.content
     )
-
 
     # --------------------------------------------------------
     # Namespace
@@ -1286,7 +1792,6 @@ def generate_podcast_feed(
         "dtds/podcast-1.0.dtd"
     )
 
-
     # --------------------------------------------------------
     # 确保 podcast namespace
     # --------------------------------------------------------
@@ -1295,7 +1800,9 @@ def generate_podcast_feed(
         root.nsmap
     )
 
-    if nsmap.get("podcast") != ns_uri:
+    if nsmap.get(
+        "podcast"
+    ) != ns_uri:
 
         nsmap["podcast"] = ns_uri
 
@@ -1307,12 +1814,15 @@ def generate_podcast_feed(
 
         new_root[:] = root[:]
 
-        new_root.text = root.text
+        new_root.text = (
+            root.text
+        )
 
-        new_root.tail = root.tail
+        new_root.tail = (
+            root.tail
+        )
 
         root = new_root
-
 
     # --------------------------------------------------------
     # channel
@@ -1330,7 +1840,6 @@ def generate_podcast_feed(
 
         return
 
-
     # --------------------------------------------------------
     # Feed URL
     # --------------------------------------------------------
@@ -1340,7 +1849,6 @@ def generate_podcast_feed(
         f"{PODCAST_SLUG}/"
         f"feed.xml"
     )
-
 
     # --------------------------------------------------------
     # title
@@ -1374,7 +1882,6 @@ def generate_podcast_feed(
                 f"{title_elem.text}"
             )
 
-
     # --------------------------------------------------------
     # channel link
     # --------------------------------------------------------
@@ -1385,8 +1892,9 @@ def generate_podcast_feed(
 
     if link_elem is not None:
 
-        link_elem.text = BASE_URL
-
+        link_elem.text = (
+            BASE_URL
+        )
 
     # --------------------------------------------------------
     # image
@@ -1404,8 +1912,9 @@ def generate_podcast_feed(
 
         if img_link is not None:
 
-            img_link.text = BASE_URL
-
+            img_link.text = (
+                BASE_URL
+            )
 
         img_title = image.find(
             "title"
@@ -1419,7 +1928,6 @@ def generate_podcast_feed(
             img_title.text = (
                 title_elem.text
             )
-
 
     # --------------------------------------------------------
     # atom:self
@@ -1452,7 +1960,6 @@ def generate_podcast_feed(
                 feed_url
             )
 
-
     # --------------------------------------------------------
     # itunes:new-feed-url
     # --------------------------------------------------------
@@ -1464,8 +1971,9 @@ def generate_podcast_feed(
 
     if new_feed is not None:
 
-        new_feed.text = feed_url
-
+        new_feed.text = (
+            feed_url
+        )
 
     # ========================================================
     # 核心：
@@ -1477,16 +1985,13 @@ def generate_podcast_feed(
         {}
     )
 
-
     all_items = channel.findall(
         "item"
     )
 
-
     removed = 0
     added = 0
     replaced_audio = 0
-
 
     for item in all_items:
 
@@ -1499,31 +2004,31 @@ def generate_podcast_feed(
             or not guid_elem.text
         ):
 
-            # 没 GUID，也无法判断是否处理
-            channel.remove(item)
+            channel.remove(
+                item
+            )
 
             removed += 1
 
             continue
-
 
         guid = (
             guid_elem.text.strip()
         )
 
-
         # ----------------------------------------------------
-        # 未处理：直接从 Feed 删除
+        # 未处理
         # ----------------------------------------------------
 
         if guid not in processed:
 
-            channel.remove(item)
+            channel.remove(
+                item
+            )
 
             removed += 1
 
             continue
-
 
         # ----------------------------------------------------
         # 已处理
@@ -1533,17 +2038,8 @@ def generate_podcast_feed(
             processed[guid]
         )
 
-
         # ----------------------------------------------------
         # 替换 enclosure
-        #
-        # 这里保持你之前要求的逻辑：
-        #
-        # 原：
-        # pdst.fm/...
-        #
-        # 新：
-        # serve.castfire.com/...
         # ----------------------------------------------------
 
         actual_audio_url = (
@@ -1551,7 +2047,6 @@ def generate_podcast_feed(
                 "audio_url"
             )
         )
-
 
         if actual_audio_url:
 
@@ -1561,10 +2056,11 @@ def generate_podcast_feed(
                 )
             )
 
-
             if enclosures:
 
-                enclosure = enclosures[0]
+                enclosure = (
+                    enclosures[0]
+                )
 
                 old_url = (
                     enclosure.get(
@@ -1573,8 +2069,10 @@ def generate_podcast_feed(
                     )
                 )
 
-
-                if old_url != actual_audio_url:
+                if (
+                    old_url
+                    != actual_audio_url
+                ):
 
                     enclosure.set(
                         "url",
@@ -1584,7 +2082,7 @@ def generate_podcast_feed(
                     replaced_audio += 1
 
                     print(
-                        f"   🔗 enclosure:"
+                        "   🔗 enclosure:"
                     )
 
                     print(
@@ -1597,7 +2095,6 @@ def generate_podcast_feed(
                         f"{actual_audio_url}"
                     )
 
-
         # ----------------------------------------------------
         # 添加 transcript
         # ----------------------------------------------------
@@ -1608,11 +2105,9 @@ def generate_podcast_feed(
             )
         )
 
-
         if not vtt_filename:
 
             continue
-
 
         vtt_url = (
             f"{BASE_URL}/"
@@ -1621,12 +2116,10 @@ def generate_podcast_feed(
             f"{vtt_filename}"
         )
 
-
         existing = item.findall(
             f"{{{ns_uri}}}"
             f"transcript"
         )
-
 
         if any(
             e.get("url") == vtt_url
@@ -1635,12 +2128,13 @@ def generate_podcast_feed(
 
             continue
 
-
-        transcript = etree.SubElement(
-            item,
-            f"{{{ns_uri}}}transcript"
+        transcript = (
+            etree.SubElement(
+                item,
+                f"{{{ns_uri}}}"
+                f"transcript"
+            )
         )
-
 
         transcript.set(
             "url",
@@ -1657,9 +2151,7 @@ def generate_podcast_feed(
             "captions"
         )
 
-
         added += 1
-
 
     # ========================================================
     # 写 Feed
@@ -1669,12 +2161,10 @@ def generate_podcast_feed(
         root
     )
 
-
     feed_path = (
-        PODCAST_DIR /
-        "feed.xml"
+        PODCAST_DIR
+        / "feed.xml"
     )
-
 
     tree.write(
         feed_path,
@@ -1683,9 +2173,8 @@ def generate_podcast_feed(
         encoding="utf-8"
     )
 
-
     print(
-        f"💾 Feed 已保存"
+        "💾 Feed 已保存"
     )
 
     print(
@@ -1712,7 +2201,6 @@ def generate_podcast_feed(
         f"   文件: {feed_path}"
     )
 
-
     # ========================================================
     # 生成 Podcast 首页
     # ========================================================
@@ -1722,12 +2210,10 @@ def generate_podcast_feed(
         0
     )
 
-
     display_name = (
         f"{PODCAST_SLUG} "
         f"(Unofficial)"
     )
-
 
     html = f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -1795,10 +2281,9 @@ a {{
 </html>
 """
 
-
     (
-        PODCAST_DIR /
-        "index.html"
+        PODCAST_DIR
+        / "index.html"
     ).write_text(
         html,
         encoding="utf-8"
@@ -1818,9 +2303,7 @@ def generate_master_index(
         {}
     )
 
-
     items = ""
-
 
     for slug, pc in podcasts.items():
 
@@ -1829,12 +2312,10 @@ def generate_master_index(
             0
         )
 
-
         display_name = (
             f"{slug} "
             f"(Unofficial)"
         )
-
 
         items += (
             f'<li>'
@@ -1848,7 +2329,6 @@ def generate_master_index(
             f'</a>)</small>'
             f'</li>\n'
         )
-
 
     html = f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -1917,10 +2397,9 @@ li {{
 </html>
 """
 
-
     (
-        SITE_DIR /
-        "index.html"
+        SITE_DIR
+        / "index.html"
     ).write_text(
         html,
         encoding="utf-8"
@@ -1948,7 +2427,6 @@ def main():
 
         sys.exit(1)
 
-
     print(
         f"🎙️ 播客: "
         f"{PODCAST_SLUG}"
@@ -1974,6 +2452,20 @@ def main():
         f"{USE_CHINA_PROXY}"
     )
 
+    print(
+        f"🔀 最大代理尝试数: "
+        f"{MAX_PROXY_ATTEMPTS}"
+    )
+
+    print(
+        f"⏱️ 代理测试超时: "
+        f"{PROXY_TEST_TIMEOUT}s"
+    )
+
+    print(
+        f"💾 代理缓存 TTL: "
+        f"{PROXY_CACHE_TTL}s"
+    )
 
     # ========================================================
     # State
@@ -1990,12 +2482,10 @@ def main():
         {}
     )
 
-
     print(
         f"📂 该播客已处理 "
         f"{pc_state.get('total_processed', 0)} 集"
     )
-
 
     # ========================================================
     # RSS
@@ -2009,7 +2499,6 @@ def main():
         feed.entries
     )
 
-
     if not entries:
 
         print(
@@ -2017,7 +2506,6 @@ def main():
         )
 
         sys.exit(0)
-
 
     # ========================================================
     # 下一集
@@ -2027,7 +2515,6 @@ def main():
         entries,
         processed
     )
-
 
     if not next_entry:
 
@@ -2053,7 +2540,6 @@ def main():
 
         sys.exit(0)
 
-
     # ========================================================
     # Episode
     # ========================================================
@@ -2063,13 +2549,11 @@ def main():
         "untitled"
     )
 
-
     guid = (
         next_entry.get("guid")
         or next_entry.get("id")
         or title
     )
-
 
     print(
         f"\n🎯 本次处理: "
@@ -2081,7 +2565,6 @@ def main():
         f"{guid}"
     )
 
-
     # ========================================================
     # 原始 enclosure
     # ========================================================
@@ -2089,7 +2572,6 @@ def main():
     enclosure_url = get_audio_url(
         next_entry
     )
-
 
     if not enclosure_url:
 
@@ -2099,7 +2581,6 @@ def main():
 
         sys.exit(1)
 
-
     print(
         "📎 RSS 原始 enclosure:"
     )
@@ -2107,7 +2588,6 @@ def main():
     print(
         f"   {enclosure_url}"
     )
-
 
     # ========================================================
     # 解析 enclosure
@@ -2119,21 +2599,19 @@ def main():
         )
     )
 
-
     if audio_url != enclosure_url:
 
         print(
-            f"🔄 使用解析后的实际音频地址"
-            f" ({audio_source})"
+            f"🔄 使用解析后的实际音频地址 "
+            f"({audio_source})"
         )
 
     else:
 
         print(
-            f"ℹ️ 使用 enclosure 原地址"
-            f" ({audio_source})"
+            f"ℹ️ 使用 enclosure 原地址 "
+            f"({audio_source})"
         )
-
 
     # ========================================================
     # 临时音频
@@ -2143,12 +2621,10 @@ def main():
         title
     )
 
-
     mp3_path = (
-        PODCAST_DIR /
-        f"{safe_title}.mp3"
+        PODCAST_DIR
+        / f"{safe_title}.mp3"
     )
-
 
     # ========================================================
     # 下载
@@ -2170,14 +2646,15 @@ def main():
 
         sys.exit(1)
 
-
     if not proxy_info:
 
         proxy_info = {
-            "proxy": None,
-            "public_ip": None
-        }
+            "proxy":
+                None,
 
+            "public_ip":
+                None
+        }
 
     print(
         "\n📡 本次下载出口:"
@@ -2193,7 +2670,6 @@ def main():
         f"{proxy_info.get('public_ip')}"
     )
 
-
     # ========================================================
     # Whisper
     # ========================================================
@@ -2203,7 +2679,6 @@ def main():
         f"({MODEL_SIZE}, CPU int8, VAD)..."
     )
 
-
     try:
 
         model = WhisperModel(
@@ -2212,9 +2687,9 @@ def main():
             compute_type="int8"
         )
 
-
         segments_iter, info = (
             model.transcribe(
+
                 str(mp3_path),
 
                 beam_size=5,
@@ -2241,24 +2716,22 @@ def main():
             )
         )
 
-
         total_duration = getattr(
             info,
             "duration",
             None
         )
 
-
         segments = []
-
 
         for i, seg in enumerate(
             segments_iter,
             1
         ):
 
-            segments.append(seg)
-
+            segments.append(
+                seg
+            )
 
             if i % 10 == 0:
 
@@ -2268,9 +2741,9 @@ def main():
                 ):
 
                     pct = (
-                        seg.end /
-                        total_duration *
-                        100
+                        seg.end
+                        / total_duration
+                        * 100
                     )
 
                     print(
@@ -2289,7 +2762,6 @@ def main():
                         f"| 第 {i} 段"
                     )
 
-
         print(
             f"   语言: "
             f"{info.language} "
@@ -2302,7 +2774,6 @@ def main():
             f"个片段"
         )
 
-
     except Exception as e:
 
         print(
@@ -2311,7 +2782,6 @@ def main():
         )
 
         sys.exit(1)
-
 
     finally:
 
@@ -2326,7 +2796,6 @@ def main():
 
                 pass
 
-
     # ========================================================
     # 后处理
     # ========================================================
@@ -2338,18 +2807,15 @@ def main():
         f"个原始片段..."
     )
 
-
     sentences = resegment(
         segments
     )
-
 
     print(
         f"   合并为 "
         f"{len(sentences)} "
         f"个句子级片段"
     )
-
 
     # ========================================================
     # 翻译
@@ -2360,11 +2826,9 @@ def main():
         "（英→中，失败无限重试）..."
     )
 
-
     bilingual = translate_sentences(
         sentences
     )
-
 
     # ========================================================
     # VTT
@@ -2374,24 +2838,20 @@ def main():
         f"{safe_title}.vtt"
     )
 
-
     vtt_path = (
-        TRANSCRIPTS_DIR /
-        vtt_filename
+        TRANSCRIPTS_DIR
+        / vtt_filename
     )
-
 
     write_bilingual_vtt(
         bilingual,
         vtt_path
     )
 
-
     print(
         f"💾 双语 VTT: "
         f"{vtt_path.name}"
     )
-
 
     # ========================================================
     # 保存 State
@@ -2399,7 +2859,8 @@ def main():
 
     processed[guid] = {
 
-        "title": title,
+        "title":
+            title,
 
         "vtt_filename":
             vtt_filename,
@@ -2434,7 +2895,6 @@ def main():
 
     }
 
-
     pc_state[
         "total_processed"
     ] = (
@@ -2445,7 +2905,6 @@ def main():
         + 1
     )
 
-
     pc_state[
         "updated_at"
     ] = (
@@ -2454,11 +2913,9 @@ def main():
         ).isoformat()
     )
 
-
     save_state(
         state
     )
-
 
     # ========================================================
     # 生成 Feed
@@ -2468,11 +2925,9 @@ def main():
         pc_state
     )
 
-
     generate_master_index(
         state
     )
-
 
     # ========================================================
     # 完成
@@ -2512,4 +2967,5 @@ def main():
 # ============================================================
 
 if __name__ == "__main__":
+
     main()
