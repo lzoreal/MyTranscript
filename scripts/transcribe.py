@@ -195,6 +195,16 @@ def generate_podcast_feed(pc_state):
         new_root.tail = root.tail
         root = new_root
 
+    # 修改 channel title，追加 Unofficial 标识
+    channel = root.find("channel", namespaces=root.nsmap)
+    if channel is not None:
+        title_elem = channel.find("title", namespaces=root.nsmap)
+        if title_elem is not None and title_elem.text:
+            original_title = title_elem.text.strip()
+            if "[Unofficial" not in original_title:
+                title_elem.text = f"{original_title} [Unofficial Transcripts]"
+                print(f"   RSS 标题改为: {title_elem.text}")
+
     processed = pc_state.get("processed", {})
     added = 0
 
@@ -227,13 +237,14 @@ def generate_podcast_feed(pc_state):
     print(f"💾 Feed 已保存 ({added} 个字幕标签): {feed_path}")
 
     total = pc_state.get("total_processed", 0)
-    # 子页链接使用完整 BASE_URL
+    display_name = f"{PODCAST_SLUG} (Unofficial)"
+
     html = f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{PODCAST_SLUG} - Transcripts</title>
+<title>{display_name} - Transcripts</title>
 <style>
 body{{font-family:system-ui,-apple-system,sans-serif;max-width:720px;margin:40px auto;padding:0 20px;line-height:1.6;color:#333}}
 code{{background:#f4f4f4;padding:2px 6px;border-radius:4px;word-break:break-all}}
@@ -241,7 +252,7 @@ a{{color:#0366d6}}
 </style>
 </head>
 <body>
-<h1>🎙️ {PODCAST_SLUG}</h1>
+<h1>🎙️ {display_name}</h1>
 <p><strong>原 RSS：</strong><a href="{FEED_URL}" target="_blank">{FEED_URL}</a></p>
 <p><strong>带字幕 Feed：</strong><br><code><a href="{BASE_URL}/{PODCAST_SLUG}/feed.xml">{BASE_URL}/{PODCAST_SLUG}/feed.xml</a></code></p>
 <p>已处理 <strong>{total}</strong> 集（中英双语字幕）。</p>
@@ -255,16 +266,15 @@ def generate_master_index(state):
     items = ""
     for slug, pc in podcasts.items():
         total = pc.get("total_processed", 0)
-        feed = pc.get("feed_url", "")
-        # 修复：所有链接都拼接 BASE_URL
-        items += f'<li><a href="{BASE_URL}/{slug}/">{slug}</a> — 已处理 {total} 集 <small>(<a href="{BASE_URL}/{slug}/feed.xml">Feed</a>)</small></li>\n'
+        display_name = f"{slug} (Unofficial)"
+        items += f'<li><a href="{BASE_URL}/{slug}/">{display_name}</a> — 已处理 {total} 集 <small>(<a href="{BASE_URL}/{slug}/feed.xml">Feed</a>)</small></li>\n'
 
     html = f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Podcast Transcripts Hub</title>
+<title>Podcast Transcripts Hub (Unofficial)</title>
 <style>
 body{{font-family:system-ui,-apple-system,sans-serif;max-width:720px;margin:40px auto;padding:0 20px;line-height:1.6;color:#333}}
 a{{color:#0366d6}}
@@ -272,8 +282,8 @@ li{{margin:8px 0}}
 </style>
 </head>
 <body>
-<h1>🎙️ Podcast Transcripts Hub</h1>
-<p>以下播客均已自动生成中英双语 VTT 字幕：</p>
+<h1>🎙️ Podcast Transcripts Hub (Unofficial)</h1>
+<p>以下播客均已自动生成中英双语 VTT 字幕（非官方）：</p>
 <ul>
 {items}</ul>
 </body>
@@ -334,7 +344,7 @@ def main():
     print(f"📝 转录中 ({MODEL_SIZE}, CPU int8, VAD)...")
     try:
         model = WhisperModel(MODEL_SIZE, device="cpu", compute_type="int8")
-        segments, info = model.transcribe(
+        segments_iter, info = model.transcribe(
             str(mp3_path),
             beam_size=5,
             language="en",
@@ -345,8 +355,20 @@ def main():
             log_prob_threshold=-1.0,
             no_speech_threshold=0.6,
         )
-        segments = list(segments)
+
+        total_duration = getattr(info, "duration", None)
+        segments = []
+        for i, seg in enumerate(segments_iter, 1):
+            segments.append(seg)
+            if i % 10 == 0:
+                if total_duration and total_duration > 0:
+                    pct = seg.end / total_duration * 100
+                    print(f"   转录进度: {pct:.1f}% ({seg.end:.1f}s / {total_duration:.1f}s) | 第 {i} 段")
+                else:
+                    print(f"   转录进度: {seg.end:.1f}s | 第 {i} 段")
+
         print(f"   语言: {info.language} ({info.language_probability:.2f})")
+        print(f"   共 {len(segments)} 个片段")
     except Exception as e:
         print(f"❌ 转录失败: {e}")
         sys.exit(1)
