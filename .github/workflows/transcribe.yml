@@ -2,22 +2,26 @@ name: Auto Transcribe & Deploy Pages
 
 on:
   schedule:
-    - cron: '0 2 * * *'   # 每天 UTC 02:00（北京时间 10:00）
+    - cron: '0 2 * * *'   # 每天 UTC 02:00
   workflow_dispatch:
     inputs:
+      podcast_slug:
+        description: '播客标识（如 how-we-made-your-mother）'
+        required: true
+        default: 'how-we-made-your-mother'
       feed_url:
         description: '播客 RSS 地址'
         required: true
-        default: https://rss.amperwave.net/v2/feed/audacynetwork/hwmym'  # ← 换成真实 RSS
+        default: 'https://rss.amperwave.net/v2/feed/audacynetwork/hwmym'
       model:
-        description: 'Whisper 模型 (tiny/base/small/medium)'
+        description: 'Whisper 模型'
         required: true
         default: 'base'
 
 permissions:
-  contents: write      # 用于 push state.json
-  pages: write         # 用于部署 Pages
-  id-token: write      # 用于 Pages OIDC
+  contents: write
+  pages: write
+  id-token: write
 
 concurrency:
   group: "pages"
@@ -39,24 +43,24 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg
 
-      - name: 安装 Python 依赖
+      - name: 安装依赖
         run: |
           pip install faster-whisper feedparser requests lxml deep-translator
 
-      - name: 运行转录（一次一集）
+      - name: 运行转录
         env:
+          PODCAST_SLUG: ${{ github.event.inputs.podcast_slug || 'default' }}
           FEED_URL: ${{ github.event.inputs.feed_url || 'https://rss.amperwave.net/v2/feed/audacynetwork/hwmym' }}
           WHISPER_MODEL: ${{ github.event.inputs.model || 'base' }}
-          # 自动构造 GitHub Pages 地址，格式：https://<owner>.github.io/<repo>/
-          BASE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+          BASE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
         run: python scripts/transcribe.py
 
-      - name: 提交状态到 main
+      - name: 提交状态与站点文件到 Git
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add state.json
-          git diff --quiet && git diff --staged --quiet || git commit -m "auto: update state [skip ci]"
+          git add state.json site/
+          git diff --quiet && git diff --staged --quiet || git commit -m "auto: update ${PODCAST_SLUG:-default} transcripts [skip ci]"
           git push
 
       - name: 上传 Pages artifact
