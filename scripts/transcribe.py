@@ -40,12 +40,6 @@ BASE_URL = os.environ.get(
 
 
 # 是否使用中国代理
-#
-# 这里默认 true。
-#
-# 如果设置为 false：
-# 程序也不会使用 Runner IP 下载，
-# 而是直接终止。
 USE_CHINA_PROXY = (
     os.environ.get(
         "USE_CHINA_PROXY",
@@ -162,7 +156,6 @@ PROXY_CACHE_FILE = Path(
 )
 
 
-# 本次运行中已经确认无效的代理
 BAD_PROXIES = set()
 
 
@@ -523,7 +516,7 @@ def translate_with_retry(
 
             print(
                 f"   ⚠️ 第 {attempt} 次失败: "
-                f"{e}, "
+                f"{type(e).__name__}: {e}, "
                 f"sleep {sleep_time:.1f}s..."
             )
 
@@ -680,6 +673,59 @@ PROXY_HEADERS = {
 
 
 # ============================================================
+# 检查 SOCKS 支持
+# ============================================================
+
+def check_socks_support():
+
+    """
+    检查 requests 是否具备 SOCKS 支持。
+
+    requests 使用 SOCKS4/SOCKS5 时需要 PySocks。
+    """
+
+    try:
+
+        import socks  # noqa
+
+        print(
+            "   ✅ PySocks 已安装，"
+            "支持 SOCKS4/SOCKS5"
+        )
+
+        return True
+
+    except ImportError:
+
+        print(
+            "   ⚠️ 未检测到 PySocks"
+        )
+
+        print(
+            "   如果使用 SOCKS4/SOCKS5，"
+            "请安装："
+        )
+
+        print(
+            "   pip install requests[socks]"
+        )
+
+        return False
+
+
+def is_socks_proxy(proxy):
+
+    return proxy.lower().startswith(
+        (
+            "socks4://",
+            "socks4a://",
+            "socks5://",
+            "socks5h://"
+        )
+    )
+
+
+# ============================================================
 # 代理缓存
 # ============================================================
 
@@ -741,7 +787,7 @@ def load_proxy_cache():
 
         print(
             f"   ⚠️ 读取代理缓存失败: "
-            f"{e}"
+            f"{type(e).__name__}: {e}"
         )
 
         return []
@@ -776,7 +822,7 @@ def save_proxy_cache(
 
         print(
             f"   ⚠️ 保存代理缓存失败: "
-            f"{e}"
+            f"{type(e).__name__}: {e}"
         )
 
 
@@ -827,7 +873,8 @@ def get_china_proxies():
 
             print(
                 f"   ⚠️ {source_name} "
-                f"获取失败: {e}"
+                f"获取失败: "
+                f"{type(e).__name__}: {e}"
             )
 
             continue
@@ -846,7 +893,6 @@ def get_china_proxies():
                 ""
             )
 
-            # 没有协议时默认 HTTP
             if "://" not in line:
 
                 line = (
@@ -855,7 +901,7 @@ def get_china_proxies():
                 )
 
             if not re.match(
-                r"^(http|https|socks4|socks5)://"
+                r"^(http|https|socks4|socks5|socks5h)://"
                 r"[^:]+:\d+$",
                 line,
                 re.I
@@ -924,6 +970,10 @@ def get_proxy_geoip(
             False
         ):
 
+            print(
+                "      GeoIP 返回 success=false"
+            )
+
             return None
 
         ip = data.get(
@@ -949,9 +999,151 @@ def get_proxy_geoip(
                 country
         }
 
-    except Exception:
+    except Exception as e:
+
+        # ====================================================
+        # 重要修改：
+        # 原代码这里直接吞掉异常。
+        # 现在输出真正的错误。
+        # ====================================================
+
+        print(
+            f"      ⚠️ GeoIP 请求失败:"
+            f" {type(e).__name__}: {e}"
+        )
 
         return None
+
+
+# ============================================================
+# 测试 enclosure
+# ============================================================
+
+def test_enclosure(
+    target_url,
+    proxy
+):
+
+    request_proxies = {
+        "http": proxy,
+        "https": proxy
+    }
+
+    try:
+
+        print(
+            "      🎯 测试原始 enclosure..."
+        )
+
+        response = requests.head(
+            target_url,
+            timeout=PROXY_TEST_TIMEOUT,
+            proxies=request_proxies,
+            headers=PROXY_HEADERS,
+            allow_redirects=True
+        )
+
+        # ----------------------------------------------------
+        # HEAD 不支持
+        # ----------------------------------------------------
+
+        if response.status_code in (
+            403,
+            405,
+            501
+        ):
+
+            print(
+                f"      HEAD HTTP "
+                f"{response.status_code}，"
+                f"改用 GET Range"
+            )
+
+            response = requests.get(
+                target_url,
+                timeout=PROXY_TEST_TIMEOUT,
+                proxies=request_proxies,
+                headers={
+                    **PROXY_HEADERS,
+                    "Range":
+                        "bytes=0-1023"
+                },
+                allow_redirects=True,
+                stream=True
+            )
+
+        print(
+            f"      enclosure HTTP: "
+            f"{response.status_code}"
+        )
+
+        print(
+            f"      最终 URL: "
+            f"{response.url}"
+        )
+
+        if response.status_code >= 400:
+
+            return {
+                "ok":
+                    False,
+
+                "reason":
+                    f"HTTP "
+                    f"{response.status_code}"
+            }
+
+        content_type = (
+            response.headers
+            .get(
+                "Content-Type",
+                ""
+            )
+            .lower()
+        )
+
+        if content_type:
+
+            print(
+                f"      Content-Type: "
+                f"{content_type}"
+            )
+
+        if (
+            "text/html"
+            in content_type
+        ):
+
+            return {
+                "ok":
+                    False,
+
+                "reason":
+                    "返回 HTML"
+            }
+
+        return {
+            "ok":
+                True,
+
+            "url":
+                response.url
+        }
+
+    except Exception as e:
+
+        print(
+            f"      ⚠️ enclosure 请求失败:"
+            f" {type(e).__name__}: {e}"
+        )
+
+        return {
+            "ok":
+                False,
+
+            "reason":
+                f"{type(e).__name__}: {e}"
+        }
 
 
 # ============================================================
@@ -966,149 +1158,162 @@ def test_proxy(
     """
     测试：
 
-    1. HTTPS 是否可用
-    2. 是否有公网出口
-    3. 出口是否为 CN
-    4. 原始 enclosure 是否可以访问
+    1. GeoIP
+    2. 中国大陆出口
+    3. 原始 enclosure
 
-    注意：
-    不主动解析 pdst.fm。
+    重要：
+    GeoIP 失败不再直接判死。
+
+    因为：
+
+        GeoIP 服务不可访问
+        !=
+        enclosure 不可访问
     """
 
-    request_proxies = {
-        "http": proxy,
-        "https": proxy
-    }
-
-    # --------------------------------------------------------
-    # GeoIP
-    # --------------------------------------------------------
-
-    geo = get_proxy_geoip(
-        proxy
-    )
-
-    if not geo:
-
-        return {
-            "ok":
-                False,
-
-            "reason":
-                "GeoIP 请求失败"
-        }
-
-    public_ip = geo.get(
-        "ip"
-    )
-
-    country_code = (
-        geo.get(
-            "country_code"
-        )
-        or ""
-    ).upper()
-
-    country = (
-        geo.get(
-            "country"
-        )
-        or ""
-    )
-
     print(
-        f"   🌍 出口 IP: "
-        f"{public_ip}"
+        f"   🔍 测试代理类型: "
+        f"{proxy.split('://')[0].upper()}"
     )
 
-    print(
-        f"   🌏 地区: "
-        f"{country} "
-        f"({country_code})"
-    )
+    # ========================================================
+    # SOCKS 支持检查
+    # ========================================================
 
-    # --------------------------------------------------------
-    # 必须中国大陆
-    # --------------------------------------------------------
-
-    if country_code != "CN":
-
-        return {
-            "ok":
-                False,
-
-            "reason":
-                f"不是中国大陆 IP: "
-                f"{country_code}"
-        }
-
-    # --------------------------------------------------------
-    # 测试原始 enclosure
-    # --------------------------------------------------------
-
-    if target_url:
+    if is_socks_proxy(proxy):
 
         try:
 
-            response = requests.head(
-                target_url,
-                timeout=PROXY_TEST_TIMEOUT,
-                proxies=request_proxies,
-                headers=PROXY_HEADERS,
-                allow_redirects=True
-            )
+            import socks  # noqa
 
-            # 一些服务器不支持 HEAD
-            if response.status_code in (
-                403,
-                405,
-                501
-            ):
-
-                response = requests.get(
-                    target_url,
-                    timeout=PROXY_TEST_TIMEOUT,
-                    proxies=request_proxies,
-                    headers={
-                        **PROXY_HEADERS,
-                        "Range":
-                            "bytes=0-1023"
-                    },
-                    allow_redirects=True,
-                    stream=True
-                )
-
-            if response.status_code >= 400:
-
-                return {
-                    "ok":
-                        False,
-
-                    "reason":
-                        f"原始 enclosure HTTP "
-                        f"{response.status_code}"
-                }
-
-            print(
-                f"   🎯 原始 enclosure 测试: "
-                f"HTTP {response.status_code}"
-            )
-
-            print(
-                f"   🔗 最终跳转 URL: "
-                f"{response.url}"
-            )
-
-        except Exception as e:
+        except ImportError:
 
             return {
                 "ok":
                     False,
 
                 "reason":
-                    f"原始 enclosure 不可访问: "
-                    f"{e}"
+                    "Python 未安装 PySocks，"
+                    "无法使用 SOCKS 代理"
             }
+
+    # ========================================================
+    # GeoIP
+    # ========================================================
+
+    geo = get_proxy_geoip(
+        proxy
+    )
+
+    public_ip = None
+    country_code = None
+    country = None
+
+    if geo:
+
+        public_ip = geo.get(
+            "ip"
+        )
+
+        country_code = (
+            geo.get(
+                "country_code"
+            )
+            or ""
+        ).upper()
+
+        country = (
+            geo.get(
+                "country"
+            )
+            or ""
+        )
+
+        print(
+            f"   🌍 出口 IP: "
+            f"{public_ip}"
+        )
+
+        print(
+            f"   🌏 地区: "
+            f"{country} "
+            f"({country_code})"
+        )
+
+        # ----------------------------------------------------
+        # 如果 GeoIP 明确告诉我们不是 CN
+        # 才判定不是中国代理
+        # ----------------------------------------------------
+
+        if country_code != "CN":
+
+            return {
+                "ok":
+                    False,
+
+                "reason":
+                    f"不是中国大陆 IP: "
+                    f"{country_code}",
+
+                "public_ip":
+                    public_ip
+            }
+
+    else:
+
+        print(
+            "   ⚠️ GeoIP 无法确认出口地区"
+        )
+
+        print(
+            "   ➡️ 不立即判定代理无效，"
+            "继续测试 enclosure"
+        )
+
+    # ========================================================
+    # enclosure
+    # ========================================================
+
+    if target_url:
+
+        enclosure_result = test_enclosure(
+            target_url,
+            proxy
+        )
+
+        if not enclosure_result.get(
+            "ok"
+        ):
+
+            return {
+                "ok":
+                    False,
+
+                "reason":
+                    "enclosure 测试失败: "
+                    + enclosure_result.get(
+                        "reason",
+                        "unknown"
+                    ),
+
+                "public_ip":
+                    public_ip
+            }
+
+        print(
+            "   ✅ 原始 enclosure 可以访问"
+        )
+
+    # ========================================================
+    # GeoIP 不知道，但 enclosure 可以访问
+    #
+    # 注意：
+    # 如果 GeoIP 失败，我们无法证明它一定是 CN。
+    #
+    # 但如果用户的目标是中国出口，
+    # 这里仍然允许继续下载。
+    # ========================================================
 
     return {
         "ok":
@@ -1224,10 +1429,6 @@ def download_audio(
             f"   {proxy}"
         )
 
-        # ----------------------------------------------------
-        # 测试代理
-        # ----------------------------------------------------
-
         result = test_proxy(
             proxy,
             target_url=audio_url
@@ -1252,18 +1453,33 @@ def download_audio(
             "public_ip"
         )
 
-        print(
-            "   ✅ 中国大陆代理可用"
+        country_code = result.get(
+            "country_code"
         )
 
-        print(
-            f"   🌍 Public IP: "
-            f"{public_ip}"
-        )
+        if country_code:
 
-        # ----------------------------------------------------
+            print(
+                "   ✅ 中国大陆代理可用"
+            )
+
+        else:
+
+            print(
+                "   ⚠️ GeoIP 无法确认地区，"
+                "但 enclosure 可访问"
+            )
+
+        if public_ip:
+
+            print(
+                f"   🌍 Public IP: "
+                f"{public_ip}"
+            )
+
+        # ====================================================
         # 下载
-        # ----------------------------------------------------
+        # ====================================================
 
         try:
 
@@ -1283,14 +1499,17 @@ def download_audio(
                     proxy,
 
                 "public_ip":
-                    public_ip
+                    public_ip,
+
+                "country_code":
+                    country_code
             }
 
         except Exception as e:
 
             print(
                 f"   ❌ 下载失败: "
-                f"{e}"
+                f"{type(e).__name__}: {e}"
             )
 
             BAD_PROXIES.add(
@@ -1492,14 +1711,12 @@ def download_with_proxy(
 
     valid_audio = (
 
-        # MP3 ID3
         header.startswith(
             b"ID3"
         )
 
         or
 
-        # MPEG Audio Frame
         (
             len(header) >= 2
             and
@@ -1512,7 +1729,6 @@ def download_with_proxy(
 
         or
 
-        # MP4 / M4A
         (
             len(header) >= 12
             and
@@ -1521,14 +1737,12 @@ def download_with_proxy(
 
         or
 
-        # Ogg
         header.startswith(
             b"OggS"
         )
 
         or
 
-        # ADTS AAC
         (
             len(header) >= 2
             and
@@ -1637,10 +1851,6 @@ def generate_podcast_feed(
         "🔄 生成播客 RSS feed..."
     )
 
-    # --------------------------------------------------------
-    # 获取原始 RSS
-    # --------------------------------------------------------
-
     resp = requests.get(
         FEED_URL,
         timeout=60,
@@ -1656,10 +1866,6 @@ def generate_podcast_feed(
         resp.content
     )
 
-    # --------------------------------------------------------
-    # Namespace
-    # --------------------------------------------------------
-
     ns_uri = (
         "https://podcastindex.org/"
         "namespace/1.0"
@@ -1673,10 +1879,6 @@ def generate_podcast_feed(
         "http://www.itunes.com/"
         "dtds/podcast-1.0.dtd"
     )
-
-    # --------------------------------------------------------
-    # 确保 podcast namespace
-    # --------------------------------------------------------
 
     nsmap = dict(
         root.nsmap
@@ -1706,10 +1908,6 @@ def generate_podcast_feed(
 
         root = new_root
 
-    # --------------------------------------------------------
-    # channel
-    # --------------------------------------------------------
-
     channel = root.find(
         "channel"
     )
@@ -1722,19 +1920,11 @@ def generate_podcast_feed(
 
         return
 
-    # --------------------------------------------------------
-    # Feed URL
-    # --------------------------------------------------------
-
     feed_url = (
         f"{BASE_URL}/"
         f"{PODCAST_SLUG}/"
         f"feed.xml"
     )
-
-    # --------------------------------------------------------
-    # title
-    # --------------------------------------------------------
 
     title_elem = channel.find(
         "title"
@@ -1764,10 +1954,6 @@ def generate_podcast_feed(
                 f"{title_elem.text}"
             )
 
-    # --------------------------------------------------------
-    # channel link
-    # --------------------------------------------------------
-
     link_elem = channel.find(
         "link"
     )
@@ -1777,10 +1963,6 @@ def generate_podcast_feed(
         link_elem.text = (
             BASE_URL
         )
-
-    # --------------------------------------------------------
-    # image
-    # --------------------------------------------------------
 
     image = channel.find(
         "image"
@@ -1811,10 +1993,6 @@ def generate_podcast_feed(
                 title_elem.text
             )
 
-    # --------------------------------------------------------
-    # atom:self
-    # --------------------------------------------------------
-
     for atom_link in channel.findall(
         f"{{{atom_uri}}}link"
     ):
@@ -1842,10 +2020,6 @@ def generate_podcast_feed(
                 feed_url
             )
 
-    # --------------------------------------------------------
-    # itunes:new-feed-url
-    # --------------------------------------------------------
-
     new_feed = channel.find(
         f"{{{itunes_uri}}}"
         f"new-feed-url"
@@ -1856,11 +2030,6 @@ def generate_podcast_feed(
         new_feed.text = (
             feed_url
         )
-
-    # ========================================================
-    # 核心：
-    # 只保留已经处理的 episode
-    # ========================================================
 
     processed = pc_state.get(
         "processed",
@@ -1898,10 +2067,6 @@ def generate_podcast_feed(
             guid_elem.text.strip()
         )
 
-        # ----------------------------------------------------
-        # 未处理
-        # ----------------------------------------------------
-
         if guid not in processed:
 
             channel.remove(
@@ -1912,19 +2077,9 @@ def generate_podcast_feed(
 
             continue
 
-        # ----------------------------------------------------
-        # 已处理
-        # ----------------------------------------------------
-
         episode_state = (
             processed[guid]
         )
-
-        # ----------------------------------------------------
-        # 恢复原始 enclosure
-        #
-        # 不使用任何解析后的地址。
-        # ----------------------------------------------------
 
         original_enclosure_url = (
             episode_state.get(
@@ -1978,10 +2133,6 @@ def generate_podcast_feed(
                         f"      新: "
                         f"{original_enclosure_url}"
                     )
-
-        # ----------------------------------------------------
-        # 添加 transcript
-        # ----------------------------------------------------
 
         vtt_filename = (
             episode_state.get(
@@ -2037,10 +2188,6 @@ def generate_podcast_feed(
 
         added += 1
 
-    # ========================================================
-    # 写 Feed
-    # ========================================================
-
     tree = etree.ElementTree(
         root
     )
@@ -2084,10 +2231,6 @@ def generate_podcast_feed(
     print(
         f"   文件: {feed_path}"
     )
-
-    # ========================================================
-    # 生成 Podcast 首页
-    # ========================================================
 
     total = pc_state.get(
         "total_processed",
@@ -2352,6 +2495,12 @@ def main():
     )
 
     # ========================================================
+    # 检查 SOCKS
+    # ========================================================
+
+    check_socks_support()
+
+    # ========================================================
     # State
     # ========================================================
 
@@ -2473,14 +2622,6 @@ def main():
         f"   {enclosure_url}"
     )
 
-    # ========================================================
-    # 直接使用原始 enclosure
-    #
-    # 不解析 pdst.fm
-    # 不解析 Castfire
-    # 不解析 Megaphone
-    # ========================================================
-
     audio_url = (
         enclosure_url
     )
@@ -2525,7 +2666,7 @@ def main():
 
         print(
             f"\n❌ 音频下载失败: "
-            f"{e}"
+            f"{type(e).__name__}: {e}"
         )
 
         sys.exit(1)
@@ -2667,16 +2808,12 @@ def main():
 
         print(
             f"❌ 转录失败: "
-            f"{e}"
+            f"{type(e).__name__}: {e}"
         )
 
         sys.exit(1)
 
     finally:
-
-        # ----------------------------------------------------
-        # 删除临时 MP3
-        # ----------------------------------------------------
 
         if mp3_path.exists():
 
@@ -2693,7 +2830,7 @@ def main():
 
                 print(
                     f"⚠️ 删除临时 MP3 失败: "
-                    f"{e}"
+                    f"{type(e).__name__}: {e}"
                 )
 
     # ========================================================
@@ -2754,7 +2891,7 @@ def main():
     )
 
     # ========================================================
-    # 保存 State
+    # State
     # ========================================================
 
     processed[guid] = {
@@ -2770,19 +2907,15 @@ def main():
                 timezone.utc
             ).isoformat(),
 
-        # 原始 RSS enclosure
         "enclosure_url":
             enclosure_url,
 
-        # 与 enclosure_url 相同
-        # 不再保存真实解析地址
         "audio_url":
             audio_url,
 
         "audio_source":
             audio_source,
 
-        # 实际下载代理
         "proxy":
             proxy_info.get(
                 "proxy"
@@ -2818,7 +2951,7 @@ def main():
     )
 
     # ========================================================
-    # 生成 Feed
+    # Feed
     # ========================================================
 
     generate_podcast_feed(
