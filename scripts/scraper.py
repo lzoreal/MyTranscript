@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-多播客字幕爬取器 (RSS-first + 搜索架构)
+多播客字幕爬取器 (RSS-first + 搜索 + 自动对齐)
 """
 
 import os
@@ -11,9 +11,18 @@ import time
 import urllib.parse
 import requests
 import html as html_module
+import subprocess
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from lxml import etree
+
+# 可选依赖：faster-whisper（用于广告对齐）
+try:
+    from faster_whisper import WhisperModel
+    HAS_FASTER_WHISPER = True
+except ImportError:
+    HAS_FASTER_WHISPER = False
 
 PROGRESS_FILE = Path("progress.json")
 PODCASTS_FILE = Path("podcasts.json")
@@ -30,6 +39,8 @@ HEADERS = {
 }
 
 BATCH_SIZE = 10
+WHISPER_MODEL_SIZE = os.environ.get("WHISPER_MODEL", "base")
+ALIGN_AUDIO_SECONDS = 90  # 只下载前 90 秒检测片头广告
 
 
 # ============ 配置 & 进度 ============
@@ -62,12 +73,11 @@ def get_podcast_progress(progress, slug):
 
 
 def display_name(podcast):
-    """返回带 Unofficial 后缀的播客名称"""
     base = podcast.get("name", podcast["slug"])
     return f"{base} (Unofficial)"
 
 
-# ============ 网络请求（带 429 处理） ============
+# ============ 网络请求 ============
 def fetch_html(url, retries=3):
     for attempt in range(retries):
         try:
@@ -99,12 +109,17 @@ def fetch_rss_entries(feed_url):
             guid_elem = item.find("guid")
             title_elem = item.find("title")
             pub_elem = item.find("pubDate")
+            enc_elem = item.find("enclosure")
+            audio_url = ""
+            if enc_elem is not None:
+                audio_url = enc_elem.get("url", "")
             if guid_elem is not None and guid_elem.text:
                 entries.append(
                     {
                         "guid": guid_elem.text.strip(),
                         "title": title_elem.text.strip() if title_elem is not None and title_elem.text else "",
                         "pub_date": pub_elem.text.strip() if pub_elem is not None and pub_elem.text else "",
+                        "audio_url": audio_url,
                     }
                 )
         return entries
@@ -160,12 +175,6 @@ def titles_match(rss_title, result_title):
 
 # ============ 字幕解析 & VTT ============
 def parse_transcript(html_text):
-    """
-    解析 podscripts.co 单集字幕。
-    1. 只提取 <body> 内容
-    2. 主动移除 <script> 和 <style> 标签及其内容
-    3. 遇到页脚/版权标记时停止
-    """
     body_match = re.search(r'<body[^>]*>(.*?)</body>', html_text, re.DOTALL | re.IGNORECASE)
     if body_match:
         body = body_match.group(1)
@@ -240,6 +249,115 @@ def safe_filename(title):
     return "".join(c if c in keep else "_" for c in title).strip("_.")[:80]
 
 
+# ============ 广告对齐 ============
+def get_audio_url(rss_entries, guid):
+    """从已获取的 RSS entries 中查找音频 URL"""
+    for entry in rss_entries:
+        if entry["guid"] == guid and entry["audio_url"]:
+            return entry["audio_url"]
+    return None
+
+
+def download_audio_sample(audio_url, duration=ALIGN_AUDIO_SECONDS):
+    """用 ffmpeg 下载前 N 秒音频"""
+    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    cmd = [
+        "ffmpeg", "-y", "-i", audio_url,
+        "-t", str(duration), "-ar", "16000", "-ac", "1",
+        "-vn", tmp.name
+    ]
+    try:
+        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=60)
+        return Path(tmp.name)
+    except Exception as e:
+        print(f"         ffmpeg 失败: {e}")
+        return None
+
+
+def detect_ad_offset(audio_path, podscripts_text):
+    """用 faster-whisper 检测广告偏移"""
+    model = WhisperModel(WHISPER_MODEL_SIZE, device="cpu", compute_type="int8")
+    segments, _ = model.transcribe(
+        str(audio_path),
+        beam_size=1,
+        language="en",
+        vad_filter=True,
+        vad_parameters=dict(min_silence_duration_ms=500),
+        condition_on_previous_text=False,
+    )
+    segments = list(segments)
+
+    # 取 podscripts 前 60 个字符作为指纹
+    fingerprint = re.sub(r"[^\w]", "", podscripts_text[:80].lower())
+    if not fingerprint:
+        return 0
+
+    for seg in segments:
+        seg_text = re.sub(r"[^\w]", "", seg.text.lower())
+        if fingerprint in seg_text or seg_text in fingerprint:
+            offset = max(0, round(seg.start) - 1)
+            return offset
+
+    # 未匹配到，假设无广告
+    return 0
+
+
+def align_batch(podcast, rss_entries, batch_guids, processed):
+    """对刚爬取的 10 集进行广告对齐"""
+    if not HAS_FASTER_WHISPER:
+        print("   faster-whisper 未安装，跳过对齐")
+        return
+
+    print(f"\n   开始广告对齐 ({len(batch_guids)} 集, 模型: {WHISPER_MODEL_SIZE})...")
+    aligned = 0
+
+    for guid in batch_guids:
+        info = processed.get(guid)
+        if not info or info.get("skipped") or not info.get("vtt_filename"):
+            continue
+
+        title = info["title"]
+        print(f"      [{aligned+1}] {title[:50]}")
+
+        audio_url = get_audio_url(rss_entries, guid)
+        if not audio_url:
+            print("         无音频 URL")
+            continue
+
+        # 读取现有字幕文本
+        vtt_path = SITE_DIR / podcast["slug"] / "transcripts" / info["vtt_filename"]
+        with open(vtt_path, "r", encoding="utf-8") as f:
+            vtt_text = f.read()
+        pod_text = re.sub(r"WEBVTT|^\d+$|\d{2}:\d{2}:\d{2}\.\d{3} --> .*", "", vtt_text, flags=re.MULTILINE)
+
+        # 下载音频样本
+        sample_path = download_audio_sample(audio_url)
+        if not sample_path:
+            continue
+
+        try:
+            offset = detect_ad_offset(sample_path, pod_text)
+            if offset > 0:
+                # 重新生成 VTT
+                cues = parse_transcript(fetch_html(info["source_url"]) or "")
+                if cues:
+                    with open(vtt_path, "w", encoding="utf-8") as f:
+                        f.write(cues_to_vtt(cues, offset_seconds=offset))
+                    info["ad_offset"] = offset
+                    print(f"         偏移 +{offset}s")
+                    aligned += 1
+            else:
+                info["ad_offset"] = 0
+                print(f"         无偏移")
+        except Exception as e:
+            print(f"         对齐失败: {e}")
+        finally:
+            sample_path.unlink(missing_ok=True)
+            time.sleep(1)
+
+    print(f"   对齐完成: {aligned}/{len(batch_guids)} 集有偏移")
+
+
 # ============ 核心处理 ============
 def process_podcast(podcast, progress):
     slug = podcast["slug"]
@@ -275,6 +393,8 @@ def process_podcast(podcast, progress):
     print(f"   本次处理 {len(batch)} 集（待处理 {len(pending)} 集）")
 
     changed = False
+    batch_guids = []  # 记录刚处理的 guid，用于后续对齐
+
     for idx, entry in enumerate(batch, 1):
         guid = entry["guid"]
         title = entry["title"]
@@ -316,16 +436,13 @@ def process_podcast(podcast, progress):
             changed = True
             continue
 
-        ad_offset = processed.get(guid, {}).get("ad_offset", podcast.get("default_ad_offset", 0))
-
         vtt_filename = f"{safe_filename(title)}.vtt"
         vtt_path = SITE_DIR / slug / "transcripts" / vtt_filename
         vtt_path.parent.mkdir(parents=True, exist_ok=True)
 
-        vtt_content = cues_to_vtt(cues, offset_seconds=ad_offset)
+        # 先保存无偏移版本
         with open(vtt_path, "w", encoding="utf-8") as f:
-            f.write(vtt_content)
-        print(f"      VTT: {vtt_filename} ({len(cues)} cues, offset={ad_offset}s)")
+            f.write(cues_to_vtt(cues, offset_seconds=0))
 
         processed[guid] = {
             "title": title,
@@ -333,13 +450,19 @@ def process_podcast(podcast, progress):
             "processed_at": datetime.now(timezone.utc).isoformat(),
             "guid": guid,
             "source_url": ep_url,
-            "ad_offset": ad_offset,
+            "ad_offset": 0,
         }
         pc_prog["total_processed"] = pc_prog.get("total_processed", 0) + 1
+        batch_guids.append(guid)
         changed = True
+        print(f"      VTT: {vtt_filename} ({len(cues)} cues)")
 
         if idx < len(batch):
             time.sleep(5)
+
+    # ========== 自动对齐刚爬取的 10 集 ==========
+    if batch_guids and changed:
+        align_batch(podcast, rss_entries, batch_guids, processed)
 
     pc_prog["updated_at"] = datetime.now(timezone.utc).isoformat()
     return changed
@@ -371,7 +494,6 @@ def generate_podcast_feed(pc_prog, podcast, base_url):
         new_root.tail = root.tail
         root = new_root
 
-    # 修改 channel title 为 Unofficial 版本
     channel = root.find("channel")
     if channel is not None:
         title_elem = channel.find("title")
