@@ -156,66 +156,42 @@ def titles_match(rss_title, result_title):
 def parse_transcript(html_text):
     """
     解析 podscripts.co 单集字幕。
-    遇到页脚/脚本/版权信息时硬停止，防止把 JS 代码抓进 VTT。
+    关键修复：
+    1. 只提取 <body> 内容，忽略 <head> 中的脚本
+    2. 主动移除 <script> 和 <style> 标签及其内容
+    3. 只在遇到明确的页脚标记时停止
     """
-    # 1. 解码 HTML 实体
-    text = html.unescape(html_text)
-    
-    # 2. 去除所有 HTML 标签，保留换行
+    # 1. 只提取 body 内容
+    body_match = re.search(r'<body[^>]*>(.*?)</body>', html_text, re.DOTALL | re.IGNORECASE)
+    if body_match:
+        body = body_match.group(1)
+    else:
+        body = html_text
+
+    # 2. 移除 script 和 style 标签及其内容
+    body = re.sub(r'<script[^>]*>.*?</script>', '', body, flags=re.DOTALL | re.IGNORECASE)
+    body = re.sub(r'<style[^>]*>.*?</style>', '', body, flags=re.DOTALL | re.IGNORECASE)
+
+    # 3. 解码 HTML 实体
+    text = html.unescape(body)
+
+    # 4. 去除所有 HTML 标签，保留换行
     text = re.sub(r'<[^>]+>', '\n', text)
-    
-    # 3. 清理多余空白
+
+    # 5. 清理多余空白
     lines = [line.strip() for line in text.split('\n') if line.strip()]
-    
-    # 4. 页脚/脚本停止标记（一旦遇到就停止所有收集）
-    stop_markers = [
-        "© PodScripts.co",
-        "Privacy Policy",
-        "if (document.readyState",
-        "function gtag",
-        "function run()",
-        "function readMoreLess",
-        "window.dataLayer",
-        "window.scroll_to_words",
-        "window.location",
-        "console.log",
-        "setTimeout(function",
-        "document.addEventListener",
-        "document.querySelector",
-        "document.getElementById",
-        "MutationObserver",
-        "gtag('js'",
-        "gtag('config'",
-        "childList: true",
-        "subtree: true",
-        "banner-analytics",
-        "axios.post",
-        "IntersectionObserver",
-        "getBoundingClientRect",
-        "pageYOffset",
-        "// Banner Analytics Tracking",
-        "// Function to check",
-        "// Process all",
-        "// Run on page load",
-    ]
-    
+
+    # 6. 提取 cues
     cues = []
     current_time = None
     current_texts = []
-    stopped = False
-    
+
     for line in lines:
-        if stopped:
+        # 遇到页脚/版权标记就停止
+        if "© PodScripts.co" in line or "Privacy Policy" in line:
             break
-        
-        # 检查是否碰到页脚/脚本开始
-        for marker in stop_markers:
-            if marker in line:
-                stopped = True
-                break
-        if stopped:
-            break
-        
+
+        # 匹配时间戳行
         m = re.match(r"Starting\s+point\s+is\s+(\d{1,2}):(\d{2}):(\d{2})", line, re.IGNORECASE)
         if m:
             if current_time is not None and current_texts:
@@ -228,11 +204,11 @@ def parse_transcript(html_text):
             if line.startswith("Click on any sentence") or line.startswith("There aren't comments"):
                 continue
             current_texts.append(line)
-    
+
     # 最后一个 cue
     if current_time is not None and current_texts:
         cues.append({"start": current_time, "text": "\n".join(current_texts)})
-    
+
     return cues
 
 
