@@ -39,7 +39,7 @@ HEADERS = {
 
 BATCH_SIZE = 10
 WHISPER_MODEL_SIZE = os.environ.get("WHISPER_MODEL", "base")
-ALIGN_AUDIO_SECONDS = 120  # 校验前 2 分钟
+ALIGN_AUDIO_SECONDS = 120
 
 
 # ============ 配置 & 进度 ============
@@ -273,44 +273,76 @@ def download_audio_sample(audio_url, duration=ALIGN_AUDIO_SECONDS):
 
 def detect_ad_offset(model, audio_path, podscripts_text):
     """
-    用 faster-whisper 转录前 2 分钟，匹配 podscripts 字幕开头，返回广告偏移秒数。
-    关闭 VAD 确保广告也被转录，避免漏检。
+    三阶段检测广告偏移：
+    1. 全文子串匹配（最准确）
+    2. 逐段 4 词短语匹配
+    3. 首个语音段开始时间 fallback
+    全程打印调试信息。
     """
     segments, _ = model.transcribe(
         str(audio_path),
         beam_size=1,
         language="en",
-        vad_filter=False,  # 关键：关闭 VAD，广告也会被转录
+        vad_filter=False,
         condition_on_previous_text=False,
     )
     segments = list(segments)
 
     if not segments:
+        print("         [调试] whisper 无输出")
         return 0
 
-    # 构建 podscripts 指纹：取前 5 句非空文本，提取前 12 个词
-    pod_lines = [l.strip() for l in podscripts_text.split('\n') if l.strip()]
-    pod_text = " ".join(pod_lines[:5]).lower()
-    pod_text = re.sub(r"[^\w\s]", "", pod_text)
-    fingerprint_words = pod_text.split()[:12]
-    if len(fingerprint_words) < 3:
-        return 0
+    # ---- 提取字幕指纹 ----
+    pod_lines = [l.strip() for l in podscripts_text.split('\n') if l.strip() and len(l.strip()) > 5]
+    target = " ".join(pod_lines[:2]).lower()
+    target = re.sub(r"[^\w\s]", "", target)
+    target_words = target.split()
 
-    # 在 whisper segments 中找匹配
+    print(f"         [调试] 字幕指纹({len(target_words)}词): {target[:100]}...")
+    print(f"         [调试] whisper 输出 {len(segments)} 段")
+
+    # ---- 方法1: 全文子串匹配 ----
+    whisper_full = ""
+    for seg in segments:
+        whisper_full += " " + seg.text.lower()
+    whisper_full = re.sub(r"[^\w\s]", "", whisper_full)
+
+    if len(target_words) >= 4:
+        # 尝试用前 4~8 个词滑动匹配
+        for window in range(min(8, len(target_words)), 3, -1):
+            phrase = " ".join(target_words[:window])
+            idx = whisper_full.find(phrase)
+            if idx != -1:
+                # 根据字符位置估算时间
+                char_ratio = idx / max(1, len(whisper_full))
+                est_time = segments[0].start + (segments[-1].end - segments[0].start) * char_ratio
+                offset = max(0, round(est_time) - 1)
+                print(f"         [调试] 方法1全文匹配成功(窗口{window}词), 估算偏移: {offset}s")
+                return offset if offset > 5 else 0
+
+    # ---- 方法2: 逐段 4 词匹配 ----
     for seg in segments:
         seg_text = re.sub(r"[^\w\s]", "", seg.text.lower())
-        # 检查是否有至少 3 个连续词匹配
-        for i in range(len(fingerprint_words) - 2):
-            phrase = " ".join(fingerprint_words[i:i+3])
+        for i in range(max(0, len(target_words) - 3)):
+            phrase = " ".join(target_words[i:i+4])
             if phrase in seg_text:
                 offset = max(0, round(seg.start) - 1)
-                return offset if offset > 3 else 0
+                print(f"         [调试] 方法2分段匹配成功, 偏移: {offset}s")
+                return offset if offset > 5 else 0
 
-    # Fallback：如果第一个语音段开始较晚，说明前面是广告/静音
+    # ---- 方法3: 首个语音段时间 fallback ----
     first_start = segments[0].start
-    if first_start > 15:
+    # 如果第一个 segment 开始较晚，且前面有较长静音，可能是音乐/广告
+    if first_start > 10:
+        print(f"         [调试] 方法3 fallback: 首个语音段在 {first_start:.1f}s")
         return round(first_start)
 
+    # 打印前 3 段 whisper 内容供排查
+    print(f"         [调试] 未匹配. 前3段 whisper:")
+    for seg in segments[:3]:
+        print(f"            [{seg.start:.1f}s] {seg.text[:60]}...")
+
+    print(f"         [调试] 结论: 未检测到偏移")
     return 0
 
 
@@ -320,8 +352,6 @@ def align_batch(podcast, rss_entries, batch_guids, processed):
         return
 
     print(f"\n   开始广告对齐 ({len(batch_guids)} 集, 模型: {WHISPER_MODEL_SIZE}, 校验前 {ALIGN_AUDIO_SECONDS}s)...")
-
-    # 关键优化：只加载一次模型
     print("      加载 Whisper 模型...")
     model = WhisperModel(WHISPER_MODEL_SIZE, device="cpu", compute_type="int8")
 
@@ -357,13 +387,13 @@ def align_batch(podcast, rss_entries, batch_guids, processed):
                     with open(vtt_path, "w", encoding="utf-8") as f:
                         f.write(cues_to_vtt(cues, offset_seconds=offset))
                     info["ad_offset"] = offset
-                    print(f"         偏移 +{offset}s")
+                    print(f"         ✅ 偏移 +{offset}s")
                     aligned += 1
             else:
                 info["ad_offset"] = 0
-                print(f"         无偏移")
+                print(f"         ➖ 无偏移")
         except Exception as e:
-            print(f"         对齐失败: {e}")
+            print(f"         ❌ 对齐失败: {e}")
         finally:
             sample_path.unlink(missing_ok=True)
             time.sleep(1)
