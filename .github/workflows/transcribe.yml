@@ -47,15 +47,18 @@ jobs:
         id: cache-ffmpeg
         uses: actions/cache@v4
         with:
-          path: /usr/bin/ffmpeg
-          key: ffmpeg-${{ runner.os }}-v1
-      
-      - name: Install ffmpeg (if cache miss)
+          path: ${{ github.workspace }}/ffmpeg-static
+          key: ffmpeg-static-${{ runner.os }}-v7
+
+      - name: Download ffmpeg (if cache miss)
         if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
-      
+          wget -q https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz
+          mkdir -p ffmpeg-static
+          tar -xf *.tar.xz -C ffmpeg-static --strip-components=2
+          rm *.tar.xz
+
+      - run: echo "${{ github.workspace }}/ffmpeg-static" >> $GITHUB_PATH
       - run: ffmpeg -version
 
       - name: 安装依赖
