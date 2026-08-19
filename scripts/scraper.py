@@ -1,13 +1,6 @@
 #!/usr/bin/env python3
 """
 多播客字幕爬取器 (RSS-first + 搜索架构)
-流程：
-1. 读取 RSS 获取所有剧集 (guid, title, pubDate)
-2. 读取 progress.json，找出未处理的 guid
-3. 取前 10 个未处理剧集
-4. 在 podscripts.co 用标题搜索，找到对应页面
-5. 爬取字幕 -> 生成 VTT
-6. 注入 <podcast:transcript> 到 RSS，生成 Feed
 """
 
 import os
@@ -17,6 +10,7 @@ import json
 import time
 import urllib.parse
 import requests
+import html
 from datetime import datetime, timezone
 from pathlib import Path
 from lxml import etree
@@ -125,15 +119,15 @@ def search_podscripts(title, podscripts_id):
         f"&exact_match=true&slv=single&podSelectedId={podscripts_id}"
     )
     print(f"      搜索: {title[:60]}...")
-    html = fetch_html(url)
-    if not html:
+    html_text = fetch_html(url)
+    if not html_text:
         return None
 
     pattern = re.compile(
         r'<h[23][^>]*>.*?<a[^>]*href="(/podcasts/[^/]+/[^"]+)"[^>]*>(.*?)</a>.*?</h[23]>',
         re.DOTALL | re.IGNORECASE,
     )
-    matches = pattern.findall(html)
+    matches = pattern.findall(html_text)
     for href, title_html in matches:
         result_title = re.sub(r"<[^>]+>", "", title_html).strip()
         if titles_match(title, result_title):
@@ -159,17 +153,27 @@ def titles_match(rss_title, result_title):
 
 
 # ============ 字幕解析 & VTT ============
-def parse_transcript(html):
-    paragraphs = re.findall(r'<p[^>]*>(.*?)</p>', html, re.DOTALL)
+def parse_transcript(html_text):
+    """
+    解析 podscripts.co 单集字幕。
+    不依赖特定 HTML 标签，直接从去标签后的文本中提取。
+    """
+    # 1. 解码 HTML 实体（如 &amp; -> &）
+    text = html.unescape(html_text)
+    
+    # 2. 去除所有 HTML 标签，保留换行
+    text = re.sub(r'<[^>]+>', '\n', text)
+    
+    # 3. 清理多余空白
+    lines = [line.strip() for line in text.split('\n') if line.strip()]
+    
+    # 4. 提取 cues
     cues = []
     current_time = None
     current_texts = []
-
-    for p in paragraphs:
-        clean = re.sub(r"<[^>]+>", "", p).strip()
-        if not clean:
-            continue
-        m = re.match(r"Starting point is\s+(\d{1,2}):(\d{2}):(\d{2})", clean)
+    
+    for line in lines:
+        m = re.match(r"Starting\s+point\s+is\s+(\d{1,2}):(\d{2}):(\d{2})", line, re.IGNORECASE)
         if m:
             if current_time is not None and current_texts:
                 cues.append({"start": current_time, "text": "\n".join(current_texts)})
@@ -177,10 +181,14 @@ def parse_transcript(html):
             current_time = f"{int(h):02d}:{mi}:{s}"
             current_texts = []
         elif current_time is not None:
-            current_texts.append(clean)
-
+            # 跳过广告/无关内容（可选过滤）
+            if line.startswith("Click on any sentence") or line.startswith("There aren't comments"):
+                continue
+            current_texts.append(line)
+    
     if current_time is not None and current_texts:
         cues.append({"start": current_time, "text": "\n".join(current_texts)})
+    
     return cues
 
 
@@ -275,12 +283,12 @@ def process_podcast(podcast, progress):
 
         print(f"      页面: {ep_url}")
 
-        html = fetch_html(ep_url)
-        if not html:
+        html_text = fetch_html(ep_url)
+        if not html_text:
             print("      无法获取字幕页面")
             continue
 
-        cues = parse_transcript(html)
+        cues = parse_transcript(html_text)
         if not cues:
             print("      页面无字幕，标记跳过")
             processed[guid] = {
