@@ -12,7 +12,8 @@ import requests
 
 from concurrent.futures import (
     ThreadPoolExecutor,
-    as_completed,
+    wait,
+    FIRST_COMPLETED,
 )
 
 from datetime import datetime, timezone
@@ -20,7 +21,24 @@ from faster_whisper import WhisperModel
 from pathlib import Path
 from lxml import etree
 
+import builtins
+from datetime import datetime
 
+
+_original_print = builtins.print
+
+
+def print(*args, **kwargs):
+    timestamp = datetime.now().strftime(
+        "%Y-%m-%d %H:%M:%S.%f"
+    )[:-3]
+
+    _original_print(
+        f"[{timestamp}]",
+        *args,
+        **kwargs,
+        flush=True
+    )
 # ============================================================
 # 配置
 # ============================================================
@@ -69,18 +87,16 @@ MAX_PROXY_ATTEMPTS = int(
 
 
 # ============================================================
-# 多线程代理竞速
+# 代理并发
 # ============================================================
 
-# 同时测试/下载多少个代理
+# 同时运行多少个代理任务
 #
-# GitHub Actions Runner 建议先使用 20。
+# 建议：
+# 10 ~ 20
 #
-# 例如：
-#
-# PROXY_WORKERS=30
-#
-# 可以提高并发。
+# 免费代理 + 大型 MP3 下载时，
+# 不建议一开始就开到 50/100。
 PROXY_WORKERS = int(
     os.environ.get(
         "PROXY_WORKERS",
@@ -89,7 +105,11 @@ PROXY_WORKERS = int(
 )
 
 
-# 代理连接/测试超时
+# ============================================================
+# 超时
+# ============================================================
+
+# GeoIP 连接/读取超时
 PROXY_TEST_TIMEOUT = int(
     os.environ.get(
         "PROXY_TEST_TIMEOUT",
@@ -98,18 +118,29 @@ PROXY_TEST_TIMEOUT = int(
 )
 
 
-# 音频下载超时
-AUDIO_TIMEOUT = int(
+# 音频连接超时
+AUDIO_CONNECT_TIMEOUT = int(
     os.environ.get(
-        "AUDIO_TIMEOUT",
-        "300"
+        "AUDIO_CONNECT_TIMEOUT",
+        "8"
     )
 )
 
 
-# 下载 chunk 大小
+# 音频读取超时
 #
-# 使用较小 chunk 可以让 stop_event 更快生效。
+# 这是“连续多久没有收到任何数据”。
+#
+# 不建议设置过小。
+AUDIO_READ_TIMEOUT = int(
+    os.environ.get(
+        "AUDIO_READ_TIMEOUT",
+        "15"
+    )
+)
+
+
+# 下载 chunk
 DOWNLOAD_CHUNK_SIZE = int(
     os.environ.get(
         "DOWNLOAD_CHUNK_SIZE",
@@ -201,12 +232,20 @@ PROXY_CACHE_FILE = Path(
 # 当前运行中已经确认失败的代理
 BAD_PROXIES = set()
 
+BAD_PROXIES_LOCK = threading.Lock()
 
-# 多线程停止事件
+
+# ============================================================
+# 竞速停止事件
+# ============================================================
+
 PROXY_STOP_EVENT = threading.Event()
 
 
-# 只有一个代理能够成为最终赢家
+# ============================================================
+# Winner 锁
+# ============================================================
+
 PROXY_WINNER_LOCK = threading.Lock()
 
 
@@ -342,6 +381,7 @@ def format_vtt_time(seconds):
 def split_sentences(text):
 
     if not text:
+
         return []
 
     protected = re.sub(
@@ -643,9 +683,11 @@ def get_audio_url(entry):
     """
     直接从 RSS 中取得原始 enclosure。
 
-    不解析 pdst.fm。
-    不解析 Castfire。
-    不解析 Megaphone。
+    不解析：
+    - pdst.fm
+    - Castfire
+    - Megaphone
+    - 其他真实音频地址
     """
 
     for enc in entry.get(
@@ -724,7 +766,7 @@ PROXY_HEADERS = {
 
 
 # ============================================================
-# 检查 SOCKS 支持
+# SOCKS 支持
 # ============================================================
 
 def check_socks_support():
@@ -747,11 +789,8 @@ def check_socks_support():
         )
 
         print(
-            "   请安装:"
-        )
-
-        print(
-            '   pip install "requests[socks]"'
+            '   请安装: '
+            'pip install "requests[socks]"'
         )
 
         return False
@@ -767,6 +806,26 @@ def is_socks_proxy(proxy):
             "socks5h://"
         )
     )
+
+
+# ============================================================
+# BAD PROXY
+# ============================================================
+
+def mark_bad_proxy(proxy):
+
+    with BAD_PROXIES_LOCK:
+
+        BAD_PROXIES.add(
+            proxy
+        )
+
+
+def is_bad_proxy(proxy):
+
+    with BAD_PROXIES_LOCK:
+
+        return proxy in BAD_PROXIES
 
 
 # ============================================================
@@ -787,9 +846,7 @@ def load_proxy_cache():
             encoding="utf-8"
         ) as f:
 
-            data = json.load(
-                f
-            )
+            data = json.load(f)
 
         created_at = data.get(
             "created_at",
@@ -928,6 +985,7 @@ def get_china_proxies():
             line = line.strip()
 
             if not line:
+
                 continue
 
             line = line.replace(
@@ -987,6 +1045,10 @@ def get_china_proxies():
 
 def get_proxy_geoip(proxy):
 
+    if PROXY_STOP_EVENT.is_set():
+
+        return None
+
     request_proxies = {
         "http": proxy,
         "https": proxy
@@ -1010,6 +1072,11 @@ def get_proxy_geoip(proxy):
             False
         ):
 
+            print(
+                f"   ⚠️ [{proxy}] "
+                f"GeoIP 返回 success=false"
+            )
+
             return None
 
         return {
@@ -1026,7 +1093,8 @@ def get_proxy_geoip(proxy):
     except Exception as e:
 
         print(
-            f"      ⚠️ GeoIP 请求失败: "
+            f"   ❌ [{proxy}] "
+            f"GeoIP 失败: "
             f"{type(e).__name__}: {e}"
         )
 
@@ -1034,7 +1102,7 @@ def get_proxy_geoip(proxy):
 
 
 # ============================================================
-# 音频文件校验
+# 音频格式验证
 # ============================================================
 
 def validate_audio_file(path):
@@ -1050,8 +1118,8 @@ def validate_audio_file(path):
     if size < 1024:
 
         raise RuntimeError(
-            f"音频文件异常，"
-            f"仅 {size} bytes"
+            f"音频文件异常: "
+            f"{size} bytes"
         )
 
     with open(
@@ -1101,7 +1169,7 @@ def validate_audio_file(path):
 
         or
 
-        # ADTS AAC
+        # AAC ADTS
         (
             len(header) >= 2
             and
@@ -1151,729 +1219,441 @@ def calculate_sha256(path):
 
 
 # ============================================================
-# 代理竞速下载
+# 单代理完整下载
 # ============================================================
 
-def download_with_proxy_race(
+def proxy_download_worker(
+    index,
+    total,
+    proxy,
     audio_url,
-    output_path,
-    proxies,
+    race_dir,
     headers
 ):
     """
-    多线程代理竞速。
-
-    每个线程：
-
-        1. 检查停止事件
-        2. GeoIP 确认中国大陆
-        3. 使用该代理直接下载 RSS enclosure
-        4. 写入独立临时文件
-        5. 校验音频文件
-        6. 第一个完整成功者成为 winner
+    一个代理从 GeoIP 到完整音频下载。
 
     注意：
-
-    已经进入底层 requests socket 的线程，
-    Python 无法安全强制杀掉。
-
-    因此“停止”是协作式停止：
-    新任务立即停止；
-    下载线程会在 chunk 边界检查 stop_event；
-    正在建立连接的请求最多等到 timeout。
+    只有“完整下载 + 音频格式验证成功”
+    才算真正成功。
     """
 
-    if not proxies:
+    if PROXY_STOP_EVENT.is_set():
 
-        raise RuntimeError(
-            "没有可用中国代理"
-        )
+        return {
+            "ok": False,
+            "proxy": proxy,
+            "stopped": True
+        }
 
-    PROXY_STOP_EVENT.clear()
+    if is_bad_proxy(proxy):
 
-    output_path.parent.mkdir(
-        parents=True,
-        exist_ok=True
-    )
-
-    # --------------------------------------------------------
-    # 获胜结果
-    # --------------------------------------------------------
-
-    winner = {
-        "proxy": None,
-        "public_ip": None,
-        "country_code": None,
-        "country": None,
-        "temp_path": None,
-        "size": 0,
-        "sha256": None
-    }
-
-    winner_found = False
+        return {
+            "ok": False,
+            "proxy": proxy,
+            "stopped": True
+        }
 
     # --------------------------------------------------------
-    # 临时目录
+    # SOCKS
     # --------------------------------------------------------
 
-    race_dir = (
-        output_path.parent
-        / ".proxy_race"
-    )
-
-    race_dir.mkdir(
-        parents=True,
-        exist_ok=True
-    )
-
-    # --------------------------------------------------------
-    # 清理旧临时文件
-    # --------------------------------------------------------
-
-    for old_file in race_dir.glob(
-        "*.part"
-    ):
+    if is_socks_proxy(proxy):
 
         try:
 
-            old_file.unlink()
+            import socks  # noqa
 
-        except Exception:
-            pass
+        except ImportError:
 
-    total = len(
-        proxies
+            mark_bad_proxy(
+                proxy
+            )
+
+            return {
+                "ok": False,
+                "proxy": proxy,
+                "reason":
+                    "未安装 PySocks"
+            }
+
+    temp_name = (
+        f"{index:04d}_"
+        f"{hashlib.md5(proxy.encode()).hexdigest()[:12]}"
+        f".part"
     )
 
-    worker_count = max(
-        1,
-        min(
-            PROXY_WORKERS,
-            total
+    temp_path = (
+        race_dir
+        / temp_name
+    )
+
+    try:
+
+        print(
+            f"\n🚀 [{index}/{total}] "
+            f"开始代理竞速: {proxy}"
         )
-    )
 
-    print(
-        "\n🏁 启动代理竞速"
-    )
+        # ====================================================
+        # GeoIP
+        # ====================================================
 
-    print(
-        f"   代理数量: {total}"
-    )
-
-    print(
-        f"   并发线程: {worker_count}"
-    )
-
-    print(
-        "   规则：第一个"
-        "完整下载并通过音频校验的代理获胜"
-    )
-
-    # --------------------------------------------------------
-    # 单个代理
-    # --------------------------------------------------------
-
-    def worker(index, proxy):
-
-        nonlocal winner_found
+        geo = get_proxy_geoip(
+            proxy
+        )
 
         if PROXY_STOP_EVENT.is_set():
 
-            return None
+            return {
+                "ok": False,
+                "proxy": proxy,
+                "stopped": True
+            }
 
-        if proxy in BAD_PROXIES:
+        if not geo:
 
-            return None
+            mark_bad_proxy(
+                proxy
+            )
 
-        temp_path = (
-            race_dir
-            / f"{index:04d}_{hashlib.md5(proxy.encode()).hexdigest()[:12]}.part"
+            return {
+                "ok": False,
+                "proxy": proxy,
+                "reason":
+                    "GeoIP 请求失败"
+            }
+
+        public_ip = geo.get(
+            "ip"
         )
 
-        # ----------------------------------------------------
-        # SOCKS
-        # ----------------------------------------------------
-
-        if is_socks_proxy(proxy):
-
-            try:
-
-                import socks  # noqa
-
-            except ImportError:
-
-                return {
-                    "proxy": proxy,
-                    "ok": False,
-                    "reason":
-                        "未安装 PySocks"
-                }
-
-        try:
-
-            print(
-                f"🚀 [{index}/{total}] "
-                f"开始测试: {proxy}"
+        country_code = (
+            geo.get(
+                "country_code"
             )
+            or ""
+        ).upper()
 
-            # =================================================
-            # GeoIP
-            # =================================================
+        country = (
+            geo.get(
+                "country"
+            )
+            or ""
+        )
 
-            geo = get_proxy_geoip(
+        print(
+            f"   🌍 [{proxy}] "
+            f"IP={public_ip} "
+            f"Country={country_code}"
+        )
+
+        # ====================================================
+        # 必须 CN
+        # ====================================================
+
+        if country_code != "CN":
+
+            mark_bad_proxy(
                 proxy
             )
 
-            public_ip = None
-            country_code = None
-            country = None
-
-            if geo:
-
-                public_ip = geo.get(
-                    "ip"
-                )
-
-                country_code = (
-                    geo.get(
-                        "country_code"
-                    )
-                    or ""
-                ).upper()
-
-                country = (
-                    geo.get(
-                        "country"
-                    )
-                    or ""
-                )
-
-                print(
-                    f"   🌍 [{proxy}] "
-                    f"{public_ip} "
-                    f"{country_code}"
-                )
-
-                # --------------------------------------------
-                # 明确不是 CN → 失败
-                # --------------------------------------------
-
-                if country_code != "CN":
-
-                    BAD_PROXIES.add(
-                        proxy
-                    )
-
-                    return {
-                        "proxy": proxy,
-                        "ok": False,
-                        "reason":
-                            f"不是中国大陆 IP: "
-                            f"{country_code}"
-                    }
-
-            else:
-
-                # ------------------------------------------------
-                # GeoIP 无法确认时：
-                #
-                # 为了严格满足“第一个中国代理获胜”，
-                # 这里不能直接认为是中国。
-                #
-                # 但是先继续测试音频。
-                # 实际下载成功后仍要求 GeoIP 有 CN。
-                # ------------------------------------------------
-
-                print(
-                    f"   ⚠️ [{proxy}] "
-                    f"GeoIP 无法确认"
-                )
-
-                BAD_PROXIES.add(
-                    proxy
-                )
-
-                return {
-                    "proxy": proxy,
-                    "ok": False,
-                    "reason":
-                        "GeoIP 无法确认中国大陆出口"
-                }
-
-            # =================================================
-            # 如果已经有人成功
-            # =================================================
-
-            if PROXY_STOP_EVENT.is_set():
-
-                return None
-
-            # =================================================
-            # 实际下载
-            # =================================================
-
-            request_proxies = {
-                "http": proxy,
-                "https": proxy
-            }
-
-            print(
-                f"   ⬇️ [{proxy}] "
-                f"开始实际下载"
-            )
-
-            total_bytes = 0
-
-            with requests.get(
-                audio_url,
-                timeout=AUDIO_TIMEOUT,
-                headers=headers,
-                proxies=request_proxies,
-                allow_redirects=True,
-                stream=True
-            ) as response:
-
-                response.raise_for_status()
-
-                content_type = (
-                    response.headers
-                    .get(
-                        "Content-Type",
-                        ""
-                    )
-                    .lower()
-                )
-
-                print(
-                    f"   📡 [{proxy}] "
-                    f"HTTP {response.status_code}"
-                )
-
-                print(
-                    f"   📦 [{proxy}] "
-                    f"Content-Type: "
-                    f"{content_type}"
-                )
-
-                # ------------------------------------------------
-                # HTML 不是音频
-                # ------------------------------------------------
-
-                if (
-                    "text/html"
-                    in content_type
-                ):
-
-                    raise RuntimeError(
-                        "服务器返回 HTML"
-                    )
-
-                with open(
-                    temp_path,
-                    "wb"
-                ) as f:
-
-                    for chunk in response.iter_content(
-                        chunk_size=DOWNLOAD_CHUNK_SIZE
-                    ):
-
-                        # ----------------------------------------
-                        # 获胜后其他线程立即停止
-                        # ----------------------------------------
-
-                        if PROXY_STOP_EVENT.is_set():
-
-                            print(
-                                f"   🛑 [{proxy}] "
-                                f"检测到其他代理已经获胜，"
-                                f"停止下载"
-                            )
-
-                            return None
-
-                        if not chunk:
-
-                            continue
-
-                        f.write(
-                            chunk
-                        )
-
-                        total_bytes += len(
-                            chunk
-                        )
-
-            # =================================================
-            # 音频校验
-            # =================================================
-
-            if PROXY_STOP_EVENT.is_set():
-
-                return None
-
-            validate_audio_file(
-                temp_path
-            )
-
-            digest = calculate_sha256(
-                temp_path
-            )
-
-            # =================================================
-            # 抢夺 winner
-            # =================================================
-
-            with PROXY_WINNER_LOCK:
-
-                if PROXY_STOP_EVENT.is_set():
-
-                    return None
-
-                winner_found = True
-
-                PROXY_STOP_EVENT.set()
-
-                winner["proxy"] = proxy
-
-                winner["public_ip"] = (
-                    public_ip
-                )
-
-                winner["country_code"] = (
-                    country_code
-                )
-
-                winner["country"] = (
-                    country
-                )
-
-                winner["temp_path"] = (
-                    temp_path
-                )
-
-                winner["size"] = (
-                    total_bytes
-                )
-
-                winner["sha256"] = (
-                    digest
-                )
-
-                print(
-                    "\n🏆🏆🏆 代理竞速获胜！"
-                )
-
-                print(
-                    f"   Proxy: {proxy}"
-                )
-
-                print(
-                    f"   Public IP: "
-                    f"{public_ip}"
-                )
-
-                print(
-                    f"   Country: "
-                    f"{country_code}"
-                )
-
-                print(
-                    f"   Size: "
-                    f"{total_bytes / 1024 / 1024:.1f} MB"
-                )
-
-                print(
-                    f"   SHA256: "
-                    f"{digest}"
-                )
-
             return {
-                "proxy": proxy,
-                "ok": True
-            }
-
-        except Exception as e:
-
-            BAD_PROXIES.add(
-                proxy
-            )
-
-            print(
-                f"   ❌ [{proxy}] "
-                f"{type(e).__name__}: {e}"
-            )
-
-            return {
-                "proxy": proxy,
                 "ok": False,
+                "proxy": proxy,
                 "reason":
-                    f"{type(e).__name__}: {e}"
+                    f"不是中国大陆 IP: "
+                    f"{country_code}"
             }
 
-    # ========================================================
-    # 启动线程池
-    # ========================================================
+        # ====================================================
+        # 再次检查停止事件
+        # ====================================================
 
-    executor = ThreadPoolExecutor(
-        max_workers=worker_count,
-        thread_name_prefix="proxy-race"
-    )
+        if PROXY_STOP_EVENT.is_set():
 
-    futures = []
+            return {
+                "ok": False,
+                "proxy": proxy,
+                "stopped": True
+            }
 
-    try:
+        # ====================================================
+        # 开始真正下载
+        # ====================================================
 
-        # ----------------------------------------------------
-        # 不需要等一个测试完再提交下一个
-        # 全部代理同时进入线程池队列。
-        # ThreadPoolExecutor 会限制真正并发数量。
-        # ----------------------------------------------------
+        request_proxies = {
+            "http": proxy,
+            "https": proxy
+        }
 
-        for index, proxy in enumerate(
-            proxies,
-            1
-        ):
+        print(
+            f"   ⬇️ [{proxy}] "
+            f"开始实际下载 RSS enclosure"
+        )
 
-            if PROXY_STOP_EVENT.is_set():
+        total_bytes = 0
 
-                break
+        with requests.get(
+            audio_url,
+            timeout=(
+                AUDIO_CONNECT_TIMEOUT,
+                AUDIO_READ_TIMEOUT
+            ),
+            headers=headers,
+            proxies=request_proxies,
+            allow_redirects=True,
+            stream=True
+        ) as response:
 
-            future = executor.submit(
-                worker,
-                index,
-                proxy
-            )
+            response.raise_for_status()
 
-            futures.append(
-                future
-            )
-
-        # ----------------------------------------------------
-        # 谁先完成谁先处理
-        # ----------------------------------------------------
-
-        for future in as_completed(
-            futures
-        ):
-
-            try:
-
-                result = future.result()
-
-            except Exception as e:
-
-                print(
-                    f"   ⚠️ worker 异常: "
-                    f"{type(e).__name__}: {e}"
+            content_type = (
+                response.headers
+                .get(
+                    "Content-Type",
+                    ""
                 )
+                .lower()
+            )
 
-                continue
+            print(
+                f"   📡 [{proxy}] "
+                f"HTTP {response.status_code}"
+            )
+
+            print(
+                f"   📦 [{proxy}] "
+                f"Content-Type: "
+                f"{content_type}"
+            )
+
+            print(
+                f"   🔗 [{proxy}] "
+                f"最终 URL: "
+                f"{response.url}"
+            )
 
             # ------------------------------------------------
-            # winner 已经产生
+            # 防止服务器返回网页
             # ------------------------------------------------
 
             if (
-                result
-                and result.get("ok")
+                "text/html"
+                in content_type
             ):
 
-                break
+                raise RuntimeError(
+                    "服务器返回 HTML"
+                )
+
+            # ------------------------------------------------
+            # 独立临时文件
+            # ------------------------------------------------
+
+            with open(
+                temp_path,
+                "wb"
+            ) as f:
+
+                for chunk in response.iter_content(
+                    chunk_size=DOWNLOAD_CHUNK_SIZE
+                ):
+
+                    # ----------------------------------------
+                    # winner 已出现
+                    # ----------------------------------------
+
+                    if PROXY_STOP_EVENT.is_set():
+
+                        print(
+                            f"   🛑 [{proxy}] "
+                            f"发现其他代理已获胜，"
+                            f"停止当前下载"
+                        )
+
+                        return {
+                            "ok":
+                                False,
+
+                            "proxy":
+                                proxy,
+
+                            "stopped":
+                                True
+                        }
+
+                    if not chunk:
+
+                        continue
+
+                    f.write(
+                        chunk
+                    )
+
+                    total_bytes += len(
+                        chunk
+                    )
+
+        # ====================================================
+        # winner 出现后，再检查一次
+        # ====================================================
+
+        if PROXY_STOP_EVENT.is_set():
+
+            return {
+                "ok":
+                    False,
+
+                "proxy":
+                    proxy,
+
+                "stopped":
+                    True
+            }
+
+        # ====================================================
+        # 完整下载校验
+        # ====================================================
+
+        validate_audio_file(
+            temp_path
+        )
+
+        digest = calculate_sha256(
+            temp_path
+        )
+
+        print(
+            f"   ✅ [{proxy}] "
+            f"完整下载成功"
+        )
+
+        print(
+            f"   📦 大小: "
+            f"{total_bytes / 1024 / 1024:.1f} MB"
+        )
+
+        print(
+            f"   SHA256: "
+            f"{digest}"
+        )
+
+        # ====================================================
+        # 抢夺 winner
+        # ====================================================
+
+        with PROXY_WINNER_LOCK:
 
             if PROXY_STOP_EVENT.is_set():
 
-                break
+                return {
+                    "ok":
+                        False,
 
-    finally:
+                    "proxy":
+                        proxy,
 
-        # ----------------------------------------------------
-        # cancel_futures：
-        # 取消还没开始执行的任务。
-        #
-        # wait=False：
-        # 主线程不等待正在执行的任务。
-        #
-        # 正在执行的请求会通过 stop_event +
-        # timeout 尽快退出。
-        # ----------------------------------------------------
+                    "stopped":
+                        True
+                }
 
-        executor.shutdown(
-            wait=False,
-            cancel_futures=True
+            # ----------------------------------------------
+            # winner
+            # ----------------------------------------------
+
+            PROXY_STOP_EVENT.set()
+
+            print(
+                "\n🏆🏆🏆 "
+                "找到第一个完整下载成功的中国代理!"
+            )
+
+            print(
+                f"   Proxy: "
+                f"{proxy}"
+            )
+
+            print(
+                f"   Public IP: "
+                f"{public_ip}"
+            )
+
+            print(
+                f"   Country: "
+                f"{country_code}"
+            )
+
+        return {
+            "ok":
+                True,
+
+            "proxy":
+                proxy,
+
+            "public_ip":
+                public_ip,
+
+            "country_code":
+                country_code,
+
+            "country":
+                country,
+
+            "temp_path":
+                str(temp_path),
+
+            "size":
+                total_bytes,
+
+            "sha256":
+                digest
+        }
+
+    except Exception as e:
+
+        mark_bad_proxy(
+            proxy
         )
-
-    # ========================================================
-    # 检查 winner
-    # ========================================================
-
-    if not winner_found:
-
-        PROXY_STOP_EVENT.clear()
-
-        # 清理所有临时文件
-
-        for part_file in race_dir.glob(
-            "*.part"
-        ):
-
-            try:
-
-                part_file.unlink()
-
-            except Exception:
-                pass
-
-        try:
-
-            race_dir.rmdir()
-
-        except Exception:
-            pass
 
         print(
-            "\n❌ 所有中国代理均失败"
+            f"   ❌ [{proxy}] "
+            f"{type(e).__name__}: {e}"
         )
 
-        print(
-            f"   共尝试: {total}"
-        )
+        return {
+            "ok":
+                False,
 
-        print(
-            "🚫 不使用 GitHub Actions Runner IP"
-        )
+            "proxy":
+                proxy,
 
-        print(
-            "🛑 本次任务直接退出"
-        )
-
-        raise RuntimeError(
-            "所有中国代理均无法下载音频"
-        )
-
-    # ========================================================
-    # 将获胜临时文件移动为最终 MP3
-    # ========================================================
-
-    winner_temp = winner["temp_path"]
-
-    if not winner_temp.exists():
-
-        raise RuntimeError(
-            "代理已经获胜，但临时音频文件不存在"
-        )
-
-    # 删除旧文件
-
-    if output_path.exists():
-
-        try:
-
-            output_path.unlink()
-
-        except Exception as e:
-
-            raise RuntimeError(
-                f"无法删除旧音频文件: {e}"
-            ) from e
-
-    winner_temp.replace(
-        output_path
-    )
-
-    # ========================================================
-    # 清理 race 目录
-    # ========================================================
-
-    for part_file in race_dir.glob(
-        "*.part"
-    ):
-
-        try:
-
-            part_file.unlink()
-
-        except Exception:
-            pass
-
-    try:
-
-        race_dir.rmdir()
-
-    except Exception:
-        pass
-
-    # ========================================================
-    # 最终确认
-    # ========================================================
-
-    validate_audio_file(
-        output_path
-    )
-
-    print(
-        "\n✅ 代理竞速完成"
-    )
-
-    print(
-        f"   Proxy: "
-        f"{winner['proxy']}"
-    )
-
-    print(
-        f"   Public IP: "
-        f"{winner['public_ip']}"
-    )
-
-    print(
-        f"   Country: "
-        f"{winner['country_code']}"
-    )
-
-    print(
-        f"   Audio: "
-        f"{output_path}"
-    )
-
-    print(
-        f"   Size: "
-        f"{winner['size'] / 1024 / 1024:.1f} MB"
-    )
-
-    print(
-        f"   SHA256: "
-        f"{winner['sha256']}"
-    )
-
-    return {
-        "proxy":
-            winner["proxy"],
-
-        "public_ip":
-            winner["public_ip"],
-
-        "country_code":
-            winner["country_code"],
-
-        "country":
-            winner["country"],
-
-        "sha256":
-            winner["sha256"],
-
-        "size":
-            winner["size"]
-    }
+            "reason":
+                f"{type(e).__name__}: {e}"
+        }
 
 
 # ============================================================
-# 下载音频
+# 多线程竞速
 # ============================================================
 
 def download_audio(
     audio_url,
     output_path
 ):
+    """
+    核心代理竞速逻辑：
+
+    1. 获取最多 MAX_PROXY_ATTEMPTS 个代理
+    2. 同时保持 PROXY_WORKERS 个活跃任务
+    3. 谁先完整下载成功谁获胜
+    4. winner 出现后不再提交新任务
+    5. 已运行任务通过 stop_event 停止
+    6. 所有 worker 完全退出后才清理临时文件
+    7. 最后把 winner 文件移动为最终 MP3
+
+    绝不使用 Runner IP。
+    """
 
     headers = {
 
@@ -1937,31 +1717,572 @@ def download_audio(
         :MAX_PROXY_ATTEMPTS
     ]
 
-    print(
-        f"🔀 准备竞速 "
-        f"{len(proxies)} 个中国代理..."
+    # ========================================================
+    # 清理状态
+    # ========================================================
+
+    PROXY_STOP_EVENT.clear()
+
+    with BAD_PROXIES_LOCK:
+
+        BAD_PROXIES.clear()
+
+    # ========================================================
+    # 临时目录
+    # ========================================================
+
+    race_dir = (
+        output_path.parent
+        / ".proxy_race"
+    )
+
+    race_dir.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+    # --------------------------------------------------------
+    # 清理旧 .part
+    # --------------------------------------------------------
+
+    for old_part in race_dir.glob(
+        "*.part"
+    ):
+
+        try:
+
+            old_part.unlink()
+
+        except Exception:
+            pass
+
+    # ========================================================
+    # 并发参数
+    # ========================================================
+
+    total = len(
+        proxies
+    )
+
+    worker_count = max(
+        1,
+        min(
+            PROXY_WORKERS,
+            total
+        )
     )
 
     print(
-        f"🧵 并发线程: "
-        f"{min(PROXY_WORKERS, len(proxies))}"
+        "\n🏁 代理竞速开始"
     )
 
     print(
-        f"⏱️ 代理超时: "
+        f"   RSS enclosure: "
+        f"{audio_url}"
+    )
+
+    print(
+        f"   代理总数: "
+        f"{total}"
+    )
+
+    print(
+        f"   并发线程: "
+        f"{worker_count}"
+    )
+
+    print(
+        f"   GeoIP 超时: "
         f"{PROXY_TEST_TIMEOUT}s"
     )
 
+    print(
+        f"   Audio connect timeout: "
+        f"{AUDIO_CONNECT_TIMEOUT}s"
+    )
+
+    print(
+        f"   Audio read timeout: "
+        f"{AUDIO_READ_TIMEOUT}s"
+    )
+
     # ========================================================
-    # 开始竞速
+    # 动态提交任务
+    #
+    # 永远只保持 worker_count 个活跃/待完成任务。
+    #
+    # 这样 winner 出现以后，不会有一堆已经排队的
+    # Future 又继续启动。
     # ========================================================
 
-    return download_with_proxy_race(
-        audio_url,
-        output_path,
-        proxies,
-        headers
+    executor = ThreadPoolExecutor(
+        max_workers=worker_count,
+        thread_name_prefix="proxy-race"
     )
+
+    pending = set()
+
+    next_index = 0
+
+    winner_result = None
+
+    completed_count = 0
+
+    try:
+
+        # ----------------------------------------------------
+        # 初始填满 worker
+        # ----------------------------------------------------
+
+        while (
+            len(pending) < worker_count
+            and next_index < total
+        ):
+
+            proxy = proxies[
+                next_index
+            ]
+
+            index = (
+                next_index + 1
+            )
+
+            next_index += 1
+
+            if is_bad_proxy(proxy):
+
+                continue
+
+            future = executor.submit(
+                proxy_download_worker,
+                index,
+                total,
+                proxy,
+                audio_url,
+                race_dir,
+                headers
+            )
+
+            pending.add(
+                future
+            )
+
+        # ----------------------------------------------------
+        # 动态循环
+        # ----------------------------------------------------
+
+        while pending:
+
+            done, pending = wait(
+                pending,
+                return_when=FIRST_COMPLETED
+            )
+
+            for future in done:
+
+                completed_count += 1
+
+                try:
+
+                    result = (
+                        future.result()
+                    )
+
+                except Exception as e:
+
+                    print(
+                        f"   ⚠️ Worker "
+                        f"异常: "
+                        f"{type(e).__name__}: "
+                        f"{e}"
+                    )
+
+                    result = None
+
+                # --------------------------------------------
+                # 找到 winner
+                # --------------------------------------------
+
+                if (
+                    result
+                    and result.get("ok")
+                ):
+
+                    winner_result = (
+                        result
+                    )
+
+                    # ----------------------------------------
+                    # 不再提交任何新任务
+                    # ----------------------------------------
+
+                    PROXY_STOP_EVENT.set()
+
+                    break
+
+            # ------------------------------------------------
+            # winner 已找到
+            # ------------------------------------------------
+
+            if winner_result:
+
+                print(
+                    "\n🛑 Winner 已产生"
+                )
+
+                print(
+                    "   不再启动新的代理任务"
+                )
+
+                print(
+                    "   等待正在执行的代理"
+                    "安全退出..."
+                )
+
+                break
+
+            # ------------------------------------------------
+            # 没有 winner：
+            # 补充新的代理
+            # ------------------------------------------------
+
+            while (
+                len(pending) < worker_count
+                and next_index < total
+                and not PROXY_STOP_EVENT.is_set()
+            ):
+
+                proxy = proxies[
+                    next_index
+                ]
+
+                index = (
+                    next_index + 1
+                )
+
+                next_index += 1
+
+                if is_bad_proxy(proxy):
+
+                    continue
+
+                future = executor.submit(
+                    proxy_download_worker,
+                    index,
+                    total,
+                    proxy,
+                    audio_url,
+                    race_dir,
+                    headers
+                )
+
+                pending.add(
+                    future
+                )
+
+            print(
+                f"📊 代理检测/下载进度: "
+                f"已完成 {completed_count}/{total}，"
+                f"运行中 {len(pending)}"
+            )
+
+        # ====================================================
+        # winner 出现：
+        # 取消未来任务
+        # ====================================================
+
+        if winner_result:
+
+            PROXY_STOP_EVENT.set()
+
+            # ------------------------------------------------
+            # executor 里还没有开始的任务
+            # 直接取消
+            # ------------------------------------------------
+
+            executor.shutdown(
+                wait=True,
+                cancel_futures=True
+            )
+
+        else:
+
+            # ------------------------------------------------
+            # 全部失败
+            # ------------------------------------------------
+
+            executor.shutdown(
+                wait=True,
+                cancel_futures=True
+            )
+
+    finally:
+
+        # ====================================================
+        # 防止异常情况下线程池没有退出
+        # ====================================================
+
+        if not PROXY_STOP_EVENT.is_set():
+
+            PROXY_STOP_EVENT.set()
+
+            try:
+
+                executor.shutdown(
+                    wait=True,
+                    cancel_futures=True
+                )
+
+            except Exception:
+                pass
+
+    # ========================================================
+    # 注意：
+    #
+    # 到这里所有 worker 已经真正退出。
+    #
+    # 所以现在再清理 .part 才不会出现：
+    #
+    # FileNotFoundError
+    #
+    # 或后台线程继续写文件。
+    # ========================================================
+
+    print(
+        "\n🧹 所有代理线程已退出"
+    )
+
+    # ========================================================
+    # Winner 检查
+    # ========================================================
+
+    if not winner_result:
+
+        print(
+            "\n❌ 所有中国代理均失败"
+        )
+
+        print(
+            f"   共尝试: "
+            f"{total}"
+        )
+
+        print(
+            "🚫 不使用 GitHub Actions Runner IP"
+        )
+
+        print(
+            "🛑 本次任务直接退出"
+        )
+
+        # 清理所有临时文件
+
+        for part_file in race_dir.glob(
+            "*.part"
+        ):
+
+            try:
+
+                part_file.unlink()
+
+            except Exception:
+                pass
+
+        try:
+
+            race_dir.rmdir()
+
+        except Exception:
+            pass
+
+        raise RuntimeError(
+            "所有中国代理均无法下载音频"
+        )
+
+    # ========================================================
+    # Winner
+    # ========================================================
+
+    winner_proxy = (
+        winner_result[
+            "proxy"
+        ]
+    )
+
+    winner_temp = Path(
+        winner_result[
+            "temp_path"
+        ]
+    )
+
+    print(
+        "\n🏆 最终 Winner"
+    )
+
+    print(
+        f"   Proxy: "
+        f"{winner_proxy}"
+    )
+
+    print(
+        f"   Public IP: "
+        f"{winner_result.get('public_ip')}"
+    )
+
+    print(
+        f"   Country: "
+        f"{winner_result.get('country_code')}"
+    )
+
+    print(
+        f"   Size: "
+        f"{winner_result.get('size', 0) / 1024 / 1024:.1f} MB"
+    )
+
+    print(
+        f"   SHA256: "
+        f"{winner_result.get('sha256')}"
+    )
+
+    # ========================================================
+    # Winner 文件必须存在
+    # ========================================================
+
+    if not winner_temp.exists():
+
+        # 最后保险：
+        # 某种异常情况下 runner 文件不存在
+        #
+        # 不使用其他代理，也不使用 Runner IP。
+        raise RuntimeError(
+            "Winner 已产生，但 winner 临时音频不存在"
+        )
+
+    # ========================================================
+    # 删除旧文件
+    # ========================================================
+
+    if output_path.exists():
+
+        try:
+
+            output_path.unlink()
+
+        except Exception as e:
+
+            raise RuntimeError(
+                f"无法删除旧音频: {e}"
+            ) from e
+
+    # ========================================================
+    # 移动 Winner
+    # ========================================================
+
+    winner_temp.replace(
+        output_path
+    )
+
+    # ========================================================
+    # 清理其他 .part
+    #
+    # 现在所有 worker 都已经退出，
+    # 所以安全。
+    # ========================================================
+
+    for part_file in race_dir.glob(
+        "*.part"
+    ):
+
+        try:
+
+            part_file.unlink()
+
+        except Exception as e:
+
+            print(
+                f"   ⚠️ 清理临时文件失败: "
+                f"{part_file}: "
+                f"{e}"
+            )
+
+    try:
+
+        race_dir.rmdir()
+
+    except Exception:
+        pass
+
+    # ========================================================
+    # 最终验证
+    # ========================================================
+
+    final_size = validate_audio_file(
+        output_path
+    )
+
+    final_sha256 = calculate_sha256(
+        output_path
+    )
+
+    print(
+        "\n✅ 代理竞速完成"
+    )
+
+    print(
+        f"   Proxy: "
+        f"{winner_proxy}"
+    )
+
+    print(
+        f"   Public IP: "
+        f"{winner_result.get('public_ip')}"
+    )
+
+    print(
+        f"   Country: "
+        f"{winner_result.get('country_code')}"
+    )
+
+    print(
+        f"   Audio: "
+        f"{output_path}"
+    )
+
+    print(
+        f"   Size: "
+        f"{final_size / 1024 / 1024:.1f} MB"
+    )
+
+    print(
+        f"   SHA256: "
+        f"{final_sha256}"
+    )
+
+    return {
+        "proxy":
+            winner_proxy,
+
+        "public_ip":
+            winner_result.get(
+                "public_ip"
+            ),
+
+        "country_code":
+            winner_result.get(
+                "country_code"
+            ),
+
+        "country":
+            winner_result.get(
+                "country"
+            ),
+
+        "sha256":
+            final_sha256,
+
+        "size":
+            final_size
+    }
 
 
 # ============================================================
@@ -2022,6 +2343,10 @@ def generate_podcast_feed(
         "🔄 生成播客 RSS feed..."
     )
 
+    # --------------------------------------------------------
+    # 原始 RSS
+    # --------------------------------------------------------
+
     resp = requests.get(
         FEED_URL,
         timeout=60,
@@ -2056,7 +2381,7 @@ def generate_podcast_feed(
     )
 
     # --------------------------------------------------------
-    # podcast namespace
+    # Podcast namespace
     # --------------------------------------------------------
 
     nsmap = dict(
@@ -2239,7 +2564,7 @@ def generate_podcast_feed(
         )
 
     # ========================================================
-    # 只保留已经处理的 episode
+    # 只保留已处理 episode
     # ========================================================
 
     processed = pc_state.get(
@@ -2720,13 +3045,23 @@ def main():
     )
 
     print(
-        f"🧵 代理并发线程: "
+        f"🧵 并发线程: "
         f"{PROXY_WORKERS}"
     )
 
     print(
-        f"⏱️ 代理测试超时: "
+        f"⏱️ GeoIP 超时: "
         f"{PROXY_TEST_TIMEOUT}s"
+    )
+
+    print(
+        f"⏱️ Audio connect timeout: "
+        f"{AUDIO_CONNECT_TIMEOUT}s"
+    )
+
+    print(
+        f"⏱️ Audio read timeout: "
+        f"{AUDIO_READ_TIMEOUT}s"
     )
 
     print(
@@ -2863,13 +3198,7 @@ def main():
     )
 
     # ========================================================
-    # 直接使用 RSS 原始 enclosure
-    #
-    # 不解析：
-    # - pdst.fm
-    # - Castfire
-    # - Megaphone
-    # - 其他真实音频地址
+    # 直接使用原始 enclosure
     # ========================================================
 
     audio_url = (
@@ -2889,7 +3218,7 @@ def main():
     )
 
     # ========================================================
-    # 临时音频
+    # 最终音频
     # ========================================================
 
     safe_title = safe_filename(
@@ -2902,7 +3231,7 @@ def main():
     )
 
     # ========================================================
-    # 下载
+    # 代理竞速下载
     # ========================================================
 
     try:
@@ -2959,6 +3288,9 @@ def main():
 
     # ========================================================
     # Whisper
+    #
+    # 到这里代理竞速线程已经全部退出。
+    # 不会再有后台线程写 .part。
     # ========================================================
 
     print(
@@ -3072,6 +3404,10 @@ def main():
 
     finally:
 
+        # ----------------------------------------------------
+        # 删除最终临时 MP3
+        # ----------------------------------------------------
+
         if mp3_path.exists():
 
             try:
@@ -3148,7 +3484,7 @@ def main():
     )
 
     # ========================================================
-    # State
+    # 保存 State
     # ========================================================
 
     processed[guid] = {
