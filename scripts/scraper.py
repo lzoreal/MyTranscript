@@ -17,7 +17,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from lxml import etree
 
-# 可选依赖：faster-whisper（用于广告对齐）
 try:
     from faster_whisper import WhisperModel
     HAS_FASTER_WHISPER = True
@@ -40,7 +39,7 @@ HEADERS = {
 
 BATCH_SIZE = 10
 WHISPER_MODEL_SIZE = os.environ.get("WHISPER_MODEL", "base")
-ALIGN_AUDIO_SECONDS = 90  # 只下载前 90 秒检测片头广告
+ALIGN_AUDIO_SECONDS = 120  # 校验前 2 分钟
 
 
 # ============ 配置 & 进度 ============
@@ -251,7 +250,6 @@ def safe_filename(title):
 
 # ============ 广告对齐 ============
 def get_audio_url(rss_entries, guid):
-    """从已获取的 RSS entries 中查找音频 URL"""
     for entry in rss_entries:
         if entry["guid"] == guid and entry["audio_url"]:
             return entry["audio_url"]
@@ -259,7 +257,6 @@ def get_audio_url(rss_entries, guid):
 
 
 def download_audio_sample(audio_url, duration=ALIGN_AUDIO_SECONDS):
-    """用 ffmpeg 下载前 N 秒音频"""
     tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
     cmd = [
         "ffmpeg", "-y", "-i", audio_url,
@@ -267,48 +264,67 @@ def download_audio_sample(audio_url, duration=ALIGN_AUDIO_SECONDS):
         "-vn", tmp.name
     ]
     try:
-        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=60)
+        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=90)
         return Path(tmp.name)
     except Exception as e:
         print(f"         ffmpeg 失败: {e}")
         return None
 
 
-def detect_ad_offset(audio_path, podscripts_text):
-    """用 faster-whisper 检测广告偏移"""
-    model = WhisperModel(WHISPER_MODEL_SIZE, device="cpu", compute_type="int8")
+def detect_ad_offset(model, audio_path, podscripts_text):
+    """
+    用 faster-whisper 转录前 2 分钟，匹配 podscripts 字幕开头，返回广告偏移秒数。
+    关闭 VAD 确保广告也被转录，避免漏检。
+    """
     segments, _ = model.transcribe(
         str(audio_path),
         beam_size=1,
         language="en",
-        vad_filter=True,
-        vad_parameters=dict(min_silence_duration_ms=500),
+        vad_filter=False,  # 关键：关闭 VAD，广告也会被转录
         condition_on_previous_text=False,
     )
     segments = list(segments)
 
-    # 取 podscripts 前 60 个字符作为指纹
-    fingerprint = re.sub(r"[^\w]", "", podscripts_text[:80].lower())
-    if not fingerprint:
+    if not segments:
         return 0
 
-    for seg in segments:
-        seg_text = re.sub(r"[^\w]", "", seg.text.lower())
-        if fingerprint in seg_text or seg_text in fingerprint:
-            offset = max(0, round(seg.start) - 1)
-            return offset
+    # 构建 podscripts 指纹：取前 5 句非空文本，提取前 12 个词
+    pod_lines = [l.strip() for l in podscripts_text.split('\n') if l.strip()]
+    pod_text = " ".join(pod_lines[:5]).lower()
+    pod_text = re.sub(r"[^\w\s]", "", pod_text)
+    fingerprint_words = pod_text.split()[:12]
+    if len(fingerprint_words) < 3:
+        return 0
 
-    # 未匹配到，假设无广告
+    # 在 whisper segments 中找匹配
+    for seg in segments:
+        seg_text = re.sub(r"[^\w\s]", "", seg.text.lower())
+        # 检查是否有至少 3 个连续词匹配
+        for i in range(len(fingerprint_words) - 2):
+            phrase = " ".join(fingerprint_words[i:i+3])
+            if phrase in seg_text:
+                offset = max(0, round(seg.start) - 1)
+                return offset if offset > 3 else 0
+
+    # Fallback：如果第一个语音段开始较晚，说明前面是广告/静音
+    first_start = segments[0].start
+    if first_start > 15:
+        return round(first_start)
+
     return 0
 
 
 def align_batch(podcast, rss_entries, batch_guids, processed):
-    """对刚爬取的 10 集进行广告对齐"""
     if not HAS_FASTER_WHISPER:
         print("   faster-whisper 未安装，跳过对齐")
         return
 
-    print(f"\n   开始广告对齐 ({len(batch_guids)} 集, 模型: {WHISPER_MODEL_SIZE})...")
+    print(f"\n   开始广告对齐 ({len(batch_guids)} 集, 模型: {WHISPER_MODEL_SIZE}, 校验前 {ALIGN_AUDIO_SECONDS}s)...")
+
+    # 关键优化：只加载一次模型
+    print("      加载 Whisper 模型...")
+    model = WhisperModel(WHISPER_MODEL_SIZE, device="cpu", compute_type="int8")
+
     aligned = 0
 
     for guid in batch_guids:
@@ -324,21 +340,18 @@ def align_batch(podcast, rss_entries, batch_guids, processed):
             print("         无音频 URL")
             continue
 
-        # 读取现有字幕文本
         vtt_path = SITE_DIR / podcast["slug"] / "transcripts" / info["vtt_filename"]
         with open(vtt_path, "r", encoding="utf-8") as f:
             vtt_text = f.read()
         pod_text = re.sub(r"WEBVTT|^\d+$|\d{2}:\d{2}:\d{2}\.\d{3} --> .*", "", vtt_text, flags=re.MULTILINE)
 
-        # 下载音频样本
         sample_path = download_audio_sample(audio_url)
         if not sample_path:
             continue
 
         try:
-            offset = detect_ad_offset(sample_path, pod_text)
+            offset = detect_ad_offset(model, sample_path, pod_text)
             if offset > 0:
-                # 重新生成 VTT
                 cues = parse_transcript(fetch_html(info["source_url"]) or "")
                 if cues:
                     with open(vtt_path, "w", encoding="utf-8") as f:
@@ -393,7 +406,7 @@ def process_podcast(podcast, progress):
     print(f"   本次处理 {len(batch)} 集（待处理 {len(pending)} 集）")
 
     changed = False
-    batch_guids = []  # 记录刚处理的 guid，用于后续对齐
+    batch_guids = []
 
     for idx, entry in enumerate(batch, 1):
         guid = entry["guid"]
@@ -440,7 +453,6 @@ def process_podcast(podcast, progress):
         vtt_path = SITE_DIR / slug / "transcripts" / vtt_filename
         vtt_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # 先保存无偏移版本
         with open(vtt_path, "w", encoding="utf-8") as f:
             f.write(cues_to_vtt(cues, offset_seconds=0))
 
@@ -460,7 +472,6 @@ def process_podcast(podcast, progress):
         if idx < len(batch):
             time.sleep(5)
 
-    # ========== 自动对齐刚爬取的 10 集 ==========
     if batch_guids and changed:
         align_batch(podcast, rss_entries, batch_guids, processed)
 
