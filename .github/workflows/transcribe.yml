@@ -1,0 +1,77 @@
+name: Auto Transcribe & Deploy Pages
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *'   # 每天 UTC 02:00（北京时间 10:00）
+  workflow_dispatch:
+    inputs:
+      feed_url:
+        description: '播客 RSS 地址'
+        required: true
+        default: https://rss.amperwave.net/v2/feed/audacynetwork/hwmym'  # ← 换成真实 RSS
+      model:
+        description: 'Whisper 模型 (tiny/base/small/medium)'
+        required: true
+        default: 'base'
+
+permissions:
+  contents: write      # 用于 push state.json
+  pages: write         # 用于部署 Pages
+  id-token: write      # 用于 Pages OIDC
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  transcribe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装 ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: 安装 Python 依赖
+        run: |
+          pip install faster-whisper feedparser requests lxml deep-translator
+
+      - name: 运行转录（一次一集）
+        env:
+          FEED_URL: ${{ github.event.inputs.feed_url || 'https://rss.amperwave.net/v2/feed/audacynetwork/hwmym' }}
+          WHISPER_MODEL: ${{ github.event.inputs.model || 'base' }}
+          # 自动构造 GitHub Pages 地址，格式：https://<owner>.github.io/<repo>/
+          BASE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+        run: python scripts/transcribe.py
+
+      - name: 提交状态到 main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state.json
+          git diff --quiet && git diff --staged --quiet || git commit -m "auto: update state [skip ci]"
+          git push
+
+      - name: 上传 Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/
+
+  deploy:
+    needs: transcribe
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 部署到 GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
