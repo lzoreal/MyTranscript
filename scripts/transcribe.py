@@ -5,6 +5,7 @@ import time
 import re
 import random
 import hashlib
+
 import feedparser
 import requests
 
@@ -38,7 +39,13 @@ BASE_URL = os.environ.get(
 ).rstrip("/")
 
 
-# 中国免费代理
+# 是否使用中国代理
+#
+# 这里默认 true。
+#
+# 如果设置为 false：
+# 程序也不会使用 Runner IP 下载，
+# 而是直接终止。
 USE_CHINA_PROXY = (
     os.environ.get(
         "USE_CHINA_PROXY",
@@ -57,7 +64,7 @@ MAX_PROXY_ATTEMPTS = int(
 )
 
 
-# 代理连接测试超时
+# 代理测试超时
 PROXY_TEST_TIMEOUT = int(
     os.environ.get(
         "PROXY_TEST_TIMEOUT",
@@ -75,7 +82,7 @@ AUDIO_TIMEOUT = int(
 )
 
 
-# 代理缓存时间，单位秒
+# 代理缓存时间
 PROXY_CACHE_TTL = int(
     os.environ.get(
         "PROXY_CACHE_TTL",
@@ -97,11 +104,9 @@ if not BASE_URL:
 
     if gh_repo and "/" in gh_repo:
 
-        owner, repo = (
-            gh_repo.split(
-                "/",
-                1
-            )
+        owner, repo = gh_repo.split(
+            "/",
+            1
         )
 
         BASE_URL = (
@@ -157,7 +162,7 @@ PROXY_CACHE_FILE = Path(
 )
 
 
-# 本次运行已经确认无效的代理
+# 本次运行中已经确认无效的代理
 BAD_PROXIES = set()
 
 
@@ -592,9 +597,11 @@ def translate_sentences(sentences):
 def get_audio_url(entry):
 
     """
-    从 RSS 中寻找原始 enclosure。
+    直接从 RSS 中取得原始 enclosure。
 
-    优先使用 entry.enclosures。
+    不解析 pdst.fm。
+    不解析 Castfire。
+    不解析 Megaphone。
     """
 
     for enc in entry.get(
@@ -634,131 +641,6 @@ def get_audio_url(entry):
             return href
 
     return None
-
-
-# ============================================================
-# enclosure URL 解析
-# ============================================================
-
-def resolve_enclosure_url(
-    enclosure_url
-):
-
-    """
-    把 pdst.fm 嵌套的真实音频 URL
-    提取出来。
-
-    支持：
-
-        serve.castfire.com
-        traffic.megaphone.fm
-    """
-
-    if not enclosure_url:
-
-        return None, "unknown"
-
-    lower = (
-        enclosure_url.lower()
-    )
-
-    # --------------------------------------------------------
-    # 已经是直接地址
-    # --------------------------------------------------------
-
-    if "pdst.fm/" not in lower:
-
-        if (
-            "traffic.megaphone.fm"
-            in lower
-        ):
-
-            return (
-                enclosure_url,
-                "megaphone"
-            )
-
-        if (
-            "serve.castfire.com"
-            in lower
-        ):
-
-            return (
-                enclosure_url,
-                "castfire"
-            )
-
-        return (
-            enclosure_url,
-            "direct"
-        )
-
-    # --------------------------------------------------------
-    # 支持的平台
-    # --------------------------------------------------------
-
-    patterns = [
-
-        (
-            "traffic.megaphone.fm",
-            "megaphone"
-        ),
-
-        (
-            "serve.castfire.com",
-            "castfire"
-        ),
-
-    ]
-
-    for host, source in patterns:
-
-        marker = (
-            f"/{host}/"
-        )
-
-        pos = lower.find(
-            marker
-        )
-
-        if pos != -1:
-
-            start = pos + 1
-
-            extracted = (
-                "https://"
-                +
-                enclosure_url[start:]
-            )
-
-            print(
-                f"   🔎 enclosure 解析: "
-                f"{host}"
-            )
-
-            print(
-                f"   🎧 实际音频: "
-                f"{extracted}"
-            )
-
-            return (
-                extracted,
-                source
-            )
-
-    # --------------------------------------------------------
-    # 未识别
-    # --------------------------------------------------------
-
-    print(
-        "   ⚠️ 未识别的嵌套音频地址，"
-        "保留原 enclosure"
-    )
-
-    return (
-        enclosure_url,
-        "unknown"
-    )
 
 
 # ============================================================
@@ -964,6 +846,7 @@ def get_china_proxies():
                 ""
             )
 
+            # 没有协议时默认 HTTP
             if "://" not in line:
 
                 line = (
@@ -1081,12 +964,15 @@ def test_proxy(
 ):
 
     """
-    测试代理：
+    测试：
 
     1. HTTPS 是否可用
     2. 是否有公网出口
-    3. GeoIP 是否为 CN
-    4. 目标音频服务器是否可访问
+    3. 出口是否为 CN
+    4. 原始 enclosure 是否可以访问
+
+    注意：
+    不主动解析 pdst.fm。
     """
 
     request_proxies = {
@@ -1095,7 +981,7 @@ def test_proxy(
     }
 
     # --------------------------------------------------------
-    # 第一阶段：GeoIP
+    # GeoIP
     # --------------------------------------------------------
 
     geo = get_proxy_geoip(
@@ -1142,7 +1028,7 @@ def test_proxy(
     )
 
     # --------------------------------------------------------
-    # 必须是中国大陆
+    # 必须中国大陆
     # --------------------------------------------------------
 
     if country_code != "CN":
@@ -1157,7 +1043,7 @@ def test_proxy(
         }
 
     # --------------------------------------------------------
-    # 第二阶段：测试目标服务器
+    # 测试原始 enclosure
     # --------------------------------------------------------
 
     if target_url:
@@ -1172,7 +1058,7 @@ def test_proxy(
                 allow_redirects=True
             )
 
-            # 某些 CDN 不支持 HEAD
+            # 一些服务器不支持 HEAD
             if response.status_code in (
                 403,
                 405,
@@ -1199,13 +1085,18 @@ def test_proxy(
                         False,
 
                     "reason":
-                        f"目标服务器 HTTP "
+                        f"原始 enclosure HTTP "
                         f"{response.status_code}"
                 }
 
             print(
-                f"   🎯 目标服务器测试: "
+                f"   🎯 原始 enclosure 测试: "
                 f"HTTP {response.status_code}"
+            )
+
+            print(
+                f"   🔗 最终跳转 URL: "
+                f"{response.url}"
             )
 
         except Exception as e:
@@ -1215,7 +1106,7 @@ def test_proxy(
                     False,
 
                 "reason":
-                    f"目标服务器不可访问: "
+                    f"原始 enclosure 不可访问: "
                     f"{e}"
             }
 
@@ -1260,30 +1151,23 @@ def download_audio(
     }
 
     # ========================================================
-    # 不使用代理
+    # 严格禁止无代理下载
     # ========================================================
 
     if not USE_CHINA_PROXY:
 
         print(
-            "ℹ️ USE_CHINA_PROXY=false，"
-            "直接下载"
+            "❌ USE_CHINA_PROXY=false"
         )
 
-        download_with_proxy(
-            audio_url,
-            output_path,
-            headers,
-            None
+        print(
+            "🚫 根据当前配置，"
+            "不允许使用 GitHub Actions Runner IP 下载"
         )
 
-        return {
-            "proxy":
-                None,
-
-            "public_ip":
-                None
-        }
+        raise RuntimeError(
+            "中国代理模式未启用，任务终止"
+        )
 
     # ========================================================
     # 获取代理
@@ -1294,27 +1178,16 @@ def download_audio(
     if not proxies:
 
         print(
-            "⚠️ 没有获取到中国代理"
+            "\n❌ 没有获取到中国代理"
         )
 
         print(
-            "➡️ 回退到直接下载"
+            "🚫 不使用 GitHub Actions Runner IP"
         )
 
-        download_with_proxy(
-            audio_url,
-            output_path,
-            headers,
-            None
+        raise RuntimeError(
+            "无法获取中国代理，任务终止"
         )
-
-        return {
-            "proxy":
-                None,
-
-            "public_ip":
-                None
-        }
 
     # ========================================================
     # 限制尝试数量
@@ -1330,7 +1203,7 @@ def download_audio(
     )
 
     # ========================================================
-    # 逐个测试
+    # 逐个测试 + 下载
     # ========================================================
 
     for index, proxy in enumerate(
@@ -1350,6 +1223,10 @@ def download_audio(
         print(
             f"   {proxy}"
         )
+
+        # ----------------------------------------------------
+        # 测试代理
+        # ----------------------------------------------------
 
         result = test_proxy(
             proxy,
@@ -1379,6 +1256,11 @@ def download_audio(
             "   ✅ 中国大陆代理可用"
         )
 
+        print(
+            f"   🌍 Public IP: "
+            f"{public_ip}"
+        )
+
         # ----------------------------------------------------
         # 下载
         # ----------------------------------------------------
@@ -1390,6 +1272,10 @@ def download_audio(
                 output_path,
                 headers,
                 proxy
+            )
+
+            print(
+                "   ✅ 音频下载成功"
             )
 
             return {
@@ -1421,42 +1307,30 @@ def download_audio(
                     pass
 
     # ========================================================
-    # 所有代理失败
+    # 所有中国代理失败
     # ========================================================
 
     print(
-        "\n⚠️ 所有中国代理均失败"
+        "\n❌ 所有中国 IP 均下载失败"
     )
 
     print(
-        "➡️ 最后尝试直接下载..."
+        f"   共尝试 "
+        f"{len(proxies)} 个代理"
     )
 
-    try:
+    print(
+        "🚫 不使用 GitHub Actions Runner IP"
+    )
 
-        download_with_proxy(
-            audio_url,
-            output_path,
-            headers,
-            None
-        )
+    print(
+        "🛑 本次任务直接退出"
+    )
 
-        return {
-            "proxy":
-                None,
-
-            "public_ip":
-                None
-        }
-
-    except Exception as e:
-
-        print(
-            f"❌ 直接下载也失败: "
-            f"{e}"
-        )
-
-        raise
+    raise RuntimeError(
+        "所有中国代理均无法下载音频，"
+        "任务已终止"
+    )
 
 
 # ============================================================
@@ -1470,25 +1344,32 @@ def download_with_proxy(
     proxy
 ):
 
-    request_proxies = None
+    if not proxy:
 
-    if proxy:
+        raise RuntimeError(
+            "禁止在无代理情况下下载音频"
+        )
 
-        request_proxies = {
-            "http":
-                proxy,
+    request_proxies = {
+        "http":
+            proxy,
 
-            "https":
-                proxy
-        }
+        "https":
+            proxy
+    }
 
     print(
         "⬇️ 下载音频..."
     )
 
     print(
-        f"   URL: "
+        f"   原始 enclosure: "
         f"{audio_url}"
+    )
+
+    print(
+        f"   Proxy: "
+        f"{proxy}"
     )
 
     with requests.get(
@@ -1535,12 +1416,12 @@ def download_with_proxy(
         )
 
         print(
-            f"   最终 URL: "
+            f"   最终跳转 URL: "
             f"{response.url}"
         )
 
         # ----------------------------------------------------
-        # 防止下载到 HTML
+        # 防止下载 HTML
         # ----------------------------------------------------
 
         if (
@@ -1569,6 +1450,7 @@ def download_with_proxy(
             ):
 
                 if not chunk:
+
                     continue
 
                 f.write(
@@ -1610,7 +1492,7 @@ def download_with_proxy(
 
     valid_audio = (
 
-        # ID3 / MP3
+        # MP3 ID3
         header.startswith(
             b"ID3"
         )
@@ -2039,16 +1921,18 @@ def generate_podcast_feed(
         )
 
         # ----------------------------------------------------
-        # 替换 enclosure
+        # 恢复原始 enclosure
+        #
+        # 不使用任何解析后的地址。
         # ----------------------------------------------------
 
-        actual_audio_url = (
+        original_enclosure_url = (
             episode_state.get(
-                "audio_url"
+                "enclosure_url"
             )
         )
 
-        if actual_audio_url:
+        if original_enclosure_url:
 
             enclosures = (
                 item.findall(
@@ -2071,18 +1955,18 @@ def generate_podcast_feed(
 
                 if (
                     old_url
-                    != actual_audio_url
+                    != original_enclosure_url
                 ):
 
                     enclosure.set(
                         "url",
-                        actual_audio_url
+                        original_enclosure_url
                     )
 
                     replaced_audio += 1
 
                     print(
-                        "   🔗 enclosure:"
+                        "   🔗 恢复原始 enclosure:"
                     )
 
                     print(
@@ -2092,7 +1976,7 @@ def generate_podcast_feed(
 
                     print(
                         f"      新: "
-                        f"{actual_audio_url}"
+                        f"{original_enclosure_url}"
                     )
 
         # ----------------------------------------------------
@@ -2193,7 +2077,7 @@ def generate_podcast_feed(
     )
 
     print(
-        f"   替换 enclosure: "
+        f"   恢复原始 enclosure: "
         f"{replaced_audio}"
     )
 
@@ -2590,28 +2474,28 @@ def main():
     )
 
     # ========================================================
-    # 解析 enclosure
+    # 直接使用原始 enclosure
+    #
+    # 不解析 pdst.fm
+    # 不解析 Castfire
+    # 不解析 Megaphone
     # ========================================================
 
-    audio_url, audio_source = (
-        resolve_enclosure_url(
-            enclosure_url
-        )
+    audio_url = (
+        enclosure_url
     )
 
-    if audio_url != enclosure_url:
+    audio_source = (
+        "rss_enclosure"
+    )
 
-        print(
-            f"🔄 使用解析后的实际音频地址 "
-            f"({audio_source})"
-        )
+    print(
+        "🎧 直接使用 RSS 原始 enclosure"
+    )
 
-    else:
-
-        print(
-            f"ℹ️ 使用 enclosure 原地址 "
-            f"({audio_source})"
-        )
+    print(
+        "   不解析 pdst.fm 中的真实地址"
+    )
 
     # ========================================================
     # 临时音频
@@ -2640,7 +2524,7 @@ def main():
     except Exception as e:
 
         print(
-            f"❌ 音频下载失败: "
+            f"\n❌ 音频下载失败: "
             f"{e}"
         )
 
@@ -2648,13 +2532,18 @@ def main():
 
     if not proxy_info:
 
-        proxy_info = {
-            "proxy":
-                None,
+        print(
+            "❌ 未获得有效中国代理信息"
+        )
 
-            "public_ip":
-                None
-        }
+        if mp3_path.exists():
+
+            try:
+                mp3_path.unlink()
+            except Exception:
+                pass
+
+        sys.exit(1)
 
     print(
         "\n📡 本次下载出口:"
@@ -2785,16 +2674,27 @@ def main():
 
     finally:
 
+        # ----------------------------------------------------
         # 删除临时 MP3
+        # ----------------------------------------------------
+
         if mp3_path.exists():
 
             try:
 
                 mp3_path.unlink()
 
-            except Exception:
+                print(
+                    f"🗑️ 已删除临时音频: "
+                    f"{mp3_path.name}"
+                )
 
-                pass
+            except Exception as e:
+
+                print(
+                    f"⚠️ 删除临时 MP3 失败: "
+                    f"{e}"
+                )
 
     # ========================================================
     # 后处理
@@ -2874,15 +2774,15 @@ def main():
         "enclosure_url":
             enclosure_url,
 
-        # 实际用于 Whisper
-        # 同时写入新 Feed
+        # 与 enclosure_url 相同
+        # 不再保存真实解析地址
         "audio_url":
             audio_url,
 
         "audio_source":
             audio_source,
 
-        # 下载代理
+        # 实际下载代理
         "proxy":
             proxy_info.get(
                 "proxy"
