@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 多播客字幕爬取器
-RSS-first + PodScripts 搜索 + Whisper 广告对齐
+RSS-first + PodScripts 搜索
 + 通用增强 RSS Feed 生成
 
 主要功能：
@@ -9,7 +9,6 @@ RSS-first + PodScripts 搜索 + Whisper 广告对齐
 1. 从原始 RSS 获取 episode
 2. 从 PodScripts 搜索 transcript
 3. 转换成 VTT
-4. 可选 Whisper 自动检测广告偏移
 5. 构造新的 RSS Feed
 6. 新 Feed 只保留已经成功生成字幕的 episode
 7. 保留原始 enclosure / metadata
@@ -25,8 +24,6 @@ import time
 import urllib.parse
 import requests
 import html as html_module
-import subprocess
-import tempfile
 
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,16 +31,6 @@ from copy import deepcopy
 from lxml import etree
 
 
-# ============================================================
-# 可选 faster-whisper
-# ============================================================
-
-try:
-    from faster_whisper import WhisperModel
-
-    HAS_FASTER_WHISPER = True
-except ImportError:
-    HAS_FASTER_WHISPER = False
 
 
 # ============================================================
@@ -93,12 +80,6 @@ RSS_HEADERS = {
 
 BATCH_SIZE = 10
 
-WHISPER_MODEL_SIZE = os.environ.get(
-    "WHISPER_MODEL",
-    "base",
-)
-
-ALIGN_AUDIO_SECONDS = 120
 
 # 是否解析真实音频地址
 #
@@ -109,26 +90,7 @@ ALIGN_AUDIO_SECONDS = 120
 # False：
 #   直接使用原 RSS 的 enclosure URL。
 #
-RESOLVE_AUDIO_URL = os.environ.get(
-    "RESOLVE_AUDIO_URL",
-    "true",
-).lower() in (
-    "1",
-    "true",
-    "yes",
-    "on",
-)
 
-# 是否启用 Whisper 对齐
-ENABLE_ALIGNMENT = os.environ.get(
-    "ENABLE_ALIGNMENT",
-    "true",
-).lower() in (
-    "1",
-    "true",
-    "yes",
-    "on",
-)
 
 
 # ============================================================
@@ -427,135 +389,14 @@ def get_episode_audio_url_from_item(item):
     return url.strip()
 
 
-def resolve_audio_url(
-    audio_url,
-    timeout=30,
-):
-    """
-    通用解析音频真实地址。
 
-    例如：
-
-    RSS
-      ↓
-    Podtrac redirect
-      ↓
-    Simplecast CDN
-      ↓
-    最终 MP3
-
-    不关心中间是哪家公司。
-    """
-
-    if not audio_url:
-        return None
-
-    if not RESOLVE_AUDIO_URL:
-        return audio_url
-
-    try:
-
-        print(
-            f"         解析音频地址: "
-            f"{audio_url[:100]}..."
-        )
-
-        # ------------------------------------------------
-        # 优先 HEAD
-        # ------------------------------------------------
-
-        try:
-
-            response = requests.head(
-                audio_url,
-                headers=RSS_HEADERS,
-                allow_redirects=True,
-                timeout=timeout,
-            )
-
-            if response.url:
-                final_url = response.url
-
-                if final_url != audio_url:
-
-                    print(
-                        "         重定向:"
-                    )
-
-                    print(
-                        f"            原: "
-                        f"{audio_url}"
-                    )
-
-                    print(
-                        f"            新: "
-                        f"{final_url}"
-                    )
-
-                return final_url
-
-        except Exception as e:
-
-            print(
-                f"         HEAD 失败，"
-                f"改用 GET: {e}"
-            )
-
-        # ------------------------------------------------
-        # GET fallback
-        # ------------------------------------------------
-
-        response = requests.get(
-            audio_url,
-            headers={
-                **RSS_HEADERS,
-                "Range": "bytes=0-1023",
-            },
-            allow_redirects=True,
-            timeout=timeout,
-            stream=True,
-        )
-
-        final_url = response.url
-
-        response.close()
-
-        if final_url:
-            return final_url
-
-        return audio_url
-
-    except Exception as e:
-
-        print(
-            f"         音频地址解析失败: {e}"
-        )
-
-        return audio_url
-
-
-def get_episode_audio_url(
-    item,
-):
+def get_episode_audio_url(item):
     """
     通用获取 episode 音频地址。
 
     当前只依赖标准 RSS enclosure。
-
-    以后如果遇到特殊 Feed，
-    可以只扩展这个函数。
     """
-
-    audio_url = (
-        get_episode_audio_url_from_item(item)
-    )
-
-    if not audio_url:
-        return None
-
-    return resolve_audio_url(
-        audio_url
-    )
+    return get_episode_audio_url_from_item(item)
 
 
 # ============================================================
@@ -938,505 +779,13 @@ def cues_to_vtt(
 # 音频采样
 # ============================================================
 
-def download_audio_sample(
-    audio_url,
-    duration=ALIGN_AUDIO_SECONDS,
-):
-
-    tmp = tempfile.NamedTemporaryFile(
-        suffix=".wav",
-        delete=False,
-    )
-
-    tmp.close()
-
-    cmd = [
-        "ffmpeg",
-        "-y",
-        "-i",
-        audio_url,
-        "-t",
-        str(duration),
-        "-ar",
-        "16000",
-        "-ac",
-        "1",
-        "-vn",
-        tmp.name,
-    ]
-
-    try:
-
-        subprocess.run(
-            cmd,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=True,
-            timeout=90,
-        )
-
-        return Path(tmp.name)
-
-    except Exception as e:
-
-        print(
-            f"         ffmpeg 失败: {e}"
-        )
-
-        Path(
-            tmp.name
-        ).unlink(
-            missing_ok=True
-        )
-
-        return None
-
-
 # ============================================================
 # Whisper 广告偏移
 # ============================================================
 
-def detect_ad_offset(
-    model,
-    audio_path,
-    podscripts_text,
-):
-
-    segments, _ = model.transcribe(
-        str(audio_path),
-        beam_size=1,
-        language="en",
-        vad_filter=False,
-        condition_on_previous_text=False,
-    )
-
-    segments = list(
-        segments
-    )
-
-    if not segments:
-
-        print(
-            "         [调试] "
-            "whisper 无输出"
-        )
-
-        return 0
-
-    pod_lines = [
-        line.strip()
-        for line in podscripts_text.split(
-            "\n"
-        )
-        if (
-            line.strip()
-            and len(line.strip()) > 5
-        )
-    ]
-
-    target = " ".join(
-        pod_lines[:2]
-    ).lower()
-
-    target = re.sub(
-        r"[^\w\s]",
-        "",
-        target,
-    )
-
-    target_words = target.split()
-
-    print(
-        f"         [调试] "
-        f"字幕指纹({len(target_words)}词): "
-        f"{target[:100]}..."
-    )
-
-    print(
-        f"         [调试] "
-        f"whisper 输出 "
-        f"{len(segments)} 段"
-    )
-
-    # --------------------------------------------------------
-    # 方法 1
-    # --------------------------------------------------------
-
-    whisper_full = ""
-
-    for segment in segments:
-
-        whisper_full += (
-            " "
-            + segment.text.lower()
-        )
-
-    whisper_full = re.sub(
-        r"[^\w\s]",
-        "",
-        whisper_full,
-    )
-
-    if len(target_words) >= 4:
-
-        for window in range(
-            min(8, len(target_words)),
-            3,
-            -1,
-        ):
-
-            phrase = " ".join(
-                target_words[:window]
-            )
-
-            index = whisper_full.find(
-                phrase
-            )
-
-            if index != -1:
-
-                char_ratio = (
-                    index
-                    / max(
-                        1,
-                        len(whisper_full),
-                    )
-                )
-
-                est_time = (
-                    segments[0].start
-                    + (
-                        segments[-1].end
-                        - segments[0].start
-                    )
-                    * char_ratio
-                )
-
-                offset = max(
-                    0,
-                    round(est_time) - 1,
-                )
-
-                print(
-                    f"         [调试] "
-                    f"方法1全文匹配成功"
-                    f"(窗口{window}词), "
-                    f"估算偏移: {offset}s"
-                )
-
-                return (
-                    offset
-                    if offset > 5
-                    else 0
-                )
-
-    # --------------------------------------------------------
-    # 方法 2
-    # --------------------------------------------------------
-
-    for segment in segments:
-
-        segment_text = re.sub(
-            r"[^\w\s]",
-            "",
-            segment.text.lower(),
-        )
-
-        for i in range(
-            max(
-                0,
-                len(target_words) - 3,
-            )
-        ):
-
-            phrase = " ".join(
-                target_words[
-                    i:i + 4
-                ]
-            )
-
-            if phrase in segment_text:
-
-                offset = max(
-                    0,
-                    round(
-                        segment.start
-                    ) - 1,
-                )
-
-                print(
-                    f"         [调试] "
-                    f"方法2分段匹配成功, "
-                    f"偏移: {offset}s"
-                )
-
-                return (
-                    offset
-                    if offset > 5
-                    else 0
-                )
-
-    # --------------------------------------------------------
-    # 方法 3
-    # --------------------------------------------------------
-
-    first_start = (
-        segments[0].start
-    )
-
-    if first_start > 10:
-
-        print(
-            f"         [调试] "
-            f"方法3 fallback: "
-            f"首个语音段在 "
-            f"{first_start:.1f}s"
-        )
-
-        return round(
-            first_start
-        )
-
-    print(
-        "         [调试] "
-        "未匹配. 前3段 whisper:"
-    )
-
-    for segment in segments[:3]:
-
-        print(
-            f"            "
-            f"[{segment.start:.1f}s] "
-            f"{segment.text[:60]}..."
-        )
-
-    print(
-        "         [调试] "
-        "结论: 未检测到偏移"
-    )
-
-    return 0
-
-
 # ============================================================
 # Whisper 批量对齐
 # ============================================================
-
-def align_batch(
-    podcast,
-    rss_items,
-    batch_guids,
-    processed,
-):
-
-    if not ENABLE_ALIGNMENT:
-
-        print(
-            "   已关闭 Whisper 对齐"
-        )
-
-        return
-
-    if not HAS_FASTER_WHISPER:
-
-        print(
-            "   faster-whisper 未安装，"
-            "跳过对齐"
-        )
-
-        return
-
-    print(
-        f"\n   开始广告对齐 "
-        f"({len(batch_guids)} 集, "
-        f"模型: {WHISPER_MODEL_SIZE}, "
-        f"校验前 "
-        f"{ALIGN_AUDIO_SECONDS}s)..."
-    )
-
-    print(
-        "      加载 Whisper 模型..."
-    )
-
-    model = WhisperModel(
-        WHISPER_MODEL_SIZE,
-        device="cpu",
-        compute_type="int8",
-    )
-
-    aligned = 0
-
-    rss_by_guid = {
-        entry["guid"]: entry
-        for entry in rss_items
-    }
-
-    for guid in batch_guids:
-
-        info = processed.get(
-            guid
-        )
-
-        if (
-            not info
-            or info.get("skipped")
-            or not info.get(
-                "vtt_filename"
-            )
-        ):
-            continue
-
-        title = info["title"]
-
-        print(
-            f"      [{aligned + 1}] "
-            f"{title[:50]}"
-        )
-
-        entry = rss_by_guid.get(
-            guid
-        )
-
-        if not entry:
-
-            print(
-                "         RSS 中找不到该集"
-            )
-
-            continue
-
-        audio_url = entry.get(
-            "audio_url"
-        )
-
-        if not audio_url:
-
-            print(
-                "         无音频 URL"
-            )
-
-            continue
-
-        vtt_path = (
-            SITE_DIR
-            / podcast["slug"]
-            / "transcripts"
-            / info["vtt_filename"]
-        )
-
-        if not vtt_path.exists():
-
-            print(
-                "         VTT 文件不存在"
-            )
-
-            continue
-
-        vtt_text = vtt_path.read_text(
-            encoding="utf-8"
-        )
-
-        pod_text = re.sub(
-            r"WEBVTT"
-            r"|^\d+$"
-            r"|\d{2}:\d{2}:\d{2}\.\d{3}"
-            r"\s+-->\s+.*",
-            "",
-            vtt_text,
-            flags=re.MULTILINE,
-        )
-
-        sample_path = (
-            download_audio_sample(
-                audio_url
-            )
-        )
-
-        if not sample_path:
-            continue
-
-        try:
-
-            offset = detect_ad_offset(
-                model,
-                sample_path,
-                pod_text,
-            )
-
-            if offset > 0:
-
-                source_url = info.get(
-                    "source_url"
-                )
-
-                source_html = (
-                    fetch_html(
-                        source_url
-                    )
-                    if source_url
-                    else None
-                )
-
-                cues = (
-                    parse_transcript(
-                        source_html
-                    )
-                    if source_html
-                    else []
-                )
-
-                if cues:
-
-                    vtt_path.write_text(
-                        cues_to_vtt(
-                            cues,
-                            offset_seconds=offset,
-                        ),
-                        encoding="utf-8",
-                    )
-
-                    info[
-                        "ad_offset"
-                    ] = offset
-
-                    print(
-                        f"         "
-                        f"✅ 偏移 +{offset}s"
-                    )
-
-                    aligned += 1
-
-            else:
-
-                info[
-                    "ad_offset"
-                ] = 0
-
-                print(
-                    "         ➖ 无偏移"
-                )
-
-        except Exception as e:
-
-            print(
-                f"         "
-                f"❌ 对齐失败: {e}"
-            )
-
-        finally:
-
-            sample_path.unlink(
-                missing_ok=True
-            )
-
-            time.sleep(1)
-
-    print(
-        f"   对齐完成: "
-        f"{aligned}/{len(batch_guids)} "
-        f"集有偏移"
-    )
-
 
 # ============================================================
 # 核心处理
@@ -1534,11 +883,7 @@ def process_podcast(
             else ""
         )
 
-        audio_url = (
-            get_episode_audio_url(
-                item
-            )
-        )
+        audio_url = get_episode_audio_url_from_item(item)
 
         rss_items.append(
             {
@@ -1615,7 +960,6 @@ def process_podcast(
 
     changed = False
 
-    batch_guids = []
 
     for idx, entry in enumerate(
         batch,
@@ -1729,7 +1073,6 @@ def process_podcast(
             "processed_at": now_iso(),
             "guid": guid,
             "source_url": ep_url,
-            "ad_offset": 0,
         }
 
         pc_prog[
@@ -1748,9 +1091,6 @@ def process_podcast(
             )
         )
 
-        batch_guids.append(
-            guid
-        )
 
         changed = True
 
@@ -1763,18 +1103,6 @@ def process_podcast(
         if idx < len(batch):
 
             time.sleep(5)
-
-    if (
-        batch_guids
-        and changed
-    ):
-
-        align_batch(
-            podcast,
-            rss_items,
-            batch_guids,
-            processed,
-        )
 
     pc_prog[
         "total_processed"
@@ -2034,7 +1362,6 @@ def generate_podcast_feed(
 
     added_transcripts = 0
 
-    resolved_audio = 0
 
     for item in original_items:
 
@@ -2081,43 +1408,6 @@ def generate_podcast_feed(
             removed += 1
 
             continue
-
-        # ----------------------------------------------------
-        # 音频 URL
-        # ----------------------------------------------------
-
-        enclosure = get_enclosure(
-            item
-        )
-
-        if enclosure is not None:
-
-            original_audio_url = (
-                enclosure.get(
-                    "url"
-                )
-            )
-
-            if original_audio_url:
-
-                final_audio_url = (
-                    resolve_audio_url(
-                        original_audio_url
-                    )
-                )
-
-                if (
-                    final_audio_url
-                    and final_audio_url
-                    != original_audio_url
-                ):
-
-                    enclosure.set(
-                        "url",
-                        final_audio_url,
-                    )
-
-                    resolved_audio += 1
 
         # ----------------------------------------------------
         # transcript URL
@@ -2240,10 +1530,6 @@ def generate_podcast_feed(
         f"{added_transcripts} 个 transcript"
     )
 
-    print(
-        f"      更新 "
-        f"{resolved_audio} 个真实音频地址"
-    )
 
 
 # ============================================================
@@ -2537,15 +1823,6 @@ def main():
         f"BASE_URL: {base_url}"
     )
 
-    print(
-        f"RESOLVE_AUDIO_URL: "
-        f"{RESOLVE_AUDIO_URL}"
-    )
-
-    print(
-        f"ENABLE_ALIGNMENT: "
-        f"{ENABLE_ALIGNMENT}"
-    )
 
     podcasts = load_podcasts()
 
