@@ -566,9 +566,18 @@ def parse_transcript(html_text):
         body
     )
 
+    # 关键修复：标签替换为空格而非换行，
+    # 避免 "Starting point is" 被拆分到不同行
     text = re.sub(
         r"<[^>]+>",
-        "\n",
+        " ",
+        text,
+    )
+
+    # 合并多余空白
+    text = re.sub(
+        r"\s+",
+        " ",
         text,
     )
 
@@ -654,8 +663,16 @@ def parse_transcript(html_text):
             }
         )
 
-    return cues
+    # 调试日志
+    has_sp = "Starting point is" in html_text
+    print(f"         [调试] HTML含'Starting point is': {has_sp}")
+    print(f"         [调试] 解析到 cues: {len(cues)}")
+    if not cues and has_sp:
+        # 打印去标签后的前 800 字符，帮助定位问题
+        debug_text = text[:800].replace("\n", " ")
+        print(f"         [调试] 去标签后文本片段: {debug_text}...")
 
+    return cues
 
 # ============================================================
 # 时间
@@ -1021,9 +1038,13 @@ def process_podcast(
 
             continue
 
+        print(f"      HTML 长度: {len(html_text)}")
+
         cues = parse_transcript(
             html_text
         )
+
+        print(f"      解析 cues: {len(cues)}")
 
         if not cues:
 
