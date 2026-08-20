@@ -1,18 +1,48 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 """
 多播客字幕爬取器
 
-功能：
+RSS-first + PodScripts 搜索
++ 通用增强 RSS Feed 生成
+
+主要功能：
+
 1. 从原始 RSS 获取 episode
-2. 从 PodScripts 搜索对应 episode
-3. 使用 DOM + 多级容错方式解析 PodScripts transcript
-4. 转换为 VTT
+2. 从 PodScripts 搜索 transcript
+3. 自动解析 PodScripts transcript
+4. 转换成 VTT
 5. 构造新的 RSS Feed
 6. 新 Feed 只保留已经成功生成字幕的 episode
 7. 保留原始 enclosure / metadata
 8. 自动加入 Podcasting 2.0 transcript 标签
-9. 通用支持不同播客
-10. 使用 progress.json 避免重复处理
+9. 通用支持不同播客托管平台
+10. progress.json 记录处理状态
+
+本版本重点修复：
+
+- PodScripts 搜索页面：
+  不再使用正则解析 HTML
+  避免把 "0 comments" 当成 episode 标题
+
+- PodScripts transcript：
+  使用 lxml DOM + 文本节点解析
+  不依赖固定 HTML 标签结构
+
+- 标题匹配：
+  支持：
+    Bonus:
+    Episode:
+    Ep:
+    标点差异
+    curly apostrophe
+    & / and
+    大小写差异
+
+- VTT 文件名：
+  使用 safe_filename()
+  不需要 urllib.parse.quote()
 """
 
 import os
@@ -21,14 +51,15 @@ import re
 import json
 import time
 import urllib.parse
-import requests
 import html as html_module
+
+import requests
 
 from datetime import datetime, timezone
 from pathlib import Path
 
 from lxml import etree
-from copy import deepcopy
+from lxml import html as lxml_html
 
 # ============================================================
 # 文件配置
@@ -62,7 +93,7 @@ RSS_HEADERS = {
         "(KHTML, like Gecko) "
         "Chrome/120.0.0.0 Safari/537.36"
     ),
-    "Accept": ("application/rss+xml, application/xml, text/xml, " "*/*;q=0.8"),
+    "Accept": ("application/rss+xml, application/xml, " "text/xml, */*;q=0.8"),
 }
 
 
@@ -72,14 +103,11 @@ RSS_HEADERS = {
 
 BATCH_SIZE = 10
 
-# PodScripts 请求之间的间隔
-SEARCH_DELAY = 2
+# PodScripts 请求间隔
+PODSEARCH_DELAY = 2
 
-# Episode 之间的间隔
+# 每个 episode 之间的间隔
 EPISODE_DELAY = 5
-
-# HTTP 超时
-HTTP_TIMEOUT = 60
 
 
 # ============================================================
@@ -103,50 +131,43 @@ def now_iso():
 
 
 def display_name(podcast):
+
     base = podcast.get(
         "name",
-        podcast.get("slug", "Podcast"),
+        podcast.get(
+            "slug",
+            "Podcast",
+        ),
     )
 
     return f"{base} (Unofficial)"
 
 
 def safe_filename(title):
+    """
+    将标题转换成安全文件名。
+
+    不保留空格、冒号、括号、问号等特殊字符。
+
+    因此生成 VTT URL 时不需要再次 quote。
+    """
+
     keep = "abcdefghijklmnopqrstuvwxyz" "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "0123456789" "-_."
 
     filename = "".join(c if c in keep else "_" for c in title)
+
+    filename = re.sub(
+        r"_+",
+        "_",
+        filename,
+    )
 
     filename = filename.strip("._")
 
     if not filename:
         filename = "episode"
 
-    return filename[:80]
-
-
-def normalize_whitespace(text):
-    """
-    统一网页文本中的各种空白。
-    """
-
-    if text is None:
-        return ""
-
-    text = text.replace("\xa0", " ").replace("\u200b", "").replace("\ufeff", "")
-
-    text = re.sub(
-        r"[ \t\r\f\v]+",
-        " ",
-        text,
-    )
-
-    text = re.sub(
-        r"\n\s*\n+",
-        "\n",
-        text,
-    )
-
-    return text.strip()
+    return filename[:120]
 
 
 # ============================================================
@@ -158,7 +179,7 @@ def load_podcasts():
 
     if not PODCASTS_FILE.exists():
 
-        print(f"错误：找不到 {PODCASTS_FILE}")
+        print(f"找不到 {PODCASTS_FILE}")
 
         sys.exit(1)
 
@@ -168,15 +189,7 @@ def load_podcasts():
         encoding="utf-8",
     ) as f:
 
-        data = json.load(f)
-
-    if not isinstance(data, list):
-
-        print("错误：podcasts.json 必须是数组")
-
-        sys.exit(1)
-
-    return data
+        return json.load(f)
 
 
 # ============================================================
@@ -198,28 +211,32 @@ def load_progress():
 
                 data = json.load(f)
 
-            if isinstance(data, dict):
+            if not isinstance(
+                data,
+                dict,
+            ):
+                raise ValueError("progress.json 不是对象")
 
-                data.setdefault(
-                    "podcasts",
-                    {},
-                )
+            data.setdefault(
+                "podcasts",
+                {},
+            )
 
-                return data
+            return data
 
         except Exception as e:
 
-            print(f"读取 progress.json 失败: {e}")
+            print(f"   读取 progress.json 失败: {e}")
 
     return {"podcasts": {}}
 
 
 def save_progress(progress):
 
-    temp_file = Path(str(PROGRESS_FILE) + ".tmp")
+    tmp_file = Path(str(PROGRESS_FILE) + ".tmp")
 
     with open(
-        temp_file,
+        tmp_file,
         "w",
         encoding="utf-8",
     ) as f:
@@ -231,7 +248,7 @@ def save_progress(progress):
             indent=2,
         )
 
-    temp_file.replace(PROGRESS_FILE)
+    tmp_file.replace(PROGRESS_FILE)
 
 
 def get_podcast_progress(
@@ -260,21 +277,6 @@ def get_podcast_progress(
     return podcasts[slug]
 
 
-def count_successful(processed):
-
-    return sum(
-        1
-        for value in processed.values()
-        if (
-            not value.get(
-                "skipped",
-                False,
-            )
-            and value.get("vtt_filename")
-        )
-    )
-
-
 # ============================================================
 # HTTP
 # ============================================================
@@ -292,16 +294,10 @@ def fetch_html(
             response = requests.get(
                 url,
                 headers=HEADERS,
-                timeout=HTTP_TIMEOUT,
+                timeout=60,
             )
 
             response.raise_for_status()
-
-            # requests 根据 header 推断编码，
-            # 但网页偶尔会声明错误编码。
-            if not response.encoding:
-
-                response.encoding = response.apparent_encoding
 
             return response.text
 
@@ -313,22 +309,15 @@ def fetch_html(
 
                 sleep_time = 10 + 5 * attempt
 
-                print(f"      HTTP 429，" f"等待 {sleep_time}s...")
+                print(f"      429 限流，" f"等待 {sleep_time}s...")
 
                 time.sleep(sleep_time)
 
-            elif status in {
-                403,
-                404,
-            }:
-
-                print(f"      HTTP {status}，" f"停止重试")
-
-                return None
-
             else:
 
-                print(f"      HTTP {status} " f"(重试 " f"{attempt + 1}/{retries})")
+                print(
+                    f"      HTTP {status} 错误 " f"(重试 " f"{attempt + 1}/{retries})"
+                )
 
                 time.sleep(3**attempt)
 
@@ -341,6 +330,11 @@ def fetch_html(
     return None
 
 
+# ============================================================
+# RSS
+# ============================================================
+
+
 def fetch_rss(feed_url):
 
     try:
@@ -348,7 +342,7 @@ def fetch_rss(feed_url):
         response = requests.get(
             feed_url,
             headers=RSS_HEADERS,
-            timeout=HTTP_TIMEOUT,
+            timeout=60,
         )
 
         response.raise_for_status()
@@ -364,23 +358,16 @@ def fetch_rss(feed_url):
         return None
 
 
-# ============================================================
-# RSS
-# ============================================================
-
-
 def get_enclosure(item):
 
     enclosure = item.find("enclosure")
 
     if enclosure is not None:
-
         return enclosure
 
     result = item.xpath("./*[local-name()='enclosure']")
 
     if result:
-
         return result[0]
 
     return None
@@ -393,79 +380,21 @@ def get_episode_audio_url_from_item(
     enclosure = get_enclosure(item)
 
     if enclosure is None:
-
         return None
 
     url = enclosure.get("url")
 
     if not url:
-
         return None
 
     return url.strip()
 
 
-def get_episode_audio_url(item):
-
-    return get_episode_audio_url_from_item(item)
-
-
-# ============================================================
-# RSS episode
-# ============================================================
-
-
-def extract_rss_items(
-    rss_root,
+def get_episode_audio_url(
+    item,
 ):
 
-    result = []
-
-    items = rss_root.xpath("//*[local-name()='item']")
-
-    for item in items:
-
-        guid_elem = item.xpath("./*[local-name()='guid'][1]")
-
-        title_elem = item.xpath("./*[local-name()='title'][1]")
-
-        pub_elem = item.xpath("./*[local-name()='pubDate'][1]")
-
-        if not guid_elem:
-
-            continue
-
-        guid_text = "".join(guid_elem[0].itertext()).strip()
-
-        if not guid_text:
-
-            continue
-
-        title = ""
-
-        if title_elem:
-
-            title = normalize_whitespace("".join(title_elem[0].itertext()))
-
-        pub_date = ""
-
-        if pub_elem:
-
-            pub_date = normalize_whitespace("".join(pub_elem[0].itertext()))
-
-        audio_url = get_episode_audio_url_from_item(item)
-
-        result.append(
-            {
-                "guid": guid_text,
-                "title": title,
-                "pub_date": pub_date,
-                "audio_url": audio_url,
-                "item": item,
-            }
-        )
-
-    return result
+    return get_episode_audio_url_from_item(item)
 
 
 # ============================================================
@@ -478,7 +407,6 @@ def clean_podscripts_url(
 ):
 
     if not href:
-
         return None
 
     href = href.replace(
@@ -486,22 +414,24 @@ def clean_podscripts_url(
         "&",
     )
 
-    url = urllib.parse.urljoin(
+    absolute = urllib.parse.urljoin(
         "https://podscripts.co",
         href,
     )
 
-    parsed = urllib.parse.urlparse(url)
+    parsed = urllib.parse.urlparse(absolute)
 
-    if parsed.netloc.lower() != ("podscripts.co"):
-
+    if parsed.netloc.lower() not in (
+        "podscripts.co",
+        "www.podscripts.co",
+    ):
         return None
 
     return urllib.parse.urlunparse(
         (
             "https",
             "podscripts.co",
-            parsed.path,
+            parsed.path.rstrip("/"),
             "",
             "",
             "",
@@ -510,41 +440,73 @@ def clean_podscripts_url(
 
 
 # ============================================================
-# 标题匹配
+# 标题规范化
 # ============================================================
 
 
-def normalize_title(text):
+def normalize_title(
+    text,
+):
 
     if not text:
-
         return ""
 
     text = html_module.unescape(text)
 
     text = text.lower()
 
-    # 常见引号统一
-    text = (
-        text.replace("’", "'")
-        .replace("‘", "'")
-        .replace("“", '"')
-        .replace("”", '"')
-        .replace("–", "-")
-        .replace("—", "-")
+    # curly apostrophe
+    text = text.replace(
+        "\u2018",
+        "'",
     )
 
-    # 去掉括号中的一些纯 UI 信息
+    text = text.replace(
+        "\u2019",
+        "'",
+    )
+
+    text = text.replace(
+        "\u201c",
+        '"',
+    )
+
+    text = text.replace(
+        "\u201d",
+        '"',
+    )
+
+    # dash
+    text = text.replace(
+        "\u2013",
+        "-",
+    )
+
+    text = text.replace(
+        "\u2014",
+        "-",
+    )
+
+    # & -> and
+    text = text.replace(
+        "&",
+        " and ",
+    )
+
+    # 常见标题前缀
     text = re.sub(
-        r"\s+",
-        " ",
+        r"^\s*" r"(bonus|episode|ep)" r"\s*[:#.\-]?\s*",
+        "",
         text,
+        flags=re.IGNORECASE,
     )
 
+    # 只保留文字数字
     text = re.sub(
         r"[^\w\s]",
         " ",
         text,
+        flags=re.UNICODE,
     )
 
     text = re.sub(
@@ -556,165 +518,119 @@ def normalize_title(text):
     return text.strip()
 
 
-def title_tokens(text):
-
-    normalized = normalize_title(text)
-
-    if not normalized:
-
-        return set()
-
-    return set(normalized.split())
-
-
 def title_similarity(
-    rss_title,
-    result_title,
+    title1,
+    title2,
 ):
 
-    a = normalize_title(rss_title)
+    a = normalize_title(title1)
 
-    b = normalize_title(result_title)
+    b = normalize_title(title2)
 
     if not a or not b:
-
         return 0.0
 
+    # 完全相同
     if a == b:
-
         return 1.0
 
+    # 包含关系
     if a in b or b in a:
 
-        return 0.95
+        shorter = min(
+            len(a),
+            len(b),
+        )
 
-    tokens_a = title_tokens(rss_title)
+        longer = max(
+            len(a),
+            len(b),
+        )
 
-    tokens_b = title_tokens(result_title)
+        if longer == 0:
+            return 0.0
+
+        return 0.90 + 0.10 * shorter / longer
+
+    tokens_a = set(a.split())
+
+    tokens_b = set(b.split())
 
     if not tokens_a or not tokens_b:
-
         return 0.0
 
     intersection = tokens_a & tokens_b
 
     union = tokens_a | tokens_b
 
+    if not union:
+        return 0.0
+
     jaccard = len(intersection) / len(union)
 
-    containment = len(intersection) / min(
-        len(tokens_a),
-        len(tokens_b),
+    coverage_a = len(intersection) / len(tokens_a)
+
+    coverage_b = len(intersection) / len(tokens_b)
+
+    coverage = max(
+        coverage_a,
+        coverage_b,
     )
 
-    return max(
-        jaccard,
-        containment * 0.9,
-    )
+    return jaccard * 0.4 + coverage * 0.6
 
 
-def titles_match(
-    rss_title,
-    result_title,
+# ============================================================
+# PodScripts 搜索结果判断
+# ============================================================
+
+
+def looks_like_bad_link_title(
+    title,
 ):
 
-    score = title_similarity(
-        rss_title,
-        result_title,
-    )
+    if not title:
+        return True
 
-    return score >= 0.65
+    normalized = normalize_title(title)
+
+    bad_titles = {
+        "",
+        "comments",
+        "comment",
+        "comedy",
+        "view full transcript",
+        "transcript",
+        "read more",
+        "share",
+        "home",
+        "podcasts",
+        "categories",
+    }
+
+    if normalized in bad_titles:
+        return True
+
+    # 例如：
+    #
+    # 0 comments
+    # 1 comment
+    # 25 comments
+    #
+
+    if re.fullmatch(
+        r"\d+\s+comments?",
+        normalized,
+        re.IGNORECASE,
+    ):
+        return True
+
+    return False
 
 
 # ============================================================
 # PodScripts 搜索
 # ============================================================
-
-
-def extract_podscripts_search_results(
-    html_text,
-):
-    """
-    使用 DOM 提取 PodScripts 搜索结果。
-
-    不依赖 h2/h3 的固定结构。
-    """
-
-    try:
-
-        document = etree.HTML(html_text)
-
-    except Exception as e:
-
-        print(f"      搜索页 HTML 解析失败: {e}")
-
-        return []
-
-    if document is None:
-
-        return []
-
-    results = []
-
-    # 找所有 PodScripts episode URL
-    links = document.xpath("//a[@href]")
-
-    seen = set()
-
-    for link in links:
-
-        href = link.get(
-            "href",
-            "",
-        )
-
-        if not href:
-
-            continue
-
-        href = html_module.unescape(href)
-
-        # 只接受 episode 页面
-        if not re.match(
-            r"^/podcasts/[^/]+/[^/?#]+/?$",
-            urllib.parse.urlparse(href).path,
-            re.IGNORECASE,
-        ):
-
-            continue
-
-        url = clean_podscripts_url(href)
-
-        if not url:
-
-            continue
-
-        if url in seen:
-
-            continue
-
-        seen.add(url)
-
-        title = normalize_whitespace("".join(link.itertext()))
-
-        # 如果 a 本身没有文字，
-        # 尝试附近元素
-        if not title:
-
-            parent = link.getparent()
-
-            if parent is not None:
-
-                title = normalize_whitespace("".join(parent.itertext()))
-
-        results.append(
-            {
-                "url": url,
-                "title": title,
-            }
-        )
-
-    return results
 
 
 def search_podscripts(
@@ -731,14 +647,14 @@ def search_podscripts(
     url = (
         "https://podscripts.co/"
         "podkeywordsearch/"
-        "?search_type=episode"
+        f"?search_type=episode"
         f"&keywordsToSearch={encoded}"
-        "&exact_match=true"
-        "&slv=single"
+        f"&exact_match=true"
+        f"&slv=single"
         f"&podSelectedId={podscripts_id}"
     )
 
-    print(f"      搜索: {title[:80]}...")
+    print(f"      搜索: {title[:70]}...")
 
     html_text = fetch_html(url)
 
@@ -746,31 +662,122 @@ def search_podscripts(
 
         return None
 
-    results = extract_podscripts_search_results(html_text)
+    try:
 
-    print(f"      搜索结果: " f"{len(results)}")
+        doc = lxml_html.fromstring(html_text)
 
-    if not results:
+    except Exception as e:
+
+        print(f"      搜索页面 HTML 解析失败: {e}")
+
+        return None
+
+    candidates = []
+
+    seen_urls = set()
+
+    # --------------------------------------------------------
+    # 关键：
+    #
+    # 不再寻找 h2/h3。
+    #
+    # 直接寻找所有：
+    #
+    # /podcasts/xxx/yyy
+    #
+    # 的链接。
+    #
+    # 搜索页实际同时存在：
+    #
+    # 0 comments
+    # Comedy
+    # Bonus: Mother’s Day Tributes
+    # View Full Transcript
+    #
+    # 所以必须根据 href + 文本判断。
+    # --------------------------------------------------------
+
+    links = doc.xpath("//a[@href]")
+
+    for link in links:
+
+        href = link.get("href")
+
+        if not href:
+            continue
+
+        # 只处理 /podcasts/...
+        if not href.startswith("/podcasts/"):
+            continue
+
+        clean_url = clean_podscripts_url(href)
+
+        if not clean_url:
+            continue
+
+        # 防止同一个 episode 重复
+        if clean_url in seen_urls:
+            continue
+
+        # ----------------------------------------------------
+        # 获取链接内部所有文本
+        # ----------------------------------------------------
+
+        result_title = " ".join("".join(link.itertext()).split())
+
+        result_title = html_module.unescape(result_title).strip()
+
+        if looks_like_bad_link_title(result_title):
+            continue
+
+        # ----------------------------------------------------
+        # 确认 URL 至少有：
+        #
+        # /podcasts/{podcast}/{episode}
+        #
+        # ----------------------------------------------------
+
+        parsed = urllib.parse.urlparse(clean_url)
+
+        parts = [p for p in parsed.path.split("/") if p]
+
+        if len(parts) < 3:
+            continue
+
+        seen_urls.add(clean_url)
+
+        candidates.append(
+            {
+                "title": result_title,
+                "url": clean_url,
+            }
+        )
+
+    print(f"      搜索结果: " f"{len(candidates)}")
+
+    if not candidates:
+
+        print("      没有找到 episode 候选")
 
         return None
 
     # --------------------------------------------------------
-    # 按标题相似度排序
+    # 计算标题匹配
     # --------------------------------------------------------
 
     scored = []
 
-    for result in results:
+    for candidate in candidates:
 
         score = title_similarity(
             title,
-            result["title"],
+            candidate["title"],
         )
 
         scored.append(
             (
                 score,
-                result,
+                candidate,
             )
         )
 
@@ -779,157 +786,69 @@ def search_podscripts(
         reverse=True,
     )
 
-    # 调试
-    for score, result in scored[:5]:
-
-        print(f"         候选 " f"{score:.3f}: " f"{result['title'][:100]}")
-
     # --------------------------------------------------------
-    # 取最佳匹配
+    # 打印候选
     # --------------------------------------------------------
 
-    best_score, best_result = scored[0]
+    for score, candidate in scored[:10]:
 
-    # 高度匹配
-    if best_score >= 0.65:
+        print(f"         候选 " f"{score:.3f}: " f"{candidate['title']}")
 
-        print(f"      匹配成功 " f"({best_score:.3f})")
+    best_score, best = scored[0]
 
-        return best_result["url"]
+    # --------------------------------------------------------
+    # 可靠匹配
+    #
+    # 0.55 是比较宽松的阈值。
+    # 完全一致 = 1.0
+    #
+    # Bonus: 前缀会被 normalize 掉，
+    # 所以：
+    #
+    # Bonus: Mother’s Day Tributes
+    #
+    # 与：
+    #
+    # Mother's Day Tributes
+    #
+    # 也可以匹配。
+    # --------------------------------------------------------
 
-    # PodScripts 搜索页有时标题可能被截断，
-    # 仍然允许一个较合理的结果。
-    if best_score >= 0.45:
+    if best_score < 0.55:
 
-        print(f"      使用较宽松匹配 " f"({best_score:.3f})")
-
-        return best_result["url"]
-
-    print(f"      没有可靠匹配 " f"(最高 {best_score:.3f})")
-
-    return None
-
-
-# ============================================================
-# Transcript 时间戳
-# ============================================================
-
-TIMESTAMP_PATTERN = re.compile(
-    r"""
-    Starting
-    \s*
-    point
-    \s*
-    is
-    \s*
-    (
-        (?:
-            \d{1,3}:
-        )?
-        \d{1,2}:
-        \d{2}
-    )
-    """,
-    re.IGNORECASE | re.VERBOSE,
-)
-
-
-def normalize_timestamp(
-    value,
-):
-
-    value = value.strip()
-
-    parts = value.split(":")
-
-    try:
-
-        if len(parts) == 3:
-
-            h = int(parts[0])
-            m = int(parts[1])
-            s = int(parts[2])
-
-        elif len(parts) == 2:
-
-            h = 0
-            m = int(parts[0])
-            s = int(parts[1])
-
-        else:
-
-            return None
-
-        if m >= 60:
-
-            return None
-
-        if s >= 60:
-
-            return None
-
-        return f"{h:02d}:" f"{m:02d}:" f"{s:02d}"
-
-    except Exception:
+        print(f"      没有可靠匹配 " f"(最高 " f"{best_score:.3f})")
 
         return None
 
+    print(f"      匹配成功 " f"({best_score:.3f}): " f"{best['title']}")
+
+    return best["url"]
+
 
 # ============================================================
-# Transcript DOM 提取
+# Transcript 页面 DOM 工具
 # ============================================================
 
-
-def extract_visible_text(
-    element,
-):
-
-    parts = []
-
-    for text in element.itertext():
-
-        if text is None:
-
-            continue
-
-        text = text.replace("\xa0", " ").replace("\u200b", "").replace("\ufeff", "")
-
-        text = text.strip()
-
-        if text:
-
-            parts.append(text)
-
-    return "\n".join(parts)
+TIME_PATTERN = re.compile(
+    r"Starting\s+point\s+is\s+" r"(?P<h>\d{1,2}):" r"(?P<m>\d{2}):" r"(?P<s>\d{2})",
+    re.IGNORECASE,
+)
 
 
 def clean_transcript_text(
     text,
 ):
 
+    if not text:
+        return ""
+
     text = html_module.unescape(text)
 
-    text = text.replace("\xa0", " ").replace("\u200b", "").replace("\ufeff", "")
+    text = text.replace(
+        "\xa0",
+        " ",
+    )
 
-    # PodScripts 常见 UI 内容
-    stop_patterns = [
-        "Click on any sentence",
-        "There aren't comments",
-        "There are no comments",
-        "Privacy Policy",
-        "© PodScripts.co",
-    ]
-
-    for pattern in stop_patterns:
-
-        pos = text.lower().find(pattern.lower())
-
-        if pos >= 0:
-
-            text = text[:pos]
-
-    # HTML 元素之间产生的换行，
-    # 对字幕而言全部变成普通空格。
     text = re.sub(
         r"\s+",
         " ",
@@ -939,96 +858,17 @@ def clean_transcript_text(
     return text.strip()
 
 
-def find_transcript_text(
-    document,
+def parse_timestamp(
+    match,
 ):
-    """
-    多策略寻找 transcript。
 
-    第一层：
-        直接找包含 Starting point is 的节点。
+    h = int(match.group("h"))
 
-    第二层：
-        找包含大量时间戳的祖先节点。
+    m = int(match.group("m"))
 
-    第三层：
-        整个 body。
-    """
+    s = int(match.group("s"))
 
-    # --------------------------------------------------------
-    # 第一层：
-    # 找包含 Starting point is 的元素
-    # --------------------------------------------------------
-
-    candidates = []
-
-    elements = document.xpath(
-        "//*[not(self::script)" " and not(self::style)" " and not(self::noscript)]"
-    )
-
-    for element in elements:
-
-        text = extract_visible_text(element)
-
-        if "Starting point is" not in text:
-
-            continue
-
-        count = len(TIMESTAMP_PATTERN.findall(text))
-
-        if count:
-
-            candidates.append(
-                (
-                    count,
-                    len(text),
-                    element,
-                )
-            )
-
-    if candidates:
-
-        # 优先选择：
-        # 时间戳多，同时文本不要巨大
-        candidates.sort(
-            key=lambda x: (
-                x[0],
-                -x[1],
-            ),
-            reverse=True,
-        )
-
-        best = candidates[0]
-
-        print(
-            f"         [调试] "
-            f"候选 transcript 节点："
-            f"{best[0]} 个时间戳，"
-            f"文本 {best[1]} 字符"
-        )
-
-        return extract_visible_text(best[2])
-
-    # --------------------------------------------------------
-    # 第二层：
-    # body
-    # --------------------------------------------------------
-
-    bodies = document.xpath("//body")
-
-    if bodies:
-
-        body_text = extract_visible_text(bodies[0])
-
-        count = len(TIMESTAMP_PATTERN.findall(body_text))
-
-        if count:
-
-            print(f"         [调试] " f"使用 body，" f"发现 {count} 个时间戳")
-
-            return body_text
-
-    return ""
+    return h * 3600 + m * 60 + s
 
 
 # ============================================================
@@ -1044,230 +884,276 @@ def parse_transcript(
 
         return []
 
+    print(f"         [调试] HTML长度: " f"{len(html_text)}")
+
     # --------------------------------------------------------
-    # DOM
+    # 方法 1：
+    #
+    # DOM 文本节点解析
+    #
+    # 这是当前 PodScripts 页面最重要的解析方式。
+    #
+    # 实际页面类似：
+    #
+    # Transcript
+    #
+    # Starting point is 00:00:04
+    # I'm Jenna Fisher...
+    #
+    # Starting point is 00:00:28
+    # I'm so thrilled...
+    #
     # --------------------------------------------------------
 
     try:
 
-        document = etree.HTML(html_text)
+        doc = lxml_html.fromstring(html_text)
 
     except Exception as e:
 
-        print(f"         [错误] " f"HTML 解析失败: {e}")
+        print(f"         [调试] HTML DOM 解析失败: {e}")
 
-        return []
-
-    if document is None:
-
-        return []
-
-    # --------------------------------------------------------
-    # 删除不会产生 transcript 的节点
-    # --------------------------------------------------------
-
-    for node in document.xpath(
-        "//script | //style | " "//noscript | //svg | //template"
-    ):
-
-        parent = node.getparent()
-
-        if parent is not None:
-
-            parent.remove(node)
-
-    # --------------------------------------------------------
-    # 获取 transcript 候选文本
-    # --------------------------------------------------------
-
-    text = find_transcript_text(document)
-
-    if not text:
-
-        print("         [调试] " "没有找到 transcript 文本")
-
-        return []
-
-    print(f"         [调试] " f"Transcript 文本长度: " f"{len(text)}")
-
-    # --------------------------------------------------------
-    # 统一文本
-    #
-    # 非常重要：
-    # 不能只依赖换行。
-    # --------------------------------------------------------
-
-    text = html_module.unescape(text)
-
-    text = text.replace("\xa0", " ").replace("\u200b", "").replace("\ufeff", "")
-
-    # --------------------------------------------------------
-    # 查找时间戳
-    # --------------------------------------------------------
-
-    matches = list(TIMESTAMP_PATTERN.finditer(text))
-
-    print(f"         [调试] " f"发现时间戳: {len(matches)}")
-
-    # --------------------------------------------------------
-    # 如果没有找到，
-    # 尝试更加宽松的模式
-    # --------------------------------------------------------
-
-    if not matches:
-
-        loose_pattern = re.compile(
-            r"Starting\s*point\s*is"
-            r"[\s:：-]*"
-            r"("
-            r"(?:\d{1,3}:)?"
-            r"\d{1,2}:"
-            r"\d{2}"
-            r")",
-            re.IGNORECASE,
-        )
-
-        matches = list(loose_pattern.finditer(text))
-
-        print(f"         [调试] " f"宽松模式时间戳: " f"{len(matches)}")
-
-    # --------------------------------------------------------
-    # 仍然没有：
-    # 打印几个 Starting 附近片段
-    # --------------------------------------------------------
-
-    if not matches:
-
-        starts = list(
-            re.finditer(
-                r"Starting",
-                text,
-                re.IGNORECASE,
-            )
-        )
-
-        for m in starts[:5]:
-
-            pos = m.start()
-
-            preview = text[max(0, pos - 100) : pos + 300]
-
-            print("         [调试] " f"Starting 附近: " f"{repr(preview)}")
-
-        return []
-
-    # --------------------------------------------------------
-    # 构造 cues
-    # --------------------------------------------------------
+        doc = None
 
     cues = []
 
-    for index, match in enumerate(matches):
-
-        timestamp = normalize_timestamp(match.group(1))
-
-        if timestamp is None:
-
-            continue
-
-        content_start = match.end()
-
-        if index + 1 < len(matches):
-
-            content_end = matches[index + 1].start()
-
-        else:
-
-            content_end = len(text)
-
-        content = text[content_start:content_end]
-
-        content = clean_transcript_text(content)
-
-        if not content:
-
-            continue
+    if doc is not None:
 
         # ----------------------------------------------------
-        # 防止最后把网页 UI 当成字幕
+        # 获取所有文本节点
         # ----------------------------------------------------
 
-        if content.lower() in {
-            "transcript",
-            "comments",
-            "discussion",
-        }:
+        text_nodes = doc.xpath("//text()")
 
-            continue
+        # ----------------------------------------------------
+        # 把 DOM 文本节点拼接成连续文本
+        #
+        # 这里不能简单用 ''.join，
+        # 否则不同节点之间的文字可能粘在一起。
+        # ----------------------------------------------------
 
-        cues.append(
-            {
-                "start": timestamp,
-                "text": content,
-            }
-        )
+        chunks = []
+
+        for node in text_nodes:
+
+            parent = node.getparent()
+
+            if parent is None:
+                continue
+
+            tag = (
+                parent.tag
+                if isinstance(
+                    parent.tag,
+                    str,
+                )
+                else ""
+            )
+
+            tag_lower = tag.lower()
+
+            # 排除脚本和 CSS
+            if tag_lower in (
+                "script",
+                "style",
+                "noscript",
+                "svg",
+            ):
+                continue
+
+            value = clean_transcript_text(str(node))
+
+            if value:
+                chunks.append(value)
+
+        # ----------------------------------------------------
+        # 不直接全部拼成一个字符串。
+        #
+        # 每个 chunk 中可能有：
+        #
+        # Starting point is 00:00:04 ...
+        #
+        # 所以分别扫描。
+        # ----------------------------------------------------
+
+        for chunk in chunks:
+
+            matches = list(TIME_PATTERN.finditer(chunk))
+
+            if not matches:
+                continue
+
+            for i, match in enumerate(matches):
+
+                start = parse_timestamp(match)
+
+                if i + 1 < len(matches):
+
+                    end_position = matches[i + 1].start()
+
+                else:
+
+                    end_position = len(chunk)
+
+                text = chunk[match.end() : end_position]
+
+                text = clean_transcript_text(text)
+
+                if not text:
+                    continue
+
+                cues.append(
+                    {
+                        "start_seconds": start,
+                        "text": text,
+                    }
+                )
 
     # --------------------------------------------------------
-    # 去掉明显重复 / 时间倒退
+    # 如果 DOM 方法没找到：
+    #
+    # 使用完整可见文本作为 fallback。
+    # --------------------------------------------------------
+
+    if not cues:
+
+        print("         [调试] DOM 文本节点未找到 cues，" "启动 fallback...")
+
+        try:
+
+            doc = lxml_html.fromstring(html_text)
+
+            # 删除脚本 / CSS
+            for bad in doc.xpath("//script|//style|//noscript"):
+
+                parent = bad.getparent()
+
+                if parent is not None:
+
+                    parent.remove(bad)
+
+            visible_text = " ".join(doc.itertext())
+
+            visible_text = html_module.unescape(visible_text)
+
+            visible_text = visible_text.replace(
+                "\xa0",
+                " ",
+            )
+
+            # ------------------------------------------------
+            # 重要：
+            #
+            # Starting point is 前面可能没有换行，
+            # 所以直接正则寻找。
+            # ------------------------------------------------
+
+            matches = list(TIME_PATTERN.finditer(visible_text))
+
+            for i, match in enumerate(matches):
+
+                start = parse_timestamp(match)
+
+                if i + 1 < len(matches):
+
+                    end_pos = matches[i + 1].start()
+
+                else:
+
+                    end_pos = len(visible_text)
+
+                text = visible_text[match.end() : end_pos]
+
+                text = clean_transcript_text(text)
+
+                # 清理页面尾部
+                text = re.split(
+                    r"(?:©\s*PodScripts|" r"Privacy Policy|" r"Terms of Service)",
+                    text,
+                    maxsplit=1,
+                    flags=re.IGNORECASE,
+                )[0]
+
+                text = clean_transcript_text(text)
+
+                if text:
+                    cues.append(
+                        {
+                            "start_seconds": start,
+                            "text": text,
+                        }
+                    )
+
+        except Exception as e:
+
+            print(f"         [调试] fallback 失败: {e}")
+
+    # --------------------------------------------------------
+    # 去重
     # --------------------------------------------------------
 
     cleaned = []
 
-    last_seconds = -1
+    seen = set()
 
     for cue in cues:
 
-        try:
+        key = (
+            cue["start_seconds"],
+            cue["text"],
+        )
 
-            seconds = time_to_seconds(cue["start"])
-
-        except Exception:
-
+        if key in seen:
             continue
 
-        if seconds < last_seconds:
+        seen.add(key)
 
-            print(f"         [调试] " f"忽略时间倒退: " f"{cue['start']}")
+        cleaned.append(cue)
 
+    # --------------------------------------------------------
+    # 按时间排序
+    # --------------------------------------------------------
+
+    cleaned.sort(key=lambda x: x["start_seconds"])
+
+    # --------------------------------------------------------
+    # 删除明显错误文本
+    # --------------------------------------------------------
+
+    final_cues = []
+
+    for cue in cleaned:
+
+        text = cue["text"].strip()
+
+        if not text:
             continue
 
-        if cleaned and seconds == last_seconds:
+        if text.lower().startswith("click on any sentence"):
+            continue
 
-            cleaned[-1]["text"] += " " + cue["text"]
+        if text.lower().startswith("there aren't comments"):
+            continue
+
+        final_cues.append(cue)
+
+    print(f"         [调试] " f"解析到 cues: " f"{len(final_cues)}")
+
+    if not final_cues:
+
+        if "Starting point is" in html_text:
+
+            print(
+                "         [调试] HTML中存在 "
+                "'Starting point is'，"
+                "但没有成功提取 transcript。"
+            )
 
         else:
 
-            cleaned.append(cue)
+            print("         [调试] HTML中没有 " "'Starting point is'")
 
-        last_seconds = seconds
-
-    cues = cleaned
-
-    # --------------------------------------------------------
-    # 调试
-    # --------------------------------------------------------
-
-    print(f"         [调试] " f"最终解析 cues: {len(cues)}")
-
-    if cues:
-
-        print(
-            f"         [调试] "
-            f"第一条: "
-            f"{cues[0]['start']} "
-            f"{cues[0]['text'][:200]}"
-        )
-
-        if len(cues) > 1:
-
-            print(
-                f"         [调试] "
-                f"第二条: "
-                f"{cues[1]['start']} "
-                f"{cues[1]['text'][:200]}"
-            )
-
-    return cues
+    return final_cues
 
 
 # ============================================================
@@ -1277,54 +1163,39 @@ def parse_transcript(
 
 def time_to_seconds(ts):
 
-    parts = ts.strip().split(":")
+    h, m, s = ts.split(":")
 
-    if len(parts) == 3:
-
-        h, m, s = parts
-
-        return int(h) * 3600 + int(m) * 60 + int(s)
-
-    if len(parts) == 2:
-
-        m, s = parts
-
-        return int(m) * 60 + int(s)
-
-    raise ValueError(f"无法解析时间: {ts}")
+    return int(h) * 3600 + int(m) * 60 + int(s)
 
 
-def seconds_to_vtt(sec):
+def seconds_to_vtt(
+    sec,
+):
 
     sec = max(
         0,
         float(sec),
     )
 
-    h = int(sec // 3600)
+    total_ms = int(round(sec * 1000))
 
-    m = int((sec % 3600) // 60)
+    h = total_ms // (3600 * 1000)
 
-    s = int(sec % 60)
+    remainder = total_ms % (3600 * 1000)
 
-    ms = int(round((sec % 1) * 1000))
+    m = remainder // (60 * 1000)
 
-    if ms >= 1000:
+    remainder %= 60 * 1000
 
-        sec += 1
-        ms = 0
+    s = remainder // 1000
 
-        h = int(sec // 3600)
-
-        m = int((sec % 3600) // 60)
-
-        s = int(sec % 60)
+    ms = remainder % 1000
 
     return f"{h:02d}:" f"{m:02d}:" f"{s:02d}." f"{ms:03d}"
 
 
 # ============================================================
-# VTT
+# Cues -> VTT
 # ============================================================
 
 
@@ -1340,16 +1211,33 @@ def cues_to_vtt(
 
     for i, cue in enumerate(cues):
 
-        start_sec = time_to_seconds(cue["start"]) + offset_seconds
+        # 新格式
+        if "start_seconds" in cue:
+
+            start_sec = cue["start_seconds"] + offset_seconds
+
+        # 兼容旧格式
+        else:
+
+            start_sec = time_to_seconds(cue["start"]) + offset_seconds
 
         if i + 1 < len(cues):
 
-            end_sec = time_to_seconds(cues[i + 1]["start"]) + offset_seconds
+            next_cue = cues[i + 1]
+
+            if "start_seconds" in next_cue:
+
+                end_sec = next_cue["start_seconds"] + offset_seconds
+
+            else:
+
+                end_sec = time_to_seconds(next_cue["start"]) + offset_seconds
 
         else:
 
             end_sec = start_sec + 5
 
+        # 防止重叠 / 反向
         end_sec = max(
             end_sec,
             start_sec + 0.1,
@@ -1361,7 +1249,9 @@ def cues_to_vtt(
             f"{seconds_to_vtt(start_sec)}" f" --> " f"{seconds_to_vtt(end_sec)}"
         )
 
-        lines.append(cue["text"])
+        text = cue["text"].strip()
+
+        lines.append(text)
 
         lines.append("")
 
@@ -1369,7 +1259,36 @@ def cues_to_vtt(
 
 
 # ============================================================
-# Episode 处理
+# 处理状态
+# ============================================================
+
+
+def is_episode_processed(
+    info,
+    slug,
+):
+
+    if not info:
+        return False
+
+    if info.get(
+        "skipped",
+        False,
+    ):
+        return False
+
+    filename = info.get("vtt_filename")
+
+    if not filename:
+        return False
+
+    vtt_path = SITE_DIR / slug / "transcripts" / filename
+
+    return vtt_path.exists()
+
+
+# ============================================================
+# 核心处理
 # ============================================================
 
 
@@ -1409,13 +1328,44 @@ def process_podcast(
 
         return False
 
+    # --------------------------------------------------------
+    # RSS
+    # --------------------------------------------------------
+
     rss_root = fetch_rss(feed_url)
 
     if rss_root is None:
-
         return False
 
-    rss_items = extract_rss_items(rss_root)
+    rss_items = []
+
+    for item in rss_root.xpath("//*[local-name()='item']"):
+
+        guid_elem = item.find("guid")
+
+        title_elem = item.find("title")
+
+        if guid_elem is None or not guid_elem.text:
+            continue
+
+        guid = guid_elem.text.strip()
+
+        title = (
+            title_elem.text.strip()
+            if (title_elem is not None and title_elem.text)
+            else ""
+        )
+
+        audio_url = get_episode_audio_url_from_item(item)
+
+        rss_items.append(
+            {
+                "guid": guid,
+                "title": title,
+                "item": item,
+                "audio_url": audio_url,
+            }
+        )
 
     if not rss_items:
 
@@ -1426,7 +1376,7 @@ def process_podcast(
     print(f"   RSS 共 " f"{len(rss_items)} 集")
 
     # --------------------------------------------------------
-    # 找待处理
+    # Pending
     # --------------------------------------------------------
 
     pending = []
@@ -1446,10 +1396,17 @@ def process_podcast(
             and info.get("vtt_filename")
         ):
 
-            vtt_path = SITE_DIR / slug / "transcripts" / info["vtt_filename"]
+            # 如果 VTT 实际存在，
+            # 才真正跳过。
+            #
+            # 防止 progress 有记录，
+            # 但文件后来被删除。
+            #
 
-            if vtt_path.exists():
-
+            if is_episode_processed(
+                info,
+                slug,
+            ):
                 continue
 
         pending.append(entry)
@@ -1479,10 +1436,10 @@ def process_podcast(
 
         title = entry["title"]
 
-        print(f"\n   [{idx}/{len(batch)}] " f"{title[:100]}")
+        print(f"\n   [{idx}/{len(batch)}] " f"{title[:70]}")
 
         # ----------------------------------------------------
-        # 搜索
+        # PodScripts 搜索
         # ----------------------------------------------------
 
         ep_url = search_podscripts(
@@ -1490,7 +1447,7 @@ def process_podcast(
             podscripts_id,
         )
 
-        time.sleep(SEARCH_DELAY)
+        time.sleep(PODSEARCH_DELAY)
 
         if not ep_url:
 
@@ -1506,17 +1463,12 @@ def process_podcast(
 
             changed = True
 
-            # 及时保存
-            pc_prog["total_processed"] = count_successful(processed)
-
-            save_progress(progress)
-
             continue
 
         print(f"      页面: {ep_url}")
 
         # ----------------------------------------------------
-        # 获取页面
+        # 获取 transcript 页面
         # ----------------------------------------------------
 
         html_text = fetch_html(ep_url)
@@ -1531,12 +1483,9 @@ def process_podcast(
                 "processed_at": now_iso(),
                 "skipped": True,
                 "reason": "page_fetch_failed",
-                "source_url": ep_url,
             }
 
             changed = True
-
-            save_progress(progress)
 
             continue
 
@@ -1550,7 +1499,7 @@ def process_podcast(
 
         if not cues:
 
-            print("      页面无可解析字幕")
+            print("      页面无字幕")
 
             processed[guid] = {
                 "title": title,
@@ -1563,12 +1512,10 @@ def process_podcast(
 
             changed = True
 
-            save_progress(progress)
-
             continue
 
         # ----------------------------------------------------
-        # VTT
+        # VTT 文件
         # ----------------------------------------------------
 
         vtt_filename = f"{safe_filename(title)}.vtt"
@@ -1603,18 +1550,32 @@ def process_podcast(
             "skipped": False,
         }
 
-        pc_prog["total_processed"] = count_successful(processed)
+        pc_prog["total_processed"] = sum(
+            1
+            for value in processed.values()
+            if (
+                not value.get(
+                    "skipped",
+                    False,
+                )
+                and value.get("vtt_filename")
+            )
+        )
 
         pc_prog["updated_at"] = now_iso()
 
         changed = True
 
-        # 立即保存，防止 Actions 中途失败
-        save_progress(progress)
-
         print(f"      VTT: " f"{vtt_filename} " f"({len(cues)} cues)")
 
-        print(f"      已成功处理: " f"{pc_prog['total_processed']} 集")
+        # ----------------------------------------------------
+        # 每成功一个 episode 就保存一次 progress
+        #
+        # GitHub Actions 被中断时，
+        # 不至于丢掉整个 batch。
+        # ----------------------------------------------------
+
+        save_progress(progress)
 
         if idx < len(batch):
 
@@ -1624,7 +1585,17 @@ def process_podcast(
     # 最终统计
     # --------------------------------------------------------
 
-    pc_prog["total_processed"] = count_successful(processed)
+    pc_prog["total_processed"] = sum(
+        1
+        for value in processed.values()
+        if (
+            not value.get(
+                "skipped",
+                False,
+            )
+            and value.get("vtt_filename")
+        )
+    )
 
     pc_prog["updated_at"] = now_iso()
 
@@ -1632,7 +1603,7 @@ def process_podcast(
 
 
 # ============================================================
-# XML Namespace
+# Namespace
 # ============================================================
 
 
@@ -1652,50 +1623,29 @@ def ensure_namespace(
 
     new_root = etree.Element(
         root.tag,
-        attrib=dict(root.attrib),
+        attrib=root.attrib,
         nsmap=nsmap,
     )
+
+    # --------------------------------------------------------
+    # 复制 children
+    # --------------------------------------------------------
+
+    for child in root:
+
+        new_root.append(deepcopy_element(child))
 
     new_root.text = root.text
     new_root.tail = root.tail
 
-    for child in root:
-
-        new_root.append(child)
-
     return new_root
 
 
-# ============================================================
-# 判断是否成功处理
-# ============================================================
-
-
-def is_episode_processed(
-    info,
-    slug,
+def deepcopy_element(
+    element,
 ):
 
-    if not info:
-
-        return False
-
-    if info.get(
-        "skipped",
-        False,
-    ):
-
-        return False
-
-    filename = info.get("vtt_filename")
-
-    if not filename:
-
-        return False
-
-    vtt_path = SITE_DIR / slug / "transcripts" / filename
-
-    return vtt_path.exists()
+    return etree.fromstring(etree.tostring(element))
 
 
 # ============================================================
@@ -1739,87 +1689,83 @@ def generate_podcast_feed(
         ATOM_NS,
     )
 
-    channel_nodes = root.xpath("./*[local-name()='channel']")
+    # --------------------------------------------------------
+    # channel
+    # --------------------------------------------------------
 
-    if not channel_nodes:
+    channel = root.find("channel")
+
+    if channel is None:
 
         print("      RSS 没有 channel")
 
         return
 
-    channel = channel_nodes[0]
-
     # --------------------------------------------------------
     # Feed 标题
     # --------------------------------------------------------
 
-    title_nodes = channel.xpath("./*[local-name()='title']")
+    title_elem = channel.find("title")
 
-    if title_nodes:
+    if title_elem is not None and title_elem.text:
 
-        title_elem = title_nodes[0]
-
-        original_title = "".join(title_elem.itertext()).strip()
-
-        title_elem.text = f"{display_name(podcast)} " "- Transcripts"
+        title_elem.text = f"{display_name(podcast)} " f"- Transcripts"
 
     # --------------------------------------------------------
     # Description
     # --------------------------------------------------------
 
-    description_nodes = channel.xpath("./*[local-name()='description']")
+    description_elem = channel.find("description")
 
-    if description_nodes:
+    if description_elem is not None:
 
-        description_elem = description_nodes[0]
-
-        original = "".join(description_elem.itertext())
+        original = description_elem.text or ""
 
         extra = "\n\n" "This is an unofficial " "transcript-enhanced feed."
 
-        if "unofficial transcript-enhanced" not in original.lower():
+        if "unofficial " "transcript-enhanced" not in original.lower():
 
             description_elem.text = original + extra
 
     # --------------------------------------------------------
-    # Atom self
+    # Feed self URL
     # --------------------------------------------------------
 
-    new_feed_url = f"{base_url}/{slug}/feed.xml"
+    new_feed_url = f"{base_url}/" f"{slug}/feed.xml"
 
-    atom_links = channel.xpath(f"./{{{ATOM_NS}}}link")
+    atom_self = channel.find(f"{{{ATOM_NS}}}link")
 
-    atom_self = None
+    if atom_self is not None:
 
-    for link in atom_links:
-
-        if link.get("rel") == "self":
-
-            atom_self = link
-            break
-
-    if atom_self is None:
-
-        atom_self = etree.Element(f"{{{ATOM_NS}}}link")
+        atom_self.set(
+            "href",
+            new_feed_url,
+        )
 
         atom_self.set(
             "rel",
             "self",
         )
 
-        # 插入 channel 前面
-        channel.insert(
-            0,
-            atom_self,
+    else:
+
+        atom_self = etree.SubElement(
+            channel,
+            f"{{{ATOM_NS}}}link",
         )
 
-    atom_self.set(
-        "href",
-        new_feed_url,
-    )
+        atom_self.set(
+            "href",
+            new_feed_url,
+        )
+
+        atom_self.set(
+            "rel",
+            "self",
+        )
 
     # --------------------------------------------------------
-    # Processed
+    # processed
     # --------------------------------------------------------
 
     processed = pc_prog.get(
@@ -1827,21 +1773,23 @@ def generate_podcast_feed(
         {},
     )
 
+    original_items = root.xpath("./channel/item")
+
+    kept_items = []
+
+    removed = 0
+
+    added_transcripts = 0
+
     # --------------------------------------------------------
     # Items
     # --------------------------------------------------------
 
-    original_items = root.xpath("./*[local-name()='channel']" "/*[local-name()='item']")
-
-    kept = 0
-    removed = 0
-    added = 0
-
     for item in original_items:
 
-        guid_nodes = item.xpath("./*[local-name()='guid'][1]")
+        guid_elem = item.find("guid")
 
-        if not guid_nodes:
+        if guid_elem is None or not guid_elem.text:
 
             channel.remove(item)
 
@@ -1849,9 +1797,13 @@ def generate_podcast_feed(
 
             continue
 
-        guid = "".join(guid_nodes[0].itertext()).strip()
+        guid = guid_elem.text.strip()
 
         info = processed.get(guid)
+
+        # ----------------------------------------------------
+        # 只保留已经有 VTT 的 episode
+        # ----------------------------------------------------
 
         if not is_episode_processed(
             info,
@@ -1865,22 +1817,30 @@ def generate_podcast_feed(
             continue
 
         # ----------------------------------------------------
-        # transcript
+        # VTT URL
+        #
+        # safe_filename() 已经保证：
+        #
+        # 空格 -> _
+        # : -> _
+        # ? -> _
+        #
+        # 因此这里不要再 quote。
         # ----------------------------------------------------
 
-        vtt_url = (
-            f"{base_url}/"
-            f"{slug}/transcripts/"
-            f"{urllib.parse.quote(info['vtt_filename'])}"
-        )
+        vtt_url = f"{base_url}/" f"{slug}/transcripts/" f"{info['vtt_filename']}"
 
-        existing = item.xpath(
-            f"./*[local-name()='transcript' " f"and namespace-uri()='{PODCAST_NS}']"
+        # ----------------------------------------------------
+        # 查找已有 transcript
+        # ----------------------------------------------------
+
+        existing_transcripts = item.xpath(
+            "./*[local-name()='transcript'" f" and namespace-uri()=" f"'{PODCAST_NS}']"
         )
 
         transcript_exists = False
 
-        for transcript in existing:
+        for transcript in existing_transcripts:
 
             if transcript.get("url") == vtt_url:
 
@@ -1903,6 +1863,10 @@ def generate_podcast_feed(
                         "en",
                     ),
                 )
+
+        # ----------------------------------------------------
+        # 如果没有，则添加
+        # ----------------------------------------------------
 
         if not transcript_exists:
 
@@ -1934,12 +1898,12 @@ def generate_podcast_feed(
                 ),
             )
 
-            added += 1
+            added_transcripts += 1
 
-        kept += 1
+        kept_items.append(item)
 
     # --------------------------------------------------------
-    # 写入
+    # Feed 文件
     # --------------------------------------------------------
 
     feed_path = SITE_DIR / slug / "feed.xml"
@@ -1958,11 +1922,11 @@ def generate_podcast_feed(
         encoding="utf-8",
     )
 
-    print(f"      保留 {kept} 集")
+    print(f"      保留 " f"{len(kept_items)} 集")
 
-    print(f"      删除 {removed} 集")
+    print(f"      删除 " f"{removed} 集")
 
-    print(f"      新增 " f"{added} 个 transcript")
+    print(f"      新增 " f"{added_transcripts} 个 transcript")
 
 
 # ============================================================
@@ -1985,16 +1949,19 @@ def generate_podcast_index(
         {},
     )
 
-    total = count_successful(processed)
-
-    missing = sum(
+    total = sum(
         1
         for info in processed.values()
-        if info.get(
-            "skipped",
-            False,
+        if (
+            not info.get(
+                "skipped",
+                False,
+            )
+            and info.get("vtt_filename")
         )
     )
+
+    missing = sum(1 for info in processed.values() if info.get("skipped"))
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -2002,7 +1969,8 @@ def generate_podcast_index(
 <meta charset="utf-8">
 <meta name="viewport"
       content="width=device-width, initial-scale=1">
-<title>{name} - Transcripts</title>
+
+<title>{html_module.escape(name)} - Transcripts</title>
 
 <style>
 body {{
@@ -2037,13 +2005,13 @@ code {{
 
 <body>
 
-<h1>🎙️ {name}</h1>
+<h1>🎙️ {html_module.escape(name)}</h1>
 
 <p>
 <strong>官方 Feed:</strong>
-<a href="{podcast["feed_url"]}"
+<a href="{html_module.escape(podcast["feed_url"])}"
    target="_blank">
-{podcast["feed_url"]}
+{html_module.escape(podcast["feed_url"])}
 </a>
 </p>
 
@@ -2099,19 +2067,35 @@ def generate_master_index(
 
         name = display_name(podcast)
 
-        pc_prog = progress.get("podcasts", {}).get(slug, {})
+        pc_prog = progress.get(
+            "podcasts",
+            {},
+        ).get(
+            slug,
+            {},
+        )
 
         processed = pc_prog.get(
             "processed",
             {},
         )
 
-        total = count_successful(processed)
+        total = sum(
+            1
+            for info in processed.values()
+            if (
+                not info.get(
+                    "skipped",
+                    False,
+                )
+                and info.get("vtt_filename")
+            )
+        )
 
         items += (
             "<li>"
             f'<a href="{base_url}/{slug}/">'
-            f"{name}"
+            f"{html_module.escape(name)}"
             "</a> — "
             f"已处理 {total} 集 "
             f'(<a href="{base_url}/{slug}/feed.xml">'
@@ -2126,6 +2110,7 @@ def generate_master_index(
 <meta charset="utf-8">
 <meta name="viewport"
       content="width=device-width, initial-scale=1">
+
 <title>Podcast Transcripts Hub (Unofficial)</title>
 
 <style>
@@ -2181,6 +2166,10 @@ li {{
 
 def main():
 
+    # --------------------------------------------------------
+    # BASE_URL
+    # --------------------------------------------------------
+
     base_url = os.environ.get(
         "BASE_URL",
         "",
@@ -2200,7 +2189,7 @@ def main():
                 1,
             )
 
-            base_url = f"https://{owner}.github.io/" f"{repo}"
+            base_url = f"https://" f"{owner}.github.io/" f"{repo}"
 
     if not base_url:
 
@@ -2210,32 +2199,40 @@ def main():
 
     print(f"BASE_URL: {base_url}")
 
+    # --------------------------------------------------------
+    # 加载
+    # --------------------------------------------------------
+
     podcasts = load_podcasts()
 
     progress = load_progress()
 
+    # 确保 site
+    SITE_DIR.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
     changed = False
 
     # ========================================================
-    # 第一阶段：处理字幕
+    # 第一阶段
     # ========================================================
 
     for podcast in podcasts:
 
         try:
 
-            result = process_podcast(
+            if process_podcast(
                 podcast,
                 progress,
-            )
-
-            if result:
+            ):
 
                 changed = True
 
         except KeyboardInterrupt:
 
-            print("\n用户中断")
+            print("\n用户中断，保存进度...")
 
             save_progress(progress)
 
@@ -2243,17 +2240,17 @@ def main():
 
         except Exception as e:
 
-            print(f"\n处理播客 " f"{podcast.get('slug')} " f"时发生异常: {e}")
+            print(f"\n处理播客 " f"{podcast.get('slug', '?')} " f"时发生异常: {e}")
 
-            import traceback
-
-            traceback.print_exc()
-
-            # 一个播客失败不能影响其他播客
+            # 一个 podcast 出错，
+            # 不影响后面的 podcast。
             continue
 
+        # 每个 podcast 完成后保存
+        save_progress(progress)
+
     # ========================================================
-    # 第二阶段：生成增强 RSS
+    # 第二阶段：增强 RSS
     # ========================================================
 
     print(f"\n{'=' * 60}")
@@ -2287,25 +2284,15 @@ def main():
 
             print(f"   生成 {slug} Feed " f"失败: {e}")
 
-            import traceback
-
-            traceback.print_exc()
-
     # ========================================================
     # 第三阶段：首页
     # ========================================================
 
-    try:
-
-        generate_master_index(
-            progress,
-            podcasts,
-            base_url,
-        )
-
-    except Exception as e:
-
-        print(f"生成首页失败: {e}")
+    generate_master_index(
+        progress,
+        podcasts,
+        base_url,
+    )
 
     # ========================================================
     # 保存进度
@@ -2325,14 +2312,30 @@ def main():
 
         slug = podcast["slug"]
 
-        pc_prog = progress.get("podcasts", {}).get(slug, {})
+        pc_prog = progress.get(
+            "podcasts",
+            {},
+        ).get(
+            slug,
+            {},
+        )
 
         processed = pc_prog.get(
             "processed",
             {},
         )
 
-        total = count_successful(processed)
+        total = sum(
+            1
+            for info in processed.values()
+            if (
+                not info.get(
+                    "skipped",
+                    False,
+                )
+                and info.get("vtt_filename")
+            )
+        )
 
         skipped = sum(
             1
