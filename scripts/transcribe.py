@@ -54,7 +54,7 @@ FEED_URL = os.environ.get(
 
 MODEL_SIZE = os.environ.get(
     "WHISPER_MODEL",
-    "base"
+    "base.en"
 )
 
 BASE_URL = os.environ.get(
