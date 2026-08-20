@@ -1,6 +1,7 @@
 name: Crawl Transcripts & Deploy Pages
 
 on:
+  push:
   schedule:
     # 每 20 分钟运行一次，每个播客各处理最多 10 集
     - cron: '*/20 * * * *'
@@ -64,11 +65,14 @@ jobs:
         run: python -u scripts/scraper.py
 
       - name: Commit progress & site
+        env:
+          MY_PAT: ${{ secrets.MY_CUSTOM_PAT }}  # 自定义秘钥名
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add progress.json site/
-          git diff --quiet && git diff --staged --quiet || git commit -m "auto: update transcripts [skip ci]"
+          git diff --quiet && git diff --staged --quiet || git commit -m "auto: update transcripts"
+          git remote set-url origin https://${MY_PAT}@github.com/${GITHUB_REPOSITORY}.git
           git push
 
       - name: Upload Pages artifact
