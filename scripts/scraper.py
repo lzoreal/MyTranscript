@@ -581,6 +581,13 @@ def parse_transcript(html_text):
         text,
     )
 
+    # 按 "Starting point is" 重新分行，
+    # 确保每个时间戳独立成行供正则匹配
+    text = text.replace(
+        "Starting point is",
+        "\nStarting point is",
+    )
+
     lines = [
         line.strip()
         for line in text.split("\n")
