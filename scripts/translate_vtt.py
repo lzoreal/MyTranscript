@@ -26,8 +26,8 @@ CACHE_FILE = Path("translations.json")
 
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite")
 MAX_FILES = int(os.environ.get("MAX_FILES", "10"))
-MAX_BATCH_CHARS = int(os.environ.get("MAX_BATCH_CHARS", "40000"))
-MAX_BATCH_BLOCKS = int(os.environ.get("MAX_BATCH_BLOCKS", "50"))
+MAX_BATCH_CHARS = int(os.environ.get("MAX_BATCH_CHARS", "80000"))
+MAX_BATCH_BLOCKS = int(os.environ.get("MAX_BATCH_BLOCKS", "200"))
 RETRY_COUNT = 5
 RETRY_BASE = 20
 RPM_LIMIT = int(os.environ.get("RPM_LIMIT", "14"))
