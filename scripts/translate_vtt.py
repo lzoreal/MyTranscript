@@ -24,10 +24,10 @@ SITE_DIR = Path("site")
 ZH_SUBDIR = "zh"
 CACHE_FILE = Path("translations.json")
 
-MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite")
+MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
 MAX_FILES = int(os.environ.get("MAX_FILES", "10"))
 MAX_BATCH_CHARS = int(os.environ.get("MAX_BATCH_CHARS", "80000"))
-MAX_BATCH_BLOCKS = int(os.environ.get("MAX_BATCH_BLOCKS", "200"))
+MAX_BATCH_BLOCKS = int(os.environ.get("MAX_BATCH_BLOCKS", "100"))
 RETRY_COUNT = 5
 RETRY_BASE = 20
 RPM_LIMIT = int(os.environ.get("RPM_LIMIT", "14"))
@@ -69,7 +69,8 @@ def endgroup():
 group("Initializing Gemini")
 try:
     client = genai.Client(
-        api_key=os.environ["GEMINI_API_KEY"], http_options={"timeout": 120000}
+        api_key=os.environ["GEMINI_API_KEY"],
+        http_options={"timeout": 120000}
     )
     log("✅ Gemini initialized")
 except Exception as e:
@@ -275,25 +276,25 @@ def detect_repetition(text, threshold=3):
 
 
 def is_retryable_error(error):
+    """
+    判断错误是否值得重试。
+    关键区分：
+      - RPM 超限 (Too Many Requests / rate limit) → 等一会儿重试
+      - 配额耗尽 (RESOURCE_EXHAUSTED / quota exceeded / billing) → 立即停止
+    """
     err_str = str(error).lower()
+    # 配额耗尽 —— 立即停止，不重试
+    if any(kw in err_str for kw in [
+        "resource_exhausted", "quota exceeded", "exceeded your current quota",
+        "billing", "insufficient quota", "quota limit",
+    ]):
+        return False
+    # 可恢复的服务端/网络错误 —— 可以重试
     retryable = [
-        "429",
-        "too many requests",
-        "rate limit",
-        "quota",
-        "503",
-        "service unavailable",
-        "500",
-        "internal server error",
-        "502",
-        "504",
-        "gateway",
-        "timeout",
-        "timed out",
-        "deadline",
-        "connection",
-        "network",
-        "unreachable",
+        "too many requests", "rate limit",
+        "503", "service unavailable", "500", "internal server error",
+        "502", "504", "gateway", "timeout", "timed out", "deadline",
+        "connection", "network", "unreachable",
     ]
     return any(kw in err_str for kw in retryable)
 
@@ -334,9 +335,7 @@ def gemini_batch_translate(blocks, cache_meta):
                     ),
                 )
                 raw = response.text or ""
-                parsed, is_valid, err_msg = parse_translation_response_json(
-                    raw, expected_indices
-                )
+                parsed, is_valid, err_msg = parse_translation_response_json(raw, expected_indices)
             else:
                 prompt = build_prompt_text(blocks)
                 response = client.models.generate_content(
@@ -347,12 +346,8 @@ def gemini_batch_translate(blocks, cache_meta):
                 raw = response.text or ""
                 if detect_repetition(raw):
                     log(f"⚠️ Repetition detected in response")
-                    raise RepetitionError(
-                        "Model output appears to be in a repetition loop"
-                    )
-                parsed, is_valid, err_msg = parse_translation_response_text(
-                    raw, expected_indices
-                )
+                    raise RepetitionError("Model output appears to be in a repetition loop")
+                parsed, is_valid, err_msg = parse_translation_response_text(raw, expected_indices)
 
             if not is_valid:
                 log(f"⚠️ Parse/Index error: {err_msg}")
@@ -365,6 +360,16 @@ def gemini_batch_translate(blocks, cache_meta):
             if isinstance(e, (DailyLimitReached, IndexMismatchError, RepetitionError)):
                 raise
             log(f"❌ Error: {e}")
+            err_str = str(e).lower()
+            # 配额耗尽 —— 直接停止整个程序，不再重试
+            if any(kw in err_str for kw in [
+                "resource_exhausted", "quota exceeded", "exceeded your current quota",
+                "billing", "insufficient quota", "quota limit",
+            ]):
+                log("⛔ API quota exhausted. Stopping immediately.")
+                raise DailyLimitReached(
+                    f"API quota exhausted: {e}"
+                )
             if not is_retryable_error(e) or attempt >= RETRY_COUNT:
                 raise
             wait = RETRY_BASE * (2 ** (attempt - 1)) + random.uniform(0, 5)
@@ -528,9 +533,7 @@ def translate_episode(source, target, cache_meta):
     translated = {}
 
     batches = chunk_cues_by_chars(cues)
-    log(
-        f"Batches: {len(batches)} (max {MAX_BATCH_CHARS} chars, {MAX_BATCH_BLOCKS} blocks)"
-    )
+    log(f"Batches: {len(batches)} (max {MAX_BATCH_CHARS} chars, {MAX_BATCH_BLOCKS} blocks)")
 
     for batch_idx, batch in enumerate(batches, 1):
         group(f"Batch {batch_idx}/{len(batches)} ({batch[0][0]}-{batch[-1][0]})")
@@ -697,9 +700,7 @@ def main():
                     errors.append((slug, episode, str(e)))
                     continue
 
-            log(
-                f"✅ Podcast {slug}: {processed_podcast} episode(s) translated this run"
-            )
+            log(f"✅ Podcast {slug}: {processed_podcast} episode(s) translated this run")
 
             if processed_total >= MAX_FILES or stopped_by_limit:
                 break
