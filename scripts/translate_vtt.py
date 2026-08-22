@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+"""
+Podcast VTT Translator
+"""
 
 import os
 import re
@@ -14,48 +17,27 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 from google import genai
+from google.genai import types
 
-# ============================================================
-# Config
-# ============================================================
-
-# 读取播客配置
 PODCASTS_JSON = Path("podcasts_translate.json")
-
-# 站点根目录
 SITE_DIR = Path("site")
-
-# 翻译输出子目录名
 ZH_SUBDIR = "zh"
-
-# 缓存/状态文件
 CACHE_FILE = Path("translations.json")
 
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite")
 MAX_FILES = int(os.environ.get("MAX_FILES", "10"))
-
-# 按字符数分批，替代固定 BATCH_SIZE
-MAX_BATCH_CHARS = int(os.environ.get("MAX_BATCH_CHARS", "120000"))
-
+MAX_BATCH_CHARS = int(os.environ.get("MAX_BATCH_CHARS", "40000"))
+MAX_BATCH_BLOCKS = int(os.environ.get("MAX_BATCH_BLOCKS", "50"))
 RETRY_COUNT = 5
 RETRY_BASE = 20
-
-# RPM 限流：14 RPM（配额 15，留 1 个缓冲）
 RPM_LIMIT = int(os.environ.get("RPM_LIMIT", "14"))
 MIN_REQUEST_INTERVAL = 60.0 / RPM_LIMIT
-
-# RPD 硬上限（免费层 1500）
 DAILY_REQUEST_LIMIT = int(os.environ.get("DAILY_REQUEST_LIMIT", "1500"))
-
-# GitHub Actions 检测
+TEMPERATURE = float(os.environ.get("TEMPERATURE", "0.0"))
+USE_JSON_SCHEMA = os.environ.get("USE_JSON_SCHEMA", "true").lower() == "true"
 IN_ACTIONS = os.environ.get("GITHUB_ACTIONS") == "true"
 
-# ============================================================
-# Logging
-# ============================================================
-
 if IN_ACTIONS:
-    # Actions 里不需要日期前缀，用 GitHub 自带时间戳即可
     fmt = "[%(levelname)s] %(message)s"
 else:
     fmt = "%(asctime)s [%(levelname)s] %(message)s"
@@ -73,7 +55,6 @@ def separator():
 
 
 def group(title):
-    """GitHub Actions 日志分组"""
     if IN_ACTIONS:
         print(f"::group::{title}", flush=True)
     else:
@@ -85,16 +66,10 @@ def endgroup():
         print("::endgroup::", flush=True)
 
 
-# ============================================================
-# Gemini
-# ============================================================
-
 group("Initializing Gemini")
 try:
-    # 添加 120 秒 HTTP 超时，防止服务端无响应时无限挂死
     client = genai.Client(
-        api_key=os.environ["GEMINI_API_KEY"],
-        http_options={"timeout": 120000}
+        api_key=os.environ["GEMINI_API_KEY"], http_options={"timeout": 120000}
     )
     log("✅ Gemini initialized")
 except Exception as e:
@@ -107,7 +82,6 @@ _last_request_time = 0.0
 
 
 def _rate_limit_wait():
-    """确保请求间隔满足 RPM 限制"""
     global _last_request_time
     now = time.time()
     elapsed = now - _last_request_time
@@ -118,23 +92,19 @@ def _rate_limit_wait():
     _last_request_time = time.time()
 
 
-# ============================================================
-# Exceptions
-# ============================================================
-
-
 class DailyLimitReached(Exception):
-    """日 API 限额达到，需要优雅停止，不是真正的错误"""
     pass
 
 
-# ============================================================
-# Podcasts config
-# ============================================================
+class IndexMismatchError(Exception):
+    pass
+
+
+class RepetitionError(Exception):
+    pass
 
 
 def load_podcasts():
-    """读取 podcasts.json，返回播客列表"""
     if not PODCASTS_JSON.exists():
         log("⚠️ podcasts.json not found, using empty list")
         return []
@@ -145,11 +115,6 @@ def load_podcasts():
     except Exception as e:
         log(f"⚠️ Failed to load podcasts.json: {e}")
         return []
-
-
-# ============================================================
-# Cache
-# ============================================================
 
 
 def load_cache():
@@ -165,7 +130,6 @@ def load_cache():
             meta["daily_requests"] = 0
             data["__meta__"] = meta
             log("🌅 New day detected, resetting daily request counter")
-        # 统计各播客的已翻译集数
         episode_count = 0
         for key, val in data.items():
             if key.startswith("__"):
@@ -187,11 +151,6 @@ def save_cache(cache):
     log("💾 Cache saved")
 
 
-# ============================================================
-# Hash
-# ============================================================
-
-
 def file_hash(path):
     sha = hashlib.sha256()
     with path.open("rb") as f:
@@ -203,53 +162,51 @@ def file_hash(path):
     return sha.hexdigest()
 
 
-# ============================================================
-# Gemini Translation
-# ============================================================
-
-
-def build_prompt(blocks):
+def build_prompt_text(blocks):
     content = []
     for idx, text in blocks:
         content.append(f"{idx}|||{text}")
     joined = "\n\n".join(content)
-    prompt = f"""You are translating podcast subtitles.
-
-Translate English subtitles into Simplified Chinese.
-
-Rules:
-1. WebVTT speaker names are metadata, not subtitle text.
-2. Never output speaker names.
-3. Only translate subtitle content.
-4. Preserve the original meaning.
-5. Do NOT summarize.
-6. Keep every subtitle block.
-7. Translate only the subtitle content.
-
-Output format:
-0|||Chinese translation
-1|||Chinese translation
-
-Important:
-- You MUST output exactly one line for EVERY block, even if it is very short.
-- Output exactly one line per block.
-- Do not skip any block.
-- Do not merge blocks.
-- Do not add markdown.
-- Do not add explanations.
-- Do not add introductions.
-- Do not use code blocks.
-
-Subtitle blocks:
-{joined}
-"""
+    prompt = (
+        "Translate the following podcast subtitle blocks into Simplified Chinese. "
+        "Output one line per block in the format: index|||translation. "
+        "Do NOT skip, merge, or reorder blocks. "
+        "Do NOT add markdown, explanations, or code blocks.\n\n"
+        f"{joined}"
+    )
     return prompt
 
 
-def parse_translation_response(text):
+def build_prompt_json(blocks):
+    content = {}
+    for idx, text in blocks:
+        content[str(idx)] = text
+    prompt = (
+        "Translate the following podcast subtitle blocks into Simplified Chinese. "
+        "Return a JSON object where each key is the block index (string) "
+        "and each value is the Chinese translation. "
+        "Do NOT skip, merge, or reorder blocks. "
+        "Do NOT add markdown, explanations, or code blocks.\n\n"
+        f"Input: {json.dumps(content, ensure_ascii=False)}"
+    )
+    return prompt
+
+
+def build_response_schema(blocks):
+    properties = {}
+    for idx, _ in blocks:
+        properties[str(idx)] = {"type": "string"}
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": list(properties.keys()),
+    }
+
+
+def parse_translation_response_text(text, expected_indices):
     result = {}
     if not text:
-        return result
+        return result, False, "Empty response"
     for line in text.splitlines():
         line = line.strip()
         if not line:
@@ -270,11 +227,54 @@ def parse_translation_response(text):
                 result[int(idx)] = value
         except Exception:
             continue
-    return result
+    return _validate_indices(result, expected_indices)
 
 
-def is_retryable_error(error) -> bool:
-    """只重试可恢复的服务端/网络错误"""
+def parse_translation_response_json(text, expected_indices):
+    result = {}
+    if not text:
+        return result, False, "Empty response"
+    try:
+        data = json.loads(text)
+        if not isinstance(data, dict):
+            return result, False, "JSON root is not an object"
+        for k, v in data.items():
+            try:
+                idx = int(k)
+                if isinstance(v, str) and v.strip():
+                    result[idx] = v.strip()
+            except (ValueError, TypeError):
+                continue
+    except json.JSONDecodeError as e:
+        return result, False, f"JSON parse error: {e}"
+    return _validate_indices(result, expected_indices)
+
+
+def _validate_indices(result, expected_indices):
+    actual_indices = set(result.keys())
+    if actual_indices != expected_indices:
+        missing = expected_indices - actual_indices
+        extra = actual_indices - expected_indices
+        msg = f"Index mismatch: expected {len(expected_indices)}, got {len(actual_indices)}"
+        if missing:
+            msg += f"; missing {len(missing)}: {sorted(missing)[:10]}"
+        if extra:
+            msg += f"; extra {len(extra)}: {sorted(extra)[:10]}"
+        return result, False, msg
+    return result, True, ""
+
+
+def detect_repetition(text, threshold=3):
+    if not text:
+        return False
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    if len(lines) < threshold * 2:
+        return False
+    last_n = lines[-threshold:]
+    return len(set(last_n)) == 1
+
+
+def is_retryable_error(error):
     err_str = str(error).lower()
     retryable = [
         "429",
@@ -298,24 +298,12 @@ def is_retryable_error(error) -> bool:
     return any(kw in err_str for kw in retryable)
 
 
-def validate_translation(original: str, translated: str) -> bool:
-    """简单验证翻译结果质量"""
-    if not translated or len(translated) < 2:
-        return False
-    if translated.lower().strip(".,!?") == original.lower().strip(".,!?"):
-        return False
-    if not re.search(r"[\u4e00-\u9fff]", translated):
-        return False
-    return True
-
-
 def gemini_batch_translate(blocks, cache_meta):
-    """带限流、RPD 检查、错误分类的翻译"""
     global _last_request_time
-    prompt = build_prompt(blocks)
+    expected_indices = {idx for idx, _ in blocks}
+    use_json = USE_JSON_SCHEMA and len(blocks) <= 30
 
     for attempt in range(1, RETRY_COUNT + 1):
-        # RPD 硬上限检查
         daily_used = cache_meta.get("daily_requests", 0)
         if daily_used >= DAILY_REQUEST_LIMIT:
             raise DailyLimitReached(
@@ -328,33 +316,57 @@ def gemini_batch_translate(blocks, cache_meta):
 
         log(
             f"🤖 Request #{cache_meta['daily_requests']}/{DAILY_REQUEST_LIMIT} "
-            f"(attempt {attempt}/{RETRY_COUNT}), blocks: {len(blocks)}"
+            f"(attempt {attempt}/{RETRY_COUNT}), blocks: {len(blocks)}, "
+            f"json={use_json}"
         )
 
         try:
-            response = client.models.generate_content(
-                model=MODEL,
-                contents=prompt
-            )
-            elapsed = time.time() - start
-            raw = response.text or ""
-            parsed = parse_translation_response(raw)
+            if use_json:
+                prompt = build_prompt_json(blocks)
+                schema = build_response_schema(blocks)
+                response = client.models.generate_content(
+                    model=MODEL,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=TEMPERATURE,
+                        response_mime_type="application/json",
+                        response_schema=schema,
+                    ),
+                )
+                raw = response.text or ""
+                parsed, is_valid, err_msg = parse_translation_response_json(
+                    raw, expected_indices
+                )
+            else:
+                prompt = build_prompt_text(blocks)
+                response = client.models.generate_content(
+                    model=MODEL,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(temperature=TEMPERATURE),
+                )
+                raw = response.text or ""
+                if detect_repetition(raw):
+                    log(f"⚠️ Repetition detected in response")
+                    raise RepetitionError(
+                        "Model output appears to be in a repetition loop"
+                    )
+                parsed, is_valid, err_msg = parse_translation_response_text(
+                    raw, expected_indices
+                )
 
-            log(f"✅ Success {elapsed:.2f}s, parsed: {len(parsed)}")
-            if not parsed:
-                log("⚠️ Empty parse result")
-                log(raw[:500])
-                if attempt < RETRY_COUNT:
-                    raise Exception("Empty parse result")
+            if not is_valid:
+                log(f"⚠️ Parse/Index error: {err_msg}")
+                raise IndexMismatchError(err_msg)
+
+            log(f"✅ Success {time.time() - start:.2f}s, parsed: {len(parsed)}")
             return parsed
 
         except Exception as e:
-            if isinstance(e, DailyLimitReached):
+            if isinstance(e, (DailyLimitReached, IndexMismatchError, RepetitionError)):
                 raise
             log(f"❌ Error: {e}")
             if not is_retryable_error(e) or attempt >= RETRY_COUNT:
                 raise
-            # 指数退避 + 抖动，应对服务端高负载
             wait = RETRY_BASE * (2 ** (attempt - 1)) + random.uniform(0, 5)
             log(f"⏳ Retryable, waiting {wait:.1f}s...")
             time.sleep(wait)
@@ -362,25 +374,30 @@ def gemini_batch_translate(blocks, cache_meta):
     return {}
 
 
-# ============================================================
-# VTT Parser (支持单语 & 双语 VTT)
-# ============================================================
+def safe_translate_batch(blocks, cache_meta):
+    if not blocks:
+        return {}
+    try:
+        return gemini_batch_translate(blocks, cache_meta)
+    except (IndexMismatchError, RepetitionError) as e:
+        if len(blocks) == 1:
+            log(f"   ❌ Single block #{blocks[0][0]} failed: {e}")
+            raise
+        log(f"   ⚠️ Batch ({len(blocks)} blocks) failed: {e}")
+        mid = len(blocks) // 2
+        left = safe_translate_batch(blocks[:mid], cache_meta)
+        right = safe_translate_batch(blocks[mid:], cache_meta)
+        result = {**left, **right}
+        log(f"   ✅ Fallback done: {len(result)}/{len(blocks)}")
+        return result
 
 
-def parse_vtt_cues(content: str) -> list[dict]:
-    """
-    健壮的 WebVTT 解析器。
-    正确处理 cue 标识符、多行文本、内部空行、NOTE/STYLE/REGION 区域。
-    同时支持：
-      - 单语 VTT（scraper 爬取）：每 cue 1 行文本
-      - 双语 VTT（transcribe 生成）：每 cue 2 行文本（英+中）
-    """
+def parse_vtt_cues(content):
     cues = []
     lines = content.splitlines()
     i = 0
     n = len(lines)
 
-    # 跳过 WEBVTT 头和所有元数据区域
     while i < n:
         line_stripped = lines[i].strip()
         if line_stripped in ("WEBVTT", ""):
@@ -429,9 +446,11 @@ def parse_vtt_cues(content: str) -> list[dict]:
     return cues
 
 
-# ============================================================
-# WebVTT Speaker handling
-# ============================================================
+def is_bilingual_cue(text):
+    lines = text.splitlines()
+    if len(lines) >= 2:
+        return bool(re.search(r"[\u4e00-\u9fff]", lines[1].strip()))
+    return False
 
 
 def extract_speaker(text):
@@ -442,21 +461,11 @@ def extract_speaker(text):
 
 
 def prepare_gemini_text(text):
-    """
-    从 VTT cue 文本中提取需要翻译的英文原文。
-    支持两种情况：
-      1. 单语 VTT：直接返回文本（去除 speaker tag）
-      2. 双语 VTT：只取第一行（英文），忽略第二行（已有中文）
-    """
     lines = text.splitlines()
-    # 如果是双语 VTT（2行），取第一行作为原文
     if len(lines) >= 2:
-        # 检查第二行是否像中文（包含中文字符）
-        second_line = lines[1].strip()
-        if re.search(r"[\u4e00-\u9fff]", second_line):
+        if is_bilingual_cue(text):
             text = lines[0].strip()
         else:
-            # 两行都是英文（可能是长句换行），合并
             text = " ".join(lines)
     else:
         text = lines[0].strip() if lines else text
@@ -467,6 +476,12 @@ def prepare_gemini_text(text):
     return text
 
 
+def get_original_text(text):
+    if is_bilingual_cue(text):
+        return text.splitlines()[0].strip()
+    return text.strip()
+
+
 def restore_speaker_translation(original, translated):
     speaker, _ = extract_speaker(original)
     if speaker:
@@ -474,25 +489,17 @@ def restore_speaker_translation(original, translated):
     return translated
 
 
-# ============================================================
-# Batch chunking (按字符数动态分批)
-# ============================================================
-
-
-def chunk_cues_by_chars(cues, max_chars=MAX_BATCH_CHARS):
-    """
-    按字符数分批，替代固定 BATCH_SIZE。
-    最大化利用 TPM，减少总请求数（对 RPD 免费层至关重要）。
-    """
+def chunk_cues_by_chars(cues, max_chars=MAX_BATCH_CHARS, max_blocks=MAX_BATCH_BLOCKS):
     batches = []
     current = []
-    current_len = 500  # prompt 模板本身约 500 字符开销
+    current_len = 500
 
     for i, cue in enumerate(cues):
         text = prepare_gemini_text(cue["text"])
-        # 每个条目：序号 + "|||" + 文本 + 换行，估算 +15 字符开销
         item_len = len(text) + 15
-        if current and (current_len + item_len > max_chars):
+        if current and (
+            current_len + item_len > max_chars or len(current) >= max_blocks
+        ):
             batches.append(current)
             current = [(i, text)]
             current_len = 500 + item_len
@@ -503,11 +510,6 @@ def chunk_cues_by_chars(cues, max_chars=MAX_BATCH_CHARS):
     if current:
         batches.append(current)
     return batches
-
-
-# ============================================================
-# Translate Episode (适配为多播客结构)
-# ============================================================
 
 
 def translate_episode(source, target, cache_meta):
@@ -525,65 +527,50 @@ def translate_episode(source, target, cache_meta):
 
     translated = {}
 
-    # 按字符数动态分批
     batches = chunk_cues_by_chars(cues)
-    log(f"Batches: {len(batches)} (dynamic by ~{MAX_BATCH_CHARS} chars)")
+    log(
+        f"Batches: {len(batches)} (max {MAX_BATCH_CHARS} chars, {MAX_BATCH_BLOCKS} blocks)"
+    )
 
     for batch_idx, batch in enumerate(batches, 1):
         group(f"Batch {batch_idx}/{len(batches)} ({batch[0][0]}-{batch[-1][0]})")
-        result = gemini_batch_translate(batch, cache_meta)
+        try:
+            result = safe_translate_batch(batch, cache_meta)
+        except Exception as e:
+            endgroup()
+            log(f"❌ Batch {batch_idx} failed after all retries: {e}")
+            raise
         endgroup()
         for idx, value in result.items():
             translated[idx] = value
 
-    # ------------------------------
-    # 缺失块检测与小批量重试
-    # ------------------------------
     missing = [i for i in range(len(cues)) if i not in translated]
     if missing:
-        log(f"⚠️ Missing {len(missing)} blocks, retrying in small batches...")
-        # 每 5 个缺失块组成一个小 batch，减少请求数
-        RETRY_BATCH_SIZE = 5
-        for batch_start in range(0, len(missing), RETRY_BATCH_SIZE):
-            batch_missing = missing[batch_start:batch_start + RETRY_BATCH_SIZE]
-            batch = [(idx, prepare_gemini_text(cues[idx]["text"])) for idx in batch_missing]
-            result = gemini_batch_translate(batch, cache_meta)
-            for idx in batch_missing:
+        log(f"⚠️ Missing {len(missing)} blocks, doing individual retry...")
+        for idx in missing:
+            single = [(idx, prepare_gemini_text(cues[idx]["text"]))]
+            try:
+                result = safe_translate_batch(single, cache_meta)
                 if idx in result:
                     translated[idx] = result[idx]
+            except Exception as e:
+                log(f"   Block {idx} failed: {e}")
 
         still_missing = [i for i in range(len(cues)) if i not in translated]
         if still_missing:
-            log(f"⚠️ {len(still_missing)} blocks still missing after retry, doing final individual retry...")
-            for idx in still_missing:
-                single = [(idx, prepare_gemini_text(cues[idx]["text"]))]
-                result = gemini_batch_translate(single, cache_meta)
-                if idx in result:
-                    translated[idx] = result[idx]
+            for i in still_missing[:10]:
+                log(f"Still missing block {i}: {cues[i]['text'][:60]}...")
+            raise RuntimeError(
+                f"Translation incomplete: {len(still_missing)} blocks still missing"
+            )
 
-            still_missing = [i for i in range(len(cues)) if i not in translated]
-            if still_missing:
-                for i in still_missing[:10]:
-                    log(f"Still missing block {i}: {cues[i]['text'][:60]}...")
-                raise RuntimeError(
-                    f"Translation incomplete: {len(still_missing)} blocks still missing"
-                )
-
-    # ------------------------------
-    # 生成标准双语 VTT
-    # 原文在上 (line:0%)，译文在下 (line:80%)
-    # ------------------------------
     output = ["WEBVTT", ""]
 
     for i, cue in enumerate(cues):
-        # 保留原始 cue 编号（如果有）
         if cue["identifier"]:
             output.append(cue["identifier"])
         output.append(cue["timestamp"])
-        # 原文：如果是单语 VTT，输出原文；如果是双语 VTT，输出原文（第一行）
-        original_text = cue["text"].splitlines()[0].strip() if cue["text"] else ""
-        output.append(original_text)
-        # 译文：恢复 speaker tag（如果有）
+        output.append(get_original_text(cue["text"]))
         output.append(restore_speaker_translation(cue["text"], translated[i]))
         output.append("")
 
@@ -594,19 +581,17 @@ def translate_episode(source, target, cache_meta):
     log(f"✅ Saved: {target}")
 
 
-# ============================================================
-# Main
-# ============================================================
-
-
 def main():
     separator()
     log("🚀 Translate VTT started")
     separator()
     log(f"Model: {MODEL}")
+    log(f"Temperature: {TEMPERATURE}")
+    log(f"JSON schema: {USE_JSON_SCHEMA}")
     log(f"Site dir: {SITE_DIR}")
     log(f"Max files: {MAX_FILES}")
     log(f"Max batch chars: {MAX_BATCH_CHARS}")
+    log(f"Max batch blocks: {MAX_BATCH_BLOCKS}")
     log(f"RPM limit: {RPM_LIMIT} (interval: {MIN_REQUEST_INTERVAL:.2f}s)")
     log(f"Daily request limit: {DAILY_REQUEST_LIMIT}")
 
@@ -624,7 +609,6 @@ def main():
         },
     )
 
-    # 日期检查（跨天时重置计数器）
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     if meta.get("date") != today:
         meta["date"] = today
@@ -711,15 +695,16 @@ def main():
                     log(f"❌ Episode {episode} failed: {e}")
                     traceback.print_exc()
                     errors.append((slug, episode, str(e)))
-                    continue  # 跳过失败的集数，继续下一集
+                    continue
 
-            log(f"✅ Podcast {slug}: {processed_podcast} episode(s) translated this run")
+            log(
+                f"✅ Podcast {slug}: {processed_podcast} episode(s) translated this run"
+            )
 
             if processed_total >= MAX_FILES or stopped_by_limit:
                 break
 
     finally:
-        # 统一保存缓存，确保即使中断也能把 daily_requests 写回仓库
         save_cache(cache)
 
     separator()
@@ -734,7 +719,7 @@ def main():
 
     if stopped_by_limit:
         log("⛔ Stopped due to daily API limit. Run again tomorrow to continue.")
-        return 0  # Actions 里返回 0，workflow 继续提交进度
+        return 0
     elif errors:
         log("⚠️ Completed with errors.")
         return 1
