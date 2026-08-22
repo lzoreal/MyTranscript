@@ -31,7 +31,7 @@ ZH_SUBDIR = "zh"
 # 缓存/状态文件
 CACHE_FILE = Path("translations.json")
 
-MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite")
+MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
 MAX_FILES = int(os.environ.get("MAX_FILES", "10"))
 
 # 按字符数分批，替代固定 BATCH_SIZE
@@ -231,7 +231,10 @@ Output format:
 1|||Chinese translation
 
 Important:
+- You MUST output exactly one line for EVERY block, even if it is very short.
 - Output exactly one line per block.
+- Do not skip any block.
+- Do not merge blocks.
 - Do not add markdown.
 - Do not add explanations.
 - Do not add introductions.
@@ -534,24 +537,37 @@ def translate_episode(source, target, cache_meta):
             translated[idx] = value
 
     # ------------------------------
-    # 缺失块检测与单独重试
+    # 缺失块检测与小批量重试
     # ------------------------------
     missing = [i for i in range(len(cues)) if i not in translated]
     if missing:
-        log(f"⚠️ Missing {len(missing)} blocks, retrying individually...")
-        for idx in missing:
-            single = [(idx, prepare_gemini_text(cues[idx]["text"]))]
-            result = gemini_batch_translate(single, cache_meta)
-            if idx in result:
-                translated[idx] = result[idx]
+        log(f"⚠️ Missing {len(missing)} blocks, retrying in small batches...")
+        # 每 5 个缺失块组成一个小 batch，减少请求数
+        RETRY_BATCH_SIZE = 5
+        for batch_start in range(0, len(missing), RETRY_BATCH_SIZE):
+            batch_missing = missing[batch_start:batch_start + RETRY_BATCH_SIZE]
+            batch = [(idx, prepare_gemini_text(cues[idx]["text"])) for idx in batch_missing]
+            result = gemini_batch_translate(batch, cache_meta)
+            for idx in batch_missing:
+                if idx in result:
+                    translated[idx] = result[idx]
 
         still_missing = [i for i in range(len(cues)) if i not in translated]
         if still_missing:
-            for i in still_missing[:10]:
-                log(f"Still missing block {i}: {cues[i]['text'][:60]}...")
-            raise RuntimeError(
-                f"Translation incomplete: {len(still_missing)} blocks still missing"
-            )
+            log(f"⚠️ {len(still_missing)} blocks still missing after retry, doing final individual retry...")
+            for idx in still_missing:
+                single = [(idx, prepare_gemini_text(cues[idx]["text"]))]
+                result = gemini_batch_translate(single, cache_meta)
+                if idx in result:
+                    translated[idx] = result[idx]
+
+            still_missing = [i for i in range(len(cues)) if i not in translated]
+            if still_missing:
+                for i in still_missing[:10]:
+                    log(f"Still missing block {i}: {cues[i]['text'][:60]}...")
+                raise RuntimeError(
+                    f"Translation incomplete: {len(still_missing)} blocks still missing"
+                )
 
     # ------------------------------
     # 生成标准双语 VTT
