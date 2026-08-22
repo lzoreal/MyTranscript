@@ -20,7 +20,7 @@ from google import genai
 # ============================================================
 
 # 读取播客配置
-PODCASTS_JSON = Path("podcasts.json")
+PODCASTS_JSON = Path("podcasts_translate.json")
 
 # 站点根目录
 SITE_DIR = Path("site")
