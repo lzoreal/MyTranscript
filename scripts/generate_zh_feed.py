@@ -47,7 +47,7 @@ def load_status():
 
 
 def load_podcasts():
-    path = Path("podcasts.json")
+    path = Path("podcasts_translate.json")
     if not path.exists():
         log("WARNING: podcasts.json missing")
         return []
