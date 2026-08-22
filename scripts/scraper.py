@@ -637,9 +637,7 @@ def search_podscripts(
     title,
     podscripts_id,
 ):
-
     if not podscripts_id:
-
         return None
 
     encoded = urllib.parse.quote_plus(title)
@@ -659,42 +657,36 @@ def search_podscripts(
     html_text = fetch_html(url)
 
     if not html_text:
-
         return None
 
     try:
-
         doc = lxml_html.fromstring(html_text)
 
     except Exception as e:
-
         print(f"      搜索页面 HTML 解析失败: {e}")
-
         return None
 
     candidates = []
-
     seen_urls = set()
 
     # --------------------------------------------------------
-    # 关键：
+    # PodScripts 搜索结果解析
     #
-    # 不再寻找 h2/h3。
+    # 注意：
     #
-    # 直接寻找所有：
+    # 搜索结果中的 episode link:
     #
-    # /podcasts/xxx/yyy
+    # <a href="/podcasts/...">
     #
-    # 的链接。
+    # 自身文本可能只有：
     #
-    # 搜索页实际同时存在：
+    # Arts
     #
-    # 0 comments
-    # Comedy
-    # Bonus: Mother’s Day Tributes
-    # View Full Transcript
+    # 真正标题可能在：
     #
-    # 所以必须根据 href + 文本判断。
+    # h2 / h3 / sibling node
+    #
+    # 所以不能直接 link.itertext()
     # --------------------------------------------------------
 
     links = doc.xpath("//a[@href]")
@@ -706,7 +698,6 @@ def search_podscripts(
         if not href:
             continue
 
-        # 只处理 /podcasts/...
         if not href.startswith("/podcasts/"):
             continue
 
@@ -715,36 +706,82 @@ def search_podscripts(
         if not clean_url:
             continue
 
-        # 防止同一个 episode 重复
         if clean_url in seen_urls:
             continue
 
+        parsed = urllib.parse.urlparse(clean_url)
+
+        parts = [p for p in parsed.path.split("/") if p]
+
+        # 必须是：
+        #
+        # /podcasts/{podcast}/{episode}
+        #
+        if len(parts) < 3:
+            continue
+
         # ----------------------------------------------------
-        # 获取链接内部所有文本
+        # 提取标题
         # ----------------------------------------------------
 
-        result_title = " ".join("".join(link.itertext()).split())
+        result_title = ""
+
+        # 方法1:
+        # 当前节点内部寻找标题标签
+
+        for node in link.xpath(".//h1|.//h2|.//h3|.//strong"):
+
+            text = " ".join(node.itertext()).strip()
+
+            if text and not looks_like_bad_link_title(text):
+                result_title = text
+                break
+
+        # 方法2:
+        # 查找父节点附近标题
+
+        if not result_title:
+
+            parent = link.getparent()
+
+            if parent is not None:
+
+                possible = []
+
+                for node in parent.xpath(".//h1|.//h2|.//h3|.//a|.//div"):
+
+                    text = " ".join(node.itertext()).strip()
+
+                    if not text:
+                        continue
+
+                    text = html_module.unescape(text)
+
+                    if looks_like_bad_link_title(text):
+                        continue
+
+                    possible.append(text)
+
+                if possible:
+
+                    # 标题通常最长
+                    result_title = max(possible, key=len)
+
+        # 方法3:
+        # fallback
+
+        if not result_title:
+
+            result_title = " ".join("".join(link.itertext()).split())
 
         result_title = html_module.unescape(result_title).strip()
 
         if looks_like_bad_link_title(result_title):
             continue
 
-        # ----------------------------------------------------
-        # 确认 URL 至少有：
-        #
-        # /podcasts/{podcast}/{episode}
-        #
-        # ----------------------------------------------------
-
-        parsed = urllib.parse.urlparse(clean_url)
-
-        parts = [p for p in parsed.path.split("/") if p]
-
-        if len(parts) < 3:
-            continue
-
         seen_urls.add(clean_url)
+
+        print(f"         DEBUG标题: {result_title}")
 
         candidates.append(
             {
@@ -753,7 +790,7 @@ def search_podscripts(
             }
         )
 
-    print(f"      搜索结果: " f"{len(candidates)}")
+    print(f"      搜索结果: {len(candidates)}")
 
     if not candidates:
 
@@ -762,61 +799,28 @@ def search_podscripts(
         return None
 
     # --------------------------------------------------------
-    # 计算标题匹配
+    # 标题匹配
     # --------------------------------------------------------
 
     scored = []
 
     for candidate in candidates:
 
-        score = title_similarity(
-            title,
-            candidate["title"],
-        )
+        score = title_similarity(title, candidate["title"])
 
-        scored.append(
-            (
-                score,
-                candidate,
-            )
-        )
+        scored.append((score, candidate))
 
-    scored.sort(
-        key=lambda x: x[0],
-        reverse=True,
-    )
-
-    # --------------------------------------------------------
-    # 打印候选
-    # --------------------------------------------------------
+    scored.sort(key=lambda x: x[0], reverse=True)
 
     for score, candidate in scored[:10]:
 
-        print(f"         候选 " f"{score:.3f}: " f"{candidate['title']}")
+        print(f"         候选 {score:.3f}: " f"{candidate['title']}")
 
     best_score, best = scored[0]
 
-    # --------------------------------------------------------
-    # 可靠匹配
-    #
-    # 0.55 是比较宽松的阈值。
-    # 完全一致 = 1.0
-    #
-    # Bonus: 前缀会被 normalize 掉，
-    # 所以：
-    #
-    # Bonus: Mother’s Day Tributes
-    #
-    # 与：
-    #
-    # Mother's Day Tributes
-    #
-    # 也可以匹配。
-    # --------------------------------------------------------
-
     if best_score < 0.55:
 
-        print(f"      没有可靠匹配 " f"(最高 " f"{best_score:.3f})")
+        print(f"      没有可靠匹配 " f"(最高 {best_score:.3f})")
 
         return None
 
