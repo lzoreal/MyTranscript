@@ -31,7 +31,7 @@ ZH_SUBDIR = "zh"
 # 缓存/状态文件
 CACHE_FILE = Path("translations.json")
 
-MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite")
 MAX_FILES = int(os.environ.get("MAX_FILES", "10"))
 
 # 按字符数分批，替代固定 BATCH_SIZE
