@@ -1,0 +1,94 @@
+name: Translate to Chinese & Deploy Pages
+
+on:
+  schedule:
+    # 每天北京时间凌晨 3 点运行（UTC 19:00）
+    - cron: "0 19 * * *"
+  workflow_dispatch:
+    inputs:
+      max_files:
+        description: '本次最多翻译多少个 VTT 文件'
+        required: false
+        default: '10'
+      model:
+        description: 'Gemini 模型'
+        required: false
+        default: 'gemini-2.0-flash'
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  translate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.MY_CUSTOM_PAT }}
+
+      - name: 同步到远程最新
+        run: |
+          git fetch origin
+          git checkout ${{ github.ref_name }}
+          git reset --hard origin/${{ github.ref_name }}
+
+      - name: 设置 BASE_URL
+        run: |
+          REPO_NAME=$(echo "$GITHUB_REPOSITORY" | cut -d'/' -f2)
+          echo "BASE_URL=https://${GITHUB_REPOSITORY_OWNER}.github.io/$REPO_NAME" >> $GITHUB_ENV
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装依赖
+        run: |
+          pip install google-genai
+
+      - name: 运行 Gemini 翻译
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ github.event.inputs.model || 'gemini-2.0-flash' }}
+          MAX_FILES: ${{ github.event.inputs.max_files || '10' }}
+          MAX_BATCH_CHARS: "120000"
+          RPM_LIMIT: "14"
+          DAILY_REQUEST_LIMIT: "1500"
+        run: python -u scripts/translate_vtt.py
+
+      - name: 生成中文 Feed
+        run: |
+          python scripts/generate_zh_feed.py --base-url "${BASE_URL}"
+
+      - name: 提交状态与站点文件到 Git
+        env:
+          MY_PAT: ${{ secrets.MY_CUSTOM_PAT }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add translations.json site/
+          git diff --quiet && git diff --staged --quiet || git commit -m "auto: translate to zh-CN [skip ci]"
+          git remote set-url origin https://${MY_PAT}@github.com/${GITHUB_REPOSITORY}.git
+          git push
+
+      - name: 上传 Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/
+
+  deploy:
+    needs: translate
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 部署到 GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
