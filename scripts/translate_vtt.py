@@ -24,15 +24,29 @@ SITE_DIR = Path("site")
 ZH_SUBDIR = "zh"
 CACHE_FILE = Path("translations.json")
 
+
+def _positive_int_env(name, default):
+    """Read a positive integer setting and fail early with a useful message."""
+    try:
+        value = int(os.environ.get(name, default))
+    except ValueError as error:
+        raise ValueError(f"{name} must be an integer, got {os.environ[name]!r}") from error
+    if value <= 0:
+        raise ValueError(f"{name} must be greater than zero, got {value}")
+    return value
+
+
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
-MAX_FILES = int(os.environ.get("MAX_FILES", "10"))
-MAX_BATCH_CHARS = int(os.environ.get("MAX_BATCH_CHARS", "80000"))
-MAX_BATCH_BLOCKS = int(os.environ.get("MAX_BATCH_BLOCKS", "100"))
+MAX_FILES = _positive_int_env("MAX_FILES", "10")
+MAX_BATCH_CHARS = _positive_int_env("MAX_BATCH_CHARS", "30000")
+# Batches at or below 30 cues use Gemini's structured JSON response, which is
+# substantially less prone to dropped or reordered lines than delimiter text.
+MAX_BATCH_BLOCKS = _positive_int_env("MAX_BATCH_BLOCKS", "30")
 RETRY_COUNT = 5
 RETRY_BASE = 20
-RPM_LIMIT = int(os.environ.get("RPM_LIMIT", "14"))
+RPM_LIMIT = _positive_int_env("RPM_LIMIT", "14")
 MIN_REQUEST_INTERVAL = 60.0 / RPM_LIMIT
-DAILY_REQUEST_LIMIT = int(os.environ.get("DAILY_REQUEST_LIMIT", "1500"))
+DAILY_REQUEST_LIMIT = _positive_int_env("DAILY_REQUEST_LIMIT", "1500")
 TEMPERATURE = float(os.environ.get("TEMPERATURE", "0.0"))
 USE_JSON_SCHEMA = os.environ.get("USE_JSON_SCHEMA", "true").lower() == "true"
 IN_ACTIONS = os.environ.get("GITHUB_ACTIONS") == "true"
@@ -66,18 +80,15 @@ def endgroup():
         print("::endgroup::", flush=True)
 
 
-group("Initializing Gemini")
-try:
-    client = genai.Client(
-        api_key=os.environ["GEMINI_API_KEY"],
-        http_options={"timeout": 120000}
-    )
-    log("✅ Gemini initialized")
-except Exception as e:
-    log("❌ Gemini initialization failed")
-    endgroup()
-    raise e
-endgroup()
+client = None
+
+
+def initialize_client():
+    """Create the API client only when the command is actually run."""
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY is required to translate subtitles")
+    return genai.Client(api_key=api_key, http_options={"timeout": 120000})
 
 _last_request_time = 0.0
 
@@ -98,11 +109,27 @@ class DailyLimitReached(Exception):
 
 
 class IndexMismatchError(Exception):
-    pass
+    def __init__(self, message, partial_result=None):
+        super().__init__(message)
+        self.partial_result = partial_result or {}
 
 
 class RepetitionError(Exception):
     pass
+
+
+QUOTA_ERROR_MARKERS = (
+    "resource_exhausted",
+    "quota exceeded",
+    "exceeded your current quota",
+    "billing",
+    "insufficient quota",
+    "quota limit",
+)
+
+
+def is_quota_error(error):
+    return any(marker in str(error).lower() for marker in QUOTA_ERROR_MARKERS)
 
 
 def load_podcasts():
@@ -146,9 +173,11 @@ def load_cache():
 
 def save_cache(cache):
     CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    CACHE_FILE.write_text(
+    temp_file = CACHE_FILE.with_suffix(f"{CACHE_FILE.suffix}.tmp")
+    temp_file.write_text(
         json.dumps(cache, indent=2, ensure_ascii=False), encoding="utf-8"
     )
+    temp_file.replace(CACHE_FILE)
     log("💾 Cache saved")
 
 
@@ -225,7 +254,10 @@ def parse_translation_response_text(text, expected_indices):
                 continue
             value = value.strip()
             if value:
-                result[int(idx)] = value
+                index = int(idx)
+                if index in result:
+                    return result, False, f"Duplicate translation for index {index}"
+                result[index] = value
         except Exception:
             continue
     return _validate_indices(result, expected_indices)
@@ -235,14 +267,20 @@ def parse_translation_response_json(text, expected_indices):
     result = {}
     if not text:
         return result, False, "Empty response"
+
+    class JSONObjectPairs(list):
+        pass
+
     try:
-        data = json.loads(text)
-        if not isinstance(data, dict):
+        data = json.loads(text, object_pairs_hook=JSONObjectPairs)
+        if not isinstance(data, JSONObjectPairs):
             return result, False, "JSON root is not an object"
-        for k, v in data.items():
+        for k, v in data:
             try:
                 idx = int(k)
                 if isinstance(v, str) and v.strip():
+                    if idx in result:
+                        return result, False, f"Duplicate translation for index {idx}"
                     result[idx] = v.strip()
             except (ValueError, TypeError):
                 continue
@@ -284,10 +322,7 @@ def is_retryable_error(error):
     """
     err_str = str(error).lower()
     # 配额耗尽 —— 立即停止，不重试
-    if any(kw in err_str for kw in [
-        "resource_exhausted", "quota exceeded", "exceeded your current quota",
-        "billing", "insufficient quota", "quota limit",
-    ]):
+    if is_quota_error(error):
         return False
     # 可恢复的服务端/网络错误 —— 可以重试
     retryable = [
@@ -351,7 +386,7 @@ def gemini_batch_translate(blocks, cache_meta):
 
             if not is_valid:
                 log(f"⚠️ Parse/Index error: {err_msg}")
-                raise IndexMismatchError(err_msg)
+                raise IndexMismatchError(err_msg, parsed)
 
             log(f"✅ Success {time.time() - start:.2f}s, parsed: {len(parsed)}")
             return parsed
@@ -360,12 +395,8 @@ def gemini_batch_translate(blocks, cache_meta):
             if isinstance(e, (DailyLimitReached, IndexMismatchError, RepetitionError)):
                 raise
             log(f"❌ Error: {e}")
-            err_str = str(e).lower()
             # 配额耗尽 —— 直接停止整个程序，不再重试
-            if any(kw in err_str for kw in [
-                "resource_exhausted", "quota exceeded", "exceeded your current quota",
-                "billing", "insufficient quota", "quota limit",
-            ]):
+            if is_quota_error(e):
                 log("⛔ API quota exhausted. Stopping immediately.")
                 raise DailyLimitReached(
                     f"API quota exhausted: {e}"
@@ -384,7 +415,33 @@ def safe_translate_batch(blocks, cache_meta):
         return {}
     try:
         return gemini_batch_translate(blocks, cache_meta)
-    except (IndexMismatchError, RepetitionError) as e:
+    except IndexMismatchError as e:
+        expected_indices = {idx for idx, _ in blocks}
+        partial_result = {
+            idx: value for idx, value in e.partial_result.items()
+            if idx in expected_indices
+        }
+        missing_blocks = [block for block in blocks if block[0] not in partial_result]
+
+        # A truncated response often contains a valid prefix. Preserve that
+        # work and ask only for the missing cues instead of retranslating a
+        # much larger split batch.
+        if partial_result and missing_blocks and len(partial_result) == len(e.partial_result):
+            log(
+                f"   Incomplete batch: preserving {len(partial_result)} cues and "
+                f"retrying only {len(missing_blocks)} missing cues"
+            )
+            recovered = safe_translate_batch(missing_blocks, cache_meta)
+            return {**partial_result, **recovered}
+
+        if len(blocks) == 1:
+            raise
+        log(f"   Invalid batch ({len(blocks)} cues), splitting for recovery: {e}")
+        mid = len(blocks) // 2
+        left = safe_translate_batch(blocks[:mid], cache_meta)
+        right = safe_translate_batch(blocks[mid:], cache_meta)
+        return {**left, **right}
+    except RepetitionError as e:
         if len(blocks) == 1:
             log(f"   ❌ Single block #{blocks[0][0]} failed: {e}")
             raise
@@ -585,6 +642,14 @@ def translate_episode(source, target, cache_meta):
 
 
 def main():
+    global client
+    group("Initializing Gemini")
+    try:
+        client = initialize_client()
+        log("Gemini initialized")
+    finally:
+        endgroup()
+
     separator()
     log("🚀 Translate VTT started")
     separator()
