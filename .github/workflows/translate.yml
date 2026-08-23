@@ -53,17 +53,26 @@ jobs:
           pip install google-genai
 
       - name: 运行 Gemini 翻译
+        id: translate
+        # A few episodes may exhaust retries while the rest complete.  Let the
+        # workflow publish the successful output and cache before reporting it.
+        continue-on-error: true
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ github.event.inputs.model || 'gemini-3.1-flash-lite' }}
           MAX_FILES: ${{ github.event.inputs.max_files || '10' }}
-          # Keep responses comfortably below the model output limit.  At 30
-          # cues the script uses a validated JSON response schema.
+          # Bound prompt size; the script validates every returned cue and
+          # retries only missing cues when a long response is incomplete.
           MAX_BATCH_CHARS: "30000"
-          MAX_BATCH_BLOCKS: "30"
+          MAX_BATCH_BLOCKS: "100"
           RPM_LIMIT: "14"
           DAILY_REQUEST_LIMIT: "1500"
         run: python -u scripts/translate_vtt.py
+
+      - name: 记录未完成的翻译
+        if: steps.translate.outcome == 'failure'
+        run: |
+          echo "::warning::Some episodes failed after retries. Successful translations will still be published; rerun the workflow to retry the failed episodes."
 
       - name: 生成中文 Feed
         run: |
