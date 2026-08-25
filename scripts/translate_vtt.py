@@ -46,7 +46,7 @@ RETRY_COUNT = 5
 RETRY_BASE = 20
 # A 504 generally reflects temporary service-side pressure. Pause requests
 # before retrying instead of repeatedly splitting and resubmitting the content.
-DEADLINE_COOLDOWN_SECONDS = _positive_int_env("DEADLINE_COOLDOWN_SECONDS", "300")
+DEADLINE_COOLDOWN_SECONDS = _positive_int_env("DEADLINE_COOLDOWN_SECONDS", "2")
 RPM_LIMIT = _positive_int_env("RPM_LIMIT", "14")
 MIN_REQUEST_INTERVAL = 60.0 / RPM_LIMIT
 DAILY_REQUEST_LIMIT = _positive_int_env("DAILY_REQUEST_LIMIT", "1500")
@@ -444,16 +444,15 @@ def safe_translate_batch(blocks, cache_meta):
         }
         missing_blocks = [block for block in blocks if block[0] not in partial_result]
 
-        # A truncated response often contains a valid prefix. Preserve that
-        # work and ask only for the missing cues instead of retranslating a
-        # much larger split batch.
+        # A truncated response often contains a valid prefix. Preserve it and
+        # defer missing-cue recovery until every initial batch in the episode
+        # has finished, so the missing cues can be retried together.
         if partial_result and missing_blocks and len(partial_result) == len(e.partial_result):
             log(
                 f"   Incomplete batch: preserving {len(partial_result)} cues and "
-                f"retrying only {len(missing_blocks)} missing cues"
+                f"deferring {len(missing_blocks)} missing cues for episode recovery"
             )
-            recovered = safe_translate_batch(missing_blocks, cache_meta)
-            return {**partial_result, **recovered}
+            return partial_result
 
         if len(blocks) == 1:
             raise
