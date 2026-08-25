@@ -44,6 +44,9 @@ MAX_BATCH_CHARS = _positive_int_env("MAX_BATCH_CHARS", "30000")
 MAX_BATCH_BLOCKS = _positive_int_env("MAX_BATCH_BLOCKS", "30")
 RETRY_COUNT = 5
 RETRY_BASE = 20
+# A large request that times out is unlikely to succeed unchanged. Retry it
+# once for transient service congestion, then split it into smaller requests.
+DEADLINE_MAX_ATTEMPTS = _positive_int_env("DEADLINE_MAX_ATTEMPTS", "2")
 RPM_LIMIT = _positive_int_env("RPM_LIMIT", "14")
 MIN_REQUEST_INTERVAL = 60.0 / RPM_LIMIT
 DAILY_REQUEST_LIMIT = _positive_int_env("DAILY_REQUEST_LIMIT", "1500")
@@ -118,6 +121,10 @@ class RepetitionError(Exception):
     pass
 
 
+class BatchDeadlineExceeded(Exception):
+    """A multi-cue request timed out and should be split before retrying."""
+
+
 QUOTA_ERROR_MARKERS = (
     "resource_exhausted",
     "quota exceeded",
@@ -130,6 +137,13 @@ QUOTA_ERROR_MARKERS = (
 
 def is_quota_error(error):
     return any(marker in str(error).lower() for marker in QUOTA_ERROR_MARKERS)
+
+
+def is_deadline_exceeded(error):
+    error_text = str(error).lower()
+    return "deadline_exceeded" in error_text or (
+        "504" in error_text and "deadline" in error_text
+    )
 
 
 def load_podcasts():
@@ -401,6 +415,14 @@ def gemini_batch_translate(blocks, cache_meta):
                 raise DailyLimitReached(
                     f"API quota exhausted: {e}"
                 )
+            if (
+                len(blocks) > 1
+                and is_deadline_exceeded(e)
+                and attempt >= DEADLINE_MAX_ATTEMPTS
+            ):
+                raise BatchDeadlineExceeded(
+                    f"Timed out after {attempt} attempt(s): {e}"
+                ) from e
             if not is_retryable_error(e) or attempt >= RETRY_COUNT:
                 raise
             wait = RETRY_BASE * (2 ** (attempt - 1)) + random.uniform(0, 5)
@@ -415,6 +437,15 @@ def safe_translate_batch(blocks, cache_meta):
         return {}
     try:
         return gemini_batch_translate(blocks, cache_meta)
+    except BatchDeadlineExceeded as e:
+        mid = len(blocks) // 2
+        log(
+            f"   Batch of {len(blocks)} cues timed out; splitting into "
+            f"{mid} and {len(blocks) - mid} cues"
+        )
+        left = safe_translate_batch(blocks[:mid], cache_meta)
+        right = safe_translate_batch(blocks[mid:], cache_meta)
+        return {**left, **right}
     except IndexMismatchError as e:
         expected_indices = {idx for idx, _ in blocks}
         partial_result = {
@@ -660,6 +691,7 @@ def main():
     log(f"Max files: {MAX_FILES}")
     log(f"Max batch chars: {MAX_BATCH_CHARS}")
     log(f"Max batch blocks: {MAX_BATCH_BLOCKS}")
+    log(f"Deadline attempts before splitting: {DEADLINE_MAX_ATTEMPTS}")
     log(f"RPM limit: {RPM_LIMIT} (interval: {MIN_REQUEST_INTERVAL:.2f}s)")
     log(f"Daily request limit: {DAILY_REQUEST_LIMIT}")
 
