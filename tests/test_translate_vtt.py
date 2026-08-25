@@ -66,25 +66,15 @@ class TranslationResponseTests(unittest.TestCase):
         self.assertEqual(result, {0: "甲", 1: "乙", 2: "丙"})
         self.assertEqual(batches, [blocks, [blocks[2]]])
 
-    def test_timed_out_batch_is_split_before_more_retries(self):
-        batches = []
-
-        def translate(batch, _cache_meta):
-            batches.append(batch)
-            if len(batch) == 4:
-                raise translator.BatchDeadlineExceeded("request timed out")
-            return {index: f"译文 {index}" for index, _ in batch}
-
-        blocks = [(0, "one"), (1, "two"), (2, "three"), (3, "four")]
-        with patch.object(translator, "gemini_batch_translate", side_effect=translate):
-            result = translator.safe_translate_batch(blocks, {})
-
-        self.assertEqual(result, {0: "译文 0", 1: "译文 1", 2: "译文 2", 3: "译文 3"})
-        self.assertEqual(batches, [blocks, blocks[:2], blocks[2:]])
-
     def test_detects_deadline_exceeded_error(self):
         self.assertTrue(translator.is_deadline_exceeded("504 DEADLINE_EXCEEDED"))
         self.assertFalse(translator.is_deadline_exceeded("429 RESOURCE_EXHAUSTED"))
+
+    def test_deadline_cooldown_waits_without_splitting_batches(self):
+        with patch.object(translator.time, "sleep") as sleep:
+            translator.cooldown_after_deadline()
+
+        sleep.assert_called_once_with(translator.DEADLINE_COOLDOWN_SECONDS)
 
 
 class VttParsingTests(unittest.TestCase):

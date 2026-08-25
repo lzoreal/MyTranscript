@@ -44,9 +44,9 @@ MAX_BATCH_CHARS = _positive_int_env("MAX_BATCH_CHARS", "30000")
 MAX_BATCH_BLOCKS = _positive_int_env("MAX_BATCH_BLOCKS", "30")
 RETRY_COUNT = 5
 RETRY_BASE = 20
-# A large request that times out is unlikely to succeed unchanged. Retry it
-# once for transient service congestion, then split it into smaller requests.
-DEADLINE_MAX_ATTEMPTS = _positive_int_env("DEADLINE_MAX_ATTEMPTS", "2")
+# A 504 generally reflects temporary service-side pressure. Pause requests
+# before retrying instead of repeatedly splitting and resubmitting the content.
+DEADLINE_COOLDOWN_SECONDS = _positive_int_env("DEADLINE_COOLDOWN_SECONDS", "300")
 RPM_LIMIT = _positive_int_env("RPM_LIMIT", "14")
 MIN_REQUEST_INTERVAL = 60.0 / RPM_LIMIT
 DAILY_REQUEST_LIMIT = _positive_int_env("DAILY_REQUEST_LIMIT", "1500")
@@ -121,10 +121,6 @@ class RepetitionError(Exception):
     pass
 
 
-class BatchDeadlineExceeded(Exception):
-    """A multi-cue request timed out and should be split before retrying."""
-
-
 QUOTA_ERROR_MARKERS = (
     "resource_exhausted",
     "quota exceeded",
@@ -144,6 +140,14 @@ def is_deadline_exceeded(error):
     return "deadline_exceeded" in error_text or (
         "504" in error_text and "deadline" in error_text
     )
+
+
+def cooldown_after_deadline():
+    log(
+        f"⏸️ Deadline exceeded; cooling down for {DEADLINE_COOLDOWN_SECONDS}s "
+        "before the next retry"
+    )
+    time.sleep(DEADLINE_COOLDOWN_SECONDS)
 
 
 def load_podcasts():
@@ -415,16 +419,11 @@ def gemini_batch_translate(blocks, cache_meta):
                 raise DailyLimitReached(
                     f"API quota exhausted: {e}"
                 )
-            if (
-                len(blocks) > 1
-                and is_deadline_exceeded(e)
-                and attempt >= DEADLINE_MAX_ATTEMPTS
-            ):
-                raise BatchDeadlineExceeded(
-                    f"Timed out after {attempt} attempt(s): {e}"
-                ) from e
             if not is_retryable_error(e) or attempt >= RETRY_COUNT:
                 raise
+            if is_deadline_exceeded(e):
+                cooldown_after_deadline()
+                continue
             wait = RETRY_BASE * (2 ** (attempt - 1)) + random.uniform(0, 5)
             log(f"⏳ Retryable, waiting {wait:.1f}s...")
             time.sleep(wait)
@@ -437,15 +436,6 @@ def safe_translate_batch(blocks, cache_meta):
         return {}
     try:
         return gemini_batch_translate(blocks, cache_meta)
-    except BatchDeadlineExceeded as e:
-        mid = len(blocks) // 2
-        log(
-            f"   Batch of {len(blocks)} cues timed out; splitting into "
-            f"{mid} and {len(blocks) - mid} cues"
-        )
-        left = safe_translate_batch(blocks[:mid], cache_meta)
-        right = safe_translate_batch(blocks[mid:], cache_meta)
-        return {**left, **right}
     except IndexMismatchError as e:
         expected_indices = {idx for idx, _ in blocks}
         partial_result = {
@@ -691,7 +681,7 @@ def main():
     log(f"Max files: {MAX_FILES}")
     log(f"Max batch chars: {MAX_BATCH_CHARS}")
     log(f"Max batch blocks: {MAX_BATCH_BLOCKS}")
-    log(f"Deadline attempts before splitting: {DEADLINE_MAX_ATTEMPTS}")
+    log(f"Deadline cooldown: {DEADLINE_COOLDOWN_SECONDS}s")
     log(f"RPM limit: {RPM_LIMIT} (interval: {MIN_REQUEST_INTERVAL:.2f}s)")
     log(f"Daily request limit: {DAILY_REQUEST_LIMIT}")
 
@@ -714,6 +704,20 @@ def main():
         meta["date"] = today
         meta["daily_requests"] = 0
         log("🌅 New day, daily counter reset")
+
+    episode_positions = {}
+    for podcast in podcasts:
+        slug = podcast.get("slug")
+        input_dir = SITE_DIR / slug / "transcripts" if slug else None
+        if input_dir and input_dir.exists():
+            files = sorted(
+                input_dir.glob("*.vtt"),
+                key=lambda path: int(path.stem) if path.stem.isdigit() else path.stem,
+            )
+            for source in files:
+                episode_positions[source] = len(episode_positions) + 1
+    total_episodes = len(episode_positions)
+    log(f"Total VTT episodes: {total_episodes}")
 
     processed_total = 0
     errors = []
@@ -743,11 +747,15 @@ def main():
             podcast_cache = cache.setdefault(slug, {})
             processed_podcast = 0
 
-            for source in files:
+            for episode_position, source in enumerate(files, start=1):
                 episode = source.stem
 
                 separator()
-                log(f"Processing episode {episode}")
+                log(
+                    f"Processing episode {episode} "
+                    f"(podcast {episode_position}/{len(files)}, "
+                    f"overall {episode_positions[source]}/{total_episodes})"
+                )
 
                 sha = file_hash(source)
                 old = podcast_cache.get(episode)
