@@ -30,7 +30,9 @@ def _positive_int_env(name, default):
     try:
         value = int(os.environ.get(name, default))
     except ValueError as error:
-        raise ValueError(f"{name} must be an integer, got {os.environ[name]!r}") from error
+        raise ValueError(
+            f"{name} must be an integer, got {os.environ[name]!r}"
+        ) from error
     if value <= 0:
         raise ValueError(f"{name} must be greater than zero, got {value}")
     return value
@@ -92,6 +94,7 @@ def initialize_client():
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY is required to translate subtitles")
     return genai.Client(api_key=api_key, http_options={"timeout": 120000})
+
 
 _last_request_time = 0.0
 
@@ -344,10 +347,21 @@ def is_retryable_error(error):
         return False
     # 可恢复的服务端/网络错误 —— 可以重试
     retryable = [
-        "too many requests", "rate limit",
-        "503", "service unavailable", "500", "internal server error",
-        "502", "504", "gateway", "timeout", "timed out", "deadline",
-        "connection", "network", "unreachable",
+        "too many requests",
+        "rate limit",
+        "503",
+        "service unavailable",
+        "500",
+        "internal server error",
+        "502",
+        "504",
+        "gateway",
+        "timeout",
+        "timed out",
+        "deadline",
+        "connection",
+        "network",
+        "unreachable",
     ]
     return any(kw in err_str for kw in retryable)
 
@@ -388,7 +402,9 @@ def gemini_batch_translate(blocks, cache_meta):
                     ),
                 )
                 raw = response.text or ""
-                parsed, is_valid, err_msg = parse_translation_response_json(raw, expected_indices)
+                parsed, is_valid, err_msg = parse_translation_response_json(
+                    raw, expected_indices
+                )
             else:
                 prompt = build_prompt_text(blocks)
                 response = client.models.generate_content(
@@ -399,8 +415,12 @@ def gemini_batch_translate(blocks, cache_meta):
                 raw = response.text or ""
                 if detect_repetition(raw):
                     log(f"⚠️ Repetition detected in response")
-                    raise RepetitionError("Model output appears to be in a repetition loop")
-                parsed, is_valid, err_msg = parse_translation_response_text(raw, expected_indices)
+                    raise RepetitionError(
+                        "Model output appears to be in a repetition loop"
+                    )
+                parsed, is_valid, err_msg = parse_translation_response_text(
+                    raw, expected_indices
+                )
 
             if not is_valid:
                 log(f"⚠️ Parse/Index error: {err_msg}")
@@ -416,9 +436,7 @@ def gemini_batch_translate(blocks, cache_meta):
             # 配额耗尽 —— 直接停止整个程序，不再重试
             if is_quota_error(e):
                 log("⛔ API quota exhausted. Stopping immediately.")
-                raise DailyLimitReached(
-                    f"API quota exhausted: {e}"
-                )
+                raise DailyLimitReached(f"API quota exhausted: {e}")
             if not is_retryable_error(e) or attempt >= RETRY_COUNT:
                 raise
             if is_deadline_exceeded(e):
@@ -439,7 +457,8 @@ def safe_translate_batch(blocks, cache_meta):
     except IndexMismatchError as e:
         expected_indices = {idx for idx, _ in blocks}
         partial_result = {
-            idx: value for idx, value in e.partial_result.items()
+            idx: value
+            for idx, value in e.partial_result.items()
             if idx in expected_indices
         }
         missing_blocks = [block for block in blocks if block[0] not in partial_result]
@@ -447,7 +466,11 @@ def safe_translate_batch(blocks, cache_meta):
         # A truncated response often contains a valid prefix. Preserve it and
         # defer missing-cue recovery until every initial batch in the episode
         # has finished, so the missing cues can be retried together.
-        if partial_result and missing_blocks and len(partial_result) == len(e.partial_result):
+        if (
+            partial_result
+            and missing_blocks
+            and len(partial_result) == len(e.partial_result)
+        ):
             log(
                 f"   Incomplete batch: preserving {len(partial_result)} cues and "
                 f"deferring {len(missing_blocks)} missing cues for episode recovery"
@@ -594,31 +617,53 @@ def chunk_cues_by_chars(cues, max_chars=MAX_BATCH_CHARS, max_blocks=MAX_BATCH_BL
     return batches
 
 
-def translate_episode(source, target, cache_meta):
+def chunk_blocks(blocks, max_blocks=MAX_BATCH_BLOCKS):
+    """将扁平的 block 列表按 max_blocks 切分成多个 batch"""
+    batches = []
+    current = []
+    for block in blocks:
+        if current and len(current) >= max_blocks:
+            batches.append(current)
+            current = [block]
+        else:
+            current.append(block)
+    if current:
+        batches.append(current)
+    return batches
+
+
+def translate_episode(source, target, cache_meta, current=None, total=None):
+    # 构建进度前缀
+    progress_prefix = f"[{current}/{total}] " if current and total else ""
+
     separator()
-    log(f"📄 Translating {source.name}")
+    log(f"{progress_prefix}📄 Translating {source.name}")
     separator()
 
     content = source.read_text(encoding="utf-8")
     cues = parse_vtt_cues(content)
 
-    log(f"Cue blocks: {len(cues)}")
+    log(f"{progress_prefix}Cue blocks: {len(cues)}")
     if not cues:
-        log("⚠️ No cues found, skipping")
+        log(f"{progress_prefix}⚠️ No cues found, skipping")
         return
 
     translated = {}
 
     batches = chunk_cues_by_chars(cues)
-    log(f"Batches: {len(batches)} (max {MAX_BATCH_CHARS} chars, {MAX_BATCH_BLOCKS} blocks)")
+    log(
+        f"{progress_prefix}Batches: {len(batches)} (max {MAX_BATCH_CHARS} chars, {MAX_BATCH_BLOCKS} blocks)"
+    )
 
     for batch_idx, batch in enumerate(batches, 1):
-        group(f"Batch {batch_idx}/{len(batches)} ({batch[0][0]}-{batch[-1][0]})")
+        group(
+            f"{progress_prefix}Batch {batch_idx}/{len(batches)} ({batch[0][0]}-{batch[-1][0]})"
+        )
         try:
             result = safe_translate_batch(batch, cache_meta)
         except Exception as e:
             endgroup()
-            log(f"❌ Batch {batch_idx} failed after all retries: {e}")
+            log(f"{progress_prefix}❌ Batch {batch_idx} failed after all retries: {e}")
             raise
         endgroup()
         for idx, value in result.items():
@@ -626,20 +671,34 @@ def translate_episode(source, target, cache_meta):
 
     missing = [i for i in range(len(cues)) if i not in translated]
     if missing:
-        log(f"⚠️ Missing {len(missing)} blocks, doing individual retry...")
-        for idx in missing:
-            single = [(idx, prepare_gemini_text(cues[idx]["text"]))]
+        # 聚合缺失 cues，按更小的 batch size 重试，避免逐个单发
+        missing_blocks = [
+            (idx, prepare_gemini_text(cues[idx]["text"])) for idx in missing
+        ]
+        retry_batches = chunk_blocks(
+            missing_blocks, max_blocks=min(MAX_BATCH_BLOCKS, 30)
+        )
+        log(
+            f"{progress_prefix}⚠️ Missing {len(missing)} blocks, retrying in {len(retry_batches)} batch(es)..."
+        )
+
+        for batch_idx, batch in enumerate(retry_batches, 1):
+            log(
+                f"{progress_prefix}   Retry batch {batch_idx}/{len(retry_batches)} ({len(batch)} blocks)"
+            )
             try:
-                result = safe_translate_batch(single, cache_meta)
-                if idx in result:
-                    translated[idx] = result[idx]
+                result = safe_translate_batch(batch, cache_meta)
+                for idx, value in result.items():
+                    translated[idx] = value
             except Exception as e:
-                log(f"   Block {idx} failed: {e}")
+                log(f"{progress_prefix}   Retry batch {batch_idx} failed: {e}")
 
         still_missing = [i for i in range(len(cues)) if i not in translated]
         if still_missing:
             for i in still_missing[:10]:
-                log(f"Still missing block {i}: {cues[i]['text'][:60]}...")
+                log(
+                    f"{progress_prefix}Still missing block {i}: {cues[i]['text'][:60]}..."
+                )
             raise RuntimeError(
                 f"Translation incomplete: {len(still_missing)} blocks still missing"
             )
@@ -658,7 +717,7 @@ def translate_episode(source, target, cache_meta):
     temp = target.with_suffix(".tmp")
     temp.write_text("\n".join(output), encoding="utf-8")
     temp.replace(target)
-    log(f"✅ Saved: {target}")
+    log(f"{progress_prefix}✅ Saved: {target}")
 
 
 def main():
@@ -780,7 +839,14 @@ def main():
 
                 try:
                     group(f"Episode {episode} ({slug})")
-                    translate_episode(source, target, meta)
+                    # 传入当前集数和总集数
+                    translate_episode(
+                        source,
+                        target,
+                        meta,
+                        current=episode_positions[source],
+                        total=total_episodes,
+                    )
                     endgroup()
 
                     podcast_cache[episode] = {
@@ -804,7 +870,9 @@ def main():
                     errors.append((slug, episode, str(e)))
                     continue
 
-            log(f"✅ Podcast {slug}: {processed_podcast} episode(s) translated this run")
+            log(
+                f"✅ Podcast {slug}: {processed_podcast} episode(s) translated this run"
+            )
 
             if processed_total >= MAX_FILES or stopped_by_limit:
                 break
