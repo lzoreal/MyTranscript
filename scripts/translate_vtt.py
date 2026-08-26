@@ -844,8 +844,8 @@ def main():
                         source,
                         target,
                         meta,
-                        current=episode_positions[source],
-                        total=total_episodes,
+                        current=processed_total + 1,   # 当前是本次任务第几集
+                        total=MAX_FILES                 # 本次任务总共要处理几集
                     )
                     endgroup()
 
