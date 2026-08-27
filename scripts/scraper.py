@@ -803,11 +803,11 @@ def build_search_variants(title):
     if ":" in original:
         before, after = original.split(":", 1)
 
-    before = before.strip()
-    after = after.strip()
+        before = before.strip()
+        after = after.strip()
 
-    add_variant(before)
-    add_variant(after)
+        add_variant(before)
+        add_variant(after)
 
     return variants
 
