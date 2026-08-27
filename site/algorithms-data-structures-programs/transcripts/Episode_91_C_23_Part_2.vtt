@@ -1,0 +1,221 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:59.000
+I show in that talk how my favorite algorithm, outer product, is basically just a composition of Cartesian product and chunk, the view that we just mentioned. Welcome to ADSP, the podcast, episode 91, recorded on August 9th, 2022. My name is Connor and today with my co-host Bryce, we continue part two of our two-part conversation on what to look forward to in C++23. But we'll start with zip. So I'm trying to get back to them. So zip is the first time I came across zip was in Python. And what Zip does is it takes two equal length sequences or ranges and combines them so that you get a single sequence of tuples. You can actually take an arbitrary number of sequences.
+
+2
+00:00:59.000 --> 00:01:46.000
+The most common, I think, is two of them, but you can take an arbitrary number. If you want to take five, it'll return you a five tuple back, a sequence of five tuples. So very nice. Zip transform is more commonly known as just map in other languages. In Haskell, it's known as zip with. We called it transform because in C++, we use transform as our mapping algorithm name and it basically takes an arbitrary number of equal length sequences and then a function that has the arity equal to the number of sequences you take so the simplest example is you take two sequences and a binary function so for example two sequences and the std colon colon plus or a
+
+3
+00:01:46.000 --> 00:02:31.000
+lambda that adds two numbers together. It can be any binary function. Binary here meaning a function that takes two arguments. You know, it doesn't actually need to be a function. It can be something else. Just as long as it's invocable or callable. And it returns you a single sequence and instead of tupling up those elements element-wise, it basically applies the binary function or the n-ary function to your n sequences. And so you end up with a sequence of whatever the return object of that binary function is. So technically you can think of zip as a specialization of zip transform where the n-ary function is makeple uh is a kind of easy way to think about that how about the chunk algorithms uh first let's do adjacent and adjacent transform because they're
+
+4
+00:02:31.000 --> 00:03:12.000
+next to zip so adjacent is basically a function that is a not i don't think specialization it's definitely not a specialization of zip and zip transform but they're sort of like uh sibling algorithms it takes two adjacent elements and tuples them together uh so you can think of this as similar to adjacent difference or adjacent find both of those algorithms are looking at adjacent elements this is basically just uh making tuples out of them adjacent transform is the exact same idea it's a a stenciling operator. It gives you sort of a stencil. Correct, yes. In a lot of the mathematical or HPC world, this is known as either tiling or stenciling.
+
+5
+00:03:12.000 --> 00:03:33.000
+What if I wanted three adjacent elements? Can I do that with the adjacent view? Yes. So actually, in the example, and it's actually sad that I don't know this off the top of my head. I think we ended up calling. So adjacent actually doesn't just look at two. You specify the number of elements you want to look at.
+
+6
+00:03:33.000 --> 00:04:15.000
+And we have a specialization for the one that takes two. And it looks like we called it pairwise. Let me just confirm that because that kind of makes me sad. It's not on CPP reference yet. Yeah, I was going to say it's not on the cpp reference compiler support page but sai has an example that says stood colon colon views colon colon pairwise i'm wonder if this compiles is there is there gobble links in here there's not gobble links in here is there a gobble link at the bottom although potentially cy works at microsoft correct right so cy might be using an internal version of msvc that has this stuff implemented because msvc is leading the
+
+7
+00:04:15.000 --> 00:05:06.000
+charge on implementing these so i think yeah i will come back and edit this as if i'm incorrect but yeah pairwise i think is the specialization that takes two at a time. And the transform version of adjacent. So adjacent transform does the same thing as zip transform, it takes an elements and an an arity, invocable or callable thing, and then applies that to the elements. And I'll speed up here, chunk, and chunk by so chunk takes a range or a sequence and integer value and basically creates a range of ranges where each of those ranges takes n elements at a time. So for instance, if you have an iota sequence of 1 to 10 and you go chunk 5, it'll give you a range of two ranges from 1 to 5 and 6 to 10. And chunk by is actually a little bit difficult to explain. It's very easy to show
+
+8
+00:05:06.000 --> 00:05:47.000
+though. It basically does the same kind of chunking behavior. So these are what are known as anamorphic algorithms. You start with a sequence and then you end up with a sequence of sequences or something like that. And chunk by basically takes a binary operation, an invocable thing that takes two arguments, and creates a new sequence. Anytime the binary operation, technically it's a binary predicate. So it returns true or false, uh, turns, um, returns false. So the easiest example, or one of the easiest examples is if you go one, one, one, two, two, two, three, three, three, and you call chunk by on that sequence with a stood colon colon equal to binary operation. That'll then give you a range
+
+9
+00:05:47.000 --> 00:06:22.000
+of three ranges where the sub ranges are equal to one, one, one in the first one, two to two in the second one and three through three in the third one. Or I think perhaps a more intuitive one is if you have a function that tells you when you're at the end of a word and then you run it over a string, it will give you all of the words in the string. Right, and what would the binary operation for that be? So that's a little bit tricky, because I was like, you could use the one where you just check whether the left character is not in white space,
+
+10
+00:06:22.000 --> 00:06:56.000
+the right character is white space, but then you wouldn't actually get the words, because you would then get, like the first word would just be the word, but then the second word would have the whitespace before it. And also that doesn't handle things like punctuation. But I just sort of meant like intuitively, if you have like a very simple string. I want you to spell it out. Character by character, Bryce. I'm just kidding. I mean, if you really wanted to get just the words, what you could do is you could do that simple function of like, is the left character non-whitespace?
+
+11
+00:06:56.000 --> 00:07:40.000
+Is the right character whitespace? And then the results of that adjacent, you could pipe into a trim that goes through each one of the sub-sequences and trims out the white space characters. And then you would get a range that is a range of the range of words in your stream. Yeah. And these algorithms are super common in sort of functional languages. So I believe Haskell calls chunk by group by. And the specialization that uses the binary operation, where it's equal to stood colon, colon equal to or lambda, that's just checking if two things are equal is called group.
+
+12
+00:07:40.000 --> 00:08:30.000
+But a variety of language, I know D calls this chunk by that's actually where we got the name from it. We got the name from we borrowed it from the D language, although there's a couple other languages that also call it this. And I think actually I gave, I actually don't know if it was covered in that talk. I gave a CPPCon lightning talk at some point called chunk, slide and stride, I believe. And it was sort of talking about these views and how they're very similar to each other. Slide is another one that basically you can think of as a chunk, but instead of stepping by the number, the size of your chunk, you're stepping by one. So chunk, if you specify in the example where I did one to 10 and you chunk by five and you end up with two chunks, that is basically chunking by five and then stepping your start of your next chunk by five. But slide only steps by one. So if you did
+
+13
+00:08:30.000 --> 00:08:56.000
+one to 10, chunk five, you'd get one to five, two to six, three to seven, et cetera, until you got to the end. And so slide is, I think of in another way, is sort of a stenciling operation. Yep. Yeah. Actually, what is the relation between slide and adjacent? I want to say adjacent has a compile time, a compile time slice length or window length,
+
+14
+00:08:56.000 --> 00:09:17.000
+whereas slide is runtime. I could actually be wrong about that. I mean, Barry Revzin is the one that did all the heavy lifting on this stuff, and I recall initially asking the exact same question. I i was like why do we need two different versions of these and then the response was well you know a lot of the times you actually know the stencil or window length at compile time and that leads to a completely different performance
+
+15
+00:09:17.000 --> 00:09:44.000
+profile and algorithm implementation so um yeah it's a great question that i think about it if it's if it's if you know it at compile time, you can just pass a tuple or a pair. Right. Whereas if it's at runtime, then you have to pass a range, and then you have to iterate through the range. Right, and I think that's the key difference as well. Like adjacent returns you back a tuple, whereas slide.
+
+16
+00:09:44.000 --> 00:10:21.000
+So adjacent returns you back a range of tuples, whereas slide returns you having a range in your range is going to affect very significantly what the next pipeable thing you do can do. Because if you want to get the last element or the first element, having a tuple or a range is obviously, it's going to be less or more ergonomic depending on what you're doing.
+
+17
+00:10:21.000 --> 00:10:51.000
+Yeah. So one of the other range views, which was a paper that Sai originally wrote, but then some folks at NVIDIA, in particular my colleague Mihao, finished and got into C++23, is the Cartesian product view, which is a range adapter that takes multiple input ranges. And it produces a range of all of the ordered tuples formed by taking an element from each one of the inputs.
+
+18
+00:10:51.000 --> 00:11:38.000
+So this one is near and dear to my heart because it's very useful for constructing ranges that iterate through a multidimensional index space. So like if you take a Cartesian product of two iota views, an iota view from 0 to n and an iota view from 0 to m, that Cartesian product of those two views will give you back a range of two element tuples from 0, 0 to n minus 1, m minus 1. Yep, it's very nice. Cartesian product is awesome to have. And if you watch the talk that I mentioned
+
+19
+00:11:38.000 --> 00:12:34.000
+in the last episode or two episodes ago that I said was live streaming in 27 minutes, I show in that talk how my favorite algorithm, outer product, is basically just a composition of Cartesian product and chunk, the view that we just mentioned. Because our outer product is basically just a structured Cartesian product that if you're given two sequences with length n and m, it'll create basically a matrix or a range of ranges with lengths n and m. It'll create basically a matrix or a range of ranges with lengths n and m. And so you can basically just call Cartesian product, then views transform and std apply whatever binary operation you want to that sequence. And then you just call chunk with the either n or m and you're good to go, which is very, very nice. Maybe we'll get other products probably not there's three other i think um or two other views worth mentioning um stride and repeat stride kind of completes the set of chunk
+
+20
+00:12:34.000 --> 00:13:24.000
+and slide where chunk is windowing size of n step size of n slide is windowing size of n step size of n. Slide is windowing size of n, step size of one. And stride is windowing size of one, step size of n. In other words, in some languages, this is called every nth. So if you specify stride of four, it just looks at every fourth element, which can be very useful if you're trying to skip over certain things. And repeat, I don't think need to sort of say what that is. You should explain it. Okay, well, actually, repeat was not one. I wonder if repeat and cycle, let's look at the paper. Because so there's two possible things that I actually don't know which one this does.
+
+21
+00:13:24.000 --> 00:14:11.000
+Does it repeat infinitely? Or do you specify that you want to repeat something n number of times because if you have cycle repeating infinitely is basically just a special case of cycle where you only have one element cycle is um a view where if you have the elements one two three four five and you want to repeat that sequence infinitely views repeat will repeat it either infinitely or a specified number of times but do you know why repeat is in c++ 23 i mean you me how wrote the proposal Right, but you are actually responsible for it. Oh, is it because of that one problem that we were solving where you had to normalize a list of numbers?
+
+22
+00:14:11.000 --> 00:14:36.000
+And then you were like, what's the way to do it? And I was like, oh, well, you just do this with a fork and APL. I think literally we solved this live on one of our episodes. So the problem was how do you do a – like you want to normalize a vector. So you want to go and find the smallest element of a vector. So like a min element. And then you want to divide every element of the vector
+
+23
+00:14:36.000 --> 00:15:16.000
+by that minimum element. And I like this example because it's an example of a problem that doesn't neatly fit into the piping syntax because you've got an input sequence to that min element and then the min element produces you know a scalar value and then you want to feed the input sequence and that scalar value into the next thing in your pipeline, the transform. And so I often use this as an example of where the piping syntax breaks down, because you're not just passing the same single input sequence
+
+24
+00:15:16.000 --> 00:16:18.000
+between stages of the pipeline. And I showed this to Connor, and Connor was like, oh, well, you should just be using repeat here. And I don't remember the exact details of it as once you've calculated the minimum, instead of capturing that minimum in a lambda and then calling a views transform over your initial sequence and then basically dividing each of those elements by the minimum, you could alternatively do zip transform where your two sequences or ranges are your initial range and then views repeat of the minimum and then you your binary operation is uh divide and that falls out of a sort of apl array language solution where you'd solve this with a monadic fork or what's known as
+
+25
+00:16:18.000 --> 00:17:17.000
+a phi combinator and commentary logic so connor showed me this and i I was like, huh. And then I took a little bit more of a look at repeat, and I was like, you know, we have all these fancy iterators in the thrust library, which is our parallel algorithms library that inspired the C++17 parallel algorithms, but also predates them and predates ranges. And so it had to introduce some of its own fancy iterators. And do you know which fancy iterator and thrust repeat corresponds to you're asking this question and literally uh one second before i stopped talking i was like oh i should also mention that but then you started talking i was like i'll wait for bryce to finish but like so the next thing i was going to say was that this also corresponds to if you use the boost fancy iterators thrust the constant iterator yes and so i saw that and i was like huh and i looked through the rest of the thrust fancy iterators and i'm like well we have we have views transform we have zip it seems like the only one that's
+
+26
+00:17:17.000 --> 00:18:06.000
+missing is iota as well yeah views iota as. It seems like the only thrust fancy iterator that does not have a corresponding counterpart in ranges is repeat. And so after that, I was like, well, that's interesting because we have a lot of thrust users that are asking me, how do I useFancy iterators with the C++ parallel algorithms? And I tell them, well, you could just include them and use them. But I was like, well, what if they didn't need to? What if I could just tell them to use C++20 ranges? Because we now have range views that correspond to all of the ThrustFancy iterators. And then I started looking into that.
+
+27
+00:18:06.000 --> 00:18:48.000
+And as it turned out, there were some bugs in the specification that prevented you from passing the range view iterators into the parallel algorithms. And so then I talked to my colleague, David Olson, and I'm like, hey, can you fix this? And he wrote a paper to fix that. And then I was like, you know what? And then we need repeat. And so I talked to my colleague, Michal Domenech, and I said, hey, can you fix this and he wrote a paper to fix that and then i was like you know what and then we need repeat and so i talked to my colleague mija domenic and i said hey can you write this paper for repeat and also for cartesian product and he did that and and that's why we have those things in c++ 23 and now in c++ 23 you can completely replace any of your thrust algorithm plus thrust fancy iterator usage with just
+
+28
+00:18:48.000 --> 00:19:15.000
+completely standard code. Yep. And to go through the list, well, I'm looking at the... And so if people are wondering what it is that I actually do it in video, that's what I do it in video. Well, to be fair, the thrust fancy iterators were completely borrowed from the boost fancy iterators. Yes, yeah. And if we go through those, I'll skip a few that are sort of more esoteric, but zip iterator corresponds to view zip.
+
+29
+00:19:15.000 --> 00:20:00.000
+Transform iterator corresponds to views transform. Reverse iterator corresponds to views reverse. Filter iterator, didn't even actually know that one existed because i don't think that exists in thrust um corresponds to views filter and counting iterator uh corresponds to views iota yeah and uh that's pretty yeah it's pretty awesome these things are at first you'd think that they're not super like the utility of them you're like how often would I reach for this? But once you start to reach for them, you start to notice that they are like, and the constant iterator, for some reason, isn't actually in the specialized adapters list, but I know it is a part of this library. And that's what corresponds to views repeat. They are very, very useful utilities.
+
+30
+00:20:00.000 --> 00:20:25.000
+There is one that I believe we don't have a counterpart for. And I don't know whether boost iterators have it. The discard iterator in Thrust. Have you ever used that one? That does exist in Thrust. That does exist. I know of it. I've never personally used it, but I've seen it in code reviews in Rapids where it basically yeets it, right? Yeah, so the discard iterator is an iterator that
+
+31
+00:20:25.000 --> 00:21:01.000
+that you can you know light to and it just does nothing so if you have an if you want to call an algorithm but you don't care about the output then you'd call the discard you'd use the discard iterator yeah it's uh it's useful it's very useful in certain situations where it's exactly what you need. I can't think of an example off the top of my head. It definitely, I'm not going to remember it, but I definitely know if you search in the Rapids libcudf code base, almost definitely you're going to find an example of it. Speaking of all of this stuff, I feel bad not having Barry on.
+
+32
+00:21:01.000 --> 00:21:38.000
+We should have, after we have Kate on, Barry on to talk about, this isn't even, I mean, I'm not sure if he's going to be upset that I'm mentioning it. It's going to become a paper at some point. He's got a Pipeline 2.0 paper in the works. That I'm really excited about. That is something I've really been spending. I just earlier today was spending some time looking at the Julia language. And yeah, the Julia has, Julia has a pipeline operator, but it only works on unary functions. And if you want to, it to work on binary functions, you have to, you have to use a macro called app pipe. And then it
+
+33
+00:21:38.000 --> 00:22:26.000
+also introduces a placeholder or the underbar where you specify where it goes. And in this 2.0 paper, I mean, he talks about in his initial paper as well. He talks about the, I mean, version one of his initial paper didn't have the placeholder version two does, and then his 2.0. So there's R1 and R2 of his first pipeline paper, and he's working on 2.0. So it's not a revised R version. It's a whole new paper with, it's going to have a whole new paper number. And I think it's incredibly important that we choose the right model because I am really leaning towards these days, the placeholder model, because it really kind of almost replaces the need for the kind of combinator things that I love. Like when you want to fork the output of an operation into two different
+
+34
+00:22:26.000 --> 00:23:16.000
+places, you can do that with the placeholder. And a great example of this is zip-width. Even when you don't want to pipe it into multiple places, but zip-width, because it is variadic in the number of sequences it can take, the variadic argument goes last. And that means that the first argument to zip-width, or sorry, zip-transform is what we call it. Zip with is the Haskell name. The first argument to that view is actually the invocable or callable thing with arity equal to the number of variadic sequences you're taking, which means that you can't actually use it with the pipe operator, because the way the pipe operator works with views is it pipes it into the first argument of your view so if it's if you don't if you can't design a view that is for some reason variatic such as zip or i think adjacent might be the same way i haven't used that yet
+
+35
+00:23:16.000 --> 00:23:40.000
+you're not going to be able to use it with the pipeline operator or sorry the pipe operator so having a placeholder anyways i'm rambling but the point is we should bring Barry on, talk about all the different trade-offs, because I really want to get this right in C++. BARRY SCHWARTZMANN Yeah, we should have Barry on. And yeah, I'm very excited by that proposal. I have found an example. There's only one example in the Thrust examples of a usage
+
+36
+00:23:40.000 --> 00:24:01.000
+of discard iterator. It is, the discard iterator is used extensively in the Thrust tests, unsurprisingly. And I believe one of the main use cases there is to make sure that things don't modify the input. So to run a test with a big data set where there's just an input. But there's a thrust example where it wants to do
+
+37
+00:24:01.000 --> 00:24:40.000
+a set intersection and then store the resulting set. And if you do this, you have to allocate storage for the output. Now you could conservatively allocate storage. The maximum size of the intersection would be the size of the first set plus the size of the second set if there's nothing in them that, or this is an intersection, not a union. So I don't know what the maximum size would be.
+
+38
+00:24:40.000 --> 00:25:28.000
+I guess, no, I guess the maximum size would be the size of the largest set, right? If you have two sets that intersect, the maximum possible answer is the maximum of the two. Correct, yeah. Yeah. If they're completely mutually exclusive in their elements, it'll be just the length of both added together. But that might allocate more storage than you need so alternatively what you can do is you could compute the output size by outputting to a discard iterator so set intersection the algorithm takes you know the range of the input uh sets so two ranges and then it takes an output iterator to write to um and it returns um uh the uh the end of where it wrote to.
+
+39
+00:25:28.000 --> 00:26:01.000
+In discard iterators, while it doesn't store anything, it does keep track of how many times it's been incremented. So if you call set intersection with your two input sets and then with a discard iterator for the output set, set intersection will return you an iterator, a discard iterator, which you can do iterator difference between that return value and the beginning and you can get the size of the set intersection and then you can allocate only that storage now that's you know more computationally intensive because you're essentially going to do the center section twice
+
+40
+00:26:01.000 --> 00:26:48.000
+but it does save on storage and that might be useful if you're doing things in parallel. Because then if you're doing things in parallel on the GPU, the additional cost of doing the computation twice may not be that important, but conserving memory may be quite important. So that's an interesting use case for it. I would suspect that there's probably some use cases where I have a feeling that somebody has said that they've used a scarred iterator with a scan, where they wanted to essentially do a reduction-like operation, but they didn't care about the output.
+
+41
+00:26:48.000 --> 00:27:31.000
+I think something like that, I recall from the past. Yeah, we'll definitely add links in the show notes. I'll see if I can find the example from Rapids that uses it in the wild. And perhaps we should write a paper proposing a discard iterator for standard C++ so that we can truly say that all of the thrust fancy iterators are available. By we, you mean the collective community at large. I completely agree. I meant you.
+
+42
+00:27:31.000 --> 00:28:13.000
+I don't have time to write papers right now. We should talk about some more C++ 23 features that we're excited about. Yeah, let's just rattle off a couple. Well, there's MD-SPAN. That's actually not in Cy's list, I don't think. No, because I just realized that their list was from March, and so they haven't included any of the stuff that we've added since then. Specifically the stuff from the July committee plenary where we voted in like 60 papers. But MD-SPAN is in, which I'm quite excited about because I joined the committee back in 2015 with the purpose of
+
+43
+00:28:13.000 --> 00:28:55.000
+working on putting a multidimensional array type into the standard. And now, seven years later, success. And let's see what other things things um yeah let's just do rapid fire i'm looking at expected stood expected yeah let's let's just do rapid fire so we'll just mention things and then maybe in a future episode we'll uh we'll maybe we'll bring on guests or we'll just talk about these in detail but yeah stood expected super exciting um and i'm looking now sort of at the bottom of the list of things that have been added to the compiler support and this is the library side of things we'll look at language in a sec um the range fold algorithms can you name the
+
+44
+00:28:55.000 --> 00:29:15.000
+four fold algorithms that got added c++ 23 i was i was gonna bring those up um i can't name them aren't they all aren't they all just spellings of Fold? There's Fold Left. Yep, that's correct. One out of four. I actually got, I did a whole talk and mentioned them and got one of the names wrong. So you're off the hook for messing up. I gave a whole talk and still messed it up.
+
+45
+00:29:15.000 --> 00:29:36.000
+I did share the meetings where these things were voted in. But that's the problem is that the names change so many times. I honestly couldn't tell you what the final names were. Yeah, so Fold Left is the first one. Fold right is the second one. Fold left first is the third one. And the one that I got wrong, you might be thinking, I named it fold right first.
+
+46
+00:29:36.000 --> 00:30:00.000
+That is wrong. Scratch that from ever having heard it in my talk. It's fold right last, which I don't know how I feel about that. I kind of like the first first. But anyways, and these are the equivalents if you're a Haskell programmer of fold L, fold L1, fold R, and fold R1. The difference being is that the ones without the underscore first and underscore last suffix,
+
+47
+00:30:00.000 --> 00:30:37.000
+they don't take initial values. Whereas the ones that are just called fold left and fold right they do take initial values and the difference that that impacts the algorithms in that the ones that don't take initial values the underscore first and underscore last version have to return an optional which means because if you're given an empty range what do you return uh you can't return anything because because you don't know what to return you don't even have a single element and you don't have an initial value uh that you can return therefore you return an optional and if you're given a an empty sequence you're going to just get back the the stood
+
+48
+00:30:37.000 --> 00:31:31.000
+colon colon null opt thing um standard where did i read this one it was standard library modules not something that uh is gonna super affect the way we write a line of code but it's very important um well what do you mean i mean it what is modularizing the standard library correct yes but it's going to change the way that everybody includes the standard library yeah so consumes code but like not i mean it it changes the way you write your import or include statements but you won't you will buddy buddy buddy buddy buddy what you it's modules lazily load on all the major implementations. So there is some cost dependent on the size of the module.
+
+49
+00:31:31.000 --> 00:31:55.000
+But in comparison to headers, which are textual, the cost is trivial. And that's why we have one big std module. And what that means is... That's why I didn't mention anything about cost. I just said it won't technically affect the way you write code. It drastically will affect the way that you write code. You'll no longer have to think about what header am I including? Which standard library header am I including? You'll just import
+
+50
+00:31:55.000 --> 00:32:21.000
+std and you'll have all of them. The way it works, the modules aren't textual. It's this internal compiler representation that has a fast index of the things. So you'll only pay for what things you use. Only those things will really have to be loaded from the module, and they can be looked up quickly. I didn't know that.
+
+51
+00:32:21.000 --> 00:32:59.000
+You should have read the paper or listened to my talks on modules. So this means import stood, importing the entire standard library as a module, is faster than including only the headers that you need. And so that means that in the future, you will not think about what headers a part of the standard library is in. You will simply import the entire standard library. And that changes how you write code. You'll no longer think about, you know, which header is this thing in or which header is that thing in.
+
+52
+00:32:59.000 --> 00:33:40.000
+You know, the, you know, oh, I forgot to add the numeric include because I included algorithms thinking that's where reduce is, but no, it's actually add the numeric include because i included algorithms thinking that's where it reduces but no it's actually in this numeric header you won't have to deal with that i mean in your defense i had no idea that this was the implications of it in my defense it still doesn't affect the way you write code it affects the way that it affects it means you don't have to think about where code lives and you don't have to go include hash include angle header from this and remember oh yeah numerics in algorithm there are there are features that people don't use today because they are in a header with a bunch of other things and they don't want to pay the cost of including the header and in the future world of a modular standard library
+
+53
+00:33:40.000 --> 00:34:22.000
+maybe instead of writing you know something on own, because you don't want to pay this cost of including the entire standard library, you'll just import std and use that thing. That is a strong argument. I mean, if we were in a debate mode here, I would still say you could still write the exact same code you were writing before now. So in that sense, it's not changing it. But from that pragmatic point of view of, yes, if you were not including a certain header because of the cost of it, now potentially, and that is actually,
+
+54
+00:34:22.000 --> 00:34:49.000
+I'm sure that is the case for some people out in the wild, that they're not including this because it hurts compile time too much. We've all seen lightning talks or talks that show, hey, look what happens when I include this single header, and boom, it explodes compile time. All right, we'll leave it there, folks. Stay tuned. This is probably episode 91 that you're finishing listening to. Episode 92, if all things go according to plan, we'll have Kate Gregory on.
+
+55
+00:34:49.000 --> 00:34:54.000
+And then maybe we'll bring Barry on after that if he wants to come on. Thanks for listening. Let us know either on Reddit or on Twitter or on our GitHub if we missed your favorite library or language feature and you want us to talk about it on a future episode. Thanks for listening. We hope you enjoyed and have a great day. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

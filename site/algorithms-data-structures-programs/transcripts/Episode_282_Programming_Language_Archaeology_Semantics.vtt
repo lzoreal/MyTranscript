@@ -1,0 +1,257 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:12.000
+Well, so the archaeology part is not necessarily like just the observation that this is surprising, but the question of why is this the case, right? Why are bitwise operations lower precedence than relational operations, right? And so I did some archaeology. You know, I look back and usually when we're talking about C++, usually we have to look back to the languages B and BCPL. Welcome to ADSP, the podcast, episode 282 recorded on March 30th, 2026. My name is Connor, and today with my co-host, Ben, we chat about programming, language, archaeology, semantics, and more. I want to go back to talking about something you mentioned earlier, which is programming language archaeology, which is fascinating, right? Not just from the point of view of, like, algorithmic and functional influences, but I think just from a point of view of, like, syntax, actually.
+
+2
+00:01:12.000 --> 00:02:18.000
+like how you know we say things like oh it's a C style syntax language and everyone kind of knows what that means right but there's tons of little things that go into that somebody in my meetup asked the other day you know what and this perennial this perennial sort of stumbling block which is why are the the bitwise operators such low precedence bitwise being like the single pipeway in C versus the single yeah single ampersand for and single pipe for bitwise or and X or is the carrot right what and those are I think I'm right in saying lower precedents than relational operators in C and in C plus plus that sounds right and and that is surprising to most people when they first when they first meet it certainly I think it's surprising and it is sort of a continual seems like a whart in the language, right? It seems like a stumbling block that you always have the perens around.
+
+3
+00:02:18.000 --> 00:02:42.000
+Because you think of bitwise being very low level, you might think of it binding very tightly as an operation, right? I guess. I mean, honestly, the way that I use those are typically when they're being overloaded. Like 100%. The most often I've used one of those is in ranges because they overload them. But every once in a while, I guess, I used to at a certain point of time,
+
+4
+00:02:42.000 --> 00:03:15.000
+the, you know, checking for odd and even kind of thing. But then compilers now optimize to that anyways, right? So you can just do mod two and you can be pretty confident that it's going to convert to the bitwise version. You don't need to pull the bit tricks for those kind of simple things. Strength reduction has been a thing in optimizing compilers for decades. But I mean, you would, you use this stuff, I imagine, much, much more than I do. So I guess, yeah, I'll take your word that it's surprising.
+
+5
+00:03:15.000 --> 00:03:59.000
+Well, so the archaeology part is not necessarily like just the observation that this is surprising, but the question of why is this the case, right? Why are bitwise operations lower precedence than relational operations, right? And so to answer that question, now I should say that I don't know the, you know, this is not fact what I'm about to say. but this is plausible based on what I've looked into, right? And so I did some archaeology. You know, I look back and usually, when we're talking about C++, usually we have to look back to the languages B and BCPL.
+
+6
+00:03:59.000 --> 00:04:37.000
+And I think in those languages, I think in BCPL and in languages of that time, bitwise operations were not represented in the language typically. because remember this was before, this was before types, as we know them today. This was before machines with 8 bits or 16 bits or power of 2 bits. There were a lot of 36-bit machines in that time. And these were languages which treated, in the case of BCPL, I think, memory cells as it acted on memory cells, right?
+
+7
+00:04:37.000 --> 00:04:59.000
+It was not the idea of an int or a float. There was, here's your memory cell. It's got data in it. That's your one type, sort of thing. And so these languages had arithmetic operations. They had Boolean operations, but they hadn't yet distinguished between Boolean operations and bitwise operations.
+
+8
+00:04:59.000 --> 00:05:21.000
+Okay. Right? There was no distinction between double ampersand for a Boolean and and single ampersand for a bitwise end. Because back in those days, it was the same thing pretty much. And so I think it's even the case that in the early days, yes, I think I was reading in the early days of C,
+
+9
+00:05:21.000 --> 00:05:53.000
+C didn't have Bitwise operations. They were introduced, I mean, fairly early on the C's lifetime at this point, but still, not absolutely originally. You know, it's something that needed to be sort of discovered and added into the language. And when they were added, they were naturally thought of as just the same as the Boolean operations, and so they got the same precedence. Again, I don't know any of this to be fact, but this seems to me to be plausible.
+
+10
+00:05:53.000 --> 00:06:38.000
+But I love looking back at this sort of thing and, you know, looking back at little syntactic elements like that. A lot of things happened with B because BCPL was fairly, you know, again, the computing hardware at that time was different than today. You didn't have home computers, right? They were different even than in the 80s. You didn't have home computers. You didn't have 8-bit computers. No, you had university installations. You had military installations. You had various computers that were given to you on a, on a lease basis, right? You had mainframes and things like that. And at the time of B and C coming along,
+
+11
+00:06:38.000 --> 00:07:12.000
+The world was just starting to move into sort of smaller computers, if you like. Just starting to move away from big industrial installations, where you just lease the computer from IBM or whatever and move more towards. Oh, actually, now the university can afford to buy its own mini computer or whatever, you know, the PDP 10, the PDP 11, things like that. And it was starting to get new hardware. like the PDP 11, I think it was, had new hardware to deal with floating point.
+
+12
+00:07:12.000 --> 00:07:35.000
+That is the origin of types, or one origin of types in C. If you're writing a language to support this hardware, well, now the hardware has integer instructions and floating point instructions. And so you need different types. You need to have an interno float type so that your compiler knows which instruction to output.
+
+13
+00:07:35.000 --> 00:08:02.000
+Mm-hmm. And then going from BCPL to B was a massive, massive sort of cut down. Ken Thompson had to trim every corner he knew how to in order to fit B into the machine. Right? I think he had sort of 16K or something, which is incredible to think about today. Yeah. Right. You have 16K to write the compiler.
+
+14
+00:08:02.000 --> 00:08:36.000
+But that's the reason, for example, we have. equals for assignment and equals equals for comparison. Ken Thompson, I think, wrote that. So he had to have two different operators. And he wrote, I think, that in an average program, assignment is about twice as frequent as comparison. And so an operator half the size makes sense. It's sort of this mindset of how to save every bite of space
+
+15
+00:08:36.000 --> 00:09:04.000
+you possibly can. And so having to make decisions like that. Yeah, that stuff, I never thought about that. And it's also the reason why we have, you know, initialization being the same thing as assignment, you know, using the equal sign for both, which is a very, they are two different, different fundamental operations, right? Yeah, yeah. And there are languages like small talk, you know, has two different, many array languages.
+
+16
+00:09:04.000 --> 00:09:25.000
+They have two different symbols for, they call them a size. and change. Yeah. That stuff is very curious. I mean, we have the same. We're two people that both have the Gene Samet history of programming languages book, which, I don't know. Yeah, that was even earlier, of course. That book finishes at 1969, I think.
+
+17
+00:09:25.000 --> 00:10:04.000
+Yeah, yeah. And I actually, for some reason, I thought APL only got a small mention, but there's a whole section on APL. I don't know why at one point, because I remember first flipping through it when I got it. And I was like, what? I can't believe this. But that was a labor on. I realized that was a mistake. I mean, this makes me think of you mentioned, or at least at some point have brought up the Cajori volumes of the history of mathematical notation. Oh, yeah. Yeah. And I forgot to, there was a couple things that I was going to mention since the last time we chatted. One of them is that I discovered upon our last conversation that in Iverson's notation as a tool of thought,
+
+18
+00:10:04.000 --> 00:10:31.000
+Turing Award paper, he made. mentions Kajori in the final section of the paper. And I can't remember if we were talking about it, about, you know, the pedmas. We were talking about it. We were. And now the thing is, this is probably the fourth time I've talked about it since then, because on my other Array Language podcast, I've been bringing it up, is that Iverson actually comments, and it's documented in a couple different places, that the reason for pedmas,
+
+19
+00:10:31.000 --> 00:11:08.000
+the motivation for it is for concise representation of polynomials. Right. And that's you can, and I never really notice this is that you omit the multiplication in when you're writing polynomials, right? Coefficient go next to variable names. Sure. You just write 2x or 3x or whatever it is. You don't write 2 times X. And but the reason that Iverson brought up Cajori is that he, it's not really a criticism, but he says, you know, Cajori doesn't actually make much mention of parentheses in the, it's mostly just about the evolution of primitives. And the reason I bring this all up is one, because we were talking about
+
+20
+00:11:08.000 --> 00:11:49.000
+it before, but when you were saying the equal and double equals, you know, my APL brain is like, well, you know, really the arrow character is nicer in a sense for assignment. And then you can reserve the equal and the not equal to, which we, left pointing arrow. Yeah, left pointing arrow. Yeah, some languages do that, do that. For at one point. Initialization. Or, for assignment. But then that made me think is like, how do we end up with the keyboards that we ended up with, you know? Like, we were missing so much stuff. Like, we don't have a multiplication. Like, how did we end up with a keyboard that doesn't have, like, four of the most common binary operations, yet we ended up with like at and, you know, it just, anyways. And so,
+
+21
+00:11:49.000 --> 00:12:18.000
+like, yeah, I guess we have asterisk for multiply, which we co-opted. We have, and this is, yeah, I mean, even like, I think we were mentioning this last time. I mentioned it in passing. Like, computers are fundamentally, the interfaces to computers we've known for these last 50 years have been sort of stuck in one dimension. You know, the terminal is a one dimensional input output. You get the line, right? When you're typing stuff, it's on the line.
+
+22
+00:12:18.000 --> 00:12:47.000
+You don't really, and this is true of most certainly mainstream programming languages today. Like, it's lines. It's not, the second dimension is not something we get to use. So we don't write fractions, right? When we do division, we have the slash. Yeah. Which is kind of a way of shoehorning division onto one line. You don't get to just naturally write a fraction.
+
+23
+00:12:47.000 --> 00:13:09.000
+Yeah. I mean, someone was commenting that, that, you know, the division sign is actually rarely used because, you know, people use the slash or they use the way that you write a fraction. But it's like, my thought is like, well, that's because it's not on the keyboard. If we had put it on the keyboard, you know, but I guess when people, maybe that's like the history of the keyboard is that initially when it was designed, it was for writing, it wasn't for mathematics and programming.
+
+24
+00:13:09.000 --> 00:13:42.000
+Yeah, maybe. And so now we're stuck with these strange glyphs that mean, some of them mean things only because they've meant, they've had to mean that in the computer age, right? Division itself, you know, back in the 1800s, I think it was common to use a colon for division, right? Which persists today in the sense of a ratio. You write down a ratio, you use a colon, right? That is historically the symbol for division, right?
+
+25
+00:13:42.000 --> 00:14:25.000
+Because the ratio is a division. And then we have things like, you know, percent sign for mod, which as far as I can tell, it's used because we had to use. something and and that's probably only been, I don't know which language introduced the percent sign for modulus operation, but it can't be much before 1970, I'm thinking. Yeah, interestingly, is that, is that the case? Does Jay, does Jay use the percent sign for division? It might, give me a second, I can check. One percent two is zero point five, yeah. So the J language uses it for division, because arguably, It looks closer to the division symbol than the slash does.
+
+26
+00:14:25.000 --> 00:14:56.000
+It kind of does, yeah. It's such a bad place we've ended, in my opinion. You know, shocking that the APL programmer thinks that the symbols, but, you know, like the double asterisk for exponentiation, you know, and I think there's some languages that actually use the carrot for exponentiation, but it's just like, and you know, the not equal to. But even that is strange, right? It's sort of like you'd write superscript if you were writing it down with a pencil.
+
+27
+00:14:56.000 --> 00:15:21.000
+Yeah. You wouldn't use a carrot to indicate ordinary exponentiation. Yeah, none of it makes sense. I mean, my favorite is the disagreement or the proliferation of not equal to operators. Because that one probably has the most non-uniformity. You know, most languages do exclamation equal. some do slash C syntax
+
+28
+00:15:21.000 --> 00:15:32.000
+Is that C? Is that where it comes from? Yeah, slash equal Well, I don't know Again, it's probably in B It might be in BCPL I don't know, I'd have to look it up But most things
+
+29
+00:15:32.000 --> 00:15:47.000
+Most things in C don't come from C Originally, they come from B or maybe BCPL But like I said, moving from BCPL to B was a massive cut down job So a lot of syntax, small syntax element got changed at that point But yeah, some languages
+
+30
+00:15:47.000 --> 00:16:17.000
+they use the diamond, you know, less than greater than... Yeah, less than greater than... Haskell uses slash equal to, which, you know, arguably might be better because if you, if you overstrike those two symbols, you end up with, you know, a not equal to. And I know there's like, there's like four other ones of... And some languages even have multiple operators for not equal to, you know? It's just like... And not equal to is, of course, the same thing as X or, if you're talking...
+
+31
+00:16:17.000 --> 00:16:40.000
+about Boolean. Oh, yeah. Right? So, and that's why, that's, that's maybe why I see a language is derived from it don't have, like you have bitwise and or X-Or, you have logical and an or, but no logical X-Or, but logical X-O is not equal to. Right. Yeah, there's, there's some cute APL expressions that make use of that fact.
+
+32
+00:16:40.000 --> 00:17:21.000
+Anyways, I do agree that doing these little archaeology things and, you know, finding where the names of things come from and syntactic curiosities. That's what I've, that came out of that pedmas discussion and the follow-up discussions that I had that you weren't there for was that I have to, I have to internalize Chesterson's fence because I've always given ped-mass a hard time. And I think it was in my conversation with you where I said, you know, maybe I should go and figure out, you know, if was there a reason. And that was, I was talking with Adam, panelists on a raycast about the word arbitrary. and that, you know, we kind of throw that around too loosely, and it's like, and then we actually got into a debate about the definition of the word arbitrary.
+
+33
+00:17:21.000 --> 00:17:54.000
+He was saying that it is, you know, if it's due to personal preference, that actually is arbitrary. And I, I preferred the random or on a whim definition, but a lot of the things that... Okay, well, it's definitely not random. Random is wrong. Random is right now. Because if you look up the definition of arbitrary, one of them is random or on a whim. And so wait, were you saying that that, well, since you brought this up, arbitrary means it was arbitrated, right? And so it was a decision was made.
+
+34
+00:17:54.000 --> 00:18:23.000
+And that that's all that arbitrary means, I think. Jesus, English is way too complicated. You're saying, I, we, if we're going to go back to that. Arbitrary define. Is there another one that says it, I suppose it carries a sign mean of like disinterested, right? because a judge, one who arbitrates, is supposed to be disinterested. Supposed to not have an interest in the outcome. And so, in that sense, arbitrary jibes with that.
+
+35
+00:18:23.000 --> 00:18:57.000
+Okay, so according to Miriam Webster, we've got three different definitions. The first one, chosen decided, etc., seemingly at random or on a win, rather than in a reasoned or methodical way. two, not restrained or limited in the exercise of power. Okay. And then there's a third one which is the, it says law next to it. It says depending on individual discretion, parentheses, as of a judge, end parentheses, and not fixed by law. Do any of those match the arbitrator? Okay.
+
+36
+00:18:57.000 --> 00:19:27.000
+That makes sense. Yeah, that third one matches arbitrated. So depending on... Depending on the wishes of a judge, of an arbitrator. discretion. What does discretion mean now? The quality of having or showing discernment. This is what I've decided, too, that LLMs have done, you know? Now that we got these things doing our work for us, or some of us, now I spend all these times answering philosophical questions of what did I really mean when I ask the LLM to do something? And now I'm spending all this time
+
+37
+00:19:27.000 --> 00:20:01.000
+looking up the precise meaning of these words. Well, yeah, in general, we have to be careful there. I mean, as much as I just made the argument that arbitrary for the meaning of arbitrate, we do need to be careful in reductive etymology, let's say, because that's not really how English works, is it? Yes, I mean, famously the word literal, no longer just means literal, because everybody uses it not in the literal sense, and so now it has two different definitions, one of which is essentially, not literally.
+
+38
+00:20:01.000 --> 00:20:29.000
+Figurative. One is figurative, yeah. Arbitrate means to settle the dispute. Yes, because there are any number of words in everyday life, which have completely become disconnected from their original etymologies, and the meaning now is completely different. So then in your mind, arbitrary... But etymology is a sort of side project of my sense.
+
+39
+00:20:29.000 --> 00:20:54.000
+Well, I mean, one of my favorite quotes of all time is from Kevlin Henney, who in one of his talks mentions, you know, the phrase, which I always took issue with, and he's the only person that I've ever heard of mention it, is, you know, it's just semantics. And he's like, what are you talking about? That's all there is is semantics. If we can't agree on semantics, we're just talking around in circles. And I've always thought the same thing. It's like, if we can't agree on what the words mean, you know, it's like the classic,
+
+40
+00:20:54.000 --> 00:21:25.000
+you get in an argument, and then someone says, you know, well, you know what I meant. And it's like, well, clearly I didn't because we wouldn't be having this disagreement if I knew what you meant. Anyway, so where are we now? The word arbitrary in your mind doesn't necessarily... Well, I offered one potential idea of it. If you said to me something is arbitrary, I normally would distinguish between arbitrary and random. That's one thing I would do.
+
+41
+00:21:25.000 --> 00:21:46.000
+Random has a mathematical meaning. Random means decided by chance, right? arbitrary means simply chosen arbitrated in some way. Not the same thing to me. Okay, yeah. So, well, I mean, so Mary. Although in loose usage, people say random all the time to mean arbitrary. I get that.
+
+42
+00:21:46.000 --> 00:22:30.000
+Yeah, yeah. I mean, well, this is honestly, like, I don't know. Maybe the listener does not care at all. But I find this so fascinating, that, like, what is actually the definition, like, you know, should we, what should we agree when what we're talking? about here is like, you know, I thought that pedmas didn't have good motivating reasons for being the like, right. Now, so that's another distinction is that like there's no good, there can't be a good reason for why they chose this because clearly like the APL model of order of operations is linear. It's simpler, it's better. And so when I when I would call pedmas arbitrary,
+
+43
+00:22:30.000 --> 00:22:51.000
+I'm essentially trying to say is like there can't be a good motivating reason. So you meant capricious. Capricious. All right. Well, here we go, folks. The limits. You meant arbitrary capricious rather than arbitrary reasoned. Governed by governed or characterized by sudden, irrational or unpredictable impulses or whims.
+
+44
+00:22:51.000 --> 00:23:12.000
+Not in the second division, not supported by the weight of evidence or established rules of law. Capricious. You thought it was on a whim. you thought somebody just liked it? I thought that... You didn't think there was reasoning behind it. I thought, I don't know if I necessarily thought it was on a whim, even though that was, you know, the first definition of arbitrary.
+
+45
+00:23:12.000 --> 00:23:34.000
+Okay. There clearly wasn't a good motivation, you know, like for the definition, for some definition of the word good. But that's why in that conversation we had last time, I literally said maybe I should go and try and figure out. Was there actually, like odds are, even if it was, you know, maybe bad reasoning then or bad reasoning now. It might have been good reasoning at the time.
+
+46
+00:23:34.000 --> 00:23:55.000
+Maybe it still is good reasoning. And you can argue whether, you know, expression of polynomials is good reason. But the point being is, is someone thought, like put thought and care into making a decision? We should not at all use the word arbitrary. There might be some other word that is like you disagree with the motivation or reason. I see. So I'm not sure. Is there an adjective or a word for that kind of?
+
+47
+00:23:55.000 --> 00:24:13.000
+I don't know. Well, and a lot of things are reasonable. At the time. Famously in programming. And the reasons that apply at any given time do not necessarily apply 40, 50 years later. Yes. Yeah. I mean, that's the...
+
+48
+00:24:13.000 --> 00:24:29.000
+So for historical reasons, you know, we say... We say it's like that for historical reasons. So we've got to look up a word. So there's arbitrary, which, you know, we got so many definitions for. I just... I don't ever going to use that word again. There's random. Maybe I should start saying alliator.
+
+49
+00:24:29.000 --> 00:24:50.000
+instead of Randallie? My goodness, man. Supposedly I play Scrabble. What is... A-L-E-A-T-O-O-Y. From the Latin Alia, a dye, or dice. Everybody knows the Latin alia. Depending on an uncertain event or contingency
+
+50
+00:24:50.000 --> 00:25:18.000
+as to both profit and loss, or relating to luck and especially to bad luck. So if random now means arbitrary, Alliatorie, maybe now is a good word for random. True, true, truly random. Decided by the roll of a dice. Well, my evolving thought now is that any time we use the word arbitrary, specifically when, you know, a lot of the conversations I have are programming-related or design related.
+
+51
+00:25:18.000 --> 00:25:51.000
+Arbitrary is never actually the word, I think, that we're really, I mean, I guess if you're using it, I mean, that's the thing. To go back to Kevlin Henney's, it's just semantics. It's just like, I had a definition for arbitrariness. arbitrary. Adam had a definition for arbitrary. You had a definition for arbitrary. And they're all, I wouldn't even say subtly different. They're all just, you know, one is like, oh, it's my personal preference. I thought it was kind of random. And you thought it was, no, it's just a decision being made. Yeah. They're all related, sure. But they all have different shades of meaning. But that is, you know,
+
+52
+00:25:51.000 --> 00:26:41.000
+that's one of the great things about English is that shades of meaning, you know, English has synonyms, which many languages to a first approximation don't have. Right. And synonyms in English can draw shades of meaning. And it's still a problem for us. Yeah. It's funny because when I was editing that episode, and I mentioned Orwell in 1984 and their reduced vocabulary. And I was like, I mentioned, well, and I've matured and I know that it's a beautiful. When I was editing it, I was like, do I really? Is that actually true? Like, not the maturing part, but just there's a part of my brain that really does think that there's something nice about a regular communication language that doesn't have. the subtle differences, you know, you know, for poetry, it's great for, for communicating, like, quickly and we're all on the same page, as we have seen here with the definition of the word
+
+53
+00:26:41.000 --> 00:27:16.000
+arbitrary. What is my, the, the code report, cinematic, you know, podcast universe has just evolved to talking about the definition of the word arbitrary. I look forward to your next podcast, your new podcast on the language and the meanings in mathematical communities. I mean, I've got too many podcasts. I mean, you know, I can just, I can repurpose the algorithms podcast for, I mean, there's something to be said about talking about programming, language, archaeology, and then also etymology. It's, it's one in the one.
+
+54
+00:27:16.000 --> 00:27:48.000
+Yeah. Well, if we want to bring it back to algorithms, you know, let's talk about the algorithm, algorithmic description in place. That has a very specific meaning to algorithms, right? If we say that an algorithm is in place, and the meaning is not what most people think of. Most people programming C++ would think of an algorithm being in place, and it has a certain meaning to them, right?
+
+55
+00:27:48.000 --> 00:28:30.000
+It means it doesn't use extra space. But when it comes to actually tying down what that means, that's where the definition has to be made in algorithm. mathematical algorithm land, right? Because you can't just say it doesn't use extra space, because every algorithm uses extra space in some way. Like, you need a stack frame to run it. You need a counter-variable, which necessarily is sort of the logarithmic number of bits of the size of the collection, right? So you are using, in some sense, in a very pure sense, you are using some kind of extra space.
+
+56
+00:28:30.000 --> 00:29:08.000
+But so the definition of an in-place algorithm is an algorithm which only uses, I think it's polylog extra space. Polylog. And I don't remember the exact meaning of polylog. But polylog arithmetic. In other words, what I just said, like, you can't use, it's sort of intuitive that if you have an algorithm which works in place on the ray, you're not going to have a second array that it needs for working space, right, of the same size. But you are going to have counter variables. You are
+
+57
+00:29:08.000 --> 00:29:51.000
+going to have sort of a sort of constant space extra, right? And more than that, you're going to have a logarithmic space extra because counter variables measured in bits. I mean, measuring in bits is logarithmic. Right, right. Right. you do have a logarithmic number of bits required to represent the size of your collection, like I said. So, you know, there are specific definitions of these terms like in place. In place is the one that brings to mind. I mean, that's nice, you know, having a precise, you know, it's kind of like the specification of an algorithm in where it says, I feel like we're missing that for better, for worse, in English.
+
+58
+00:29:51.000 --> 00:30:12.000
+Well, you know, now we're back to, like, does it matter to most people? most of the time, no, it doesn't matter. Like, it's fine to have this intuitive understanding what in place means. We know it's not going to allocate extra space. We know it's going to be able to run on the array we have. Fine, right? We don't need to think most of the time about, you know,
+
+59
+00:30:12.000 --> 00:30:52.000
+the precise amount of extra space it's going to use in bits in a stack frame. Right? We, we subordinate that unnecessary detail for a different, abstraction, right? We're happy with the idea that an in-place algorithm, yeah, I can use a counter-variable. Why wouldn't I be able to do that? Like, we don't give it a second thought in everyday programming, and that's fine. Yeah, I guess the question is, is when does it matter? And probably when you start talking about, you know, the, for lack of a better word, standardese, you know, of an algorithm spec, or more importantly, uh, compiler specification or whatever,
+
+60
+00:30:52.000 --> 00:31:08.000
+then you end up in these conversations where it's it's much more important to be precise and be on the same page about what a word means right? Yes. Like we don't have any fuzzy language around linear rhythmic, quadratic. Like
+
+61
+00:31:08.000 --> 00:31:25.000
+that is, that means the same thing to everyone, right? But when you start talking about the word readable or arbitrary now we're in much more of like subjectivity land. Someone mentioned there was a guess we should have on that has done studies about program language design
+
+62
+00:31:25.000 --> 00:31:56.000
+and has conducted like studies on what makes something more learnable or readable. And yeah, we should maybe reach out to that individual. That would be interesting. Anyways, we've blown by, I mean, we were chatting before, but as usual, part for the course. But this has been great as always. Yeah, maybe we will try to, whether it's that guest or a different guest, start bringing on some guests because the feedback from the, the end of year kind of wrap up was everybody loves this content,
+
+63
+00:31:56.000 --> 00:32:15.000
+but they also love hearing from people at different companies and whether it's on programming language stuff or, you know, whatever their area of expertise is. Be sure to check these show notes either in your podcast app or at ADSP thepodcast.com for links to anything we mentioned in today's episode, as well as a link to a get-up discussion where you can leave thoughts, comments, and questions. Thanks for listening.
+
+64
+00:32:15.000 --> 00:32:20.000
+We hope you enjoyed and have a great day. I am the anti-brace. Yeah. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

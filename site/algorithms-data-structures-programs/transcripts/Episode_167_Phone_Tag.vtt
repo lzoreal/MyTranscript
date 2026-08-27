@@ -1,0 +1,165 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:50.000
+I'm down in Florida this week. I've been in Costa Rica. Welcome to ADSP The Podcast, episode 167, recorded in between January 30th and February 2nd of 2024. My name is Connor, and today with my co-host Bryce, we play phone tag because he was down in Florida and I just got back from Costa Rica. In today's episode, we chat about control structures in array programming and array languages, as well as two algorithms, scatter and gather. Hey Connor, it's Bryce. I was just trying to reach you, but it seems like you're busy right now,
+
+2
+00:00:50.000 --> 00:01:46.000
+so I figured I would leave you a message. I'm down in Florida this week visiting my mom and my stepdad, and we've had some not-so-great weather thus far. But this morning I woke up, and it's nice and sunny and warm. And so I'm out on my mom's patio by her pool, just doing a little bit of work, taking some meetings. And I keep thinking about this conversation and question that I was asked yesterday that I think you'd find quite interesting. So I was talking to somebody about array programming languages, and they asked me, well, how do you express conditional logic in an array programming language? And this is somebody who came from an imperative programming background.
+
+3
+00:01:46.000 --> 00:03:09.000
+And so I think they were thinking of, well, okay, like, how do I write, you know, if and else? And more so, I think they were in their head sort of imagining like, okay, I can see how I could, you know, chain together some transforms and some reductions and scans. But it wasn't as straightforward for them to see how they might introduce an if-else that maybe would appear in the inner body of a for loop. Now my first reaction was that you would use something like a filter. Now this is something from C++ ranges. Filter is an operation that takes a range and a predicate and it returns you a range that has all of the elements for which the filter returned true. And so then you can use this to select which elements are going to participate in the rest of the operations that you're going to apply to this range. Now, this pattern is very common in parallel programming, where traditional conditional logic can be quite a challenge.
+
+4
+00:03:09.000 --> 00:04:29.000
+In particular, in the world of vector or SIMD programming, conditional logic can be very hard, and for a long time it was not possible to express in many cases. The way that you often express it is through masked operations. So a masked operation is an operation that takes a bit mask that tells you which elements of the vector are going to participate in this operation. And you can construct those bit masks through other operations that might apply a predicate, etc. This is a very common thing in SIMD programming models, especially today. So like the ARM SVE instruction set essentially has all of the operations have a masked form. And this is also a common pattern in GPU programming. This is how we do selection and grouping in libraries like a cub, we build up some mask. And in some cases, we have to propagate
+
+5
+00:04:29.000 --> 00:05:20.000
+information about this mask forward using scans. For example, Cubs Selective has to do this because it is a stream compacting operation. So it decides, okay, well, these elements in this sequence, you know, match this predicate. And then I need to move all the ones that matched to the front and move all the ones that didn't match to the back. And so I need to know as I'm going, where is the cursor of where's the next spot where I need to put things into? And that requires information from earlier in the sequence, and thus it's a scan.
+
+6
+00:05:20.000 --> 00:06:33.000
+But I think there was a deeper question underneath this question that I was asked, which is that I think this person was really expressing to me that they felt like array programming languages couldn't express everything that you might need to write a full-fledged application. I think that they were telling me, well, okay, array programming languages might be a great thing to use in one part of my application to write, you know, a particular compute operation, but I can't do everything with them that I can only use an array programming language within a broader project that is primarily written in some more general-purpose programming language. And I think maybe what they were getting at is that, you know, there may be cases where you need to write some scalar sort of control logic, you know, like some just single-threaded, some non-array operation that, you know,
+
+7
+00:06:33.000 --> 00:07:12.000
+does IO or does some initialization or something like that. And they felt like, well, I can't really express that in array programming language. And so I was sort of interested in your thoughts about this, both about this question of can you write full applications in an array programming language? Can you express the sort of imperative logic for setup and IO and you know stitching together you know all
+
+8
+00:07:12.000 --> 00:08:00.000
+the various behind the scenes things that that an application does aside from just compute but also I was wondering whether I'm missing some ways in which conditional logic can be done in array programming languages. You know, the filter is the one that came to my mind, but maybe there's some others that, you know, you know of that I hadn't thought of. Anyways, I'm going to be pretty busy this week you know i'm working a full work week and i've got my family uh to spend time with so it may be a little bit hard to reach but uh you give me a call back and uh leave a message if you can't reach me
+
+9
+00:08:00.000 --> 00:08:26.000
+hey bryce sorry i missed your call i've been been in Costa Rica for the last, not week, but just under a week for a wedding. Congratulations to the bride and groom. One of the best weddings I've been to. We had a lot of fun. Wedding was on Saturday. We ended up doing a catamaran on Tuesday. Anyways, we are back in Toronto, Canada now. Just got your call and thought I would reply.
+
+10
+00:08:26.000 --> 00:09:10.000
+So the question overall was, what do you reach for in an array programming language when you want to do something like a conditional branch? Or you didn't mention this, but another common thing that people reach for in array language is that isn't necessarily obvious how to do is something like a while loop where you have a condition that you're trying to converge to and it's different than a for loop in that a for loop you know the length of the number of iterations you want to complete where a while loop might have some condition like you know you're trying to converge to some you know threshold and you don't know the number of iterations you're going to need to do. So you need to basically check you have some kind of condition. And the short answer to this is that
+
+11
+00:09:10.000 --> 00:09:53.000
+almost all array languages have control structures. And we actually did an episode on my other podcast, ArrayCast. It was episode 32. And the title of it was Control Structures in Array Languages, where we answer this question, basically, which is, how do you do this? And like I said before, the answer is that most languages like APL and J actually have control structures in them. They're not primitives, per se, because they're built into the language as keywords, so you don't get these little ASCII digraphs. In J, I will leave links in the show notes for folks that want they represent their control structures with lowercase letters followed by a period. So
+
+12
+00:09:53.000 --> 00:10:34.000
+a couple of them are for dot, if dot, else if dot, and dot, etc. And in APL, we have similar control structures, which are I I think, Pascal case. So like if you want a while loop, it's colon, capital W, and then lowercase H-I-L-E. And then there's end while, if, end if, et cetera. But for the rest of this, you know, return message, I will read to you from the APL wiki, the history section on control structures in array languages because it is rather interesting. So here we go. Relative to other programming languages, which began to adapt structured programming in the
+
+13
+00:10:34.000 --> 00:11:10.000
+late 1950s and almost all supported it by the end of the 1980s, APL was slow to adopt the paradigm. Adoption by mainstream array languages began in the 1990s, and some dialects, such as APL2 and GNU APL, have never added support for control structures. Many dialects developed in the 2010s and later also do not include control structures, favoring light defund, that stands for defined function syntax, in combination with operators such as each, that is the explicit mapping operator. Edgar Dykstra's letter, Go To Considered Harmful, published in 1968, is widely considered a turning point in the push for structured programming. At the time,
+
+14
+00:11:10.000 --> 00:11:54.000
+APL programs were written as defined functions using branch for control flow, but programmers began to publish responses considering alternatives in the mid-1970s. Several programmers showed how to use structured programming in current APL systems or modify these systems to better support it. Others proposed more radical changes that would allow the user to define control structures. Experiments to extend APL with ALGOL-style control structures also began in the 1970s. This led to APL-GOAL, first described in 1972, which used names beginning with underlined characters and was supported by a compiler implemented in and targeting APL 360. A similar project was called SAPL for structured APL and that used reserved words for control structures and was published in 1978.
+
+15
+00:11:54.000 --> 00:12:55.000
+Control structures using reserved words were included in A-plus by 1989. And A-plus, for those of you that don't know, is one of the very first programming languages that Arthur Whitney created, who is famously the creator of the K languages. In 1994, they were both added to J, aka APL 2.0, with a dotted syntax such as while dot and to APL star plus three using the colon prefixed syntax, aka colon capital W-H-I-L-E, that has since been widely adopted in APL. Dialog introduced similar structures in version 8.0 in 1996. They also appear in SACS, APL-X, and NARS 2000. Newer APL dialects such as NGN-APL, APL-4, and Zyma-APL often discard control structures as well as branch on the grounds that defunds, along with operators like HNREDUCE or recursion, allow similar functionality. Such a possibility was not available in the 1970s because APLs at the time did not allow arbitrary functions to be
+
+16
+00:12:55.000 --> 00:13:19.000
+operands and was not generally considered before the rise of defunds and tacit programming in the 1990s. APRIL, which is a APL implemented in Common Lisp, does not support control structures on the grounds that APRL code should be embedded in Common Lisp, which can handle control flow better. BQN also does not include predefined control structures, but its first class functions and list literals allow a similar syntax to be achieved
+
+17
+00:13:19.000 --> 00:13:47.000
+without extending the language. So that is the end of the history section. In general, the state of the art in languages like BQN, it is a more functional language and allows you to do things like building up a list of functions and then using your mask that you described earlier to then basically execute conditional logic and functions based on the mask that you build up. So a common thing you can do is just build up a list of two functions and then a mask that you build up. So a common thing you can do is just build up a list of two functions
+
+18
+00:13:47.000 --> 00:14:04.000
+and then a mask that's either gonna be a one zero or a zero one, and then you can execute one of those functions depending on which of the masks you build up. And then BQN also has support for recursion and things like that. And it's also an interesting comment that they made about April,
+
+19
+00:14:04.000 --> 00:14:15.000
+which is something, I guess, a little bit more akin to what you might be doing in the GPU programming world with libraries like Thrust and Cub. You're going to execute your kernels by invoking functions that are provided via these libraries.
+
+20
+00:14:15.000 --> 00:14:38.000
+But if you need to do sort of these conditional logic things, you still have access to everything that comes with C++ because these are just CUDA C++ libraries. That being said, within this history, it is clear that certain APLs along the way never added any support for any of these structured programming control flow statements. So it is definitely possible. And one of the
+
+21
+00:14:38.000 --> 00:15:19.000
+operators that wasn't really mentioned here is the power operator. And that gives you the ability to basically do the equivalent of the while statement with a pattern called repeat match or power match, which basically a power or repeat operator, you can basically put a function to the power of a number. So if you want to repeat something 10 times, like multiplying by 10 or squaring something, you can do that with the power operator and then the literal number 10. And that kind of mimics a for loop. However, if you want to mimic a while loop, you can use the power match pattern where you include basically a conditional statement
+
+22
+00:15:19.000 --> 00:15:48.000
+along with your power operator. And now you're gonna repeat whatever function you've paired your higher order function power with until it converges and this predicate or condition is satisfied. So recursion, the power operator, and masks basically give you the ability to replicate everything that you would want to do in a typical imperative programming language. Hope that answers your question. Interested to hear thoughts on the history section and everything that I just mentioned,
+
+23
+00:15:48.000 --> 00:16:14.000
+and hope you're having a good time in Florida. Hear from you soon, buddy. Hey, just got your message, so I thought I'd try to reach you. Sounds like you had a fun time in Costa Rica. I hope you didn't get sunburned. Did you get too much swimming? We're about to leave to go play some mini golf, and I have a feeling it's not going to end well for me because I am quite clumsy. So it was really interesting to hear
+
+24
+00:16:14.000 --> 00:17:09.000
+about all of the history of control flow in array programming languages. I hadn't even thought about while loops when I was originally asked this question. And you know, there's another example from the world of C++ which is in the world of senders. There is this sender adapter called repeat where you give it a sender chain and then a count, and it performs that sender chain in times where n is the count. And presumably, you could also make a while form of that too, where instead of taking a count, it takes a predicate for when
+
+25
+00:17:09.000 --> 00:18:00.000
+it should stop. And that predicate gets sent the value from the underlying sender chain every iteration. It was really interesting to hear that remark about April, where the creator sort of said, well, we don't need to have this in April because it's meant to be embedded in Lisp. I wonder how many array programming languages were designed to be embedded in other languages. If you think about it, ranges and the range adapters and the senders and the sender adapters, that whole like little piping syntax, that's sort of like an array programming language that was designed to be embedded in C++. So I had another question for
+
+26
+00:18:00.000 --> 00:19:47.000
+you. Are you familiar with the thrust gather and scatter algorithms? I was looking through a couple of the thrust examples the other day, trying to find some examples that I could use in a paper that I'm writing about C++ asynchronous parallel algorithms. And I noticed that a lot of the thrust example algorithms use gather and scatter. And I don't think they're algorithms that we've talked about in great detail on the podcast before or that we've used. So thrust gather, it takes as an input a range of a map, they call it, and then an input range, which has to be a random access iterator, and then an output iterator. And you take that map range, and for each element of that map range, you use it as an index to the input range. And then you copy that element to the output iterator. And then scatter does sort of the opposite, where it the input range,
+
+27
+00:19:47.000 --> 00:20:34.000
+it copies it to the output element corresponding to the index in the map that is associated with that input element. So they kind of remind me of the by-key algorithms in thrust. They're almost sort of like a copy-by-key, maybe. And so one of the places where these are used in one of the examples is in the thrust lexographical sort example where it does a lexographical sort,
+
+28
+00:20:34.000 --> 00:21:13.000
+like you want to sort some tuple of three elements where you want to sort it first by the middle element and then by the first element and then by the third element. And the way that this Thrust example does it is it creates this permutation vector, and then it does this update permutation step where it does a gather of the current reordering using the permutation vector
+
+29
+00:21:13.000 --> 00:22:04.000
+as the map, and then the keys of your original input as the input to the gather. And then it outputs to some temporary storage. And then it does a stable sort by key of the temporary key storage. and the output of that stable sort is this permutation vector. And then you do this update permutation step n times, where n is the number of columns that you want to sort by,
+
+30
+00:22:04.000 --> 00:22:31.000
+if you think about this in Excel terms. And then at the end result of that, you have this permutation vector of indices that you need to apply to the thing that you're sorting. And there's a couple other examples that use this gather algorithm. And I just thought it was quite interesting that this is never something that's come up in our chats.
+
+31
+00:22:31.000 --> 00:23:13.000
+You can imagine that gather and scatter are used for things like stream compactation, so to implement something like a copy if, but maybe we never have talked about it because we just have the optimized copy if available. And so we just always use that copy if and we never really talked about how it's implemented. Anyways, I was just wondering if you'd had any thoughts about that. Have you ever used thrust scatter or scatter? Anyways, hope to hear from you soon. Talk to you later, buddy.
+
+32
+00:23:13.000 --> 00:24:05.000
+Good to hear back from you bryce hope you had fun playing mini golf we'll have to revisit how that went in the next episode as i believe this will probably be the last message so interesting that you bring up the scatter and gather algorithms i can't actually recall if I covered them in my thrust versus standard C++ algorithms talk from, I believe it was GTC 2021. But if I didn't cover them, I at least briefly mentioned them. And I am familiar with these algorithms. I don't reach for them very often, the same way that I don't reach for their equivalents in APL very often. But they, I'm not sure if they come from APL, but they have exact equivalents in APL. And the sort example that you came up with is actually interesting because when you are trying to sort something in APL, you actually don't have a sort primitive. You have
+
+33
+00:24:05.000 --> 00:25:20.000
+two different primitives that you compose together in order to get that sort. There's a couple different ways to do this, but the way that I'm going to explain uses bracket indexing and a primitive called grade, grade up and grade down. And what grade up and grade down give you, if applied to a rank one vector, is a permutation of indices that if you index into an array to resort them by that sort of indexation, if you have an array which we'll call x, the way you spell this is x, open bracket, grade up, x, close bracket. And what this does is the set of brackets is what's called bracket indexing. And it is the equivalent of a gather in thrust. So it's basically given a permutation of indices, bracket indexing is going to permute your rank one vector, aka x in this example, based on the permutation indices. And scatter has also
+
+34
+00:25:20.000 --> 00:26:05.000
+a equivalent in APL, and that is indexed assignment. So in the sort example where you have x bracket grade up or grade down x n bracket, that's just an expression that's going to return you a rank one vector. But you can also do indexed assignment where assignment in APL is a left arrow. And so if you once again have a vector x, you can go x bracket and then a set of indices. We'll call it, you know, 2, 3, 4, which is going to be the second, third, and fourth indexes or indices of that vector. End bracket. Then you have your left arrow. And then whenever you're doing indexed assignment, you have to have an array on the right that matches the length of the number of indexes that you were trying to assign to.
+
+35
+00:26:05.000 --> 00:26:33.000
+So this is basically what scatter does. You want to kind of do the opposite of a gather. A gather is similar to a copy if, if you want to think that, like copy if is a compaction where you go linearly across your vector and then you're doing a compaction. It's like a filter. You're just getting rid of elements, but they always stay stable. Like the order always stays the same. Whereas in a gather, it's like a copy if where you can rearrange. It's no longer going to be stable. You can end up with, you know,
+
+36
+00:26:33.000 --> 00:27:00.000
+elements towards the end that are at the beginning. And that's the whole point of a gather. It's kind of like an unstable copy if, if you will. But a scatter is completely different. You're basically trying to send off values to certain locations in a rank one vector or some kind of arbitrarily ranked array. And this is what you can do in APL with indexed assignment. You have your basically left arrow. On the left of that left arrow, you're going to have an array with bracket indexing and some indices.
+
+37
+00:27:00.000 --> 00:27:47.000
+And then on the right of the arrow, you're going to have a rank one vector that is equal in length to the number of indices and then whatever values correspond so in the example we had x bracket two three four n bracket arrow and then if i had the values 10 20 30 in an array which is just space delimited in apl those values will be will be sent second, third, and fourth index of your vector. So hopefully that makes sense. As I mentioned before, I barely reach for these because even when I'm coding in APL, I don't like to use bracket indexing for the gather. There are other ways to basically index into rank one arrays.
+
+38
+00:27:47.000 --> 00:28:16.000
+One of them is using the squad operator. I don't actually know the actual name of it. But these are, there's typically alternative ways to spell these algorithms that I find more preferable. And it's kind of considered, I don't want to call it like old school APL, but like for instance, in BQN and then another array language cap, there are just sort primitives. So you don't need to reach for two different sort of language features or primitives, one being the grade up and grade
+
+39
+00:28:16.000 --> 00:28:51.000
+down and the other being bracket indexing. You can just use the sort primitive and it does what you want. Similar to how you could build up a sort if you wanted, I'm sure, with either thrust or cub primitives like you spelled out in that lexicographical. Although at the end of the day, you still passed it a stable sort, I believe. But I would prefer not to have to use two different things if I can use one. There are certain cases where you need both, but in most of the common cases, or at least the use of cases that I've come across, you can get away with just using the basic sort primitive. Anyways, I think that's
+
+40
+00:28:51.000 --> 00:29:13.000
+where we'll leave it. That'll wrap episode, I think this is 167. And we will chat in episode 168, hopefully both in person. Be sure to check your show notes either in your podcast app or at ADSPthePodcast.com for links to anything we mentioned in today's episode as well as a link to a GitHub discussion where you can leave thoughts, comments, and questions.
+
+41
+00:29:13.000 --> 00:29:18.000
+Thanks for listening. We hope you enjoyed and have a great day. Low quality, high quantity. That is the tagline of our podcast. It's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

@@ -1,0 +1,545 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:01.000
+Hey everybody, so if you're following H. So if you're following, you know, Hacker News, or you're following these various sources, you've probably heard about Scientific Python. It's becoming a really important way for people to try and do numerical computation and solve really difficult problems. There's a bunch of really awesome libraries for that. And we'll definitely cover that in detail. And we have Guido Imperiale here from Coiled to tell us kind of more about it. So Guido is an open source software engineer for Coiled. And I think we're all really grateful for having Guido on the show to lend us his experience and expertise.
+
+2
+00:01:01.000 --> 00:02:10.000
+So thanks for coming on the show, Guido. Hi, everyone. Cool. So before we dive into what is Scientific Python, why don't you give us some background about what have you been up to? What kind of led you to Coiled? And how did you get involved in Dask and in the overall SciPy community? Well, I have 10-something years in risk risk management in banking and insurances in Italy and UK. And what risk management is about is simulate financial instruments or the whole balance sheet many, many times. And a lot of financial institutions use obscure closed source software, which tends to be very, very slow and inefficient and really unwieldy. And I decided, nope, I'm going to rewrite it from zero. And I needed a really, really big hammer to break down the problem.
+
+3
+00:02:10.000 --> 00:02:36.000
+And I realized that Dask was just right. Cool. So why don't you dive into that a little bit? So I've heard stories of banks running their own version of Python. I think, Patrick, you mentioned this in an earlier episode. There's like Bank Python or something like that. And so what about closed source software at the companies you were at? What about it was sort of unwieldy and difficult to use?
+
+4
+00:02:36.000 --> 00:03:16.000
+First of all, it was a piece of software designed 30 years ago, back when multithreading was not a thing. So first of all, it's all traditional design of have an iteration on a single point, go through the whole depth and then go back. It had no benefit whatsoever from SIMD, AVX or parallel multithreading. It would be really, really painful. It was written in C++, but that was the only saving grace. And then that was the simulation part of the software. The aggregation part was written in Java and it was even worse.
+
+5
+00:03:16.000 --> 00:03:55.000
+To give an order of magnitude, the reporting part was taking five days over to run every time, five days exercise with two people who did nothing else but throw kicks at the software whenever it was hanging. And it was running on 20 hosts with 380 gigabytes of RAM each. We are talking about now 10 years ago. So that was expensive hardware. Wow. Yeah, that's wild. And I came, I saw saw i rewrote and by the time i left five years later that exact same algorithm instead of five days
+
+6
+00:03:55.000 --> 00:04:40.000
+and 380 gigabyte of ram was running in two hours and 20 gig so so this is interesting. So you saw this huge Java C++ monolith, right? And yeah, I mean, it's really inefficient. How do you get started on a project like that? I mean, do you sit down and write a document explaining every bit and piece? Do you start by converting small pieces? How do you go about doing such a transformation? Okay, first of all, in any such kind of environment where you have a massive piece of software, that legacy software that you need to tackle, forget about rewriting the whole thing in one go. You just can't.
+
+7
+00:04:40.000 --> 00:05:25.000
+You will fail. You will end up in a five years long project that never delivers and management will pull the plug on it, guaranteed. So it is imperative to follow a bit of mantra of agile and deliver as small a piece as you can every time to keep stakeholders happy. And that piece needs to integrate as good as possible with the legacy software. And yes, that means that you will have a 20% of throwaway code, but it's the way to go. Because at all times during this transformation process, which takes in the end, it takes five years, don't get me wrong. Stakeholders can see,
+
+8
+00:05:25.000 --> 00:06:06.000
+oh, now this little piece was rubbish and now it's super fast and super stable. And they start getting their appetite wet for the next big thing. And they will be happy to keep bankrolling your project. Yeah, that makes sense. Yeah. I think one of the challenges is where you have, there's this sort of meme. It's like, yeah, there's 18 different messaging platforms. I want to make one that unifies them all. Now there's 19 platforms, right? And so you're going to, in the short term, kind of add another piece. Actually, so this new, the rewrite that you did was that, that was using Dask and Python, correct? And XR, yes. Okay, got it. So there was a moment there where you had to kind
+
+9
+00:06:06.000 --> 00:06:51.000
+of convince people to add another language and add complexity to that project. How did you go about doing that? That was actually easy because I did not start from dusk. That project was around this third-party software within C++ and Java, there was an ungodly amount of Bash and Perl scripting, and which if anybody had the pleasure to work with it in a serious size, it's impossible to deal with. As soon as you get beyond two pages of code, Bash becomes unusable. It becomes untestable and really, really hard to read
+
+10
+00:06:51.000 --> 00:07:13.000
+if you have a newbie programmer on the team that will not understand why with parentheses space works and parentheses without space doesn't work. So it's really, really bad. And Perl is, well, I mean, there are actual competition about obfuscating Perl and I'll leave it at that. I've seen Perl soft.
+
+11
+00:07:13.000 --> 00:07:39.000
+I've seen things that you mortals cannot even comprehend. I've seen Perl programs that generate at runtime Perl regular expressions worth five pages, which are then fed into a second Perl interpreter to parse the actual content. Yeah, this is brutal. It's insane. So that was the situation I came in and I realized, nope.
+
+12
+00:07:39.000 --> 00:08:10.000
+And I started rewriting piece by piece, script by script. We're talking about thousands of individual small scripts. Everything in Python, adding tooling on top of that, or a customer-specific tooling. Some of which by now, by the way, it is now open source. Look up B shell on PyPy, on PyPy. Is it B shell? B shell, as in Python shell. B shell. Oh, python shell p shell oh oh okay got it not to be confused
+
+13
+00:08:10.000 --> 00:08:43.000
+with pi shell or python shell or any of the other variations which were already taken so how do you spell this how do you spell your version p shell oh just p shell okay got it got it, got it. So I started with that and I started rewriting a lot of those individually small scripts which were glued together by Linux. So it was very easy to take one out and put the replacement in, which was like for like, just better working, faster,
+
+14
+00:08:43.000 --> 00:09:06.000
+easier to maintain with unit tests and whatnot. And by the time I replaced the majority of those, I had a common library that was, and a common library, a common tooling, and a common learning for my whole team, which was 10 people, of their Python language, which I say, okay, now we have a solid foundation. We can start
+
+15
+00:09:06.000 --> 00:09:51.000
+seriously building stuff that is, we built a round path. Now we can build a rocket. Yeah, that makes sense. So were there any people who were just really sympathetic to the current version and you had to sort of win them over or was everybody pretty happy to get rid of the current version? Everybody was very happy to get rid of Bash and Perl. There was an initial problem with somebody in management that forced us to use Python 2.6. That was back when Python 3.3 was out already. So that was a very bad decision. And we had to pay that technical debt because of that decision for several years to come. After how many years?
+
+16
+00:09:51.000 --> 00:10:08.000
+We just replaced everything with 3.6 or something. Yeah, that makes sense. Did Python 2 have typing or did that come with 3? It's got nothing. Okay. Without typing, I can't imagine writing any serious Python like more than two three hundred lines no
+
+17
+00:10:08.000 --> 00:10:28.000
+as a matter of fact we wrote the whole thing before typing was a thing but typing is very recent it started being usable around 3.5 ish let's say 3.6 and they're adding fundamental bits every version.
+
+18
+00:10:28.000 --> 00:11:00.000
+Got it. Yeah. I feel like before that, people probably just were heavy users of like is instance and asserts and these other, just basically runtime, having to do the typing at runtime. Well, you still do that. I mean, but yes, typing helps a lot of course so you know we have this this big rewrite effort along the way at some point uh i guess you built the launchpad to your point and then you said now we can change this from being i guess pure python or just you know
+
+19
+00:11:00.000 --> 00:11:35.000
+using like lists and dictionaries and all that now we can change it to doing more BLAS-type approaches that are going to be much faster. No, it was not pure Python. It was like Python scripts, which were wrapping around the closed source C++ and Java code. And what I did was Python scripts who were wrapping around the Python engine, which at that point I wrote in-house together with my team. Yeah. And so what was the rocket ship then? How did you make it fast?
+
+20
+00:11:35.000 --> 00:12:16.000
+The biggest challenge was to understand what the previous software was doing, which was neatly outside the way of the education of any software engineer. The problem in a bank, chiefly, is that the people that know what the algorithm should do are people that if they know how to use R, you must be already happy. Most people just know how to use Excel. Those are the people that know the algorithm, know why you do the numbers in the way you do. And then those people just give their algorithm to the developers, which know how to write very good software,
+
+21
+00:12:16.000 --> 00:12:57.000
+but know nothing about subject matter. And they're told, here, here's my Excel sheet, put it in production. And you would be shocked to hear how many financial institutions have at some point in their pipeline an Excel spreadsheet, which is executed from the C-sharp macro or something. Yeah, I believe it. Yeah, I mean, we saw this, Patrick and I saw this a long time ago with with matlab where there were there would be people who would be really good at matlab but then uh couldn't do any embedded code or or or things that were really uh needed to run in low memory and these other things and so
+
+22
+00:12:57.000 --> 00:14:18.000
+you end up having to sort of translate and then you end up with two teams like the team that can build things and a team that knows sort of like the mathematical essence of whatever they're building. And getting those teams to work in harmony is really, really difficult. In fact, and because of these hybrid figures on either side, so what are normally called financial engineers, which are people that know the subject matter and have a decent, although not amazing, understanding of coding. And people like me, which are software engineers, which over time learned what they were doing, are in very high demand in the financial industry. Yeah, that makes sense. Okay, so you wrap these C++ modules and Java modules, right? And then at some point, I mean, to get the memory down and get the speed up, at some point, you probably had to rewrite those underlying know, maybe using Eigen or maybe it's just using raw matrices, raw arrays, and figured out a way to rewrite it using like NumPy and SciPy and Dask and that modern suite.
+
+23
+00:14:18.000 --> 00:15:27.000
+Yes, more or less. the algorithm on paper, you can start thinking, okay, why is the current algorithm so slow? And how can I write it in a way that is fast? And as I was mentioning before, the immediate thing that jumped to the eye is that this C++ software was written before sim existed so there was no vectorization of any kind and the java one was taking was that expensive in terms of memory because it needed it needed to load as an input 50 60 gigabytes of data and then it needed to do successive iterations on that. And it was very obvious that at all times it was keeping the whole thing in memory. So Dask is very, very good at this, namely where you can have a baseline data on disk and you can load into memory just a little piece you need, crunch it,
+
+24
+00:15:27.000 --> 00:16:01.000
+and then release it. Yeah, that makes sense. Yeah, I mean, if you need random access, then running on something like Daskworks distributed is really nice, because you can still get the random access, but you don't need everything on one machine. What about like, you know, when somebody has something that works in C++, they have to rewrite it in Python. Did you create sort of a, almost like a automatic test suite? Because you could take the existing C++, generate a bunch of output, and then go to
+
+25
+00:16:01.000 --> 00:16:39.000
+the engineer and say, look, we want this output to match these numbers. And so now they have kind of like a built-in nice unit test ready to go. And so you kind of know when you have something that's correct. Yeah, absolutely. You don't even think about starting a rewrite of this kind of magnitude if you don't have Toro unit tests for the legacy software. You need to design the whole thing so that it can slot in, yank the old piece, put in the old piece, and you don't touch the test and they just continue working. Yep. Yep. Yep. Totally makes sense. Cool.
+
+26
+00:16:39.000 --> 00:17:13.000
+So at some point you kind of rolled off of this project, right? And joined Coil. Did you go to Coil straight from the banking company? Actually, no. I spent a couple of years in design in a different, in an oil trading company, which they told me, well, we have this, we told me they had this 20 years old Java software, which again was unfathomably slow. You have already heard that, didn't you? And they told me, rewrite it, carte blanche.
+
+27
+00:17:13.000 --> 00:17:58.000
+As long as the numbers are the same and it's faster and more robust, you have carte blanche. And so I started with a clean slate, which was super exciting. And I used TASC again, this time not for vector computations, because it was unnecessary, because it didn't have Monte Carlo simulations to run, at least in the first iterations. But for managing the complexity of the problem, I used the distributed scheduler to organize the workload with great results. And again, I was computing the whole thing in a fraction of the time.
+
+28
+00:17:58.000 --> 00:18:39.000
+Yeah, that makes sense. Okay. So, and then from there you went to Coiled, is that correct? Correct. So, what inspired you to do that? So you could have gone to like a third, a fourth, a fifth company and done, sort of repeated this pattern, but instead you went to Coiled. What motivated that? First, I was motivateded was that for the whole years in my previous two employments, I was a heavy community contribution into Dask, as you would expect, and into XRA. So Matt told me, hey, I really like your PRs.
+
+29
+00:18:39.000 --> 00:19:26.000
+Would you like to do just that for a living for me? And I really like the way that his team worked, uh, from what I could see from the, from the outside, I was seduced by the fact that Coiled is a 100% remote company. We are now talking, we were in the middle of 2020 and i was enjoying my working in my pajamas and i said wait what do you mean that as soon as the pandemic is gone i have to start doing two hours of commute again every day and i said no i really like my pajamas and so i just that makes sense yeah some people who are you know people who don't have uh
+
+30
+00:19:26.000 --> 00:20:08.000
+who are just listening to us can't tell but we're all in our scooby-doo pajamas right now so just close your eyes well unless you're driving if you're listening to us driving don't do this but if you're at home close your eyes just imagine a group of people in their pajamas that's that's pretty much what's going on back then I was I had this idea that I could potentially switch the country I was living in. Right now I'm living in the UK and I was thinking, okay, do I still want to live here? But the idea of having, being able to change country, which is a massive stressor and time sink while keeping my job with seamlessly was a really big appeal.
+
+31
+00:20:08.000 --> 00:20:40.000
+Yeah, that makes sense. Yeah, both Patrick and I moved also, moved during the pandemic. And we stayed in the same country, but we moved to just a different part of the US. And yeah, that's a huge appeal. Do you think people, a bit of a segue, do you think people ever go back to the office? I mean, how do you motivate people to do that? It seems like that's going to be a really uphill battle. Some people enjoy going to the office.
+
+32
+00:20:40.000 --> 00:21:46.000
+I heard of several people with young kids that beg to go to the office. And a lot of people really enjoy the social aspects. I miss them. I miss having a few days a week where I just chat with co-workers at the water cooler, go out for lunch and whatnot. I miss those bits. Yeah, definitely. One thing that I've been trying to do is to, you know, maybe once every couple of months, fly to the office and see people in person. And maybe that's the future. I mean, I work at a company that has one big office and a bunch of satellite offices. But if your company is totally remote, maybe every two months, everybody flies into some, in your case, someplace in the EU and meets up. And you can get, you know, sparingly, but you can get some of that interaction and still work from home. I think that this is a massive opportunity for co-working spaces. I think that there's a massive amount of people
+
+33
+00:21:46.000 --> 00:22:21.000
+that are in the same situation that my closest co-worker is two hours from train away. The second closest is three hours by plane away. And it would be nice to be just in an office space where I can have water cooler chat and possibly go out and have lunch with somebody that is friendly, even if I am a software engineer and they are a fashion designer. Why not? Yeah, that's a good point. I'm in a co-working space at the moment,
+
+34
+00:22:21.000 --> 00:22:51.000
+and there's not really anything that binds the different workers together. You know, we all have our own, I mean, for security reasons, you know, we all have to have our own key. So I can't go into some random company's office and bum around. But you know, the common spaces are pretty much empty. And I think that you hit that on the head, there's an opportunity there, you know, and like, it'd be nice if like the building had some kind of event for anybody who is working there, right? Yeah. Cool. Okay.
+
+35
+00:22:51.000 --> 00:23:31.000
+So let's dive into, I want to learn more about Coiled, but let's put a bookmark in that for now and dive into the topic. What is scientific Python? You know, how is that different than Python? Like that different than Python? How do you define that niche? I would define it with anything that involves very large numerical computations, which means science proper, like geoscience, weather analysis, but also you have AI and machine learning.
+
+36
+00:23:31.000 --> 00:24:06.000
+You have finance. All that requires gigabytes and gigabytes of data. Graph resolution of some sort, like, for example, social network analysis. That is also scientific computation. Got it. And so what are the sort of, you know, main tools that people use? We talked about Dask. Dask is definitely one of them. What are some other tools that people use where, you know, for example, if you were trying to hire somebody who is an expert in scientific Python,
+
+37
+00:24:06.000 --> 00:24:56.000
+you'd kind of expect them to know about these tools. The library that everybody knows is Pandas. That is the baseline. There's Pandas, there's NumPy that is below Pandas, but it also has a different scope. So Pandas is all about data manipulation, tabular data manipulation specifically. So you were using Excel and now you're using Pandas and it's better in every possible way. But it still looks and feels like Excel. NumPy instead is about matricial computations and this kind of heavily vectorized algorithms that have potentially many, many dimensions that you can move along.
+
+38
+00:24:56.000 --> 00:25:42.000
+And there is very high interoperability between the two. Again, Pandas is built on top of NumPy, so you can have an advanced numpy algorithm that runs on pandas. scipy is also on top of numpy, it's just extra functions that are more niche like statistical analysis and whatnot. If you put everything together you will end up with something that somewhat resembles R, although R is still king when it comes with really, really exotic algorithm that only exists in one paper circa 1996. That paper had a code attached to it and you can guarantee that code
+
+39
+00:25:42.000 --> 00:26:08.000
+is in R. Yeah, that's a good way of explaining it. So yeah, at a high level, the reason people use Excel is because tables are probably the easiest way to think with a vector mindset, right? And the reason why that's important is because if you do an operation on a vector, that vector can be very large or even unbounded.
+
+40
+00:26:08.000 --> 00:26:50.000
+You could work with it in an atomic way. So for example, you know, if you look at R or MATLAB, you can have two matrices. The matrices can be really high dimensional, even arbitrary number of dimensions with respect to your program. And you can just do A plus B. And as long as the dimensions are equivalent, or even sometimes if they're not, there'll be some fan out operation. But in general, as long as the A and B have the same dimensions, you just do A. Literally in your code, you write A plus B and you get the sum of those two. The other part of it is, and people can try this, if you grab Octave, which is the open source MATLAB, or if you grab MATLAB and you do, you have two vectors,
+
+41
+00:26:50.000 --> 00:27:41.000
+you do A plus B, it'll be done like super, super fast, right? You can also write a for loop in MATLAB and you can say, you know, for I zero to the size of the vector, you c is equal to c of i is equal to a of i plus b of i and that will take forever right and so so what the reason is because when you do a plus b under the hood it's not just a for loop it's doing a million other things to make that addition super super fast it's taking advantage of the different process, like coprocessors on your processor, like the SIMD and these other coprocessors, it might be running on the GPU, you know, depending on if you're using something like JAX or one of these things, it'll actually farm that out to the GPU on the graphics processing unit. Or even in the case of
+
+42
+00:27:41.000 --> 00:28:34.000
+Dask, it might send that part of that sum to another machine or to many other machines and then go and collect the output. And so in all of these cases, you're able to work at a really high level and you're able to do the same operation many, many times on many different data atoms very, very quickly. And that's something that Excel also gives you. In Excel, you can say sum A. It's very, very terse. It's very fast. And it sums the entire column super quickly. So it's all kind of with that kind of a mindset that we can get a lot of stuff done without having to be experts on the GPU and SIMD and all of that stuff. Yes, except that there are two big things to point out. The first one is that the amount of library that is available for Excel is
+
+43
+00:28:34.000 --> 00:29:07.000
+a tiny fraction of what you have on Numpy. And the second big thing is reproducibility. So one of the biggest problems with Excel is that you have your VBA code and your in-cell formulas mixed with your data. And as soon as your data changes, you will need to start thinking, okay, how do I keep my software, meaning my VBA and my
+
+44
+00:29:07.000 --> 00:29:50.000
+Excel formulas, while swapping the data? And for a regular piece of software, that's trivial. The software is the software, the data is the data. And you have a command that says software.py or.exe input file, output file, or something like that. In Excel, it's not like that. It's the same file. And I've seen the most horrible things to work around that. And inevitably, you will end up with human error, with stuff that simply stops working because the software has been corrupted by new data or something bad like that.
+
+45
+00:29:50.000 --> 00:30:12.000
+Or there was a manual step in updating the data that was not performed just right. And now there is a subtle difference in the output that you will not notice because you forgot a validation step that would be otherwise redundant. So that's a colossal problem. And then you have,
+
+46
+00:30:12.000 --> 00:30:46.000
+how do you put Excel code in version control? The short answer is you just commit a binary blob. Now there is a change. Put a new binary blob into version control. What changed? Well, you have two binary blobs. Can't you tell the difference? Yeah. And again, I've seen the most exotic solutions where there were macros that were yanking all the VBA code out of an Excel spreadsheet, saving them to version control, and then another macro
+
+47
+00:30:46.000 --> 00:31:27.000
+that was Yankton-Bend back in and rebuilding the spreadsheet was nightmare. Speaking of nightmare, do you want a horror story? Sure, let's hear it. I actually was thinking of, I have a horror story in my head, but I'd love to hear yours first. It's probably more horrific and then people can ramp down at my story. Four words, matrix inversion in Excel. Oh my gosh. I saw somebody write a matrix inversion in three or four pages of VBA. It was, I was four pages of VBA. It was running. It was like a 10,000 by 10,000 matrix.
+
+48
+00:31:27.000 --> 00:31:50.000
+So substantial. And it was pushing button and then it was leaving. Two hours later, it was coming back. And somehow, hopefully, it was giving the result. I looked at it. I looked at him. I looked at it. I opened my Jupyter notebook.
+
+49
+00:31:50.000 --> 00:32:50.000
+First line, import, open openpy excel or whatever second import pandas second line loaded the data from his input excel spreadsheet third line invert fourth line save out i looked at him push button 40 milliseconds later the program was done he looked at me i said oh i didn't know you could do it yeah i would be worried if i knew if you knew oh my gosh yeah i have a similar story where uh i'm gonna throw my brother-in-law under the bus so my brother-in-law is really really good at math got like a perfect on the math SAT. So I'm going to set him up to knock him down here. But he's really good at math, but he's not a computer scientist. He's an economist, right? And I remember this is years and years ago. So we were both like relatively junior professionals. And he asked me to take a look at his laptop because of course, everyone with a CS degree is also an expert in IT right in your family so I was really prepared to not have any solution for this because I'm
+
+50
+00:32:50.000 --> 00:33:36.000
+usually terrible at IT but but it's just he said it was running really slowly and he had I'm not even kidding it must have been over 200 Excel programs open at the same time and almost all of the files had almost exactly the same name. And basically he had created, as you said, he had this code that did all of this logic, but he wanted to run it on a hundred different data sets. And so as an economist, he didn't know how to do that. So he created a hundred copies of this Excel spreadsheet, and then he just had them all, it was more than a hundred, had them all open at the same time. And he was trying to copy and paste data into each one. And I was like, you have to learn R. I was like, at the time, I don't know how popular
+
+51
+00:33:36.000 --> 00:34:11.000
+Pandas was. I don't even know how old Pandas is. So I didn't know about any of that. But I told him, you have to learn R and get a know, get a book on R. Yeah, I mean, to your point, you know, people get in sort of trapped in Excel and then it becomes difficult for them to take the next step. And so that's kind of where I think scientific Python, that's where I think it can grow the most is with that audience, right? The Excel audience. So how do people, let's say, you know, people out there like my brother-in-law and like other people who might
+
+52
+00:34:11.000 --> 00:34:59.000
+be really good with Excel, how do they get started with scientific Python? Like what's a way they can ramp into that? There are plenty of tutorials out there. First, they should start with the Python tutorial, which is generic and it teaches them like basic for loops. And already that will give them the tools to awkwardly read a CSV file, do some calculations on it and then write it out. And then from there, they should start with a Pandas tutorial specific for scientific Python and realize that all that for loop that they wrote in pure Python, where they were opening the CSV file and reading cell by cell and calculating cell by cell, actually that
+
+53
+00:34:59.000 --> 00:35:35.000
+becomes three lines in Pandas. And it's a lot faster as well. One thing that's different, you know, with Excel, it's reactive, right? You know, with pandas, it's imperative, right? So, you know, with Excel, you change the data and then the answer just magically appears, right? And so how do you get people to sort of make that paradigm shift from, you know, everything is reactive and sort of, it's like, Excel is like a true functional programming language, right? How do you go from that to something like Pandas, where it's a script where you read in the data? How do you get people to make that paradigm shift?
+
+54
+00:35:35.000 --> 00:36:35.000
+I think that for anybody that uses Excel professionally, reproducibility and removing human error is the cell. Yes, Excel is reactive which is great if you want to prototype something but then if you want to repeat the same operation every other week and you want to repeat it exactly the same way and you want your replacement to repeat it the day that you're on holiday, Excel is doom. You will get it wrong. You will introduce human error in these 20 different manual steps that you need to repeat the exact same thing. And the idea is you have input data, which is a plain formula-less Excel file or CSV or whatever or a web page. And you have software that you push button and you're guaranteed that if you
+
+55
+00:36:35.000 --> 00:36:57.000
+push button twice on the same data, you will get the same output. And if you want to change one thing, you can have version control. And you can say, okay, a push button. Oh, I don't like these numbers. But I remember a week ago it was working. Go back in version control one week. Push button.
+
+56
+00:36:57.000 --> 00:37:20.000
+Oh, now it works. Okay, what changed? In Excel, at best, you have binary blob versus binary blob. In Python, you have those five lines that somebody changed and they shouldn't have. And you can blame it and fix it accordingly. It's a much better living. Yep, that makes sense. Cool.
+
+57
+00:37:20.000 --> 00:37:42.000
+Yeah, I think that makes sense. Do you recommend people go from Excel to R to pandas or go straight to Pandas? Skip R. There is no need for R nowadays. Again, unless you are a scientist that needs that one specific algorithm that somebody wrote 20 years ago
+
+58
+00:37:42.000 --> 00:38:05.000
+and it's barely almost unknown. But even then, there is a really nice library, which I cannot remember the name, which can wrap our functions and you can work on NumPy objects. Cool. That makes sense. Yeah, so for folks out there, if you go from Excel straight to Pandas, you're going to see these constructs
+
+59
+00:38:05.000 --> 00:38:50.000
+like data frames and wonders. A lot of Pandas is inspired by R. And so the inspiration might be a little bit lost on you. But I agree. I agree with Guido. I think you go straight to Pandas and you don't necessarily need to know the whole history there to get up and running and get proficient and get effective. And for those that miss the fumbling around bit of Excel, I think that using a Jupyter Notebook helps immensely. I always prototype my new code on Jupyter Notebook and only at a later date when I want to productionize it, I move to PyCharm. That's my personal preference at least.
+
+60
+00:38:50.000 --> 00:39:19.000
+I find it a lot faster for prototyping. Yeah, that makes sense. What tool do you use to share Jupyter Notebook results? Do you do the export to HTML or do you have like another tool that you use? If I just want to show them to somebody on the internet, I may publish them to a GitHub guest or if I'm going to share them to somebody that doesn't know what Python is, I will do a save as to HTML.
+
+61
+00:39:19.000 --> 00:39:53.000
+Yep, that makes sense. So cool. So yeah, I think we covered this in really good detail. Just to recap for folks out there um you know so numpy is a blaz and blaz blaz stands let me step back a little bit so blaz is basic linear algebra system and so the idea is again going back to that vector add you know you want to do a plus b and you want it to be a component wise add really quickly. And so Blas basically provides you with a way to, and Blas is pretty low level, like C or C plus plus or even Fortran.
+
+62
+00:39:53.000 --> 00:40:24.000
+Blas is written in AVX assembly. It's very, very highly optimized. Right. Oh yeah. But even the interface will be, you know, if you wanted to interface directly with a BLAS system, you'll be writing, yeah, C or at best, you'll be writing C or C++. So, and yeah, you're right, under the hood, it's all custom written assembly code that's, you know, optimized for a million different architectures, et cetera. And so that's how people have done, you know, scientific
+
+63
+00:40:24.000 --> 00:41:03.000
+computing in general, especially how scientists have been able to do it without having to sort of rewrite that from scratch, because that can be really difficult. And there's issues with precision. There's times where you want to change the order of operations. The thing that comes to my mind is actually the log sigmoid, where often you want to get the log likelihood of a sigmoid function. And it turns out if you do the sigmoid and then you do the log operation as two steps, you incur a lot of imprecision. And so your answer ends up being very imprecise. So many, many BLAS systems will offer a log sigmoid operator, which does both of those at once. And the result ends up being much more
+
+64
+00:41:03.000 --> 00:41:53.000
+accurate. These are all things that people don't want to have to think about, right? Unless they're down in the weeds. So NumPy provides a beautiful Python interface to n-dimensional arrays and all of those operations. And it allows you to use Python to do all of that. But it's also pretty low level. You have to think in terms of matrices, and so that's where Pandas comes in. One thing that everybody that is not using Python is complaining about is, isn't Python slow? The answer is, well, yes, Python is pretty slow, but NumPy is as fast as C in theory, actually faster than whatever C you will write because it's been highly optimized.
+
+65
+00:41:53.000 --> 00:42:34.000
+Yep. Yep. That's right. Yeah. This is a common criticism of Python. I think that for everything, you know, there's a Pareto distribution here. So a tiny percent of your code consumes 99% of the time. And so with NumPy, that expensive code is almost certainly being done in assembly or at best at C. So you are executing a command saying, you know, add these two arrays, and you're telling NumPy to do that. And if that, you know, instruction, you know, that message telling NumPy to do that. And if that instruction, that message telling NumPy to do that takes a hundred times as long as it would in C, it's totally irrelevant because that is very, very tiny
+
+66
+00:42:34.000 --> 00:43:20.000
+compared to the actual adding of those matrices. And that actual add instruction, which is gonna take the vast, vast majority of the time is now super, super optimized. Way better than if you had just written a for loop in C++. There are times, what comes to my mind are simulators, but there are times where you do have many instructions and it's not really something that can be parallelized. And even there, there's Numba and there's a bunch of these there's Cpython you know a bunch of these tools that will convert you know Python functions to C on demand so if you're not doing anything complicated with objects you just have a lot of serial mathematical operations there's a whole
+
+67
+00:43:20.000 --> 00:44:05.000
+bunch of different just-in-time compilers that can optimize that for you. So yeah, in short, you know, don't be adverse to Python for speed reasons. So we've done a pretty good job covering NumPy and Pandas. The thing that Dask does is take it to multi-node. And that, I think, is really, really interesting. And I have to confess, I don't actually know a lot about that part of it. I'd love to know more. So multi-node is how do I take this operation that now runs really fast on my machine and get it to run on a hundred machines, even if they're in my office or even better if they're in the cloud somewhere. And how does Dask actually do that? How does it run your code remotely?
+
+68
+00:44:05.000 --> 00:44:57.000
+Right. So traditionally, distributed computing has been very low level. Back in the day, we had this very low level CZ++ programming toolkit that would tell you something like, okay, you have two nodes, and this is a command that lets you send this piece of data from one node to another node and then the other node will need to expect that and it doesn't scale in terms of complexity it becomes really really complicated really fast so the idea behind dask is that you have this object in your Jupyter Notebook or whatever that looks and feels like a Pandas data frame or a NumPy array, except that you look at it and there is a line that says
+
+69
+00:44:57.000 --> 00:45:42.000
+this Pandas data frame is 40 terabytes. How is that possible? But you're on your laptop and you have a 40 terabytes Pandas data frame on your laptop. How is that possible? But you're on your laptop and you have a 40 terabyte Pandas data frame on your laptop. How is that possible? There's a trick. You don't actually have it on your laptop or anywhere else for the matter. You have the instructions to generate that data frame. And then every time you do a manipulation on that data frame or on that NumPy array, you add an extra delayed instruction to the bunch. And at the end, on your laptop, you have two megabytes, say, worth of delayed instructions, which are, to you, they are completely invisible.
+
+70
+00:45:42.000 --> 00:46:20.000
+You have the final product in front of you just not the actual numbers are in it and then you invoke one method that in pandas and numpy does not exist which is dot compute when you do that two things have well a few things happen if you're just on your laptop you can run the whole thing on your laptop and it will be already faster and more performant than NumPy or Pandas because it will read from disk or from the network whatever bits you need, crunch them through and then release the RAM as soon as possible before the next bit can be loaded up.
+
+71
+00:46:20.000 --> 00:47:05.000
+Say, for example, that you have an hypothetical Excel spreadsheet of a million lines and you want to sum up a column. If you do that in Pandas you have to load up the million lines. Now you have everything in memory and then you do the sum in memory. And unless you have something fancy that sum will be most times using a single CPU with dusk you can say load this million lines spreadsheet in split it in a hundred and sixty chunks so one million over a hundred and sixty is no 10,000 something and now you and now every and And now every one of those
+
+72
+00:47:05.000 --> 00:47:27.000
+goes to one of my 16 CPUs or eight CPUs or four CPUs, depending how fancy my computer is. And it does not matter how many CPUs I've got. I have split it in 160 chunks and Dask will take care of it by saying, okay, load the first one. As soon as you start finishing loading the first one,
+
+73
+00:47:27.000 --> 00:47:55.000
+do the partial sum of that column that you want, and now you have one single number, and then you can release it. In the meantime, let's say you've got seven more CPUs that are idle, load the second one, and the third, and fourth, and seventh, and the eighth. By the time you finish loading the first one, load the ninth on the first CPU and so on. So at any time on your eight CPUs host, you've got eight 10,000 lines chunks in memory,
+
+74
+00:47:55.000 --> 00:48:16.000
+completely saturating your CPU capacities, and you are instead of one million lines. That's the idea. And then once you have the subtotals of two chunks, what did the user want? Oh, they wanted just a grand total. Fine, I don't really need these two numbers in memory. Sum them up and now I have one number.
+
+75
+00:48:16.000 --> 00:48:35.000
+Rease and repeat. And I can do a recursive aggregation and all of that is under the hood, completely transparent to you. You don't see it. If you're running on your laptop, all you see is your million lines database is now taking as much as 80,000 lines
+
+76
+00:48:35.000 --> 00:49:10.000
+if you have eight CPUs and you split in 10,000 bytes chunks and it runs eight times faster. And then you can scale up to the cloud or to a data center because you don't have a million lines, you have a billion lines. And no matter how fancy your laptop is, it will just not do it. It's just not enough even then. So you don't even have this billion lines database, which is probably going to be in the terabytes, on your machine.
+
+77
+00:49:10.000 --> 00:50:00.000
+You have it somewhere on one or many databases on the cloud. So you have your one megabyte worth of Dask data frame or DaskArray, push button compute, Dask will push these instructions to the Dask scheduler, which in turn has a thousand or whatever you made, I mean, you paid for Dask workers. And the Dask scheduler will coordinate the workers to say, you do this one, you do this one, you do this one, exactly the same way that earlier my local laptop was coordinating my eight CPUs, except that I don't have eight CPUs. I've got 8,000. And then you can do fancier stuff like share data between workers peer-to-peer,
+
+78
+00:50:00.000 --> 00:50:42.000
+which is something that typically in a processing pool, for example, you can't do. And the data sits near the workers. It never touches your laptop. Yeah, this is super cool. So just to recap, so see if I understand. So, you know, most people want to either visualize some result, in which case, you know, you're only interested in as much information as your brain can process, right? So some kind of line case, you know, you're only interested in as much information as your brain can process, right? So some kind of line chart, you know, with smoothening and all of that is more than enough for your brain to understand what's going on. Or if it's not going, you know, the information is not going directly into your brain, it's going into another database. And
+
+79
+00:50:42.000 --> 00:51:08.000
+usually there's that database can take it in one piece at a time and doesn't need to have the entire thing loaded in at once. And so in either of those cases, to your point, like either you're streaming out small chunks or you're crushing everything down to a small chunk. And so only the intermediate values might be large. I mean, it might get small very quickly at the end.
+
+80
+00:51:08.000 --> 00:51:56.000
+And so the way Dask works is instead of saying, load this huge data set, do all this logic on each piece and then aggregate, it's deferring all of those commands. And then at the end, it's analyzing the sort of graph of operations and it's figuring out where it can break things up into pieces that's correct got it so a couple of questions one is how do you handle like let's say i'm using some pretty esoteric like gambit right which is a game theory library in python right so let's say I want to use Gambit to, you know, calculate some Nash equilibria of some data. How does that work with Dask? Because now the Dask scheduler needs to tell these nodes,
+
+81
+00:51:56.000 --> 00:52:21.000
+hey, you have to, you know, pip install Gambit. And then when you're done, you have to pip uninstall it. Right, like how do packages work in this kind of environment? Right. This is where Coiled steps in. So normally what you will need to do, you have two ways to do it. One is you SSH into every one of the workers and you repeat the exact same pip install
+
+82
+00:52:21.000 --> 00:52:53.000
+on every worker. That's the first option. The second, definitely more sensible option is you create a Docker image and then you send it to all the workers. Even then, you will be struggling with complexity with a lot of DevOps work in terms of keeping all the workers aligned. You have a thousand workers, you got to keep them aligned. It's not that simple. Yeah. And multiple people could be on
+
+83
+00:52:53.000 --> 00:53:28.000
+the cluster too. Like I might need Gambit, you might need PyTorch and we both submit our job at the same time, right? In that case, you will typically have two separate clusters. It's a lot easier. Ah, okay. Got it. It doesn't make much sense to share a cluster with different software. And you cannot share a cluster with different versions of the same software. Typically, what people do when they want to build heterogeneous clusters, they change the hardware.
+
+84
+00:53:28.000 --> 00:53:56.000
+So for example, they will have some nodes that are memory optimized with many, many gigabytes of memory, but not that great of a CPU. With compute optimized nodes, which are built for heavy lifting, but cannot store that much data. And the GPU nodes on the side got it but so so let's say i have a docker image and my docker my docker file is you know pip
+
+85
+00:53:56.000 --> 00:55:01.000
+install gambit and i submit my job along with this docker image so then the the das scheduler tells these nodes um i guess run this docker container and then inside the docker container do this computation and then tear down the docker container is that how it works no it's the other way around the docker container will also contain the dusk scheduler and workers plus all the software that you need. And you will start task scheduler or task worker from inside the Docker container. So it's up to you to deploy the Docker container on the hosts and then start everything. And that's where Coiled steps in, the company I work for. The idea being that all of this work is a lot. And it's potentially months worth of DevOps engineering time to have it in production scale and that many workers.
+
+86
+00:55:01.000 --> 00:55:24.000
+And if you are a lonely data scientist that has the money for it because maybe your company bankrolls you but doesn't have the human resources to support you in your work, you can just push button and fire up a thousand workers in a matter of minutes with Coiled,
+
+87
+00:55:24.000 --> 00:55:57.000
+which you just specify, I want these packages, push button, and Coiled will build Docker for you. You don't need to know a single line of Docker file syntax. You just need to know your algorithm and which libraries you want to have. If you're prototyping in a Jupyter notebook, Dask will do something fancy, which is pickle the cells of the Jupyter notebook so that you don't need to install everything remotely beforehand.
+
+88
+00:55:57.000 --> 00:56:22.000
+You can change your code on the fly in your Jupyter notebook cell, compute that code is pickled entirely, not just the reference to it, and send to the worker in real time so that in theory you could have generic workers that just have NumPy, SciPy, and Pandas installed, and that would be enough. Yeah, one thing that Google Colab does,
+
+89
+00:56:22.000 --> 00:56:59.000
+which I thought was pretty cool, is you can do like bang pip install inside of Jupyter. And so when you do like a bang pip, that tells Google Colab that this is a pip install command. Yeah, it somehow gives you a, I guess you run inside of some kind of Docker or VM, and then you pip install whatever you want. And at some point, Google just terminates that machine running that Jupyter notebook. And so in this way, you don't have to pass Docker to Google. I feel like you could do something similar as long as it's just Python. You're not trying to install any kind of OS level stuff.
+
+90
+00:56:59.000 --> 00:57:19.000
+I don't believe you can pip install stuff on a running cluster but again if you're using Coil rebuilding a cluster is a matter of 10 minutes at most if you're rebuilding the whole Docker image at all. Oh interesting yeah okay that's an interesting way of doing it
+
+91
+00:57:19.000 --> 00:57:34.000
+yeah I like that especially at bigger companies you have a lot of different teams and different teams are using different packages and they're all running on the same cluster. Or in this case, they're running... In this case, they're not. Yeah, yeah.
+
+92
+00:57:34.000 --> 00:58:08.000
+Maybe cluster is not the right word. They're running... The same hardware. Yeah, they want to do distributed computation. Maybe I'll put it that way. So they want to run their task at the same time. And so, yeah, to your point, it's like, why not just build an ephemeral cluster for each team, right? As a matter of fact, a company that I was working for was doing at the same time four or five different versions of the
+
+93
+00:58:08.000 --> 00:58:33.000
+same application software that they could run in parallel. And it was not a good design. There was a lot of compatibility issues, a lot of integration issues. You had to do integration testing every time. Does this version, or does the latest version of the cluster software collaborate correctly
+
+94
+00:58:33.000 --> 00:58:59.000
+with the older version of the application software? It wasn't great. I find that whole design was because the whole thing was bare metal, was born in bare metal. It hadn't been migrated properly to the cloud. It was designed well before Docker. And with Docker, none of this makes sense, to be honest.
+
+95
+00:58:59.000 --> 01:00:12.000
+You can just have your own specific version of everything. And you have a bunch of Docker images that you just distribute and you don't need to care. And if somebody else wants to run a different version of the same thing on the same resources, fine. It's just, it's Docker, you will not even see them. Right, right. Does Dask then play nicely with like, you know, like the auto scheduling and auto scaling and all of that in Kubernetes? Let's say you have a bunch of people running jobs, and then, you know, it's six o'clock, everyone goes home. You know, does Dask know to sort called adaptive scaling, which does exactly this. You tweak how many seconds does a worker need to be idle before you tear it down? How much pressure do you need to have in terms of queue of Dask piling up in queue before you spin up a new worker and everything goes up and down on the fly. Yeah, that is super cool. So I can imagine something where you, you know, you like MD5 or you SHA some, your requirements,
+
+96
+01:00:12.000 --> 01:00:42.000
+your Docker container, actually Docker container already is some, but basically you have two people have the same pip packages, they could get on the same cluster and you could use some kind of hashing to make sure of that. But if someone revs one of the dependencies or shows up with a totally different program, they would get a unique cluster that would scale up and down for them. Yeah. And again, this kind of functionality, it comes in Dask straight away.
+
+97
+01:00:42.000 --> 01:01:27.000
+And you have packages like Dask Kubernetes. If you want to install it yourself, it will cost you quite a lot of DevOps to have it right. If you use Coiled, you have it out of the box. Yeah, actually, this is very timely because we just did an episode on Kubernetes. And inspired by that episode, I personally went in and did a bunch of digging. I finally got a Kubernetes cluster up and running where I had an ingress proxy, which I learned a few days ago for the first time. But basically, it's this thing where when you visit the cluster, you get authenticated. There's some SSso through like google auth um that
+
+98
+01:01:27.000 --> 01:02:03.000
+sets some cookie and then once you're authenticated you can get into the cluster for real it doesn't bounce you out and i have a few services on there that now each service doesn't need its own auth because i've put auth on the entire on the entire cluster but that whole thing took me multiple days to figure out. I was on Google, I was on Wikipedia, I was looking up a bunch of articles on Medium, and I was hacking my way through it. And it's currently kind of held together with duct tape. So that is just to make it so that you can securely log in
+
+99
+01:02:03.000 --> 01:02:24.000
+to this Kubernetes service, right? It took forever. And so, you know, it's definitely not worth it. I mean, if you could use something that's managed. Actually, yeah. So how does Coiled handle authentication? That's kind of a good kind of segue. I'm not familiar with that part of the software.
+
+100
+01:02:24.000 --> 01:03:30.000
+I am focused on the Dask distributed. But the idea being that you have your own AWS account and you install Coiled provides some like Terraform or some other kind of scripts where you can spin up Coiled in your own private cloud. And so there isn't just one Coiled cluster for everybody. Correct. And so got it. And so in your cloud, it's already private. So you don't have to, you could assume that you can trust the people who can see those IP addresses. Yes. Got it. it okay that makes sense and of course and of course on top of that there is a wealth of security that comes out of the box with ssl and whatnot which again can be a bit fiddly to figure out and called just delivers it out of the box. Very cool. Okay, so I think we covered a lot of things in really good detail. So you run Dask,
+
+101
+01:03:30.000 --> 01:03:50.000
+you create a bunch of operations in Dask. At some point you say.compute and then up until then, everything has been instantaneous because it's not actually doing anything. It's just deferring it. When you say.compute, that's when everything pauses. Dask goes off and crunches all of that and then comes
+
+102
+01:03:50.000 --> 01:04:24.000
+back with those answers. One other question, how do you deal with things that are difficult to decompose? Like you mentioned matrix inversion, right? Matrix inversion is a difficult operation to run on, for example, 100 nodes, right? It's not impossible, but it's not trivial. How does Dask handle something like that? That's where the fancy code comes in. It's all about copying over data when it's needed, where it's needed. And all of that happens automatically for you.
+
+103
+01:04:24.000 --> 01:04:51.000
+So you will end up with multiple copies of the same pieces of data, meaning that the total amount of memory cluster-wide will be somewhat higher than if you were running on a single host. There are algorithms that figure out how to try to keep the number of copies alive at any given time at a minimum. Got it. Okay. Yeah, that's some gnarly stuff.
+
+104
+01:04:51.000 --> 01:05:11.000
+That's, as you said, that's where the really complicated code is. Maybe for something like matrix inversion, there's even some specialized implementations that are distributed friendly. The algorithms can be slightly different from PrimaPure and NumPy, yes. Yeah, that makes sense.
+
+105
+01:05:11.000 --> 01:05:59.000
+Some things which are straightforward and in NumPy can be close to impossible in Dask. Like the most obvious example is sort. Sorting a bubble sort of any kind of sort when you have everything at once in memory in front of you is 1980s textbook computer science. But when you have your chunks that are in small pieces scattered all around the network, it becomes almost impossible. So you can sort each chunk locally, but then you will not be able to do a global sort.
+
+106
+01:05:59.000 --> 01:06:36.000
+So there are solutions around that where you, for example, instead of calling sort, you get a function called the topK, which is give me the 1000 largest elements or smallest elements globally, at which point becomes trivial. You get the 1000 largest elements in each chunk. Each chunk is a million elements, for example, and you get 1,000 out of that. You get 1,000 out of the other. You compare them. Now you have 2,000.
+
+107
+01:06:36.000 --> 01:07:19.000
+Now you get 1,000 out of 2,000. You need to repeat. You again have something that is distributed friendly, but you had to change the algorithm at that point. You had to let go of a piece of algorithm that you actually didn't care about, which is the bottom 9,990,000. Yeah, right. I remember working on sorting in MapReduce a really long time ago and i think what we did was we had each node compute the quantiles of their piece of the data and then we had another that could look at a hundred different sets of quantiles and try to guess at the overall
+
+108
+01:07:19.000 --> 01:07:52.000
+you know quantiles of the overall data set so quantiles are just buckets if i had the sorted data and it was broken up into buckets, where would those boundaries be? Once you say, you know, I know roughly 10% of my data is between zero and 10, another 10% is between 10 and 100, another 10% is between 100 and 200. If you have that rough estimate, then you can give each of those buckets to a new node, have them sort in order, and then now you have something totally sorted. If you know each bucket is strictly greater or less than the other, right?
+
+109
+01:07:52.000 --> 01:08:25.000
+But you're right. That's not 90s textbook stuff. It starts to get really complicated and requires you to do a lot of statistics that are approximate, and so you lose all your guarantees. Yes. And another thing that is normally done is called rechunking. So if you really, really need all of your data in a single piece, you will realize that actually you need all your data along a certain axis on a single piece. So for example, let's say that you really need a sort
+
+110
+01:08:25.000 --> 01:09:09.000
+or you have a matrix that is a million lines by a million columns and you need it sorted by row. And let's say you have it chunked in a thousand by a thousand squares. You can't sort that. What you can do is call a rechunk. And now instead of have a thousand by a thousand squares chunks, you have a million lines, single chunk by a single column. So the individual size of every chunk is the same as before, but now it's sortable in place because you have it in memory all at once, but you still don't have the whole matrix in memory. Oh, interesting. Really, really interesting.
+
+111
+01:09:09.000 --> 01:09:26.000
+Cool. So yeah, this is fascinating. I'm going to have to really do a deep dive personally on Dask and learn a lot. I think folks out there, actually, if someone wants to learn Dask, what is the best way they can learn that? There are plenty of really good tutorials on Dask.org.
+
+112
+01:09:26.000 --> 01:09:47.000
+Got it. So go to Dask.org, check out the tutorials section. Do you recommend people learn on their laptop or should they get a machine in the cloud? Does it really make a difference? It does make a difference the moment you want to deal with sizable data. If you're just learning and fumbling around with a few kilobytes or megabytes
+
+113
+01:09:47.000 --> 01:10:26.000
+of data, your laptop is fine. The hello world air quotes, because of course it doesn't make much sense in Dask, takes less than a millisecond to run. Compare it, for example, to a hello world in Spark that takes, I think, two to five seconds, something ridiculous. Because that scales down a lot better than, say, Spark. And then you can scale up from that. And you can work on your laptop. And then you realize that, oh, now I want more data. And now my laptop is dying.
+
+114
+01:10:26.000 --> 01:10:41.000
+And now you scale to the cloud with the exact same software this is as a matter of fact what I do normally I work with a reduced data set locally which is super fast on my Jupyter notebook play around with it and once I have the algorithm nailed down
+
+115
+01:10:41.000 --> 01:11:25.000
+I take the exact same algorithm and I connect to a Dask scheduler and crunch it instead of the laptop. I send it to the Dask scheduler on a data set that is a thousand times larger. Yeah, that makes sense. Totally. Yeah, it's really nice. Actually, this is something that is missing in a lot of modern compute is the ability to run locally and then switch to running at scale and then switch back. So I'm thinking right now of Kubeflow and there's this determined AI. There's a lot of these solutions for running in the cloud, running parallel operations in the cloud. But if you write for them and you find a
+
+116
+01:11:25.000 --> 01:12:05.000
+bug and you want to reproduce that bug locally, you're stuck. You can't really do that. And so you end up in this really painful loop where I submit my job to the cloud, I go get a coffee, I come back, oh, I missed a colon, I submit it to the cloud, go for a walk. And so it's just the iteration time just plummets, right? And so it's just the iteration time goes, just plummets, right? And so it's nice to have sort of it all in one unified interface where you can say, okay, I clearly have a bug that is independent of my data. And so I'm going to pull one one thousandth of the data. I'm going to run the whole thing on my laptop 20, 30 times, get the bug fixed and then go back to running at scale. That's really
+
+117
+01:12:05.000 --> 01:13:04.000
+nice. Cool. So let's jump into Coiled, the company. So tell us a bit about Coiled, the company. How long has it been around and how long have you been there? Coiled has been around for, I believe, a year and a half. And I've been there for a year, actually a year and a half and I've been there for a year actually a year a year and a half now two years the company are in a half me oh okay got it so so about how many people are there now uh around 50 something got it and is it I know it's it's remote is it is it concentrated in the EU is it really all over it's most of the people just happen to be in the US, but now we have a half dozen people in the EU, one in India. We used to have a couple in Australia that turned out to be problematic because our company meetings were at 6am in the morning for them, which was not really sustainable.
+
+118
+01:13:04.000 --> 01:13:49.000
+Yeah, that makes sense. So it's been around for a couple of years, about 50 people. I mean, that's actually a lot of growth. I mean, to go from zero to 50 in two years, it takes a lot of coordination to get that many people onboarded. I mean, that's a person every two weeks. Yeah, very cool what's what's sort of the plans going forward are you hiring full-time are you hiring uh interns all the above none of the above i don't believe we are hiring interns right now we have a page with careers if you want to have a look at it if you want to send your cv you are more than welcome cool and And so what time zones are you supporting? So you mentioned India, the US and the EU.
+
+119
+01:13:49.000 --> 01:14:15.000
+Is that pretty much the time zone block or what are the requirements there? We are as flexible as humanly possible in terms of requirements from the individual workers. So it's very, very flexible for personally. I'm a night owl. And that means that I frequently work until 1 a.m. in the morning
+
+120
+01:14:15.000 --> 01:14:46.000
+and then log in late in the next, the next, well, the same morning, technically. Right. That's cool. Patrick, are you a night owl? Yeah, no. Morning person. No, I used to be. I used to be, but with kids, I lost the opportunity to do it. I still think I would do it if I could. If the sun is not shining bright, I'm pretty much getting tired and going to sleep. You know, I actually, at a place patrick and i used to work a long time ago i got into a
+
+121
+01:14:46.000 --> 01:15:31.000
+lot of trouble because i just could not show up at what was it 7 30 or something they were asking us to show up and uh i just couldn't do it and i was like i'm sorry i mean i had no reason you know it's not like i had something at 7 30 but i'm also a night owl. I just could not do it. And I would always go in much later than that. But now with kids, I don't have a choice. They just come in and kick the door down, jump on my stomach. And I'm like, okay, I guess we're getting up now. But that's cool. I think that, yeah, I think there is a ton of flexibility there. If you're out there and you are, you know, if you're a Dask user, if you're a Dask enthusiast, you know, Coiled is hiring folks. You know, this is a question we get asked a lot.
+
+122
+01:15:31.000 --> 01:16:06.000
+You know, what's the best way for someone to impress the hiring managers at Coiled? Contribute on both. We have the Dask board on GitHub, Dask Dask, which is the NumPy and Pandas wrapper, and the Dask Distributed, which is the scheduling part. We have plenty of issue tickets to pick up from. And if you have your own issues and you believe that it may be within your reach, go on and contribute with a PR. You will be very, very welcome to do so.
+
+123
+01:16:06.000 --> 01:16:24.000
+That's how I impressed Metropolis, for example. That's exactly how I was cutted. I was just contributing. Yeah, that makes sense. I submitted a change recently to Apache Drill. You know, one of the things that, just talking to some folks, I realized there's a lot of people don't understand that
+
+124
+01:16:24.000 --> 01:16:40.000
+at the end of the day, all of these things, whether it's Linux or whether it's Desk or whether it's Drill or Spark, all of these things at the end of the day are just pieces of software that you can go and look at, if they're open source. And so don't
+
+125
+01:16:40.000 --> 01:17:16.000
+ever shy away from going and reading the developer instructions, building your own local copy of whatever it is, and making whatever improvements or fixes you want to make. I think a lot of people are intimidated by that. They say, well, I pip install desk. I don't know how to get the code or how to change the code. And it turns out it's not as hard as you would think for any of these projects. And so I think it's great advice. I just want to double down on that and say, if you think this is interesting, go in and look at how you can have an impact right now.
+
+126
+01:17:16.000 --> 01:18:04.000
+And that's going to be the best way to signal not only to them, but to yourself, like to tell for you to sort of confirm with yourself that this is something that you really enjoy and are good at. Yes. And it's going to be immensely, even if nobody is going to hire you, it's going to be immensely useful for your career growth and is 100% something that you can put in your CV. Frequent task contributor, it has a weight on a CV, definitely. Definitely. Yep. I think, you know, just to make this super concrete, we had a candidate who had kind of mixed results on the coding part of our interview. You know, so we were kind of debating, the hiring committee was going back and forth as to what to do about this candidate.
+
+127
+01:18:04.000 --> 01:18:56.000
+And one of us went to their GitHub and we saw that they had done all this open source work and they had these projects. They took the time to test it and it was related to our field. And so that actually had a huge impact. It almost just instantly changed everyone's perspective. So, you know, so if you do things, you know, and, you know, build things that you're proud of and then publish them so you can be proud of them, at least for a long time. And also kind of broadcast the message to others as well. Cool. So Guido, if people want to reach out to, you know, either you or other folks at Coiled, you know, what's the best way for folks to kind of follow you and know more about what you and what Coiled are up to? So if you are interested in the Dask development, we have the Dask GitHub boards.
+
+128
+01:18:56.000 --> 01:19:31.000
+We have the community board, which is about the higher level design and direction. And then we have the Dask, Dask, and Dask distributed boards, which are the lower level day-to-day issues. We have, I believe, a customer Slack. We have discourse. We are active on Stack Overflow as well. So if you put a question on Stack Overflow about Dask, there is a good chance that some of us may spot it.
+
+129
+01:19:31.000 --> 01:19:47.000
+But if you want to be sure, reach out directly. We have people that just do that as a job. Cool. When you say Dask board, I'm actually on the Dask GitHub page now. What do you mean by that? The issues page. Okay. Oh, got it. What do you mean by that? The issues page. Okay. Oh, got it.
+
+130
+01:19:47.000 --> 01:20:07.000
+Okay. So yeah, check out the issues page and see the, oh yeah, here we go. Monthly community meeting. Oh, that is super cool. So yeah, definitely. If you go to Dask issues, you can actually see the issues are also used for discussion, which is really neat. Yeah, I've never seen that before.
+
+131
+01:20:07.000 --> 01:20:39.000
+Cool, okay, I think we can put a bookmark in this. This has been super, super interesting. I think that, oh, before we close out, I wanted to let people know that this is the Coiled product. Obviously, Dask is completely open source, free to use, but also Coiled, if you're a student, if you're getting started, Coiled is also free. They have a very generous free tier. You will still pay for your cloud resources, although Amazon also has a bunch of amazing resources for students.
+
+132
+01:20:39.000 --> 01:21:31.000
+And you can combine these. They're not exclusive. So you can be on the AWS credits that they give students and use those credits to run Coiled completely for free. And even if you, let's say, have already graduated, you could get spun up with Coiled at a very modest amount. You get to choose what sort of resources that you want to put forth there and be well within the free tier. So there's really no reason not to try this out. And once you have Dask running locally on your laptop, you could use Coiled to run something at a larger scale with very little friction. Cool. And with that, we can call this a show. Thank you so much, Guido, for coming on. I mean, we covered a lot of really interesting stuff. We explained to folks how, you know, even if you're writing in C, if you just do
+
+133
+01:21:31.000 --> 01:21:58.000
+4A from 0 to 10, that's not going to be as fast as NumPy and why that is. And I covered pandas, covered R, we covered Dask, gave people a whole bunch of great references we'll put a whole bunch of links here in the show notes to help help everyone out there get ramped up on this if you're not already and so thanks so much for helping to drive the discussion we don't really appreciate your time
+
+134
+01:21:58.000 --> 01:22:34.000
+no worries thank you cool all right everyone thanks for supporting us on patreon and audible we really appreciate that if you want to get a hold of us it's patreon.com slash programming throwdown or you can subscribe to us to audible through our programming throwdown link in the show notes and if you want to reach us through email you can email us programming throwdown at gmail.com. So a lot of show suggestions have come from folks emailing us, listeners who know someone they think would be a really good fit for the show.
+
+135
+01:22:34.000 --> 01:22:58.000
+And we really appreciate that. So definitely keep the dialogue going. And we will catch everyone in a couple of weeks. Bye-bye. Hey, everyone. Just chipping in here after the fact to clarify the free usage of coiled anyone can use coiled for free with their existing aws or google cloud account up to 10 000 cpus a month there's a great way to test it out and try it for more information
+
+136
+01:22:58.000 --> 01:23:03.000
+you can head over to coiled.io. Music by Eric Barndollar. Programming Throwdown is distributed under a Creative Commons Attribution Share Alike 2.0 license. You're free to share, copy, distribute, transmit the work, to remix, adapt the work, but you must provide an attribution to Patrick and I and share alike in kind. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

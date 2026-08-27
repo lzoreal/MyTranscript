@@ -1,0 +1,177 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:54.000
+you know, very high-end sushi place. I don't know if they have a Michelin star. Is it okay that we're here? I don't know if it's okay that we're here. And you remember, I remember you saying at one point, he's like, Connor, this is San Francisco. If you just act like you belong, they'll assume that we just IPO'd some like million dollar company and that we're like entrepreneurs and we're celebrating. welcome to adsp the podcast episode 37 recorded on june 30th 2021 my name is connor and on today's episode my co-host bryce describes how scans can be parallelized. We're going to talk about scans. Woo. Yeah. So first I'll tell the story. So God, when was this? Was it 2018? Maybe 2019?
+
+2
+00:00:54.000 --> 00:01:26.000
+Is this the story where we drove to San Francisco? Yeah, it's the story where we drove to San Francisco. Haven't we already told this on the podcast before? I don't care. We're telling it again. So Connor and I are driving to a meetup in San Francisco. And I won't tell the sushi part of the story because I do think we've done that before. I may be lying. Maybe I'm going to tell the sushi part of the story. So we're driving up to San Francisco. This is pre-sushi to go to a C++ meetup. This was back in the days before covid when uh you know
+
+3
+00:01:26.000 --> 00:02:16.000
+you would go and see other human beings and that was a regular thing um and um we're driving and connor was not working at nvidia at the time and was um had not yet been introduced to the world of parallel uh programming i would say. And we were talking about parallel algorithms and Connor basically asked me something along the lines of, I don't see how you could possibly paralyze something like a partial sum or an inclusive scan. And I think that your reasoning for it is not at all surprising. Because first, let's think about reduce. So a reduction is something that seems like it's pretty clear
+
+4
+00:02:16.000 --> 00:02:41.000
+how you would parallelize it. A reduction is, hey, I want to add up all the elements in this sequence. And the idea behind a parallel reduction is you do it as a tree. If you have four elements, you have one thread adds the first two elements, another thread adds the next two elements, and then you take the results from both of those threads and you combine them together. And then you've got a final result that incorporates information from all four of the elements.
+
+5
+00:02:41.000 --> 00:03:38.000
+But for a scan, or a partial sum, as the non-parallel version is called in C++. The idea with a scan is that you're, you're producing a sum of all the elements, but you're also producing every intermediate sum. So, so the output is not one sum, but the output is an array of sums where the, you know, the first element in the output array is just the first element of the input. And the second element of the output array is the first element plus the second element. The third element of the output array is the first element plus the second element. The third element of the output array is the first element plus the second element plus the third element. And so because you need to produce all of those intermediate sums, it sort of seems like it might be a thing that you would have to do
+
+6
+00:03:38.000 --> 00:04:12.000
+sequentially, right? Because you need every one of those intermediates. You can't sort of like do the tree-based thing that I just described for reduce. And so Connor sort of like asked me, like, I don't see how you could possibly do that. And we're in the car and we had just reached, I think we were taking 101 and we just reached a point where we needed to like transfer over to 280. And I did not care.
+
+7
+00:04:12.000 --> 00:05:06.000
+I was just so excited that Connor had asked me this. And I think like I had just made some slides for this for a talk. And so I was like hundred percent ready to give him like a really good answer for it. And so I proceed to explain to him while I'm driving, uh, uh, the answer is don't, don't drive and teach people parallel programming kits. Um, and, uh, and I, I, I missed the turnoff and I, I think like I proceeded to miss like turns like three or four times and we basically ended up driving in a circle um uh uh through like freeway on ramps between these two highways until I had explained this insight to Connor um and then we got, we, we went up to the meetup and I think that was the day
+
+8
+00:05:06.000 --> 00:05:50.000
+where we, where I had to, um, I had to bring my watch to, to get the battery fixed. And there was like a, like, you know, very high end sushi place. I don't know if they have a Michelin star, but, uh, if they don't know if they have a Michelin star, but, uh, if they don't, they probably deserve one. That was like two minutes walk away from the, from the, the, what the equally fancy watch place. And, uh, and I just like, like after we got done with the watch thing, I just walked out. I put, put to my phone. I'm like, that's good food. And I see the very nice sushi place. I'm like, we'll go in there. And then we walked in, we were both wearing like, you know, gym clothes, which is like our typical thing. And it was like maybe five.
+
+9
+00:05:50.000 --> 00:06:27.000
+And they looked at us and they were like, they did not think we were the class of people that belonged in their establishment. And they like showed us the menu because I think they were like, hmm, you probably don't understand that this is an expensive place and you're probably like some college kids who can't afford it. And then I asked them something like, you know, like, well, we only got like an hour. Can you like get us in real quick? And they accommodated us, I think, because we must have been in before their like first dinner wave. Like this is a place where normally you'd have to get like a reservation,
+
+10
+00:06:27.000 --> 00:06:44.000
+like a good chunk of time ahead of time. But they were just like, oh, like, you know, we're not really, we just opened up. We don't have any reservations for a while. These guys say they're just going to be an hour and they don't seem phased by the price. So, okay, we'll let them in. And we had a very nice omakase sushi dinner. And Connor was just sitting there the whole time,
+
+11
+00:06:44.000 --> 00:06:57.000
+just like shaking his head at like, I'm just sitting here in San Francisco eating super fancy sushi in my gym clothes with Bryce. And I just can't believe it. Those were in the days when Connor was still awestruck by me. Yes, I do. I do remember that.
+
+12
+00:06:57.000 --> 00:07:15.000
+It's a very, very fond memory. And it was very surreal. Because that's the thing. At the time, I think we had sort of started to become friends. But I still, like, yeah, you were a person that I watched on YouTube videos, like, at CPPCon. And then just we happened to both be going to San Fran. He said, oh, do you want a ride?
+
+13
+00:07:15.000 --> 00:07:51.000
+And then I asked you a question. And then before I knew it, I'm just like, is it okay that we're here? I don't know if it's okay that we're here. And I remember you saying at one point, he's like, Connor, this is San Francisco. If you just act like you belong, they'll assume that we just IPO'd some like million dollar company and that we're like entrepreneurs and we're celebrating. There's a lot of people that just walk into restaurants, you know, without fancy clothes and stuff. But yeah, it was a very surreal experience. We would not, we will not do that when we have fancy dinner in New York, though, because while it would be acceptable in San Francisco, not so much in New York.
+
+14
+00:07:51.000 --> 00:08:22.000
+Well, but that was an interesting time in our friendship because that was the period in our friendship before you came to understand that, like how skilled you were as a speaker. Like that was a period where you were still, you know, you were really awestruck by, you know, like all the people who talk at conferences and what yet. And like you hadn't come to accept that you were really good at it too. And like I, as soon as I met you,
+
+15
+00:08:22.000 --> 00:09:20.000
+I just like, like it's my superpower. I just like knew like Connor, like he's i just like like it's it's my superpower i just like knew like connor like he's got it like he's got this you know really unique um uh unique mind and he's just got the right skill set to like present talks and so i like i just knew at that point i'm not even sure i had given my first conference talk at that point it might have only been the meetup right i think it had been that was that was but so yeah so it must have been like 2008 yeah 2018 uh 2008 i was in high school you were probably too yes i i was also in high school yes that is correct yeah all right so let's um let me show you this algorithm um and i'll give you the explanation i'll give the audience the explanation that more or less I gave Connor. So I like to think about parallel algorithms and like this algorithm in particular in terms of communication of information. And that perhaps comes from my background working on
+
+16
+00:09:20.000 --> 00:10:39.000
+distributed systems like HPX, where there was like, you know, you had to actually, you know, communicate information over the wire. So let's imagine we have like some input sequence. Let's just assume that it's nine values and there'll be characters And we're going to do a scan of strings. And the reason that we're going to do a scan of strings is because it is non-commutative, right? That A, like when you're doing string concatenation, A plus B is not equal to B plus A. And so I want to demonstrate that you can do a scan that can be paralyzed and does not require commutivity. So we've got an array of nine input characters, A through I. And the first thing we're going to do, which is almost always the first thing that you do in any parallel algorithm, is we're going to partition the input set into subproblems. And
+
+17
+00:10:39.000 --> 00:11:14.000
+each subproblem will be assigned to some thread. So we'll take the first three characters of the input, A, B, and C, we'll give them to one thread. Then we'll take the next three characters, D, E, and F, we'll give them to another thread. Then we'll take the last three characters, G, H, and I, and we'll give them to a last thread. And so the result that we're looking for here is we're looking for, you know, the last element of the output is going to have the concatenation of all of these characters, which is going to be A, B, C, D, E, F, G, H, I.
+
+18
+00:11:14.000 --> 00:11:53.000
+And the first element of the output will have like the string A, B. The third element of the output will be A, B, C, etc. All the way up to that last element, A, B, C, D, E, F, G, H, I. And that last element, it's sort of a little bit special because it is actually, it's the reduction of the entire sequence. So if you only cared about getting that last element, you would just use a std reduce here, not a scan. Although, would you use a reduce?
+
+19
+00:11:53.000 --> 00:12:33.000
+Yeah, well, no, you wouldn't because you couldn't use std reduce because it assumes that your operation is commutative, which we've done a separate episode on. Connor will put a link in the show note to, uh, episode 25, the lost reduction. Yes. Um, so, um, okay. So, so now we've got our chunks. Um, and the first thing we're going to do, um, is that locally within each chunk, we are going to do a sequential scan of the elements in that chunk. And we're going to do that because, you know, what we need for each output element,
+
+20
+00:12:33.000 --> 00:13:17.000
+it needs information from all of the prior elements. So, you know, the third out in the first chunk, the third output element, which belongs to that first thread, it needs information from those first two elements. So the first two elements are A, well, it actually needs it from the first three elements. So the first three elements are A, B, and C. So it needs all three of those to be incorporated into its result. And likewise, the second element, it needs A and B to be incorporated into its result. And the first element of that chunk and the first element of the output, it just needs A.
+
+21
+00:13:17.000 --> 00:14:11.000
+And so you can see getting the answer for just that first chunk is pretty easy. All we have to do is do an inclusive scan of that that chunk locally and then we'll be done. Now, when we go to that second chunk, it's a little bit more complicated because that second chunk, which starts at the fourth element, it needs information from the first chunk, right? In particular, it needs the summation from that first chunk. It needs to add ABC to all of the elements in its chunk. But we're not going to worry about that right now, because it also needs to do that local scan too. Because the last element of the second chunk, which would be the sixth output element, it needs to incorporate information from the fourth and fifth input elements. And those fourth and fifth elements
+
+22
+00:14:11.000 --> 00:14:44.000
+belong in that chunk. So again, we can just do a local inclusive scan to add the information from those local elements into all of the output elements for that chunk. That's not going to be sufficient, but it'll be enough to get us started. So essentially what we do in this first step is each chunk is, or each thread does a inclusive scan locally over its chunk. And so after that,
+
+23
+00:14:44.000 --> 00:15:48.000
+the first thread, its three elements, it has A in the first one, then AB, then ABC. The second chunk, we have D, then DE, then DEF. The third chunk, we have G, then GH, then GHI. Okay. So now the challenge is we need to get information passed between these chunks. In particular, we need to get the last element of the first chunk, ABC, needs to be added into all of the elements after it. So that information, that summed result, ABC, needs to be sent from that first chunk to the second and third chunks. But we also need to send information from that second chunk to the last chunk because DEF needs to be added into the seventh, eighth,
+
+24
+00:15:48.000 --> 00:16:58.000
+and ninth element. So each chunk needs to send its last element to the other chunks. And remember that last element, the last element of an inclusive scan is the sum of all the elements in that chunk. So essentially what we're saying is each chunk needs to send the sum of all of its elements to all of the chunks that follow it. So how are we going to do that? Well, what we're going to do is after each chunk does an inclusive scan, it's going to take that last element of its local inclusive scan and it's going to put it into some temporary storage. We're going to call that temporary storage the aggregates array. And so that aggregates array will have one element for each different chunk. So there will be one element for each different thread. And the threads can write concurrently their values into this aggregates array
+
+25
+00:16:58.000 --> 00:18:01.000
+because we assume that we allocated that aggregates array before we started this operation. So this aggregates array, it's an already existing storage. It's got one slot for each chunk. And during this phase, only one thread will write to each slot. So, we don't need any sort of mutex or anything here. Each thread can just write that summed value into that slot. Okay. So then after each thread has written its element into that aggregate slot, then we need some synchronization. And the reason we need some synchronization is that we need to transform that aggregates array and we can only do that after we know that everybody has written to it. So we insert some sort of barrier.
+
+26
+00:18:01.000 --> 00:18:49.000
+And then after that barrier we know that two things are true. One, that each thread has completed the local inclusive scan of its chunk. And two, each thread has completed writing the sum of its chunk to that aggregates array and all threads can now see those sums in the aggregates array. So that aggregate array has the information that we need to add into each one of the chunks. But we need to transform that information a little bit. Because let's look at what's in that aggregates array in this little example we've been working on. So in this example we've been working on,
+
+27
+00:18:49.000 --> 00:19:27.000
+that aggregates array has three slots. The first slot has the string ABC. The second slot has the string DEF. And the third slot has the string GHI. And let's think about that third chunk that we talked about before. So that third chunk needs to incorporate information from the first two chunks. In particular, that third chunk needs to add the strings ABC and DEF to all of its elements. So, you know, we could have it just read all of the elements in the
+
+28
+00:19:27.000 --> 00:20:38.000
+aggregates array before it. But there's actually something a little bit more elegant that we can do, which is we can do another local inclusive scan. Specifically, we will do an inclusive scan over that aggregates array. And what that will do is that will give us an aggregates array that has the following values. The first element will be ABC, which is the sum of the, you know and the second chunk. And then the third slot in this aggregates array will have ABCDEFGHI, which is the sum of the entire string. And so then after that, we've done that inclusive scan. We now have this aggregates array that has one slot for each chunk that has the correct string for them,
+
+29
+00:20:38.000 --> 00:21:37.000
+or the correct value for them to add to all of their elements to complete the sum. For the second chunk, the element that it's going to use will be the entry in the aggregates array for the first slot, for the first chunk. And that entry has the string ABC, which is exactly what we need to add in. And then for the third chunk, it's going to use the second element of this aggregates array, which has the string ABCDEF, which is the sum of all of the elements from the first and second chunk, which again is exactly what we need to add into that third chunk. So after we've done this aggregates inclusive scan, and I should note, this is a thing that we do in a single thread because this is just a scan over a very small array of aggregates where there's just one for each thread.
+
+30
+00:21:37.000 --> 00:22:26.000
+There's no real need for us to paralyze it. So we do this inclusive scan over the aggregates array in just a single thread. And then after that's done, we can go back to parallel operations. Now each one of the chunks in parallel can add the correction from the aggregates array or the remaining elements that it needs to incorporate into its results. So the first chunk doesn't actually have to do anything. It's a little bit special because it does not have any chunks that precede it. So it already has incorporated all information into its results.
+
+31
+00:22:26.000 --> 00:23:32.000
+The second chunk will read the value in the aggregates array from the first slot. And it will increment all of its elements by that. And it'll add it at the start. And so then after that, the fourth element, which belongs to the second chunk, will be ABCD. And the fifth element, which belongs to the second chunk, will be ABCDE. And then the sixth element will be ABCDEF, which is, again, exactly what we wanted. And the third chunk will do the same thing. It will take the second slot from the aggregates array, which contains a, b, c, d, e, f, and it will prepend that to all of the elements in its chunk. And then that gives us the final result. Because right now in that third chunk before the prepending, it has G and then it has GH and then it has GHI.
+
+32
+00:23:32.000 --> 00:24:01.000
+And so after you add A, B, C, D, E, F to the front of all those strings, you'll have the correct result. And this algorithm, which is called the work-efficient parallel scan, it has these two phases. That first phase where we do the local inclusive scan, and we call that phase the upsweep, and the reason for that is because we start in parallel, and we do this operation in parallel,
+
+33
+00:24:01.000 --> 00:24:51.000
+and then we propagate information up to this aggregates array. And then we do this operation in serial where we scan through the aggregates array. And then we go and do that second step where we add the scanned values from the aggregates array to each one of the chunks. And that second parallel phase is called the downsweep, because in that phase, we are taking this global information and we're fanning out in parallel again. And this is not the most efficient parallel inclusive scan algorithm. There's actually a single-pass algorithm, which was invented by some colleagues of mine, which we use in Thrust. But I think it's the most elegant one.
+
+34
+00:24:51.000 --> 00:26:12.000
+And we'll put some links in the show notes so that you can see the code here. But it's quite a clever little algorithm. And sort of the key secret sauce behind it is, you know, it's all about this information propagation. You know, you figure out, okay, well, there's some information that needs to be propagated that is local to each of these chunks. Within each one of these chunks, I need to add all of the elements, all the preceding elements need to be scanned. And that's completely local. Now, yes, I also need information from some other chunks, but I'm not going to worry about that until later. I'm going to do all the local work that I can first. And then later, we will communicate the information between each one of these chunks in a very compact form, the sum. And then I will propagate that information and update, increment all of my values with that information that I was previously missing.
+
+35
+00:26:12.000 --> 00:26:53.000
+Yeah, I think that's the reason initially that it didn't seem parallelizable is because of that state. It's a stateful algorithm where you carry that state across when you think about it serially from like left to right. And you just have to make the jump to understand that, you know, you're doing a bunch of local scans. And then you take the state at each of the end of those chunks and then basically use that to get all the information that needs to be distributed to all the chunks to the right. And then you go ahead and do that. And I think that was one of the first questions that I asked too. And I was like, how is this, how is this fast? Because you're basically doing like two passes on the data plus another pass on the aggregate vector,
+
+36
+00:26:53.000 --> 00:28:00.000
+at which point you were like, oh yeah, like most parallel algorithms are doing a lot more work. Like time complexity wise, it seems, you know, if you're coming from serial land that it's like oh that would be way worse but that's the whole point is that gpus eat yeah that kind of stuff for breakfast that it's it's okay to uh do more work um uh in apparel implementation in fact like that Like, that is a typical and unsurprising thing. One thing that commonly happens in more numeric algorithms that are similar to this is something called ghost zone exchange, where, hey, you know, like, I've got some local chunk, some local grid, and then I've got these neighboring grids, and I need information from these neighboring grids. And so what I'm going to have them do is I'm going to have those neighboring grids send me that information on the boundary regions. And then I will locally use that information and locally compute some of it. And then every so often those neighbors will send me new values.
+
+37
+00:28:00.000 --> 00:29:12.000
+But I will replicate some of those computations locally. And that's fine because the parallel algorithms are not always about efficiency of work. It's about speed. And so sometimes by doing more work across multiple threads, you can avoid communication bottlenecks. Yeah. And I mean, I think one of the other key innovations in thinking behind this parallel scan is the realization that you need commutivity. You can't swap A plus B with B plus A. But you are free to associate the operations in the way that you want. Right. And so, you know, I don't, when I'm in that like second or third chunk, I don't have to wait to get the data from the earlier chunks before I can start doing the second part of
+
+38
+00:29:12.000 --> 00:29:52.000
+the sum. The only thing I have to do is make sure that when I add those accumulations from the earlier chunks with the local accumulations, I have to make sure that I do that in the right order. But I'm free to associate the operations as I wish, or I'm free to put the parentheses around the operations as I wish. Yeah. It's pretty awesome. Inclusive scan. Exclusive scan. Scans and reduces. They're the best. Yeah. We'll send around some links to the code and
+
+39
+00:29:52.000 --> 00:30:09.000
+put it in the show notes. Are you familiar with, is there an episode in the future where we're going to talk about the shiny or newer single pass implementation? I do not know how that works at all. I do. And yeah, I think that could be a good episode.
+
+40
+00:30:09.000 --> 00:30:40.000
+It's a little bit more complicated. That's why I don't use it as an example here because it's just like a little bit less elegant. Or I know, okay, I should take it back. It's a very elegant algorithm. It's a little bit trickier to explain. Yeah. So if you want to hear that explanation listeners just add us on twitter maybe we'll have billy o'neill on to chat about that because he's implemented that in um the microsoft parallel
+
+41
+00:30:40.000 --> 00:31:13.000
+algorithms library which is as far as i know the the second you know major implementation because uh i don't know that anybody else is important other than our our thrust and cub library that'd be cool that'd be cool to have billy on i think also too someone someone requested that we have dave abrahams on who and then i think dave abrahams liked he hearted when i or i i responded saying yeah we can reach out and then then Dave Abraham's hearted that tweet. Oh, yeah. It would be really fun having Dave on. You never attended BoostCon where Dave was there.
+
+42
+00:31:13.000 --> 00:32:12.000
+But, yeah, that was – I just – the other day I just found my – because I'm in the middle of moving and packing. I found my Boost con 2011 hat they gave out hats as swag and it's a boost pro hat which was the uh that was dave's consulting uh uh company um back when he was still doing boost stuff and uh it brought back memories better times yeah i've heard of the stories where Dave would be running between all the different talks. Yeah, it'd be interesting to hear his stories and his path to Swift. Yeah, those were the days when we could go to conferences and see each other. But maybe we're at the light of the end of the tunnel. It looks like maybe there's going to be some conferences and some things in the fall and the winter. Yep.
+
+43
+00:32:12.000 --> 00:32:23.000
+And CPP North 2022. Yeah. Canada's first ever C++ conference. The best. The best ever. The first ever. Yeah. I won't be there.
+
+44
+00:32:23.000 --> 00:32:28.000
+I got a particular talk that I think I'm going to save for that one. As the program chair, I'll review your submission, and we'll see if, you know. I'll be waiting for my embroidered invitation to arrive. Okay. Thanks for listening. We hope you enjoyed, and have a great day. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

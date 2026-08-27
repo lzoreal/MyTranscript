@@ -1,0 +1,181 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:59.000
+O of n where n is the number of elements and then you're gonna have to store like a min heap right yeah so it's actually it's actually gonna be like O of n log k I think uh because like you can't just store the top k values you have to store them in such a way that you're able to pop off Welcome to ADSP, the podcast, episode 187, recorded on June 11th, 2024. My name is Connor, and today with my co-host, Bryce, we continue our chat about implementing the TopK algorithm, a.k.a. nth element in parallel. Did you listen to my last message that I sent you yet? Yes, I did. So I guess we just released episode 185, right? And that was phone tag.
+
+2
+00:00:59.000 --> 00:01:52.000
+Yeah. And then the Friday that we released, which is a couple days ago now because it's Tuesday, you recorded half of a phone tag. I did listen to that, but I've been so crazy busy for like the last three days or whatever since Friday. I have yet to act. It's been more than the last three days, buddy. Three or four days. You wouldn't even – yeah, it's been nuts. And so to answer your question, yes, I have listened to it, but no, I have not recorded my half to that. Well, you're going to have also heard my half that has not yet been recorded as of this recording.
+
+3
+00:01:52.000 --> 00:02:17.000
+But by the time the listener has heard this, all of the recordings and publishings will have happened. So where else have you been? Because you've been like on the road, right? Oh, not really. I mean, I've been stopping back in toronto so i was at first i was at uh a craft conf it's a conference in budapest hungary that was just a two-day conference phenomenal conference um really cool because i got to meet i think you've probably met
+
+4
+00:02:17.000 --> 00:02:38.000
+kevlin henny a bunch of times because you've gone to accu yeah he's cool but i've actually never and he's one of my favorite speakers i've I've never actually met him in person. You know who we should have on the podcast. You know who I bet would be hilarious on the podcast. Oh, man. That's – why haven't – Yeah, that guy is such a good storyteller. My brain is not working right. I'm on like three hours of sleep after a lot of travel.
+
+5
+00:02:38.000 --> 00:03:22.000
+So bear with me, listeners, over the next two episodes here. But, yes, we should definitely have him on. He said one of my favorite things in a couple of his talks. He actually said it in one of his talks at CraftConf, which I think it was entitled Testing with Guts, G-U-T-S, Good Unit Tests. And I heard this for the first time, and he basically basically said it really bothers me when people say it's just semantics and immediately i was like absolutely oh my god this i've been thinking this like my whole life finally do people do people say yeah and it's like think about what you're saying it's it's only i've never heard the meaning of the words like it's like what are we talking about
+
+6
+00:03:22.000 --> 00:03:49.000
+i did have a conversation and i i suspect it was one of my co-workers and if the co-worker is listening i apologize in advance but i was having some conversation with somebody where they kept saying semantics but they meant syntax oh um it like it wasn't like an extended thing but it was like over the course like two minutes they said something like they said something in the effect of like well it's just semantics andantics. And I'm like, wait, I think you mean it's just syntax. Yeah. I've never heard people say it's just semantics. Oh, no, people say it.
+
+7
+00:03:49.000 --> 00:04:18.000
+Semantics are all that it is. That's exactly the point. It's like... I think that it is a phrase that comes from non-programmer speak, right? Like I can think outside of the context of programming like the phrase it's just semantics is like a common phrase which kind of means like it's just details right yeah and so people might be saying that to mean it's just details whereas i think i i don't
+
+8
+00:04:18.000 --> 00:05:05.000
+know i'm a spec i'm like a programming language spec person so so so maybe maybe i have a warped perspective on this but i think most programmers will would not would interpret that differently but i think it's just a common phrase in like the english language in general yeah and i think it's similar to when it's like a different way of saying tomato tomato which i also take issue with yeah because nobody says tomato like tomato your program has undefined behavior it's a motto and uh anyways we'll we'll definitely get kevlin on i think he'd be a blast to chat with and then after that i was at should i should i email him what you want me to email him yeah sure you can email him right now. Like before we forget. Yeah.
+
+9
+00:05:05.000 --> 00:05:24.000
+Yeah. Well, I mean, not like right now, but I'll start the draft of the email. Sounds good. You heard it here first, folks. ADSP, probably before episode 200, we'll have Kevlin on. See, but the problem now is that like if he rejects us, you're going to have to cut all this out. No, no, no. I mean, it's a bad look.
+
+10
+00:05:24.000 --> 00:06:11.000
+It's a bad look because we're i'm i'm a big fan you know so uh i i have a follow-up for one of our past episodes uh where we talked about uh top k algorithms we talked about um uh radix partitioning and uh i mentioned that i was chatting with my our co-worker elias um and he wrote me on Slack. And he said, maybe one remark on why an LSD Radix partitioning pass doesn't work. An LSD partitioning pass tells you nothing about the final rank of an item because you're just looking at the least significant part. This partitioning pass is only helpful to resolve ties between items that compare equal on all the more significant digits.
+
+11
+00:06:11.000 --> 00:07:01.000
+At this point, you just don't know yet whether there are ties on the more significant digits because you are yet to look at those. Remember, this is why LSD radix sort requires stable partitioning passes, while the MSD doesn't, unless you want a stable sort. And then he gave an example that's going to be hard for me to verbalize. But I think that's a pretty good explanation of what we talked about. Why do we do LSD for the radix sort versus it being problematic for the radix partition? And so he writes at the bottom of his example that the MSD radix sort, however, gives you already some idea about the final ranks of an item.
+
+12
+00:07:01.000 --> 00:08:05.000
+An item won't cross the boundaries of the bucket it has been assigned to. In subsequent passes, it will just refine its position within the boundaries of its bucket. So wait, so that makes sense, but where does this leave us with respect to the top K question? Well, I think we may have talked about it on the phone tag episode, but I had suggested that it may be worth it for a Radix partitioning algorithm to do a pre-pass where you do a max. And then the max tells you how many, like what is the relevant, the most relevant digit on the most significant side. And so, like, you know, if your maximum integer is, you know, like 100, then there's a lot of digits that you can skip over, right? And so, like, in this, it depends on your cost function of how much...
+
+13
+00:08:05.000 --> 00:08:24.000
+Well, no, it actually doesn't, because it's not just a computational cost thing, right? It's not just the cost of doing the extra passes that are maybe not so useful. No, actually, I think it is. I guess it is. But you're also paying... I think you would pay an additional cost,
+
+14
+00:08:24.000 --> 00:08:43.000
+and the additional cost is, like if your maximum integer, if you've got like 32-bit integers and the maximum integer in the set that you're partitioning is an integer that's 100, and you do radix partitioning, starting with the most significant digit, like the first like more than half passes
+
+15
+00:08:43.000 --> 00:09:26.000
+is going to put everything into the first bucket. And I don't know if we do actual data movement to put things into buckets, or if we just do it with flags. But certainly, it's like a lot of wasted computation there. And depending on how expensive those passes are, it might make it might be worth doing that first max pass. So essentially you're just trying to take your sort algorithm and basically just minimize the amount of computation that you would have to do. But then what happens when you get your k is going to be in one of the bins? I'm talking specifically for partition. Oh, so just for partition
+
+16
+00:09:26.000 --> 00:09:44.000
+yeah right because for as he was explaining for a radix sort like you're sort of going through everything anyways and like it's fine for the sort but for partitioning like you want
+
+17
+00:09:44.000 --> 00:10:41.000
+to like split things up into reasonably sized buckets. But that's kind of like a non-deterministic algorithm, right? Based on the distribution of values, if you're looking for top K, you're going to have to continuously do that partition until you're able to determine your your kth value which for some which i guess is what you're saying so up front if you're doing some pass to get you to the maximum or some other like metadata on the distribution of your values you can then make sure that like in the worst case you're not just doing a bunch of extra work. And it is worth noting that thrust's radix sort takes bits, like an optional bit start and bit end parameter,
+
+18
+00:10:41.000 --> 00:11:19.000
+for you to tell it what bits what uh you know bits do you want to to actually sort ignore these bits because you know they're never used yeah yeah it's still it's still kind of somewhat somewhat unsatisfying because of the like uh i don't know non-determinism of it yeah i mean it's probably it's probably better than sample sort, though. Yeah, I mean, like, it's definitely for a K value that's not sufficiently small or sufficiently large to do the either reduction or sort, it's definitely going to be better than doing a full-blown sort.
+
+19
+00:11:19.000 --> 00:12:02.000
+Yeah. You know, what we were talking about last time with, like, the small k case, it got me thinking a little bit more that if k is small but not small enough that you would want to pass it by value. Like if k is like 10, or okay, let's use a simpler example. If k is 1, you know, it's just a max reduction. And so like it's pretty clear that you don't need any like additional overhead or anything. There's no state at all. If K is two, you need some state, right?
+
+20
+00:12:02.000 --> 00:12:42.000
+Your operator needs some state to remember what the largest was, because it's searching for the second from largest. Right. I mean, technically, max reduction also requires state, but it's just the accumulator value. So it doesn't need extra state, additional state. Yeah. And so the amount of state that you need grows linearly. And so like, if it's two, and because this is an accumulator value, you're passing this around by value. We're talking about state that gets passed around through the reduction. So it needs to be something that you're comfortable passing around by value on the stack. If it's two, you're probably comfortable with that.
+
+21
+00:12:42.000 --> 00:13:22.000
+If it's like 10,'re probably comfortable with that. If it's like 10, you know, maybe also that's fine. If it's 100, that's starting to get to be a place where that's too large. But I was thinking if the K is 100, is it possible that there's some algorithm where you have side storage of, you know, some array of 100 elements, and then you have some synchronization protocol um for uh everybody to sort of collectively update that and is that possibly faster i don't know it's an idea i mean it's very i mean it's very side effecty like the very is
+
+22
+00:13:22.000 --> 00:13:56.000
+unnecessary it is side effecty but it could I don't know it could be faster but it could be I mean what's the what's the complexity and number of comparisons of you know a max reduction yeah I mean yeah if you know you know you have enough arguments and at a certain point... No, that was a question. What's the complexity of a max reduction? Sorry, what's the complexity of a max reduction? Like a parallel max reduction? Yeah.
+
+23
+00:13:56.000 --> 00:14:27.000
+No, just like a max reduction in general. It's linear in time and O1 in space. Right. And like radix sort, which is the special case, radix sort is like what? It's like O, W times N, where N is the number of keys and W is the key length. So it's like kind of like linear E. But like merge sort
+
+24
+00:14:27.000 --> 00:15:00.000
+or for anything that can't be radix sorted, what's merge sort? Merge sort is like, you know, in login. So I guess it is better, right? Right, right, right. Radix sort is worse complexity-wise. Because the best of the... Okay, so maybe this doesn't ever make sense, right? Right, right, right. Radix sort is worse complexity-wise. Because the best of the, okay, so maybe this doesn't, this never makes sense, right? Because any form of the reduction based approach is going to be linear. And if you do something that requires synchronizing this,
+
+25
+00:15:00.000 --> 00:15:54.000
+you know, global array, that's going to probably be expensive. Radix sort is actually worse than like the best case sorting algorithms right because it's it's linear too yeah the only the only thing that changes is the the space complexity it goes from o of one to o of k what do you mean yeah so like you're definitely correct that a max a max reduction whether you are accumulating a single value a pair of values or a vector or array of k values it's always linear in time complexity yeah is that actually true i think for k actually it does change it's going to be o of n where n is the number of elements and then you're going to have to store like a min heap right yeah so it's actually
+
+26
+00:15:54.000 --> 00:16:42.000
+it's actually going to be like o of n log k i think uh because like you can't just store the top k values you have to store them in such a way that you're able to pop off efficiently. So I guess the question here is, how fast of an atomic min heap or max heap can you implement? I mean, don't they already exist? This is like C++ has a priority queue isn't that just like a yeah but it needs to be it needs to be atomic oh you mean for the version where it's stored like outside of the it's not even it's actually we're not even talking about a reduction right at this point if like if you're if you're still a reduction you have side stored
+
+27
+00:16:42.000 --> 00:17:27.000
+i mean no it's not it's not it's not really reduction it's everybody everybody is just putting stuff into it into the queue yeah that's more of like a four each but technically you could like yeah in in non-parallel land or even in parallel land you technically could do it you're just like you're suggesting an alternative implementation where instead of storing the state in the accumulator, you're storing it outside and then having some kind of locking and synchronizing. But you technically could, in C++ non-parallel land, just accumulate a priority queue or min heap, max heap, whatever. And then I think in C++ 17, I don't fully... I remember watching Ben dean's talk uh and he they added like uh move semantics
+
+28
+00:17:27.000 --> 00:18:15.000
+to the accumulators so you could actually like do a reduction on a string that was doing plus equals to the string and so basically you know adding characters or strings to strings and previously that was like terrible it's better to do that in a for loop, because you're going to end up copying the string every single time if you try and do it inside of reduction. But then in C++ 17 or 20, I think they added the capability of the lambda that you're passing to your accumulator reduce, they added the ability for that to have copy elision. So technically, like, you could implement what you're talking about without storing it in like side memory or whatever you want to call it but yes the version that you're talking about i'm not sure i understood that explanation you want to try that again
+
+29
+00:18:15.000 --> 00:18:57.000
+so it's at some point in c++ 17 or 20 they basically added the ability for the return type of the lambda that you pass to your reduction algorithm for it to take advantage of copy elision. So like pre C++ 17 or 20, I can't remember which one it is. If you are doing a reduction on a string where your initial string is empty and you basically just want to join a bunch of strings, that was like extremely inefficient because every single time you did your your plus you would basically do a copy of your string but like they added an optimization where you can take advantage of move semantics aka copulation where now you actually can't perform a reduction on like a list
+
+30
+00:18:57.000 --> 00:19:12.000
+of strings to build up one string and you're not going to end up with a bunch of copies um which so here's the problem with that um if you're doing this in parallel like with a bunch of copies, which. Here's the problem with that. If you're doing this in parallel, like, yeah, it's like, if you're, what you're saying is like,
+
+31
+00:19:12.000 --> 00:19:32.000
+if you did like a serial fold left, like you could, you could have your state in the, the accumulator type and you wouldn't ever allocate more. Right. Cause, cause you could just always move this accumulator object thing. You'd never make a copy. Yes. right because because you could just always move this accumulator object thing you'd never make a copy yes problem is that we're taking the input sequence we're dividing it up and we've got a
+
+32
+00:19:32.000 --> 00:19:58.000
+whole bunch of people operating in parallel yeah yeah so in parallel this doesn't work at all yeah and the the real problem actually is that uh uh like you could kind of do that in parallel but any form of like I was thinking what if you had some side array and then what if you had one side array per group of threads but then you have to merge the side arrays and then that's annoying
+
+33
+00:19:58.000 --> 00:20:31.000
+you can do that there's parallel merge algorithms but it's annoying at another cost and then that means like essentially you you end up building building the the the uh something that looks a lot like a bad sort yeah actually i was while you were saying right before you said that i was literally thinking actually i in the yeah in the parallel algorithm where you store k when you are combining the the you know min heaps or whatever in between the chunks uh you're gonna end up having to do like a stood merge which is like an algorithm
+
+34
+00:20:31.000 --> 00:21:00.000
+that like i've never used in my life but i know exists for like combining two sorted lists and yeah yeah yeah my my point was just that like uh when you were saying this isn't really reduction. I agree. It's more of like a for each side effect thing. Yeah. But like in theory, you could do this kind of thing efficiently in, like I said, non-parallel C++ land. Yeah, I think you could. Yeah. I'm sure there's a paper out there.
+
+35
+00:21:00.000 --> 00:21:34.000
+We should do some research or we should get the listener to do some research. Go find us the paper. On top K. On parallel top K. I'm sure it's a common enough problem. There's a bunch of papers out there. But I don't know that I've seen any literature on doing a reduction-based approach for like small k and whether that pays out like because like if it's like 10 um it starts to get interesting because 10 is like if let's say
+
+36
+00:21:34.000 --> 00:22:21.000
+let's assume 32-bit numbers like you know 10-inch is pretty chunky to have to to to carry around, right? Because 10-inch is, you know, 40 bytes. But, like, it's not ludicrous to imagine just passing that by value. So it might pay off. And what may be interesting here is that the payoff might be very different for CPUs versus GPUs. Because for CPUs, you're going to have order of magnitude, hundreds of threads. So each thread is going to be doing a lot more work. And so you'd have less actual copying around of your accumulator type. And so you could potentially handle a bigger K this way.
+
+37
+00:22:21.000 --> 00:23:06.000
+I mean, again, you still have to do the merge. But for GPUspus you have a lot more threads and so you this only makes sense for much smaller k yeah what's the complexity of uh of pushing into like a priority it's log n log n where n is the length of the the q right right it's the length of q yeah i always i'd always irritated me back when i was in my interviewing days when you'd have some quadratic complexity question and then you'd they'd say what's the time complexity and then you'd say oh it's quadratic but technically like the n the two n's that you're multiplying are not actually the same it's like n by m
+
+38
+00:23:06.000 --> 00:23:54.000
+so the complexity is not quadratic it's n times m i always thought that was just i mean technically n times m is correct but you know at a high level it's quadratic you know you got uh you got a rectangle of data it's quadratic but then they'd always they'd always be oh it's not quadratic and i'd be like i mean technically it's n by m but like let's move on to the next question folks uh no you know what i think i miss i think i misspoke before i think that this does maybe pay off because merge sort is n log n which is worse than n yes yes definitely i think i said i think I mistakenly said earlier that it's not. So I think you can get to, well, no, okay, all right, no. Because think about it. If what you have to do for every element is that you have to push heap.
+
+39
+00:23:54.000 --> 00:24:32.000
+Well, no, actually, maybe not. Okay, so if you, for every element, if you have to push into a K-sized heap, then you're doing a log K operation for n elements right which is better than than in log n and then the only other cost that you have is the cost of doing the merge yes and also too like technically the time complexity is n log k but you're not always going to be doing the insertion like Like the time complexity is the worst case, but like on average, you're probably only going to be doing the log K insertion.
+
+40
+00:24:32.000 --> 00:24:56.000
+I don't know, like a percentage of the time. Is it half? Is it 20%? Is it 10? We don't know. It depends on the data. In the worst case, you'll have to do it every time in some like whatever reverse sorted or sorted sequence. But in the average case case you're going to do some check to see is you know when you if before you do the insertion i think i think maybe when you actually push into it i don't know if that how that actually works so like it might
+
+41
+00:24:56.000 --> 00:25:30.000
+already take care of it when you try to insert into a min heap and it's it's greater than the largest value or whatever it uh it'll just discard it and that's like an o1 operation right so it's greater than the largest value or whatever, it'll just discard it, and that's like an O1 operation, right? So it's really going to be better than, like, N log K. It's going to be... And we might be able to kind of ignore the cost of the merges, of having to merge these heaps together. And the reason I say that is because the order of magnitude of, like, how many merge, like, the order of magnitude of the elements involved in the merges
+
+42
+00:25:30.000 --> 00:26:06.000
+is much smaller than the order of magnitude of the inputs. So they're kind of amortized. Yeah, we're assuming in this problem that the order of magnitude of K is substantially smaller than N. And we're also assuming this problem, that the order of magnitude of the number of parallel execution agents is substantially smaller than N. So even on a GPU, you might have thousands or hundreds of thousands of threads,
+
+43
+00:26:06.000 --> 00:26:38.000
+but I think that you would only need on a GPU to have one of these heaps per thread block. And GPUs, thread blocks, are going to be in the thousands. Yeah. And you would have, you know, at least millions, but probably tens of millions or hundreds of millions of input elements. And so the merge costs may not be that expensive. Yeah. All right. Well, we're at the halfway mark of the recording. Do we want to wrap up this topic? Any final thoughts on the top K,
+
+44
+00:26:38.000 --> 00:27:04.000
+parallel top K? Well, Elias, if you're listening, you should go prototype this. Perfect. Delegating work. All right. That's episode 187, if I've got my numbering correct. Be sure to check these show notes either in your podcast app or at ADSPthepodcast.com for links to anything we mentioned in today's episode, as well as a link to a GitHub discussion where you can leave thoughts, comments, and questions. Thanks for listening. We hope you enjoyed and have a great day.
+
+45
+00:27:04.000 --> 00:27:09.000
+Low quality, high quantity. That is the tagline of our podcast. It's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

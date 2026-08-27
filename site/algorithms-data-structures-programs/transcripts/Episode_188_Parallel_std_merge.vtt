@@ -1,0 +1,121 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:16.000
+Hey, hey, I'm not hearing any better ideas from you. I'm on three hours of sleep here. I've been up since I don't even remember when. Oh, yeah, I almost died on the plane, too. That was crazy. That was crazy. You almost died on the plane? Yeah, yeah.
+
+2
+00:00:16.000 --> 00:01:08.000
+Would you like to elaborate? Yeah, I would like to elaborate. Welcome to ADSP the podcast episode 188 recorded on June 11th 2024. My name is Connor and today with my co host Bryce, we chat about how to implement a parallel merge. Moving on to episode 188. What are we talking about? I got a topic. Perfect. Saved our listeners from me just rambling.
+
+3
+00:01:08.000 --> 00:02:09.000
+Both of us are just super ill-prepared to this but uh so how does parallel merge work how does okay let's take a step back how does how does serial merge work serial merge of just two lists yeah yeah yeah mean, that's trivial, no? I wouldn't be asking if it was. I mean, if you've got two separate lists and you're merging into a new list, then that is the easiest case, right? You just got two pointers into each array and you're just doing a comparison each time and while you have the lower value you copy that into the new list and move the iterator and repeat rinse repeat okay in a case where you are trying to do it quote unquote in place which doesn't really exist for merge but you're going to end up doing a bunch of insertions, which is probably going to be worse.
+
+4
+00:02:09.000 --> 00:02:28.000
+It's going to be way worse for time complexity. Actually, is it? Interesting, yeah. So if you want to do an in-place merge where you've got list A and list B and you're going to resize list A to be the sum of both your sizes, is that worse time complexity? So the first one is linear in the length of both of your lists.
+
+5
+00:02:28.000 --> 00:02:43.000
+The second one, I mean, technically, couldn't you do something where you fill it from the back and then you don't need to do a bunch of insertions? Yeah, that's brilliant. Brilliant, folks. That's what you do. So instead of... But it's still linear. It's still linear.
+
+6
+00:02:43.000 --> 00:03:15.000
+But I was imagining if you're filling it from the front each time you want to insert an element from b into some middle position of a you're going to end up you know having to reallocate or actually you won't have to reallocate but you're gonna have to do these copies of like n elements at a time or you know some linear number of elements at a time every time you do an insertion from B. But if you do it backwards, you're just basically doing the exact same algorithm. You just have pointers at the end, and you don't need to worry about doing that linear copies of elements. All right, so we...
+
+7
+00:03:15.000 --> 00:03:53.000
+Does this get worse if you want to merge K lists, not two lists? No. Do you have to do more comparisons? Yeah, you have to do more comparisons, but that's fine. Doesn't that... Or does does it i think it might so it so at any given you know i'm i'm do i i've got k lists of length m and uh at any and i so i'm going to iterate M times. And for each one of those M iterations, I have to... I guess it's true, yeah. It becomes K times M.
+
+8
+00:03:53.000 --> 00:04:15.000
+I have to do like... Well, no, don't I have to do like log K comparisons? Why log K? Well, because I've got like k things I need to find the smallest, right? Mm-hmm. So can't I just do like a min heap?
+
+9
+00:04:15.000 --> 00:04:28.000
+But your values across your k lists are not in a min heap. You just have pointers to whatever value you're at. Right, right. But I'm saying, like, I got k things.
+
+10
+00:04:28.000 --> 00:04:46.000
+I got to find the smallest one. In order to do a log n lookup on k elements, they have to be in a structure that you can do a log k lookup on them. And they're just in some array, so it's just going to be linear. Yeah, yeah. Okay, so maybe for the k list it is actually
+
+11
+00:04:46.000 --> 00:05:27.000
+k times n but the the algorithm is still morally the same all right i did linear you can do parallel well i know i know that uh you know this is a building block of our of our parallel merge sort i don't i don't actually know how it works. We use this thing called the parallel merge path algorithm, I think. Let's see if I can understand how this works. I actually have no clue. Do you have any intuition? Maybe we should limit ourselves to the two-list case to think about this.
+
+12
+00:05:27.000 --> 00:06:02.000
+Well, how would I... My approach to solving this, not knowing off the top of my head, is how would I implement this in terms of thrust algorithms? And you would do this with a copy if algorithm, and could you do it with some kind of scatter iterator or gather iterator if you did some kind of... I mean, they're already sorted, so... Right, they're already sorted. But there's got to be some kind of thing where you do some...
+
+13
+00:06:02.000 --> 00:06:22.000
+Okay, well, hang on. Let's start with the dumbest way you could do this, right? The dumbest way would be like you just do some sort of segmented sort, right? Like you just re-sort the entire thing in parallel. We know how to sort in parallel. I mean, that's not a merge, though. I mean, okay, yeah, sure. If you want to do the dumbest thing possible,
+
+14
+00:06:22.000 --> 00:07:00.000
+create a new list and just sort it. But that is, I feel like you haven't answered the question. I mean, technically, if you're in an interview and someone says implement a parallel merge, and then you write the function body merge, and then you just do a copy if to the back of the first vector after resizing, and then you call thrust sort i mean technically you did implement a parallel merge not exactly i think what the interviewer would have been asking for but you know sure sure but what i'm saying is it's only uphill from here i mean if we want to if you want to say that i mean you probably could choose something worse
+
+15
+00:07:00.000 --> 00:07:33.000
+you know i i i don't even want to uh you could have some like you know nested reductions or something like that call a call a max or you know copy it over and then do basically a hand roll a parallel insertion sort or bubble sort or whatever the heck it's called find the just repeated reductions anyways that's a You could go downhill is all I'm saying. Yeah. So continue with your idea. Well, I don't really have... My idea was only half-baked.
+
+16
+00:07:33.000 --> 00:07:57.000
+It's like you have a copy if with some kind of like iterator sequence. Like, you know, there's the permutation iterator. And is there some way that you could get... Like if you combine the vectors, is there some way that you could construct a permutation iterator that when combined with a copy of results in that final merged sorted sequence?
+
+17
+00:07:57.000 --> 00:08:26.000
+So imagine you've got the lists like 1, 2, 3, 4, 5, 6, 7, 8, 9, 10. And then you've got another list, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10. You put those together. So now you've got one to 10 followed by one to 10. And so the permutation iterator would go from like the first element to the 11th element, then back to the second element and then to the 12th element. And it would repeat that until you got all 20 elements done. So that, that permutation iterator combined with a copy if algorithm gets you your
+
+18
+00:08:26.000 --> 00:09:09.000
+merged sequence. And a copy if is just a scan underneath the hood. The question is, is like, how do you, is it possible to construct that permutation iterator based off of, it's like, it's data dependent, right? So most permutation iterators, they follow some kind of pattern. So how are you going to construct this permutation so yeah that that's the final question is is is it even possible to construct uh it doesn't even need to be a permutation iterator there's other iterators it but it seems like the permutation iterator is the closest one to like what we want but uh how do so it described to me again how you'd construct this well i don't know i I'm only like 60% of the way. I went from 50% of the way there to being 60% of the way there.
+
+19
+00:09:09.000 --> 00:09:51.000
+Describe for me again what you want this permutation iterator to model. So if you've got two sequences of 1 to 10, you put those together in a single list. So you've got the values 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, followed by 1, 2, 3, 4, 5, 6, 7, 8, 9, 10. So you want your permutation iterator. I will visually show this to Bryce, but the listener cannot see this. You're at 1, and then you want to jump to the 11th element, which is also 1. And then you want to jump back to the second element, then to the 12th element, the third element, then the 13th element. And that way you when you copy if with a permutation iterator you're going to end up with one one two two three three four four five five this this sounds similar
+
+20
+00:09:51.000 --> 00:10:46.000
+to an iterator that i wrote for thread scheduling a while back and i'm by a while back i mean like 10 years ago which i called a spiral iterator because when you, because when you're stealing from work queues in a high-performance threading system, you want to steal from the work queues that are closest to you. And so the spiral iterator would first check the queue that's one past you, and then it would check the queue one behind you, then it would check the queue two past you, then it'd check the queue two behind you. And so it would sort of checks in a spiral shape that grows outwards. This kind of reminds me of that. It's not exactly a spiral. The only reason it reminds you of that is just because the data is one to 10, and then one to 10. If the two lists were one to 10, and 11 to 20 10. If the two lists were 1 to 10 and 11 to 20,
+
+21
+00:10:46.000 --> 00:11:14.000
+your permutation iterator should just be an iterator that goes left to right. It would still remind me of this, because you can think of it as going like, and then going, and then going. But it only reminds you of that for this data. If you change the data so that when you combine list one and list two, it's just a monotonically increase in sequence. There's no shooing back and forth.
+
+22
+00:11:14.000 --> 00:11:34.000
+The iterate, the permutation iterator just goes left to right. Okay, I understand. You are correct. It does do this kind of spiraling thing. The permutation iterator needs to go in the order. Okay, so the permutation iterator you're describing basically has to do the merging. Yeah. So you're asking for a magic black box.
+
+23
+00:11:34.000 --> 00:12:20.000
+Hey, hey, I'm not hearing any better ideas from you. I'm on three hours of sleep here. I've been up since I don't even remember when. Oh, yeah, I almost died on the plane too. That was crazy. That was oh yeah I almost died on the plane too that was crazy that was crazy you almost died on the plane yeah yeah you want would you like to elaborate yeah I would like to elaborate although my girlfriend said that I I didn't almost die but you know she's a doctor so what does she know um she says I tend to the over be overly dramatic at times. But I went to sleep on the last hour of the flight to Reykjavik from Toronto. And I slept with my head on like the pullout tray table because I'm not fancy like Bryce, you know, in first class with the kickout bed or whatever.
+
+24
+00:12:20.000 --> 00:12:56.000
+And I woke up. We rarely are in first class. We usually fly in business class. Okay. Well, you know, potato. It's different. Tomato, tomato. It's just semantics. It's a callback to episode 187. Anyways, I woke up. Long story short, I had, I think, cut off some of the blood, however my neck was sleeping, to my brain. And so my brain was like extremely short of oxygen. And I felt so lightheaded. I was like, I thought I was going to be sick. And then I asked the guy if I could go to the washroom. And I got like halfway to the back of
+
+25
+00:12:56.000 --> 00:13:37.000
+the plane and basically like passed out. Coincidentally, like right next to a doctor. She was like, oh, this guy needs help and uh i didn't like i didn't i didn't come to and like realize what was going on for like four minutes i was if you've ever had like a head rush imagine that times a thousand like my head was so high in the clouds no pun intended i was just you're lucky they didn't divert you're lucky you didn't get a medical diversion well we were we were 30 minutes away from reykjavik and i'm not sure if you know anything about iceland but there's nowhere i think i literally said at one point i was like there's nowhere this plane could like go and at one point i started not if it had been if it had been like 30 minutes earlier you could have been
+
+26
+00:13:37.000 --> 00:14:16.000
+diverted to london edinburgh no that's past iceland oh this was to iceland yeah yeah you connected in iceland i understand yeah i went from i thought you're talking about going to norway yes okay yes oh yeah yeah this was the toronto to iceland like i understand and yeah once at one point i started talking about oprah because uh three sisters and a mother uh i watched a lot of oprah uh when i was in high school and there was an episode where they were trying to shed some light on this terrible thing that was happening where high school kids were basically like purposely asphyxiating they were like choking each other specifically to do to like do that
+
+27
+00:14:16.000 --> 00:14:57.000
+thing where you cut your oxygen and blood from the brain then you pass out but then when you wake up from passing out you get like the craziest head rush possible but it's extremely dangerous and a bunch of kids were dying from this and so oprah had this like special episode where she was like being like you know kind of like it was uh don't do this don't eat the tide pods of its day you know like uh don't do this really stupid thing anyways i was trying to tell the flight attendants i was like oh this is like i accidentally did what oprah was talking about that one time yeah i don't think they understood what i was saying but uh well i'm glad you didn't die buddy yeah apparently i i wasn't close to death it was
+
+28
+00:14:57.000 --> 00:15:50.000
+i would have been fine uh well we're gonna have to uh call it here because i gotta go run a fairly important meeting um that is at 5 p.m local time so we'll see if i survive that so yeah we're gonna have to talk more about this this merge algorithm so you gotta you gotta research the thing that we do in in cub is called merge path i don't know how it worked if anybody knows how it works let us know we should just bring uh okay we should just bring you know duane on uh duane merrill get him to explain it to us that's not a bad idea not a bad idea at all do you want to do that we work i mean he's on my team we could pretty easily reach out to him be like hey duane yeah we'll just trick him we'll say we'll say uh hey we want to talk about, and he'll be here in a heartbeat. I think he'd be equally excited about sorts and merging.
+
+29
+00:15:50.000 --> 00:16:14.000
+All right. I got to run. Be sure to check these show notes either in your podcast app or at ADSPthepodcast.com for links to anything we mentioned in today's episode, as well as a link to a GitHub discussion where you can leave thoughts, comments, and questions. Thanks for listening. We hope you enjoyed, and have a great day. Low quality, high quantity. That is the tagline of our podcast.
+
+30
+00:16:14.000 --> 00:16:19.000
+It's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

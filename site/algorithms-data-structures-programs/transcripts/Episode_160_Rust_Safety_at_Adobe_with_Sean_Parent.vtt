@@ -1,0 +1,237 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:25.000
+Has this stuff been talked about before, or is this kind of like breaking news? I guess it hasn't. This is somewhat breaking news. So we ported it to Rust. We're within about 15% performance of the C++ implementation. In some cases, the Rust implementation actually wins. This is a straight port of the new concurrency features that Nick wrote in the C++ library. He ported them to Rust. So when you say they were running inside Rust, it wasn't like Rust bindings to the C++ library.
+
+2
+00:00:25.000 --> 00:00:59.000
+No, no, no. This is a port. Gotcha. I wrote the portable executor. And then Nick ported it to Rust. And not just Rust, but safe Rust. So we did it without using unsafe calls, which is nice because now we have established that there's no race conditions in this body.
+
+3
+00:00:59.000 --> 00:01:45.000
+Welcome to ADSP, the podcast, episode 160, recorded on December 12th, 2023. My name is Connor, and today with my co-host, Bryce, we chat with Sean Parent about the latest updates on the Hilo programming language and the state of Rust and safety at Adobe. I think the plan for today is we will try to record probably three different mini episodes because the way that this is going to roll out, we're currently recording this on December 12th. So this episode, first episode will come out on December 15th. And then next Monday, we're recording with Zach Lane the holiday special, which should just be one one-hour-ish episode that'll come out on the 22nd. And then part two and part three of this conversation will come out on the 29th of December and then the 5th of January. So with that in mind, i was thinking for the first
+
+4
+00:01:45.000 --> 00:02:21.000
+mini episode 30 minutes or so we could i mean we'll introduce sean i mean no needs no introduction at this point this has got to be i think your 12th episode fourth recording if we include the last time we recorded which was in june of 2023 at cpp on c in Folkestone, UK, which was an absolute blast. That was fun. Hopefully, we will be able to repeat that at some point in the future. Not necessarily at C++ on C, but at some other conference. And we can just catch up on everything that has happened since then. Because I know, Bryce, you were at at least one conference.
+
+5
+00:02:21.000 --> 00:02:39.000
+You were at Meeting C++ in November, right? And I don't think we have... I was not at Meeting C++ in November, right? And I don't think we have... I was not at Meeting C++ in November. You were not? No. Why did YouTube just show me Meeting C++? I gave a talk remotely. Oh, okay.
+
+6
+00:02:39.000 --> 00:03:00.000
+But that was at the conference or at a meetup? At the conference. Okay. So you were not in Berlin, but you were presenting at the meetup. And I know, Sean, you as well have attended, I think, CPPCon and potentially one or more conferences. Anyway, so we'll start with Sean. Sean Parent, you know, longtime guest, longtime listener. Everyone should know him.
+
+7
+00:03:00.000 --> 00:03:32.000
+We will link every single one of his past appearances on ADSP the podcast as well as appearances on other podcasts. I know you've been on CPP cast and we'll throw it over to you. Feel free to update us on conferences and also how things at Adobe have been going. I know that you are not sure if it was the last time we recorded with you or two times ago you mentioned that you know you've been putting together the dream team and bringing back to life the ST lab. So yeah we'll throw it over to you. And this is our Catching Up with Sean, part one of our three-part conversation here. Hey.
+
+8
+00:03:32.000 --> 00:04:08.000
+Well, thanks. Yeah, since last time we talked, let's see what's been going on. On the Hilo front, we talked a lot about Hilo last time. And actually, thanks for the PR on that. After my interview came out on your podcast, we had a significant uptick in Hilo contributors. So it was very helpful. And that's a whole announcement in itself, because at the time, we were referring to Hilo as Val, because Val hadn't been rebranded. And then I think like a month later, I got a message saying, hey, you might want to rename your episodes and i was like well i mean it turns out there's a uh another val programming
+
+9
+00:04:08.000 --> 00:04:50.000
+language uh which is a robotics language uh been around since the 70s corporate owned and so the trademark was owned uh so so the val team got a cease and desist, and we had to pick a different name. Actually, that's the reason. So you got a cease and desist. Yeah. Wow. So. And where did the Hilo name come from? The Hilo name came from making a big, long list of potential names and vetting them with legal and crossing them off until we had one left.
+
+10
+00:04:50.000 --> 00:05:20.000
+So not the ideal way to pick a language name. Do you remember any of the top contenders or your favorites that did not make the legal removal process? Some of them had Val in the name, like Valkyrie and things like that. And unfortunately, basically, if you've got a trademark named and you've potentially violated it, any derivative name is also off the table.
+
+11
+00:05:20.000 --> 00:05:51.000
+And so all names that included Val were immediately off the table. This is just because you got the cease and desist? Yeah, yeah. Interesting. So if you had gone for a more specific name and had never gone through the path of getting the cease and desist for Val, you potentially would have been okay to have that more specific name including Val. It's kind of like if you said, you know, like, oh, I'm going to call my new operating system Windows and Microsoft sued you and you said, okay, I'm going to call it
+
+12
+00:05:51.000 --> 00:06:20.000
+Blindos. They'd be like, no, that's still too close. But if you had started with Blindos, they might have never had a case, right? That is amazing. So how did they hear about Val? Probably from your podcast. Whoops. So I don't know. Well, that's unfortunate. That's also, that's pretty aggressive if they like, they started with like a cease and desist letter.
+
+13
+00:06:20.000 --> 00:07:11.000
+If they had just sent you an email email you probably would have figured out some solution exactly exactly so so but you know it is what it is um so the hylod name's kind of sticking so so that's that's doing well so far it's more googleable it's more googleable yeah uh yeah and then uh let's see we are now available on Compiler Explorer. So you can select Hylo as a language and write a little bit of code. We are making our biggest breakthrough here recently was we got arrays working on important data structure, which is kind of the start of the standard library which is going it's it's the language is very much in the flavor of swift where where all your types including you
+
+14
+00:07:11.000 --> 00:07:44.000
+know your integer types are our library types and so getting to the point where we had enough of the facilities in place to build arrays has been significant emphasis rightphasis right now is we trip up something in LLVM's optimizer. And so if you turn on optimizations on our project, the compiler LLVM explodes. And that's unfortunate, because we'd like to start to get a feel for what kind of code we actually generate
+
+15
+00:07:44.000 --> 00:08:29.000
+without the optimizer. It's just very crude and shows it. I mean, I think it's of the actual, because we were talking to Richard Feldman over the last few episodes and Rock is not a C++ successor initiative, but of the C++ successor initiatives, I think yours is the only one that's actually hosted on Compiler Explorer or is CPP2 potentially as well. Although that's slightly different, right? Because it's transpiling to C++ and then compiling the C++ code where you're actually building a completely different front end and then having to compile that. But like compared to Carbon, I think, or I guess Circle as as well so i guess it's just hylo versus carbon of the ones that are actually building their own like compiler stack uh or you know
+
+16
+00:08:29.000 --> 00:09:01.000
+targeting lvm at the end of the day yeah yeah and it was interesting because uh you know not less than a year ago our our we'd actually started targeting llvm early on and then and then the decision was made that that was kind of too big of a lift and so we were going to compile to c++ and do the transpiler thing. And we thought there would be benefits there for kind of bringing things up quickly. And that turned into a bit of a nightmare. And so we backed off and went back to LLVM. Interesting.
+
+17
+00:09:01.000 --> 00:09:22.000
+And that's working pretty well right now. So we can target Mac, Linux, and the Windows support is limping. Most of the Windows issues are around. We leveraged to the Swift Package Manager until they're actually Swift Package Manager on Windows issues. Oh, the beautiful thing is Windows these days has WSL2,
+
+18
+00:09:22.000 --> 00:09:58.000
+so you can find a way to run it if it works on Linux, right? Yeah, exactly. So yeah, it's making progress. I'm hoping over this next year, I've got Dave Senkel working on university relations for our team. And so I'm hoping that we can get a collaboration going with a university or two around Hilo development and keep it going that way. You know, right now, officially, Adobe's, we've got one person on it part-time. Not going to be hard to double or triple that
+
+19
+00:09:58.000 --> 00:10:37.000
+amount. Not going to be hard to double or triple that amount, right? It's a long effort. And I think building community support is critical. So we've got a big meeting this afternoon, or not this afternoon, tomorrow afternoon, we're discussing a concurrency model. We've got Lucien, who's one of the collaborators on sender receivers. He collaborated with Eric Niebler on some of that work and now he's jumped into the Hilo project and he's been helping us on the concurrency front. And so we've got a big meeting tomorrow to try to get everybody on the same page.
+
+20
+00:10:37.000 --> 00:10:58.000
+So hopefully I can convince them that we can do better than senders receivers. So what do you have in mind? I like the sender receiver model, but I think the cancellation model in sender receivers is broken. Elaborate. Yeah, should we dig into this in our catching up episode? We are taking a hard right to Sean's thoughts on
+
+21
+00:10:58.000 --> 00:11:54.000
+why the sender and receiver model is broken. In what way? So the cancellation model in sender receivers is very manual and it's top down. And so what I mean by that is you need to carry around a token, a cancellation token, and then you can flip the cancellation token to say cancel. And then something up the call chain basically receives that and cancels down to the caller. The problem there is anything within that chain could be holding on to effectively a sender for another asynchronous task that it's not yet waiting on. And so that cancellation won't happen until the things that are currently executing finish up. So the STLAB model is the other way around. It's bottom up. When you drop a future or equivalent of the sender,
+
+22
+00:11:54.000 --> 00:12:50.000
+it unravels the chain automatically going backwards. Any task that hasn't started is destructed or any task that's suspended is destructed means that if you have a future being held up the chain, it's the destruction of that future that cancels that operation. And so you get a faster and asynchronous cancellation. And where that came from was doing real-time rendering, right? The whole ST Lab library came out of me working on Lightroom Mobile and Lightroom Web. And in that model, when you're sliding the sliders, say, adjusting exposure, we're doing approximate frames, trying to give you quick feedback at 60 frames a second. And as you slow down on the slider, we're going to generate a higher resolution image. But if you move the slider again, we need to get back to 60 frames a second
+
+23
+00:12:50.000 --> 00:13:37.000
+immediately. So we need to cancel the operation. We need those resources back now. And we're going to fall back into generating an approximate thread or over an approximate frame. And we do that at various dynamic levels, so we can kind of tune things. The faster you move the slider, the lower quality frames you get, and as you slow your slider movements down, you get higher quality frames. And so the sender-receiver cancellation model, basically, as it's written, it's too manual, and it's too slow. So I'm hoping that we can, you know, that said, sender-receivers has a huge amount of benefits too, right?
+
+24
+00:13:37.000 --> 00:14:08.000
+The whole building up task chains before you start to execute them so that you're not paying synchronization costs every time you're attaching a new task. You know, it's got a nice composition model in there. So it's got some huge benefits. So I'm hoping we can kind of blend blend the two models my understanding of snr is not as good as bryce's but bryce is there is that like a fundamental limitation what sean just explained like there's no way to design that into like basically the way it's designed you'd never be able to replicate that you'd need to uh i don't know that's a that's an open issue. Eric Niebler asserts that it's doable.
+
+25
+00:14:08.000 --> 00:15:18.000
+I've taken a couple stabs at it. Basically building the STLAB cancellation model on top of senders and receivers. I've taken a couple stabs at it and failed. But part of that is because I ran into a bunch of things within the sender-receiver library that were not yet implemented. Now I've got Nick DiMarco on my team on the STLAB concurrency libraries where kind of at the base of that, we've got this nice library that provides an abstraction over the system thread pool. So if you're running on Windows, it will target Apple's lib dispatch. And if you're running on Windows, it will target the Windows thread pool. And if you're on Linux and you have lib dispatch available, it will target that. It's also got a very high performance portable task stealing thread pool. And so if there's no system
+
+26
+00:15:18.000 --> 00:16:06.000
+thread pool available, it will target that. It's also got a notion of a main executor because most platforms have such a thing or frameworks do. So if you're running on Mac, the main executor is the main queue for lib dispatch. And if you're running in Qt, it will pick up the main executor in Qt. And these are updates to Hylo or a STLab concurrency library that Nick's working on? No, this is the STLab concurrency library, which is a C++ library that's been available for a while. And one of the experiments that Nick did recently is he's gotten our portable high-performance executor running inside of Rust.
+
+27
+00:16:06.000 --> 00:16:25.000
+What? Yeah, and so we ported it to Rust. We're within about 15% performance of the C++ implementation. In some cases, the Rust implementation actually wins. This is a straight port of the new concurrency features that Nick wrote in the C++ library. He ported them to Rust. So when you say they were running inside Rust, it wasn't like Rust Nick wrote in the C++ library, he ported them to Rust.
+
+28
+00:16:25.000 --> 00:16:40.000
+So when you say they were running inside Rust, it wasn't like Rust bindings to the C++ library. No, no, no. This is a port of... Gotcha. I wrote the portable executor. And then Nick ported it to Rust. And not just Rust, but safe Rust.
+
+29
+00:16:40.000 --> 00:17:29.000
+So we did it without using unsafe calls, which is nice because now we have established that there's no race conditions in this body. Was that the motivation for reporting it to Rust? Or was it just a curiosity to see the perf of the ported Rust version? Well, a few things. One is what my team is tasked with, where we started with, was being tasked with basically how do you do correct and efficient concurrency? And it turns out there's a really strong correlation between correct concurrency and safety. And if you go back to the Leslie Lampert papers, which were all written about how do you reason about concurrent code, you'll find a big part of that is about safety and liveness properties.
+
+30
+00:17:29.000 --> 00:18:14.000
+And so you'd have to prove a set of safety properties to prove your concurrent codes correct. And that, as it turns out, has a strong correlation to what we talk about when we talk about memory safety and things of that nature. So this, so we started working on concurrency and then because of all the pending legislation around safety, we kind of took a detour to focus a little bit more on safety because it very much fell within our domain. But in looking at that, you know, know within c++ it's a huge challenge if you say something like you know well i've got a a high performance task stealing thread pool
+
+31
+00:18:14.000 --> 00:18:58.000
+how do you know you implemented that correctly and and that you don't have some subtle race condition buried in there and you And you can run it with threat sanitizer, but that's not a proof. It will only show you a race condition if you hit the race condition. So a programming language like Rust, as long as you're within safe Rust, lets you demonstrate no races by construction. And so that's where the interest came from. Could we start to move critical concurrency components into Rust? You know, we're also looking at moving critical safety components into Rust.
+
+32
+00:18:58.000 --> 00:19:35.000
+So things where we're, you know, within our products, parsing untrusted inputs, those should either be sandboxed or moved into a memory-safe language like Rust. Interesting. And so this is actually have that code being run through the Rust compiled executable, not verifying that it works in Rust and then continuing to use the C++ version? No, the plan is to, we want to continue to performance tune the Rust implementation, but if we can get the Rust implementation a little bit closer, right? We don't have to have 100% the performance we have on the C++ side,
+
+33
+00:19:35.000 --> 00:20:05.000
+but if we can get within a few percentage points, which I think is doable, then we'll just probably swap out the implementations and we'll have it there. The other thing we want to do is we want to do Rust bindings to the platform thread pools because within a product you really don't want to have multiple thread pools running and so if you're running on Mac you as great as our portable implementation is you really want to be using Apple's lib dispatch. And same on Windows, you want to be using the Windows thread pool.
+
+34
+00:20:05.000 --> 00:20:58.000
+And so we'd like to release this as a library for Rust developers, because we think it's something kind of missing in the Rust ecosystem. So you go to Cargo and pull down your Rust code and you'll have a library for a high performance thread pool that will run anywhere and it will target your platform thread pools where appropriate. So we think there's value there also. It's also giving us experience in how difficult it is to do the bindings back and forth, which are not bad. Adobe has a lot of experience with binding C++ to other languages. We were a little surprised in that the bindings that are available, few of them start with basically how do you do function object calls between the two.
+
+35
+00:20:58.000 --> 00:21:49.000
+And that's kind of always where I start. It's like, you know, how do you call function objects from C++ into Rust, and how does Rust call a C++ function object? And the ones you get that, you can bridge all the rest. And so that's where we've been starting with our bindings, and we found the existing work that was a gap. So hopefully people can look at what we're doing there and also pick up some tips. Is there any talks that have been given or blogs that have been written on this kind of Rust at Adobe or Rust at STLab? Because this, I think, like Reddit and the Internet are going to have a field day with. If we title this episode like Rust at Adobe and you talk about how, you know, due to the safety and, you know, critical nature of parts of our code, we're trying to migrate to Rust. And there's like a 15 percent gap and i'm sure like the listeners would be very interested to hear
+
+36
+00:21:49.000 --> 00:22:27.000
+like you know what is it the you know you think it's one to two percent as possible but there's a gap right now like what are the things that are causing that but the first part of the question was has this stuff been talked about before or is this is this kind of like breaking news i guess it hasn't this is somewhat breaking news. Adobe's got something called our Content Authenticity Initiative, which is a way that we tag content that's generated with AI or content that's been edited otherwise versus content straight off your camera as a way to build trust. So it's an opt-in system.
+
+37
+00:22:27.000 --> 00:23:28.000
+It's not something where we're trying to like auto detect what's AI or what's not AI. But the idea is that it uses a blockchain and builds a chain of trust. And it's starting to get built into cameras. And so that if you're a photographer and you're taking pictures and you're sending them off to the New York Times the New York Times has a token that's that they can validate that says yes what this photographer says about the origin of this image and that it wasn't edited inside of of Photoshop or any other application is true and so it allows you to build a chain of trust around your content and it's become incredibly important as as we're moving into the AI realm and so you have it's you know increasingly difficult to tell what's real and what's not but in any case the the content authenticity plugin that's written for Photoshop is itself written in Rust.
+
+38
+00:23:28.000 --> 00:24:21.000
+So that choice was made because they needed high level of assurance that the code was correct. And Rust seemed like a better starting point than C++. So that's one project at Adobe that's currently in Rust. Around the concurrency stuff, yeah, Nick is working on a couple of blog posts on that front, and hopefully he'll give some conference talks on it here soon. So that's coming. And then we're also discussing internally around the pending legislation around safety and security, what Adobe's response is going to be. And right now our thinking is we would like to publish a roadmap on basically how we're going to address that. And that's not finalized yet in any form, but I expect a component of that
+
+39
+00:24:21.000 --> 00:25:33.000
+roadmap is going to be that some of our critical components will get rewritten into Rust or another memory safe language. When you say pending legislation, is that a nod to some pending legislation that you actually know is on the horizon or just anticipating that it's going to happen at some point? Oh, yeah, no, there's, so there are two bills. Sorry, I don't have. It's all right. We'll find them. We'll find them and link them in the show notes afterwards. Yeah, yeah. I can hunt down the links. uh within 270 days of the bill passing and it's a funding bill which means it will probably pass late this year early next year uh the department of defense will establish uh guidelines around safety and security including uh memory safety for software products purchased by Department of Defense.
+
+40
+00:25:33.000 --> 00:26:13.000
+The EU has a similar wording in a bill that's slowly winding its way through their channels. I don't have insight into when that will pass. The U.S. one will almost certainly pass here within a month or two. There's a long way between having a bill passed that says almost a year later, they have to establish a plan for what they're going to do, right? So it's not hard legislation in any way. But I view this, I can send you a link. There was a podcast I listened to recently on Mac OS Folklore. I actually got a call out to your podcast within that podcast. I've never even heard of this podcast.
+
+41
+00:26:13.000 --> 00:27:11.000
+Now I'm going to have to go, how many episodes? Is this going to cost me like a month or two of listening to all the backlog? It's all in one episode, so I can hunt down the link. But it's talking about how in the early 90s, there was a somewhat similar round of legislation that went around around POSIX compliance. And basically, the Department of Defense decided that in order to have portable software, every operating system that they purchased had to have POSIX compliance, and there was a roadmap put into place. And that's why Apple pursued building their own Unix, which was AUX, and then eventually partnered with IBM to do AIX. And Microsoft, in the same timeframe, had a big push to get POSIX compliance in Windows OS. And the thinking was eventually in order to sell to the government your operating system, it would require POSIX compliance.
+
+42
+00:27:11.000 --> 00:27:53.000
+What actually happened if you wanted to buy just traditional Macintosh operating system, you would just say, well, I require Photoshop or pick your application. And there is no alternative that runs under Unix. So therefore, I need an exception to buy Mac OS. And it was extra paperwork, but it got signed off on. And so it really never materialized into hard restrictions on sales of non-POSIX compliant OSs. And we expect the, or I expect the safety legislation to take somewhat the same route,
+
+43
+00:27:53.000 --> 00:28:47.000
+which is there will be pressure to write more software in memory safe languages. Where you don't write software in memory safe languages, there's going to be more pressure for you to document what your your process is to mitigate the risks you know and this is all initially it's going to be all in the realm of government sales although there's some discussion in both the eu legislation and in the the on the u.. side of extending this to to just a consumer to a consumer safety issue. But there will be, you know, an escape hatch because you couldn't wave any kind of magic wand as a legislator and say you can't sell software anymore if it's written in C++ like the world would grind to a halt. So there will be an escape hatch and there will be pressure.
+
+44
+00:28:47.000 --> 00:29:29.000
+And so as a company, you have to look at how are you going to mitigate that risk going forward? And what's your plan going to be so that you can continue to sell products to the governments? And how do you make sure that you're not opening up a competitive threat if you've got a competitor that can say, well, we're written entirely in Rust. So we don't have to do the paperwork. That becomes a faster path. So you want to make sure that you're aware of those issues and that you've got a plan in place to mitigate them. I wonder if there's like an analogy to a JF and I think it was his C++ Now safety talk has this comparison to seatbelts
+
+45
+00:29:29.000 --> 00:29:48.000
+and how at the time, you know, a bunch of people said, like, I'm a safe driver, I don't need a seatbelt. But now we live in a world where everyone wears a seatbelt, even if, you know, 90% of drivers are never going to get in an accident and no one's going to get hurt. But like the analogy I'm thinking here with respect to, sure, you know, trying to, the legislation that was passed with respect to operating system is one thing. But
+
+46
+00:29:48.000 --> 00:30:17.000
+like the legislation being passed here is with respect to like safety and critical systems. And the same way that if you're caught not wearing a seatbelt these days, you get ticketed. Like you can make the choice not to put this, wear the seatbelt that was put in every vehicle, but you could end up with a ticket. Potentially that's going to be the same thing in the future with this. Like you can make the choice not to use the, you know, mandated language that are safe for critical systems. But if something ends up happening and you took the escape hatch and said, for these reasons, it'll be okay.
+
+47
+00:30:17.000 --> 00:31:00.000
+And then it ends up not being okay that there's going to be, you know, fines that are handed out by the government saying that like, you know, we made this recommendation, et cetera. And or not recommendation. We passed some legislation, you chose to take the escape hatch, people died, or something bad happened. And now you're getting fined. That's the basics of it. And this is the White House put out a cybersecurity strategy. And, and part of that cybersecurity strategy is to shift liability. And what that means is right now, if you're a consumer and you buy a piece of software and the software crashes, you signed a EULA that said the software manufacturer doesn't warrant that this does anything.
+
+48
+00:31:00.000 --> 00:31:59.000
+And so it crashes and it takes out your hard drive. That's on you for running the software. You know, and there are very few exceptions where people have won cases around that. And so part of the strategy is to start to shift liability to the manufacturer and say, look, if if if that happens, you know, you're liable for the for the loss that your your your customer paid. And so so, you know, and that's true in almost every other industry. Right. If you if you buy a phone charger and your phone charger explodes or your phone and your battery explodes, that's going to be, you know, on Apple or Samsung or whoever whoever built that component. And so to protect organizations around that, to protect them from suits for negligence, is you get industry-established standards on best practices. So kind of in the hardware industry, you have, you know, UL listed, right?
+
+49
+00:31:59.000 --> 00:32:58.000
+So you'll see, you know, this product is UL listed. And that basically means that there's a lab that's certified that, yeah, this component was built following best practices and is safe to use. And I expect over time, as the software industry matures, we'll see similar industry practices appear. I mean, the closest equivalent right now is MISRA, which is largely the automotive industry. But, you know, I think you'll start to see similar industry standards appear and similar compliance requirements and more transparency in how software is developed. And so it's just going to be, you know, a little bit stricter engineering practice and a little bit more bureaucracy around what it takes to build software. You know, personally, I think it's a good thing, right? It's the number of times where I'm utterly frustrated by the quality of software on my devices a day is amazing. And we've just
+
+50
+00:32:58.000 --> 00:33:49.000
+come to accept it. You know, we started this meeting and we were talking about two of us, two of three of us updated Teams to the latest version of teams and it's like oh my god is this going to work is it going to crash are we going to get any audio um not to pick on microsoft but but we go through this every time we we expect failure yeah right from our software and and we shouldn't we should expect success right right if my phone exploded the note you know the number of times my software crashes per day yeah it would be a pretty dangerous world so and it costs like to pick on a different company google one time i think i had the pixel two or three at the time i did a software upgrade it bricked my phone. And then I contacted Google thinking that like, this is clearly a Google software program. I hit the upgrade, you know, OS. Now my phone no longer
+
+51
+00:33:49.000 --> 00:34:10.000
+works. You owe me a new phone. And when I contacted Google, they were like, that's not on us. Like, you know, we don't guarantee that like software or OS upgrades are going to be like, you know, bug free or whatever. And I was like, this is not a bug problem. This is that you bricked my phone. And I was so angry. Like I was like, you know, I'm problem. This is you bricked my phone. And I was so angry. Like I was like, you know, I'm taking a break from Google. I love the Pixel phones. They're amazing. Software is great, you know.
+
+52
+00:34:10.000 --> 00:34:52.000
+But I switched to OnePlus for the time being and haven't gone back because OnePlus has been treating me great. But it's just like, you know, that's like a thousand plus dollar phone. And it's ridiculous that like, you know, something like that can happen. And they're not, they don't owe me anything for that. It's like, oh, well, we didn't guarantee you that this wasn't going to completely set your phone on fire. Yeah, by clicking OK to do that update, you accepted the risk. Which is absurd. I think we've mentioned this on the podcast before, but I'll drop a link in the show notes of, I think it's Jonathan Blow.
+
+53
+00:34:52.000 --> 00:35:27.000
+And there's this like 10 minute lightning talk within a larger talk that he gave where he just goes through. He's like, I got really frustrated with how terrible quality of software is. And then he goes for 10 minutes and he documented for a week, just like everything that happened. And it was like 50 things or something. And he was just like, nothing works here. You know, like i open this window and it's off the screen and so i need to know that i need to window snap something but like someone that doesn't know that stuff they're just constantly restarting and that's we we accept it right like you know people know if it doesn't work just restart it and probably that'll that'll fix things like we've just gotten uh completely like desensitized to the quality of our software yeah that's a reason why you know
+
+54
+00:35:27.000 --> 00:36:00.000
+intel's effort around optane which was kind of you know promising technology it was like like like what if your ram were persistent right and what they discovered was nobody knows how to write software for persistent ram we assume that you can always just restart and clear things out. But if you're not saving things, if just everything just keeps running, what happens? And nobody knows how to write software in that environment. And so they found that people wouldn't utilize Optane, they would write software
+
+55
+00:36:00.000 --> 00:36:47.000
+as they were writing software today. And so instead of having a slightly slower RAM, but a slightly faster SSD in one, the only way people used Optane was as an SSD, and it wasn't competitive in that space. So it's interesting, right? Our software has evolved in this environment and and we just take for granted that there's a you know a reset button we can just just like okay put everything back to at least some initial known state and we can start from there yeah i mean windows has that built i mean just just the other day you know windows auto restarts they give me a little warning but then i'll say i'll decide later and then i to decide. And then they just restart my computer. And, you know,
+
+56
+00:36:47.000 --> 00:37:29.000
+I lost some file. And like, it's like, that's why I hate Windows. It's just like, come on, like, let me not restart my computer if I don't want to. And they're like, No, no, no, we have to so you don't you don't get a say in this, you're gonna lose whatever notepad file that you had that doesn't have like autosave built into it, which is why basically everything other than notepad has autosave built into it. Because, basically everything other than notepad has autosave built into it because you know vs code you don't actually lose anything from your computer restarting because it happens so freaking often yeah mac does that and uh it's it's you can turn it off but it's like really freaking hard to get it turned off and keep it off and even if you turn it off there's still like critical updates where they will force a restart on you and it drives me nuts because if you have encryption turned on on your hard drive
+
+57
+00:37:29.000 --> 00:38:14.000
+then when the machinery starts you can't remote into it and so like all of you working from home and my machine in the office will have been forced restarted and it's like now i have to drive to the office to log back into my machine so that i can start remoting into it again it's like now i have to drive to the office to log back into my machine so that i can start remoting into it again it's like yeah so and apple's apple's answer to that is we'll turn off hard drive encryption i'm like how is that better it's like going into the doctor and saying this this hurts, doc. And they say, well, don't do that. It's not what I was hoping for. And with that, then, we will transition to, this was what, episode 160.
+
+58
+00:38:14.000 --> 00:38:35.000
+We've now skipped ahead over Zach. Be sure to check these show notes either in your podcast app or at ADSPthepodcast.com for links to anything we mentioned in today's episode, as well as a link to the GitHub discussion where you can leave comments, thoughts, and questions. Thanks for listening. We hope you enjoyed and have a great day. Low quality, high quantity. That is the tagline of our podcast. It's not the tagline.
+
+59
+00:38:35.000 --> 00:38:40.000
+Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

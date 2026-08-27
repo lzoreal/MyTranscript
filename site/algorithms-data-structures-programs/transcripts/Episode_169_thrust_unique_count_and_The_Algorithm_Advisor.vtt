@@ -1,0 +1,201 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:00.000
+Well, and this is why you should use algorithms instead of raw for loops. Because you can do this not only in some array language like Jelly, but you can also do this in standard C++. It's a little bit harder, but there's actually, so there's an effort to develop um a new high level ir for claim i'm using the the ml ir framework which is a framework for sort of developing high level more language specific irs that are exist at a level above lvm ir Welcome to ADSP, the podcast, episode 169, recorded on February 14th, 2024. My name is Connor, and today with my co-host, Bryce, we chat about the parallel algorithm
+
+2
+00:01:00.000 --> 00:01:26.000
+thrust unique count, other algorithms, and the algorithm advisor. What is wrong with my voice? I technically haven't said... Oh, Jesus. I'm going to sound like I smoke a... Are you using your mic? I am. Oh, but the microphone would not be on me, so that might be... It sounds about 100 times better.
+
+3
+00:01:26.000 --> 00:01:40.000
+You know, minor details. I did turn it on. Happy Valentine's Day, buddy. Happy Valentine's Day, Connor. How you doing? We're recording nice and early in the morning. Yep. What are your big Valentine's Day plans?
+
+4
+00:01:40.000 --> 00:02:00.000
+It's more like a, well, we're not talking about this on the pod. Yeah, we are. Yeah, we are. Yeah, we are. Ramona and I are doing nothing. It's Ramona's birthday. It's February 13th. So we went out for dinner on Saturday and then yesterday.
+
+5
+00:02:00.000 --> 00:02:50.000
+But, you know, it's like impossible to go out on Valentine's Day. You have to get a reservation. Everywhere has a special menu where they charge it extra. But since her birthday's the day before, it's like, we can just go out the day before. It's great. So we're going to stay at home. We're going to, our little local Korean place, though, has a special Valentine's Day menu. So I may try to talk her into going out to there. But we're probably going to stay at home, eat take-in or leftovers. And then, I don't know, watch a movie, read books. We're going to be lazy. So there's like a foot of snow in New York, but we're up in Albany and there is no snow which I'm very upset about because it didn't snow at all in New York last year and I love the snow
+
+6
+00:02:50.000 --> 00:03:04.000
+so we really missed out well I'm sure you'll be back to the Big Apple soon yeah Friday actually and you're going to come down to the Big Apple this is true
+
+7
+00:03:04.000 --> 00:04:06.000
+March 5th to 8th we will be me you and sean parent yes i we i'm excited we should actually check the new york c plus plus meetup we happen to know that it is on march 7th, which is the Thursday, I believe. But as of this recording, which for those of you that know when Valentine's Day is, is February 14th. It is not posted on, and I assume this is the NYC++ meetup not the new york c++ developers meetup which hasn't been active new york developers yeah there's two new york meetups but this one hasn't been active for a couple years and then the nyc plus plus is the one that adobe kind of quasi sponsors now but yes there should be a meetup for the C++ folks.
+
+8
+00:04:06.000 --> 00:04:32.000
+And also, if you're not interested in C++ and you just want to come and hang out for an evening, Bryce and I will be there. I believe Sean Parent is the speaker, if not one of the speakers. No, he'll be the speaker. And yeah, should be a good time. You've booked us some plans on the Tuesday night. We're going to a, I think I saw a comedy club. I accepted a bunch of invites.
+
+9
+00:04:32.000 --> 00:04:59.000
+Although our plans may change because the dinner venue is going to change a little bit. But yeah, the plan is we're going to go to a comedy club and then go get food somewhere. Yep, looking forward to it. Love comedy. Was just at Second City on Monday in Toronto, not in Chicago. Hopefully. Nobody's heard of Second City in Toronto. Is that even a thing?
+
+10
+00:04:59.000 --> 00:05:46.000
+It definitely is. There are three different Second City locations, Toronto chicago and i believe new york actually is the other one yes i think it's new york and chicago i don't know about toronto i mean from what i've been told the a lot of canada's top comedians come out of second city um like oh canada's top comedians i'm gonna i'm gonna get so canceled for this have you heard of mike myers uh i have heard of mike myers canadians are too nice to be comedians is that true do we have any mean comedians i guess that's true mike myers was nice j Jim Carrey was really nice.
+
+11
+00:05:46.000 --> 00:06:32.000
+He admits to it. I mean, that's the thing. It's like America. Ramona is giving me a look like this is the important podcast content that you need to be recording. So we better get down to business before she comes over here and kills me with a dinner fork. i mean we were talking about the c++ meetup so link in the show notes we will add it in post whenever it gets posted do you have a topic i mean i was gonna i was gonna follow up on what we chatted about last time because i am yeah i do not have a topic i am thrilled with the refactor of the thrust inner product to be count unique. And there's two follow-ups. The first follow-up is that...
+
+12
+00:06:32.000 --> 00:07:05.000
+Wait, wait, wait. The thrust inner product to be count unique? Yes. Yes, that is exactly... Technically not count unique. Unique count is the name of the algorithm. But to recap, we were solving or walking through the parallel implementation of the mode algorithm, aka more commonly known as outside of the world of statistics as most frequent element. And there's like a one-liner way to solve this in Python where you just reach for the counter collection and then you do
+
+13
+00:07:05.000 --> 00:08:06.000
+a max reduction by looking at the values and then get the key corresponding to that. Pretty straightforward but the way it worked in the thrust example was to sort then to do a inner product to get the unique number of keys and they did that with an inner product, which we refactored to a unique count, then do a reduce by key, and then do a max element at the end of all that. And the two follow ups are that not only did that example use inner product, which it shouldn't have. My tool or project, yet to be named, yet to be announced, also was using not unique count. I have sort of this example that generates a reduce by key, and it does the exact same thing where it counts the number of unique keys, but the code that it generated was a count if using zip iterators which is basically another
+
+14
+00:08:06.000 --> 00:08:56.000
+way to spell how to count the unique number of keys and when you combine that with the fact that we spent a whole episode in venice talking about unique account do you remember this when we went and got the donuts and set and sat in that little square, we initially, that whole sort of theme or topic theme through our Slovenian trip was how to implement unique in parallel. But we ended up at unique count because I had mentioned that I had had a conversation with Michael, my boss, about how to implement a unique count and that, you know, one way to do it is with copy ifs and actually calling unique but you don't actually need to do any of that at the end at the end of the day you can just do a reduction account if and when you combine the fact that like i have this tool
+
+15
+00:08:56.000 --> 00:09:46.000
+that i've done this i've written this you know exact similar code to this parallel mode example didn't reach for unique account and then you staring at this code weren't able to immediately recognize that this inner product was a unique account and we spent the whole episode in venice talking about how we could optimize the implementation of unique account and we actually never followed up from that whole series because you might not remember but at the end of that we like we said we need to go refactor this to make sure that we're not materializing anything in this unique account. Because we were looking at this struct that was called zip underscore adj short for adjacent underscore not, which was basically a struct that would bundle. It would basically do the trick of zip iterators and complementing your your
+
+16
+00:09:46.000 --> 00:10:25.000
+binary predicate which you don't really need that but at the end of the day we thought that that was like calling it was some kernel that was materializing anything it wasn't it was basically just the zip iterators so the refactoring that we said we needed to do actually we didn't because unique can't unique count calling count if using this little struct was doing the optimal thing. It just looked a bit weird. And so my, my, my, the end of my whole ramble and this sort of, you know, follow-up is how, how did, how did we both miss this? Like in looking at you, looking at the parallel mode example, and then in me doing something similar in my own project. And it's like, one, how did that happen?
+
+17
+00:10:25.000 --> 00:10:38.000
+And two, I had this idea once, which I actually have implemented in Jell-O. Maybe I should whip out Jell-O again. Back-to-back Jell-O episodes, folks. And let me share my screen. We said we won't do this, but honestly, we're not going to be, it'll be easy for Bryce to explain
+
+18
+00:10:38.000 --> 00:10:55.000
+what I'm about to do here. So if we can... For me to explain? And Connor's going to spin up Jello again. Let's make this full screen. So we're launching Jello. So let's actually just see what happens if we do this.
+
+19
+00:10:55.000 --> 00:11:19.000
+If we do plus fold on a list of numbers and actually let's just do five and then if we do IOTA what do you see here? So the expression that i just rolled essentially was iota plus fold five yeah so he's got an iota of to five and then he's got a plus fold uh and says plus fold can be replaced with some and then it shows the steps of
+
+20
+00:11:19.000 --> 00:11:41.000
+the algorithm and the first one is it shows the list of 1, 2, 3, 4, 5. And then the second one shows the sum of the two. And then it says this is a 1-2-q monadic chain. Everything after that I've highlighted, we can ignore. It's really the first part that I'm trying to highlight here. The plus fold can be replaced with sum. And then what does it say right out of that? Algorithm advisor. Yes.
+
+21
+00:11:41.000 --> 00:12:30.000
+Let's look at another example now. Say that I want to say i want to do the maximum consecutive ones problem nco mco yeah that's a fun one so if i do this i typed out just a list of ones and zeros i go group and all right he's got ones and zeros folks he's grouping them he's lengthening them he's eating them and again it says all right so he's got lists and then he's got group len each and it says group len each can be replaced with group len algorithm advisor and it also says that len each can be replaced with len each or with len space each can be replaced with len underscore each so do you remember at one point that we actually had a meeting where we talked about the idea of something
+
+22
+00:12:30.000 --> 00:13:31.000
+like this where yes i do i was just about to say did jello steal this from you or did you steal this from jello no no i jello is a i wrote this whole tool and that you wrote this tool for jello jello is my tool i wrote the whole thing oh i didn't realize that oh yeah sorry so jelly is a pro is a programming language written by i mean his online alias is dennis mitchell which is the name of the character from dennis the menace so i'm not actually sure that's his name it could be and i wrote a wrapper around the language which is this tool that basically if you look at the things in yellow the atoms in yellow this oe ligature g l and then i think that's the british pound symbol that is that is jelly syntax so So that is the actual Jelly program for group len each. So Jello is just basically a keywordified Jelly language.
+
+23
+00:13:31.000 --> 00:14:16.000
+And a part of this tool I realized is that they have so many, like when I hit space, they have so many of these functions that come with the language that half the time I forget that, like, oh, there's a len each or a group len or a specific specialization of some kind of reduction. And so I basically just added a dictionary slash regex matcher that will let you know when you're using a suboptimal composition of algorithms. And this just brings me back to my observation about the fact that both of us missed opportunities to use unique account even though we spent like a whole journey not a not a whole four episodes but like we got to the fourth episode and then we're like what about unique account and i think we both consider ourselves like algorithm
+
+24
+00:14:16.000 --> 00:15:06.000
+experts yet we still miss this stuff well and this is why you should use algorithms instead of raw for loops. Because you can do this not only in some array language like Jelly, but you can also do this in standard C++. It's a little bit harder, but there's actually, so there's an effort to develop a new high-level IR for claim using the MLIR framework, which is a framework for sort of developing high-level IR for Clang using the MLIR framework, which is a framework for sort of developing high-level, more language-specific IRs that exist at a level above LLVM IR. And one of the cool things that somebody's doing with Clang IR is looking at optimizing and analyzing usage of standard algorithms.
+
+25
+00:15:06.000 --> 00:15:47.000
+And if everybody expresses their algorithms in terms of the named set of algorithms in a language, then it's pretty easy to write an algorithm advisor for that language. But if you write your things in terms of raw for loops, then the compiler has to figure out, okay, well, this for loop that this person wrote, this is really a bespoke, you know, unique count. And I can tell them that they can optimize it in this way. But it's a lot harder to identify that than if you're just like, oh, well, this is an inner product. It does this. And oh, actually, you can just, like, this thing should just be that.
+
+26
+00:15:47.000 --> 00:16:18.000
+Like one of the big benefits of a, sort of an array-style programming model where you're working with array, where array operations are your primitives, not raw for loops, where you have named array operations, and be that in C++ or in an array programming language one of the big advantages of that is that those array operations can be one implemented in some optimized way by the platform but two the platform can look at
+
+27
+00:16:18.000 --> 00:16:50.000
+the composition of different array operations that you're using and identify opportunities for optimizations across that composition. And that is very, very powerful. And so that is the way by which your hand-rolled, bespoke, low-level C4 loop can be beaten by higher-level code. It's entirely possible that you could write an algorithm using some tool like Jelly
+
+28
+00:16:50.000 --> 00:17:14.000
+and get better performance than something like CUDA C++ simply because when you write it with Jelly, it tells you, oh yeah, you could write it this way instead. And that thing that both of us, who are probably, I think, considered experts in algorithms, missed. The tool won't miss that. That is one of my life goals, basically,
+
+29
+00:17:14.000 --> 00:17:43.000
+is to build this kind of thing, either in the form of a library or the form of a language. And it should be mentioned that the initial one, recognizing that a plus fold can be replaced with a sum, there's no perf advantage there. But in the example here, when you're doing a group, a group being something that's basically the equivalent of a chunk by, so you're splitting a range up into a range of ranges, and then when you do len each, which is the equivalent of transforming basically a stood
+
+30
+00:17:43.000 --> 00:18:26.000
+colon colon distance or stood colon colon ranges colon colon distance this can recognize that at least for the jello implementation or the jelly implementation a group len each is going to materialize each of the sort of sub ranges and then calculate what the length of that because this is just jelly is implemented in python at the at the end of the day but group len doesn't materialize it. It basically just like, while it's going through, it at the same time it's going through it and quote unquote grouping, it's using iter tools and more iter tools, which is like Python's iterator facility. So it manages to avoid something that's much less efficient, which depending on what you are
+
+31
+00:18:26.000 --> 00:19:00.000
+lowering this down onto, you could do something extremely similar, right? Like imagine someone that is not aware of unique count and that's making use of thrust unique. And then we're just able to programmatically see, oh, you did a reduction right after this unique, we can just switch that for you. Yeah, I more and more think that writing array primitives yourself instead of using existing array primitives and using array style programming, writing this all by hand
+
+32
+00:19:00.000 --> 00:19:43.000
+is more and more like handwriting assembly instead of using know using some language in an optimizing compiler yeah and that's the thing like it's already writing efficient either cuda c++ code or even you know efficient code that just calls thrust algorithms or cub algorithms is already like a non-trivial thing yeah like pointing case episode 168 last last episode i managed to notice it but even it took me a second when you were yeah i think i was trying to take my covid test and you were like hey hey pay attention we need to figure out what this is doing i read through it and my first thought actually was like
+
+33
+00:19:43.000 --> 00:20:01.000
+oh this is a count if and i was like wait a second i saw that then i read the comment and my first thought actually was like, oh, this is a count if. And I was like, wait a second. I saw that. Then I read the comment and I was like, I immediately thought, I'm pretty sure I'm doing this wrong in my own tool. I'll see if Bryce sees it. You didn't see it. And then in the back of my head, we were already running long on that episode. But my thought was just like, how are we missing this in two different instances?
+
+34
+00:20:01.000 --> 00:20:54.000
+When at the end of the day, perf wise, wise the inner product my count if in my gen my generated code and the unique account ultimately all do the same thing so it's not like there's any perf loss but like from a readability perspective it's so much more difficult to figure out what that inner product's doing and in not all cases i'm not i'm not sure that you're right about the no perf loss because um unique count in thrust for the cuda back end has a bespoke bespoke implementation um and i don't i don't know that the inner product will lower down to this like isn't the bespoke implementation the count if with that zip add not struct no no that's the generic implementation the generic for that works for all backends there's a bespoke kernel
+
+35
+00:20:54.000 --> 00:21:18.000
+for unique account i'm actually looking at it right now in the bespoke share your screen maybe it's maybe it's just for unique though um let. Let's see. I was going to say, I'm almost positive, because I've looked this up now three different times, and the one in the CUDA... No, no, no, no, no. It just says this. Yeah, so it is... We'll permalink this for folks.
+
+36
+00:21:18.000 --> 00:22:02.000
+We'll permalink it to the GitHub line in the main repo of Thrust, which now lives in the NVIDIA Cl repo but yeah it's a so it actually it does use a zip iterator so actually i have i have no idea what the zip underscore adj underscore not predicate like it seems like that's totally unnecessary it calls count if it calls it makes a zip iterator um of uh zipping adjacent elements so it basically it's like taking a range and doing adjacent to with it. And then it does a count if on that range and it uses a zip adjacent not. Oh, you know what this zip ADJ not predicate function is? So there is a thrust make zip
+
+37
+00:22:02.000 --> 00:22:50.000
+function where you pass it a binary predicate and then it'll apply it to something that has been passed to a zip iterator. So this is basically that exact same thing, but it also performs the complement. So it's basically composing not with zip make zip function. Yeah, I think so. Which really this should not be like a one-off. Really, there should be a way that we can just compose like a not fun because isn't Yeah, I think so. complements the result of something that returns a Boolean. Anyways, we should, whether we build an algorithm advisor for C++ or for Thrust.
+
+38
+00:22:50.000 --> 00:23:20.000
+You know what's funny? My word count example that I've used for years could also be implemented with unique count instead of transform reduce. I only just realized that. Yes, yes yes yes and this is the thing is like you've been giving that talk or that example in variations of talks since like what 2016 i think is the first one i remember seeing yeah but it's it's earlier than
+
+39
+00:23:20.000 --> 00:23:52.000
+that it's from like 2014 and that's the thing is like no one – A unique count would make it so much clearer what it's doing. Because the way that the parallel word count works is you're basically – like you have some predicate to determine what the end of the word is. Like, okay, when do I have a space on the right? Like when I have a non-white space character followed by a space character, that's the end of the world. And then like that's the transform part. And then the reduce part is just counting
+
+40
+00:23:52.000 --> 00:24:25.000
+all of those instances of the end of a word. So what is a parallel word count? I am like counting all the places, you know, all the unique words, all the ends of words. Yeah. And so this is actually another fantastic, because we've got, we've got like five minutes left. This is a fantastic note to end on that I had temporarily forgotten I wanted to bring up. First of all, it's actually, you're in the clear, because unique account, I looked up the PR, wasn't added until 2022 you're in the clear buddy
+
+41
+00:24:25.000 --> 00:25:07.000
+so that's a good good thing to mention wait wait wait why was it added it was added i think because someone pointed out that it was a useful algorithm to go along with all of the reduced by key algorithms yeah i kind of remember i kind of remember its addition i will we will leave because i went and found the PR that added it. Because for those that checked the show notes, probably nobody, I went and created a PR to refactor that mode example. And then in the PR, I linked to the other PR that added unique count initially to Thrust. But here is the last note I want to end on. And that is unique count is not
+
+42
+00:25:07.000 --> 00:25:58.000
+like technically it's fine that there exists an algorithm called unique count, but this is not like the correct generic name for this algorithm. And I actually gave a lightning talk at one point called algorithm selection, where I showed that all of these algorithms like is sorted and is sorted until and then adjacent find all of them are in this hierarchy and the root algorithm that sits at the top of the hierarchy is do you know what it is it's the arguably the worst named algorithm in all of c++ um i don't know mismatches what that is it what comes to mind that is it it is it is and that's because really what mismatch is is it's zip find i i followed my intuition and it paid off yeah you're crushing the quizzes these years you're crushing the quizzes zip find not is essentially
+
+43
+00:25:58.000 --> 00:26:51.000
+like the generic name for that algorithm and in case, like we have the exact same thing. Unique count is at like one of the leaf nodes of this tree and transform reduces at the top. But in the middle, we've got like a version of count if that bundles this zip iterator pattern. And if you recall, the very first talk I ever gave at C++ Now, I showed a sequential algorithm to solve a problem called dangerous teams that was adjacent reduce, which was basically this transform reduce with the built-in pattern of the zip iterator. And so my point here is that unique count really shouldn't be implemented in terms of count if, it should be implemented in terms of some parallel version of transform reduce called adjacent reduce, where you still have two binary operations,
+
+44
+00:26:51.000 --> 00:27:34.000
+one that performs this transform and one that performs the reduction, but then it takes care of that zip iterator trick for you. Because this pattern is so common. It's so common that even before I had entered the land of parallel thinking, this adjacent reduce thing is so common. It's so common that even before I had entered, you know, the land of parallel thinking, this adjacent reduced thing is so common. And the reduction here is really just summing Booleans. So your binary predicate would be not equal to, similar to the inner product. And then your second binary operation that does the reduction would just be sum. And so really, then at the end of the day, all you would see inside of unique count is just, you know, a call to adjacent reduce. And really, unique is just like, I don't know, once again, you can still have the algorithm there, but there is no unique in range v3.
+
+45
+00:27:34.000 --> 00:28:09.000
+There is an algorithm called adjacent remove if. Because really, unique is just an algorithm. Which is a better name. It just does compaction based on a binary predicate unique doesn't capture the fact that it only removes like consecutive things yes like like if you if you tell people who don't know they're not many in the background like what does a unique operation do they're gonna think like it removes all the duplicates yeah i mean and is unique count even i know that like unique now has a meaning in C++, but if you were to have, I guess, yeah, you can't do it with adjacent remove if that wouldn't
+
+46
+00:28:09.000 --> 00:28:45.000
+be the best way to do it. It would just be to have like a call to adjacent reduce, at least in parallel land and sequential land, it'd be fine to call, I guess, adjacent remove if, and then follow that up with a fold. But anyways, the point being here is that just these names you know we can we can be doing better here oh yeah i mean it's all a mess it's all a big mess and and really at the last thought i have in my head is like is it better to have like an algorithm advisor that tells the user hey here's a better thing or is it just better to have a library or a language that like the compiler
+
+47
+00:28:45.000 --> 00:29:28.000
+or their or your tools will do it all for you so like you never need to think should i write it way a way b way c at the end of the day it can just see through everything and will always do the most efficient thing i think that's honestly what like devs want that's what people want yeah i mean and i think the question is can we i mean i clearly we can do that in array programming languages but the question is can we take those techniques from array programming languages and bring them to um to python to rust to c++ i think the answer is probably yes yeah stay tuned folks the update on andrew kelly oh yeah i meant actually maybe yeah that was my other thinking which is that it's been a while since we've had some guest episodes so let's let's let's bring on the guests yeah maybe i'll
+
+48
+00:29:28.000 --> 00:30:08.000
+maybe i'll pick up i'll cut this in somewhere but we had actually let's go let's go get their name because we love it we love it on adsp when people reach out so on episode 168 we had a couple people ping us. One of them was Marco Seidentopf. I probably butchered that pronunciation. But thank you, Marco. He pinged us and said, for contacting Andrew Kelly of Zig, I recommend talking to Loris, who is the Zig's VP of community. And I went ahead
+
+49
+00:30:08.000 --> 00:30:49.000
+and did that. I DMed Loris on Twitter. Twitter got back to me. Loris got back to me and said that Andrew's very busy, but he is interested in going on podcasts when he's less busy, and he'll ping us when he is available. So probably not anytime soon, but maybe sometime in 2024, we will get a message from Andrew and we will figure out who we're going to guest host next time. Be sure to check your show notes, either in your podcast app or at adsbthepodcast.com for links to anything we mentioned in today's episode, as well as a link to a get up discussion where you can leave thoughts, comments, and questions. Thanks for listening. We hope you enjoyed and have a great day. Low quality, high quantity.
+
+50
+00:30:49.000 --> 00:30:54.000
+That is the tagline of our podcast. It's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

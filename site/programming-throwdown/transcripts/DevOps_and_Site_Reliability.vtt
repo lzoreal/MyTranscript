@@ -1,0 +1,433 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:06.000
+programming throwdown episode 104 devops and site reliability with matt watson take it away jason hey everybody so uh if you remember from, I'm on the spot now because I didn't plan ahead. I think it was episode 96. We talked with Rob Zuber from CircleCI about testing. We talked all about all the different forms of testing and how important that is. But at the end of the day, if you're going to have a scalable system, if you're going to service a lot of folks, you're going to have to do more than just write really solid unit tests and integration tests and all of that. I mean, you have to build something that's reliable, that can heal. And you have to build a lot of social and human processes to make all of that work and to keep all of these really popular
+
+2
+00:01:06.000 --> 00:01:44.000
+websites that you go to every day stable. And so we have Matt Watson here, who's the CEO and founder of Stackify, who's had a ton of experience in this field and is going to take some time to really share with us how that whole process works and how these websites do stay up for all of that time. And so, Matt, it's really good to have you on the show. How are you doing? Great. Absolutely. Thanks for having me. Cool. Awesome. Are you hanging tight with the lockdown? I don't know what area you're in, how severe the lockdown is right now for you. Yeah. So Stackify is based in the Kansas City area. Half of our employees live in Missouri
+
+3
+00:01:44.000 --> 00:02:13.000
+and half live in Kansas. For those who don't know the trivia about Kansas City,. Half of our employees live in Missouri and half live in Kansas. For those who don't know the trivia about Kansas City, it's right on the border. Oh, that's right. Yeah. But yeah, everybody's doing good and working remotely and has been no big deal for us. Coronavirus is definitely here, but it's not currently spiking like it is in some other areas. But everybody's trying to play it safe, though. Yeah, that makes sense. Yeah, it's spiking pretty bad. Actually, both Patrick and I live in Texas and in California.
+
+4
+00:02:13.000 --> 00:02:46.000
+But yeah, hopefully they kind of figure out ways to get it under control. But cool. So yeah, why don't you start with kind of an intro about yourself? How did you get into this sort of field and what sort of inspired you to take the leap from whatever you were doing at the time to say, I want to start a company, build a company around DevOps and site reliability? Yeah. So I am now 39 years old. Yesterday was my birthday. Oh, happy birthday.
+
+5
+00:02:46.000 --> 00:03:30.000
+So, thank you. I actually started my first software company when I was, let's see, 22 years old. And it was a company called Vint Solutions, and that company grew really fast. It was actually, it's weird to think about it now, but it was really kind of on the forefront of SaaS, you know, software as a service companies. And back then, crap was hard. Like, if we needed more servers, like, we're racking servers and installing VMware and, like, dealing with all that kind of crap. And, you know, none of that was fun and none of it was easy. And it was before the cloud, right? Before AWS and Azure and all these things. So did you have a warehouse or something i mean how did you see we just used
+
+6
+00:03:30.000 --> 00:04:33.000
+we just used a local data center i mean it was just a local kansas city data center but um you know so that company really grew really fast and in 2011 we sold it but when we sold it um you know i had about 40 people that worked for me in IT. You know, most of that was software development. But we had every challenge in the world from, you know, how to scale this thing, the performance and bugs and trying to build new features. And like, we had all the problems as a startup, right? And, you know, my goal when I when I left there and started Stackify was to build, you know build a set of tools and a platform that would help developers better understand how their applications are performing, how to troubleshoot basic problems, view errors, view log files, just basic kind of day-to-day stuff, which is a lot of kind of DevOps, SRE kind of stuff these days. But the problem I had back then is it felt like myself and the three or four other developers that were the most important people in the whole company spent all day long looking at
+
+7
+00:04:33.000 --> 00:05:13.000
+log files and trying to solve bugs in production, right? When we had like 40 other developers, but they just didn't have the knowledge, the tools, the security access, you know, just didn't have all of those things to really help troubleshoot things. And we just didn't have the tools. So I mean, that was originally the goal was, you know, how do we build a set of tools, help developers troubleshoot basic problems, you know, so that the lead developers don't spend all day doing it. Yeah, yeah, cool. So let's try to unpack, unpack's actually, there's a lot of complexity around just getting some diagnostics into your hand, right? So you have this data
+
+8
+00:05:13.000 --> 00:05:55.000
+center. Now most people are using AWS, but let's say you've rented out a portion of this data center and you have some servers on it. How do you go from 100 you know, 100, 1000, 10,000 machines serving some website to being able to look at something on your computer and say, Oh, yep, this this is bad. And this log line is bad. How does that end to end process look like? Well, so I mean, all of these things have changed a lot over time, right? And it used to be, you know, developers and system administrators would would set up all these machines, and you'd have a load balancer and you could log into the server. And of course, you have all the security access, you know, concerns with all those things. Right.
+
+9
+00:05:55.000 --> 00:06:37.000
+But now you fast forward to today and like servers aren't even a thing. We have containers or we have serverless applications. And, you know, now you're deploying a container somewhere and there's one to many of those instances of that container. And yeah, to your point of like, well, how do I get the log files off of a container? Right. It's like there's more and more levels of abstraction from, you know, a developer or anybody in IT to troubleshoot these things there's multiple layers of of automation and abstraction and all of this stuff which makes it more and more difficult to troubleshoot some of these things because you know like we use microsoft azure at stackify and
+
+10
+00:06:37.000 --> 00:07:05.000
+and uh we were recently trying to troubleshoot something and i had to figure out how to ssh into a container that was was interesting. Yeah, right. And by the way, I'm an old Microsoft developer, basically, who hates everything command line related. And so I'm not an old dog, but I feel like an old dog now being forced to learn this Kubernetes and all this stuff and Linux. And I'm like, God, why is this so complicated? Can I just RDP into the box and troubleshoot some things?
+
+11
+00:07:05.000 --> 00:07:25.000
+It'd be a little easier. But the only way we get access to these things today is to get all the data off the servers, right? So like log data, we got to get the logging data off of the servers, the containers, the serverless app, whatever type of app it is, wherever it is, wherever it's deployed, you've got to get that data
+
+12
+00:07:25.000 --> 00:07:47.000
+off of there and get it to a centralized logging solution, which there are a lot of those. Stackify is one of them. We do centralized logging, but there's things like Splunk or all sorts of solutions that you can throw all of your logging data into. Elasticsearch is another popular one. So how does that work? So if someone wants to use any of these, let's say Stackify,
+
+13
+00:07:47.000 --> 00:08:13.000
+they've built some Docker container that has their website business logic. And then how do they connect that to Stackify? They write as part of their code. You have something in every programming language. So if someone's using, let's say, C++ or Node.js or something, they have some line that says, you know, log this to Stackify. How does that work? Yeah, most developers in their applications
+
+14
+00:08:13.000 --> 00:08:45.000
+use some form of standard logging framework, right? So in.NET, that's log4j and it's Node.js. It's Winston. You know, in.NET, it's inlog or log4net. So, you know, they use these standard logging frameworks, which help you decide if you want to log to disk or log to, you know, syslog or Windows Event Viewer, rolling files on disk, you know, all these different things, right? And so most of the way you do this is they support different targets or appenders that are syncs, they call them different things.
+
+15
+00:08:45.000 --> 00:09:15.000
+But basically, they're like extensions that allow you to just change your config file to say, you know what? I want to send this logging data to this third-party source now, which could be Stackify or Elasticsearch or whatever the thing is, right? So it's usually a small configuration change. Got it. But that's only one type of logging, right? You've also got logging from the web server. If you want to get logs from Nginx or Apache or IS, that's a different kind of logs, like access logs.
+
+16
+00:09:15.000 --> 00:09:41.000
+And then you've got server logs, which could be things from syslog or Windows Events. And then now you get to Kubernetes, and Kubernetes has its own logs. Everything has logs. There's logging data for everything, right? Oh, I see. And so it's a combination of if you're the one writing the app, then you configure it in your app. But if there's something like the Windows syslog or the Linux syslog,
+
+17
+00:09:41.000 --> 00:10:38.000
+in that case, there's like a Stackify, maybe Daemon or something that trolls that and logs it for you or redirects it for you. Yeah. And as we talk about DevOps sort of stuff today, the challenge is, as a developer, you just want to write code and you can add your own logging and stuff like that, right? But then how you deploy your application and then, you know, install it in dev and QA and some pre-production environment and production and the automation of all that and all the configuration and all the settings and all the diagnostics. And that's just like a whole different world that most developers don't want to deal with or don't know how to deal with, right? Yeah. don't want to deal with or don't know how to deal with right yeah and i think that's where you know devops has kind of come in and there's people who specialize on those things and it's its own craft yeah that totally makes sense totally makes sense like so um i mean it sounds
+
+18
+00:10:38.000 --> 00:11:04.000
+overwhelming i mean there's yeah a lot of questions here one is you know how do you handle there's just so much data, right? I mean, if I just, if anyone right now, if you're running, and I have to admit I'm on the other side of the table, I've only ever done Linux development. So I don't know too much about PowerShell or Windows, but anyone on their computer running Linux can type dd message, and you'll just see this huge flood of all these things.
+
+19
+00:11:04.000 --> 00:11:43.000
+Oh, your Wi-fi driver is telling you something and and uh you know thousands of lines just for the computer to start and and your windows server is doing this and everything's doing that um and so it's that's a ton of information when even if nothing really interesting is happening on the computer right and so you multiply that by all the computers that it takes to service whatever this website is or this web service is. And it's just overwhelming, right? I mean, how do developers even know if something's going wrong before it's too late, right? Well, the logging data you're mentioning is really only probably like one
+
+20
+00:11:43.000 --> 00:12:27.000
+fourth of the information that you need. There is so much other information that you need that that doesn't even come from your logging so for example like metrics so what is the cpu and memory of the server or you know custom metrics for your software let's let's say for example you know at stackify we receive log messages right so if we want to, we receive log messages, right? So if we want to know how many log messages per minute are we receiving, that's a metric, right? So software produces a lot of different kinds of metrics that can be specific to the application, which could be things like garbage collection or the number of threads being used, like all sorts of diagnostic things, like how many SQL connections do we have open?
+
+21
+00:12:27.000 --> 00:12:44.000
+You know, all that sort of stuff, right? But then you've got things like CPU and memory and system load and, you know, disk space and like all that kind of stuff, right? So you have all sorts of metric data that is at your disposal. But then, you know, most people these days use some sort of profiling technologies
+
+22
+00:12:44.000 --> 00:13:41.000
+like application performance management, APM kind of tools, which is what Stackify does. So we profile their applications in production and can tell them, you know, how many times a this third-party web service and all the different things your application connects to, right? So is that hooked into the OS? How does that work? How do you know without the developer telling you if they're accessing a SQL server? Yeah, so APM products like Stackify, like Application Performance Management, and there's other companies that do this like New Relic and AppDynamics and other companies if people are listening and familiar with those type of products and companies. The way all of them work is they basically inject themselves at runtime.
+
+23
+00:13:41.000 --> 00:14:04.000
+So while the application is running, they basically manipulate the code, kind of inject themselves into the application while it's running, and then are able to instrument those different things to know when a SQL query is being called, how long it took that call to happen, when an external service is being, HTTP service is being called.
+
+24
+00:14:04.000 --> 00:14:47.000
+So that's done through byte-level, code-level injection into the app at runtime. So what kind of programming language do you use for your work? Yeah, so I typically use Python. And so the front-end work that I have done has been mostly using Flask or Django or these things. So for scripting languages like Python and Node.js and Ruby, the APM part of it is actually done with what's called monkey patching. So basically when you execute a query, our library overrides the behavior of that method with what's
+
+25
+00:14:47.000 --> 00:15:19.000
+called monkey patching and then our method gets called instead and then we call the original method so we're able to add like that makes sense instrumentation so that's it's called monkey patching which i didn't even know that word yeah yeah i've done this before for um there was a there was an application where the person used just straight Python prints, and I was kind of in a hurry trying to debug something. And so I just created my own print that called the original print, but then also did some other analysis. There you go.
+
+26
+00:15:19.000 --> 00:15:46.000
+That's how it works. Yeah, when they called a print, they didn't expect to call my print. But as long as you don't really change what returns from the print, it should work like normal. There you go. So that's how this APM kind of technology works on the scripting languages. And it works similar for.NET and Java and stuff. But those languages are compiled into bytecode, right? So that sort of manipulation has to be done in the bytecode, the compiled code.
+
+27
+00:15:46.000 --> 00:16:05.000
+Yeah, that sounds really hard. I put that in the hard category. It is really, really, really, add a bunch of expletives, curse words, complicated. Very complicated. I can't even imagine. I mean, I've seen some of these disassemblers and things like that where you give it an executable
+
+28
+00:16:05.000 --> 00:16:39.000
+and it'll turn it into C code. But that's about the extent of my experience in that area. And it looked really difficult, especially you have to do it without knowing what the app developer is going to do. You basically have to do it in a way where it works with every app and there's no corner cases. Exactly. And that's rule number one at stack by is we don't crash other people's applications we don't add a bunch of performance overhead and and actually so we support six programming languages at stack five for what we do and
+
+29
+00:16:39.000 --> 00:17:10.000
+Actually for in dotnet a large part of the profiler is actually written in C code And then so we have to know C to actually large part of the profiler is actually written in C code. And then so we have to know C to actually write a.NET profiler, which is kind of funny. And same thing for, or actually, I'm sorry, it's C++ technically, I believe. Right. But then in PHP, it's also written in C as well. And then Java actually is written in Java. So it's actually a lot easier because of that but i don't know if you've ever done any programming in c but it's a nightmare yeah so patrick actually
+
+30
+00:17:10.000 --> 00:18:05.000
+uh is uh is the cx he had to step out he has i saw his kids uh coming barreling through the door so uh but he's done a lot of c a lot of embedded uh programming and um yeah, I mean, that, that terrifies me. One time I did, and I totally botched it, but they asked me to do work on a DSP. And it was, it was super, super difficult. I mean, first, I just I wrote it the way I would write, you know, high level C++ code, and it almost immediately ran out of memory. Patrickrick we were just talking about um having to use c to do like a c to c sharp interop to uh to get automatic uh like to get code injection basically into c sharp um that stuff is brutal but i mean well i think there's a lot of intellectual capital that you've built if you can make that work because it's you need a
+
+31
+00:18:05.000 --> 00:18:39.000
+very specific expertise well you talk about um just software development in general and and how it's changed over the years right like writing programming in python or java or a lot of these other more modern languages is infinitely more easy than writing c++ and i honestly these days i don't even think really a computer science degree is really all that useful to learn about pointers and bubble swords or compiler theory or any of that. It's completely useless. Unless you want to be a C++ programmer.
+
+32
+00:18:39.000 --> 00:19:14.000
+Then it is really critical knowledge that you need to have. But for a lot of the more modern stuff, it's just so much easier not having to worry about all that crap. Yeah, we'll totally pick your brain a little bit later. We'll put a bookmark on that because I'd love to talk more about that is the most popular question we get into the show is, is should I go back to college, right? And yeah, definitely. Yeah, the TLDR, I kind of agree with you, but yeah, we'd love to, let's talk more about that. Oh, go ahead.
+
+33
+00:19:14.000 --> 00:19:29.000
+To go back to what we were talking about earlier about collecting the data, right? Like, so we collect, developers need so much data to understand how their applications are performing and troubleshoot things. So we collect a lot of logging data, which can have really, really detailed information in it. It can also have errors in it. So, you know, one of the things we do is, you know,
+
+34
+00:19:29.000 --> 00:19:44.000
+we collect the errors and we're looking for unique errors. So it's like, oh, we did a deployment today. Well, a few minutes later after the deployment, we want to see, did we get new errors that we weren't getting before? Did we fix some errors? Like all that sort of stuff. And then we talked about collecting the APM data,
+
+35
+00:19:44.000 --> 00:20:14.000
+understanding performance, which transactions happen the most, what causes those transactions to be slow. You know, it's this database query gets called way too many times, gets called in a loop, it's an N plus one problem, or it's just very slow, all that sort of stuff. And so it's just the combination of all this stuff from the metrics, the APM data, the errors, the logs. Developers really have to have all of that information together to really understand how their applications are performing and then troubleshoot problems.
+
+36
+00:20:14.000 --> 00:20:42.000
+Otherwise, you just have kind of one piece of the story. Yeah, that makes sense. I think another part of this is to tie this to our last episode. In the past episode, we talked with Max Sklar about Bayesian models, about generative systems, and about some of these machine learning things. And you can imagine this as being sort of a generative model. So you could look at the past, let's say, 30 days of your application and say,
+
+37
+00:20:42.000 --> 00:21:26.000
+in all of these days, I saw this one error message, you know, about 20 times. So maybe 20 plus or minus two, right? And then now you're on the next day and you see that same error message 400 times. And so, you know, if you had some kind of generative model, it would have expected you to see that message 20 times, you saw it 400, and you could flag that and say, hey, you know, this print with this message is going crazy today. You know, you should take a look at that. And that might be a way for people to find the needle in the haystack, right? Absolutely. And, you know, so machine learning, anomaly detection, all that stuff,
+
+38
+00:21:26.000 --> 00:22:11.000
+I think is very useful. The challenge we have, though, is that the big problem is that software changes, right? If you deployed some software and you literally never changed it, those patterns would be probably extremely useful because like you just expect the same kind of pattern of usage over and over. And that stuff is great.'re absolutely right but the problem with everything to do with software development is agile development the more stuff changes the more it breaks right like i don't know about you guys but how many times like hey we're doing a deployment today and you all stand around in a room stare at each other for a while and you're like are we really going to do this are we gonna ruin our night weekend is everybody
+
+39
+00:22:11.000 --> 00:23:00.000
+really sure about this this crappy code we're about to deploy right that's the nature of software development and and now we want to do deployments every week or every day and you have crazy companies like Facebook that I think do deployments every five minutes, it seems like. And those events are the problem, right? And so that's why tools like Stackify and all this data we're talking about are so important because they help give you more visibility. They give you more confidence and they help you understand your risk, right? You're like, well, we know we're going to deploy this. identify, you know, understand your risk, right? You're like, well, we know we're going to deploy this. Like we, you know, none of us feel a hundred percent about this thing, but we know five minutes after we do the deployment, we have all the data we need to understand that all of a sudden there is nobody using our software. Like it doesn't work anymore.
+
+40
+00:23:00.000 --> 00:23:41.000
+It crashed or like it's getting all sorts of new errors or performances, you know, dramatically worse, right? So that's really important for all developers to have access to this kind of data because it helps them know when they do a deployment, did things get better or worse? Did like, did we just jump off a cliff? Is the system down, right? How do you deal with that? Like, so let's say there's a deployment and things change, you know, you don't really know whether the change is normal, you know, the deployment caused, you know, the system to just behave differently, or if the change is a problem, there's really no way to know, right? You just have to kind of tell developers about all the changes, right? Or is
+
+41
+00:23:41.000 --> 00:24:00.000
+there, how can you, how can people be smart about that? Well, I think in general, it comes down to having good application monitoring. You know, so you have some baselines, you know, like, you know, this application gets 35,000 requests a minute. Kind of to your point earlier, like there's a very steady amount of traffic, you know, on a monthly basis.
+
+42
+00:24:00.000 --> 00:24:20.000
+It's very kind of predictable. And that's, hey, we did a deployment. Okay, well, you know, five minutes after the deployment is, the deployment, are things normal? Is the average transaction times are normal? All that sort of stuff, right? And able to just see, hey, things are behaving in a normal pattern. Or all of a sudden, things are just totally different.
+
+43
+00:24:20.000 --> 00:24:41.000
+Something has totally gone off the rails. Like, oh, okay, things have gone totally off the rails. Well, hopefully, if you have the right data and the tools, you know, products like Stackify and these things, right, you can go and it's like, oh, wow, this database query is performing terrible now. And I can clearly see, like, the software will tell you, like, wow, this query sucks.
+
+44
+00:24:41.000 --> 00:25:17.000
+I don't know what happened, but when we did the deployment five minutes ago, all of a sudden, this database query is crazy slow. And then that helps give you something to pull on, right? Like, okay, well, let's figure out what changed. Let's go back and see what was in the release. And you're like, hey, Joe, did we change this thing? Right? And you start going down because almost always, almost every single time in software if there's a problem it's because something changed right like crap crap just doesn't randomly break like that doesn't really happen you know maybe a server goes down or you know aws there's like a super bowl ad
+
+45
+00:25:17.000 --> 00:25:56.000
+super bowl ad and your server just yeah yeah but usually it's something changed, right? And we have to figure out as fast as possible what changed, right? And that's, you know, going back to kind of where we started the conversation is agile development and, you know, these rapid deployments cause a lot of change, a lot of change events. And that's where all the risk comes from. And I'm a huge fan of doing deployments actually more often because then you're shipping fewer changes at a time, right? You're like, well, we did a deployment, but we only made five changes. So it's like, it was one of the five things. Where if you do a deployment-
+
+46
+00:25:56.000 --> 00:26:34.000
+If you can slow roll it even better, right? So at any given time, you have 10, 20 different deployments at the same time and you can compare and contrast all of them yeah where if you where if you do a deployment and you change 50 things and something doesn't work you're like oh crap where do we start yeah yeah there's no place you know so and i have to confess you know i i've i've never um i haven't done a lot of DevOps. I find those people like SREs to be just total magicians. I think it's amazing, but this already has taught me a lot.
+
+47
+00:26:34.000 --> 00:27:10.000
+Can you walk me through the user experience here? So let's say they've set up Stackify, they're logging a ton of stuff. What's the reporting look like? Is it a bunch of graphs? Is it some SQL database where they can write queries? I mean, like, how do people actually triage this? What are they seeing when they do that? Yeah, products like Stackify are a lot of dashboards and reporting. So, you know, a lot of analytical just dashboards and stuff. So you can go in and pick a specific application and then immediately see, okay, how does this thing perform over time?
+
+48
+00:27:10.000 --> 00:27:56.000
+How much traffic does it get over time, you know, on charts and graphs and stuff? And be able to quickly see, you know, these are my top performing, you know, worst performing things, things that get used the most, all that kind of stuff. So, you know, a lot of things kind of very quickly bubble up to the top. And usually people use products like this in two modes. They're either being very reactive. They're like, okay, we did an employment and the whole building is on fire. Everybody's running around. Everybody's stressed out. We're all not sure if we should just get our resumes up to date and just go find a new job. Or do we fix this thing? Right. And so you're very reactive and you're trying to find the problem.
+
+49
+00:27:56.000 --> 00:28:46.000
+Right. That's that. And that is one use case for all this kind of stuff. The other side of it is being proactive. It's more of the Boy Scout mode. It's like, OK, how do we improve our software? And this is kind of the role of SRE today of like, okay, we get 30,000 requests per minute. How do we make this thing faster? You know, how do we, you know, make it less fragile? How do we make it so it costs less for us to host? How do we improve our user experience? Like all those sort of things, right? And proactively just trying to figure out these sort of things. And amazingly, when people don't use APM type of products, they don't know what they don't know. It's like Schrodinger's cat. Like, is the cat alive or dead? Is the bug in our software alive or dead? Does it exist or not? We don't know. And maybe we don't want to know but then you install you know products
+
+50
+00:28:46.000 --> 00:29:14.000
+like this and all of a sudden we you know you start collecting all the errors in the software and you're like holy crap there's like 300 errors on our software being thrown 300 different errors not the same one 300 times but 300 different errors being logged in our software every hour you're like oh my god we got some crappy code that's doing some dumb things. Null reference exceptions everywhere. Just like, oh my God. And it's like Schrodinger's cat kind of thing. Like you don't know what you don't know until you know.
+
+51
+00:29:14.000 --> 00:29:36.000
+And then you sort of don't want to know. Yeah, you find out. Yeah, I think it's so true, y'all. When I'm writing code, especially as I've gotten more experienced, I'll put logs, I'll be much more diligent about writing logs. And, you know, I'll get to a point where I'll say, you know, oh, you'll never actually get here. And I'll just put a log saying, you know, we'll never get here.
+
+52
+00:29:36.000 --> 00:30:13.000
+And then, you know, a year later, you go and look at the code or people send you the traces. And it's always like, should never get here here i don't remember why this should be three and then colon two right i mean it's just like and it's just terrifying and see at your point it's kind of you know you build up and then people leave the team too right and so that intellectual capital is gone right and so uh definitely you know bite that bullet as soon as possible um otherwise it just gets so hard to go back and recover. Well, and I have a particular saying that I'm very fond of that I think every developer should have tattooed right on their forehead.
+
+53
+00:30:13.000 --> 00:30:30.000
+And it is, if it can be null, it will be null. Yeah, that's so true. Okay? And it goes back to the point of you just mentioned, like, this thing shouldn't happen, but it could. Yeah, yeah. And then what do we do if it if it does happen right and same thing with things being null like everybody thinks code is perfectly
+
+54
+00:30:30.000 --> 00:31:16.000
+magical and there's like puppies and clouds and rainbows but one in a thousand times there's not and what's great about software is if it works 99.99 of the time it works perfectly right that means like one in 10 000000 times it fails miserably. And that's perfectly acceptable. We live in this world where like one in 10,000 airplanes could fall out of a sky and it's okay. That's software development for you, right? And that's the reality of software too, is there are problems all the time that you do not anticipate you cannot anticipate but you have to try you always have to be defensive in your programming to your point earlier like we add this logging in here just in case this weird scenario happens or something is null that we
+
+55
+00:31:16.000 --> 00:31:53.000
+didn't expect to be null but you have to account for it because if it can be it will happen it and it happens every time you had to give a first- example, I mean, you know, we rolled out, I rolled out the Eternal Terminal, which is this SSH alternative. And one thing I didn't expect was people running out of memory. Because, you know, I'm looking at my desktop here, I have 64 gigs of RAM, my laptop has probably the same. And I didn't really think about, you know, Eternal Terminal uses maybe 50 megs, right? But someone out there was running it on a VM that
+
+56
+00:31:53.000 --> 00:32:21.000
+they got for free. And yeah, just all things started breaking all over the place. And it's because every time you ask for memory, you could end up not getting it. Yeah. You know, what am I? Yeah. It's just that stuff ends up being really difficult to do after the fact. You know, and you're adding to that topic. We never think about performance these days because computers are fast and we have fast internet, right? But what happens when you're working on an airplane that's flying over the Pacific Ocean
+
+57
+00:32:21.000 --> 00:33:06.000
+that has the worst Wi-Fi connection in the entire world, and you're trying to use a website, right? You're trying to surf the web or do something, and it's like the slowest thing in the world. But as developers, we don't think about those scenarios. It's all those sort of scenarios that we never think about that then cause all sorts of errors and bad user experience. Yeah, and that's where I think tools like Stackify are really important because they give you a window into the entire user base. And there is that needle in the haystack, which we talked about earlier, and that seems pretty overwhelming. But with the right tools and the right logging, you can actually find that person who maybe right now is flying over the Pacific using your app.
+
+58
+00:33:06.000 --> 00:33:39.000
+Well, you mentioned your logging. Logging is really important, but it's even more important to do the right type of logging and using logging levels. So it's like that weird scenario you mentioned, that needs to be logged at a warning or error or fatal level, right? Not a debug level. And that's where when people's apps get deployed to production, a lot of times debug logs and stuff aren't turned on because they can be like a crazy volume of information. But you need to look for things that are warnings or error or fatal
+
+59
+00:33:39.000 --> 00:34:17.000
+and those types of severity. And then it makes it easy to log into a tool like Stackify and say, okay, let's look at all the logs that are warning or fatal or whatever and go find those problems. Yeah, that totally makes sense. What about, how do you handle machines that are misbehaving? So in this case, if you look at the overall data, it might be fine. But I remember an issue that we had a number of years ago where basically our app was creating new threads. And so it was just constantly creating new threads. And at some point, the machine would die.
+
+60
+00:34:17.000 --> 00:34:53.000
+And AWS or whatever the cloud we were using would just kill that machine based on some logic they had. And then it would spin another one up. And so it's one of these things that we actually, it took us a long time to even know something was wrong, because you can't really tell. But if you were to look at a single machine, you could see that things were getting kind of bad, right? And so how do you handle that? We have this sort of heterogeneous environment where some machines are healthy, some aren't? I had this exact type of issue happen this week at Stackify.
+
+61
+00:34:53.000 --> 00:35:19.000
+We deployed a new application on Kubernetes in our QA environment. For whatever reason, the pod would fail, and then Kubernetes would restart the pod and create a new one. Except the problem is it did it 7,000 times over like three days. And then Kubernetes ran out of memory. Oh, okay. The node in the cluster like ran out of memory. Now, luckily this was in QA and it wasn't a big deal. But these things happen to your point,
+
+62
+00:35:19.000 --> 00:35:42.000
+like things that you don't anticipate. And actually the fix for that was we had just put memory limits on the pod and then it behaved just fine. Like just really weird stuff. And to your point, like these are problems that still happen. We've got another app in Stackify that's actually in production for us. And the only way we can make the thing work is to restart it every 30 minutes. Oh no, that's so brutal.
+
+63
+00:35:42.000 --> 00:36:11.000
+But these things happen, right? And you're like, okay, do we spend like millions of man hours and dollars fixing this thing? Or do we make a script to restart it every 30 minutes? Yeah, yeah. That is a really good point, right? Especially when we dive into this, it's easy to kind of say, well, we'll log everything. We will do a deployment once a year or something like that. But there's always these trade-offs, right? And so, you know, it could be that if your business
+
+64
+00:36:11.000 --> 00:36:50.000
+doesn't move fast enough, like if you're not pivoting based on the user experience fast enough, that you fail at the business level. And so you're kind of running up against that. You have to kind of balance. This is one of the things that I think a good tech lead will do well, is balance sort of moving fast or maybe being sort of more interactive with the other cross-functional teams. Balance that against accumulating all this technical debt. And so I think that requires constant supervision. Well, and we could record a whole podcast episode
+
+65
+00:36:50.000 --> 00:37:05.000
+just on this topic. But the problem is software developers always chase shiny objects, right? They're like, hey, we want to rewrite everything in Kubernetes because why not? And so we redo everything with Kubernetes and then like a year later, they're like, nah, let's move
+
+66
+00:37:05.000 --> 00:37:42.000
+to aws lambda that's even cooler now and it'll look better on our resume so then it's like let's just spend the next no we're literally not going to ship a new feature we're too busy we're moving everything to kubernetes and lambda right like that's what like people do this and then they never deliver new functionality to their customers you're absolutely right like i could go on this topic for like an hour yeah yeah i know i have a friend who works in the games industry and he says, you know, I asked him really to describe what this crunch phenomenon was. This was around the time when, you know, there was a lot of publicity around the crunch hours that game developers work and things like that. And, you know, he basically explained to me really well. He said
+
+67
+00:37:42.000 --> 00:38:07.000
+it's basically feature creep, except because a game is kind of this atomic thing where you just release the game, it's all hypothetical, right? So the game designer will come to the engineers and say, oh, we need to add a 14th lineman in Madden. Otherwise, no one will play this game. And then they go and they code it up. It's like, oh, now the football needs to be orange.
+
+68
+00:38:07.000 --> 00:38:22.000
+It has to be orange. Everyone loves orange. And then, oh, now we want the person to be able to set the color, right? And so you get all of these changing requirements and you're working these insane hours. And so then that's one of the reasons why I think code quality on games
+
+69
+00:38:22.000 --> 00:38:55.000
+has always been a challenge. Yeah, feature creep is a never-ending problem in software development just and and to some sense developers are our own worst enemy on it too where you know i'm talking to one of my team members this week and and we use like a sql parser that parses sql statements and we're having problems with it and i'm like okay well if and we use like a third-party product to do this. If it doesn't work, we have some fallback logic. We'll just have this little regular expressions that are fallback logic. My developer's like, no, we need to write our own SQL parser.
+
+70
+00:38:55.000 --> 00:39:21.000
+I'm like, no, we don't. We really don't need to do that. We have other stuff to do. That's what developers do. People love building stuff yeah that's where our own worst enemy of you know what i always say like doing software development sideways like we're not moving forward to like really improve our product and deliver new stuff to our customers we're just like moving sideways okay you know i wanted to piggyback on that so
+
+71
+00:39:21.000 --> 00:40:06.000
+you make a product for developers you know when started Stackify, were you afraid of that? Because that's one thing that I've always wondered. And we talked to a lot of folks who make, you know, for whom developers are the end user. And, you know, one of the fears is that you can provide 99 percent of the functionality. And then the developer says, no, I want to I want to build my own Stackify for my own company. Right. And so how do you defend yourself against that? I mean, there's really nothing you can do. At some point in time, you just have to say no. And we, you know, this is actually something I have to remind our teams all the time. Like our customers will come to us and like, oh, Stackify doesn't work in this like purple squirrel mode. And we're like, nope, sorry. Yep, it doesn't. And we're not going
+
+72
+00:40:06.000 --> 00:40:46.000
+to fix it because our other 99% of our customers don't care about that. And we're not going to bet our entire company on that 1%. Like the other 99%, we have got to service, right? And we've got to make an incredible product for that 99%. Yeah. When you started Stackify, how did you know that these people would use it and not try and build their own thing? Well, I Yeah, when you started Stackify, how did you know that these people would use it and not try and build their own thing? Well, I mean, when we first started out, what we were doing was a little different, right? And I think maybe developers these days, compared to maybe, say, 10 or 15 years ago, are maybe a little more over of the, like, I'm going to build my own version of this.
+
+73
+00:40:46.000 --> 00:41:06.000
+I mean, I think that was definitely the case like 15 or 20 years ago. You're like, oh, we need some little JavaScript library or some little library that does this or does that. And yeah, developers were really bad about it. Like, oh, I'm just going to create one instead of buying one for $400. And maybe because things now, there's so many SaaS products,
+
+74
+00:41:06.000 --> 00:41:22.000
+there's no way. If somebody wants to rebuild Stackify, good luck, and I'll talk to you in five years. It's so complicated. I was like, good luck. It's not like some little JavaScript library that does this one cute thing like change currencies
+
+75
+00:41:22.000 --> 00:42:58.000
+or time zones or something. Maybe that's the difference right like so many sass products like you want to create your own version of twilio or send grid like good luck go for it if you want to master that go for it it just doesn't make any sense it'll take you five years to make emails that don't go to spam yeah good alone and and to be honest with you that's the most amazing thing about being a developer these days is we have Azure and AWS and all these different platform as a service stuff and APIs that we can use for things like Twilio and SendGrid or machine learning or a thousand other things that just make it so much easier to build software and not have to reinvent all of those wheels. Writing software today is so much easier because of all of those things, but then it's so much more difficult for other reasons. Yeah, I think people just are much more productive. And then because of that, I think it's much more lean. You could have three people do an entire. There's this, I can't remember the name of it, but there is this social network that's kind of like a TikTok thing, but it's audio only. I can't remember the name off the top of my head it's just it's just three people and they were saying they don't even really have any incentive to hire a bunch of people because uh it's already you know they've scaled it up themselves yeah so yeah so let's talk about um let's talk about stackify uh you know
+
+76
+00:42:58.000 --> 00:43:46.000
+what is the you know company like in terms of where do folks work is it sort of distributed you have a lot of folks here in college that are looking around for internship opportunities. Do y'all do internships? Do you do? Are you hiring full time? Kind of like walk us through the company, maybe even like what a day is like working at Stackify. Yeah, so we have about 45 to 50 employees and about half of about 25 of those are in the Kansas City area. And then we have about 20 employees in the Philippines. So we have a lot of our engineering is done in the Philippines. And then we do customer support as well. And some other things out of the Philippines. And part of that is because Stackify is a global company. We have customers in 60 countries.
+
+77
+00:43:46.000 --> 00:44:21.000
+And so we have to operate 24 hours a day. So we have support people and developers, 14 time zones different on purpose. Wow, that's wild. So we can help support our customers globally. But at Stackify in Kansas City, we hire a lot of entry level developers to do support because our product is so technical. So we actually hire developers to do like customer service, customer support. It's like really high level kind of technical support
+
+78
+00:44:21.000 --> 00:45:01.000
+for our customers. And then a lot of times those developers then work their way potentially into our engineering team. And so I think that's a great career path for developers is to work in that kind of like tier two, tier three kind of customer service and high tech companies, learn the product, have like really invaluable product knowledge that way and then be able to bring that product knowledge and customer kind of viewpoint right into the engineering team and then continue to grow their their engineering skills i think that's a great career path and we had a developer at vin solutions that did that at my old company came in as entry level
+
+79
+00:45:01.000 --> 00:45:31.000
+support worked his way up through all the support, became an engineer on the team, and then left and founded his own software company. Now he has his own software company he started. And so I think that's a great career path for people. Yeah, that makes sense. So the folks in the field, like how do you deal with 14 times? We have trouble. I'm two time zones away from my boss and and we have trouble with our team how do you deal with 14 time zone difference um so we have some people that work
+
+80
+00:45:31.000 --> 00:46:09.000
+um our hours in kansas kansas city hours so that's full they work like the graveyard shift there like overnight shift there but most of them actually work there like 3 p.m to midnight their time which overlaps to like 11 in the morning uh kansas city time so you know we have meetings and stuff like that with them and them in the mornings and um then how do you keep the how do you keep the cadence up right so let's say you meet once a day um you know i've seen issues where i need these are people who are only 100 yards apart. Right. But they'll send an email. The person will respond the next day.
+
+81
+00:46:09.000 --> 00:46:32.000
+They'll respond the next day. And it's just nothing's getting done. And you finally have to say, OK, you know, we need to just sit together. And I found that to be a recurring problem. How do you how do you handle you know, how do you close that loop? I think those are all communication and management problems. Right. And, you know, that's the great thing about Slack and things like that, being able to communicate with people instantly and get work done and collaborate.
+
+82
+00:46:32.000 --> 00:47:16.000
+And a lot of the challenges that you mentioned are totally different now that everybody's working remote. And working remote, I don't know about you guys, if you've ever worked remote or been on a team that was partially remote, but I think the worst case scenario is you've got five or six people on a team that work together and then you have one person who works remote. Right. Like that one person is always in the dark and they will never know anything. Right. Because the other five or six people are in one room and when one of them breathes weird, everybody knows what they're thinking. Because, you know, there's that osmosis of just that teamwork, right? And being together and just knowing the personalities of people and all that sort of stuff. But now that we're all
+
+83
+00:47:16.000 --> 00:47:54.000
+working remote, all of that has gone away. Like the communication style has to change dramatically. And now that one person in my example before that was the odd the odd person out that was always in the dark now all of a sudden it's a level playing field like everybody has to communicate in a different way and the big thing that people have to strive for is just the sense of urgency it's like yeah i need so-and-so's help to figure this out i could email them and just pray that they respond eventually, or I could call their butt right now and get a damn answer and figure this out. And what I always used to say when we're all in the office is I'm like,
+
+84
+00:47:54.000 --> 00:48:12.000
+go sit on their desk until you figure it out. Like go figure it out now. Yeah, I feel like that. That sense of urgency is the key. Yeah, I feel like what I've noticed noticed and I've noticed this in myself too, is sometimes you could end up like subconsciously procrastinating where it's like, you know,
+
+85
+00:48:12.000 --> 00:48:33.000
+it's a big deal. It's not even really procrastinating. It's subconsciously not unblocking yourself. So you're kind of, you hit this roadblock and you don't even really know it's a roadblock. Like maybe it's some technical problem that you don't know how to solve. Or maybe it's a person that you need to talk to, but you don't quite know who to talk to. And so you just end up paralyzed.
+
+86
+00:48:33.000 --> 00:49:03.000
+And if you ask somebody like, hey, what's the status on this? They'll say, oh, I'm working on it. And then at some point you kind of realize, oh, no, this is actually blocked. And there's sort of like state of like unconscious, uh, misunderstanding. Right. And, uh, yeah, I think, I think actually to your point, being online might actually make that easier. Um, because when you're, when you're in person, you might see the person kind of stressed and say, oh, this person must be working really hard.
+
+87
+00:49:03.000 --> 00:49:29.000
+Right. Or I can tell I need some help. Running into a wall. Yeah, yeah. Yeah, I think there's always a delicate balance to this, right? Because you don't want to be bothering people all day long and asking them dumb questions that you can answer on Stack Overflow. But at the same time, you don't want to sit there and be marinating on problems and not getting anything accomplished because you're not asking for help. There's definitely a very delicate balance there. And it's always a struggle.
+
+88
+00:49:29.000 --> 00:49:57.000
+And, you know, I always tell my developers on my team that it's like, you know, if you need help, ask. I'd rather you ask for help and be overly annoying about it than be sitting there wasting a bunch of time. And I think, you know, these things are the reason we have standups and different things like that on a daily basis is not necessarily because we need them, because if you had the right people that are good at communication, they would ask the questions. But it's almost like we have standup every day because some people aren't very good at
+
+89
+00:49:57.000 --> 00:50:46.000
+communication. And it's the only it's that chance to say, hey, do you need help? Because otherwise they won't ask for help. And otherwise, you know, if you have all the right people on your team, standups maybe are completely useless. But for some personalities, it's that daily check-in that you need to push that to make sure that, you know, those questions are being asked. Yeah. So on the product side, if someone, again, let's say a college student or someone just getting into programming wants to use Stackify. What is that? I mean, I understand that Stackify is like mostly for enterprise, right? But for folks who want to get started, what is the sort of tier look like? Is there a free tier? What's the environment like for someone who is just an academic trying to get into this area? Great question. And I've got a perfect answer for you.
+
+90
+00:50:46.000 --> 00:51:10.000
+So actually, Retrace, our flagship product, our APM product, Retrace, starts at $99 a month. So it's very affordable. It's not like a really expensive enterprise product. We have another tool called Prefix, which is free. And so I honestly think it's the type of tool that you talk about in an educational perspective. It's very, very useful in an educational perspective.
+
+91
+00:51:10.000 --> 00:51:35.000
+And we have some colleges and stuff like that that use it. It's a profiler basically that runs on the developer's laptop. So as you're writing and testing your code, you can instantly see what that code just did. So it'll show you, okay, this page loaded, this transaction loaded, it ran this database query, it did this web service call, it did three more database queries, and here's how long it took,
+
+92
+00:51:35.000 --> 00:52:14.000
+and show you your log messages and everything. So it kind of gives you instant feedback to what did my code just do and did it work? How long did it take? All those sort of things. And then that's a free tool that Stackify provides. It's called Prefix, and I definitely recommend it. Got it. So the idea is someone's just getting started. They probably don't know about Docker and all of this yet. They're SSHed into some AWS box and they are developing some website or something like that. They run prefix. Is it hooked into VS Code or where does prefix actually live?
+
+93
+00:52:14.000 --> 00:52:55.000
+So usually it's used on your laptop itself, like not on a server. It's on your workstation. Oh, I see. And it's installed the same kind of way that retraces so let's say you're using python you would install our our package into your app and then that would enable the the monkey patching and the profiling that we kind of mentioned earlier and then um prefix will collect that data all locally and just show it to you all locally it doesn't oh got it i see it doesn't connect to the internet or any of that it's all local yeah you're testing locally you have like a local database or using sqlite or something simple and and you're running the same thing you'd run in production but in this test environment and while
+
+94
+00:52:55.000 --> 00:53:47.000
+you're doing that retrace is telling you like oh you're really hammering the sql server right now you don't want to take another look at what you just wrote yeah and that's what that's what prefix does that's why we call it pre fix oh prefix all right that's clever so cool yeah that makes sense that's awesome so everyone out there check it out totally free um i guess it runs on everything like windows mac linux so as of today uh prefix is primarily been for dotnet on Windows but we're getting ready to release a new version that will support six programming languages and also run on the Mac so look for that very soon very cool yeah keep keep your eyes peeled for that also you have a podcast of your own which is which is really cool totally gonna check out. Why don't you give us
+
+95
+00:53:47.000 --> 00:54:39.000
+some details about the Startup Hustle and what that's all about? Yeah, so it's called the Startup Hustle and you can find it on Apple and all the places you would find a normal podcast. And it's about entrepreneurship and startup stuff. So we cover a lot of different topics related to startups and um we have a lot of different guests that are founders of other companies and um just you know if you're kind of into the startup on you're an entrepreneur it's a very educational uh podcast cool so what uh what advice would you give for someone coming out of, for someone who doesn't have a college degree or doesn't have a degree in computer science and wants to get into this field? You know, what do you think is the best way? There's these coding boot camps, there's, you know, DIY. There's always,
+
+96
+00:54:39.000 --> 00:55:27.000
+you know, DIY and then go to a smaller company where you don't need the fancy college on your resume, right? There's all these different sort of approaches to get into the field. And it'd be great to hear your take on which one you think could be the most useful for people. Well, like almost all things in life, you've got to put the effort into it. You got to work like instead of Netflix and chill, you got to figure out how do I make a website for my church or whatever right like yeah you just gotta put the effort in and and get experience any way you can if it's like look i'm gonna find a local startup and i will donate my time uh what can i do please anything i can do i want to write some code and dedicate it doesn't matter like i need experience right and that's the hardest part
+
+97
+00:55:27.000 --> 00:55:59.000
+as a developer it's a chicken and egg problem like a lot of things right where nobody wants to hire people without experience but you can't get experience if you don't get a job and yeah all and the great thing about software development is you just need some experience and and that could be you know helping some local startup or startup or somebody else in the community, some business you know, an open source project, whatever it is, you just gotta get experience and you gotta put in the effort. And a lot of times I've had developers that work for me
+
+98
+00:55:59.000 --> 00:56:30.000
+or employees that work for me that wanna do software development. And I've actually got one now kind of on my team. I meet with him and he's like, well, I really want to do computer programming. I really want to do coding. And I'm like, well, why don't you do it? You're not putting in any effort. You're not coming to me and asking me like, hey, do you have a project I can do or whatever? Like you got to put in the effort. And that's the number one problem with everything. You got to put in the effort. Yeah. So what do you think people should do to prepare, if anything? Right. So I think, you know, there's there's so many like
+
+99
+00:56:30.000 --> 00:57:12.000
+there's Udacity and Coursera and then there's there's real life like like brick and mortar, you know, coding boot camps where they kind of give you a diploma at the end or get you some interviews. And, you know, the sentiment on this has been pretty mixed, right? I mean, there's some people who swear by them. There's some people who say, oh, I would, you know, I don't even look at that on someone's resume and they disregard it totally. I think that, you know, you could, you could, you can easily learn everything on your own. And so, you know, what do you think is the value of these kind of coding boot camps and you know would you advise people to try them out so i think all of these things are applicable avenues right
+
+100
+00:57:12.000 --> 00:57:33.000
+so you know there is a a boot camp sort of place here in kansas city that i think is like 12 weeks long and um but it costs like some insane amount of money to go to like it's like twenty thousand dollars or something like oh wow it's some astronomically insane amount of money to go to. Like it's like $20,000 or something like that. Oh, wow. It's some astronomically stupid amount of money. But you know what? Like 90% of the people that go through it get a job. Oh.
+
+101
+00:57:33.000 --> 00:58:12.000
+So somehow or another, they do a really good job at placing these people. And now they don't all necessarily get engineering jobs. They may get jobs doing QA or technical support or other things, but they're entry-level positions. That's the key, is getting your foot in the door somewhere and getting experience. And so, you know, I think the cost of those things are insane. But with all of these, it's like the ROI to it, right? It's like if I know if I go to this thing and I'm going to get experience and they can help get me a job, then it's really valuable. So I actually went to DeVry, which is a technical school. You end up getting a four-year degree.
+
+102
+00:58:12.000 --> 00:59:01.000
+And they do a good job as well with career placement and stuff like that. But I think all of these avenues are possible. I think some of the best are working at a place and you've got like product knowledge industry knowledge of a certain thing you're like i want to teach myself programming and then like okay how do i how do i apply that where i work you know and then how do i like ease myself how do i somehow transition myself from being, you know, I work in a medical lab and I'm an expert on all things about medical lab. How do I, how do I work myself into the engineering department somehow? Right. Yeah. And that's really good advice. And, and, and that was my example earlier from Venn solutions. Like we had somebody who was a support person and they slowly work,
+
+103
+00:59:01.000 --> 00:59:38.000
+slowly work themselves into the engineering side of it. And that's where you can teach yourself or do small projects. You're starting to work on small bugs. But a lot of times, you've got to work at the right kind of company that has the right atmosphere for those kind of people to succeed too. Yeah, I think a lot of those are startups. I think startups are a really, a really good place for people to go. And in fact, I have this this sort of theory that sort of the better you are relative to your resume, the better a startup is for you. So, you know, if you have a phenomenal resume,
+
+104
+00:59:38.000 --> 01:00:26.000
+but you're not actually that good at coding, then going to a big company is probably going to work in your favor. You can kind of blend in, you know, the resume will get you through. But if you're lopsided in the other direction, you have a ton of talent, but, you know, you got a degree in economics or something. And so the degree doesn't show the computer science skill that you have. That's where startups can be a really good opportunity. I also really like what you said about starting in an adjacent role. A lot of people ask me how to get into AI, and I tell them something very similar, which is just start as a software engineer at a company that does AI in some way, shape or form. That's usually the best
+
+105
+01:00:26.000 --> 01:01:11.000
+way to start. Well, or it's like, hey, I'm a software engineer at Stackify and maybe we don't do a lot with AI, but you know, in my free time, I'm going to see how I can apply AI to what Stackify does. Yep. Right. I'm going to go back to my boss and say, look at this really cool thing we can do with AI. Yeah, totally. Cool. Yeah. I'm definitely going to check out your podcast. I just inside baseball or something. I've always wanted to start a company. It's never been. The opportunity hasn't presented itself to me yet, but it's something I've always been interested in. And I love resources like that. I follow what's the one I follow? Oh, Pivot, where they talk about a bunch of different startups. But yeah, I'll add this one to my list of podcasts. I'm looking forward to it.
+
+106
+01:01:11.000 --> 01:01:36.000
+And thank you so much for coming on the show. So folks out there who want to know more, the tool that was free is Prefix. There's also, what is the enterprise product? It's called Retrace. Retrace. And you can get both of those at stackify.com. Check it out. And what is Python? What are the six languages that Prefix is going to support?
+
+107
+01:01:36.000 --> 01:02:00.000
+Yeah, so we support.NET, Java, PHP, Ruby, Node.js, and Python. Cool. I mean, that covers a lot of the major ones. So once that's out, maybe we'll add it to our new section of the show when that's out, so we'll remind everyone about that. And yeah, thank you so much for coming on the show, Matt. I really appreciate it. I think hopefully we really showed a lot of folks out there
+
+108
+01:02:00.000 --> 01:02:05.000
+how this actually works and how these websites stay up. All right. Thank you for having me. The intro music is Axo by Binar Pilot. Programming Throwdown is distributed under a Creative Commons Attribution Sharealike 2.0 license. You're free to share, copy, distribute, transmit the work, to remix, adapt the work, but you must provide attribution to Patrick and I and sharealike in kind. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

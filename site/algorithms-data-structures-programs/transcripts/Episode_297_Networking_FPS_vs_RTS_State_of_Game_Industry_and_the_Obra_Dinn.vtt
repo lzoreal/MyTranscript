@@ -1,0 +1,365 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:37.000
+But we can quickly contrast with RTS. So like I said, in FPS, you're not simulating very many things at once. In RTS, and so, okay, so in FPS, what that means is you can afford to send the world state across the wire, right? You can afford to send deltas in the state of objects. Whereas in RTS, you have, you might have too many objects to do that, right? You don't have enough bandwidth to do that sometimes. So at least in my experience, which I now say is dated. But, you know, when you're simulating hundreds of things,
+
+2
+00:00:37.000 --> 00:01:24.000
+potentially a thousand things on the battlefield, sort of numbers, the way RTS used to work, and presumably in some way still does, the machines are running parallel simulations. Welcome to ADSP, the podcast, episode 297 recorded on July 22, 2025. My name is Connor. Today with my co-host, Ben, we chat about networking in FPS versus RTS. video games, the state of the video game industry, the return of the Oberdeen, and more. I can tell you about networking stuff, if you like.
+
+3
+00:01:24.000 --> 00:02:01.000
+The great thing about networking in terms of it being good for my career, of course, was not just that it took off, but also that in networking, the problems don't tend to get that much easier just because the machines get faster, right? The latencies over the internet haven't got a whole lot. haven't got orders of magnitude better in a span of years, right? Not in the way that machines get faster. And so the fundamental problem of hiding that latency and making the gameplay look smooth, that's one of the fundamental problems with network programming, of course,
+
+4
+00:02:01.000 --> 00:02:30.000
+hasn't really changed, right? Now, having said that, different genres of game do networking very differently, right? So networking in a first-person shooter is very different, usually, from networking in a real-time strategy game, right? Because in the first-person shooter, you don't have very many things to simulate. You have, you know, a few dozen moving objects in the world, players, rockets, maybe doors, things like that.
+
+5
+00:02:30.000 --> 00:02:54.000
+You don't have very, you typically, at any given moment, you don't have very many active things to simulate. In a real-time strategy game, you have a lot of units, you have potentially hundreds of units that are, It's a, you know, it's a big distributed simulation, if you like. Whereas an FPS is a much more, maybe much more latency intolerant,
+
+6
+00:02:54.000 --> 00:03:18.000
+but a much, much smaller simulation. And so the strategies you use to do networking are different in those two cases, right? And then, and then, you know, in, for example, an MMO, networking strategy is different again. Interesting. And so just so that can keep me up to date, this is actually probably less for the listener. I'm probably the least steeped in this world than other folks. When you say FPS, I definitely know about that.
+
+7
+00:03:18.000 --> 00:03:47.000
+I'm thinking like Call of Duty, Fortnite titles like that. When you say real-time strategy, the games that I think of are like civilization and like Dota, but like then you mentioned MMO. So potentially... So real-time strategy is classically things more like StarCraft. Okay, I mean, so StarCraft and Dota, they're very similar, no? Yeah, Dota derived from Stork. Starcraft, right? So yeah, you could put it in that camp. Back in the day, titles like,
+
+8
+00:03:47.000 --> 00:04:29.000
+let's see, Command and Conquer was a Real Time Strategy franchise. Okay. Was that the, was that the boat one? The boat one. There's some, there's some game where you're sailing like a pirate trying to shoot other ships. Total War franchise. Shogun Total War was the first one and then many after that. Okay, I'm not familiar with that title. Basically, it's a battlefield, you're controlling lots and lots of units. You're building units, you're building bases, you're a resource, it's a resource engine kind of a game where you get your resource engine started, you build units, you fight. Right, yeah. Age of Empires. I actually did play Age of Empires quite a bit. And it's real time. So when you said civilization, civilization
+
+9
+00:04:29.000 --> 00:04:56.000
+is turn-based, of course, right? So RTS is real-time strategy. I got to be honest. I've only actually played the Civilization board game. I just assumed that the VIII video game version didn't need to be turn-based because it's a video game. Like, if you're going to fight, like, you know, the Romans versus the Greeks or I don't know what the armies were. I imagine it was something like that. Like, I imagine it was like World of Warcraft.
+
+10
+00:04:56.000 --> 00:05:23.000
+It's, you can, I think you can pick more or less any civilization these days. Okay. So, interestingly, Siv the computer game is still term-based. I pictured it was just like a historical world of warfare. Yeah, but it's not. You're saying it's still turn-based. Yeah, civilization, I guess, turn-based strategy tends to be much more about, you know, much more about traversing the tech tree, unlocking new things, getting down the tech tree.
+
+11
+00:05:23.000 --> 00:05:47.000
+Right. Right. Whereas real-time strategy tends to have less of that and is more about, like I said, building a production engine, right, in real time. So you can build units, build more units, go, fight, conquer. Right. Okay. And so, and none of these titles qualify as MMOs, right? I guess Fortnite technically is an MMO.
+
+12
+00:05:47.000 --> 00:06:18.000
+Well, yeah. So maybe, so I'm not, I'm not sure. Okay, Fortnite is a FPS, also with elements of MMO. I don't actually know what the sort of maximum number of players you can have in the Fortnite game is. Well, I mean, the classic one's 100, but I don't know if you can go above that. So it's a pretty small MMO. When I say MMOs, I'm talking about things like World of Warcraft, which you can have 5,000 people in a single world.
+
+13
+00:06:18.000 --> 00:06:37.000
+Yeah, okay. And also, too, I guess when I was saying World of Warcraft, there's two, and I've never really understood this, there was the World of Warcraft that were like the Age of Empire's games. There was Warcraft. Or is that just Warcraft? So I've been saying the wrong thing? Yeah. So Warcraft was RTS. Okay.
+
+14
+00:06:37.000 --> 00:06:55.000
+So replace every single time I said World of Warcraft. with Warcraft. I thought they were the same name. Actually, I'm losing, I'm like a negative thousand nerd credits on this episode. Yeah, so Warcraft was originally an RTS. Yeah, fantasy-based RTS. I think it was called
+
+15
+00:06:55.000 --> 00:07:17.000
+Warcraft orcs and humans originally, right? And that had one, two, three, three, you know, so Warcraft three was the, and then there was the Frozen Throne and some expansions, but basically, Warcraft 3 plus plus was the end of that line at the time. And then they took the franchise, the story, the elements, the
+
+16
+00:07:17.000 --> 00:08:04.000
+IP, if you like, and made the MMO called World of Warcraft. I see. Okay. Henceforth shall never make this mistake again. Everyone's probably screaming at their headphones being like, how is that like World of Warcraft? That's not like that at all when I meant Warcraft. Okay, so we've set the landscape now. We've got we've got MMOs, we've got RTS, we've got FPS. I mean, there are lots of other genres of course. Right, right. But I just singled those out as having basically three very different approaches to networking. Okay. And do you want to take us through? Like, well, so, you know, you have to, you have to take this with the knowledge that I haven't worked in games for nearly 10 years. Although I do have a long history in games, I know how things were done.
+
+17
+00:08:04.000 --> 00:08:26.000
+Things always move on. So, you know, if there are people listening to the podcast who are currently working in games, they might be saying, nobody's talking about anymore, and that's fine. But I think the broad strokes are probably still true, which is why I said. It's like when you program in FPS, you are, it's about, you know, it's about using, it's about interpolating or extrapolating where you think things are going to move to.
+
+18
+00:08:26.000 --> 00:08:44.000
+You have very few things that you're actually simulating at one time, maybe a couple of dozen, because you have players moving around, you know, they're picking up health packs, maybe they're shooting their weapons. Most of their weapons probably, Many of the weapons are, use what are called colloquially, light speed bullets.
+
+19
+00:08:44.000 --> 00:09:00.000
+In other words, there's not a bullet you have to simulate in the world. It doesn't move slowly enough. You know, rockets and things like that are simulated objects that are in the world. But if you shoot a pistol, if you shoot a machine gun, those bullets are treated like the light speed.
+
+20
+00:09:00.000 --> 00:09:29.000
+Right. And so, you know, the big problem that you have to solve. And it's not really a problem to solve. it's more of a design issue that you have to figure out where you lie, where you make a choice, is, you know, you're always going to have the problem. Let's say you and I are fighting in an FPS. There is latency between our machines or between our two machines and a third machine, which is a server, right?
+
+21
+00:09:29.000 --> 00:10:01.000
+And I might see, I might have you directly in my sites and I might shoot you and I know that I'm shooting you. but because of latency, I'm not actually shooting you. So I'm seeing the wrong thing, right? Conversely on your side, you, you know, in your experience, that I am not shooting you because you ducked around a corner or something. But again, there's that latency, right? So how do you solve that problem? How do you do that fairly?
+
+22
+00:10:01.000 --> 00:10:49.000
+And that's really a problem of like design rather than a problem of implement. right so either to me you know the two extremes would be either you'd you you have an experience where you you you die randomly when no one was shooting you because you couldn't see them right and that's a bad experience or I have the experience of I'm shooting this person and they're just not taking damage and I know I'm shooting now I've been shooting them for half a second or a second or whatever it is right so those are the kind of subjective experiences that you you have to try and treat fairly, try and solve in the presence of tens of milliseconds of latency. And my guess is that most of the time, it's that the shooter ends up missing if there's a choice.
+
+23
+00:10:49.000 --> 00:11:07.000
+And my guess is based on the... Well, I don't know. You don't know? Like, in a sense, you have a choice. When you're simulating, you have a choice of, are you always running behind or are you always trying to predict the head? You know, so there's kind of that choice. when important things happen and important things in FPS
+
+24
+00:11:07.000 --> 00:11:31.000
+are really like deciding whether or not someone dies. That's one of the most important things, right, in FPS that you can identify. Sometimes those things are, I think they are, they are modeled these days by taking both sides into account and sometimes the server will kind of roll back a little way and try and properly order things in time.
+
+25
+00:11:31.000 --> 00:12:19.000
+And, you know, so it's, it's like you're always, when you're simulating, you are never quite correct, but you're always trying to tend to correctness. You know, the world is always converging to a consistent shared state. It never quite gets there, and the amount by which it deviates from that is subjectively controls the sort of quality of the experience. Yeah, I mean, I remember when I, when I, I used to watch Fortnite back in the day when it was huge. And people when they were not at some local tournament, inevitably at some point, end up like they're measuring their ping and then they'll start whining about the ping because
+
+26
+00:12:19.000 --> 00:12:39.000
+LPBs. Yeah, yeah, yeah. And so, you know, if they miss and they, and so clearly that's like the networking issue that you're talking about here, right? Like when the ping is so bad and whatever, they click their mouse, but then the server doesn't get it for however many milliseconds. There's only so much you can do, right? Yeah, and there are certainly issues with lag spikes and things.
+
+27
+00:12:39.000 --> 00:13:08.000
+But yes, like you say, there's a certain baseline which you can't really get below, right? You aren't going to get much below, you know, a few tens of milliseconds, probably. Yeah. And so, I mean, I don't know, is it too much to try and, like, dive into, like, a algorithm for queuing this stuff and, like, making these decisions? or is it probably again because my experience is now at least 10 years out of date
+
+28
+00:13:08.000 --> 00:13:25.000
+but we can quickly contrast with RTS so like I said in FPS you're not simulating very many things at once in RTS and so okay so in FPS what that means is you can afford to send the world state across the wire
+
+29
+00:13:25.000 --> 00:13:51.000
+right you can afford to send deltas in the state of objects whereas in RTS you have, you might have too many objects to do that, right? You don't have enough bandwidth to do that sometimes. And so, at least in my experience, which I now say is dated. But, you know, when you're simulating hundreds of things, potentially a thousand things on the battlefield, sort of numbers,
+
+30
+00:13:51.000 --> 00:14:26.000
+the way RTS used to work, and presumably in some way still does, the machines are running parallel simulations, right? So and that and what and what's being sent across the wire are inputs, right? And each machine has to simulate what the units do in response to those inputs, you know, because it's prohibitive to send all of that state all the time. There might be points where you can send some of it and synchronize, but, you know, in general, that's the way it used to be done anyway. And of course, that brings with it its own problems.
+
+31
+00:14:26.000 --> 00:14:50.000
+When you're running parallel simulations, you have to be really sure that those simulations aren't going to diverge. Well, that's what I was immediately thinking. I was like, if you're sending it back and forth, but you're not doing it constantly, don't you run the risk of two different boxes on other sides of the world, simulating that some Starcraft creature goes left instead of right? Well, absolutely, you run that risk. And that is why you do things to mitigate that risk.
+
+32
+00:14:50.000 --> 00:15:39.000
+So some of the things you do are transmitting checksums, right? To check that you're actually still in sync. But more than that, you have to do things like in the code, you know, for the good of the team who are writing the code, you have to do things like have separated random number generators, for instance. So, so one, anytime you do something which is going to be part of shared simulation, you have to use the synchronized, the random number pool, which is designated for that use, right? But there are lots of things in games that aren't synchronized. You know, there's particle effects and there's, you know, all sorts of things which happen only locally. Typically, in terms of rendering a lot of the time, like particle effects.
+
+33
+00:15:39.000 --> 00:16:02.000
+Maybe audio cues or flavor as well. And those things are just happening on sort of local. They need to happen with local randomness, right? And it's fine. They don't contribute to the shared simulation state. But you can't accidentally use one random number pool when you, when you're really supposed to use the other, because then that will produce synchronization, desynchronization.
+
+34
+00:16:02.000 --> 00:16:25.000
+Right? Because everything needs to, in the shared simulation, both sides need to agree, you know, in lockstep, what they're doing in a sense. I never thought of that. So, yeah, the stuff that can afford to be locally random that basically doesn't affect gameplay, if you will, but other stuff, which is, needs to be consistent,
+
+35
+00:16:25.000 --> 00:16:45.000
+has to be identical. So you're having some seated random number genera. And is it like an endpoint that you're hitting on the server? Or is it something that in like the parallel simulation, everyone has the same like deck of cards that you're just pulling from? It's a parallel simulation. Everyone has the state. The topology of the network of the game might involve a server
+
+36
+00:16:45.000 --> 00:17:25.000
+which acts as a aggregator for inputs and a sort of mediator for when turns happen. Interesting. But yeah, everyone is doing the same parallel. simulation. And so, yeah, so a very, a very simple way that can desync is through, you know, like we said, wrong randomness locally. Effects that occur either locally random or quite a lot, there's effects that occur when you're looking at them, right? So where you're looking on the battlefield and something, you know, when you're looking at something, it's, it's animating, it's doing whatever. Those kind of things also are local and, and need to not accidentally
+
+37
+00:17:25.000 --> 00:17:53.000
+contribute to the shared simulation. And then we can go a deeper level, right? You're trying to run this game across multiple machines, and the hardware in those machines isn't the same. In particular, the way those machines treat floating point numbers has probably small differences, right? And so you have to, you know, to run a true parallel simulation, you have to do things like, well, I can't use floating point
+
+38
+00:17:53.000 --> 00:18:22.000
+in my parallel simulation. I have to use fixed point arithmetic, you know, things like that. This is way more complicated than I would have ever thought. Although I guess I've never thought very deeply about if you wanted to create, yeah, a game like... You have never been burned by all these issues. Yeah, yeah. You know, you can foresee some of these issues by thinking deeply, but, you know, also a lot of this is experiential, you know, like you've just been burned by that kind of thing before. Yeah.
+
+39
+00:18:22.000 --> 00:18:54.000
+It's funny because every once in a while I hear people. people and they talk about, oh, you know, like you parallelize the reduction of some floating point numbers and then you don't have stability because you've changed the algorithm, them from serial to parallel. And I always have a little voice in the back of my head is like, I've never, you know, like run into some issue where like that's a big deal, you know, like, I'm sure there are instances, but there's just a little like, I don't know, is it an angel or a devil? Some little voice in the back of my head that's saying that like, I understand that that's a thing, but like I've never encountered it. And now here you are explaining.
+
+40
+00:18:54.000 --> 00:19:23.000
+Yeah. Like even, not even, it's not like, you know, some monetary bank account balance that is, you know, probably like the worst case where, you know, you've, you've got some different figure computed and you're losing, you're missing some money now, but even just, yeah, simulating two games. I've never even thought about the fact that, yeah, like, you're basically, it's a difficult problem to run a parallel simulation that is correct and identical in every detail. Yeah.
+
+41
+00:19:23.000 --> 00:19:47.000
+And so there are two things to mitigate that, right? One is make your simulation smaller. Don't simulate as much stuff. And not just sort of in numbers, but in terms of axes, right? And then the other side is drill down to all these things that really matter and sometimes quite low level, right, to make sure they are identical. You need to do a bit of both. That's wild.
+
+42
+00:19:47.000 --> 00:20:08.000
+I would have never thought of the use case for fixed point numbers is to avoid divergence and parallel simulations of a video game because floating point is producing different results on different architectures. That's wild. Is there any other shocking things that you run into in terms of like you might not think, you might not expect this,
+
+43
+00:20:08.000 --> 00:20:24.000
+but like you have to keep, you have to take this into consideration in order to make sure that these games work the way they should? I don't know. Like, it's hard for me to think. Yeah, I'm sure if you were actively working in the industry, you would have, in the last two weeks, you would have bumped into a couple different things.
+
+44
+00:20:24.000 --> 00:21:00.000
+You know, in the last 10 years of my career, I worked at Blizzard and I worked on Battlenet. And that was a different thing again, right? So that was MMO adjacent as well, right? And so the focus there is not so much in the real-time simulation, either on FPS or RTS. But a big focus there is secure. knowledge of, you know, which machines have knowledge of which parts of the simulation.
+
+45
+00:21:00.000 --> 00:21:24.000
+And that plays into security, of course. Resource usage, right? So when you're simulating between machines playing a game with FPS or RTS, you're worried about resource usage in one sense, right? Which is like you're worried about, you know, how fast can this go? What's the bandwidth? That kind of thing. when you're when you're when you're when you start building servers then you're worried about a different
+
+46
+00:21:24.000 --> 00:22:16.000
+aspect of resource usage which is like for everyone that connects here how much how many resources does that use you need to think about things like denial of service attacks and stuff like that coming into the picture right and and typically where rts and fps have a historically at least the desire for both low bandwidth and better latency meant that we typically didn't use for example TCP connections. TCP connections were considered relatively heavyweight, right? The size of the header is larger than the size of the UDP header. They have a sort of startup time. They, you know, UDP is sure, it's, it's far and forget. It's not guaranteed delivery, but it's timely, right? And in a game where every 60th of a second, you're having to update the world, things are changing all the time.
+
+47
+00:22:16.000 --> 00:22:50.000
+what happened, you know, half a second ago is kind of irrelevant, right? If you miss something, if you miss something half a second ago that doesn't affect what the player is saying, you can make it up, right? Doesn't matter. But when you move to server-based infrastructures and particularly large-scale server-based infrastructures, then you think more about what the resources used. And, you know, then you start having things like, well, people have multiple connections, you Their initial connection is to the sort of login endpoint.
+
+48
+00:22:50.000 --> 00:23:16.000
+After that, they might make another connection to a different kind of server. You know, there's load balancing on the front end. They might, and then, you know, there are kind of ancillary things that come in as well. Like I was working on BattleNet, there's things like, you know, voice chat, which these days is in many, many games. But, you know, Ryan, when the clock back 20 years and it was in relatively few, sort of came into play. That's crazy.
+
+49
+00:23:16.000 --> 00:23:40.000
+I mean, it's wild, too. Because like I said, I've watched quite a bit of, I don't know, games being played. And you never actually think about it, like, what would it take to go in? Like, I've actually never also understood fully engines. Like, I've seen people make videos of like, oh, I'm going to put together some small game. And they just go to Unity and they just start dropping assets places. And I'm like, wait, does that all it is? Like, if you, if you, yeah, it's all commoditized now.
+
+50
+00:23:40.000 --> 00:24:07.000
+You just drop assets and then, like, do you even need to write? I assume you need to write some code to, like, define the logic. of whatever, some airplane flying through the mountains or whatever and collision detection. But at one point in time, I always thought it was like, oh, you have to drop into C++ or C sharp or whatever language and you have to write the whole thing. But now it just seems like there's this drag and drop aspect of some... I mean, the engine, the engine gives you, will give you collision detection. I'm pretty certain of that.
+
+51
+00:24:07.000 --> 00:24:28.000
+You wouldn't have to do your own collision detection necessarily. The engine just gives you a framework to build in, right? And it solves all the problems which otherwise you would have to solve yourself. Like, how to render things, how to represent things, how to represent the world, how to do collision detection, right? And all the other things. How to do animation. How to do audio. How to do textures.
+
+52
+00:24:28.000 --> 00:24:56.000
+So when you have an engine, you get to concentrate on what the gameplay is. So with an engine, is there, like, do you have to write any code? Or is it feasible to go and make a game? Oh, yeah. You always have to write code, I think. I mean, we can imagine there are. ways in which you can make your outwriting code, I'm sure. But if you want your game to be good, I think you have to write some code.
+
+53
+00:24:56.000 --> 00:25:16.000
+Yeah. Interesting. But you know, an engine isn't just one thing either, right? Like I said, there's all these different sort of sub-genres of programming different areas. You know, an audio engine is a thing. When we say engine, historically, we often meant graphics engine. These days it means sort of every. thing.
+
+54
+00:25:16.000 --> 00:25:41.000
+So, you know, physics engine, audio engine, animation engine. Yeah. Yeah, I know Jonathan Blow, I've heard interviews by him and seen a few of his YouTube live streams. And it seems like for a certain game, he'll write an engine and then he may reuse it for other games as well. But a lot of the stuff he's doing is actually building, which I guess is not dissimilar from other, whatever industries.
+
+55
+00:25:41.000 --> 00:26:25.000
+You build a tool using software or using, programming and then you have like a software tool and then you if you are the programmer you can go and edit and add stuff to like basically make your job easier like you know if you're the person who designed excel you can go add some new function into excel in order to make it easier to use but technically you can just go and use excel at the end of the day and you maybe know a little bit of bbA but you don't you're not hooking into the c++ plus to add some new future i'm sure there's some i mean another thing another thing we're sort of skirting around is a primary job of the sort of the unities and the unreal engines of the world is the asset pipeline right so it's not you know games
+
+56
+00:26:25.000 --> 00:27:01.000
+aren't only made by programmers a huge amount of them is made by the artists the designers the the the audio folks the people who make the actual game assets the graphics the the 3D models the sound effects all that stuff and you need to to get all that stuff into your game in a way that understands. And that's a large part, you know, besides the programming aspects of how you program graphics, like the asset pipeline is a huge kind of off-the-shelf thing that these game engines bring. Yeah.
+
+57
+00:27:01.000 --> 00:27:20.000
+I've seen that in some of those videos. And you have to typically pay for assets unless if they're like a part of the free assets. Right. Yeah. I mean, you can pay or get free assets. But also, if you're working in a game team and you're working with artists, they need a way to, they're making assets. They need a way to bring them to. Oh, right, right.
+
+58
+00:27:20.000 --> 00:27:56.000
+Yeah. You have to design the tools for them to design assets so that you can have a library of them. Yeah, you have to bridge the gap between, you know, I don't even know what tools artists use these days. But, you know, whatever 3D modeling package produces some output, use some format, you know, you've got vertex data, you've got texture data. you've got, you know, lighting data. You need to bring that into the engine and be able to render it. Well, to wrap up this, well, we'll probably be two-part series, and then maybe we can talk about something else.
+
+59
+00:27:56.000 --> 00:28:23.000
+What are your game recommendations of 2026? I'm not even sure if you're gaming these days anyways. And they don't need to be recent. They can be from, like, you know, a couple decades ago if you want. Well, you know, there are... I don't know that I can recommend. any recent games because I'm not up to date on what's, you know, like in the last, even the last five years, the number of, if you look at the graph of like how many games are released each
+
+60
+00:28:23.000 --> 00:29:01.000
+year on Steam, it's just like a hockey stick. It's, it's a sort of an exponential curve. It's kind of ridiculous. It's kind of amazing to think about. So from that point of view, I don't know. The games industry right now is in a really bad way. Really? Oh, yes. my social media feeds are full of, since I was in the games industry for so long, they're still full of game industry folks. And the layoffs that have been hitting the game industry for the last couple of years, I'm going to say, maybe more. But it doesn't seem to be abating.
+
+61
+00:29:01.000 --> 00:29:43.000
+It seems to be only accelerating games industry is a pretty bad way and I feel for folks in it right now. Is that driven by something in particular right now? There are several factors, you know, that we can speculate. Generative AI is one factor. Another factor would be perhaps come down from the hiring frenzy around the pandemic. A third factor could be that games are getting more and more, you know, triple A games are just have huge, huge budgets. I mean, we're talking over $100 million, easy.
+
+62
+00:29:43.000 --> 00:30:18.000
+Yeah, I heard something about GTA-6 that it's got a GDP bigger than like some crazy number of countries. Oh, yeah. So when you're making games like that, you really are very, very risk-averse, right? Which is why, when you said to yourself, GTA-6, right? It's not a brand-new game. It's a new version of a formula we already know works. So this is the kind of thing that is AAA games almost entirely right now, it seems. There is a thriving, you know, like I said, number of games released on Steam just as going
+
+63
+00:30:18.000 --> 00:31:05.000
+up and up and up. And that represents a kind of indie scene, I think. But, you know, games are changing a lot. Where the money is to be found, I don't know anymore. And a lot of folks are getting impacted by layoffs. you know, from, from jobs that 10 years ago seemed stable. Yeah. It makes me think about the movie industry and how a lot of film studios are just doing, you know, sequels, remakes, or preexisting, like, intellectual property, you know, book to movie kind of thing. And within, like, the movie space, people say that, like, these independent films, they don't get financed anymore in.
+
+64
+00:31:05.000 --> 00:31:43.000
+unless if you happen to be like a big name director who's proven that they've made a bunch of movies successfully and so they're willing to take a risk on you. But like back 20 years ago, 30 years ago, there was tons of movies that ended up being like classics that would like never get made today. Right. Well, and it's interesting to think about, you know, for some years, a couple of, you know, at least 10 years now, I've been wondering how the game industry would evolve in terms of structure. and when we look at the movie industry, you know, we can look back to the 40s. The 40s, 30s was the era of the studio, right?
+
+65
+00:31:43.000 --> 00:32:15.000
+Where MGM had stars on payroll and you belonged to a studio, you know. And that completely changed. Nothing like that right now, now when you make a movie, you spin up a company to make the movie. You know, all of the people working in movies are unionized to a first approximation, right? Completely different. And, you know, for a while I thought, is this a potential way that it could play out in games? You know, like, until five years ago, we were still in the studio model for games.
+
+66
+00:32:15.000 --> 00:32:39.000
+Maybe that model is shifting now. Yeah, I've never thought about that. I guess time will tell. Anyways, you were about to recommend some stuff, but then you mentioned, yeah. Was I? Oh, well, you know, I don't know. I play old games. and I play games which anyone would recognize our classics a lot of the time.
+
+67
+00:32:39.000 --> 00:32:59.000
+Was Mario Golf on the Game Boy? Mario Golf on the Game Boy Keller is a great great game. I don't know. I don't know. You know, maybe you've never heard of that one particularly. Maybe 25% of our listeners, maybe more. Maybe all of our listeners are going, yes, I remember playing Mario Golf on the Game Boy. That was a great game. It depends what kind of games you like to play.
+
+68
+00:32:59.000 --> 00:33:15.000
+You know, I like to play. I don't really play FPSs. I don't have the APMs to play RTSs these days. And neither do you, by the way. After at the age of 25, your APMs, too poor to be competitive. I don't think even back then,
+
+69
+00:33:15.000 --> 00:33:33.000
+because I really think you have to start playing video games at a young age to, like, develop that talent. And I was not allowed video games for a very long time. And, like, I tried to play Fortnite once or twice, actually more than once or twice, but usually, and I'm sure some of our listeners will relate,
+
+70
+00:33:33.000 --> 00:33:56.000
+I would just go hide in a bush and see how far I could get, and I never won, but I couldn't even, like, build, you know, the ramps and the structure. Like, I couldn't, my fingers were not capable. I blame my parents. So it used to be an interesting, so an interesting observation, I always thought, and again, this is from maybe 15, 20 years ago, but it's still maybe it's true.
+
+71
+00:33:56.000 --> 00:34:40.000
+RTS and FPS. Think of those as two genres, which we've been talking about. about, right? It's at a beginner, right? RTS seems like it's a strategy game, right? It seems like you have to think about it. It seems like it's a more cerebral kind of a game. And FPS seems like a Twitch game, right? Reactions are very, very important, right? As a beginner. At a competitive level, it's almost like those pictures reverse, right? TSs are all about going as fast as possible, making a resource engine spin up as quickly as possible, and reacting to the game. RTS at a very high level becomes much more, in a sense, of a Twitch game, right?
+
+72
+00:34:40.000 --> 00:35:13.000
+Contrast that FPS at a very high level becomes a much more strategic game. And it becomes about things like listening for the audio cues so you kind of can get some information about what your opponents are doing and where they are in the level. I never thought about that. That's very true. It's very true. I actually, I mean, a fun fact. One of my best friends from university was a competitive StarCraft player, and he was never professional, but he was good enough that he would get paid by professionals to train because a lot of the pros...
+
+73
+00:35:13.000 --> 00:35:46.000
+Like a practice partner. Yeah, exactly. And they want people that have different strategies because on the competitive scene in tournaments, you play the same people, you get used to their strategies, but it's very hard to find a competitive player that you don't already. know their go-to strategies and whatnot and I don't know there's like different races or whatever you call them in Stargraft right anyways he he made money playing against people which is kind of cool I tend to play games these days that are firstly are comparatively short right I don't tend to
+
+74
+00:35:46.000 --> 00:36:28.000
+it it's going to take a lot for me to dive into a game which will require me to put in a hundred hours 200 hours. Right. The last big game I played was Tears of the Kingdom, which was fantastic. Legend of Zelda, by the way, if Tears of the Kingdom is not enough to give it to you. I've heard Legend of Zelda. I assume, yeah, that's the one with the, what do we call? It's the latest one in the Zelda franchise. Yeah, the cell shading. No, well, we can't remember, actually, but not all Zelda games are cell shaded. Okay. Right. But Tears of the Kingdom was really, really good. But that's the last sort of AAA game. That's the last AAA game I played.
+
+75
+00:36:28.000 --> 00:36:49.000
+And that was a couple of years ago now. So I tend to play the games which I can play, you know, over a weekend. Oh, Return of the Obra din. I played that one. That was a great game. Return of the Obra. Now, if you want to talk about graphics, you're going to get a shock when you look this up. No, speaking of graphics, all my monitors are frozen. I tried to open a new tab.
+
+76
+00:36:49.000 --> 00:37:07.000
+Oh, no. Big mistake. Maybe I should close this tab. The graphics guy. I'll look it up later. Although... So it's a game... So what's the pitch? The pitch I can give you is, um, insurance claims adjuster examines boat. What?
+
+77
+00:37:07.000 --> 00:37:24.000
+It doesn't sound like a great pitch for a game, is it? No. So it's the year... Oh, 1790. About that. I don't remember. It's the year 1790. The merchant ship, the Oberuddin, has returned from a voyage.
+
+78
+00:37:24.000 --> 00:37:45.000
+and the ship is deserted. It's now sitting in Southampton Docks or wherever. You are an insurance claims adjuster. What? I guess insurance had just been invented at that point, actually. So you work for Lloyds of London or whoever. And it's your job to figure out what happened to this ship and what should the insurance payouts be, right?
+
+79
+00:37:45.000 --> 00:38:08.000
+So it's a game of exploration and solving mystery. Right? There's a mystery. The ship has returned. It had a crew of, of three dozen plus half a dozen passengers, however many, it's your job to figure out what was the fate of each one. What happened, such that this ship came back empty?
+
+80
+00:38:08.000 --> 00:38:29.000
+And it's a great game. You know, you can play it over a few days, a weekend, not a real long game. It's maybe, you know, it's sort of somewhere between, somewhere around 15 hours of gameplay, maybe. Mm-hmm. And it's just really good. I enjoy these games which are like discovery,
+
+81
+00:38:29.000 --> 00:38:53.000
+figuring out things. That's why I enjoyed The Witness. That's kind of like a scape roomy. Yeah, yeah, maybe. And talking of graphical style, you know, the Obra Din kind of pioneered a totally new graphical style. Some other games have since kind of copied it, but it's rendered amazingly in dithered monochrome.
+
+82
+00:38:53.000 --> 00:39:30.000
+Oh, wow. Wow. Okay, I did manage to successfully open a tab. Yeah, yeah. So it's a 3D world, but the rendering is quite different from more or less anything that we saw before. Wow, it kind of looks like some terminal-based game, except on steroids. This was not at all what I was expecting. Interesting. Well, if ever I have time, maybe I will try and play this game, and then we can have a return of the Oberdin. spoiler episode where we talk about this and you know I encourage listen I'm not saying I'm going to
+
+83
+00:39:30.000 --> 00:40:01.000
+do this for sure but I encourage listeners now to go and play it and then if at any point I have time I will go and do this it does look like a very very interesting when you said it pioneered something in graphics this was not what I was expecting yeah what you're expecting right yeah interesting all right well we got a couple game recommendations out of you uh I was thinking the only The game that I play these days on the computer is Wingspan, which is just a board game. Oh, yeah, I know the board game. Yeah, yeah. It's just a digital version of the board game.
+
+84
+00:40:01.000 --> 00:40:21.000
+I mean, the last game that I ever played to completion was Hogwarts Legacy, which was three or four years ago. And three or four years ago, you played it? Yeah, yeah. And I haven't touched it since. I wrapped it in like two days. I was in the top point one percent of the world. And that's why I can't. Laity tar.
+
+85
+00:40:21.000 --> 00:40:37.000
+Yeah, that's why I can't have video games because my personality is too addictive. I've actually never played World of Warcraft. My mother... Yeah, I wouldn't start. Yeah, my mother didn't let me have video games, but she specifically said, I wasn't allowed a couple games.
+
+86
+00:40:37.000 --> 00:40:56.000
+I don't know how she knew what World of Warcraft was. I guess it was in the news. And I didn't actually even know what it was, and I went over to a kid's friend's house in high school, I think it was probably grade 9 or 10, and I saw what it was. and I was like, oh wow, like I understand. Like I would, my life would disappear as we know it, you know.
+
+87
+00:40:56.000 --> 00:41:24.000
+I was doing science fairs and math contests. All of that would have been gone because like the idea of, I mean, as people know, I love to climb leaderboards, city strides, whatever it is. If you give me a leaderboard, that's like the number one way to get me to do something, you know. If there was some list of people competing to do chores in this house, the problem is there's only two, so it's not a leaderboard. but if there was, you would have the cleanest house probably in the city.
+
+88
+00:41:24.000 --> 00:41:48.000
+I'd be cleaning rooms that didn't need to be clean just to work my way up that leaderboard. What do you call it? You are the perfect victim of sort of the gamification strategy of everything. Oh, my God. You are absolutely, absolutely. Absolutely the target demographic. What was, yeah, so it was on a different episode, a guest recommended a book, which I won't remember off the top of my head, but I think, or it was a,
+
+89
+00:41:48.000 --> 00:42:29.000
+like the theory of game design or something like the theory of fun something oh theory of fun for game design raff costa is it you'll know i won't i only heard about this book literally a couple days ago but he was saying that that that book even though he's not a game designer really influenced the way that he thinks about kind of designing a product that is engaging and gets people to come back not like in an unhealthy way but but yeah like i am the biggest which is why i can't like I don't let myself gamble. I don't let myself really play video games because, yeah, I think, well, that's a whole other topic. The gamblingification of society and how everything has got prediction market odds next to it.
+
+90
+00:42:29.000 --> 00:42:52.000
+It's very sad. We should talk in future because you work on algorithm libraries, right? You still work on that? Yeah, yeah. So in some way. I don't know which variant of that you work on right now. So we should talk about the data. design of the APIs for those kind of things because most of what I, a lot of what I do these days
+
+91
+00:42:52.000 --> 00:42:57.000
+is API design. Be sure to check these show notes either in your podcast app or at ADSP the podcast.com for links to anything we mentioned in today's episode, as well as a link to a get-up discussion where you can leave thoughts, comments, and questions. Thanks for listening. We hope you enjoyed and have a great day. I am the anti-brace. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

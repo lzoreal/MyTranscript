@@ -1,0 +1,277 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:46.000
+which I talked about in my keynote at Array last year. And a keynote that you actually inspired on this podcast. We talked about how I was going to pull an audible and give a completely different talk, and I did. I do consider myself your biggest source of inspiration. Yes. Welcome to ADSP, the podcast episode 124 recorded on March 21st, 2023. My name is Connor and today with my co-host Bryce, we talk about vectorizing stood views filter. So is this going to be a two-part episode? Because we're already... With my co-host Bryce, we talk about vectorizing StoodView's filter. So...
+
+2
+00:00:46.000 --> 00:00:59.000
+Is this going to be a two-part episode? Because we're already... Probably. Okay. I think it's at a point where it's time for us to start looking at some code. Are we doing the screen share thing? Because we got to... Not yet.
+
+3
+00:00:59.000 --> 00:01:19.000
+You're not ready yet to see... I was going to say, we made the decision to try not to share code because. No, we're doing it now because we need to. We made the executive decision never to do it, but we need to now, so we will. Of course. Dude, it's a programming podcast. We need to be able to look at code. Should we hit the record button?
+
+4
+00:01:19.000 --> 00:01:49.000
+I'll just upload this to YouTube because every single time people comment, why don't you just post this to YouTube? Okay. So, so if you're at this point, listening to this podcast, uh, link in the description to a live stream that'll be published to my code report, YouTube channel. All right. Let's, let's get started here. Would you agree that this code right here is increase the font a tiny bit control Control-Shift-Plus. Because clearly this dude doesn't know what he's doing. You got to hit the... Click the...
+
+5
+00:01:49.000 --> 00:02:14.000
+There you go. He's figured it out. Look at this guy. Principal Architect or whatever the hell his title is. And he doesn't know how to increase the font on Compiler Explorer. Hey, that's Mr. Principal Architect to you. Would you agree that this code on the left here is an accurate approximation of what is going on in a – and here, let's change it a little bit.
+
+6
+00:02:14.000 --> 00:02:44.000
+No, it's going to be fine as is. Would you agree that this is an accurate approximation of what a filter view is doing. I mean, if you're encoding the unary predicate to be that it's greater than the floating point number zero. Yes. So my first thought is like absolutely not because you've hardcoded. We are filtering all the elements of a range that are greater than zero
+
+7
+00:02:44.000 --> 00:03:09.000
+and we're setting those elements to be zero. Sorry, it's the other way around. We're filtering all the elements of a range that are less than zero, and we're setting them to zero. Yeah, and for, I mean, are we going to explain this? Because the listener has no idea what we're looking at right now we have a you want to explain yes you're you're gonna you're gonna just you're
+
+8
+00:03:09.000 --> 00:03:34.000
+gonna explain the loop here you're gonna explain the all right his function is called test search and it's got extern c no except a bunch of stuff that should make you sad about c plus plus and a for loop it's's in the two parameters. The only reason that it's extern C here is to make it easy to find the function in the assembly output that we're looking at. Oh, God. All right, here we go.
+
+9
+00:03:34.000 --> 00:03:58.000
+Strap in for a technical remaining however many minutes of part one and part two of this live coding exercise. And there's two arguments to this test search function. One is a double star underscore, underscore restrict, underscore, underscore A. And the other one is a size T called N. We then would have a for loop from I equals zero up till N.
+
+10
+00:03:58.000 --> 00:04:31.000
+And then we're incrementing. And then we've got a while loop inside this for loop that is hard coding our unary predicate of trying to basically see if it's greater than zero and keeping it. And while it's greater than zero, it's incrementing. So we're sort of doing, we've got two different places where we're incrementing, but we're incrementing iso in both cases. So it doesn't really matter. And then anytime we find a negative number, we set that number to zero. It's a pretty horrific code.
+
+11
+00:04:31.000 --> 00:05:00.000
+It hurts my soul. That inner while loop is the find diff that we're doing in a filter view. That inner while loop is the thing where we're going to find the next element that matches the predicate. You know what? I know where I kind of feel because I'm looking at the output of clang not being able to optimize. I just want to like jump ahead to the end. Okay, all right.
+
+12
+00:05:00.000 --> 00:05:13.000
+No, no, wait, wait, wait. I'm saying it. We've solved this problem in array languages because… Yeah, no, don't ruin it. no, wait, wait, wait. I'm saying it. We've solved this problem in array languages because... Yeah, no, don't ruin it. Don't ruin it. I want to ruin it, Bryce. Let me ruin it. So, okay.
+
+13
+00:05:13.000 --> 00:05:46.000
+I won't ruin it. But all I'll say is that array languages solve this problem because this API function, a filter function that takes a unary predicate does not exist. And the first time I ever went to an array language and I tried to do a filtering operation, I was like, what the hell? How come I can't filter something? And that's because filtering something in an array language looks nothing like this. And the way they do it is definitely vectorizable. All right, back to you, and we are throughout this exercise going to get to a much better version of filter in my book for for the
+
+14
+00:05:46.000 --> 00:06:41.000
+purposes of vectorization we have to qualify your statement because that's what we're trying to do here i think it's just better in general uh not just vectorization for loop optimization in general okay so i have instructed in this godbolt instance i have um we're using Clang and I have instructed Clang to emit some optimization remarks, which you can you do with the the dash R pass flags, which are quite useful. And in particular I've asked it to to emit some optimization reports relating to loop optimizations. And so there's two different remarks here. Connor, would you care to let the listener know what these remarks are? It says, remark, loop not vectorized, colon,
+
+15
+00:06:41.000 --> 00:07:23.000
+could not determine number of loop iterations, bracket. Okay, and which loop is it referring to? Referring to the inner while loop. Right. And then the second remark says loop not vectorized. And that is, so that's also referring to that same loop. But if we tell Clang to attempt to vectorize the outer loop, it'll tell us loop not vectorized, the optimizer was unable to perform the requested transformation. Basically, this is because the way that the Clang loop vectorizer is set up, it doesn't
+
+16
+00:07:23.000 --> 00:08:13.000
+really do this outer loop vectorization. I mean, it can do some like reordering of loops and loop collapsing, but essentially because we have this inner while loop, that's inhibiting the vectorization here and we have this scalar code on the right here. And in this, sorry, the code on the right is the assembly code. And in this assembly code we have two actual loops. There's the outer loop and then there's the inner loop that does this search. Okay. Now, let's look at a different way to write this code. Also, in case it's not clear from people that started to watch this video
+
+17
+00:08:13.000 --> 00:08:38.000
+and didn't listen to the prior conversation, the reason why we have this inner while loop inside the for loop is to mimic the behavior of the views filter in C++20. Obviously, the more reasonable way to write this, if we weren't trying to replicate the semantics or the moral equivalent of that function, would just be to check if statement is it greater than zero. The thing that I just put on the screen. Yeah, exactly.
+
+18
+00:08:38.000 --> 00:09:23.000
+Okay, so let's talk about the loop that I just put on the screen. Which is what I just described. You know, no while loop just a statement new function test reference and it's got that for loop that that iterates through the indices so it's a for loop from from zero to n uh that iterates you know some some variable i from zero to n where n is the size of the uh of the input range And then the body of this for loop, it does if AI is greater than 0, although I think based on what we said, the flow should be less than 0, then assign AI to 0.
+
+19
+00:09:23.000 --> 00:10:09.000
+Yep. OK. So let's talk about what happens with this test reference loop. So for this one, the compiler tells us that it was able to vectorize this loop. And on the right here, we have some very nice, very compact assembly that vectorizes this loop. I've told it to generate output for the KNM architecture, one of the Xeon Phi architectures that is now defunct, but it's an AVX 512 platform. And so what we see on the right here is
+
+20
+00:10:09.000 --> 00:10:49.000
+in the inner body of this loop, there's four vectorize compare instructions and then four vectorize move instructions. So not only does the compiler vectorize this loop, but it unrolls the loop a little bit, which is pretty nice okay so this code can be vectorized very nicely now we'll we'll put in the um does it matter that we're just zeroing these out and not erasing them and creating like a newly sized the the reason that we're doing a memset
+
+21
+00:10:49.000 --> 00:11:26.000
+operation here um is because this is we're looking to study um uh how loop optimizers view this code. And so that means we're going to be staring at a lot of assembly. And setting a value to zero is very few assembly instructions. Doing like anything more complex, like, you know, multiplying two values together or anything more complex than this
+
+22
+00:11:26.000 --> 00:12:08.000
+would mean that the generated assembly would be longer. And when we are looking at five or ten different ways of writing this function, we want the assembly to be something that's going to be very short and sweet so that we can read it over and understand it. And importantly, so that we can see all the assembly for this function on a single screen and that we can look at the assembly line by line and understand exactly what's happening. And likewise, that's why we've chosen, you know, a built-in type double as our data type,
+
+23
+00:12:08.000 --> 00:12:52.000
+and why for the predicate, we've chosen another something else very simple, which is just comparing whether something's greater than zero. So, and it doesn't, you know, we could write this code. I don't think that it greatly affects what's happening here. If you, the original predicate that I'd worked with was a predicate that was solely based on the index. So, doing like I modulo two. And in that one, the compiler can do some even more clever things
+
+24
+00:12:52.000 --> 00:13:14.000
+because it can sort of figure out the stride pattern that it can figure out that it's every other element. And so that does mess a little bit with the results that you see. So the nice thing about this predicate is that it is a data dependent predicate. So the nice thing about this predicate is that it is a data-dependent predicate. So the compiler doesn't know how many elements are being filtered out.
+
+25
+00:13:14.000 --> 00:13:37.000
+And speaking of that, when we look at the reason that the compiler is unhappy about that innermost while loop, in our first example, the thing that the compiler tells us is loop not vectorized could not determine number of loop iterations. And this is an interesting remark.
+
+26
+00:13:37.000 --> 00:14:28.000
+Clang's loop optimizer remarks are not particularly descriptive. Basically, you get like one of three or four different messages. This is one of them. Just because it tells you could not determine number of loop iterations, that's not necessarily that that's the true meaning of why it couldn't vectorize that loop. However, I have not, I've looked at this with many compilers, with the Intel compiler, with NVIDIA's HPC compiler, with a few other compilers. And while most compilers do have mechanisms for vectorizing loops with unknown bounds.
+
+27
+00:14:28.000 --> 00:15:21.000
+The problem here is, in fact, that this inner loop, it sort of gets merged with the outer loop. And because we don't know how many elements we're going to filter out in between each one, it does sort of throw off the compiler's ability to figure out the trip count for this loop, and that is what ends up inhibiting vectorization. But the reason is really more because of the merger of these two loops. Okay, so if we go down to this last sample that I've gotten here, in this example, why don't you explain what's happening in this one?
+
+28
+00:15:21.000 --> 00:16:19.000
+This function called test ranges, same arguments as before, except now we have a variable local called IDXS, short for indexes. And it is the composition of iota starting at zero to going to n. And then that pipe to views filter with a predicate that's checking whether our value is greater than zero. And after that, we've got a range base for loop that loops through each of the elements returned to us by indexes and sets each of those values to zero. By using it as an index into our original array A using the bracket operators. Cool. What would be a better way to write this using range adapters?
+
+29
+00:16:19.000 --> 00:16:59.000
+A way that would vectorize? I mean, this is not a filter. It's a replace if. We don't have a range adapter version of a replace if. But if we had the C++26 pipeline operator, we could just pipe that to... You're being a little too clever because you're thinking about solving this particular problem here, where I want you to think about solving this in the abstract. So like, yes, I know that we're using a mem set here. We're doing a mem set of everything that's, you know, AI or larger than zero. But imagine that our predicate is just some arbitrary function P
+
+30
+00:16:59.000 --> 00:17:46.000
+and the thing that we're doing in the for loop is just some arbitrary function f. I mean, then you just go to the generic version of replace if, which is transform. So at the end of the day, there's two problems here. Really boils down to one problem. One, we have this nested loop. And two, because of this nested loop, the compiler can't figure out the space that it's iterating through. And I think that this problem is sort of inherent
+
+31
+00:17:46.000 --> 00:19:08.000
+to how we designed the filter view, that it goes from n to n minus m, and you don't know what that minus m is. Now, let's go back up to the thing that does vectorize here, which is the for loop that has a simple if in its body that says like, hey, if this element's filtered in, then do this thing and otherwise do nothing. Well, what if like we essentially built a filter that worked like that? Or like, what if we essentially built a protocol for composing these, you know, filter and filter-like operations where the end consumer would agree that, hey, whenever I see some empty tombstone value, I'm just going to ignore it.
+
+32
+00:19:08.000 --> 00:20:23.000
+So, like, instead of you giving me a sequence of elements, you can give me a sequence of elements or empty values, and I'll just ignore the empty values. Okay. So, essentially, it is more or less what you said before. What if we had a thing called, let's call it filterO, and it will, so it's going to take an F and it's going to return some form of transform here and okay so and and this filter o thing is going to be you pass it in an f and it returns you some um uh some transform view that takes a transformation function that takes a t and returns an optional of t um and what it's in it it has the the your predicate bound and so what it's going to do is it's going to do if um t then return t and otherwise return and m or return t
+
+33
+00:20:23.000 --> 00:20:42.000
+which will be wrapped into an optional and otherwise return change that to a ternary expression okay you want to return okay so the ternary expression is return ft question mark
+
+34
+00:20:42.000 --> 00:21:12.000
+t colon stood null null opt. It's complaining about that. Okay, all right. So what filter O now does is filter O is a range adapter that you give it a function f, and for all of the elements in the underlying range that f is true for, the produced range
+
+35
+00:21:12.000 --> 00:21:48.000
+has an optional with that value. And for all the elements that the filter function returns false for, there's a corresponding empty optional in the um produced range do you follow so far i understand i mean i have qualms with your stating this is a better filter because it's not i mean it's maybe better for solving your problem but this is no longer this is better for this is no longer a filter this is exactly like replace if was the first thing i said but replace if is just a specialization of transform, which is essentially what you have now.
+
+36
+00:21:48.000 --> 00:22:21.000
+And like you now have a shape preserving operation in the map. And shape preserving is exactly the key intuition here. That if you preserve the original loop trip count throughout your range transformations, then the code will be able to be vectorized. That's the key thing. If you want to keep everything shape preserving. Now, the problem is that on the consuming side here in this for loop that consumes this
+
+37
+00:22:21.000 --> 00:23:02.000
+range, previously the range was a range of indices, and now it's a range of optional indices. So anywhere that we consume this, we would now have to add some logic that checks, oh, does this thing have a value? Is it an engaged optional? And if so, then I need to get the value, and otherwise I ignore it. No, well, that's not how you solve this problem. This is, you're now in optional land, which is a monad. And so, I mean, honestly, if anyone's upset by that, don't be upset by that. It's a simple thing, but they're in Rust and all the functional languages. They've got basically, what we should have is a range adapter called like transform maybe
+
+38
+00:23:02.000 --> 00:23:52.000
+that will apply your unary operation only if the optional exists and it just does nothing for the null opt case so like forget that i said monad and monadic operation but like the point is is like you pipe from the result of filter o a like in rust i think it's called map maybe or maybe map but we would call it transform maybe or transform optional you know whatever you want to call it because we call our map transform and we call our maybe optional so transform optional or something like that that that does this the thing that i like my whole issue with this is that your answer kind of avoids like the The problem? Yeah. Yes. I would like to avoid the problem. The high-level summary is like if you're using a filter, try to find a way to not use a filter.
+
+39
+00:23:52.000 --> 00:24:26.000
+And... Well, okay. Wait. I don't know if I committed this code yet. And my point being is that like if you have that sequence that is shape-preserved and of optionals now, that there are monadic operations like filter map that gets rid of the options. So at some point, you still might need— I've got to log into the VPN so I can show you the next atrocious thing. My point being is at some point, you might need to actually destroy the shape, in which case we're back to what we were talking about originally,
+
+40
+00:24:26.000 --> 00:24:48.000
+and there's no solution. No, don't destroy the shape. Why would you need to destroy the shape? Because what if you need to end up, what if what you actually need to do is filter out, like filter in the even numbers, and you want a vector of those even numbers at the end of the day? Yeah, then at the very end end then like my point being is if if if
+
+41
+00:24:48.000 --> 00:25:12.000
+you consider a valid solution like if if if i'm feeding this stuff into uh a for each that i want to be vectorized like i would like that to happen right so. So, okay. Now my point being is like, you cheated. You cheated. The final piece of code I want to show you. Like the array, the array solution is exactly what you're saying. Basically.
+
+42
+00:25:12.000 --> 00:25:24.000
+It's that like, find a way to express your problem. That is easily, you know, vectorizable, which involves shape preserving options. As soon as you start doing things like filters that actually destroys the shape,
+
+43
+00:25:24.000 --> 00:25:54.000
+then you're much like much that actually destroys the shape, then you're much less likely to have an accelerated solution. But you didn't actually create a better filter. You created a different algorithm. Is my point. I created a better filter for me as a loop optimizer compiler person. It's not a filter, though. It's a transform. Yeah, but the thing is that...
+
+44
+00:25:54.000 --> 00:26:36.000
+Boom. Okay. Are we going to name this episode? We had one called for each versus transform, and now we're going to have filter versus transform. Everything's a transform, and you think're going to have filter versus transform. Everything, everything's a transform. And you think there's a thing you can continue using stud views filter. I'm fine with that because I can write this function here, optimize range that I use in my implementation of foreach and optimize range just takes your range and it checks whether your range has a base this version doesn't have the overload for that but it checks whether your range has a base and if it does then
+
+45
+00:26:36.000 --> 00:27:33.000
+it applies optimize range to that base and then whenever whenever i whenever i find in the chain of your range adapters, whenever I find a filter view, I can just transform your filter view into my filter view that my 4-H knows how to unpack, which is what I do here. Yeah, but that doesn't necessarily save you anything. Not in all cases. What do you mean it doesn't save you the case where you vectorize the loop i mean but in the case where i then need to do an actual filter where i destroy the option the the null ops and get rid of them and end up with a vector that just uh contains the optional values and then unwrap them from optionals, you're still going to end up doing the filter that we didn't do here. Um, but like, so, so sure. Like you're talking about if I'm going, if I'm going into a vector.
+
+46
+00:27:33.000 --> 00:27:54.000
+Yeah. Like if you're, if you're collecting things, but I'm not talking about if I'm going into a vector, I'm talking about that. Like, I want to write a, a fast stood forh that when I feed it in a range that has a filter view somewhere in it that my implementation of 4-h can be
+
+47
+00:27:54.000 --> 00:28:19.000
+vectorized and all I gotta do is I gotta take your range and go and find all your filter views and any other annoying caching lazy views like this that are causing me problems and replace them with my quicker version or my version that does the tombstone-ing thing. Tombstone-ing thing. I agree that this will work.
+
+48
+00:28:19.000 --> 00:28:56.000
+The point that I'm making is that it only accelerates a certain category of problems. Like of the umbrella, you know, of the problems that use filter, the ones that will benefit from this optimization will benefit. But then there are whatever percentage of the other ones that are just going to be as slow as they were before. Which is fine. Which is fine. You're accelerating a subset. This lets me write this sort of code right here which i talked about in my uh keynote at array last last year
+
+49
+00:28:56.000 --> 00:29:45.000
+and actually a keynote that you actually inspired on on on this uh this is true podcast we talked about how i was going to pull an audible and and give a completely different talk, and I did. I do consider myself your biggest source of inspiration. Yes. And so what I have here is this little library I've been playing around with called Spaces, and it's got a 4-H, and this 4-H is aware of this new spaces protocol that I came up with, which is a I can apply a range view to it,
+
+50
+00:29:45.000 --> 00:30:29.000
+or I can apply a range view to just one particular access of it. And this will generate code that will vectorize. It's really quite something. Like this is exactly what I want out of a multidimensional iteration paradigm in modern C++. It generates efficient code and it's composable. And it's composable using our existing compositional primitives in this space, specifically range adapters. You will also note that my little implementation here has added some magic that does the unpacking
+
+51
+00:30:29.000 --> 00:31:28.000
+of the tuples so that I don't have to do the structured bindings within the body of each of these lambdas. I've made my peace with not getting that language feature, but I'm going to make all of my algorithms do the std apply sort of thing where if you send it through a tuple of things, it's going to invoke your lambda with that tuple of things unpacked. I still want that language feature. Yeah, I mean, sure, I do too, but until I get it, I'm going to do this so that I have a nice look at it. We're referring to a 2017 proposal that died or didn't have further work done on it called, what is it called? Generic lambdas with structured bindings, something like that. Or polymorphic lambdas with structured bindings.
+
+52
+00:31:28.000 --> 00:31:55.000
+Go back to that example, though. So here's the thing. It says memset diagonal 2D for each filter. Like, why are we using for each and filter? This is just a replacive. You're missing the point. I'm missing the point because this example doesn't demonstrate the utility of what you're talking about like it it yes it does work but but that that's that's only because you're not you're not thinking big i don't want
+
+53
+00:31:55.000 --> 00:32:28.000
+to have to be creative i want you to show me a motivating use case and not the degenerate case that could be spelled more elegantly with a more precisely named algorithm called ReplaceF. The key thing is that I want to do composition. But this composition is... I believe you that this shows the enabling of composing filter O, the optimized filter with another algorithm for each. So filter O doesn't actually stand for filter optimized.
+
+54
+00:32:28.000 --> 00:32:56.000
+It stands for filter optional because it turns things into optionals. I just didn't have a good name for it. Okay. My point being is that this presentation, your code example here, needs a more motivating example. These are the things that I want to be able to write. Like what I've got here, like where I've got – I think Zoom is frozen because I'm still looking at the same 3D for each filter.
+
+55
+00:32:56.000 --> 00:33:14.000
+Oh, well, that's your problem. I'm now on my keynote slides from last year. Are you sure you're sharing your whole screen? Yeah, I'm sure I'm sharing my whole screen. He said as he hits the stop sharing button, I know he shared the whole screen. But no, I was sharing the whole screen. I was sharing the whole screen.
+
+56
+00:33:14.000 --> 00:33:42.000
+You want what? I was sharing the whole screen. Oh, no, yeah, sorry. So you were saying now I'm looking at your slide now. So what do you want? Like, okay, you know, an example here would be if I want to take just the interior points of a particular extent, and I want to, to, to stride through that extent and only take every other point. Like, like it's not hard to use your imagination and imagine that
+
+57
+00:33:42.000 --> 00:34:31.000
+I would want to combine two different type of, like to do two different types of filters or or to do something like drop take although those two need a better name i mean and to then like want to do a striding there listen mr listen mr principal architect you never go into a pitch and then you present something and say listen uh mr executive it's not hard for you to imagine what i'm trying to tell you here this is it it is it is it is a like the if you can't be motivated by the need for compositional primitives to express multi-dimensional integration then like i don't know how to help you it's like that's like saying like i don't know why we need to have range adapters that compose
+
+58
+00:34:31.000 --> 00:34:55.000
+together because we could just we could just call replace it we're we're you're you're barking up the wrong tree i agree that these compositional primitives are useful i'm just giving you a hard time for your bad examples is all I'm doing. My examples are glorious and generate beautiful assemblies. Folks, for those of you watching this on YouTube, let's go down to the chat and tell
+
+59
+00:34:55.000 --> 00:35:34.000
+Bryce that you agree with me that his for each filter O example is suboptimal. I think that my people in the chat, my HBC people will be on my side here, that it's pretty amazing that we're able to write this code. I do have to go fix this to use on extent. Oh, look, now he's updating the example. Surprise, surprise. Yeah, well, it's because I wrote this in fervor. Because this one, I can actually just do the selection in the middlemost loop, and that's
+
+60
+00:35:34.000 --> 00:36:12.000
+what I wanted to do for this example. Although the odds of this code compiling is, you know, probably not great because I'm just writing it live here. But that seems like that's probably correct. Okay. Let's. I mean, we got to wrap this up because we're now at the hour point. What? Here. But I got to say, if we switch back to your slides, I'm not fully convinced your filter O thing works in this case.
+
+61
+00:36:12.000 --> 00:37:02.000
+Because the whole point of this – I assure you it does work. But do you end up – so in your – You want to look at what filter O actually does. No, no, no. Answer my question. I'm not saying it doesn't compile and it doesn't work. With this filter O sort of technique on your slide deck, slideware, do you end up traversing the entire matrix? Say you compose some things in your spaces library that basically creates the equivalent of a mask that indicates which of your indices are you going to operate on. Once you have this mask, behind the scenes now, what I'm visualizing is a bunch of optional values and then null ops.
+
+62
+00:37:02.000 --> 00:37:44.000
+But then based on what you had before, you're traversing every element now. I think you are perhaps thinking that the loop, that the multidimensional nature of the loop gets collapsed. And that was never the case? Yes. The way that the spaces protocol works is that there's a metafunction rank that you call in the space that tells you how many ranks. And then any space aware algorithm has to do a nested for loop for each one of those ranks. And you call MD range.
+
+63
+00:37:44.000 --> 00:38:48.000
+Here it shows MD begin and MD and mdend, but that was an earlier iteration of the idea. Now you just call mdrange. You call mdrange1, mdrange2, mdrange3, mdrange2, mdrange1, MD range 0, to get the range for each subsequent innermost loop. And you have to feed the value from whatever outermost loop you're in to MD range. So when you're in the first nested loop or the first inner loop, you need to feed it wherever your current location is in the outer loop into MD range so that you can incrementally build up the indices as you go down through this loop structure. It's actually – I hate to toot my own horn, but it's really actually quite pretty. First of all.
+
+64
+00:38:48.000 --> 00:39:07.000
+First of all. I'm pretty happy with myself. I've never heard a more false statement in my life that I hate to toot my own horn. Bryce. That's. Actually, that little fix that I just did compiled without any issues. So, you know, that's pretty nice.
+
+65
+00:39:07.000 --> 00:40:22.000
+Look at that. A principal architect that still knows how to write code. Okay. Some tests may have failed. It compiled, but it miraculously did not work. Yeah, we'll figure that out. I mean, so to just circle back is that the reason that this is important and works and sort of nullifies what I was upset about earlier is that specifically the use case for filter in this spaces and indices framework is exactly for the kind of stuff that you were showing you're essentially creating you can think of it as like a boolean mask of like which elements in this arbitrarily ranked matrix do i want to perform some kind of nested iteration or nested looping that Bryce, as Bryce described, it is not at all what we want to do.
+
+66
+00:40:22.000 --> 00:41:04.000
+This kind of transform and ignore some values is exactly what we want in this use case yes so like i said a motivating example is really just all you needed bryce yeah now i just got to figure out what exactly i did wrong here because i won't be able to sleep until i do well we're not going to do that live on the podcast so thanks for listening folks bryce anything you want to want to say to I do. Well, we're not going to do that live on the podcast. So thanks for listening, folks. Bryce, anything you want to say to wrap up this? I think we might release this as a 65-minute episode because either that or we're going to make our listeners suffer and we're going to start part two of this just like mid-live coding. Now, what did I do wrong here?
+
+67
+00:41:04.000 --> 00:41:31.000
+All right. I got to go back to the to bryce does not have anything else to say he's just over indexing on his ability uh his failing uh test cases here yeah thanks for listening folks um feel codes on github feel free to let us know how terrible this format was um and next time bryce tries to share code, I won't let him. I will. I'll just put my foot down. I mean, we decided.
+
+68
+00:41:31.000 --> 00:42:08.000
+I gave the APL show podcast the hard feedback to not live code and not share things and not write on the chalkboard. And then three episodes later, here we are. Bryce breaking our rule. And I'm pretty sure that was absolutely impenetrable for the listener, probably. If not, let us know. Give us some feedback on this. And just really let Bryce know that you were unhappy with the format. So we won't do it again next time. Be sure to check your podcast app or ADSP the podcast.com for links to all of the things
+
+69
+00:42:08.000 --> 00:42:13.000
+that we mentioned in this episode, as well as a link to a GitHub discussion where you can leave comments, questions or thoughts on the episode. Thanks for listening. We hope you enjoyed and have a great day. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

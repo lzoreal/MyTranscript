@@ -1,0 +1,217 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:02.000
+Effectively, compilers can generate really, really, really good code. Optimizers just seem to absolutely love this style of doing things. What I've discovered is that this is just amazing for performance. Welcome to ADSP the podcast episode 224 recorded on February 17th, 2025. My name is Connor and today with my cohost Ben, we continue our conversation with Tristan Brindle in today's episode. We chat about updates in Tristan's library flux, internal iteration versus external iteration and more. Now we're starting episode 224 and we haven't even talked about flux. So a part of the goal was to bring Tristan on because I mean, it's been a while now, but back in August,
+
+2
+00:01:02.000 --> 00:01:51.000
+I told this story twice on the podcast. We met up a couple times. Taylor Swift delayed us meeting up by an hour or so at one point, because she was performing at Wembley. And I said at that point that we were going to have you back on, get some updates about Flux. And then I had some follow-up questions about fully understanding the internal iteration model of Flux because I actually don't think I tweeted this. It is, I know it's public somewhere and that somewhere is for sure in the PDF slide deck of the talk that I gave at C++ Under the Sea which was called Fusion Arrays and CPU versus GPU, something like that. I just, it was a bunch of things because I couldn't figure out a good title, so I just put some commas in between it.
+
+3
+00:01:51.000 --> 00:02:25.000
+In there, it shows a highlight of rankings of a bunch of different quote-unquote backends to this tool I wrote with three different C++ quote-unquote libraries. Flux is one of them, Range V3 is another one, and then the standard C++ 20, 23 ranges. And then Swift's there, Rust is there. There's a few different GPU backends like Kupai, Kuda Thrust, etc. There's a few others. And at least on the lower end of the sizes that I tested, so I think that was like a thousand elements and vectors up to a
+
+4
+00:02:25.000 --> 00:02:55.000
+hundred thousand. Flux hands down one in every single one. So it beat ranges, it beat range v3, it beat swift, it beat rust. I mean the other ranges implementations were right behind Flux. But this echoes, I mean you gave a lightning talk at I want to say C++ North 2024, at, I want to say C++ North 2024, which was called filtering, filtering fast with Flux, something like that. Faster filtering with Flux, I think it was, yeah. Faster filtering with Flux, where it was a five minute lightning talk,
+
+5
+00:02:55.000 --> 00:03:17.000
+link in the show notes, and you showed how this double dereference issue can get in the way of compilers optimizing code, what you could write with a hand-rolled for loop. Anyways, I'm gonna throw it over to you. So I've got questions, but first give us an update for folks that haven't listened to episode 126 and 127, where I think, it wasn't the last time you were on,
+
+6
+00:03:17.000 --> 00:03:34.000
+but it was the last time you were on that we talked about Flux, because I think you came on in between to do the one algorithm to rule them all episode at some point, I think. Oh yeah, we were supposed to argue with Ben and then we ended up agreeing about, yeah. So yeah, what's the state of Flux?
+
+7
+00:03:34.000 --> 00:03:49.000
+What are the updates and then we can get to- What's the state of Flux? That's a greater, that's what I should call the updates, right, the state of Flux. Why didn't I think of that? I was gonna say, and also to give a little like a summary of just what the, I mean, I've compared it to ranges already. So maybe people have an idea,
+
+8
+00:03:49.000 --> 00:04:26.000
+but in case they started listening since then, and this is the first time they're hearing about Flux, maybe give them just a little background so that we're not. Okay, so Flux is a library for doing what we might call collection-orientated programming or sequence-orientated programming. It's similar in spirit to things like C++20 ranges, Range V3, the Rust iterator library, like Python iter tools, D ranges, all those sorts of things.
+
+9
+00:04:26.000 --> 00:04:57.000
+The idea is that you have algorithms that operate on sequences, as we call them in Flux, and you can have sequence adapters that you can chain together to build up kind of a view of your data, and then call some algorithm that operates on that data. So as I say, this is pretty much every language, I think, you can do this sort of thing. So Flux is kind of an alternative to C++20 ranges. The way it works is a little bit different because it doesn't use STL iterators. So
+
+10
+00:04:57.000 --> 00:05:36.000
+standard ranges, they're built on iterators that are effectively a generalization of pointers. Raw pointers are the most general or the most powerful kind of iterators, they're contiguous iterators and the STL takes these and generalizes backwards to bidirectional iterators and forward iterators and eventually input iterators. You can only have single pass. Flux, rather than using pointers, takes the idea of indices and generalizes backwards from there. So slightly different approach,
+
+11
+00:05:36.000 --> 00:06:14.000
+but we end up being kind of, we can do the same things as you can do with ranges, just the way that you do them is slightly different. And the goal with this is because, or was originally anyway, that being pointer based, indices, sorry, iterators, STL iterators share the same downsides as pointers in that they can quite easily be invalidated, they can quite easily end up dangling. It's just not a very safe abstraction. Whereas with indices, the generalized version, we call them cursors in Flux, rather than like an iterator can advance itself, it can dereference itself,
+
+12
+00:06:14.000 --> 00:06:53.000
+whereas a cursor just purely represents a position in some sequence. And in order to advance the cursor, you have to have the sequence object available to say, please, will you give me the next position after this? Or in order to retrieve the value corresponding to that position, you have to ask the sequence, please, will you give me, you know, read the cursor position and give me that value? So it means that if you ever end up with a dangling cursor, you know, you're holding on to a cursor and the sequence has vanished, it's perfectly safe because there is literally nothing you can do with this cursor,
+
+13
+00:06:53.000 --> 00:07:33.000
+because you can't just try and dereference it like you would be able to with a dangling iterator. So the initial goal of Flux, what I set out to do, was to do something that's pretty much the same as ranges, but less prone to dangerous dangling things. I think actually that's one of the titles. You gave, I think, the same talk a couple different times in 2023. Once it's C++ on C, once it's C++ North, I think it's CppCon, and I think the C++ on C1, it retitled the talk to a safer, there's the safe is in the title, even though the actual title of the talk is iteration revisited.
+
+14
+00:07:33.000 --> 00:08:14.000
+So you might see different titled talks, but they're all versions of the same one. And so Flux is a safer version. But as I mentioned before, it ends up performance wise, beating ranges and range v3. And in the episode 126 discussion, we talked about these two different models of internal iteration and external iteration. And to this day, I don't think I've fully grasped what the difference is. And I actually in preparation because I went and rewatched that talk, I went and re listened to the episode. I didn't rewatch Barry Revson's talk, which we'll also link. He's given it a couple times where he compares the various models across programming languages, D, Swift, C++, C sharp, Python, et cetera. But now we live in the
+
+15
+00:08:14.000 --> 00:08:38.000
+age of LLMs. And so I figured I'll go, they got these reasoning models. I'm not sure if this is 03 or 01 mini on ChatGPT, but I went and I asked, I said, explain internal iteration as it exists in libraries like C++ Flux and also the issue of double dereference. And this is what it said, it reasoned for 18 seconds. That's a reasonable amount of time for me to wait. It says in many traditional C++ designs, you iterate over containers or ranges using external iteration.
+
+16
+00:08:38.000 --> 00:08:53.000
+That is you write a loop that pulls values out via iterators. With internal iteration on the other hand, you pass a function, often a lambda, to an algorithm, and the algorithm internally, in quotations, iterates over the data, applying your function to each element. This means control.
+
+17
+00:08:53.000 --> 00:09:12.000
+The library's algorithm controls the loop rather than the caller optimization. The library can optimize the iteration process, potentially fusing multiple operations together, a technique often called loop fusion, and even parallelizing work and abstraction. Users work at a higher level of abstraction, you chain operations together without managing the low level mechanics of looping.
+
+18
+00:09:12.000 --> 00:09:55.000
+So before I throw this over to you, and we'll ignore the double dereference exclamation answer that it gave us, my first thought when I hear this is, okay, I mean, I agree with this loop fusion thing, but explaining it as like passing higher order functions to these operations and letting the algorithms manage the iteration. My first thought is like, that's what doesn't like ranges you like, if I call a, you know, stood colon colon views, colon, colon transform versus a flux dot map, you're passing a lambda to both of those. So like that explanation of handing over this kind of callback that then enables the algorithms or the adapters to control the iteration doesn't fully check out.
+
+19
+00:09:55.000 --> 00:10:35.000
+I did ask a follow-up question that said, okay, so what does C++ ranges and range V3 use? And it did say this uses external iteration because you can use this with for loops. And then I asked, can you can you not use flux with for loops and it says typically no you can't so anyways how much of that is right and wrong and where it's wrong please elaborate and correct okay okay right so um it is uh correct apart from the bit about flux um not using external iteration. Flux, the cursor model that I described is a form of external iteration. What we mean by that is that you
+
+20
+00:10:35.000 --> 00:11:37.000
+have some, or typically you have some sort of external, some sort of object that represents your iteration state. And then you can, as the caller, you can request the next value of the sequence. So typically we would call this thing, this state, like an iterator. Right. So this is the way that it works in C++. In Flux, our iteration state is this cursor object, you know, Python, almost all languages, in fact, you use this external iteration model. But as an optimization, and at the moment, we might get into how I'm planning to change things, but at the moment, it's purely an optimization in Flux, is that we can turn this round for certain algorithms and we can, just as you described it, we can instead say to the sequence, okay, here is a function. I want you, please, to call this
+
+21
+00:11:37.000 --> 00:12:16.000
+function for every one of your elements. And it turns out that by turning things inside out like that, instead of requesting elements one at a time, by saying here is a function, please, will you do the iteration for me, effectively compilers can generate really, really, really good code. Optimizers just seem to absolutely love this style of doing things. That's kind of what I've discovered is that this is just amazing for performance. So wait, just to clarify, so you're saying actually that Flux doesn't use internal iteration? It's X?
+
+22
+00:12:16.000 --> 00:12:43.000
+No, it does. It uses it as an optimization. So if you're doing like a basic for each algorithm, if it can, it will attempt to use an internal iteration code path. If it can't do that, if one of your adapters or your source doesn't support internal iteration, it will use regular external iteration using cursors. Interesting.
+
+23
+00:12:43.000 --> 00:13:03.000
+So if it can, it internally iterates. If it can't, it externally iterates. That is the current situation. And so how is that? I mean, not that we want to get into implementation details, but like, what does that look like from an implement? Because I actually took a look at like the map adapter, but I don't know. It's a lot of templates and stood invokes and stood forwards.
+
+24
+00:13:03.000 --> 00:13:39.000
+And it's hard to make sense of like, you know, how does it determine? Is it just basically like every single one of the adapters is tagged with, like, whether or not it can do this and it dispatches based on that or something or? OK, so imagine that like there's a function called. Well, I have to imagine because there's a function called for each. Right. And you can write the forEach algorithm, which is, you know, in terms of the cursors, you just say, okay, well, give me a curse to the start, like the start cursor. And while it's not equal to the end, I'm going to read a value, I'm going
+
+25
+00:13:39.000 --> 00:14:48.000
+to call the function, the given function with that value, I'm going to increment the cursor, and then eventually it's equal to the end position and then we finish. Okay, so that's, that is a, like, just, just how we, how we write a 4-H in terms of, uh, excellent iteration. However, you could also, and this is the way we do it, allow sequences to provide a specialization of the for each algorithm. So something like a vector or a C++ range, you could just use a for loop, like a language for loop, and within this loop you would just call the function. And then you think about, well, okay, what about a map adapter? Can we provide a specialization for each on a map adapter? And the answer is yes, we can. So what we do is we take the mapping function and we apply that first. so we get the adapted value, and then we pass that adapted
+
+26
+00:14:48.000 --> 00:15:31.000
+value to the user called function. So we can compose mapping and filtering inside of this for each. And the way that this works, and it's quite hard to describe, it's much easier if you can sort of see it in code, the way that these lambdas all sort of nest inside each other, but they're all completely transparent to the compiler and it can just see right through them and do an amazing job of optimization because we can specialize this for each function. And that's sort of at the heart of what we mean by internal iteration. And so, yeah, in terms of algorithms,
+
+27
+00:15:31.000 --> 00:16:07.000
+pretty much anything that is a fold or a scan can end up using internal iteration. Everything, anything that where you begin at the beginning of a sequence and run linearly until a certain point can almost always be written in terms of internal iteration and that is the vast majority of things people tend to do with sequences. So it ends up like I said the goal with Flux really was to have something that was safer than the status quo but it turns out that most people have noticed
+
+28
+00:16:07.000 --> 00:16:35.000
+that it also, because of this internal iteration, optimization ends up generating really good code as well. So, yes. So is there this technique of providing specializations, is there a reason this can't be applied to standard ranges? It could be, right? So in fact there was a proposal by Jonathan Mueller and Barry, I think Barry Resson, I can't remember the paper number, we'll have to look it up.
+
+29
+00:16:35.000 --> 00:17:11.000
+But there was a proposal for exactly this kind of thing. So yeah, it didn't succeed because it kind kind of I think it was probably a little bit too ambitious for uh initially but uh it could in theory be applied to um to ranges as well. So you're saying the reason it failed wasn't technical it was just that they were trying to land too much stuff at once? I it's a while since I since I read it but yeah I think they were kind of proposing to the changes to the way range for loops work and things like that, which probably made people a bit nervous. Yeah, I'm not really.
+
+30
+00:17:11.000 --> 00:17:30.000
+I can't remember the precise details. Not necessarily just touching library stuff, like touching language stuff as well. Yeah, yeah. Interesting. Interesting. So there's nothing actually that, yeah. Yeah, in principle, we could have the range's algorithms perform this optimization as well.
+
+31
+00:17:30.000 --> 00:18:08.000
+Yeah, I do know that there, I mean, I don't really pay attention to it, but I do know there's like a year long filter view saga happening right now where I see talks from people about the brokenness and yeah, I don't follow the committee papers closely anymore, but I do know at some point papers were being written. So yeah, I don't really know what the status of that stuff is. Of course, this kind of thing. It's interesting you can say we can apply that to standard ranges because this kind of thing always the question in the back of my mind whenever we talk about things like this is the question of did we standardize
+
+32
+00:18:08.000 --> 00:18:53.000
+something too early, right? Ranges got standardized with several implementations but without this internal iteration design it hadn't been discovered yet maybe or you know and so the question to ask is like which doors have we closed by standardising as early as that? Would it have been worth waiting? Do you have thoughts on that? I mean, people have kind of said, well, you know, would you propose flux for standardisation? I was like, well, no, because it because the overlap with ranges is too much. But on the other hand, flux wouldn't exist without ranges, without what I learned from
+
+33
+00:18:53.000 --> 00:19:24.000
+studying that. So it's like, you can always wait for the next thing, because I have changes I now want to make to flux, because I think I can do it better and you can always, there's always a way to do something better, right? There's always a next thing. So at some point you've got to go, well, let's just, let's put this in there. So, well, I mean, I mean, technically there's an argument that you don't have to, like if we had a better story for package management, arguably it would have been range, range V2,
+
+34
+00:19:24.000 --> 00:19:50.000
+range V3, then Flux, you know, Flux 2, and then you can just reach for stuff management, arguably it would have been range, range V2, range V3, then flux, you know, flux two, and then you can just reach for stuff easily, right? But the problem is, is that unless if you, you know, have your build system configured or worked for a company, like, you know, all the major companies have some solution for this, right? It's not as easy as going cargo install, whatever for your, if you're a library, like these days, I think I've said this on this podcast, I just do the fetch command and make
+
+35
+00:19:50.000 --> 00:20:21.000
+scripts and every single time I have a new project, I copy my make file and I just pull from the latest whatever GitHub repo. I don't use any of the package repo. Like what are they? The frog has one one the frog company Conan J frog thank you and then there's VC package like I don't use any of that stuff I just I just point at github repos and luckily almost all of the libraries that I want to use CMake's has recent versions of CMake have this fetch
+
+36
+00:20:21.000 --> 00:20:42.000
+content which I found to be pretty good for just like home projects. I use CPM, which is a wrapper around fetch content. It's entirely different than CMake. Yeah, someone told me about that recently and said I should switch to CPM, but the thing is once you have something that works and all you have to do is change a GitHub URL. Yeah. Yeah, well you should switch to CPM because it's a wrapper around fetch content, because
+
+37
+00:20:42.000 --> 00:20:57.000
+it works the same way. It's just a better API. It's just easier. All right, folks. Has all the things you like, I think, is what I'm saying. Next time we record, I will report back. Although I don't even know if there's any C++ projects that I actively am working on.
+
+38
+00:20:57.000 --> 00:21:17.000
+Mostly these days I'm in Python land. But yeah, I mean, so anyways, back to the, you know, at some point you have to put it in to the standard, arguably, you know. Well, yeah, exactly. Do you? Yeah. If we had a better story for it. And this is very much like there's lots of things going into the standards and people
+
+39
+00:21:17.000 --> 00:22:11.000
+have different opinions about whether they should maybe like, like the poster child for this maybe is formatting, right? Most of the people I talk to probably sticking with libfmt, even though std format exists. libfmt is better featured and it's what they were already using and you would probably, you know, therefore they want to stick with it and they want to... and it's still being developed, still being maintained and it's very stable and nice. Now, the counter argument of course that always gets brought up as well, what about the regulated industries where regulation is a big deal and they can regulate against the standard but but regulating against third party is is a big deal right expensive or whatever
+
+40
+00:22:11.000 --> 00:22:41.000
+so I don't know what the answer there is but but I did what I do know is that almost everyone I talked to wanted to use slip FMT rather than stood format. Interesting. I think in the particular example of format, that is important enough. We should be able to have a good way of just printing stuff out that comes with the language. I agree. That particular example, I think,
+
+41
+00:22:41.000 --> 00:23:07.000
+yeah, that's something that's reasonable for the standard library. However, there are other things that linear algebra being a recent example that I'm not sure for me personally, whether I think that's a good fit for the standard library. Yeah. Senders receivers is one for me. I've implemented senders receivers, a version of them. I don't know if what's being standardized will fit all my use cases.
+
+42
+00:23:07.000 --> 00:23:54.000
+I hope it will. I believe that the people working on it want it to, but I think with the best will in the world it might take another decade before it supports all the use cases required. In the case of libfmt, I agree that we should have good ways to standardly format things. The extra benefit that libfmt provides for me is largely in the constexpr space. And this is something where the standard continually disappoints me. We still standardize things without making them properly constexpr. Yeah. I don't, to the point where I don't, I think that might be a tactic now.
+
+43
+00:23:54.000 --> 00:24:23.000
+Like that is just a process, right? First we standardize something, then we make it constexpr. In some cases, maybe not in other cases, but it's almost always disappointing when you come up against something that you want to use at compile time. And to all intents and purposes, it should be usable at compile time. And the only reason it isn't is that it was not standardized with that constexpr keyword in front. It still happens.
+
+44
+00:24:23.000 --> 00:24:45.000
+Yeah. Speaking of the time that the committee spends on stuff that arguably I would prefer if they just had a good package management story, then I feel like at least 50% of the stuff the committee spends time on trying to get into the standard, where you just be like, oh, modulo the regulatory companies that have to deal with that stuff.
+
+45
+00:24:45.000 --> 00:25:29.000
+And then if you took all that extra time and put it towards language, some types, like a nice tuple, a nice language variant and pattern matching, that was actually a question I was going to ask you, Tristan. I asked Phil Nash this at C++ Under the Sea. I said there was a project that I wanted to build that for reasons would have been easier to do in C++. And I said I want to use Flux, but like it's just so hard for me coming from languages now that all have really nice algebraic data types and sun types and pattern matching to like come back to like library variant land and you know is alternative it's just it's so
+
+46
+00:25:29.000 --> 00:26:07.000
+cumbersome and I said what's your suggestion if I want like that experience in C++ you know you're you're someone who's been doing this for a while and his answer was use Swift so what is there I guess I can open this up to you Ben like is there what is the best Experience in C++ if I want to do some kind of functional programming esque So either reaching for ranges or range V3 or flux But then I I want I want the the sum type pattern matching that almost all languages these days have Is just the answer is there is no good solution currently and I have to wait for a future standard until pattern matching is
+
+47
+00:26:07.000 --> 00:26:39.000
+standard or is there... You're asking me? I'm not sure I'm the best person to ask. I think Circle has pattern matching. I did actually consider going to Circle and then programming in like a C++ variant that has, you know, uses choice types and uses pattern matching. But then like, you're not programming in a, you're programming in not just like a dialect, but I would almost argue like a different language at that point, right? Because you can't then go to a GCC or Clang and it's, it's not going to work, right? Yeah.
+
+48
+00:26:39.000 --> 00:26:51.000
+I think, I mean, there's been a pattern matching proposal that's been in flight for a long time. Yeah, for years. Michael Park. But I think... It looks like it's just going to miss. It's missed the boat. Yeah. Yeah. Oh, it's...
+
+49
+00:26:51.000 --> 00:26:59.000
+For C++26. Breaking news, folks. Breaking news. C++26. Looking like it won't. We don't know for sure. I mean, the dust... Or has the dust settled?
+
+50
+00:26:59.000 --> 00:27:33.000
+I think the last meeting was the... It's supposed to be feature complete. It's just the reason I'm wavering is because I can't remember off the top of my head whether I'm pretty sure let me just see if I can find the... Yeah I think in the last week meeting it looks like pattern matching is going to miss 26. And I honestly too like even pattern matching it would make it nicer but really you need you need the language support, in my opinion, to really get the full first class experience. I mean I was talking to Sean Baxter the other day about, you know, he was asking me if there
+
+51
+00:27:33.000 --> 00:27:57.000
+was some new language on the block, what are the things that you would want to support array programming, and I said forget array programming, I just need, because he said it needs to be like a C++ like language, And I was like, I need some types and pattern matching. He's like, oh, Circle already has that. So, you know, choose another feature. And I was like, well, C++ doesn't have it. So, um, sorry, Tristan, you were going to say something. I was just going to say, I found it as a thing.
+
+52
+00:27:57.000 --> 00:28:27.000
+And I said pattern matching does, did not get consensus, but was extremely close. Tendies felt that it wasn't quite ready for C++ 26. So interesting. I wonder what that means, like with more details. It was extremely close but didn't make it in in terms of like just people didn't agree on the design. Oh well. I mean it is coming at some point. I don't know if it's the, I don't know if we can say it's the design at this point but something. I don't know if it's the, I don't know if we can say it's the design at this point, but something. I don't know.
+
+53
+00:28:27.000 --> 00:29:02.000
+I wasn't at the meeting. Yeah, this is why, this is why you have to be in the inner circle. You got to be at the meetings in order to, I mean, I'm sure, I guess CPPcast hasn't come out with an episode in a while, but usually Phil and Timur, they, they'll have someone on to talk about the committee meeting. I think Timur's been so busy with the contract stuff because that's his thing. So he's probably been too busy being part of the action to do the podcast about the action if you see what I mean.
+
+54
+00:29:02.000 --> 00:29:07.000
+Be sure to check these show notes either in your podcast app or at adspthepodcast.com the action if you see what I mean. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

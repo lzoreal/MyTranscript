@@ -1,0 +1,181 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:17.000
+I certainly agree with you that given all of the time that was spent on concepts, what we got, I think, is unfortunate. I was rereading the 2003 paper to see what our goals were. And separate type checking is the one goal. That is the one thing that if we had it, you could even throw out concept maps. If you had separate type checking, it would have made generic programming in C++ an order of magnitude easier, right? It would no longer be the domain of experts to use on April 29th 2024 my name is Connor and today with my co-host Bryce we continue our chat with Doug Greger from Apple about the history of C++OX concepts. So, Joe Coder killed C++OX concepts. I think projections of the thinking onto a mythical Joe Coder is the main thing here.
+
+2
+00:01:17.000 --> 00:01:42.000
+There were other complaints. So, there was concern about the compile time performance of the concept GCC prototype, because it was doing all this template definition checking for the algorithm setter. But there's always going to be some compile time. I mean, there's a compile time cost to see plus plus 20 concepts. People have done a bunch of other stuff. There's always going to be some compile time cost to checking versus not checking, right? I fully agree with you.
+
+3
+00:01:42.000 --> 00:03:06.000
+It seemed like a strange complaint. It hadn't come up before. It hasn't come after. But that it was somehow an insolvable problem that the definition checking could not be done. And that back a little bit to what separate type checking means, you are type checking the implementation of a template against the constraints that it states. Now, C++ has all sorts of ways in which you can make a template behave differently. So imagine, for example, my template definition over some template like parameter T uses a vector of T. Now what happens when T becomes bool? You've kicked over to the partial specialization of vector. The partial specialization of vector could be completely unrelated to the generic primary template for vector.
+
+4
+00:03:06.000 --> 00:03:45.000
+And so if you have a language that has something like partial specialization, or where you want to be able to do overloading in sort of an ad hoc manner at template instantiation time, you cannot actually fully type check a template definition and be certain it's going to work in all cases. Because someone can just drop in an explicit specialization or a partial specialization of one of the template types it uses and things can break. So C++ OX concepts were able to do template definition checking using the primary templates and doing overload resolution essentially based on what knowledge it has of the template arguments and
+
+5
+00:03:45.000 --> 00:04:30.000
+their capabilities. Now, throughout the C++OX concepts process, we actually loosened the constraints and template instantiations a little bit. So, this is a deliberate decision in reaction to move semantics, actually, the addition of move semantics into the language, where the original definition of C++ OX concepts would say, when you pick an overload at template definition time for any operation, that is the overload that you use at instantiation time, no matter what. The change we made is that we redo overload resolution with the actual template arguments types that come in, the concrete ones at instantiation time. This is treated as a performance optimization because it
+
+6
+00:04:30.000 --> 00:05:04.000
+meant, for example, that if you're passing an R value here and an L value here, you could pick up an overload that took an R value on the right side and an L value on the left side, and that would have better performance than if you always pushed it through the constel value path. Right. We can cite that for you in the show notes to see the decisions. But that's a very explicit, we gave up some of the separate type checking to maintain the C++ performance model. And so it's true that you don't have perfection, but this kind of overloading is pretty rare,
+
+7
+00:05:04.000 --> 00:05:42.000
+and it's pretty rare that it actually breaks anything. So you still had the property that you had almost no instantiation time failures. They only really came in when you're doing funny overloading or partial specializations that don't line up with the primary templates. So, but is there a reason? Couldn't you just check all of the partial specializations? Wouldn't it just be like, there's no way to like exhaustively check? Isn't that trivially exponential?
+
+8
+00:05:42.000 --> 00:06:11.000
+I suppose so. And there's other constraints here too of, for example, what if you haven't seen the partial specialization at the time you check the template definition? Do you not consider it at instantiation time? Or do you admit the failures again? Yeah. I mean, I suppose good partial specializations shouldn't differ from the primary. It would just be nice if we had a language way to enforce that. Right.
+
+9
+00:06:11.000 --> 00:07:03.000
+We could have done that. So that, you know, it would be possible to say, okay, the primary template is itself like a concept, right? It describes an abstract interface and every specialization, whether partial or full, of that template needs to match that interface. That would be completely reasonable direction for the language to take that would help with this kind of problem. Right. The other answer is don't allow specialization, which is what Swift does, for example. Yeah, I think you probably could have done that, too. I mean, you might need different tools than what C++ has to be able to do. Partial specialization is just one of C++'s many janky versions of a pattern matching engine.
+
+10
+00:07:03.000 --> 00:07:19.000
+And there could have been other ways to have handled that but we may have had needed different tools than we would have had and as you said you have the same problem for an overload set too like if you have some weird overload that returns
+
+11
+00:07:19.000 --> 00:07:38.000
+something different okay I mean it's... I do in... I have seen plenty of partial specializations that do something different than the primary in some way and overload sets in which, you know, that do quirky things.
+
+12
+00:07:38.000 --> 00:08:27.000
+Usually it's mostly implementation details are not particularly important. I mean, I'm sure I can think of some cases where it's mostly implementation details are not particularly important. I mean, I'm sure I can think of some cases where it's mattered, but I could see how people could have that concern and could conflate that to claims that the checking is not suitable. I think it's a little – or I can see how that narrative got born, I guess is a way to put it. I don't agree with the narrative, but I could see how that narrative got born, I guess is a way to put it. I don't agree with the narrative, but I could see how the narrative got born. Yeah. I think to that, partly this is a, the perfect is the enemy of the good, right? Because for the vast majority of generic code, you write the separate type checking that C++ concepts had would probably work. And the vast majority of template instantiation back
+
+13
+00:08:27.000 --> 00:08:47.000
+traces that you get from something blowing up deep in the stack would have gone away. Because partial specializations, you could do them. We have them in some obvious places. But VectorBool sticks out because it's kind of the only weird one in the entire standard library. And most programmers don't do this. They have the one definition and they use it.
+
+14
+00:08:47.000 --> 00:09:14.000
+And so I think the benefits would have been common. Template instantiation backtraces would have become a very rare thing. Possibly made even rarer once people embrace the notion of, well, I'm using concepts. I'm getting all these benefits from it. I would have to give those up to do partial specialization here. I'll find another way. And it's those instantiation backtraces is really the root of all of the problematic diagnostics that we have. Yes, that's my view.
+
+15
+00:09:14.000 --> 00:10:43.000
+And the separate checking, I think, would have eliminated much of that pain and suffering that we experience today. And I mean, you make a good point that the failure mode of the checking that you just described is not one of, you know, you get bad code or a program that does quirky things. It's simply that the failure happens at a different point in the compilation process and that you maybe get a worse diagnostic, which seems anybody who may have influence, that probably needs to be updated or that page can be deleted because it seems like it was written in like 2012 and talks about things that have already happened. But it sounds like it wasn't just that the decision was made to take it out of C++ OX, but that the committee was like, we want to do something different. And that they rejected the design and it wasn't like we're going to take it out and come back to it.
+
+16
+00:10:43.000 --> 00:11:29.000
+It's like, we're going to take it out and we're going to do this concepts light thing. Is that more or less correct? Or was there ever really an effort after C++ OX to move forward with the C++ OX model? So I don't think it's reasonable to characterize it as the committee giving that level of direction. The committee decided to remove it from C++ OX based on these concerns. I think what really happened is the people that were pushing for C++ OX concepts, like myself, I'm first author on pretty much every one of these papers that I talked about, weren't interested in pursuing it further after it got removed. From personal history standpoint, Conor gave a pretty good
+
+17
+00:11:29.000 --> 00:12:19.000
+approximation. But, you know, by this time, I had joined Apple to work on this thing called Clang, which was barely a C parser with no code generation at the time I joined Apple. And my mission was go make it a good C++ compiler. And that is what I worked on. So I got to implement overloading and templates and initialization and everything. But the idea of going back and revisiting C++ OX concepts was not terribly appealing at the time. And, you know, just a handful of years later, Clang was succeeding. We were rolling it out through Apple's ecosystem and Google picked it up and was doing tons of work with it. We made the decision to start working on Swift, a new language.
+
+18
+00:12:19.000 --> 00:13:10.000
+Right. And so, at some point, a different group of people started working on the concepts light model. Well, let me ask you this. So I'm just assuming that you were a strong – there's five different ways of voting on things. I'm assuming you were a strong against on on removing c++ ox concepts from uh and the reason i ask is that is that sometimes with you know big controversial features like this sometimes the authors decide like yeah okay um we should take more time on this and so sometimes the answer isn't isn't that the author is opposed to this, but I had a feeling that in this case, no, you thought we should have shipped it. I thought we should have shipped it.
+
+19
+00:13:10.000 --> 00:13:46.000
+Yeah. I thought it was a very good model. All the programming we have done with that model at the time of updating the various algorithms to use it and playing around with like the Boost Graph Library, Conceptified, were very positive. It was a very nice model to work with. Since then, we took something very much like that model, and it became the Swift generic system where we got to clean up even more rough edges. And it's a wonderful model to work with. I think we should have shipped it, and any issues we could have ironed out over time if that was needed. So yeah, I was strongly against. I also had decided that if I lost the vote,
+
+20
+00:13:46.000 --> 00:14:12.000
+I wouldn't come back with concepts, even though I was still working on C++ full-time as a professional compiler developer for several years after that. And do you think C++ would have ended up any better positioned if C++ OX concepts had shipped in 11. A better position with respect to what?
+
+21
+00:14:12.000 --> 00:14:43.000
+With respect to sort of the next generation systems programming languages and like overall trends of the day and the general, you look at C++'s evolution versus other languages and it's maybe not moving quite as fast. It's not, you know, it had this resurgence after C++11, but do you think that the landscape of programming languages
+
+22
+00:14:43.000 --> 00:15:45.000
+or the popularity of C++ would be drastically different today if we shipped concepts in 11? I don't expect it would be drastically different. I mean, I do think that the newer languages have generic systems that were possibly inspired by C++ OX concepts and do a lot of the things that it did well. Like it is easier to write generic code in a language that has separate type checking for its generics. And a number of languages have proven this out for us. In that regard, yes, C++ would have been in a better place. But it seems like right now, you know, the concern around C++ is really around memory safety. And concepts would have done nothing there. Nothing at all. on concepts are the same people who are the primaries in the C++ contracts efforts and
+
+23
+00:15:45.000 --> 00:16:49.000
+the same people who are the people who think about safety in C++. And so I wonder if concepts had shipped in 11, maybe their efforts would have switched to modules and contracts earlier, maybe we would have gotten something like contracts in a, like by now, and maybe C++ would be in a better place. Maybe we would have been better positioned to respond to the growing need for memory safety than we are instead of this, uh, this long redesign effort and then missing 17 and barely making it into 20. This is actually a, it's a, you know, parallel universe mental exercise, but it is, I understand what Bryce is saying. Like it's, it's also, I, you haven't explicitly used these words, but it does seem like out of C plus plus OX failing to get in. And I also on a side thought on a little tangent when you were talking about all this, it does
+
+24
+00:16:49.000 --> 00:17:39.000
+strike me as unique to the C++ OX story of being kind of voted out. I don't know of any other proposal because there's been others like contracts that were, you know, 11th hour going in and then there was a vote and they weren't, that required an immense amount of work to kind of back out all of these changes that have been made to the standard library. Like, I don't know of any other, you know, proposal that necessitated that. And I think that that's actually like a unique property to this is that if it had just been, okay, we're not going to put this in, but it doesn't necessitate a bunch of work. There's going to be less like fallout. And that kind of ends the tangent to me adding to what Bryce was saying is that like, I don't think it was just, I don't want to, you know, throw people's names out there.
+
+25
+00:17:39.000 --> 00:18:42.000
+But definitely there was more that it was more than just you, Doug, that left sort of the C++ initiative. And like you said, you were still working on C++, you just didn't have the desire to go and go back to the committee with this. And then eventually, you know, another opportunity arose with a brand new language that, you know, obviously, a colleague of yours, Chris was working on. And, and then, you know, Dave Abrahams, as well, joined sort of that. And so then you got this all-star cast, a lot of who, you know, used to spend a lot of time and energy working on C++. So, it is interesting to think like what if concepts went in in 11 in the form that they were initially proposed, a bunch of energy wasn't spent on, you know, the next decade, getting it into C++ 20. And on top of that, the folks that are now working on other things that used to work on C++, what if they were still there? Like the combination of the time and energy spent on extra decade getting concepts in, if that was able to be put towards something else, and the people that were a part of C++ back then, you know, it's all just gonna
+
+26
+00:18:42.000 --> 00:19:28.000
+like, we don't live in that world. So, you know, it's more of a fun exercise than it is actually like, nothing's going to come of thinking what could have happened in this parallel universe. But it's the same thing when I like, what if Bill Gates had implemented, you know, his APL interpreter and put it on the PC, we'd be living in this world where you know every language was inspired by apl and not basic you know we don't live in that world but it is fun to think about what would have happened if that was the decision bill kate's made microsoft microsoft would have been bankrupt sorry connor we'll never know so one one of the reasons that i that i mentioned is hypothetical is so the c plus plus 11 uh went went long because it was a feature-based
+
+27
+00:19:28.000 --> 00:20:10.000
+release, not a schedule-based release. After C++11, famously called C++OX because they expected it to ship in the earlier decade. And it was a feature-based release, which means that we said, these are the things we want to ship and we'll ship the standard when those things are ready. And after that, we moved to a schedule based release where we shipped every three years. And my reading of that quote from iscpp.org was very intentional earlier. The last part of that was, and a radically simplified version, Concepts Lite will be part of the C++14 wave of deliverables as a technical specification. So after C++11, we did a few things. We moved to this schedule-based cycle of releasing every three years, and we got all
+
+28
+00:20:10.000 --> 00:21:38.000
+excited about technical specifications. And we also, this was the big library era where we put out a call that we want a giant standard library. Everybody come bring your proposals to the committee. And that period from like 2011 to 2016 or 17 was sort of like this C++ renaissance where the committee, you know, grew order of magnitude and size. C++ became very popular because C++11 had all these new features in it. The committee was inundated with proposals. And we started shipping all these technical specifications. And a lot of good things came out of that era. Buted enthusiasm. And it was followed by what I like to call the era of small library, which was the post C++17 period where the committee had a two-year backlog on processing things and features missed that kept missing the boat. And we spent tons of time on technical specifications that we shipped that nobody really implemented. And we never really got the field experience that we wanted
+
+29
+00:21:38.000 --> 00:22:41.000
+from technical specifications. And they just became a way to fast track forcing your thing into the standard. And it took us a while after C++11 to learn, like, what's a good cadence for us to ship at? And, like, how should we prioritize and focus on things? And I'm not claiming that the committee's figured that out yet, because I still have said many times in this podcast, I don't think we have a good evolution model. But we certainly have a better evolution model today than we had in that period of time. And one characteristic of that is that, you know, we didn't ship concepts in OX, and then we didn't ship it in 14, and then we didn't ship it in 17. And then we just barely shipped it in 20. And that additional decade was really unfortunate for C++. I mean, the schedule-based release cycle was really great.
+
+30
+00:22:41.000 --> 00:23:36.000
+It's been one of the things that has saved C++. One of the great innovations that Herb has brought to the process was that. But the period of time that it took for the committee to adapt to that and that sort of unchecked enthusiasm really did hurt us in some ways. And I don't think that it needed to take that long to ship it. Like, I don't think that the concepts needed to go to a TS. I think if like, concepts like could have been done and shipped it, Like if we were doing it today, I think we would have done it and shipped it in 14 or 17 and not in 20. But yeah, it's an interesting hypothetical that like as we said before,
+
+31
+00:23:36.000 --> 00:24:29.000
+like the perfect is the enemy of the good. I think C++ would have been far better off if we just shipped OX concepts and moved on to do other things because we had a lot of other work to be doing. And I also think the feature that we got is so watered down that spent the amount of time that it did on concepts if we'd got something closer to C++ OX concepts. Uh, but because we got something that doesn't really give me much of what I want, um, and I think has a syntax that's far harder for me to understand and teach to people.
+
+32
+00:24:29.000 --> 00:25:14.000
+And that makes me just want to avoid the feature other than just as a fancy form of Sphenae. And I don't get any of the diagnostic or checking benefits out of it. It doesn't feel like it was a good use of the time. And that's unfortunate because I do think that C++ really could have benefited from a proper generic programming interface. Yeah. I don't know how many questions were in the last like 15 minutes of Bryce, then me, then Bryce, but I feel like we should let Doug respond to whatever questions you do recall from the last 15 minutes. I'm not even sure where to pick up the thread here. So I certainly agree with you that given all of the time that was spent on concepts, what we got, I think, is unfortunate.
+
+33
+00:25:14.000 --> 00:25:37.000
+I was rereading the 2003 paper to see what our goals were. And separate type checking is the one goal. That is the one thing that if we had it, you could even throw out concept maps. If you had separate type checking, it would have made generic programming in C++ an order of magnitude easier. Yeah. Right. It would no longer be the domain of experts to use templates and use them well.
+
+34
+00:25:37.000 --> 00:26:17.000
+It would be something that every programmer just does because they need the abstraction. And we have seen it work in other languages. And it could have been there in C++. And whether it still can be, I was thinking about this as can it still be fixed? And it's an interesting question of whether it can. So I did actually write a paper 10 years ago. It was my last attempt at trying to get separate type checking into concepts light that said basically take the concepts and your constraints, generate some archetypes from them and try to instantiate the template. And if it fails, show the error messages so that the,
+
+35
+00:26:17.000 --> 00:26:51.000
+I don't know if this archetypes thing came out of a boost, boost concept check library. I should explain it. I was about to say, because there were two things that we haven't covered yet, and it was archetypes and axioms. And maybe archetypes is a good thing to start with. Archetypes is a good one. So an archetype is essentially a fresh concrete type. And the only operations that are on that concrete type are the operations that are explained by the concept requirements for it. So if you were to say, hey, I have an algorithm that takes an
+
+36
+00:26:51.000 --> 00:27:46.000
+arbitrary container and that element is equatable. Now, you could create an archetype for the container that is just a plain old class, has no state, has no operations other than what the container type says it needs. So it needs to have a begin and an end, maybe, right? Let's keep this simple. So it has begin and end, those return iterators. It creates a fresh archetype for an iterator. What's that? Well, it has the dereference operator, the plus plus operator, it's equatable. And so you build this little set of types that are completely minimal. They only match the requirements that are placed in the requires clause for that one specific constrained template. Now, then you go try to instantiate the template with those archetypes. is good, if it's only using the operations that are specified in your requirements, and it's only
+
+37
+00:27:46.000 --> 00:28:30.000
+calling into other templates that have the same set of requirements or a subset of them, then your instantiation will succeed. Great. You have now separately type checked your template definition. The reason I propose this is it is a reasonable simplification to the C++ OX model. It takes away all of the nice things that you get out of concept maps, for sure. Right. You can no longer do cool remapping syntax to say, oh, you know, I can make the matrix type from this library work as a graph type for this library, which is my favorite example of cool things you can do with concept maps. You don't get to do any of the fancy things, but you get separate type checking. You get the simplification that comes from having separate type checking.
+
+38
+00:28:30.000 --> 00:28:58.000
+And it's a lot easier to specify and implement because all you have to say is how do I map the requirements of my concept over to an archetype? And that's a mechanical translation. It's a little easier with pseudosignatures than it is with usage patterns, but we could define what it means for usage patterns. So maybe that model, maybe you could retrofit that. It's hard. You would break all the code that has concepts now because I guarantee you nearly all of it has some subtle bug.
+
+39
+00:28:58.000 --> 00:29:45.000
+Every template definition that has a concept constraint on it has a subtle bug. But you could possibly get to that model where you have separate type checking in a much more limited form. Yeah. Sadly, I think that ship has sailed. But axioms, you should explain the axioms. Axioms, yes. Axioms were a feature in the C++ OX concepts design that essentially the idea was you could describe semantic constraints on your concepts. And so this might be things like, for example, if you have an equatable concept, right? It lets you just compare two Ts and say whether they're equal. You would have an axiom inside that concept that said,
+
+40
+00:29:45.000 --> 00:30:32.000
+well, if you have a value X, X is equal to X. And if you have two values, X and Y, then X equals Y is equivalent to Y equals X. The standard properties you'd expect. You also have the transitive property that X is Y and Y is Z, therefore X is equal to Z. And in C++ OX concepts, you could actually write axiom. It was a new keyword and write out these semantic properties. The idea and the hope behind axioms is that this would provide valuable information to both users to understand like what their types need to do to actually conform to the concept, and that it could be used by static checkers and optimizers and so on to go and make sure that the code was more correct
+
+41
+00:30:32.000 --> 00:30:56.000
+or to improve performance by letting you do high-level optimizations. It was almost in the family of things that contracts might be in. Yes, absolutely. Yeah, because one perhaps important thing that wasn't captured, I don't know if we've captured thus far, is that concepts have both syntactic and semantic requirements.
+
+42
+00:30:56.000 --> 00:31:28.000
+And the language feature that we have today can only check the syntactic requirements, but that does not mean that the semantic requirements are not important. Like we talked a little bit before about like, you know, the view concept is something syntactic requirements, but that does not mean that the semantic requirements are not important. Like we talked a little bit before about like, you know, the view concept is something that has semantic requirements that are very important, like that it has O1, you know, copying, and a bunch of other operations have important complexity requirements that essentially mean that these things are cheap to copy around and to pass around.
+
+43
+00:31:28.000 --> 00:32:19.000
+And that's what distinguishes a view from a range. And that's not something that we can syntactically distinguish. And that's why you have to opt in. Your range is to opt in to being a view using some trait. It does amuse me how frequently I see people having to define C++20 concepts using some trait mechanism or just using the new things like alias templates. There's a bunch of, I just saw a talk the other day by Gaspar where he was showing some trick using some alias templates to define a concept. Or concepts that have to be defined in terms of type traits. Surely a true sign of our success. Traits have been used since the early STL as the way to opt into behavior and state.
+
+44
+00:32:19.000 --> 00:32:59.000
+This is what concept maps did. You can think of concept maps as essentially formalizing the notion of traits with some bells and whistles and actual language integration rather than being a specialization-based template trick. Right. And so for anybody who might be thinking like, oh, this concept map thing sounds heavy-handed. Like, I don't have to want to, like, with the concepts we have, we don't have to explicitly opt into things. Well, you know, you look at how many concepts are written in a lot of libraries. There are still a lot of cases where you have to explicitly opt into something. There's just no formalized way to do it. Concepts maps would have given us that.
+
+45
+00:32:59.000 --> 00:33:04.000
+And with the auto concepts, you would have gotten all of the implicitness that you want. Be sure to check these show notes either in your podcast app or at ADSP, the podcast.com for links to anything we mentioned in today's episode, as well as a link to a GitHub discussion where you can leave thoughts, comments and questions. Thanks for listening. We hope you enjoyed and have a great day. Low quality, high quantity. That is the tagline of our podcast. It's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

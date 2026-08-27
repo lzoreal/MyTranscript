@@ -1,0 +1,165 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:31.000
+And he asked the question of like, you know, does C++ have a good way to take an item out of a sequence and put it back somewhere else? That was literally the question. I'm like, I can't believe this has landed in my lap on my screen. I'm like, I can't believe I'm about to say this. That's a rotate. And so it's literally the Euclid's GCD. It's just subtraction is swap ranges. And then you just run Euclid's GCD. It's just subtraction is swap ranges. And then you design Euclid's algorithm, which is very beautiful, right?
+
+2
+00:00:31.000 --> 00:01:21.000
+It's this beautiful connection between a mathematic notation and this operation. Welcome to ADSP, the podcast, episode 202, recorded on September 26, 2024. My name is Connor, and today with my co-host, Ben, we chat with Sean Parent about stood rotate, GCD, elements of programming from mathematics to generic programming and more. All righty. We are, I believe, recording now episode 202. I think I failed to mention it on episode 201, but I'm considering this season two. Season one was a reasonable 200 episodes,
+
+3
+00:01:21.000 --> 00:01:59.000
+and now we've started season two after almost four years. And we're going to be trying some different things. You know, after four years, we gotta, we gotta change things up a bit, but we had episode 199. It was entitled stood rotate. And Bryce and I fumbled our way through trying to talk about how would you implement a rotate and miss the fact that the number of operations on the linear algorithm is basically half the length. Realized that with like five minutes left in the podcast recording. We apologize to Sean, understanding that if he did listen to this, he would be disappointed. I believe you were disappointed, but you accepted our apology on Twitter.
+
+4
+00:01:59.000 --> 00:02:32.000
+And you were one of three people. So you tweeted Sean saying that at least you apologized. In STL, there are three algorithms used for rotate, Fletcher and Silver for random access, three reverses for bidirectional, the one we discussed, and then Grease and Mills for forward iterators. And you mentioned that Grease and Mills is Euclid's subtractive GCD algorithm. Ben DM'd me and mentioned the same thing I believe about the forward iterator algorithm. And then Tristan also tweeted and I think linked to a paper talking about the forward
+
+5
+00:02:32.000 --> 00:03:30.000
+iterator version. So now we've brought on two of the three people that messaged me. Tristan, don't worry. We have, I think, lined up. We're going to bring him back on to talk about the sort of changes and recent updates to Flux. We were actually supposed to record when I was in London back in August, but we ended up meeting up at his local pub in, oh my goodness, I'm going to forget the name of the town that is just on the outside of London. But we met up twice, actually. And I got to see, we actually went on a bird walk. If you can guess at it, I might be able to recognize it. If you've got like. Oh, it's, it's, Iick rickman's rickman's worth i believe yeah that's it that'll be it which is yeah not in london but adjacent to london it's slightly up the a40 i'm gonna say something like that the m40 it's south it's uh a North Northwest. Yes. I subwayed and we can actually blame Taylor Swift for the reason that we didn't record
+
+6
+00:03:30.000 --> 00:04:06.000
+because she was performing at Wembley stadium and I ended up getting out there like an hour later because of all the Swift fans that were taking the underground. And so we'll blame Taylor Swift. And I apologize to any listeners that are big fans uh but it is the case that her concert and her fans delayed me getting out there anyways i'm gonna throw it over to to you two now i'm not sure if sean you want to start first um because i did not go ahead and do any research on these other uh implementations i figured i would just learn via inviting you on and, uh, yeah,
+
+7
+00:04:06.000 --> 00:04:52.000
+let me get maybe your thoughts while you were listening to it. How upset were you? And, uh, once, once again, Bryce and I both apologize. Uh, yeah, well, it was annoying because I think both of you guys probably have elements of programming and all of these algorithms are covered in, in EOP. Uh, uh, so you could have just like cracked the book and taken a look. The other piece of it is anytime you're dealing with a permutation algorithm, every permutation algorithm decomposes into a set of cycles. And what that means is if you think about, I can remove one element, and then if I know what piece goes into that element, I move that piece into the hole and that leaves another hole. And so something moves into that hole and it keeps going until the
+
+8
+00:04:52.000 --> 00:05:52.000
+one element that I took out goes into the hole. And so that creates a cycle going around. And so kind of the worst case is if you're doing a reverse for the number of cycles, because you're going to have every swap is a trivial cycle of two elements, right? It turns out that when you're doing a rotate, that the number of cycles you have is the GCD of the length of the two halves right so so that's how the cycles decompose that's why you have the complexity of the random axis algorithm that's why the complexity of that is driven by gcd and so you know your worst case then is where the ranges are are equal length and which case rotate is just a swap ranges and every cycle is just a swap but that algorithm if you're given random access minimizes the number
+
+9
+00:05:52.000 --> 00:06:41.000
+of moves it goes through each cycle and so every element is is only is only moved into its final position so you're going to have if you have n elements you're going to have, if you have n elements, you're going to have n moves plus one for each cycle. So it's going to be n moves plus GCD of nm moves. So that's how you can do that. Now, the interesting thing is the complexity of the forward iterator case and the complexity of the three reverses case is the same number of moves. Just clarification there, Sean. Do you mean that they're the same number of moves as each other or as the random access case? As each other.
+
+10
+00:06:41.000 --> 00:07:28.000
+Okay. Which is going to be more because you're you're breaking it down all into all into swaps and so if you're doing three reverses right then then you're going to to uh you're going to reverse each half or each each segment and then reverse the whole and and so each of those uh reverses is n over swaps. And so you're going to have n over 2 plus n plus m swaps. When you're doing it with forward iterators, you're swapping elements. How to describe this? So you're basically going to swap ranges when the two are equal, are
+
+11
+00:07:28.000 --> 00:07:44.000
+unequal halves. And so you're going to be swapping ranges up until you hit the midpoint. And then that leaves you a new piece. And then you're going to swap that piece and then swap that piece. Okay. And so you're going to end up swapping every element, calling swap for
+
+12
+00:07:44.000 --> 00:08:53.000
+every element once. And so that's the same as the three rotates. Now, I suspect, but I haven't tested it, that the forward algorithm these days probably wins. I don't know that we could make the change in STL because we have the guarantees on number of moves for the random access case. But just because of locality and caches, it's much faster to iterate through a sequence always going forward. Always moving forward. And so almost positive that that always wins over three reverses, which is the bidirectional iterator case. And I would be very surprised if you have a low-cost move if it didn't win even over the random access case, which would have fewer move operations but horrible locality because you're you're tracing cycles all all through your sequence um so even worse locality than the than the random access case for something like thrust
+
+13
+00:08:53.000 --> 00:09:23.000
+which apparently is missing rotate which is a crime how is it possible to miss rotate it's a fundamental building block right if you're missing, how are you implementing a bunch of stuff which depends on rotate? In defense of the good folks at NVIDIA, David Olson, who we interviewed on that CPP North episode for the first 10 or 12 minutes, he pinged me after the episode went live and said, this is on a GitHub issue
+
+14
+00:09:23.000 --> 00:10:08.000
+that was filed in like 2012 or something like that when in the early days and then they pointed out that these algorithms are missing and we should add them and it's actually because of that because the stdpar mvc++ compiler that implements you know you'd write c++ and can easily parallelize it by just passing a flag. There's a couple algorithms that actually aren't supported and rotate is one of them because thrust is what it lowers down onto. But anyways, we we'll, we're getting to it, Bryce and I, we're going to fix it. Or by we, I mean, probably, you know, David and friends, but you know, in it by episode 400, this is an ADSP promise, you know, another four years from now, there'll definitely be a thrust rotate.
+
+15
+00:10:08.000 --> 00:10:58.000
+So rotate, I was going to say rotate is one of these algorithms that really has a kind of, people experience a semantic gap. In general, because in C++ the algorithms are called what they do at a very low level rather than what they do at a domain level. So partial sort is not called top end, for example. And rotate is one of these others that people see the explanation of what it does and they go away and they think, well, I don't ever do that in my code. And getting to the realization that yes, we actually do that all the time is one of the reasons why, you know, C++ seasoning was such a eyeopening moment for many folks.
+
+16
+00:10:58.000 --> 00:11:29.000
+And Connor, your talks about algorithm intuition similarly. The funniest thing that ever happened to me on twitter was where one of my friends it was uh alan wolf who's on graphics twitter and and uh he was we he and i used to work together and he asked the question of like you know does c-plus have a good way to uh to take an item out of a sequence and put it back somewhere else that was literally the question i'm like i can't believe this has landed in my lap on my screen of a sequence and put it back somewhere else? That was literally the question. I'm like, I can't believe this has landed in my lap on my screen.
+
+17
+00:11:29.000 --> 00:11:47.000
+I'm like, I can't believe I'm about to say this. That's a rotate. Yeah, that's right. You just answer that one with the link to Connor's cut of my seasoning talk. Which the seasoning talk is 10 years old now, so I can't believe we're still talking about it. Yeah, but it is a fundamental rotate.
+
+18
+00:11:47.000 --> 00:12:19.000
+And if you look at, you know, Connor's an array programming guy, and a rotate, you know, has its own operator in APL. And it is a very fundamental algorithm and building block. So it definitely deserves to be in thrust. You know, the interesting thing is like the three reverses is probably the most trivially parallelizable because reverse itself, all of your cycles are independent. So you can run all of those.
+
+19
+00:12:19.000 --> 00:12:57.000
+You can chunk up those cycles however you want and run them all independently. I think the forward iterator case to run in parallel would require a little more thought, but again, it decomposes all into swaps. So I think you could break it up pretty well. I've never attempted it, but I think doing a fast parallel rotate is interesting. Is that true about the three reverse implementation? Because you do the two n over two or wherever your midpoint is.
+
+20
+00:12:57.000 --> 00:13:28.000
+You do those two reverses. But then the final reverse on the whole sequence, isn't that dependent on the previous two? Well, yeah. final reverse on the whole sequence isn't that dependent on the previous two well yeah but it's not that you do like the first two well you do do the first two reverses you do them in parallel but it's not the fact that you can do a re that you can do those two reverses simultaneously it's that an individual reverse individual has no there's no dependency between each cycle. You can break that and do it on a thousand cores. It stays a parallel.
+
+21
+00:13:28.000 --> 00:13:44.000
+Right. It doesn't suffer from the communication issue that scanned, or suffers the wrong word, but it doesn't have that property of a scan that you're constantly needing to refer back and figure out a way to propagate that information. Reverse doesn't have that. Every swap is data parallel with every other swap.
+
+22
+00:13:44.000 --> 00:14:23.000
+Right. Right. The random access algorithm, minimizing the number of moves in parallel gets more challenging because you need to identify the start points of all of your cycles. And then in theory, you could run each of those cycles in parallel. But again, I'm not sure if the memory access patterns would kill the gains you'd get off of that. The other thing is, in some cases, you're going to run into the case where the number of cycles is one. And so, in which case, you can't parallelize it. You've got to run through the whole thing.
+
+23
+00:14:23.000 --> 00:15:13.000
+At least I don't know of a way to parallelize that so it's interesting again my intuition says that the forward algorithm probably probably wins in the parallel case probably wins in all cases uh but that's without you know you have to implement them all in benchmark it right i, machines these days are nuts for breaking intuition. So I had a similar experience when I was listening to the episode. I was listening and I thought, OK, well, they're explaining the hand flipping algorithm. Any minute now, they're going to explain how the forward iterator algorithm is basically GCD algorithm. And they're going to explain how that works. And then I noticed that it was at like 28 minutes of 30 in the episode, and I'm like, maybe they're not going to get to it.
+
+24
+00:15:13.000 --> 00:15:52.000
+Right. For the listener, if you're having trouble viewing why rotate is GCD, well, first, GCD is greatest common divisor, and Euclid's algorithm for greatest common divisor is you subtract the smaller number from the bigger number. If the result is now smaller, then you flip the two and you just keep going. So it's just iterative subtraction, right, until the parts are equal size, and then you stop. And so if you think of swap ranges as your subtraction operation, then you can say, okay, I've got two unequal
+
+25
+00:15:52.000 --> 00:16:28.000
+size sequences and I can swap ranges which will stop when I hit the end of the shorter segment. And so that's subtracting the shorter segment from the shorter segment. And so that's subtracting the shorter segment from the longer segment. Okay. And so now what I end up with after I do that is I'm done with the beginning up to the point where I stopped. And now I have a piece left of which I stopped somewhere halfway through there. And so that gives me my three points, my three numbers to
+
+26
+00:16:28.000 --> 00:17:05.000
+continue my subtraction. And so it's literally the Euclid's GCD, it's just subtraction is swap ranges. And then you just run Euclid's algorithm. Which is very beautiful, right? It's this beautiful connection between a mathematic notation and this and this operation and that's why yeah gcd keeps popping out right right right the number of cycles is gcd number of cycles and and and so so the complexity of the random axis algorithm it gets described in gcd because there's there's no more minimal way to do it
+
+27
+00:17:05.000 --> 00:17:45.000
+yeah so i always think of algorithms recursively i think that's at least the right way to think about algorithms you know when you code them you can remove the recursion but to me the right way to think about algorithms is recursively and that's exactly what you just said short like like what do you do with rotate well you put you put the things at the beginning of the range first right you rotate something into the beginning of the range and then it stops at some point then what are you left with and you rotate effectively that is smaller than the old one and so recursively that that works and that is gcd as you said right so this is i don't know i feel bad admitting this on air especially after having had zach on because i think actually there's
+
+28
+00:17:45.000 --> 00:18:23.000
+another thing to point out we have our two most frequent guests so you guys are just putting uh you know more distance on the rest of our guests but uh we had zach on i think he's up there for a number of episodes um and he said the way to do it is to read eop elements of programming available free online link in the show notes three times you you you know you don't skim through it but you read through it quickly without stopping to digest everything and that doesn't take too long then you go through a second time and that's the one where you treat it like a textbook you know work through things try to understand them and then you read it a third and final time at the same speed you read it the first time I have not
+
+29
+00:18:23.000 --> 00:18:40.000
+actually fully read EOP. I'm not sure if, you know, Sean's heart is breaking right now, but there's two things that have been high on my list of things to do. I know both of you have done them. Obviously, Sean's read EOP and so has Ben, but also too, Ben, you have watched the,
+
+30
+00:18:40.000 --> 00:19:28.000
+what is it? It's the four algorithmic journeys that came out of A9. Is that the correct title of the? what is it it's the four algorithmic journeys that was that came out of a9 is that that is that the correct title of the uh i think yes it's algorithmic journeys um yeah there's a hundred hours plus of a9 video content presentations from alex stepanov within amazon a9 they are i would highly recommend them to everyone. Those Algorithmic Journeys videos are the video version, if you like, of the second book, which is From Mathematics to Generic Programming. And that book in particular explores GCD a lot. Yes. GCD comes up repeatedly in it. And Sean, I know that you gave, if not attended, some of those.
+
+31
+00:19:28.000 --> 00:20:06.000
+I definitely know you were a guest speaker, I think, as one of those talks. That is Programming Conversations, Lecture 5, Part 2. I'm not sure if it's Part 1 or 2, maybe both. It's the one that you give the extended version of the Google Rotate story, I believe, in that edition, which I think we've talked about on this podcast. But I've never said that I actually haven't watched all of them, even though for years now I've had it linked as a bookmark. But the problem is, is that my curiosity is too vast that I. So I've seen little pieces. I've definitely seen the 2002, is it, Stepanov talk that I've cited in a couple, which I think he came and
+
+32
+00:20:06.000 --> 00:21:08.000
+gave at Adobe. How many of those did you see that were given at A9 slash, I assume you just know most of that stuff, probably from conversations directly with Alex. Well, yeah, so I don't know, I attended a few of them. I watched, I think all of them online, you know, plus Alex and I worked largely in the same room together for eight years. So I'm I'm I'm pretty familiar with most of most of his material there. I did link in the show notes to Alex's talk on or I linked to it on Twitter, which that will be in the show notes, to my favorite talk of all time, which is Alex's GCD talk. It's the history of GCD, the last 2,500 years. And that's one of the journeys from mathematics to generic programming, which I love that title. And Alex views it as generic programming is the next step in mathematics, is the arc there.
+
+33
+00:21:08.000 --> 00:21:57.000
+That mathematicians have been working on algorithms and how you solve problems for centuries and kind of moving that into the computer domain as part of it. And mathematics we think of as being relatively abstract, and generic programming is carrying those mathematical abstractions into the programming space. You know, that book in particular for the listener and for you, Connor, pick up a copy, read it. That's, compared to EOP, it's a much easier read. It's not a textbook. It's stories. And so it's a lot of history. It's a little bit of math, and a little bit of programming, and they're stories. They're tracing the origin of fundamental algorithms through history,
+
+34
+00:21:57.000 --> 00:22:39.000
+and looking at the mathematicians who extended or improved on the algorithm through history, and what their motivation was, why they were dealing with that particular algorithm at that particular time in history, and what their realization was, and then what the ongoing ramifications of that are. So it's interesting. And even things like GCD, there are still open problems open problems in mathematics well and i'm blanking on the name now but there was the the israeli researcher in the late 60s or early 70s who developed a version of gcd through necessity which i'm blanking on his name yeah uh joseph stein
+
+35
+00:22:39.000 --> 00:23:46.000
+stein yes the stein gcd so it's the stein algorithm for GCD, and it's a binary GCD. So it's what you, you know, if you call a GCD on your computer, it's probably what's executing on your computer. The interesting thing is the Euclidean algorithm defines what's known as the Euclidean domain, which is for any kind of abstract number system, if GCD works, if the GCD algorithm terminates this incremental subtraction, if you always end up at zero, basically, by doing incremental subtraction, then that numeric system is in the Euclidean domain. And so the interesting thing is that Stein's algorithm does not appear to be, the numbers for which the Stein algorithm works don't appear to be exactly the same set of numbers for which the Euclidean algorithm works. And so the open question is,
+
+36
+00:23:46.000 --> 00:24:10.000
+is the Stein domain the same as the Euclidean domain? Is it a superset of the Euclidean domain? Is it a subset of the Euclidean domain? And I haven't tracked it closely. I think, you know, last time I looked, there was one proof of something that was in the Stein domain that wasn't Euclidean and one proof of the opposite. So there's this section that there there's some some ven overlap uh but they both
+
+37
+00:24:10.000 --> 00:25:17.000
+have have have unique bounds but over time there's been a number of proofs that have just failed right right they people have submitted proofs on that and then then under peer review, the proofs collapse. So as far as I know, it's still an open problem. But, you know, it's pretty amazing. And because of Alex bringing all of this up, and Alex actually managed to contact Joseph Stein, who at least as of a decade ago was was still alive and he was just like a you know engineer working in israel who came up with this algorithm and it got published and went everywhere and he was completely unaware that that there was this whole branch of mathematics research that he triggered. So, wow. When, when you, when, when you say that the, you know, subset or superset of things that it works for, I imagine this doesn't impact like the correctness of what's happening on
+
+38
+00:25:17.000 --> 00:25:48.000
+your hardware. If, if that's the algorithm that's taking, is it the things for like for certain types that it doesn't work or like, what is, what are the edge cases? So, so it's, you know, if you think about number systems like integers, OK, both algorithms work fine for integers. Both algorithms work fine for reals. And then you have things like polynomials with real coefficients or or just complex numbers or. Right. Or. OK, so. So that's what I mean by different types of numbers, right?
+
+39
+00:25:48.000 --> 00:26:51.000
+Right. Right, and there's an infinite number of ways that you can create new domains for numbers, right? There are sets of them that are useful, but you can make up your own set of rules, and that becomes a number. So if you're dealing much in the abstract algebra space, that's what you're trying to do. And the Euclidean domain is odd in that there's no better definition than the set of numbers for which the Euclid algorithm terminates. Okay? Okay. You can have algorithms that uphold the other axioms of Euclid's algorithm, but there's no axiom better than just the algorithm must terminate. Right. So it's kind of an extrinsic definition. There's nothing intrinsic to say. It's just kind of like the fifth postulate, you know, it is because it is.
+
+40
+00:26:51.000 --> 00:27:32.000
+Right. And that makes it very difficult. There's no single axiom that you can point to and say, oh, so long as my number system satisfies X, then it's within the Euclidean domain. Because the definition of it within the Euclidean domain is so long as Euclid's algorithm terminates. And that gets to be very interesting to try to prove or disprove for any two numbers within a given domain, does Euclid's algorithm terminate or not? And that's an open question. There's no general rule to it. There are many proofs for many different domain instances. Yes. Be sure to check these show notes either in your podcast app or at adspthepodcast.com
+
+41
+00:27:32.000 --> 00:27:37.000
+for links to anything we mentioned in today's episode, as well as a link to a GitHub discussion where you can leave thoughts, comments, and questions. Thanks for listening. We hope you enjoyed and have a great day. I am the anti-brace. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

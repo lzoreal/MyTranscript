@@ -1,0 +1,269 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:28.000
+Tersity empowers economical expression. And if you have economical expression, it allows you to be simpler longer for more complexity. We've talked about before how algorithms in C++ are so important. There's a lot of people that say, why do I have to go learn these algorithms? A for loop is good enough. And we've advocated on this podcast that algorithms elevate your vocabulary. If algorithms are your vocabulary, notation is the analog of that for thought. Cheers.
+
+2
+00:00:28.000 --> 00:01:05.000
+Cheers. That was amazing. Welcome to ADSP, the podcast, episode 197, recorded on August 21st, 2024. My name is Connor, and today I interview Aaron Hsu on-site at the Eagle Pub in the University of Cambridge. In today's episode, we chat about the importance of algorithms and tersity in programming languages. Cheers. Cheers. All right. All right.
+
+3
+00:01:05.000 --> 00:01:23.000
+All right. Get into the serious stuff. We're back, folks. It's episode, I didn't even mention what episode it was last time. It's episode, I think, 197 now. We just got done recording 196. We're back with Aaron Hsu, famous for his GPU code defunds compiler. We just finished talking about algorithms.
+
+4
+00:01:23.000 --> 00:01:55.000
+We might have to make it a recurring thing every few months. We'll bring you back to talk about algorithm implementations on the CPU versus the GPU. And you can choose the one in advance that you want to talk about because it's – I think it is interesting to talk about the tradeoffs. And that's an interesting thing about the dialog implementations. A lot of time they have these kind of upfront heuristic things. They'll do like a single pass reduction to collect some kind of like Boolean predicate data. And then from there they'll dispatch to one of two or three algorithms.
+
+5
+00:01:55.000 --> 00:02:14.000
+Or 15. Or 15. Well, we're going to have to talk about those. And so it's like when you talk, like I know that I've talked to both Adam and Marshall, who both, I mean, Adam still is working in Dialog and Marshall used to, about what is the algorithm implementation. They're like, well, it depends on your data. Anyways, a topic for another day.
+
+6
+00:02:14.000 --> 00:02:40.000
+The question that we're going to talk about now, as previewed in 196, episode 196, we'll link it in the show notes. Aaron recently talked at LambdaConf. I know you've given several talks in years past. And I can't actually remember which talk it was. I'll link it in the show notes. Aaron recently talked at LambdaConf. I know you've given several talks in years past. And I can't actually remember which talk it was. I'll link both of them. But there was a key moment where you kind of made an offhand comment. And it was that tersity is fundamental.
+
+7
+00:02:40.000 --> 00:03:09.000
+It underpins the power of APL. And without the tersity of APL, you don't have APL. Yep. And this is something that I believe inside, deep in my core. But arguing that just because something's terse, it makes it powerful is something that I don't know how to pitch that argument. Whether it's APL or just having some language that's on the command line, whether it's you know, sed, awk, there's a lot of other languages jq for json that aren't
+
+8
+00:03:09.000 --> 00:03:27.000
+necessarily APL, but there's a power to, yeah, grep there's a power, even regex, to these languages that are the opposite of verbose and you made this comment and you are much more articulate when it comes to advocating for the things that you believe in.
+
+9
+00:03:27.000 --> 00:04:26.000
+So this is my question, is why? And why should people care about and think about the verbosity of their code and whether they can make it terser to make it more powerful? All right, here we go. Yeah, we got to settle in for something like this because this is not an easy question to strongly support because there's so much institutional momentum around the concept of quote-unquote readable code as juxtaposed against tersity and this idea of abstraction and additive code and a lot of assumptions that people make assuming certain things about just the reality of software engineering that would force you into the conclusion that tersity is a dangerous tool right and the closest we get in most arguments is that, well, you would like your code to be smaller,
+
+10
+00:04:26.000 --> 00:05:03.000
+up to the point where you start not violating certain types of style rules that are usually pretty verbose. So I think the first thing we need to understand is why is it so hard for people to intuitively embrace the idea of tarsity, right? And in this respect, we have to look at the history of the wisdom of what good code should look like, right? And so in the past, you have the 60s, the 70s, the Wild West of programming. People don't really care too much
+
+11
+00:05:03.000 --> 00:05:36.000
+about how your code looks. What they care about is just solving some stinking problems right like just get anything to work i don't care if you have to self-rewrite your own memory to fit it on the punch card make the thing work right and the and in those spaces cleverness ruled the day right because you had to be really clever figuring out exactly what it is you're doing on these very esoteric architectures, each of which is bespoke. You're working down at the machine level, even if you're at a high-level language, right? But something happens, right? Something shifts.
+
+12
+00:05:36.000 --> 00:06:21.000
+And we begin to scale our programs up. And we don't have tools to scale software up. We don't know the tools. We don't have a theory for how to scale software up. We don't know the tools. We don't have a theory for how to scale software. And this spawns off the modern software engineering craze, where people are trying to figure out how do we make bigger and bigger pieces of software? How do we make them run? How do we make them reliable? How do we stop having things blow up in our faces, sometimes literally, right? And this whole wave, I would say, really strongly gets a lot of its push initially from what we call imperative programming today, but which at the time was called structured programming. So we get the idea that you can use structured programming to get a handle on complexity.
+
+13
+00:06:21.000 --> 00:07:12.000
+And from the very beginning, people recognized that management of complexity was the biggest challenge in software. That people have understood. And everybody since then has understood things like incremental development, the need for breaking things down into small pieces, the need to somehow absorb this information in a way that's accessible to the human mind, right? To solve these problems. But structured programming programming imperative programming comes with it the dykstra school of thought which is this idea of formal methods around programming the idea that you can be very rigorous about how you think about the structure of your programs and sort of prove important things you get tony hoare who develops the hoare around state and managing memory and things like that. And this spawns a whole base of early axiomatic systems on how to reason about programs.
+
+14
+00:07:12.000 --> 00:07:36.000
+And they all are based on structured programming, right? So the entire ethos of how to make reliable code stems from the structured programming models, which then turn into object-oriented models. All of this that you're saying, it doesn't necessitate verbosity. It doesn't? Well, it kind of does, but not for the reason you might think, right? The verbosity comes from the core abstractions
+
+15
+00:07:36.000 --> 00:08:11.000
+that became foundational at that time, right? So the core abstractions at that time were what you would see in C. What eventually became C, these are the core structured programming foundations that you get in your early Fortran, ALGOL, C, COBOL-type programs. You get these if-then-else clauses, these switch statements, these loops, the while loop, the for loop. And there were arguments about which ones were better, but it all put your data at a certain level of abstraction. And it was really the scalar abstraction level, right?
+
+16
+00:08:11.000 --> 00:08:38.000
+And all of this was very operational and organized around the machines at the time, which had very limited register sets on scalar operations. And in the 80s, there was a little bit of a parallel computation wave. People were trying to come up with massively parallel systems. And that, ironically, was the time at which APL also had a lot of uptake and was one of the dominant languages. He said APL. For a second, I thought he said JPL.
+
+17
+00:08:38.000 --> 00:09:20.000
+And I was like, that's NASA. JPL actually is one of the still harbingers of the grand software engineering formalism tradition. But if you look at all of that stuff, you get to this point of we need to be able to reason about this code in a certain way. And so there's this institution of software engineering that latches on to structured programming and object-oriented programming around all of this. And so there's this core foundational abstraction that's chosen. latches onto structured programming and object-oriented programming around all of this. And so there's this core foundational abstraction that's chosen. And it's chosen, and if you look at the arguments between that and APL at the time,
+
+18
+00:09:20.000 --> 00:09:50.000
+there's this, a lesson begins to emerge that, well, this other type of code is more readable, right? And people start saying, well, APL is a write-only language. So terse languages, the representatives of terse languages, begin to get this reputation of spaghetti code. And spaghetti code is one of these things that everybody's terrified of at the time. And nobody really has theory to prove any of this. It's just who chooses what to do. And there's this giant success that people are seeing with software engineering. And during the 90s, object-oriented programming was supposed to save the world in some sense, right? And you get Java, you get these
+
+19
+00:09:50.000 --> 00:10:32.000
+garbage collectors, you get all these systems that support this abstraction model. And all of that begins to then develop into what does good code look like? And the vast majority of people arguing about what good code looks like are already steeped in this core foundational abstraction that they built up. And in that foundation, what you're dealing with is these modules that quickly exceed the human capacity for reasoning around them, right? So people start to then say, oh, well, these formal methods can't be handled by human minds at scale. This is one of the classic problems that people have. So then you begin to get this principle, this proverb in your head, that we will never be able to understand the full system.
+
+20
+00:10:32.000 --> 00:11:00.000
+And since we can never understand the full system, the key is to make sure that we break it apart in such a way that we never have to think about the whole system, right? Think small, think modular. And then we start thinking about as we grow software teams, we still have this sort of Taylor-esque attitude towards software management, which is very hierarchical, very control-oriented, very much write this specification and then have programmers implement it. Well, if you're going to write a specification and have programmers
+
+21
+00:11:00.000 --> 00:11:35.000
+implement it, you have to divvy up your programming work in such a way that each programmer can really freely independently operate on given pieces of the software without ever really understanding the whole thing. And that comes from the management perspective. And then you get this idea that to make this clean code, you have to design these abstractions and these architectures to separate everything out so that we can change everything. And this was sort of a way forward. And if you get to that point, you sort of swallowed those ideas. Well, you can't be terse about that stuff
+
+22
+00:11:35.000 --> 00:12:02.000
+because there's so many points in there. You're, you're really, you're at a dangerous point. If you're, you're, you start to, you start wanting to not be clever, and you have systems that begin to grow very quickly because the inherent complexity of the problem also starts inheriting inherent complexity in the architecture. So your architectures start to get big. Your object hierarchies start to get big. Everything starts to sort of grow faster.
+
+23
+00:12:02.000 --> 00:12:28.000
+And that means that you get these clean code books, like Bob Martin's clean code book. And these all are sort of antithetical to a terse programming style. And these are lauded as the best way to do everything. So everybody seems to get this idea that tersity is a bad thing. And they don't know why, but they have this strong institutional opinion that that's the way to go.
+
+24
+00:12:28.000 --> 00:12:56.000
+Now, all of that is this big drive to push it, and that means that it's really hard to change an idea like that because Tersity is, to suggest Ters code, almost flies in the face of all of that expectation built up over decades that we're going to work with. So in order to undermine that idea, you really have to go back to a question of how you're going to approach the entire process of designing software to begin with. Going all the way back to imperative. Walk it back.
+
+25
+00:12:56.000 --> 00:13:33.000
+To recap to you, what I heard, and I might miss a couple points, but you start with the rise of imperative programming back in the day called structural programming. That leads ultimately to abstraction, which leads to more abstraction, which leads to an ability to not understand the full program, which leads to modularization. And you didn't say microservices, but that's what I was kind of thinking. That's one of the next things up. And at this point, everything's become so fractured. You're not going to be terse about it. It's going to end up being verbose. And it all started with this paradigm of imperative programming
+
+26
+00:13:33.000 --> 00:13:55.000
+that led to this kind of stuff. And I think where it gets the inflection point, if you will, is the idea of black box information hiding as object-oriented programming promotes it. So the idea that you create these objects that hide state in a way that is mechanically enforced is sort of, I think, the inflection point for this whole space.
+
+27
+00:13:55.000 --> 00:14:14.000
+And famously, Knuth didn't like this idea. It's one of his pet peeves that everybody sort of disagrees with him on. He doesn't like black box libraries. He wants editable, reusable code. So he likes reusable code that you can edit. So he sort of doesn't want that information hiding at the source level. Wait, so this is across two episodes.
+
+28
+00:14:14.000 --> 00:14:38.000
+The second time Knuth has come up, was he an APL fan? No, because what he liked to do is play with algorithms at the bit levels. And at the time, APL was not suitable for doing the kinds of low-level programming that he wanted. He thought, he famously, I think, said, famous, eh, it's famous to me. He said APL is a terrific problem-solving language and not the kind of programming language he wants to do because he likes to solve programming problems.
+
+29
+00:14:38.000 --> 00:15:04.000
+He likes to play with CPUs and algorithms. And he, and APL is the thing that takes all of the algorithms he might make and makes them trivially accessible to the problem solver. And the problem solver is more interested in solving the problem than in worrying about whether he's represented this bit or that bit in exactly the precise way that's going to map onto the exact hardware machine. Whereas Knuth just goes goo-goo-ga-ga over that kind of stuff.
+
+30
+00:15:04.000 --> 00:15:20.000
+Even inventing his own microcode more or less and instruction set to do what he wants to do so we've got to go back to square one and we have to ask ourselves are there alternatives
+
+31
+00:15:20.000 --> 00:15:37.000
+to managing complexity because complexity is always going to be a problem. We have to manage that, right? And so if we look at the ways that humans managed complexity in the past, sometimes there is this concept of modularization and other things, right?
+
+32
+00:15:37.000 --> 00:16:02.000
+But there's another concept that actually comes closer to the way we think the computers work, and that's our mathematical history. And our mathematical history is the exact opposite. Math still has the problem of complexity, having to break problems down, having to separate concerns, solve issues. But they also have the need to leverage a lot of human thought about really formal things, right?
+
+33
+00:16:02.000 --> 00:16:30.000
+So it shifts the idea from construction models, which software engineering sort of embraced the construction metaphor, to the metaphor of reasoning about concepts, or reasoning about objects, reasoning about ideas, coming up with properties and statements and things like this. And if you look at the historical development of formal thought in humans over time, when they're trying to communicate with one another, and things like this. And if you look at the historical development of formal thought in humans over time, when they're trying to communicate with one another, all of that
+
+34
+00:16:30.000 --> 00:17:12.000
+tends to evolve towards something that looks like math notation. And one of the hallmarks that makes math notation work is its tersity. The reason somebody uses math notation instead of just writing out the expression that could be equally formal in natural language is that it's way shorter and it's much easier to chunk into patterns for the human mind. And so if we look at like cognitive science research and we look at HCI research and things like that, and we look at how the mind engages with information ontologies, this is something we have research on now that we didn't have research on when this initial debate was happening. And we see that humans don't do well
+
+35
+00:17:12.000 --> 00:17:47.000
+with trying to reason about abstract frameworks that can't be visualized. The ability for your typical human to reason about very complex graphs in their head and structures is really bad. That's where the common seven working items in memory kind of thing comes from. There's a general issue. And so how do humans get over that hump when they have to deal with massive complexity in the world? Well, all of our mental processing power tends to go into a type of
+
+36
+00:17:47.000 --> 00:18:29.000
+pattern recognition space, right? A lot of what we do is pattern recognition linking to various ideas. That's where our neural network concepts came from in the computer science world. That's where case-based reasoning began to get in the early symbolic AI space. That's where we recognize the idea of chunking in memory research, where humans, in order to think about complex topics, they will chunk more complex things into units that can be stored and referenced as a single atomic entity. And it helps to build these graphs in your head that you can think of at different abstraction layers through atomic units and these chunks this sounds similar to the trick of trying to memorize some series of digits
+
+37
+00:18:29.000 --> 00:19:00.000
+into like if you split it a nine digit sequence into three three digit numbers and memorize 123 versus a couple other numbers that's an easier way to memorize instead of just nine single digits or what you can do with numbers is you can translate groups of numbers into words. Right. And then translate those words into a story. And that's leveraging more processing power than the raw memorization skills. So it's leveraging more of your brain, makes it easier to remember, and it makes it easier to recall.
+
+38
+00:19:00.000 --> 00:19:31.000
+And here's something that people have forgotten about is when it's easier to memorize in your head, it's easier to immediately reason about over time. Because the connections that you're, it's sort of like caching, right? If you have to go out to disk every time you need to add two registers together, you're really slow. But if those registers are sitting right there and you can just add two registers together, that's blazingly fast. So the human mind has the same issue, right? These are levels of cache. And most people in programming right now have accepted this idea
+
+39
+00:19:31.000 --> 00:20:01.000
+that there's not enough processing power in their minds, and so therefore we just have to store everything on disk. Right, and constantly reading docs and stuff like that. What they're doing is they're essentially constantly invalidating cache in their head. So they're not leveraging the caches that exist in their heads. And this is where deep learning comes in. Whereas if you have something that you've memorized in your head and you can connect that pattern to a lot of other patterns, you now have the ability to reason with that pattern across a lot of spaces way faster
+
+40
+00:20:01.000 --> 00:20:33.000
+than if you took the equivalent concept and had to remember it by looking it up somewhere in an API reference or something else. Now, how do you apply that to programming? Well, if we look at how it's applied in math, you'll notice that there's a lot of core abstractions that mathematicians repeatedly use over and over and over across many, many different domains. Sets. Maybe if you're a homotopy type there, use types. Natural numbers, reals, all these things, these concepts all connect to each other and they form the basis of a lot of mathematical thought.
+
+41
+00:20:33.000 --> 00:20:59.000
+And so if you want to reason about some other thing, you encode it into sets, symbols, numbers, you know, these other things that you now have this huge toolbox memorized in your head, ready to go. And if you look at mathematicians, they have all these theorems, they have all these practices, all these manipulations that they can do in their heads and they're ready to go. Right. And it's, and that's how they think and reason about programs. And that's how they solve the
+
+42
+00:20:59.000 --> 00:21:34.000
+complexity problem because they translate an idea into a representation that they have this massive toolbox of things that are easy for them to memorize that they can use but if you took a bunch of these theorems and you didn't have the formulas ready to go it's much harder to apply them that's why a lot of mathematicians use the formulas or derive the formulas before they apply the theorem they might know the theorem but then they're going to derive the formula and then they'll go apply it because that's what is easier to work with. And so if we translate this to computer science, if we want to achieve the same type of reasoning power,
+
+43
+00:21:34.000 --> 00:22:03.000
+expand that reasoning power in, that's the notational reasoning power that Iverson was talking about. That appeal to a symbolic language that allows us to express ideas concisely and then leverage the natural pattern matching symbolic reasoning that we have in our heads to connect those ideas with lots of other ideas because they share a common domain and they share a common symbolic language over which we can manipulate those ideas. And so we do that in computer science.
+
+44
+00:22:03.000 --> 00:22:50.000
+The only way to do that is with terse languages. The more verbose your language gets, the harder it is for your mind to see the patterns, connect the patterns, and leverage them internally to think about problems. So it's like you're constantly invalidating your cache, because that verbose code is too big to naturally fit within the tightest cache regions of your mind. Whereas a terse language much more naturally connects in with all of the caches in your mind and allows you to reason more easily about those problems, especially over time, right? Because over time, those small terse expressions are reusable over and over and over again across multiple problem domains if those domains get encoded into the same base abstraction.
+
+45
+00:22:50.000 --> 00:23:19.000
+So in APL, this is the array abstraction. In Lisp, this is the links list cons model of programming. Both of them, if you can translate your ideas into those data representations, now you've got this giant suite of tools that you can apply to that data representation that you already know how to use and you can begin to see connections between ideas. And what this does is this shifts the complexity problem in a different way. What it does is it elevates,
+
+46
+00:23:19.000 --> 00:23:59.000
+it elevates the base layer of complexity that an individual can manage. And so it doesn't invalidate all of the lessons learned in some of the software engineering stuff. But what it does is it shifts the scope. So the scope of what an individual person or mind can take on suddenly becomes much larger problem domains. Right? larger problem domains, right? And so now we don't need the overhead of the software engineering abstractions for a huge number of programs because they're too trivial to need that anymore because our human minds can handle it now. So by using Tersity to expand the range of problems
+
+47
+00:23:59.000 --> 00:24:41.000
+that we can tackle as single people, we expand the range that we can tackle as a whole. And we tackle the complexity problem basically by removing the, making it easier for the human to tackle that complexity directly using the human mind. That's where the tools of thought come into play. So then we still have to do software engineering once we exceed that level, right? There's still, when two people have to share an idea over space and time, and it begins to exceed the capacity for the trivial, we now have to add a little bit more to manage it. But we're talking about the, like, to use my compiler as an example, most compilers have obscene amounts of abstraction in them
+
+48
+00:24:41.000 --> 00:25:12.000
+because they need them to manage these ideas over the base abstraction layer that they're working with. But since I'm writing my compiler using APL, I don't need most of those abstractions. So all I need to do is occasionally create a function abstraction for what we would normally think of as a large module or multiple sub-modules of an idea that's linking against other concepts. And I can collapse all of that down to the idea of a function abstraction. That's a much simpler concept than
+
+49
+00:25:12.000 --> 00:25:44.000
+a visitor pattern of a particular class with a particular sub-class derived from this particular sub-AST structure that's going to then be applied using these loops and these for loops and this recursion. All of those concepts are necessary to do the similar thing for a single pass. Whereas for me, I have a single function that might contain 20 compiler passes, and each of those compiler passes needs no additional abstraction, and it's a few lines of code. And so from an informational theoretical standpoint, it's much more efficient, and therefore it's a lot easier for our minds to engage with,
+
+50
+00:25:44.000 --> 00:26:00.000
+because it maps patterns that are much easier for our minds to engage with. Because it maps patterns that are much easier to reuse efficiently, quickly internally. And so that still means we have to be aware of what software engineering has given us. You know, these ideas of arranging your data in such a way that you've got independence,
+
+51
+00:26:00.000 --> 00:26:16.000
+doing all this. But we can often do it without needing the extra overheads that are traditionally needed if we embrace Tersity now we have to develop skills around how we use Tersity effectively we have to understand what we're gaining
+
+52
+00:26:16.000 --> 00:26:41.000
+from using Tersity and apply it in that fashion just like you cannot over abstract with object hires and generics and type classes or whatever in your oop language if you do that you end up with spaghetti code just like anybody else and it's horrible code you have to learn how to use your tools effectively and tersity is another one of those tools you need to learn to use effectively but it allows you to obviate the need for a whole
+
+53
+00:26:41.000 --> 00:27:34.000
+lot of other tools by just leveraging one simpler tool if you learn how to use it i mean take a bow that was i've i've been sitting here like deep in thought while listening to you cheers cheers that was amazing we're at a table that has a reservation in eight minutes so we'll wrap this up and land this plane before them but that every once in a while, you have a conversation where it lights up your brain because almost everything you were saying there made me think about, I'll have to iterate on this quote that I have in my head, but there's something like on ADSP, we've talked about before how algorithms in C++ are so important. There's a lot of people that say, why do I have to go learn these algorithms? A for loop is good enough. And we've advocated on this podcast that algorithms elevate your vocabulary. And there's an analogy here between everything you were saying. And in the back of
+
+54
+00:27:34.000 --> 00:28:30.000
+my head, I'm like, it's making me think that what algorithms in C++ do for your vocabulary, tersity does for your ability to comprehend and solve problems. So like the same way that a vocabulary of algorithms like rotate and reverse and reduce and scan, that vocabulary makes it easier for you to communicate with your coworkers. Like if I have to say a for loop that has an if thing that checks, no, it's a find if, it's a reduction. The same thing that that vocabulary does for you when communicating verbally and even in code with your coworkers, the same thing Tersity does for you when it comes to architecture and solving problems and your ability to look at a screen of code and see the whole solution. Even if there's a lot of stuff going on, you can see it on a single screen or in a single function, whereas in an imperative paradigm,
+
+55
+00:28:30.000 --> 00:28:53.000
+you're going to need all this abstraction. You might not even, in the imperative style, need the abstraction, but that's just the way that idiomatically it's done. You're using classes and stuff. There's some analogy there that it's really making me think that we had a two-hour discussion the other day about whether libraries are necessary. And I wasn't fully convinced or at all convinced that we don't need them.
+
+56
+00:28:53.000 --> 00:29:39.000
+But everything you said over the last 15 minutes or so, I can see how you get to a less of a need for libraries. If algorithms are your vocabulary, notation is the analog of that for thought or something like that. Well, the vocabulary and the tersity empower each other. So if you have a well-selected vocabulary that is expressive and general, then if it's an economical vocabulary, then a terse notation for using those vocabulary terms allows you to chain them together in patterns that allow you to use them more effectively, more easily, and scales their applicability farther.
+
+57
+00:29:39.000 --> 00:30:00.000
+Right, right, right. And you used the word elevate at one point, and I was literally thinking that. You're elevating not just your ability to think in your head, but your ability to iterate and solve. Because it's one of my biggest complaints when swapping between APL and C++ is I can try out. I literally have a talk called Algorithms as a Tool of Thought where I show 10 or 11 different. Great talk, by the way. Great talk.
+
+58
+00:30:00.000 --> 00:30:24.000
+You provided solution number nine or something. And it's like 10 different solutions in 30 minutes in a slide deck. All of them, I think the most was six characters, and most of them are three or four or five. In C++, you can't give, I mean, you probably could, but you're burning through those solutions because every single one of those primitives in APL is hopefully the equivalent of an algorithm in C++,
+
+59
+00:30:24.000 --> 00:30:43.000
+but not all of them, so you're going to end up spelling out some boilerplate, and the making of that talk in APL, it's an order of magnitude, if not less, than the equivalent preparation for C++ code, because coding the equivalents, they don't just... The namespaces on a single operation in the C++ code
+
+60
+00:30:43.000 --> 00:31:15.000
+already exceeds the length of the solution in APL. And just the difficulty of presenting that kind of code to an audience is hugely magnified. Yeah. And there's so much more. Just the namespaces, like when it comes to C++, I'm definitely an algorithm expert. And there's like four different now, you need to know the iterator algorithms from C++ 98, plus the ones that were added in 14, 17. Then in 20, you get the ranges overloads of them. Then we get views, which technically are not algorithms, but you would call them. Anyway, so there's like four or five different things.
+
+61
+00:31:15.000 --> 00:31:51.000
+And then there's the parallel algorithms that I didn't even mention. It is impossible for a beginner to keep that stuff in their head. I've been doing this since like 2014. Whereas in APL, it was designed well from the get-go this is a question of economy right is tersity empowers economical expression and if you have economical expression it allows you to be simpler longer for more complexity right you can stay simple for more complex problems if you haven't the ability to be economical with your vocabulary, with your domain, with your expression, your notation, everything. Whereas as things become more difficult,
+
+62
+00:31:51.000 --> 00:32:22.000
+you need more to get a handle on it. And as you get more, you need more. And C++ is the poster child of needing more to do more. And they make the right choice for what they need to do because of the constraints they're working under, but it leads to a proliferation of vocabulary and syntax and names and everything, whereas that's all fundamentally unnecessary, even if it's practically required for them as a design problem
+
+63
+00:32:22.000 --> 00:33:03.000
+at the space that they're at right now. Is it possible for a non-symbolic language to gain the power of tersity? It is possible, but it requires an intentional rejection of the tools that the languages provide you, which is very difficult because you can't use all those syntactic extras. You have to strip it down and simplify your expressions so that you can try to take advantage of at least a little bit of tersity. You can get a lot of advantages without going all the way to the symbols, but there isn't a really strong inflection point that you hit really quickly if you don't leverage symbols to the full effect
+
+64
+00:33:03.000 --> 00:33:35.000
+because there's a big difference between a page of code, a line of code, and a couple of pages of code. And every time you double or triple your size, you are cutting out a massive amount of work that you can do, right? So in my compiler, four lines of code is a huge difference between that and, say, four lines of code is a huge difference between that and like, say, 20 lines of code. So you can write some really nice, small, clean C++ code, but you're only going partway there and you're still going to hit really hard barriers until
+
+65
+00:33:35.000 --> 00:34:06.000
+you sort of swallow the entire concept, you know? And some people just are not going to want to swallow that concept, but that's where the biggest power lies. And that's why math notation inevitably needs its symbols. You can't really do the math without the symbols. People would just invent more symbols at some point. Because once you get to a certain point of doing real work, the symbols are required to achieve the control over complexity that you want. Well, this has been amazing. I'm going to have fun editing this
+
+66
+00:34:06.000 --> 00:34:18.000
+because I'm going to be deep in thought again while I edit this. Thanks for letting me rant. This was the goal and it was achieved. Thank you so much. We'll do this again sometime. Absolutely. Be sure to check these show notes
+
+67
+00:34:18.000 --> 00:34:23.000
+either in your podcast app or at ADSPthepodcast.com for links to anything we mentioned in today's episode as well as a link to a GitHub discussion where you can leave thoughts, comments, and questions. Thanks for listening. We hope you enjoyed and have a great day. Low quality, high quantity. That is the tagline of our podcast. It's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

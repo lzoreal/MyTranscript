@@ -1,0 +1,133 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:31.000
+The first thing that should come to mind is an algorithm called adjacent transform, or at least that's what comes to mind for me, because this is one of the most fundamental algorithms for performing transforms. That's not a basic transform. Your basic transformer map is applying a unary operation to a single element at a time. And then you have your binary transforms where you're performing binary operations on two different sequences of the same length, but that was our two-range-stead transform or zip transform that we talked about when calculating exact matches. And the inverse operation that we want here
+
+2
+00:00:31.000 --> 00:01:28.000
+is an inverse plus scan. And your plus scan is your partial sum. And so you're getting the inverse of that, which is adjacent difference. So we have the correct algorithm, in my opinion, stencil, adjacent transform, or adjacent map if you're in Haskell. But we also have access to the adjacent difference, which is what we actually want in this case, but we get access to that by inverting a plus scan, which is the whole reason behind adjacent difference in the first place. Welcome to ADSP, the podcast, episode 271 recorded on January 29th, 2026. My name is Connor, and today I chat about the algorithms and combinators behind the mastermind game, including a very beautiful inverse algorithm.
+
+3
+00:01:28.000 --> 00:02:35.000
+Hello, ADSP listeners. It is currently January 29th at just after 5 p. Eastern Standard Time and was it four hours ago I was outside and minus 12 feels like minus 20 degrees Celsius weather which in Fahrenheit for our American listeners is 10 Fahrenheit feels like minus four Fahrenheit. I was outside running freezing. my hands off and I was listening to a couple podcasts and I realized that I did not have any recorded conversations for tomorrow's episode because I've been so busy. There was an internal conference at NVIDIA this week and there's been a lot on the go. It slipped my mind. I was supposed to
+
+4
+00:02:35.000 --> 00:03:22.000
+organize a recording with Ben. That did not. happen. And we've only got a couple hours left. So we're back with another solo recording. I mentioned in the last couple episodes that there was going to be a podcast called the podcast purge. But we're going to do that. We're going to record that later. And maybe we won't even record it. But I have something else I want to talk about, which I can't remember if it was with Bryce or with Ben, that in the last month, I was programming the solution to the mastermind game, and I came across a beautiful, beautiful application of an inverse algorithm.
+
+5
+00:03:22.000 --> 00:03:55.000
+And so this episode will be entitled Mastermind Algorithms, and I'll explain the game. If you've seen one of my talks or Amar Shah's talk, you'll already know this game, or potentially I'm assuming, I don't know, in how many countries this game, exists, but probably 50% of folks have played this game at some point. But anyways, that's what today's solo episode is going to be about. We'll see how long this runs for. It'll probably be a shorter episode, but I think it's pretty fantastic when I realized you could use an inverse
+
+6
+00:03:55.000 --> 00:04:39.000
+algorithm to solve this problem a little bit more beautifully. So Mastermind is a game that is played by two people. There is a code maker and a code breaker. And you have eight colors to typically to choose from, but for the purposes of programming this problem, I use the numbers one to eight. Usually it's like red, orange, yellow, blue, whatever, eight colors, but numbers, colors, they work just as well. And in the physical game, you choose a four color code. Now, you can use duplicate colors, so your code can be four reds in a row. You can use all unique colors. It can be red, orange, yellow, green. You can use two reds, two oranges, et cetera. and the goal is that I think there's like 10 or so guesses,
+
+7
+00:04:39.000 --> 00:05:11.000
+and the code breaker has to guess the code within that number of guesses. So not dissimilar. Honestly, I'm pretty sure wordal was inspired by Mastermind. So instead of having random colors and a random sequence, you have a set of 2,000 plus or minus words and only a certain, it has to be a valid word in order for it to be a wordal possibility. whereas in Mastermind, it can be any combination permutation of those eight colors, including duplicate colors.
+
+8
+00:05:11.000 --> 00:05:53.000
+And the information that you get with each guess is the exact same information you get with Wordle. Instead of having green and yellow to indicate correct letters in the correct spot and wrong letters in the wrong spot, you usually have a red and white pin that goes beside your clue. So honestly, yeah, Wordle, I did not think about Wordle when I started talking about this. but Wordle clearly is a, you know, hybrid version of Scrabble and Mastermind. And in the 2014 Strange Loop Talk, which I have referenced in many of my talks and many of my podcast episodes, Amarshaw gave a talk called Point Free or Die.
+
+9
+00:05:53.000 --> 00:06:15.000
+I think the sub-tagline is Tacit Programming and Beyond. And in this talk, he solves the solution to exact, matches using the Blackbird combinator, which is composing a unary function after a binary function. So unary and binary meaning a function that takes one
+
+10
+00:06:15.000 --> 00:06:31.000
+argument and a function that takes two arguments. So the and the two inputs to this algorithm for exact matches are your code and your guess. And if we're staying in C++ land, a binary operation would be a two
+
+11
+00:06:31.000 --> 00:07:03.000
+range stood transfer. If you're in pre-range land, or if you are in range land post-C++20, you have access to something called zip transform. It was called zip width in range V3, I believe. And this takes two ranges in a binary operation and does an element-wise computation of whether or not your elements are equal to each other. So the binary operation is equal. And then once you have this sequence of bullions, your unary operation that follows
+
+12
+00:07:03.000 --> 00:07:46.000
+is a summation. So you could do that with a stud accumulate or I believe there's a, you know, stood ranges fold left first that you can use. So this is the solution to exact matches. It's pretty straightforward. You do an element-wise comparison to see if elements are equal to each other and then a summation after that. In array languages, this is just three characters. I covered this in my twin algorithms talk from, I believe it was, CPP North 2020? I can't remember. Sounds about right, though, plus or minus a year. And I didn't cover the algorithm or solution for solving what is called near matches.
+
+13
+00:07:46.000 --> 00:08:19.000
+So this is the equivalent of the yellow. So the exact matches is the equivalent of the green and wordle, and the near matches is the equivalent of the yellow. And the naive way to solve near matches is to just remove the letters or numbers that correspond to your exact matches and then do an algorithm that amounts to a frequencies or value counts depending on your language. Closure calls it frequencies. Pandas and libraries, similar to pandas call it value counts.
+
+14
+00:08:19.000 --> 00:09:07.000
+In Python, there's a collection called counter, which returns you a hash map where the keys are the unique values, and the values attached to those keys are the counts, hence why some languages call this value counts. And this is also referred to as a frequency map. Anyways, there's a bunch of different ways in different languages to kind of get the counts. And then once you have a quote-unquote frequency map or counter-collection, you just do an intersection of the key value pairs, or if you're in an array language, the way that I have solved this is you do a table or an outer product with the values one to eight, and you do this with both your code and your guess, and then that's going to give you an array of eight elements, and if you do a row-wise
+
+15
+00:09:07.000 --> 00:09:55.000
+reduction on the outer product of this, you end up with the counts corresponding to each of the values, one through eight. And then if you do a element-wise min across the eight-element-element frequency array for both the code and the guess, you're going to end up with the number of elements that are in the wrong location after you've removed the exact matches. And so this is, it's not trivial, but it's not super complicated. And after that, you have your exact matches, your near matches, and you're good to go. You basically just return whatever format the problem requires, you can return these two values. And at some point when I was solving this, in the last month, I realized having to do this filtering or removal of the exact matches
+
+16
+00:09:55.000 --> 00:10:45.000
+before we do this kind of frequency map or outer product frequency array on the remaining letters or characters is a little bit irritating. So what if you, instead of calculating exact and near, you calculate exact and all, meaning both exact and near? And that's just basically a simplified version of the near matches because if you don't remove the exact matches when you do this frequency map, the exact matches are going to be included in the total of the frequency map or frequency array. And so then you have exact all and you can back out the near by subtracting from four the count that you got from your all calculation. And this is where the beauty of this inverse operation that I'm about to talk about.
+
+17
+00:10:45.000 --> 00:11:21.000
+comes in because at the end of the day, what you need is the exact matches, the near matches, and then the misses, because the information that you want to convey is basically a red or a green for an exact match, a white or a yellow for a near match, and then nothing or X's for no matches. So you don't actually need the all number, but it's easier to calculate the all number, and then we can back out the near number from the all number. And I think the way that I initially thought about this is that you just subtract all from four, and then that gives you near.
+
+18
+00:11:21.000 --> 00:11:52.000
+But that's not nice. That's not nice, folks. So what I ended up doing is if you put the values for all and exact in a three element array. So say we have one exact match, two near matches, so three matches overall for all, you're going to end up with an array that is four, three, and one. But the array that we want backed out of that is we want one miss, two near matches, and one exact match.
+
+19
+00:11:52.000 --> 00:12:17.000
+So you're starting off with the array four, three, one, and you want the array one two one two one two near matches and one exact match. And the first thing that should come to mind is an algorithm called adjacent transform, or at least that's what comes to mind for me, because this is one of the most fundamental algorithms for performing transforms. That's not a basic transform. Your basic transformer map is applying a unary operation
+
+20
+00:12:17.000 --> 00:12:33.000
+to single element at a time. And then you have your binary transforms where you're performing binary operations on two different sequences of the same length, but that was our two-range-stead transform or zip-transform that we talked about when calculating exact matches. But then after that, there's a third type of transform
+
+21
+00:12:33.000 --> 00:13:15.000
+that people don't, some people know about it, but not enough people know about it. It's the adjacent transform. It was initially called adjacent difference in C++98, but that's a terrible name. We've covered that before. Don't encode the name of your binary operation into the name of your algorithm because you can do lots of things with adjacent difference that have nothing to do with subtraction, the default binary operation. The problem with adjacent difference is, there's a bunch of problems, the name we just talked about. But on top of that, the output type, the type of your output sequence is limited to be the type of your input sequence because they copy the first value of your input sequence to be the
+
+22
+00:13:15.000 --> 00:13:58.000
+first value of the output sequence. So you're type constrained. And so really the first value of the output sequence isn't the application of a binary operation to any two elements. It's just, it's just the first value of your input sequence. And then after that, they applied the binary operations. And I talked with Chris DeBella a while ago about this because he's studied Stepanov's algorithms and apparently the motivation for it was round-tripping. The relationship between adjacent difference and partial sum, the scan algorithm in C++-908, was that you were supposed to be able to go back and forth between them. And I never thought that was a good argument because of the fact that you're, you know, type constraining yourself and also too, I think in
+
+23
+00:13:58.000 --> 00:14:28.000
+general when you are doing an adjacent transform or an adjacent map. You, it just by definition, you end up with one less element. I've talked to Phineas Porter about this, and that's how the prior algorithm works in Q. Same as adjacent difference. Anyways, there's differing camps on what's the correct behavior. But this is all to say that the first algorithm that came to mind was adjacent transform. But adjacent transform returns you n minus one elements. And if you remember the problem, you want to go from 4, 3, 1, 2.
+
+24
+00:14:28.000 --> 00:15:05.000
+to 1-21. And therefore, you don't actually want adjacent transform here. Otherwise, you have to kind of append some value. So in this case, you actually want adjacent difference. However, in the language I was solving this in Wiiwa, you have the adjacent transform in the form of an algorithm called stencil. And when you provide stencil with a binary operation, it is exactly the adjacent transform in C++23. So it's returning you n-1 elements. However, they have something in Wiiwa, and a lot of array languages have this. We talked about it, I believe, on the way to Venice. It was part of the three amazing things about array languages that you should check out.
+
+25
+00:15:05.000 --> 00:15:36.000
+And one of them was inverse operations. And so typically in array languages, there's something called a power operator where you can raise an algorithm or a primitive to the power. So if you want to do something two, three times, you just put it to the power of two or three. But you can also put it to the power of negative one, which then turns that operation into an inverse operation. And the inverse operation that we want here is an inverse plus scan. And your plus scan is your partial sum. And so you're getting the inverse of that, which is adjacent difference.
+
+26
+00:15:36.000 --> 00:16:17.000
+So we have the correct algorithm, in my opinion, stencil adjacent transform or adjacent map if you're in Haskell. But we also have access to the adjacent difference, which is what we actually want in this case, but we get access to that by inverting a plus scan, which is the whole reason behind adjacent difference in the first place because we wanted to be able to round trip. So round tripping, the motivation for designing, in my opinion, a flawed algorithm adjacent difference, we get access to that via the inverse plus scan. You've got an inverse modifier. It's absolutely beautiful, folks. So we're not in Wi-Wa. You don't actually have to put something to the power of negative
+
+27
+00:16:17.000 --> 00:17:00.000
+one. They just have an inverse operation that they call un. So it reads un-plus scan, which is basically adjacent difference. Now, you might be thinking, How does doing an unplus scan on 431 get you one to one to one? You have to reverse the 431 to be 1, 3,4, and then you're going to copy 1 to be your first element. Then 3 minus 1 is 2, then 4 minus 3 is 1, and you end up with 1, 2, 1. So the code actually reads unplus scan reverse of your 3 element array, which you form by coupling 4 and the result of all an exact applied to your code and your guess, and you're having to use the fork, the phi one combinator in this case because you are applying all and exact diatically.
+
+28
+00:17:00.000 --> 00:17:34.000
+A rare use of the Phi-1 diatic fork. A little bit of combinator there for you, folks. So we've got the B-1 combinator in exact. We've got both, which is the psi combinator, aka over in all, because you're doing your frequency map on both of your arrays, your code and your guess. And then we've got the diatic fork, the phi-1 combinator. Fantastic, folks. An un-plus scan, which it just brought joy. It brought joy to me, folks, because I always in the back of my mind think about how I look up to stepping off so much, and I understand
+
+29
+00:17:34.000 --> 00:18:07.000
+the motivation of wanting to round-trip. There's a nice kind of symmetry there, but I just fundamentally disagree that the ultimate generic version of a binary operation applied to adjacent elements, you shouldn't be copying that first element to the output sequence. It should be returning you n-1 elements, but you can get access to that round-tripping with an inverse modifier. Call it whatever you want. It's called undo in BQN. It's called un-in-we-we-W. It's called nothing in APL because they just do power, negative one.
+
+30
+00:18:07.000 --> 00:18:20.000
+Fantastic, folks. Absolutely fantastic. We went 20 minutes. We'll see how I edit this down. Hope that gave you something to think about. We got the combinators, check out commendatory logic.com. Go check out Amar Shah's Point Free or Die Talk. If you haven't.
+
+31
+00:18:20.000 --> 00:18:39.000
+You can also check out the twin algorithms talk. Talks about how I fell in love with array languages. Lots to think about folks. Unplus scan is a better version of adjacent difference. And we've got everything we want. We got everything we want. We got the generic adjacent transform in the form of stencil. And we've got adjacent difference in the form of an unpluss scan.
+
+32
+00:18:39.000 --> 00:18:57.000
+All right, folks. Next week you'll hear from Ben and I together. Until then, have a good one. Be sure to check these show notes, either in your podcast app or at ADSP thepodcast.com for links to anything we mentioned. in today's episode, as well as a link to a get-up discussion where you can leave thoughts, comments, and questions. Thanks for listening. We hope you enjoyed, and have a great day.
+
+33
+00:18:57.000 --> 00:19:02.000
+Low quality, high quantity. That is the tagline of our podcast. It's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

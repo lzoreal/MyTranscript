@@ -1,0 +1,257 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:30.000
+And then also whenever you are at the first tile and you want to copy the first element into the back of the array, you also need to make sure that the first tile or the last tile has already been read because you would be overwriting its space. And so you basically need to guard against those things. But isn't it just like a scan? In what way? That like I'm just moving, well, at least some part of it is I'm just moving information down. I'm just shifting information down. It's just like if you think about it, it's like,
+
+2
+00:00:30.000 --> 00:00:45.000
+Like a shift is definitely just a scan. This is just a shift. It's not just a shift. It's like a shift left for one partition, though, and a shift right for the other partition. So you can't do this with a scan, right? What, what, will you explain that to me? Like, if you're doing a one rotate,
+
+3
+00:00:45.000 --> 00:01:19.000
+the first element goes to the back. Sure, you can consider that a shift, like a shift right. But then every other element is going left. And like, by definition, how are you going to get the second piece of information in the first spot with the scan? Welcome to ADSP the podcast episode 284 recorded on April 23rd, 2006. My name is Connor and today with my co-host, Bryce, we chat with Marco in part two of this
+
+4
+00:01:19.000 --> 00:01:56.000
+three to four-part interview. In this episode, we do a deep dive on the potential implementation of a GPU rotate. Over to you, Marco. Now, like a mini-representation of the better code GPRotate that you gave a week ago. Yeah, it was recently, so I have everything in my head still. Yeah, so basically the idea of this site project was to implement like a GPU implementation of rotate, doing it in place. And the reason for doing it in place is that you're going to get the best theoretical performance. So our rotate is just moving memory around.
+
+5
+00:01:56.000 --> 00:02:23.000
+So you're going to be bound by the memory bandwidth of the GPU. And so the less memory movement that you have to do, that's going to give you the best theoretical performance. So if you think about it, you could theoretically just, let's say you have an array and you want to rotate it, you could just allocate a buffer of the same size, do the rotation into that other buffer, and then copy the buffer back into the original. That would be like the easy way of doing it. But that way, you're moving from one array to another.
+
+6
+00:02:23.000 --> 00:02:44.000
+And so if your arrays of size n, you would have to do 4N data movement, right? And by doing it in place, you only have to do two times n data movement. Because in a rotate, you're going to have to read each element from the array, and you're going to have to write it back at another location. That's an amount of work that you cannot get around.
+
+7
+00:02:44.000 --> 00:03:04.000
+So the minimum theoretical movement they have to do is two times the size of the array. And so by doing it in place, you're able to get to that theoretical limit. And so that would be what we call speed of light. So if your algorithm, if the throughput of your algorithm is half the memory bandwidth of the GPU, that means that you've achieved the best theoretical performance.
+
+8
+00:03:04.000 --> 00:03:36.000
+So that was basically the goal of the project. Wait, why is it half? I'm not sure I understand. Yeah, because you have to, if your array is of size n, you have to read the whole array and you have to write the whole array back. If you're not doing it in place, you have to do four because you have to, you would have to read the array, write it into another array, then read the other array and write it back to the original. That would be four. If you do it in place, you have to read the array and then write it back, which is two. Yeah, but like the way that we usually count, like, for like mem copy, for example, we usually count like memory movement.
+
+9
+00:03:36.000 --> 00:03:52.000
+We count reads plus rights, but we don't expect it to be half, for something like memory movement, for something like mem copy. I don't understand, I don't understand the half part. Why would you expect? Well, because the memory bandwidth of the GPU is just telling you how many gigabytes per second
+
+10
+00:03:52.000 --> 00:04:09.000
+can you can kind of like move through the GPU. And so in order to read, let's say a million elements, you need, and in order to read a million elements, you're saturating the GPU, whatever bandwidth that is. And in order to write them back, you're saturating it again. So you're doing like two trips.
+
+11
+00:04:09.000 --> 00:04:39.000
+That's why you would divide it by half. But that's not usually the performance model that we use for something like MemCopy or Transform. Like we expect MemCopy to hit like 90% of peak bandwidth, right? Yeah, yeah, it hits that 90%, but what I mean is that, let's say you have an array of a million elements and it takes you a second to rotate that array. That means, I mean, how do I put it? Basically, it's like the amount of elements per second that you can rotate is going to be half the memory bandwidth of the GPU. If you see it in that way.
+
+12
+00:04:39.000 --> 00:04:56.000
+Yeah, yeah, yeah, yeah, sure, sure. Okay, I'm on board, yeah. So you're still saturating the, you're still saturating the GPU, of course. So the goal would be to saturate the memory back. Right, right. It's, what you're saying is the elements per second is going to be half. I'm always thinking about this in terms of number of bytes mode. Exactly.
+
+13
+00:04:56.000 --> 00:05:06.000
+So the throughput of the algorithm itself, not necessarily the throughput of the memory move. Right, right, right. Okay, yeah, sure. I'm on board. Yeah. Okay. Okay. So we take that and then.
+
+14
+00:05:06.000 --> 00:05:27.000
+Okay. Okay. And this is assuming, that's assuming that you never have to touch any sort of global memory, or that's your theoretical best case, assuming that you never have to go out of L2 Cash. Exactly. So that's basically the, we cannot get better than that. That's the best we can do. And so that's what we are trying to achieve.
+
+15
+00:05:27.000 --> 00:05:55.000
+That's what I'm trying to achieve with the implementation and the algorithm. And so now that we have that, we can basically think, how would we rotate an array by just one element? So that's the first thing that I did. There's just one element. How would I do that? And so if we think about a huge array, because I mean, if we're going to do a GPU implementation, the thing would do, like the use case would be to have huge amounts of huge arrays. And so if we have a huge array and we want to rotate by just one element and we want to do that in place,
+
+16
+00:05:55.000 --> 00:06:33.000
+what we would do is since we're on a GPU, we want to tile the array so that then each CTA or each block gets one pile of the array and does whatever it has to do on it. And so once we've tiled the array, we're not going to tie the whole array. We're going to tile the array except the first element. The first element is the one we're rotating and it's just one element, so we don't need to tile it. We can just tile the rest of the array. And then each block is going to grab one of the tiles and then it has to, it's going to read one of the tiles and it has to write it back one element before because that's how you would be rotating the array.
+
+17
+00:06:33.000 --> 00:07:10.000
+then the first tile is also the one that's in charge of moving the first element into the back of the array, because that's what you would need to do in order to rotate an array, right? You move the first element into the back and you move the rest of the array all the way to the front. And so there's two problems there. The first one is that whenever you are writing a tile back, it could be that you are overwrite, well, you are overriding the next tile or the tile before you. And so it could be that you overwrite it before it has been read by another block, which would cause a wrong result. So you need to guard against that.
+
+18
+00:07:10.000 --> 00:07:42.000
+And then also, whenever you are at the first tile and you want to copy the first element into the back of the array, you also need to make sure that the first tile or the last tile has already been read because you would be overriding its space. And so you basically need to guard against those things. But isn't it just like a scan? In what way? that like I'm just moving, well, at least some part of it is I'm just moving information down. I'm just shifting information down. It's just like, if you think about it, it's like a shift is definitely just a scan.
+
+19
+00:07:42.000 --> 00:08:03.000
+This is just a shift. It's not just a shift. It's like a shift left for one partition, though, and a shift right for the other partition. So you can't do this with a scan, right? What, what, explain that to me? Like, if you're doing a one rotate, the first element goes to the back. Sure, you can consider that a shift, like a shift right. but then every other element is going left.
+
+20
+00:08:03.000 --> 00:08:34.000
+And by definition, how are you going to get the second piece of information in the first spot with the scam? Sure, I agree. But in the case of like doing like a rotate of one, like if you're doing like a rotate of like small number, then it's just like a scan plus some special handling for the small number maybe. But how do you express the memory movement in terms of the scan? Where does this can come into play? Yeah, I don't think this is. I think the communication pattern is similar to a scam.
+
+21
+00:08:34.000 --> 00:09:00.000
+Yeah, so I think we can get into that. That's what I was going to get into. So how do you communicate between blocks whenever a tile can be overwritten or not? And so how I did that is that you have an array in global memory in a scratch buffer where every tile has like an atomic flag. And then whenever, so the steps that a block takes is that it gets a tile, it catches it into shared memory. And then once it has cached it into shared memory,
+
+22
+00:09:00.000 --> 00:09:41.000
+it can basically release the flag so that the other blocks know that they are safe to overwrite that memory location. And then it needs to poll the previous tiles flag so that it's sure that it can overwrite the memory location that it is going to write to. And then once that flag has been released, it can write the cache tile to the destination. And so whenever you do that, you're basically using those global flags to make sure that you're never overwriting some memory location. that has not been read already, and you're avoiding getting a wrong result. So you're using those flags. That's basically the communication path between the blocks. How many flags do you need?
+
+23
+00:09:41.000 --> 00:10:05.000
+One. So you have one flag per tile, and a tile is 32 kilobytes. So I don't know, I think for an array of a gigabyte, let's see. So it's per per block. Yeah. For an array of a gigabyte, you would have around 30,000 tides and 30,000 flags. So the amount of extra memory that you're using there is very small in comparison to this type of theory. Yeah.
+
+24
+00:10:05.000 --> 00:10:42.000
+Yeah. So that's basically the algorithm. But if you think about it, so in the presentation, I call this and I call this the short algorithm. And that is because if you say that instead of having a rotate distance of one, let's say you have a rotate distance of, I mean, I think now it's better if we switch to thinking in terms of piles instead of elements. because we're always going to be talking about tiles, so we can just say that an array has a certain amount of tiles instead of elements. So imagine that you are now trying to rotate an array by five tiles. And let's say you only launch three blocks.
+
+25
+00:10:42.000 --> 00:11:16.000
+So you can only process three tiles at the same time. Then, okay, another thing I forgot to say is that whenever in the implementation, you're actually processing the tiles from the back of the array. Because since you're moving them to the left, you want to start processing from the back so that the first block gets the last tile and the second blocks gets the second to last tile. And so that way you're moving from the back. Since you're moving the array to the left, you want to start processing from the back in order to get the best, like the best overlap in that sense. Yeah.
+
+26
+00:11:16.000 --> 00:11:56.000
+So taking into account that we're doing that, let's say we want to rotate an array by five tiles and we're only launching three blocks. Then we would have a deadlock because let's say the first block, gets the last tile, the second block gets the second to last tile, the third block gets the third to last tile. So you're processing the three last tiles, but then the first block wants to overwrite the memory location of five tiles before it, because you're rotating it by five tiles. But that five tiles before it is not being processed by any block, so it's just going to be waiting indefinitely until it can override that and you're so, so you're basically going to have a deadlock. And that's where that algorithm no longer works. And you know,
+
+27
+00:11:56.000 --> 00:12:23.000
+need another way. Okay, and so you have some other approaches. That's interesting. So you're, you, depending on the rotate size, or the amount of rotation and I guess the amount of concurrency you have on the GPU, you pick a different algorithm. Exactly. Do you do this as like a persistent kernel?
+
+28
+00:12:23.000 --> 00:12:50.000
+Yes, so I am launching, well, there's actually we can get into that later. The first implementation is that you're launching as many CTAs. So you have a tile size of 32 kilobytes, and you launch as many CTAs or as many blocks per SM as you can to use up the shared memory of the SM, which on H-100, I think you're launching six blocks per SM. And then you have also an atomic counter on the scratch buffer
+
+29
+00:12:50.000 --> 00:13:22.000
+so that you're doing a work stealing loop. So whenever a block wants a new tile, it decrements the atomic counter to get whatever tile it needs to process. And so that way you have load balancing implemented into that as well. I don't know, Connor, you said at the beginning that there were some things that were not clear in the presentation. So I would like you to... No, no, no, I was waiting because Bryce was staring at the ceiling looking like he was looking for religion or something. And so I was waiting for him to either not his head in agreement or ask for clarification.
+
+30
+00:13:22.000 --> 00:13:57.000
+This stuff, this stuff made sense. It was the later on when you started making adjustments to the algorithm based on like the NICU results. And I can't remember if it was acronyms or if it was like words and stuff. And you started tuning and adjusting things and getting closer to speed of light. And that's the stuff where I was kind of like, you know, I don't use NICU that often. And admittedly, I think of like people that work at MVIDIA at least on like Kuda code. because obviously there's a bunch of folks that do different stuff, like some of the C++ engineers,
+
+31
+00:13:57.000 --> 00:14:20.000
+they're working on tooling, right? So they're not actually authoring kernels or working with any of our kind of GPU accelerated library. So we've got lots of folks at Nvidia. But of the folks that are doing Kuda and kernel-related things, I would guess that there are, like, different tiers of people that work at different levels. And, like, the people that work at the NICU
+
+32
+00:14:20.000 --> 00:15:05.000
+and that are considered, like, you know, kuda ninjas, which I would put you in that camp because you're designing algorithms and like using NICU and I think that is like a fraction. I don't know. And maybe Bryce, you've worked longer at Nvidia. But like I primarily work at like a higher level, you know, the the thrust level, cub level. The number of times that I have actually from scratch like coded a raw kuda kernel like is in the low double digits. And I do not. You are sadly in the minority. Connor. Am I sadly in the minority? More people should, but don't. More people should, but don't. More people should not write their own kernels and just use our libraries, but... I thought, I see,
+
+33
+00:15:05.000 --> 00:15:37.000
+I thought you're saying something else. But because admittedly, writing like rock kernels is like, in my opinion, approaching infinitely harder than just reaching for like a cub reduce or a thrust reduce. Yeah. And there's a bunch of like hardware and software factors, like the disaggregation. of the disaggregation of ML inference, the disaggregation of the GPU core itself, that is making this a lot more and more challenging. Yeah. So. CPU core is now this like crazy asynchronous thing and programming it's kind of a nightmare.
+
+34
+00:15:37.000 --> 00:16:19.000
+I should clarify, programming it's kind of a nightmare if you program it the way that we program GPUs 10 years ago because the GPU today is very different. And so we need new abstractions. And that's why things like cute DSL, like kuda tile, et cetera, have all come about is because, like, the GPU itself is just different than it was. And so we're sort of like struggling with that problem. So wait, why does a, why is raw colonel authoring complicated by what you just said? Because the traditional view is that like you think about a processor core, right? Like, you know, you issue a load instruction.
+
+35
+00:16:19.000 --> 00:16:46.000
+You issue like a, you do some indexing math, then you do like an FMA, then you have like a store instruction, right? And like that's, those are all things that are executed by a processor core, right? Yeah. Yeah, that's not how that works. Because like there is no processor core. There's, there's a load and store unit. There's an ALU unit that's doing your indexing math. There's an FMA unit that's doing your, you know, your fused multiply ad that's doing your actual like hard math.
+
+36
+00:16:46.000 --> 00:17:21.000
+You have a special math functions unit that's doing things like your. your cosigns, your signs, your exponents, et cetera. Those are all different, like, pieces of hardware that the abstraction that we've had in software for, like, the last 50 years has been that they're like this monolithic thing. But in reality, like, each of these separate operations is executed by a different piece of hardware. And what's happened over the past, you know, nine, ten years is we've slowly exposed more and more of that asynchrony to you, the programmer.
+
+37
+00:17:21.000 --> 00:17:49.000
+So now, like, there's a bunch of different ways to issue asynchronous loads and stores within a thread in Kuda. And the way that you issue instructions to the tensor cores that do the matrix multiplication, those are asynchronous operation. So now, like, within each thread, you're not just like, oh, I do a load, then I do a map mall, then I do a store. It's like you asynchronously launch a load. you asynchronously launch a Map Mall, you asynchronously launch a store.
+
+38
+00:17:49.000 --> 00:18:15.000
+And then, like, you have to like, if you want to get full utilization, you have to overlap the compute and the communication. So it's like, oh, I start launching like this load, and then I do some compute, and then I launch the store. And then by the time I've done that, the load that I launched has landed and I can start doing the next thing. And so you have to do this pipelining. And you have to do this thing called warp specialization.
+
+39
+00:18:15.000 --> 00:19:00.000
+where you have some of your SM cores that are doing the dispatching of work to the tensor cores and some that are doing compute and some that are just dispatching the I.O. operations, etc. So now you have to have this tasking model. And if you're writing Kuta Kurnals, the way that you wrote Kuta Kurnals 10 years ago, this is like you're either not taking advantage of this, in which case your performance is bad, or your code's really, really ugly and awful. And so we're building like new abstractions, things like Qaeda tile, et cetera, that abstract over these things and make Kuta programming simple and easy again and also performance portable. Simple and easy again. That's a funny statement.
+
+40
+00:19:00.000 --> 00:19:37.000
+As if at any point Kuta kernel authoring has been an easy endeavor. Kuta kernel authoring has never been easier than it is today because you can write something like Kuta tile. and you can, which is like a very small diff on how you'd write something in Numpi and Pi Torch. And you can write that, you can write Triton, those like three or four other DSLs like this, where you can write very high-level code and you can get the fastest performance. You can get better performance than you'd get writing the low-level code that would be the equivalent of it. I see. And you can write that code and you can get performance portability.
+
+41
+00:19:37.000 --> 00:20:17.000
+So, I mean, is this all to say that the work that Mark was doing is like, suffering compared because I didn't hear any of that asynchronous stuff or is it simple enough because we're just copying stuff around that we're not going to suffer from. You can't write what Marco is writing easily in something like tile because what Marco is writing is fundamentally more of a communication primitive than just pure compute. And by communication primitive, I mean like what's one of the main things we talked about in this algorithm is how do you know when another, when like you can override you like, incoming tile. So just like scan or reduce, this is more about how do threads communicate and
+
+42
+00:20:17.000 --> 00:20:52.000
+talk to each other. This is a fundamental building block that you need to be able to expose to a higher level dialect. So now I think this is like the rare case of an example of something that you do still need to write, or maybe it's not the rare case. This is an example of something that you still need to write in Simtie. But given that the communication is not at the threat level, but at the tile level, would it not be possible to still do it in Kura tile? It might be. I mean, maybe, maybe. That's actually a question that I wanted to ask you. Because I think, I mean, the other thing, we haven't talked about that yet,
+
+43
+00:20:52.000 --> 00:21:30.000
+because the challenge of the actual implementation is that you have a lot of unaligned memory movement because GPUs are very sensitive and the bandwidth, the memory bandwidth of a GPU is very sensitive to the alignment and the size of your loads and stores. And in this, implementation, you have a lot of unaligned loads and stores, and you need to move around that in specific ways, which is what I talked about in the presentation. And so I'm interested, I would be interested to know if something like that is possible in Kura Tile, where it takes care of maximizing the performance of the memory movement, no matter what the alignment is or other
+
+44
+00:21:30.000 --> 00:21:52.000
+characteristics. Yeah. So, I mean, initially hearing the unaligned thing, my initial reaction is, is there some way we could pad? And I think the equivalent of padding here would be some form of like, could we over rotate? Could you rotate to the next alignment and then like correct? And I think that that's always going to,
+
+45
+00:21:52.000 --> 00:22:09.000
+like it's just the idea at the top of my head. I don't think that helps you because I think it's just as expensive to over align and then correct. But like if you could, if you think about like something like a transpose where a transpose when you de-tose when you decompose it into tiles,
+
+46
+00:22:09.000 --> 00:22:27.000
+you transpose the tile locally, and then you transpose the entire tile when you write it back into global memory. So it's like two-step. There's like a local operation, and there's a global operation. The thing that would be great would be with rotate, if you could have the same thing,
+
+47
+00:22:27.000 --> 00:22:56.000
+where like if you over-rotated and were able to do like aligned axes when you do the load from global memory, and then you had to do some extra work to do a correction, but that, in that correction would be the unaligned part, but that correction only happened at the L2 level. Like at worst it would hit the L2, then that might be, you know, worth it.
+
+48
+00:22:56.000 --> 00:23:23.000
+But I don't know whether that's just a very off the top of my head. I don't know. Now you're having extra memory movements, So you're getting further away from the theoretical maximum performance. What I did basically is if you imagine the rotate distance of one, and we imagine that our array is aligned to a sector boundary, so it's 32 byte aligned, which is basically perfect alignment. So you're one-off that perfect alignment.
+
+49
+00:23:23.000 --> 00:23:44.000
+Whenever you want to copy your first type to shared memory, and so what you can do is that you can just over-copy. So you align the tile to the sector boundary, so to the previous sector boundary, which would be in this case the beginning of the array, and then you copy all of that instead of starting from that unaligned position. And then that way you're doing, it's called overcopying,
+
+50
+00:23:44.000 --> 00:24:07.000
+where you just copy more than you actually need to, but that way you copy in an aligned fashion. And so you get the best performance there. But then in shared memory, the tile that you're actually interested in is still unaligned. And so what I did in that case is that I copied into registers and then aligned it into registers, so to speak, And then you can do align stores back into global memory.
+
+51
+00:24:07.000 --> 00:24:34.000
+And so you can use an instruction that is called a funnel shift where you just copy eight bytes. So you want to copy four bytes into registers. And what you do is that you copy the eight bytes that surround those four bytes that you want. Because those four bytes are not even in one place or in one register or in another. They are in between. And so you copy them both. And then the funnel shift basically just gives you part of that. Yeah.
+
+52
+00:24:34.000 --> 00:25:12.000
+The funnel shift instruction gives you part of that, of that eight byte. So it gives you four bytes out of those eight bytes that you have loaded. And so that way you can basically align it into registers, and then you can do align stores back into global memory. So there's like a little, a couple of tricks that you need to do in order to make the global memory movement as good as possible. So with the overcopy thing, how does that help? because you're just copying more of a tile than you need, but then don't you end up with like where the starting address does have to be offset by one? What do you mean by the starting address?
+
+53
+00:25:12.000 --> 00:25:35.000
+Address of what? Of your tile or of the memory that you're copying? The memory that you're copying. No, so let's say our array, our array starts at address zero, which is 32 by the line. And then the tile that we want to copy starts at address one. So we forget about that and we copy from address zero. But then in shared memory, In shared memory, the tile is still unaligned.
+
+54
+00:25:35.000 --> 00:25:57.000
+It's still at address one. That's what we're actually interested in copying. We just copy extra so that we can do the copies as synchronously. Yeah, I'm having an idea. Oh, that could be interesting. You may want to look at the TMA, I'm to call mode. No, the I'm to call mode specifically, which is what we use for convolutions. What's it called?
+
+55
+00:25:57.000 --> 00:26:40.000
+Like, I am to two, then the. number two, then call COL. So we use that for convolutions because for convolutions, you sort of have to do a similar thing where you want to access a bunch of stencil points. And you can think of this rotate as sort of being similar. And in particular for the case of like the one, the off by one, this might be interesting, where it will build you like a matrix where it's hard to get into here without like a visual. but it'll build you like a matrix where it's got your like input like tiled into like shifted columns.
+
+56
+00:26:40.000 --> 00:27:01.000
+And then each one of those columns is going to be aligned. Although I guess it is way like the downside is that it is shared memory. It's wasteful of shared memory, right? It has some redundant shared memory. In the case of like a rotative one, it may be an interesting thing to look at. Nice. Yeah. So currently in the implementation,
+
+57
+00:27:01.000 --> 00:28:24.000
+The thing that may be interesting to think about here is that the problem that you're facing is similar to the problem that like stencils would have. Now, when you see these alignment problems for what data types is this usually? In the implementation, I basically assumed an array of bytes because that's basically the worst case scenario. So if I get the best performance on an array of bytes, I should be able to get the best performance on any data type. Right. So this is hard. So for something like a stencil problem, you don't often have this because for a stencil, like, you know, I'm usually dealing with like FP32 or something. And so if I move over by one, I'm still aligned to like a reasonable number of bytes. Whereas like for something like string processing where I'm dealing with like, you know, a single bite thing, then it's a lot easier to get hosed here. But nobody cares about single bite. Like nobody cares about like a stencil on like, you know, a single bite thing. And nobody cares about like a stencil on like, you know, a car. Well, I don't know, maybe. I mean, things like word count. Yeah, things like word count. So that's actually interesting. If you do something like a transform, reduce word count on like, on like into eight data, does it have similar alignment problems? Maybe. No, maybe it doesn't
+
+58
+00:28:24.000 --> 00:29:03.000
+because what you're saying for rotate is you, well, I don't know. No, I do think it's similar. I do think it's a lot of this, I think it's very similar to like these stencil type problems. But you never have to do stencils on FP16 or FP8. Because I mean, sometimes are you, I don't know if you're using convolutions on the smaller types of loading points. You might, you might be doing convolutions in the smaller types. But I'm specifically, I'm thinking about like string processing stuff, like, like word count or other things that would use like a stenciled view of text. Interesting. So you said that there was a second algorithm, right? So the, what's the second Yeah, I mean, I don't know.
+
+59
+00:29:03.000 --> 00:29:21.000
+I don't know if you have what's up with Ramon. I don't know. Oh, yeah. Maybe we need to read the second. Do we leave the second algorithm for part two? Well, it depends on when you have to go. I need to go 18 minutes ago. Well, then probably, yes, we should save that for part two.
+
+60
+00:29:21.000 --> 00:29:43.000
+We will do part two of this. We already talked for an hour, so potentially I will split that into two episodes, and we will come back. And I was thinking this whole time too, I was like, how would I do this in pair it? I was like, I would just use a permutation iterator and a copy. And then I was like, oh, yeah, that's the point though. That's not in place. That's out of place. So the thing that makes this tricky is the in-placeness.
+
+61
+00:29:43.000 --> 00:29:59.000
+Like if you're just doing an out-of-place rotate, it's very easy. Yeah. We should talk more next week. I do very much want to hear more about this. Yeah, yeah. We'll set something up for next week. Maybe not on Thursday, maybe a Tuesday or Wednesday. And then you'll hear part two of the rotate story.
+
+62
+00:29:59.000 --> 00:30:48.000
+and then we'll also get to hear Bryce's Fifth Infinity Stone, you know, Auto Kuda taking over the world. I don't believe that Bryce is better than me at AI, but I'm excited to hear why he thinks he is, folks, and stay tuned for that. And also, if the listener has some questions on the algorithm, I guess it would be a good time also to ask them so that we can maybe cover them next week. Oh, yeah, yeah. We will, links will be to the GitHub discussion, or you can also, if you're on X or, I mean, I'm on all the socials, Blue Sky, Macedon. The best place is probably the GitHub discussion, because that, like, is all in one place. But yeah, you can add us on socials as well. And if there's questions for Marco, or even if you've got ideas, why didn't you consider this?
+
+63
+00:30:48.000 --> 00:31:13.000
+We can definitely chat about those on part two, because it's rare that we have to record twice separately on the same topic back to back. A rare opportunity to have your question asked and answered or comment, I guess just read if it's a comment. Bryce, you look like you got one last thing to say. No, no, no. My last thing to say is I'm going to be in so much trouble. All right. Thanks, Marco. Thank you, guys.
+
+64
+00:31:13.000 --> 00:31:18.000
+Be sure to check these show notes, either in your podcast app or at ADSP thepodcast.com for links to anything we mentioned in today's episode, as well as a link to a get-up discussion where you can leave thoughts, comments, and questions. Thanks for listening. We hope you enjoyed and have a great day. Low quality, high quantity. That is the tagline of our podcast. That's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

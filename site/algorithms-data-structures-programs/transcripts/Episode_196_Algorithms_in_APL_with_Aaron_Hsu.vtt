@@ -1,0 +1,281 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:45.000
+You can't say C++ needs to add anything because C++ already has everything. But it gives you access to all sorts of algorithms, right? You can do a binary search to find that stuff. You can do a hash table lookup to find that stuff. You can do a quadratic lookup on that stuff. There's all sorts of ways of finding that data. Welcome to ADSP The Podcast, episode 196, recorded on August 21st, 2024. My name is Connor, and today I interview Aaron Hsu on-site at the Eagle Pub on the campus of the University of Cambridge. We chat about algorithms in APL as
+
+2
+00:00:45.000 --> 00:01:30.000
+well as their implementations. All right. This is pretty epic. We are here in the historic Eagle Pub, thanks to the recommendation of both Ben Dean and Tristan Brindle to previous guests on ADSP. And I'm here with Aaron Hsu, first-time guest on ADSP. I believe you were episode 18. I don't actually know what number guest you were on ArrayCast. So we will link at the top of the show notes for folks that can't get enough of Aaron Hsu after this conversation. I'll let you introduce yourself after a brief introduction from me, most famous for being
+
+3
+00:01:30.000 --> 00:01:59.000
+the author, creator of the CodeDefunds compiler, which is a APL that is both run on the GPU and is, I believe, compiled on the GPU. It's designed to host itself on the GPU. Which can't be said about many languages that can be compiled, both run and compiled on the GPU. Yeah, nope. Designed to self-host itself is the idea. And you work at Dialog Limited.
+
+4
+00:01:59.000 --> 00:02:20.000
+You have for, I think, the last few years since basically your dissertation or completing your PhD. They fund the compiler research. Yes. And I'm not sure, do you want to add anything? You're a man with strong opinions, strongly held of many hobbies and passions. We were just discussing that it's not so much passions that both of us have, but obsessions, you know. They don't overlap a lot.
+
+5
+00:02:20.000 --> 00:02:56.000
+I like to do a deep dive, and I'm quick to change an opinion provided that you provide evidence that exceeds the evidence and research that I've done. The problem there, folks, is that he has done an immense amount of research himself. So the amount that you have to provide is not trivial. What are the things that we, and so I guess I should also mention, for those that don't know where the Eagle Pub is and why it's historic, we are on the Cambridge, University of Cambridge campus. This is where, I believe, DNA. I think that's what the sign says.
+
+6
+00:02:56.000 --> 00:03:16.000
+That's what the sign said. It'll be in the show notes. But also, more interesting to me, this is a pub that Alan Turing, the father of computing, frequented as he went to King's College, one of the colleges associated with the University of Cambridge. Potentially, we're sitting at a table that Mr. Turing himself sat at. It's possible.
+
+7
+00:03:16.000 --> 00:03:41.000
+It's possible. I mean, it was over half a century ago. Inhabiting the overall same spatial geometry. Yeah. If it wasn't the same table, you know, at least we are frequenting the space that he frequented in decades past. We are here at Iverson College. Probably no one that's listening to this podcast that doesn't listen to Arraycast as well knows what that is. It's a week-long get-together.
+
+8
+00:03:41.000 --> 00:03:55.000
+You yourself have been to, I think, a couple before. I think two before, yeah. So this is your third one. And it's a collection of about 25, 30 folks. I'm not sure how many it was in years past. It's about that, yeah. About the same. 20 to 30 is, I think, a pretty typical number.
+
+9
+00:03:55.000 --> 00:04:22.000
+And some other folks not attending this time, but have attended in the past, the infamous Arthur Whitney behind the Ks and Shakti. Who else has attended that? Roger Hui, I think, attended, who is the main implementer of the J language, for those that have heard of that. So it's a, what would you say, a congregating of like-minded folks to share ideas while they're still working on their own personal work. And I think it's, I've heard it referred to as like an, not this
+
+10
+00:04:22.000 --> 00:05:19.000
+specifically, but this kind of meeting as like an unconference. It's a conference without a schedule. I think it's in the tradition of classic scholastic colleges of a meeting of shared minds to pursue the furtherment of ideas and knowledge and share experiences and things like that. I think that's sort of the appeal in general. How is this addition compared to years past? Because I think the last one was before the pandemic, so it's been a few years. So without a doubt, the crowd is younger, but also way more eclectic. So there are many, many different backgrounds compared to in past colleges, where the past colleges had usually a stronger, more intense representation of senior people in the array programming field, whereas this college now has a much broader selection of people who have a lot of passion and varying degrees of experience in the array programming field.
+
+11
+00:05:19.000 --> 00:05:38.000
+Has that changed the vibe or the conversations that have been happening? Sometimes. Sometimes. happening? Sometimes. Sometimes. Sometimes? Yeah. I'd say one thing we do is we can, I think we are a lot more active and broad in our topics that we can cover right now. You know, we have a lot more new things that are being discussed
+
+12
+00:05:38.000 --> 00:05:59.000
+instead of like really precise refinements on things that we all know quite well. Yes. Yeah. So there's a lot of new seeding of ideas to play with. Yeah, I think probably in years past, you didn't have creators of brand new, never heard about before array languages by some of the attendees. Brand new languages sweeping the nation. Yeah, yeah.
+
+13
+00:05:59.000 --> 00:06:19.000
+We're referring to the Wiwa language created by Kai Schmidt. He's here. He gave a presentation on Monday. I think there was a lot of, I won't say dropped jaws, but definitely... Admiration. Yeah, burrowed frowns and some interesting design decisions made in that language. But that is a topic for another day.
+
+14
+00:06:19.000 --> 00:06:49.000
+Something I might want to mention, given that this is not necessarily an array community, other people outside of the array community might know my background as a scheme developer back in the day. And I was one of the members of the small working group for the standardization of the R6RS, R7RS scheme standards. So as far as laying out some more history. If they don't know array languages, they might know LISPs. They might know scheme know LISPs. They might know Scheme or LISPs or something like that.
+
+15
+00:06:49.000 --> 00:07:16.000
+Yeah, that is, I mean, Alex Stepanov, the father of the standard template library and algorithms in C++, was famously also a Scheme developer for, I think, like, I don't know if it was a decade, but he had some exploration of ideas that he explored in a couple different languages. Java was one of them, Ada was another, and I think he had a scheme as well. And actually, he had like notes on programming, which was like an 88-page document, where his first implementation of a reduction
+
+16
+00:07:16.000 --> 00:07:36.000
+was in scheme, but he had a little comment that said, reduce is taken from APL. And so there's actually a kind of a very faint dotted line between APL and C++. Interproduct, IOTA, I think adjacent difference even was taken from, the name was taken from the kind of NY's reduction in APL. So a very faint line, but IOTA definitely.
+
+17
+00:07:36.000 --> 00:07:48.000
+IOTA 100%. Comes from APL. And 0 and 1 Booleans also come from APL. Is that in C++, though? Oh, I guess the implicit conversions. Yeah, implicit conversions over. Yes.
+
+18
+00:07:48.000 --> 00:08:10.000
+There's many languages to many people's chagrin that have that. But it was famously Knuth's favorite feature from APL. Really? Yeah. He writes about it in his Art of Computer Programming, his favorite. He calls them the Iverson Booleans or something like that. Really? And it was taken from APL, and he likes to use them a lot.
+
+19
+00:08:10.000 --> 00:08:50.000
+It's one of the things that I, at times, take for granted in APL. A lot of times I forget about the importance of rank polymorphism and Booleans as 0 and 1, a subset of the integer space, because it leads to, like, you can extend Boolean operations to work on the full integer range a lot of times, which I believe APL does that, like, in the case where you have and and or. The extended integers is LCM and GCD. And it is also extended in a tolerant form to floating points as well.
+
+20
+00:08:50.000 --> 00:09:11.000
+I have had nightmares trying to ensure compatible implementations of that, but yes. You're telling me that there's a GCD implementation of those primitives for floating points? Yep. How? What? Yes. Yes, it's, you have to, you have to do. Is it a different algorithm entirely? It's the same, it's the same basic algorithm. You do the Chinese remainder theorem type stuff.
+
+21
+00:09:11.000 --> 00:10:02.000
+It's the same basic GCD type things, but you have to, you have to, there's some kind of factorization on the floats to normalize them or something that you have to do that gets into some kind of standard form that you then can get a result. I would think there has to be some kind of discretization. Otherwise, you could have an infinite number of answers, no? So that's where quad CT, tolerant comparison, comes in. So normally, for most cases, if you want a useful result on this, you compare for equivalency across a range, not on exact bitwise equality over floats. So you have to do a soft equality checking. And then you execute the algorithm as you typically would, and it follows the same basic mathematical results, the simple ones,
+
+22
+00:10:02.000 --> 00:10:23.000
+and you just apply it to floats. It's a contentious feature. Yeah, interesting. I've never even in my life considered GCD on floating point. Neither have many other people. Well, maybe we should stay on the topic of, what do you call them, fancy? Maybe esoteric algorithms, seeing as this is the ADSP algorithms. What does ADSP stand for?
+
+23
+00:10:23.000 --> 00:10:38.000
+It's the acronym taken from the Nicholas Wirth book, Algorithms plus Data Structures equals Programs. Of course, of course. One time on an episode, someone mentioned, oh, like ADSP, it's a book. And I was like, no, it's a podcast. And then they were like, no, like, you took your name from the book.
+
+24
+00:10:38.000 --> 00:10:55.000
+And I was like, oh, yeah, how did I? It was like 160 episodes in. I'd forgotten where we stole the name from. You've lost your roots. You're no longer connected. It is a part of the new 2.0 version of this podcast that we're trying to bring back more algorithms and data structures conversation. So maybe we'll record for now.
+
+25
+00:10:55.000 --> 00:11:25.000
+We have a topic lined up, but maybe we'll save that for the last 30 minutes of this conversation. Let's talk about algorithms. So what are more algorithms, either that you really like that exists in APL that you rely on all the time, or maybe staying in this fancy space that I would have never guessed that GCD works on floating point? Are there other sort of esoteric things that are less useful or actually useful that you can reach for in APL that you don't have, that C++ should consider adding to its algorithm header?
+
+26
+00:11:25.000 --> 00:11:46.000
+You know, I think you can't say C++ needs to add anything, because C++ already has everything. And so, like, you can't... Not yet. We don't have reflection. I don't know. If I know some C++ programs, somebody's doing binary reflection on their own executables and getting data out. Like, you can do it.
+
+27
+00:11:46.000 --> 00:12:07.000
+You just have to be crazy. You can do anything. That's true. It's not a language feature yet. When you work in these languages, the difference between a language feature and just some kind of hacker doing something on the bit level is, it gets pretty thin, you know? You know, what's the difference between a C instruction and an assembly inline block with intrinsics? You know? I don't know.
+
+28
+00:12:07.000 --> 00:12:22.000
+So but as far as algorithms, I think I actually I tend to have grown into preferring to avoid having to think about algorithms too much by shifting the abstraction just a little bit up at your base
+
+29
+00:12:22.000 --> 00:13:15.000
+layer to worrying more about the overall type of engagement. So maybe a little bit up at your base layer to worrying more about the overall type of engagement. So maybe a little bit higher level where you're specifying, I want to do something that's within a family of algorithms, and then allowing your implementation of that to select the best algorithm out of that. And that may be giving you more access to algorithms without having to be as aware of all the different varieties of algorithms that are out there as a usability case i kind of like that but but within the general computing sphere c++ i think is less guilty of this than others but still guilty i think alternative algorithms that do not require pointer chasing that would be there are many ways in which you can work with flat data, encoded data, you know, representations in a slightly richer mathematical domain like linear algebra or matrices or numerical spaces.
+
+30
+00:13:15.000 --> 00:13:51.000
+Something in that space, instead of just building a set of abstract data types that operate over pointers, I would encourage people to play with not having to go to the pointer as your core way of connecting data together. Well, so interestingly in C++, the iterator abstraction that lives between your data structure and your algorithm actually means that, like an iterator has an interface of the.next, which for certain data structures, you know, the elements live contiguously in memory, so there is no pointer chasing.
+
+31
+00:13:51.000 --> 00:14:25.000
+So because they have an abstraction in between, if you're using a linked list and you invoke some algorithm like find or whatever where you have to traverse, you're going to pointer chase, but if you're underlining data structure as a vector or a std array, there's actually no pointer chasing there. So really, the algorithm is in a way divorced from whether or not you are doing pointer chasing. Especially with the iterator patterns. Yeah, so it's really based on the data structure that you're choosing underneath. Which, in this sense, you're saying if you were going to, we don't have a graph data structure.
+
+32
+00:14:25.000 --> 00:15:07.000
+But if we did have one, you would be advocating for representing that you want contiguous flat representations internal representations implementations of your of your complex structures try to avoid having pointers all over the place you know that's that would be my first preference you know i mean c++ in general we do that quite well because like you're pretty good about it like c++ amongst everybody is not bad yeah the vector is our go-to and even some of the containers are not actually containers they're container adapters like the the stack and the queue and the deck are all just wrappers on top of vector and and so like you could implement those as linked lists but we avoid that because cache locality and portrait chasing is important. There's a lot of things that can be said about C++ but, you know,
+
+33
+00:15:07.000 --> 00:15:23.000
+there is a culture of performance in C++ so these things do matter. For instance, I think something that's come up in the broader programming zeitgeist recently is the idea of larger object
+
+34
+00:15:23.000 --> 00:16:01.000
+pools as a mechanism for managing your data as opposed to RAII or other things like that. And I think modern C++ tends to do a lot of selling to beginning C++ programmers, this modern C++ of RAII with these particular containers and single object focuses on things like that. And I think there's an extra level that I agree with some people on learning how to think maybe in terms of object pools at a top level instead of allocating these with smart pointers in the middle of your space for managing your lifetimes.
+
+35
+00:16:01.000 --> 00:16:36.000
+Stuff like that, I think, is an underappreciated technique outside of, say, the game programming world. And C++ is really good at it. And I think you're kind of leaving a lot on the table if you don't take advantage of that, if you're going to force yourself to use a language like C++. Have you used these techniques in your CodeDefense compiler? Yes. Really? And so are you manually implementing that yourself? So one of my interesting failures was that I had a ref counted memory management system that allocated and deallocated based on stack lifetimes, very close to what you would think of as like smart pointers in C++,
+
+36
+00:16:36.000 --> 00:17:08.000
+the same basic concept as a shared pointer. And, you know, that had some overhead. So I thought, you know what, I'm going to do some object pooling, you know, manage this memory myself. I'm going to, you know, use my own allocator instead of doing a malloc. And I said, all right, you know what, I'm going to do it. It's going to be sort of like a bump stack allocator based a little bit like the slab allocator in Linux's kernel and all that stuff. And so I implemented all that, came out, worked beautifully and ran exactly the same performance wise as when i didn't and then i got to thinking i was like well you know what that
+
+37
+00:17:08.000 --> 00:17:39.000
+was kind of stupid because the underlying operating system is basically doing exactly what i just re-implemented and so i had just re-implemented a kernel malloc in for myself and got exactly the same performance i tossed it i tossed it. I got about 10 commits in on that work, and then you'll see a giant revert of all that code. And I just, you know, goodbye. I don't need that anymore. So I do other things. But the principle of managing those objects in a way that avoids needing to manage ref counts throughout your program,
+
+38
+00:17:39.000 --> 00:18:03.000
+so basically going even further than just smart pointers, getting rid of smart pointers in your program and having object pools at a higher level so you don't have to bump ref counts up and down all the time and stuff like that. You know, that's a big, that's something I would consider. Yeah, there's some, I'm not sure if it's modern C++ guidelines, but there's a couple guidelines I think that consider smart pointers as just global variables.
+
+39
+00:18:03.000 --> 00:18:19.000
+And depending on who you are, folks have strong feelings on whether or not those are a good thing or a bad thing. It's kind of the beauty of C++, right? It's like each person can be his own church. Because you kind of get to pick whatever... Actually, maybe it's not the beauty. Maybe it's the curse of C++
+
+40
+00:18:19.000 --> 00:18:37.000
+is that you're relegated to picking only the subset of C++ you like and then always being, you know. This is what I've heard from a manager at Facebook that when they code on their own, they love to use C++, but when they code and are managing a team, they never use C++
+
+41
+00:18:37.000 --> 00:18:50.000
+because everyone has a different style that they want to program in and trying to mandate a consistent style is so much harder. And so they choose Rust. You get way more guarantees. There's way less code review needed. And you can just say, we're using Rust format.
+
+42
+00:18:50.000 --> 00:19:11.000
+And it gets rid of a lot of the arguments that you end up having if you're coding in a C++ code base. Yeah, well, if we want to get snarky and critical about things, I have the same complaint about Rust and C++, which is simply that the languages do not encourage deep, inherent memorization of the ecosystem. You tend to
+
+43
+00:19:11.000 --> 00:19:31.000
+be doing a lot of lookups, a lot of references, a lot of autocompletes, a lot of which library do I need to call for this thing, and I much prefer when I can think about a problem, have the language in my head, and not have to go to an API reference, not have to look something up every hour or every 30 minutes to go have to do
+
+44
+00:19:31.000 --> 00:20:10.000
+something. I just want all of that sitting in my head, and I just want to program. I don't want to have to deal with all that other stuff. Well, maybe this is an opportunity. So of the stuff sitting in your head, you mentioned algorithms. You said you preferred sort of families of abstractions. But when it comes to primitives, a lot of these map to what we consider algorithms in C++. So what are, you know, your go-to favorite primitives that, I mean, some of them, like I said, IOTA that exists in C++. Whether that's really an algorithm, you know, it lives in the, actually it lives in the numeric header, which are a small set of numeric algorithms. Diotic IOTA, though. Diotic IOTA and IOTA underbar in APL, which those correspond to some really interesting
+
+45
+00:20:10.000 --> 00:20:37.000
+cases. Diotic IOTA. Walk people through what, and actually walk people in case they happen to not know what IOTA is. So IOTA is the primitive that would allow you to generate the numbers or generate the discrete space in a n-dimensional discrete space. So in the vector case, you would be generating the natural numbers. It's the index space of a vector. In a matrix, you're generating the index space of a matrix, which would be things like 0,
+
+46
+00:20:37.000 --> 00:21:07.000
+0, 0, 1, 0, 2, 1, 0, et cetera, as indices into a two-dimensional array of some sort. And you can go up to any number of dimensions with that, and you generate sort of the entire index space that exists. So the C++ iota is basically the one-dimensional subset of the APL iota. Right, right, right. And so dyadic iota. And dyadic iota, this is a cool design question you have, right? Because dyadic iota, when you express what you want,
+
+47
+00:21:07.000 --> 00:21:27.000
+it's really just, I want to find matching elements between two sets of things, right? I have an ordered set of one thing, and I want to find the matching things in an ordered set of another thing, right? And that's a really simple specification, but it gives you access to all sorts of algorithms, right? You can do a binary search to find that stuff.
+
+48
+00:21:27.000 --> 00:21:55.000
+You can do a hash table lookup to find that stuff. You can do a quadratic lookup on that stuff. There's all sorts of ways of finding that data behind the scenes, and there's something I really like about not having to think whether I want a skip list or a hash table or a binary search or something else and allowing that to be decided on later based on the actual data that you have instead of a priori deciding we're going to make this a hash table because we think this is what our data is
+
+49
+00:21:55.000 --> 00:22:25.000
+going to look like we are saying the word dyadic uh to convert that to uh I mean I made the same mistake to convert that to c++ speak that just means a binary function. Not bitwise arithmetic, but just a function that takes two arguments, whereas iota is a monadic or unary function, takes one argument. So for the case, let's give them a short example. If you've got the lists 2, 3, and 1, 2, 3, 4, 5, and you place dyadic iota in between those two because binary functions or dyadic functions are infix in APL, what does that give
+
+50
+00:22:25.000 --> 00:22:49.000
+you as a result? It's going to look at those elements that are the left argument, that second set, and it's going to try to find the matching element in the other set and give you, return you the index pointing into that space or into that set. So if two, three is your left argument, two, three is your left argument. And then you said one to five is your right argument. So you would get the, well, some of those don't match. So there's an extra edge case where it says
+
+51
+00:22:49.000 --> 00:22:59.000
+if you can't find it, just return the index one more than the unmatched. So if you did 2, 3 and you're trying to find 1, 2, 3, 4, 5 or something through that, the 2 and the 3
+
+52
+00:22:59.000 --> 00:23:15.000
+in that 1, 2, 3, 4, 5 are going to match on the 2, 3. Right. So you'll get 0 for the 2 because that's the first element. And 3 is the second element in that set. So you get 1 there. And everything else is just going to give you 2 because they can't find it in that set.
+
+53
+00:23:15.000 --> 00:23:47.000
+So you'll get 2 for the 1, 0, 1, 2, 2, 2. So it basically returns you the indices of matched items. And for everything else that doesn't exist, you get a length plus one back. Yeah, basically the index of the matching item or one more than the largest index in the largest valid index for the searching set. Right. And so off the top of your head, do you know how, one, this is implemented,
+
+54
+00:23:47.000 --> 00:23:59.000
+and I'm not even sure if you can say in Dialog APL, and two, how it's implemented in CodeDefunds, the GPU version, because I'm sure they're very different. And it's interesting that you could use binary search because binary search
+
+55
+00:23:59.000 --> 00:24:23.000
+is not typically the top algorithm you think of when you're doing a GPU-accelerated algorithm. Right. So for an algorithm like this, on a CPU, if you have enough data that you need to do this work, it pays to build a hash table of this stuff and look it up. And so in the dialog interpreter, you would, in fact, often generate a hash table for the set of elements you're going to look up,
+
+56
+00:24:23.000 --> 00:24:52.000
+and then you just look up membership in that set and find the index that goes along with that. So the key is the value, and the index is the value. The problem is that we have to use the value multiple times there. But the problem is there's a computational cost to building the hash table. So very often the interpreter would prefer to do that where you have an array that's stable. But if you have small amounts of data that you're going to search, it's not worth it to build the hash table. So very often, the interpreter will prefer to do that where you have an array that's stable. But if you have small amounts of data that you're going to search, it's not worth it to build the hash table. So you can just use a, you know, a quadratic search or a binary search
+
+57
+00:24:52.000 --> 00:25:27.000
+to find your data in that space. And that'll have lower overheads. And that's the faster way to go. And it's very common that you might use this pattern on small sets, rather than large sets in APL. In other languages, this isn't as much of a primitive. It's sort of a special case for a lot of people. So they tend not to want to have optimizations for small cases and large cases in the same primitive or same library call. In the CodeDefense compiler, since we care about the GPU and the CPU, our CPU, we have two algorithms, two spaces we have to implement. The CPU case, we're assuming
+
+58
+00:25:27.000 --> 00:25:44.000
+that it's small. We're assuming it's small. So we use like a quadratic or a binary search algorithm on small arrays because we don't want more than like a thousand 1024 of them. So we don't have more than like two to the ten of these elements. We use something very naive because it's low overhead.
+
+59
+00:25:44.000 --> 00:26:07.000
+But on the GPU side, we can't really do a hash table. Like, it's really complex to do a hash table, and it's very expensive to do a hash table on a GPU. You can do it, but I don't want to have to maintain that kind of algorithm. I mean, we do, not to interrupt, but I think it's been in the last one or two years we have a lot of algorithms in different libraries, but we have started building in the namespace KUCO
+
+60
+00:26:07.000 --> 00:26:22.000
+for KU collections we have a bunch of these different types of hash because it's not just one hash map on a GPU there's these static hash maps so anyways if you're thinking out there to roll your own, very difficult if you don't want to roll your own they are some hash map implementations
+
+61
+00:26:22.000 --> 00:26:51.000
+that we are rolling out and the problem then is it's a lot of work to work on this. So what I do is I just use the binary search, and that is very low overhead. And it requires logarithmic in general, the logarithmic type critical paths. But in practice, especially for those intermediate variables where you want to maximize the amount of actual work you're doing on a problem like this, because on a GPU,
+
+62
+00:26:51.000 --> 00:27:16.000
+this might be a very memory-bound sort of operation. And so when you're working with that, I want to try to minimize the memory bandwidth on it for the types of intermediate spaces that we very often would work with in the data. So I just use a binary search, and that turns out to work remarkably well. Yeah, I'm trying to think if there's, because I was chatting with Kai the other day, and he was saying that he has certain optimizations built into,
+
+63
+00:27:16.000 --> 00:27:46.000
+kind of similar to what DialogAPL does, idiom recognition. And he said one of those is a row reduction outer product, or table as they call it. So you can build up a table and do a reduction on each row, and that actually won't materialize. Anyways, I'm trying to think if there would be some GPU equivalent, probably the binary searches for each element would end up being more performant. But you could do something similar. Like fusing the results of the lookup
+
+64
+00:27:46.000 --> 00:28:19.000
+with the with the next operation yeah like so i'm trying to think if you did some outer like you could implement dyadic iota technically in terms of like a outer product for for small arrays i i do have that just directly in there and you can fuse that yeah and uh this is just for outer product in general you're saying saying? Yeah, yeah. Okay. Outer product can get fused with other things, because on the GPU, we just tile it out. Right. And we do the operations. So if you've got fusion on your scalar operations, then you can fuse that outer product.
+
+65
+00:28:19.000 --> 00:28:50.000
+Yeah, that's super, super nice, because it's a very common pattern that you blow something up into a table, and then you immediately want to shrink it back down on a row or column basis. Yeah. And then... As long as the memory requirements for that are small enough, then yeah, it makes sense. And sometimes it actually may make more sense than you think. If you have too little data to really saturate the GPU, sometimes it's worth it to do a little extra computation, saturate the GPU a little bit better, and make use of all that computation power, even though you're slightly less asymptotically efficient. Yeah. That's becoming a problem that our GPUs, especially
+
+66
+00:28:50.000 --> 00:29:14.000
+in the latest like Blackwell models, they're getting so big that it's actually very difficult for small problems. I mean, the national labs in America don't have any problem saturating our GPUs, but like for a, you know, a single node, you're just doing something at home. It is actually very hard to put your GPU to full use. And so now there's technologies coming out where they're actually partitioning your GPU virtually into smaller GPUs because
+
+67
+00:29:14.000 --> 00:29:30.000
+then you can descend multiple tasks as if you have a multi-node system. I would take advantage of that if I could. I mean, most of us don't have Blackwell GPUs, so it's not a problem for most of us. I don't even have a Blackwell GPU. I think I've got an Ampere in my work laptop. I think I've only got like three or four. No, that's a joke.
+
+68
+00:29:30.000 --> 00:29:50.000
+Of course I don't have any. Alright, well we're at the, what time is it? We're at the 30 minute mark. Maybe we'll take a small break here. This is going to be a week for the listener. It's going to be like four minutes for us. And then we're going to talk about Tersity and the pitch that I don't know how to make for why tersity matters.
+
+69
+00:29:50.000 --> 00:30:16.000
+All this has been the warm up to the... I mean, that was the initial topic. Yeah. All right. We'll be back in a sec. Be sure to check these show notes either in your podcast app or at ADSPthepodcast.com for links to anything we mentioned in today's episode, as well as a link to a GitHub discussion where you can leave thoughts, comments, and questions. Thanks for listening. We hope you enjoyed and have a great day. Low quality, high quantity. That is the tagline of our podcast.
+
+70
+00:30:16.000 --> 00:30:21.000
+It's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

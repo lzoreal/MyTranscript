@@ -1,0 +1,165 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:23.000
+At some point, something has to give. And then the theory is it goes, boom. There's the cold open right there. And then it goes, boom. I also had the thought too that, you know, the reason I don't use pen and paper, it's because I have APL. That is basically like not the inductive proof thing you just described, but like I can go and visually explore some algorithm or some solution in a REPL.
+
+2
+00:00:23.000 --> 00:01:23.000
+And you actually can do this with like Haskell as well. Like with a REPL, it's like the digital equivalent of like pen and paper. You can see step by step every single time you add some operation to some expression. Like literally yesterday I was presenting and I was showing solutions to that sushi for two problem that I presented in like 2023 at C++ on C and maybe one other conference. And I do it in the REPL. And it's like, I'm showing you that when you chunk by it result like you can see it visually. Welcome to ADSP, the podcast, episode 219, recorded on January 22nd, 2025. My name is Connor, and today with my co-host, Bryce, we chat about flood fills, adaptive mesh refinement, and white doors.
+
+3
+00:01:23.000 --> 00:02:13.000
+So immediately my mind jumps to how do we implement this on a GPU? And my first thought is, of course, that, okay, you can just partition the entire space up into chunks and then just have each chunk be done by a thread block so you just partition up the entire domain and then uh you just you know locally do your flood fill within or or you can really just i guess paralyze it for every element um uh and then for every element determine if it's inside the region does that work i? I suppose so, right? It depends if what you're using your flood fill for. If you're using your flood fill just to literally do something like in the paint operation
+
+4
+00:02:13.000 --> 00:02:38.000
+where you don't actually care about the resulting values, like if you're searching for the number of steps to get to some or number of moves to get to some final square, that's going to be a lot trickier. We can talk about that in a sec if you want. However, if you're just trying to flood it with a single value, a single color, then you're basically, by partitioning it, you could do some coloring problem.
+
+5
+00:02:38.000 --> 00:03:04.000
+And the tricky part is that when you join up your partitions, you don't actually know that the color that you filled in is going to be connected with your origin point. So that's the tricky part. But you just compare edges and stuff. And you're going to end up doing a ton of extra work because you've got like... That was the next thing I was thinking of, which is... So back when I worked in HPC, I primarily worked on a type of grid code that used what's
+
+6
+00:03:04.000 --> 00:04:00.000
+called adaptive mesh refinement. Have you ever heard of that? Nope. Okay. So the particular application I worked on was simulations of the mergers of white dwarf stars. And so when you have two white dwarf stars that are evolving around each other and they start merging. One of them, the smaller one, which becomes called the accreter, it'll start, the bigger, more massive one will start pulling material off of the accreter. And there'll be this accretion stream that'll come from one of the stars into the other one. And as this stream of stellar material hits the bigger star that's sucking up the smaller one, it's a pretty violent thing. And so, you've got a bunch of stellar material that gets ejected out there. And so, if you're going to simulate this,
+
+7
+00:04:00.000 --> 00:04:40.000
+you need to simulate not just the two stars, but this huge space around it because you're going to simulate all of this material that's getting ejected out there. But you end up where you've got this huge grid, and in the center, you have these two tiny stars. And if you simulate the entire grid with the resolution that you'd want, that becomes a computationally massive problem. And you're not actually interested in the entire grid. You don't need the same resolution of the entire grid. There's a few places where you need really high resolution. For example, the accretion stream of material between the two stars.
+
+8
+00:04:40.000 --> 00:05:40.000
+When the stars start merging, that stream can be very, very narrow. And so you might need a lot of resolution on that feature because it's a very small feature relative to the rest of the simulation, but it's very important. And also, around the edges of the stars, the boundary of the stars, you want to have a lot of resolution so you can really study, you know, what's happening as the material leaves in one star and hits the other star. And so, the technique that you use is you have a grid of a hierarchical grid of different resolutions. So, you start off with a very, very coarse grid, which is your root level grid. And then you can refine. So, you pick a region of that grid, maybe multiple regions, and you say, we're going to create a new grid that's going to have twice the number of points that represents this region of the parent grid.
+
+9
+00:05:40.000 --> 00:06:17.000
+And then you can refine further. So, the applications I worked with, sometimes you could have up to eight levels of refinement. So basically, you take some sub-region of the grid, and you say, okay, I'm going to create a whole new grid that has a lot more points inside of it. And then you have to do what's interpolation and then coarsening between these grids. So if you're at the eighth level of refinement, you need to take an average of your eighth level very refined grid and you need
+
+10
+00:06:17.000 --> 00:07:17.000
+to send it back up to the seventh level. And then the seventh level has to send it to the sixth and the fifth and the fourth and all the way up to the parent grid so that at every level of the grid, you have a correct for that resolution view of the world. And I was thinking with this fill problem, if all you care about is just filling in the region, you could maybe take an approach similar to this, where you start off with a very coarse grid, and then you partition it up. And then for each one of the partitions, you check, okay, are all of the points in this partition within the boundary? And if so, you can do something simple. Or if all of these points within the partition are not in the boundary, then it's pretty boring. You can just ignore it. And if it's an actual point where it's, if the boundary is within the chunk that you're looking at, then you could go and, you know, look at it with greater refinement or
+
+11
+00:07:17.000 --> 00:08:32.000
+something. So, I don't know. At least in my mind, it sort of seemed like you could use a technique like that. It was called adaptive metric something? Adaptive mesh refinement. Yeah, it's funny, when you were describing this, I actually almost implemented conceptually the exact same thing, but for a completely different application. I have, I think I've mentioned it before on this podcast, I have a repo called CityStrideHacking that I use for creating heat maps and generating paths for my city striding hobby where I try to collect streets all over the world. But there is this limitation where when you're collecting the nodes that define the ends and curves of streets, you're only allowed to – the website will only return you 1,000 at a rectangle defined by two latitude and longitude points, and you're trying to collect all the nodes in that space, it just, I just defined like a square small enough, and then
+
+12
+00:08:32.000 --> 00:09:09.000
+it just grids over it. But even that sometimes doesn't pick all of them up. And so I thought, you know, the smart thing to do would be just to have a recursive algorithm that looks at the top level, sends a request, and every time that you hit a thousand, you just partition your rectangle into like four sub rectangles or like split it up by some like square thing. And then every time you send a request where you hit a thousand for that smaller rectangle, you just keep on sending requests where you partition your rectangle into smaller and smaller. And the nice thing about this is it probably actually ends up with fewer requests
+
+13
+00:09:09.000 --> 00:09:35.000
+at the end of the day, because as you run exhaustively a space like the Toronto, like I'm running, there's whole areas of the map where there's no more nodes because I've run them all. And so at the top level, when you've partitioned it for the first time and then you've got like the bottom quarter of the map, that might result in like, you know, 250 requests with this really small rectangle that I had before. But now at the top level, as soon as you get zero nodes,
+
+14
+00:09:35.000 --> 00:10:04.000
+it'll just ignore that corner of the map. And now you've saved yourself like 25 or 50% of the work. Anyways, while you were explaining this about this two star, what did you call them? Red dwarfs or something? White dwarfs. White dwarfs. When you were describing that, I was like, huh, I never implemented this. But this is the exact same idea for something much less important that I never did implement, but would be a neat thing to do. But I was too lazy. And so I just, like I said, I just kept the small rectangle. And then actually, James, I hope James
+
+15
+00:10:04.000 --> 00:10:34.000
+doesn't listen to the podcast. He probably doesn't know who I am. But I said, I just kept the small rectangle. And then actually, James, I hope James doesn't listen to the podcast. He probably doesn't know who I am. But I think he's been observing that people are like abusing or hitting his servers over and over again, because he over time has been making it increasingly hard for me, for my algorithm, like my Python code that hits the server like a thousand times. He put these like rate limiting things in where every once in a while now it'll be like sorry you've exceeded your threshold please wait like five to ten minutes because you need to be logged in with your credentials uh so i have some
+
+16
+00:10:34.000 --> 00:11:13.000
+like i don't know python cookie header thing uh that enables so he knows like which account it is and then just like blocks that user so it's kind of like a cat and mouse game. Currently, I have, I just, I put some, whenever you get the first warning, I just wait for like a minute or something. And that seems to have worked for the moment. But anyways, it's a very interesting idea. And I'm sure, actually, speaking of the summed area tables from earlier on, we got, I think, messages from three or four different people. Off the top of my head, I know that Phineas, soon to be guest of the upcoming Arraycast episode,
+
+17
+00:11:13.000 --> 00:11:50.000
+and former guest that we had dinner with that time we went and played an escape room. Yes, yes. We went to that vegan restaurant. So Phineas, we recorded an impromptu episode at that restaurant. He reached out and said that I think it was for book orders because he works in finance. He said that they use some Dairy Table algorithm to get some information off of those. I might have that slightly wrong, but in finance, they use it. And then I think also on GitHub, in our discussion, someone had mentioned that they use it in image processing for something.
+
+18
+00:11:50.000 --> 00:12:20.000
+Those are two of like the three or four. I had three or four people ping me and they were like, oh, yeah, we use this algorithm for X, Y, and Z, where they were all completely different fields and completely different things. But it seems to be, and I bring that up because this algorithm that you've just mentioned, this kind of adaptive drilling in, I'm sure is used also in a couple different places. Because it seems like a very intuitive way to get like highly detailed information in a certain space and then ignore the other spaces that you don't really care about. Yes, it is quite widely used.
+
+19
+00:12:20.000 --> 00:13:10.000
+Somewhere I have a great video, specifically the simulations that we did um but uh if they're online do some digging afterwards and uh send me a youtube link i'll show you i have a still picture i'll show you that at least um just a tweet or or blue sky or mastodon or is there a generic term for social mediaing so so that we can... No? Do we still say tweet? Oh, wow. I showed my screen and the audio got weird. It's fine on my end. But you can see here there's one star that's denser and more massive. And then there's the other one that has a stream of material going out from it. And then you see in the bottom one here, that shows the size of the entire grid.
+
+20
+00:13:10.000 --> 00:13:44.000
+And then those two stars are just in the center. So they're pretty small relative to the size of the grid. And then you can see these more and more refined grids surrounding the stars here on the left. Take my word for it, listener. It looks cool i will i will find that video um which i'm sure is on one of my other hard drives i will find it later in uh uh uh because it's uh it's pretty cool it's i've actually been looking for it because i wanted to show ramona to get back to the the your original question like 15 or 20 minutes ago which is
+
+21
+00:13:44.000 --> 00:14:33.000
+probably in the last episode at this point. So I'll repeat the question in full was, you know, do you use pen and paper? Or that was this author, I think Panos was his name. You know, an algorithm is a thing that you can do by hand. I will say at my very first job, I used to use pen and paper and it was a classic thing. I was literally just talking with my buddy victor um who also worked there uh and has moved on to a different company since then so we were both actuaries and a part of uh actuarial calculations are these things called projections and you are forecasting the financial and mortality future if you will of of groups of people. And you typically will have like adverse scenarios that are like a projection off of a projection. And then you have to compare like you have to hold money in the form of what they call
+
+22
+00:14:33.000 --> 00:15:03.000
+reserves or capital in order for if some adverse situation happens that you've got the money on your books to pay out these insurance claims. And that you would do by hand all the time because you'd have, you know, different mortality rates. You'd have this sort of one line, which is your main projection. And then you'd have these kind of adverse scenarios at the five, the seven, the 10. And then those would have like different mortality. Anyway, so you do that stuff all the time to try and visualize this complex calculation.
+
+23
+00:15:03.000 --> 00:15:24.000
+So when it comes to stuff like that, that is a lot going on, it's not so much describing the algorithm, but it's more describing like a visualization of a calculation, if you will. That stuff I definitely think is super useful, but I'm not sure the last time when I actually pen and paper worked through
+
+24
+00:15:24.000 --> 00:15:58.000
+like a generic algorithm. I don't know. Maybe we're breaking Sean Parent's heart right now because it's like a – although I'm sure he just sits there like a monk and does it in his head. I don't know. Well, I'm sure we'll get a message from Sean clarifying whether or not he actually uses pen and paper um i i think maybe part of the reason why i do it is i as much as i i hate to admit it i do actually have a college degree and that college degree is in applied math and i i've said i think a few times maybe even on this podcast that
+
+25
+00:15:58.000 --> 00:16:48.000
+um i feel like the one thing that i really took away from my math education that I use with some regularity is proofs, going through and constructing a proof. And actually, sad story, I had this professor who was teaching our class on proofs and logic. And he's a great professor. And he actually, he died very suddenly of a heart attack in the middle of the semester. And I remember I walked into class and, you know, I was me. So, I was always late for class. And I walked into class and he wasn't there. There was some other professor there. And I just assumed, oh, I've come into the wrong class. And so, I very quickly exited and started walking down the hall.
+
+26
+00:16:48.000 --> 00:17:46.000
+And then somebody ran out of the classroom. And they were like, no, no, no, come in, like something's happened. And they told me that unfortunately, our professor had been out for a run and I just had a heart attack. And it was very sad, but he was an amazing professor. And I feel like maybe one of the reasons why I go and write stuff out by hand is that like, I'm just going through like the process, like of coming up with a proof to prove to myself that this algorithm is going to work. And, you know, when I'm when you're constructing a like an inductive proof, you start off with like the zero case and then the one case and then the two case. And I and I think that's maybe why I start off with looking at like, you know, some, you know, one small problem. And then I look at another small problem, et cetera, et cetera. Yeah, I definitely don't have that background.
+
+27
+00:17:46.000 --> 00:18:11.000
+I mean, I took a discrete mathematics course, but I wasn't paying attention too closely. And I also had the thought too, that you know the reason I don't use pen and paper? It's because I have APL. That is basically like not the inductive proof thing you just described, but like I can go and visually explore some algorithm or some solution in a REPL.
+
+28
+00:18:11.000 --> 00:18:57.000
+And you actually can do this with like Haskell as well. Like with a REPL, it's like the digital equivalent of like pen and paper. You can see step by step every single time you add some operation to some expression like literally yesterday i was presenting and i was showing solutions to that sushi for two problem uh that i presented in like 2023 at c++ on c and maybe one other conference and i do it in the ripple and it's like i'm showing you that when you chunk by it result like you can see it visually like you are permuting and changing an input and you can see it at every step so that is kind of convincing yourself like okay i do this next thing i expect this okay it happens i do this next thing oh right there's a corner case there
+
+29
+00:18:57.000 --> 00:19:47.000
+uh when you have whatever so i'm not sure like how often do you spend time in a repl i'm guessing python's the only language that you really use actively that has a repl like do you spend time in a REPL? I'm guessing Python is the only language that you really use actively that has a REPL. Do you spend any time in it? Yeah, I do. I think my way of learning is by doing and experimenting. I'm very unlikely to go and read the the documentation learn how something works i'm much more likely to go and pop into you know for c++ godbolt for python just into the repl to just play around with something and and learn how it works uh through example through doing so i i do do that fairly frequently i feel like i do it for c++ too and the c++ equivalent of a repl is just going to godbolt yes that is as
+
+30
+00:19:47.000 --> 00:20:21.000
+close as you will ever get to the repl feedback uh when compared to languages like apl python haskell yeah it's etc i did i did just find the video i will show you the video all right here we go folks maybe i'll cut'll cut in the audio if I have the energy, which sometimes I do. I don't think there is audio from the video. All right, folks. I will not be cutting in the audio. Let me see if I can make it a little bigger. We're in PowerPoint.
+
+31
+00:20:21.000 --> 00:20:46.000
+Here. We've got some blue with two dots. Oh, PowerPoint's gone. I can just share my entire screen. It would be cool if I ever changed the thumbnails for ADSP the podcast. I would definitely put this as the thumbnail. But it's been 218, 19 episodes, and I've never changed the thumbnail once, and I'm not about to start now.
+
+32
+00:20:46.000 --> 00:21:09.000
+All right, here we go. We're hitting the play button. So the grid here is rotating, but- It's a rotate. That's a rotate, folks. Holy smokes. So the stars are actually rotating around each other incredibly fast. Like, white dwarf stars are rotating around each other at, like, you know, a few times a second in some
+
+33
+00:21:09.000 --> 00:22:27.000
+cases. So, these things are, these are giant stars that are spinning around each other very quickly, but we rotate the grid with the stars. So, they appear to be rotating very slowly here because the frame of reference is rotating. And you can see here, it's now zoomed in, you can actually see the grids. And you can see that one of the things that we do with the adaptive mesh refinement for these types of simulations is we add and remove refinement as needed. So, you can see as these stars move, those little grids were, you know, finer grids were appearing and disappearing, tracking the stars as they move around this grid here. And now you can see that there's much coarser resolution towards the edges of the grid where you've just got some stellar matter and not the stars themselves. And the reason that you study these things is that these are one of the possible progenitors of type 1a supernovae, type 2a supernovae, some type of supernovae, which are used to measure stellar distances.
+
+34
+00:22:27.000 --> 00:22:59.000
+Because we believe that we, oh, there it goes. It just slurped up the star. And you could see as it zoomed in, you could see that towards the edges there was like lower resolution and in the center there was higher resolution. And here's another little visual. It shows you just how those finer grids can track features because they get dynamically added. And so there's two images here. There's one that shows before the accretion stream forms. And there's no fine grid between the two stars.
+
+35
+00:22:59.000 --> 00:23:30.000
+And then there's an image that shows after it forms where you've got these fine grids tracking that stream of material. And that gets added dynamically. And then you remove the resolution dynamically as needed to save computational resources. Anyways, yeah. Pretty cool, folks. questions about the universe because we use this type of supernovae to measure stellar distances because we believe that they put out a fairly
+
+36
+00:23:30.000 --> 00:23:47.000
+uniform amount of energy when these type of supernovae explode. And so if you can see, oh, hey, this type of supernovae exploded over here, and we know how bright it appears to be relative to us us then we can
+
+37
+00:23:47.000 --> 00:25:10.000
+measure roughly how far away that thing was um and so it's measuring events like this that were we were able to determine that oh hey the universe is expanding so anyways um this is uh what do you call it cosmology 101 201 maybe? Maybe 401 with Bryce Lelbeck? And the reason we would want to simulate these things is that if we use these things to measure stellar distances and to understand our universe, we want to make sure that we have a good understanding of their dynamics and whether they actually are standard candles and what actually causes these type of supernovae to occur. The theory is, so, white dwarfs are very, very dense. And once a white dwarf goes above a certain mass, which is called the Chandrasekhar limit, then there's literally no space for any more stuff in the center of it. And then it just reaches a point where if any more stuff gets pulled into it by gravitational forces, it's just going to explode because of the radiation forces and simply the lack of any space left in the core of this very, very dense thing.
+
+38
+00:25:10.000 --> 00:25:32.000
+It's like, you know, this thing is like essentially imagine there's no space between the atoms. It's all just completely compacted, but more stuff keeps coming in because of gravity. And so at some point something has to give. And then the theory is it goes boom. There's the cold open right there. And then it goes boom there's the cold open right there and then it goes boom but um one other thing i wanted to talk to you about from this book um so i was gonna say
+
+39
+00:25:32.000 --> 00:25:55.000
+we've got like i think it's five minutes till we hit the hour mark which would be a good two part we'll call i don't know what we'll call it algorithms panos algorithms one two or airport algorithm book we'll cut we'll algorithm book we'll come up with something catchy so what's the put a bow on this with the last thing or one of the other things that you wanted to chat about that's worth highlighting so
+
+40
+00:25:55.000 --> 00:26:18.000
+well I had a whole new another topic a whole new topic end of episode 219 start of episode 219. Start of episode 220. Be sure to check these show notes either in your podcast app or at ADSP the podcast dot com for links to anything we mentioned in today's episode, as well as a link to a get up discussion where you can leave thoughts, comments and questions. Thanks for listening.
+
+41
+00:26:18.000 --> 00:26:23.000
+We hope you enjoyed and have a great day. Low quality, high quantity. That is the tagline of our podcast. That's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

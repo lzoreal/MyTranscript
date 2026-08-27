@@ -1,0 +1,229 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:39.000
+Anything that takes, if you're in range land in C++ 20 or 23, a range and turns it into a range of ranges. Or if you're in sequence land in Swift, a sequence into a sequence of sequences. Or if you're in Haskell land and you take a list and you got a list of lists. Or a string and you now have a list of strings. Anything that does that, I consider a cut. And there are four or five different types of cuts. There are index cuts, predicate cuts, function cuts, and then the last one is what I call FHM, frequency hash map cuts. There are index cuts, predicate cuts, function cuts, and then the last one is what I call FHM, frequency hash map cuts.
+
+2
+00:00:39.000 --> 00:01:08.000
+Welcome to ADSP, the podcast episode 173, recorded on March 6, 2024. My name is Connor, and today with my co-host, Bryce, we chat about the category of algorithms called cuts and how to implement a parallel chunk buy. This is what? Episode 173. No, no, no, no, no, no, no. Episode 173, because this is what just happened, folks. We had a 30-minute episode on Bryce's apartment and couches.
+
+3
+00:01:08.000 --> 00:01:22.000
+This will air. It was just on couches. We didn't even really talk about it. We talked about the fixtures, the brushed brass. We'll send pictures of the apartment. But you're not going to hear that episode. So actually, this is episode 172. That episode's probably going to be like 170, late high numbers, 180,
+
+4
+00:01:22.000 --> 00:01:49.000
+because we're going to record this algorithm episode right now. We're in Bryce's apartment. I'm visiting for the New York C++ meetup tomorrow night. We just had sushi last night at Sugarfish with Sean Parent of Adobe. And we went to a very mediocre comedy show. And we went to a very mediocre comedy show. Shout out to the – actually, we're not going to shout it out because we don't want to make him feel bad. But we went to a – You know who you we don't want to make him feel bad.
+
+5
+00:01:49.000 --> 00:02:34.000
+You know who you are. Yeah, you know who you are. And if you're from New York and you're familiar with the comedy club scene, they had mini donuts and the mini donuts were the best part of the show. We love them, folks. We love them. Anyways, the couch episode and the apartment episode isn't going to come up for a few episodes. Why is that? Because we're going to do the algorithm episode right now. That's going to air in like two days on March 8th. That'll be episode 172. Then we're going to be recording with Sean Parent live, I think at Adobe headquarters, not headquarters, at the New York Adobe offices. Adobe HQ is back where Sean lives in San Jose or outside San Jose. I mean, the HQ is in San Jose. Sean doesn't live in San Jose. Anyways, trying not to dock Sean here, but he lives near San Jose. Anyways, and so we're going to do probably a one-part or two-part episode with Sean.
+
+6
+00:02:34.000 --> 00:02:51.000
+That's going to be episode 173, 174. And then maybe we'll save the couch episode for when we run low and we need like a backup one. And then that's when it'll air. So maybe it might not even be until like the 220s. Who knows? Also, folks, it's been about what, six, seven episodes in a row where we haven't had a guest? That's not for lack of trying.
+
+7
+00:02:51.000 --> 00:03:08.000
+It's Connor's fault. We now have a DuckDB individual who we actually haven't confirmed the time yet. I think, Connor, I think you should not announce guests until we have the recording of the guests. Nope, they're coming on. They said they'd be willing. We just haven't set up the final time. We haven't even had it scheduled.
+
+8
+00:03:08.000 --> 00:03:22.000
+And we have who reached out. We said if you are listening or if one of your friends is listening. We haven't even scheduled it. We haven't scheduled it. It's going to happen, though. Did he write us back? He did. And then did I reply with times?
+
+9
+00:03:22.000 --> 00:03:32.000
+He did. Not with times. He did write us back, though. Anyways, name him. We're going to have Doug Greger on this podcast. We're going to have Doug Greger on. So we've got a couple different people, and we've got Sean coming up. So don't worry.
+
+10
+00:03:32.000 --> 00:03:56.000
+If you're tired of these mano-a-mano with your two co-hosts in 2024, don't worry. We're fixing it. And now, after four minutes of preamble, we're going to talk about— You're thinking about grouping operations wrong. I've just been waiting to pounce. I've just been sitting here waiting to pounce on Connor for an hour. Let's do a brief overview of what a grouping operation is. Because I call them, I actually have a new category name for them.
+
+11
+00:03:56.000 --> 00:04:22.000
+They're called cut operations, not grouping. You do the brief overview and then you tell me when I can fire this loaded gun. Here's a 120-second overview. It's brief. There's this new – I mean, we've talked about these lots. Here's a few examples. Chunk buy, splits, chunks, et cetera. Anything that takes, if you're in range land in C++ 20 or 23, a range and turns it into a range of ranges.
+
+12
+00:04:22.000 --> 00:04:57.000
+Or if you're in sequence land in Swift, a sequence into a sequence of sequences, or if you're in Haskell land and you take a list and you got a list of lists, or a string and you now have a list of strings. Anything that does that, I consider a cut. And there are four or five different types of cuts. There are index cuts, predicate cuts, function cuts, and then the last one is what I call FHM, frequency hash map cuts. And technically when it comes to predicate cuts, there's different types, unary and binary predicates. Anyways, if Bryce is curious of the different types of cuts, we can get into it. But basically anything that chunks or dices things up, there you go.
+
+13
+00:04:57.000 --> 00:05:20.000
+All right. So a little more context, Connor. And by the way, that was only 50 seconds. I've been trying to work on not rambling as much because I've gotten some feedback from people that I just – remember that one time you asked for me to describe – No, don't care. Shut up and listen to me. Okay, a little bit of context.
+
+14
+00:05:20.000 --> 00:06:02.000
+I've been working on a project to figure out how to paralyze C++ ranges, in particular how to deal with range adapters in ranges that we might want to paralyze in C++ recently. And some of the tricky ones to deal with are the grouping operations like chunk by and split. Now, Connor. And so Connor and I have been talking about this a bit during the day. And so you, the listener, may not have all the context here. I don't care. And we love that because, you know, it's been four years since I've been in an office next to someone where you get to chat about work while working.
+
+15
+00:06:02.000 --> 00:06:38.000
+I mean, you did give me today – you either – well, I think you later said that you didn't come up with the clever idea. But you certainly – I got you half – I started you halfway there and then you made an insight on top of my insight. Well, I'm sure we'll do an episode about that. So here's the thing about grouping operations. You, I think, are thinking about them wrong. Because earlier you made a comment that they are not removal operations, that they are not like filtering operations. Some of them are. Some of them aren't.
+
+16
+00:06:38.000 --> 00:06:57.000
+You started mansplaining to me chunk buy. First of all, can you mansplain to a man? Yeah, you can. Can you? Yeah. That's a whole other episode right there. Dude, we're not tangenting now. Make your argument. What? You were claiming that chunk buy is not in our removal operation. Oh, chunk buy is definitely not. So I have a table inside my Jell-O project where I categorize these
+
+17
+00:06:57.000 --> 00:07:31.000
+types of cuts. And there is a similar to that algorithm table that I had back in C++ now, 2019's algorithm intuition, where you've got reduce, scan, etc. And then some of them are maps versus reduces. Some of them look at one indexes versus two indexes, etc. This table, one of the columns, that's a binary column, it's either yes or no, is does it drop elements? And chunkby does not drop elements. It doesn't drop elements, yes. It doesn't drop anything. Okay, but you're thinking about it wrong for the purposes of
+
+18
+00:07:31.000 --> 00:07:53.000
+parallelism. Okay, the way that we tackle almost any parallel programming challenge is the first thing we do is work distribution. We take our input and we come up with some strategy for how we're going to distribute it among a group of threads.
+
+19
+00:07:53.000 --> 00:08:42.000
+Yeah? In the case of these array language operations and things like C++ ranges, we have some input sequence or data of length n. And typically what we do is we take that n and we divide it up equally or as equally as possible among m threads. Now, when we have something like filter or chunk by that is going to change the shape of that original in inputs that changes it in a way that is not cannot be known a priori then we have to discover
+
+20
+00:08:42.000 --> 00:09:28.000
+the change of the shape in parallel. So if it's something like stride, right, where we say we're going to take every third element, we can simply handle that during work distribution. If we have something like stride, we can just say, okay, we're just going to pretend that the input's actually you know n divided by three and then we're going to split up that n divided by three input among the m threads that we have yeah that makes sense and like likewise for chunk if we have like chunk three but if we have chunk by, we don't know what the size of those groups are going to be.
+
+21
+00:09:28.000 --> 00:10:31.000
+We don't know how many we're going to have. In the same way that with filter, we don't know how many elements we're going to have on the other side. So we can't divide it up evenly among the threads. We have to, in fact, part of the thing that we're paralyzing is the non-trivial computation of the reshaping. In the case of the filter, the non-trivial computation is applying the predicate, and likewise in chunk by. So, but we still have to do work distribution. And if we can't compute a priori how the shape is going to change then we must do work distribution based upon that original in elements of input and so every thread is going to get n divided by m pieces of work okay i think i'm following still i don't see how anything
+
+22
+00:10:31.000 --> 00:11:13.000
+has had to do with dropping yet though right so for something like chunk by at least on a platform like a gpu platform we don't want to create new threads. We want to figure out the chunks and then we want to like create those chunks and then continue processing the rest of this pipeline of operations after the chunk by with that same group of threads. So like if we have like chunk by, like pipe transform, we want to figure out what those chunks are and we want to apply, we want to with those same groups of threads,
+
+23
+00:11:13.000 --> 00:11:51.000
+we want to have them apply the transform function. So if we've got M threads, each of which are given in initial pieces of work, then we need to figure out, like, which one of these threads are going to need to call this transform function. Because it's not going to be every thread. I mean, it could be. You could have a chunk by function that makes everything into a chunk of one element. That's the limit for the most number of chunks that you can have. But let's assume that that's not the case,
+
+24
+00:11:51.000 --> 00:12:49.000
+that we're going to end up with fewer chunks than we had initial elements. In that sense, so then in that situation, when we get to that transform operation, after the chunking operation, some of the threads that own some of those original input items, some of those threads are not going to participate in the transform operation. Because we don't need all of them to participate. We don't have in chunks. We have some number less than in chunks. And so we need some way for those threads to decide which, you know, who's going to do which, which of these original in pieces of work that we were given are no longer valid. And that process of deciding who's gonna handle the chunks is very similar to how we
+
+25
+00:12:49.000 --> 00:13:30.000
+parallelize removal now let's talk about the algorithm that i was working on last week and was excited to talk about oh we can't move on yet we're not moving on we're talking about how do you implement chunk buy in parallel. And one second. Hang on. I will be right back. All right, well, Bryce is over there. I mean, I'm not fully buying what he's selling, folks. First of all, I'd like an example of the transform operation that he says we're applying to each chunk that has resulted from the chunk by.
+
+26
+00:13:30.000 --> 00:13:55.000
+I'm saying if you have chunk by pipe transform. Yeah, that's what I just said. It's just an arbitrary chunk by followed by transform. Okay. What do you mean? Are you saying do you want an example of how you would use Shung-Fai in a pipeline? I can come up with a ton of examples, but the reason why I'm asking for one is what you're thinking. Here's one.
+
+27
+00:13:55.000 --> 00:14:38.000
+Here's one. Take an input of text and compute the average length of every word that was i literally as soon as you said the text thing that's where i thought you were going so this is an example where everything that bryce said doesn't need to apply because every thread will get used an example like where you are doing a reduction this this is one of the easiest. You're going to have to move closer because I'm going to have to read from my computer. Well, now I'm recording a podcast. A local friend, Phineas of the pod.
+
+28
+00:14:38.000 --> 00:14:56.000
+Why is it a friend of the pod? He's a friend of mine. Has just messaged me. And now we've got to reply back. Recording pod right now. Good luck editing this section, Connor. Maybe we'll just leave it in. No, you better not.
+
+29
+00:14:56.000 --> 00:15:33.000
+We'll reply in a few minutes. Do you think I'm going to be done with you in a few minutes? Yeah, well, it could mean more than that. minutes and you think i'm gonna be done with you in a few minutes yeah well that's you know it could mean more than that anyways um so because basically you've got your chunk by and you're chunking by uh spaces which is going to give you words there's maybe something a little bit more complicated than that and then your transform is a ranges colon stood colon colon ranges colon colon distance which you can think of as a reduction you definitely can just do that it doesn't matter if like where your blocks are split
+
+30
+00:15:33.000 --> 00:15:56.000
+you know that was across a word because you can just handle that you know oh the length of this string is three and the length of this string is two that was across a border you just add them together there's no threads that weren't doing work. Like, so in that example, anytime basically where you're... How are there not any threads doing work? Because all of them are doing, are calculating the length of the elements
+
+31
+00:15:56.000 --> 00:16:15.000
+that are in your chunk. Why would any thread not need to do that computation? Okay, let's say that we have... Well, now he's changing the example. See, and this is why... No, we're going to use the same example. Let's say that we've got some input string of text that has four words in it.
+
+32
+00:16:15.000 --> 00:16:43.000
+Okay. And let's say that it has in total... Each word is like four characters long. There's a space after each one. So we have 20 characters total in the input. Okay. So we spin up, let's say 20 threads, each of which is given a single character. And then we apply.
+
+33
+00:16:43.000 --> 00:17:15.000
+What? How is every thread given a single character how are you able to it's an example connor but how are you supposed to calculate like each thread needs at least more than one character every every thread is responsible for one character it's it's looking at adjacent characters because that's how chunk by works but it's computing the answer for the predicate for one character every thread is answer for the predicate for one character. Every thread is checking the predicate for one character. And yes, that may require it to look at a second character, but that's not the character that that thread is responsible for.
+
+34
+00:17:15.000 --> 00:17:45.000
+So you have 20 threads, each of which is going to run the predicate and determine whether this is the end of a word. Right? Okay. Sure. and determine whether this is the end of a word, right? Okay. So are you somehow claiming that all 20 of those threads are going to run the transform function that calls distance on each one of those chunks? No. Only four of those threads are going to run distance on the chunk because there's only four words.
+
+35
+00:17:45.000 --> 00:18:01.000
+There aren't 20 words. there's only four words. There aren't 20 words. There's only four words. How do you figure out the length of the word now that every thread only has one character? There has to be some like thread communication stuff now and all the threads need to communicate. So that's work. Yes.
+
+36
+00:18:01.000 --> 00:18:36.000
+But I mean, how else would we divide this problem? How do we have the threads communicate? What is the number one most common communication mechanism that we use? Scans. And we perhaps haven't talked about this before. Scan is not an algorithm. Scan is a communication mechanism. Scan and a non-commutative reduction where information goes from left to right are communication mechanisms. They are synchronization primitives for threads to communicate to threads that are later in the computation.
+
+37
+00:18:36.000 --> 00:18:52.000
+Connor, put your phone away. Put your phone away. You just got invited though, so... You put your phone away. Now my girlfriend's calling me at the same time. Yeah, well, you know what? Priorities, buddy, priorities. How'd.
+
+38
+00:18:52.000 --> 00:19:05.000
+Hey, sweetie. She can't talk right now. Sorry, we're recording a podcast. Did you hear that? Oh. Did you hear that? Okay, that's my cue to go. Okay, call me later. Sure. Do you hear that? Okay. That's my cue to go. Okay. Call me later?
+
+39
+00:19:05.000 --> 00:19:16.000
+Sure. Do you want to say anything to all the listeners? No. All right. We're moving on. We're moving on. All right. I'll call you later.
+
+40
+00:19:16.000 --> 00:19:32.000
+Okay. All right. Bye. Okay. I will read you a little bit. You got to move a little closer so I can read this from this document I've been working on. Move the mic a little closer. Stop texting your girlfriend.
+
+41
+00:19:32.000 --> 00:19:54.000
+I'm texting Phineas. We're having dinner with him later. We're having dinner with him later. I don't care whether you're texting Phineas. I don't care who you're texting. Okay. You and I, I don't know if we've talked about this before, but I think it's not particularly relevant. So this is from my little document on how we parallelize ranges and parallel algorithms.
+
+42
+00:19:54.000 --> 00:20:30.000
+Can I ask a question? No. Okay. Certain range adapters group or combine elements in a way that cannot be trivially computed a priori. And that's how I think about chunk by. I think about it as combining elements together. And that, I think, is the correct mindset to lead us to the parallel algorithm for chunk by. These adapters reduce the size of the input sequence. When considering how to parallelize them, we should think of them as both transforming and removing elements.
+
+43
+00:20:30.000 --> 00:21:06.000
+A parallel implementation of these adapters must do two things. Also, is this your paper that got published? A parallel implementation of these adapters must do two things. Compute the groupings, which requires some form of summation, discard whichever of the m initial elements per execution agent do not represent one of the groupings. So the computation of those groupings can be implemented by inserting some sort of in-place scan preprocessing pass. Because I don't know that we've talked about how you implement like
+
+44
+00:21:06.000 --> 00:21:36.000
+copy if in parallel before in this podcast have we nope oh well maybe we're gonna talk about that next but just take it we've only got 10 minutes take it as a given that we can implement copy if in terms of scan we have talked about that at least that copy if is implemented in terms of scan has come up. So then my paper says, as discussed in the non-trivial removal section. What are you doing to the mic, man? Stop. You're making me. As discussed in the non-trivial removal section,
+
+45
+00:21:36.000 --> 00:22:10.000
+the removal of elements can be done by inserting an in-place COPYIF preprocessing pass. And COPYIF can be implemented. Stop squeezing the mic like that. And COPYIF can be implemented like that and copy if can be i'm starting this part over as discussed in the non-trivial removal section the removal of elements can be done by inserting an in-place copy if pre-processing pass and copy if can be implemented with a scan so for our purposes which aren't particularly worried about ranges, my point there is copy if can be implemented with a scan. Hang on, I'm not done yet.
+
+46
+00:22:10.000 --> 00:22:46.000
+I'll tell you when you can talk. So filtering operations, removing operations like copy if, can be implemented with a scan. Now, these two operations of computing the groupings and needing to remove elements can be combined into a single scan-based preprocessing pass that both computes the groupings and removes all but one element per grouping. Okay. Have we ever – are you – implement copy if in terms of scan? Wait.
+
+47
+00:22:46.000 --> 00:22:57.000
+Can I ask questions now? No. You can implement copy if in terms of scan. What is happening? I need to ask a question. Yeah. Okay. Can I ask one?
+
+48
+00:22:57.000 --> 00:23:36.000
+Yeah. I'd like to ask two, but I'll settle for one. It better be a time. It's definitely about what you just said so are you it it hurts my soul to hear that like the size of the input sequence is decreasing because in a sense that is true because i remember you saying this in a meeting once that like when a range goes through a cut operation or a grouping operation as you call it and it becomes a range of ranges now the size of technically the outer range has decreased from whatever 20 to 4 yeah we agree but like to say that the size of the input is decreasing like all those elements are still
+
+49
+00:23:36.000 --> 00:24:26.000
+there they're just like right but but they've just been inner range of five which but this is this is a mindset that represents how we implement this physically in parallel on a massively parallel processor like a GPU. So that's what my question is. and then you end up with only four threads doing work, is that because you gave all the data of the other 16 threads to each of those four threads? Yeah. And how did you do that? With a reduction. With like a reduce by key or a scan. That was my second question is How does reduced by key work?
+
+50
+00:24:26.000 --> 00:24:44.000
+We're going to get there. We're going to get there. How do we implement copy if in parallel? Copy if in parallel. I would imagine well, I wouldn't imagine. If I had to do it, I would so copy if, for those that don't
+
+51
+00:24:44.000 --> 00:25:31.000
+know, is a algorithm similar to copy but it takes a unary predicate and only copies the element uh if it satisfies that predicate and there's actually a couple different overloads that we've talked about in past episodes anyways how do we Basically do a scan on a transformed sequence representing ones and zeros that are basically corresponding to whether each element returned true for the unary predicate. You do a plus scan on that to get the resulting indices, and then you do a gather operation, and you're done. Yes. This is, well, you can look at the code now.
+
+52
+00:25:31.000 --> 00:26:37.000
+I will explain it in a slightly different way. To implement the naive way of implementing a scan in parallel, I'm going to describe a three-pass approach which needs two O-N vectors. So the first pass is we compute the flags. So we create a vector of flags which are just booleans except it can't be vector bool because that's broken in C++. But we have a vector of bools or flags and we do a transform where we run the predicate for each one of the input elements and we assign the results of that into this flags vector and so we have in flags one for each of the input elements and that flag is true if the predicate returned true and false otherwise
+
+53
+00:26:37.000 --> 00:27:36.000
+you don't even need to do that you can but it's it for the purposes of explaining it this is a bit the very simple elegant version of the sound rhythm. Then we have to build our second vector of information, which is the indices of where elements that are going to be copied are going to move to. And to do that, we scan the flags array. And we write the results of that scan into a vector of int that each element for which the predicate is true should be assigned to. And then that gather operation that Connor mentioned, in thrust we have a thing called
+
+54
+00:27:36.000 --> 00:28:52.000
+thrust gather, but we don't in standard C++. But it's pretty easy to implement. The way I have it written here is I've got a foreach over a zip of the original input, the flags array, and the indices array. And so the function that's passed to this foreach, it's going to take three inputs, an element, a flag, and an index. And what that function does is if the flag is true, then it will assign to in the output the element's value. And then to compute the range of how large the output that you've created is, you just take the last index from the scan that you did. And that is the size of the output.
+
+55
+00:28:52.000 --> 00:29:07.000
+And after that explanation, I realized that the gather that I was referring to, I was being a little lackadaisical, a little loose. I should have said what I specifically meant was a gather if, which is what you just described. Yes.
+
+56
+00:29:07.000 --> 00:29:23.000
+All right, folks. Well, that's the end of the episode. No, it's not. It is not in no way, shape, or form the end of the episode. You hear that, folks? That's the sound of Bryce's mic not next to his mic. Well, because this thing is, this is not the end of the episode. Okay, Connor.
+
+57
+00:29:23.000 --> 00:29:28.000
+Be sure to check these show notes either in your podcast app or at adspthepodcast.com for links to anything we mentioned in today's episode as well as a link to a github discussion where you can leave thoughts comments and questions thanks for listening we hope you enjoyed and have a great day low quality high quantity that is the tagline of our podcast it's not the tagline our tagline is chaos with sprinkles of information There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

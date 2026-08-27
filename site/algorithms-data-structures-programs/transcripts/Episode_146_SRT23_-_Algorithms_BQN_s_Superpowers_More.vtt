@@ -1,0 +1,185 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:08.000
+The Psy Combinator. It's on in Haskell. We love it. You got a unary operation, you got a binary operation, and two arguments incoming. You apply that unary operation to both arguments and then feed it to the binary operation. It's super useful if you're doing chunk buys in Haskell. That's called group or group buy. Welcome to ADSP, the podcast episode 146, recorded on June 21st, 2023. My name is Connor, and today with my co-host Bryce, we continue to record live from Italy on the way to Venice during our Slovenia 2023 road trip. In today's episode, we chat about improvements to our parallel stood unique implementation, essential data structures, our favorite algorithms revisited and BQN superpowers. All right, well, so what am I what am I telling the listener at slash you? Your your idea for a a implementation of unique that does not need temporary storage.
+
+2
+00:01:08.000 --> 00:01:34.000
+Right. So we will, we'll, we'll do this with a practical example. Say we have a hundred numbers. You're going to chunk this up into 10 chunks of 10 on each of these 10 chunks. You're now going to call a sequential unique. You don't need this one to be in parallel. The parallel in this is the fact that we're doing this 10 different times on 10 different chunks you call unique on each of these chunks then once you've done that you're going to merge them which
+
+3
+00:01:34.000 --> 00:02:09.000
+bryce asked well what does that mean you're basically just going to be copying and you could calculate the indices first if you wanted to perform all the copies in parallel or you could just do them one after another sequentially where basically because you've called unique on each of these chunks you basically have potentially removed some values so you need to shift them all over so the copying is just you know copy the first chunk copy the second chunk over to where the first chunk ends etc and then once you've done this you still need to perform one final unique which is going to potentially be expensive. Yeah, so it doesn't even work.
+
+4
+00:02:09.000 --> 00:02:52.000
+Like, that's the thing. Yes, this avoids the linear memory storage. But, like, imagine that all your values are unique. So, like, the final unique that you're calling has to be because it can't be the parallel one right because you could yeah like well but but why do you have to do that final unique because if you say in my example of 100 values say value number 10 is 42 and value number 11 is also 42 because those each got sent to a different chunk. There's no looking back at the, at the equal value. And so when you copy them back,
+
+5
+00:02:52.000 --> 00:03:48.000
+you're going to end up with those two 40 kills, 42 is still adjacent to each other. But, but all that in that case where you got two chunks and the first chunk has its last value is 42 and the second chunk has its last value is 42 and the second chunk its first value is 42, all that that second chunk needs to know is what was the last value of that first chunk. This is a very similar property to what chunks need to know when you do a scan. And so if you can just, heck, you could use the same, the same down sweep, up sweep technique that you use for a scan, where you have every chunk, do its, its, do its serial unique, and then write to some, um, O chunks array of temporary storage, what its last value was.
+
+6
+00:03:48.000 --> 00:04:33.000
+And then you have another parallel pass where each chunk looks at the array and says, hey, what was the last, of the chunk before me, and then it can do, it can, you know, do the fix up that it needs to, that if that last element was the same as the first element, now, that may not work in the face of if I have a, no, I think that, I think it's fine, even if, even if I had, like, chunk one that ended it with a 42, chunk two is all 42s, and chunk three starts with a 42. In that case, chunk one is going to write...
+
+7
+00:04:33.000 --> 00:04:53.000
+It'll still work. Yeah, it'll still work. So that, I think, is a workable design. Yeah, that's a lot. Well, a lot. It's a little bit trickier, though, because now you're basically... You have like overlapping tiles or chunks. Yeah, but you have that with a scan, too.
+
+8
+00:04:53.000 --> 00:05:33.000
+Yeah, but a scan is designed to work that way. Yeah, so yes. The answer is yes. You can avoid your final unique by making use of the last value from each chunk in the next chunk and i and i suspect that that we've just talked about that using the design of the the simpler two-pass uh scan but i suspect that you could implement um that algorithm with the same technique that we used for the single pass decoupled look back scan and get yourself to a, I think at least a single pass unique
+
+9
+00:05:33.000 --> 00:05:49.000
+that only needs O number of chunks temporary storage instead of O N temporary storage. So yeah, I think that's better. So you're going to go implement that and send me a PR for Thrust? No. I'm busy. All right, all right.
+
+10
+00:05:49.000 --> 00:06:26.000
+Now that we've bottomed out on that, we can do a proper final episode. All right, what are we chatting about now? I don't know. You got any topics? We could circle back 140-something depending on with this when this comes out and talk about our favorite algorithms now that it's been two and a half years later you know is uh our favorite algorithms still the same well what was what were our answers then mine was out of product i don't know if you remember i think
+
+11
+00:06:26.000 --> 00:07:07.000
+yours was transform reduce yeah um although you might have chosen something different because you always say transform reduce um i mean i i think today i would simply say reduce because i think that transform reduce is just a simp is is no special thing it It's just a form of reduce, a spelling of reduce. And I mean, but perhaps I would say scan because I think increasingly on these most recent episodes we've found scans and... Okay, I do know what my answer is going to be. My answer is going to be that non-commutative reduce.
+
+12
+00:07:07.000 --> 00:07:42.000
+The reduce that does not require your operator to be commutative. And the reason that I like that one so much is that it does a reduction, but it lets you propagate information from left to right. And that can be very, very powerful. So I think that that's the reduce that I would pick. And yes, you may pay some performance penalty for using that reduce instead of the commutative reduce, but I still think that that's the...
+
+13
+00:07:42.000 --> 00:08:03.000
+If I only had one algorithm tool, I would have that one. Lovely. We love that for you. Great algorithm. Why don't we talk more about data structures on this podcast? Because they're boring. Yeah, that's an inflammatory statement. But, you know, there's that famous quote.
+
+14
+00:08:03.000 --> 00:08:29.000
+But it's something like, you know, 100 functions versus one data structure or 10 functions that work on 10 data structures. Whereas in C++, we have technically 100 functions that work on 10 data structures. But I just like, I, these days, I operate in array land, and there's really only one data structure, and that's the array, the multidimensional array. You know what? Sometimes you need a hash table, but we got those too. Kuko, check it out. Link in the description. Parallelized data structures
+
+15
+00:08:29.000 --> 00:08:54.000
+if you need a hash map on the GPU. You know, sometimes you need stacks and queues, but like you can implement all those with an array. It's just a couple extra functions. And yeah, you know, I'm just, I understand that there are certain areas that require certain domains that require fancy, you know, probabilistic, you know, what do they call it? Hyper log log and stuff like that.
+
+16
+00:08:54.000 --> 00:09:47.000
+Very interesting stuff. It's just not it's not what I'm focused on right now. I like, there's nothing really, I find it less tantalizing for my brain to think about data structures versus, uh, it's much more tantalizing, uh, to think about algorithms and chunk buys and the missing algorithms and stuff like that. You know, we love chunk buying. We love outer products. We love zip transform. We love, uh, inner product or transform reduce. We love the segmented algorithms. We love them all folks. We love ZipTransform. We love Interproduct or TransformReduce. We love the segmented algorithms. We love them all, folks. We love them all. And, yeah. that data structures are algorithms um and that that you know when you think about like what a
+
+17
+00:09:47.000 --> 00:10:29.000
+data structure is it's it's like you know it's some state and maybe some set of invariants and then like operations on that state and when we talk about algorithms here like especially when we talk about like you know reductions or scans like we often talk about like like what is what is the state that we need to propagate what is the state that we need to propagate? What is the information that we need to propagate between, you know, like, with our reduction or scan operators? And, you know, sometimes when we talk about algorithms, like, we talked about Unique and how our parallel implementation thrust currently needs to maintain this ON temporary storage.
+
+18
+00:10:29.000 --> 00:10:55.000
+Like that's, you know, that's state two. And so, you know, I think that at the end of the day, data structures are really just persistent algorithms, perhaps. Yeah, I mean, that's a stretch. That's a stretch. But I see what you're trying to say. And I remember back when I was, I was an actuary trying to get a job at a major tech company, and I was doing all these leet code challenges
+
+19
+00:10:55.000 --> 00:11:14.000
+and reading, you know, Cracking the Code, CTCI, whatever it's called, Cracking the Code interview, and reading all these blogs on how to best prepare and like there was this, geez Louise we've got Mr. Mazda riding right up on me tail we're going to have to get into our right hand lane
+
+20
+00:11:14.000 --> 00:11:31.000
+here and I just remember there was this like big onotation.com that had sort of all these different data structures that had the time complexity of all the operations that came with these data structures. And I just think that's so silly.
+
+21
+00:11:31.000 --> 00:11:45.000
+Like, you know what, folks? You know what, folks? You're hearing it here first. Here's what you need to know. You need to know your list in Python. We're going to stick with Python, you know? You need to know your list in Python, a.k.a. your vector, something that's dynamically resizable, in uh python we're going to stick with python you know you need to know your list in python aka your
+
+22
+00:11:45.000 --> 00:12:24.000
+vector something that's dynamically resizable you can append to etc you need to know that that's your bread and butter everyone's rank one array your vector whatever you want to call it and uh after that you know you really don't need much you need a hash set you need a hash set. You need a hash map. Maybe you need some ordered collections. You know, in Python, you're going to have to import your, I believe it's called the sorted collections module. In C++, it's going to be your map and your set, which is very confusing because, you know, we should have called them ordered map and ordered set,
+
+23
+00:12:24.000 --> 00:13:13.000
+and then set and map should have been our hash containers but you know what naming's hard and i really honestly think that's it you know that's uh i think once you've got your your hash set your hash map and your vector or your list whatever you're going to call it every once in a while you need something that's sorted but a lot of times you don't actually need that sort of container you just need you just need a rank one array you know vector or list and then you can just sort that and you're good to go um and you know all these stacks and decks and queues and yeah okay it's good to know them but like are you actually reaching for that stuff and i know there's a few listeners being like i used a queue this one time i use a stack this one time but I used a stack this one time. But, like, I think 95% of problems and stuff are solved with just, you know, a couple hash containers.
+
+24
+00:13:13.000 --> 00:13:34.000
+We're going this way because we've got to pay. Yes, that's right. And we're going to... Ooh, hopefully they take card. I mean, that does seem to be an image of a credit card, right? It did just say Visa, so we're good to go. We're gonna have to talk to someone? Do you think they want to be on the pod? I think we better not get in trouble with European tax laws.
+
+25
+00:13:34.000 --> 00:14:11.000
+All right here folks, we're doing it live and the car is unhappy because it thinks we're gonna crash. I guess we don't have to talk to somebody. Are we recording still? I did stop the recording when I thought that this was going to be an incident. We managed to successfully pay the toll on the Italian highway. It's very confusing because we put the ticket in before we selected the language and so all the instructions were in Italian and it was not clear where to put the credit card in at all. Apparently he put it in the same place as the ticket. Would have been nice
+
+26
+00:14:11.000 --> 00:14:31.000
+if they had a little arrow pointing. They just had visa signs everywhere and looking for a tap and didn't think that there would be a overloading of functions for that little ticket slot yes where were we before we were so rudely interrupted by the highway uh we were talking about data structures
+
+27
+00:14:31.000 --> 00:14:57.000
+oh right and i was just saying you're you got your list in python your set your map and they don't even have uh sets oh no that's true they do have sets in python there's some language that doesn't have sets. And if you want a set, you just use a valueless hash map, which I don't like at all. I don't like at all. Anyways. That sort of seems fine to me. It seems like a simpler model
+
+28
+00:14:57.000 --> 00:15:27.000
+because then you don't have these two kinds of things. Just to make a special case of a map, then it's one less thing you have to learn and worry about and then like all of your code that's been written to deal with maps will also work with sets um it kind of actually seems like a like a good design to me i think you're completely wrong if you've got no sets and only a hash map, that means you've got a bunch of APIs that are for looking up, you know,
+
+29
+00:15:27.000 --> 00:15:52.000
+values and stuff like that that just have no meaning because there's no values there. And it's the same reason that, you know, you've got the aliases, keys, and values on the C++20 range adapter elements. They, you know, they're sure it's convenient, but it can be confusing. So we don't like it sure that may be fair anyways i guess uh i guess that's why we don't like
+
+30
+00:15:52.000 --> 00:16:27.000
+talking about data structures that much i think it also may be a domain thing it may be just that because we're in uh compute and that we mostly focus on the design of parallel algorithms we are um we just spend less time thinking about data structures and maybe people in different domains or working in different types of applications spend more time thinking about it yep how how far we're 19 minutes away from venice folks yeah nine kilometers until the part where i'm gonna want to pay attention to looking at venice and not talking to not talking to the listener. Wow.
+
+31
+00:16:27.000 --> 00:17:16.000
+So rude, Bryce. I want to keep talking to the listener, folks. I could have been ruder. I could have said, I want to pay attention to looking at Venice and not talking to you. That's, you know, I think it was more offensive when you insulted the listener, not me. I'm used to it after four days of traveling with Bryce. So we're now going to talk about the things, the superpowers, the hidden gems of array languages. Specifically, we're going to focus on BQN, but a lot of the array languages, J and APL, have these features too. So the first one, the first one is invertible functions, invertible functions. Think about this folks. Think about this. Say one of my favorite functions
+
+32
+00:17:16.000 --> 00:18:07.000
+that I actually are algorithms that I didn't mention that I think I was going to mention when I brought up talking about our favorite algorithms was an algorithm called indices. Sometimes it's called where in Q it's called where, and in APL, I believe it's called where, but in J and BQN, I believe it's called indices. And this is if you're given a Boolean list, a list of ones and zeros, AKA trues and falses, it returns you the indices corresponding to the trues so given the sequence one zero one zero one you get back the values one three and five or if you're in bqn you get back the value zero two and four depending on whether you're a one index language or a zero index i prefer one indexed array languages or i just i prefer that language choice doesn't mean i prefer languages that do that anyways but and so, and so that function, we'll call it indices.
+
+33
+00:18:07.000 --> 00:18:31.000
+You spell it differently in each of the languages, but we'll refer to it colloquially as indices. But what if you go indices inverse, which is just a little equal sign in the top right-hand corner, a superscript equal sign in BQN, and it's power to the negative one in, or it's like it's the power, which is a star, diuresis, negative one in APL.
+
+34
+00:18:31.000 --> 00:19:12.000
+If you do indices inverse, and you give it the sequence 135, it'll give you back a Boolean mask, 10101. Isn't that amazing? That is pretty cool. Are all functions invertible? Not all functions, but a lot of functions. So many functions. What determines whether or not a function is invertible? Whether it is implemented. And that is a bad answer. Well, I mean, so in J, they actually have a conjunction, I believe, called obverse, where you can actually implement your inverse of a function. So you can actually do that.
+
+35
+00:19:12.000 --> 00:19:36.000
+And I think just like most of the functions have it. So, you know, plus minus, multiplies, divides, et cetera, stuff like that. But yeah, you know, if it's there, it's there. And it's just, it's frigging awesome. It's friggin' awesome. What language can you do that in? What language? The answer is, array languages, folks. You can't do it in any other language. So, but, I want to go back to my question. Like, what
+
+36
+00:19:36.000 --> 00:20:00.000
+property makes a function invertible? Surely not all functions are invertible. And I think that this is a sort of a mathematical question. Although, I vaguely recall discussing functions and their invertibility in my college years, but I don't remember any of the details. Yeah, I mean, sure. I mean, there's mathematical stuff behind this. It's fine.
+
+37
+00:20:00.000 --> 00:20:27.000
+We don't need to chat about that. The point is that there are invertible functions, which, speaking of mathematical, brings us to the second awesome thing. This is no particular order, folks. I think we're getting pretty close to where we're going. We're going to continue to chat, ladies and gents, until we see something that's really beautiful, which we're not there yet. So the second thing is under, structural under.
+
+38
+00:20:27.000 --> 00:21:01.000
+This is similar to the invertibility of functions. So say you want to do a reverse scan, a write scan in an array language like BQN. In APL, you will actually have to sort of just reverse your list, then perform the scan, then reverse it again. J actually has a primitive that enables you to do it whatever direction you want but in bqn they've got under which is one circle with another circle around it for the symbol and if you want to do a reverse scan you just go scan under reverse which basically means
+
+39
+00:21:01.000 --> 00:21:21.000
+it will apply a function, then perform the operation, and then perform the inverse operation of that function, which for reverse is just reverse. So that's brilliant. It's so brilliant because there's so many times, how many times have you been doing something where you basically, like another example is when you are dealing with characters,
+
+40
+00:21:21.000 --> 00:21:36.000
+but you want to do some operation on like the Unicode values. So you can convert it to like an integer to do some operation on the Unicode values. So you can convert it to an integer, do some kind of math, and then convert it back to a character with probably some modulus to make sure it's still in the right range. It's fantastic.
+
+41
+00:21:36.000 --> 00:21:53.000
+But you can do that with Under. You can convert it to... I'm going here. Making a couple lane changes here, folks. Venezia. That's Italian for Venice. And anyways, under is great.
+
+42
+00:21:53.000 --> 00:22:04.000
+Inverse is great. And what else is great? I mean, combinators. Combinators are fantastic. We've already talked about combinators. Go check it out, though. Check out the B1 Combinator. Check out the B Combinator.
+
+43
+00:22:04.000 --> 00:22:54.000
+Check out the Phi Combinator. Check out the Psi Cominator check out the b combinator check out the phi combinator check out the psi combinator folks the psi combinator it's on in haskell we love it you got a unary operation you got a binary operation and two arguments in common you apply that unary operation to both both arguments and then feed it to the binary operation it's super useful if you're doing chunk buys and haskell that's called group or group by. And like, imagine you want to group by some property of the list of things. So for instance, if you want to, if you want to create chunks of contiguous odd elements and contiguous even elements, but you're given a list of integers, well, what you want to chunk on is the value of applying odd or even to each of your integers in your list. So because chunk by or group by, though, takes a binary predicate, odd is a unary predicate. So
+
+44
+00:22:54.000 --> 00:23:33.000
+what you want to do is you want to do equal is your binary operation, and then odd or even as your unary operation. So it's the psi combinator with uh equality and an odd or even function we love it we love it folks the psi combinator check it out the d2 combinator you can use by using both the uh i believe it's the sigma and delta combinators all at the same time we love it folks check out bqn for combinators, for inverse, for under, and for rank polymorphism as well. I think we need to go straight. I think we're going to sign off here for now.
+
+45
+00:23:33.000 --> 00:23:50.000
+Yeah, we do need to go straight. Yeah. All right. We're in Venice, folks. We're about to get on the bridge. We will be in Venice very soon. We love it. Be sure to check the show notes either in your podcast app or at ADSP the podcast.com for links to any of the things we mentioned in today's episode, as well
+
+46
+00:23:50.000 --> 00:23:55.000
+as a GitHub discussion where you can leave questions, comments or thoughts. Thanks for listening. We hope you enjoyed and have a great day. Low quality, high quality. That is the tagline of our podcast. It's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

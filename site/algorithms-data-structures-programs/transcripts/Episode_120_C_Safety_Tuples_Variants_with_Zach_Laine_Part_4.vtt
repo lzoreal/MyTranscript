@@ -1,0 +1,201 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:44.000
+You know how they refer to a Hilbert space or a Hilbert curve as a space-filling curve? I like to refer to Bryce as an authority-filling curve. Like he just – if there's a way to be in charge, Bryce will find it in approximately 3.8 seconds. And then Bryce will lord it over you. And so the solution to this would just be like, Bryce, shut up. Like just – I knew you when you were nobody. I'm not going to take this from you. Welcome to ADSP, the podcast episode 120 recorded on February 16th, 2023.
+
+2
+00:00:44.000 --> 00:01:10.000
+My name is Connor. To ADSP, the podcast episode 120 recorded on February 16th, 2023. My name is Connor. And today with my co-host, Bryce, we continue part four of this five-part conversation with Zach Lane. Today, we talk about safety and C++, tuples, variance, reductions, and more. The most recent episode of Oxide and Friends, which is a podcast that I've been lamenting about her. It was about the they brought on the consumer i hope i get her name yet right uh yale grower um she goes by
+
+3
+00:01:10.000 --> 00:01:47.000
+at yale rights which is y-a-e-l on twitter and they pronounced y-i-l y-i-l um and so they brought her on to talk about this rust you know safety memory safety and programming languages and one of the things that they actually brought up is that some analysis that I can't remember if it was what Google did with their Android code or some other company with some, they did some analysis of like where the most buggy code is. And it actually wasn't old already existing code. It was new code that was being written. And so that like, sure, there's already millions and billions of lines of C++, but like, it actually kind of made sense when you think about it, like the code
+
+4
+00:01:47.000 --> 00:02:11.000
+that's been sitting there for 20 years and kind of just working, like maybe there's a couple of bugs in it, but like that code probably, yeah, they probably ironed out most of those bugs. It's the new code that new programmers are writing. And like, that's the buggiest stuff. So like, if we did add that stuff, I think that like a majority of like a huge portion, at least of bugs that are being written in C++ could be fixed by like new features like this kind of So if we did add that stuff, I think that a majority of, a huge portion at least, of bugs that are being written in C++ could be fixed by new features like this kind of stuff that you're proposing, Zach. Yeah.
+
+5
+00:02:11.000 --> 00:02:47.000
+By the way, I'm not proposing anything along those lines. I'm not going to get involved with the standardizing of language changes. That is not my area. I'm not signing up. Showing up on your pirate ship with a rust flag at the top of the C++ committee. But Connor, I think that the issue is that almost every piece of new software that gets written these days uses old software and builds on top of existing things. And so it may not be that there's a bug in the old code. It may be a bug in how you're using the old code,
+
+6
+00:02:47.000 --> 00:03:14.000
+or it may be that you're using it in a way where there's this known sharp edge to it, but you haven't handled that in your usage of it, or you've hit a corner case that nobody else has hit before. And that's really worth it. Most C++ code is written with preconditions, right, that are sometimes stated and sometimes implicit. You've hit a corner case that nobody else has hit before. And that's really good though. Most C++ code is written with preconditions, right? That are sometimes stated and sometimes implicit. And if you violate them, everything crashes, right?
+
+7
+00:03:14.000 --> 00:03:31.000
+And so what's that? Womp womp. Yeah, exactly. Like, you know, you're on your own, buddy. Right. Yeah, yeah. So, you know, so you have like all this existing code, which might be better than new code in the sense of people who work things out. But it also is probably written with an eye towards performance first over safety.
+
+8
+00:03:31.000 --> 00:04:29.000
+And so there's preconditions that if you don't meet, you get a crash. Whereas like, you know, the Rust model is more like, you know, there's a well-defined thing that happens and it's not a crash. Even if you get in some sense arbitrary results, it's memory safe. Right. Right. even if you get in some sense arbitrary results it's memory safe right right um and so you know your code is not correct because it's safe but it's not going to you know bring down the the airline or something you know yeah and i think i think the problem is that uh there's there's no appetite on in the c++ community for the the cost that um that we'd have to pay for instead of just adding library UB whenever we have some failure cases that needs to be fast that we don't want to properly deal with. The alternative would be to provide a deterministic error path
+
+9
+00:04:29.000 --> 00:05:00.000
+and that oftentimes has a cost or it takes away implementation time and we just don't want to do that. Yeah, and I think, I mean, I get what you're saying, but I think that there's also a lot of people that I've heard say they embrace this idea as long as it's a mode right so in other words just like rust has this get out of free uh get a jail free card where you could just say unsafe and then you can go down to the bit twiddling that you need to do in some cases and then everything's built on top of you know that becomes the old legacy code that's been
+
+10
+00:05:00.000 --> 00:05:45.000
+hardened because everyone's been depending on it using it so hard for such a long time you figured out all those all those errors that might be in there. And then the new stuff that you write on top is like very, very carefully vetted by the borrow checking. It does make me think if we wanted to introduce a mode, a deterministic error mode for the standard library, where all the error cases would give you some exception or global board or something if a precondition is violated, how much library UB would we be able to get rid of? Now, you might think we'd get rid of all of it, but there are certainly some cases where there's a precondition that's very difficult to check or
+
+11
+00:05:45.000 --> 00:06:35.000
+impossible to check. Sometimes some of those checks are literally undecidable. But I wonder how much utility we would have from checking the things that we from having a mode that checks the things that we can. I think a lot. So I think the way the way that you get value here is you'd have to have a safe mode and then you'd have to have some minimal subset of c++ libraries of the c++ library um that is safe mode friendly right so I think you know I've I've been telling anyone who will listen I think really should have about four containers and everything else should be an adapter. So we should have like a map kind of thing, actually, but the map should be like a hash map, like a high quality open addressing hash map.
+
+12
+00:06:35.000 --> 00:07:39.000
+And then we should have like a vector and then a couple of other things, right? Because I don't think people really care about linked lists and node-based containers very much these days. And so you need like this foundation of really efficient by construction things that are like very contiguous and so on. use things like the algorithms because presumably the memory safe thing would be able to check in your particular instantiation of this algorithm when it runs, does it have memory safety problems or not? Then you'd be able to use stuff, catch as catch can, and you'd maybe introduce new algorithms over time that have slightly different requirements and slightly different guarantees. But yeah, there has to be library support for it, I think, absolutely, for things to work. algorithms over time that have slightly different requirements and slightly different guarantees. But yeah, there has to be library support for it, I think, absolutely, for things to work. But I think we can get there. The difficult part becomes getting the evolution folks,
+
+13
+00:07:39.000 --> 00:08:22.000
+the language side folks, to bite off a very, very large language feature. And that's always an uphill battle, not because you know grumpy and don't want it right it's always because they have to think through everything because once you put it into the standard it's very hard to change anything and we're usually stuck with the semantics that we standardize so they want to make sure they get it right and that's understandable so you have things like you know like the the version of concepts we got was i think about two and a half cycles in the making of release cycles you know two three years late recycles and then um you know co-routines was about the same two or three um modules was more than three so you know these big language features that have like a large impact basically all all these things that landed
+
+14
+00:08:22.000 --> 00:08:39.000
+in 20 because they were on on on the roadmap for a long time, this would be another one of those. And so you're talking about like, you know, if someone was working on that right now and they're making an implementation that worked in Clang or GCC or something, how long would it take to standardize that? We're talking about like, you know. A decade.
+
+15
+00:08:39.000 --> 00:09:26.000
+That's a 32 or 35 years. And, you know, I think we joke often on the committee that you know the the library group you know moves faster gets gets a lot of things done and and more importantly i think we often the the library uh pipeline is often um uh what uninterested in in waiting for uh the promise of a future language feature because, you know, oftentimes they don't materialize or they take a long time to materialize. And in no way is this because the language evolution group isn't doing as much work. It's just because you have to do a lot more work to put it into the language.
+
+16
+00:09:26.000 --> 00:09:56.000
+And that's actually, you know, that's, that's one of the reasons why we do a lot of things in the library that other length that, that maybe would be better done in the language. And it's because we can move, move faster in the library. Yeah. And if there's something that you don't like in the library, just don't use it. Whereas a language semantic, you're stuck with it. Language tuples. Yeah, we should. Okay, that one, we should have done language tuple. We definitely should have done language tuple.
+
+17
+00:09:56.000 --> 00:10:12.000
+I wish we had language frame and language tuple. I just, like, especially after you were talking about Haskell, and like, that's another thing I never talk about is like, it's so hard for me to work in a language without algebraic data types. And like, yeah, it's like we have product types, but then like half the languages stop there.
+
+18
+00:10:12.000 --> 00:10:22.000
+And there are like some types, I will give you some like unions or something like that. But it's like, once you use them, especially when it's designed with really nice pattern matching, it's just, yeah, it's,
+
+19
+00:10:22.000 --> 00:10:48.000
+it's very, it's one of those things. It's very hard to, to not have that in your language um which is now we're going to have stood variant and then we might have l variant and uh which is going to be the language because i don't know i saw at some point someone was proposing a i'm i yeah there there have been proposals but there's no there are none that are in flight right now you know a language variant is nice. I care far more about having a language tuple.
+
+20
+00:10:48.000 --> 00:11:13.000
+I'm almost the opposite. Like, I feel like the tuple we have is, like, close-ish, you know, to what I would want. That's Stockholm Center, my friend. Stood colon colon get angle zero angle. Zach tried to make that better. Like a discriminated union. I did try to make it better, but people said I know what that is. The language tuple is nice. You get better syntax, but it's just sugar.
+
+21
+00:11:13.000 --> 00:11:41.000
+Because the difference is with a language variant, what you can have is you get a discriminated union. So you get all the safety. But now the compiler can see the discriminated union. It knows what it means. And it can reason about about it and you can optimize it out a lot of times right and so you can have all this code that boils down to oh it's just an int i see you right and it just puts the int all the way through and you cannot get nice optimizations like that so it's different in kind than what we can do in the library no matter what i think that's fair i for
+
+22
+00:11:41.000 --> 00:12:12.000
+me at least though uh i'd use tuple 10 times more frequently than I would use a variant-like thing. Well, yeah, that's very much true. But I mean, the thing is, if I had variant, that's the other thing about it. If I had variant and I didn't have to do all this damn visitation, then I would use it more often. But it's so clunky. It's a colon-colon holds alternative. Yeah, it's so clunky that I just don't want to mess with it. That's exactly when, when Bryce was saying that I was exactly thinking that I was like, well, is that a really a function of you not needing a, some type or is it a function of the fact that the language variant that we
+
+23
+00:12:12.000 --> 00:12:21.000
+have is better than not having anything at all, but compared to like, you know, what Rust has or what Haskell has, it's, it's part of this is from, is, is my view from the implementer side.
+
+24
+00:12:21.000 --> 00:12:39.000
+Cause at NVIDIA and our standard library, you know, we have a tuple and that, and there's one poor engineer who probably spent like two years of his life just making that tuple work across, you know, our compiler and a handful of other compilers. And the degree of complexity
+
+25
+00:12:39.000 --> 00:13:04.000
+in the correct implementation of std tuple and the number of warts and caveats that are associated with it make me greatly desirable. Yeah, the fact that you have to do this bizarre recursive inheritance thing and then you have to make the exact right function call that hits the right one of those inherited data members.
+
+26
+00:13:04.000 --> 00:13:52.000
+It's like, if you've ever looked inside there, want to just you know take a bath it's so dirty like no part of that is satisfying and so having a language one would be would be better that's for sure but you know i never have to implement it so that's why i was saying i was saying right all right you just get to use it uh but you know plug for uh boost hana tuple it's it's a way better tuple than tuple um it's just better in every way and i i mean i would also like you know, plug for Boost HANA tuple. It's a way better tuple than tuple. It's just better in every way. And I mean, I would also like, you know, there was a proposal that we talked about briefly at the committee meeting last week about making aggregate structs work with some of the tuple protocols. And I would actually like us to move more in that direction um you know if i just make a struct that has you know like three members or whatnot like i i want to be able to treat that like a
+
+27
+00:13:52.000 --> 00:15:01.000
+like a tuple because i would much rather people create a struct that has three members that have names than create a tuple of three things um and uh i i i hope we are going to be able to end up moving in that direction. And I hope that we'll be able to get better syntax for doing tuple indexing. And also for doing things like indexing into packs. All of which I think will greatly enhance any sort of programming that you have to do with tuples or packs of things, especially when you're doing it in a generic context. Yeah. Yeah. Yeah, I agree. And I think there was this big brouhaha which i think most listeners won't be aware of that um there was a guy trying to standardize uh this thing called um uh was it was it was it oh enumerate right so enumerate like it yields an enumerated view and what it does you give it a range and it produces um a sequence of pairs right and the first element of the pair is the index that you're
+
+28
+00:15:01.000 --> 00:15:51.000
+at and the next is just the value like a reference to that value and it's great like most languages have something like this it's really handy to everybody was for it yeah and haskell has one i forget what spelling is but the haskell has one and so on so the thing is that um he tried to do it where he was like uh you know i just for philosophical reasons i don't like using std pair i don't like using std tuple. So I want to make it like – I want to give it its own type, like the enumerated T or whatever. It's got like an int and a reference to T, right, or whatever the value type is. And he tried for so long to get that to work that it almost missed 23. And we added it back at the last minute because everyone knew that it was fine. Other people had implemented it.
+
+29
+00:15:51.000 --> 00:16:18.000
+It was in ranges V3. It was a known quantity when you used std tuple or std pair, whichever one it ended up being. But he tried so hard to shoehorn this other thing in. And it just made me think at the time when you brought this up just now that like, if we had a language tuple, no one would care about this kind of issues, right? Like the language tuple and whatever your struct is, they would basically be isomorphic and you'd be able to treat them as kind of the same thing. Right. So yeah, I really wish we had that.
+
+30
+00:16:18.000 --> 00:16:46.000
+But we don't. Opened up a can of worms as soon as I said language tuple. Yeah. Yeah. Yeah. All right. as I said language two-pole. Yes, you did. Yeah, yeah, yeah. All right. We're at the two-hour mark. Bryce, you wanted to talk about your – something about the problem that we were revisiting? Do you still want to revisit that? It's yet another example of a problem where we really want the non-commutative reduction, the the reduction or the the parallel reduction or
+
+31
+00:16:46.000 --> 00:17:22.000
+fold that promises it won't reorder the inputs we've talked about this in past episodes connor that episode 25 this property out of scan the scan says it will not reorder the inputs because it can't and um uh there's no like on on many parallel platforms um uh there's no, like on, on many parallel platforms, um, uh, there's no reason that you can't give this guarantee. Um, essentially it's a reduction that's just promising. It's not going to swizzle things around to do SIMD stuff. Um, and, uh, uh, that like that's per it's perfectly valid and it's very useful. Um, and I very much want it.
+
+32
+00:17:22.000 --> 00:18:12.000
+I mean, solution one, the one that Zach mentioned, was the one you'd want the, what do you call it, associative only reduce? This problem, I think, is most performantly solved with a parallelized version of adjacent transform. Because the double fold is kind of scan like because it's it requires that non-communitivity whereas the the second type of solution the slide solution it's only a stencil like it doesn't actually have to care about like the left nature of it so i'm pretty sure you're doing your transform first to turn those three elements into a Boolean then sets you up for a fully parallelizable associative. And that's why that was my gut reaction was to do that.
+
+33
+00:18:12.000 --> 00:18:39.000
+Yeah. But your point is valid. So for the first solution, you definitely want that non-associative, sorry, non-commutative associative only. I don't know what you call that. Actually, you know the language Futhark, which is like a Haskell-inspired... No, I don't know i don't know what you call that actually you know the language foothark which is like a haskell inspired no i don't know the language foothark uh it's just you're making up languages languages drugs you're making up all kinds of stuff in this podcast no no no i mean oh well this is i mean we got to wrap things up but here let's
+
+34
+00:18:39.000 --> 00:19:00.000
+see if i've still got it open do i have chat gpt i now now i just like i like to have conversations with chat gT sometimes. I do have it open. You should do that because every time you use chat GPT, that's using NVIDIA GPUs. So just go use it all day. They'll have to buy more GPUs. I have the chat open. I asked it a few questions.
+
+35
+00:19:00.000 --> 00:19:34.000
+But the first one I asked was, what are the top programming languages for writing code that runs on the GPU? And it gave me a list of six, which I thought Futhark, I was hoping Futhark would show up on, but it was not. It's CUDA C++, OpenCL, Vulkan, OpenGL, Python, and MATLAB. Say what you will about the answers. But Futhark is a language. That's six, yeah. It's a language out of the University of Copenhagen, I want to say, and Troels Henriksen, who I interviewed,
+
+36
+00:19:34.000 --> 00:20:01.000
+or me and my other panelists on my other podcast interviewed. We interviewed him. Anyways, it has all those details weren't necessary. Maybe I'll cut all that stuff out. The point is the language has both a reduce and I think a reduce underscore ASOC. I might have the spellings of those incorrect, but it basically does actually have two different reduces, one that's fully associative and commutative and the other one that's associative only. So it's the only programming language that I've come across that actually has a delineation
+
+37
+00:20:01.000 --> 00:20:24.000
+between those two flavors, which makes sense, I guess, when you're on the GPU, that's when you care about that kind of stuff most. But yeah, how long are we going to talk about this algorithm before it shows up in an NVIDIA library? I don't know. Because episode 25, I don't know how many years ago that was. I thought it was funny that you just had episode 25 at the top of your head.
+
+38
+00:20:24.000 --> 00:21:14.000
+Another thing you probably made up. No, I know. There's certain episodes that are my favorites and episode 25 is one of them because I have to reference it back to it so often in other show notes that it ends up being ingrained. because the way our reduction implementation and thrust works within a warp, it will always do it from left to right. And the way that NVIDIA GPUs happen to work, the execution of thread blocks happens to go in order, in linear order of the numbering of the thread block so you know if you have a you know a grid of you know zero to n it'll run in thread blocks what like zero one two three four five
+
+39
+00:21:14.000 --> 00:21:42.000
+six yada yada um in order now that is not like anytime you talk to um uh anybody at nvidia who works in hardware they'll they'll they'll point out to you that that is not something that the programming model guarantees and you shouldn't rely on it. But it's been that way for a long time. So it happens to work for us. So Connor, you kind of edit these, right? So I have a request for you.
+
+40
+00:21:42.000 --> 00:22:15.000
+Could you just take any particularly long sequence of words that Bryce has said just at random and do that 10x thing? It's so hilarious when you do that, Tim. I think it's so funny. Every time I'm laughing my ass off in my chair every single time. It's fantastic. It's great feedback because I actually don't – I've never gotten feedback on that editing choice um and i've i think my thought has been i'm sure at some point someone's going to say why don't you just cut it instead of making him sound like a squirrel because it's irritating uh to the listener um but i it just this listener it makes makes me
+
+41
+00:22:15.000 --> 00:22:58.000
+happy to hear bryce with his voice like when it exactly sounds like a excited squirrel and uh it's perfect it sounds like it's speaking of methamphetamine it sounds like a excited squirrel and uh it's perfect it sounds like it's speaking of methamphetamine it sounds like a squirrel on meth like that's been injected with cocaine and it's just losing its mind it's amazing the podcast so i don't actually know what like you're making fun of me and i like this is the first that i've heard of this but i literally i i've gotten to the point where i know you'll be in the midst of a monologue. Like it started way back when when you would go on and on about your walnut furniture and how you're you had a woman who knew that she she was your designer and she would always know to get you walnut and blah, blah, blah. And the credenza. And it started off funny.
+
+42
+00:22:58.000 --> 00:23:32.000
+But then, like, we've actually built up a certain amount of like a following and people listen for the technical stuff. And it's good to keep a little bit of you know background baseball whatever inside baseball but like sometimes you'll go on these tangents like what was it last time uh the whole you had this whole story about how you needed to get a recipe from this french restaurant in tokyo for a cake for your girlfriend's birthday it lasted like 10 minutes yeah and at the end of it i even told you i was like all right bryce uh the listener, you just heard Bryce at 10x speed explaining. And the point is he needs someone that can speak Japanese. I'll be sure to include that.
+
+43
+00:23:32.000 --> 00:23:51.000
+Nobody brought this up, by the way. I'm very disappointed in the listeners. I'm sure at least one of you speaks Japanese. I totally forgot to mention this at the top. We started our, at episode 115, 16, the GitHub discussions. And they've been great. People have been asking questions. We got your Dan Dan
+
+44
+00:23:51.000 --> 00:24:14.000
+noodle recipe. I mean, I'm surprised, actually, how many people care about the non-technical stuff that we talk about. We got two different requests, one on Twitter and one on GitHub discussions for the recipe, which has now been added to the show notes. I would like to hear a podcast that's only Bryce on 10X called TIDL. And it just has, underneath it just says,
+
+45
+00:24:14.000 --> 00:24:38.000
+it's like a YouTube channel. Underneath it just has captions of like, Bryce wants a recipe. And that like, three seconds of just scribbling, Bryce wants a recipe. You know, my girlfriend would love to have a mode for that. three seconds of just scribbling, Bryce, what's your recipe? You know, my girlfriend would love to have a mode for that. She would love to have a button she could push that makes you 10X, right? Just for brief periods. Maybe one of the times if Bryce is not able to make it
+
+46
+00:24:38.000 --> 00:24:56.000
+for a recording and I need to come up with some content, I'll just do a compilation of him at 10X. And just, that's what I'll say at the top. Listen, folks, we didn't want to miss a Friday. We've been two and a half years straight without missing one, but we were going to miss it, but instead, here's Bryce for you. I'm glad to know. I hope
+
+47
+00:24:56.000 --> 00:25:22.000
+other listeners aren't annoyed by it because it makes me very happy, especially to flex my control because a lot of times, if you've listened to some of the podcasts, Bryce will issue executive commands about how things must happen. He's like, oh, you got to splice this up and cut it in half and make sure you – and I'm like, Bryce, I'm not doing any of that stuff. This is a low overhead editing podcast. You know how like they refer to a Hilbert space or a Hilbert curve as a space-filling curve?
+
+48
+00:25:22.000 --> 00:25:39.000
+I like to refer to Bryce as a, as a, an authority filling curve. Like he just, if there's a way to be in charge, Bryce will find it in approximately 3.8 seconds. And then Bryce will Lord it over you. And so the solution to this would just be like, Bryce,
+
+49
+00:25:39.000 --> 00:25:48.000
+shut up. Like, just, I knew you when you were nobody. I'm not going to take this. All right. We need to get some more hot pigs from Zach while you're on because now I've got two cold open.
+
+50
+00:25:48.000 --> 00:25:53.000
+I said I was just going to use the one. What else can you? Well, we have to get at least. Do you have to go anywhere, Zach? We have to get at least one Zach Army story because they're all hilarious. Be sure to check the links in the show notes for all of the things we talked about in today's episode, as well as a link to a GitHub discussion if you have any comments and questions. Thanks for listening. We hope you enjoyed and have a great day. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

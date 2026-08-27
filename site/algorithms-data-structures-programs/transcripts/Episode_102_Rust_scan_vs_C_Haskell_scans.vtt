@@ -1,0 +1,173 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:56.000
+Like C++ is a copy-by-default language, and Rust is a move-by-default. So if you're not making a copy, bye-bye. Welcome to ADSP The Podcast, episode 102, recorded on October 27, 2022. My name is Connor, and today with my co-host Bryce, we live code some more Rust and more importantly, talk about Rust scans. Now moving on, we're new episode. We're still talking about Rust. We're still live coding. Let me unstash my changes, get stash pop. And let's look at the diff and so if i run this i should get a test failure so there's no way just by looking at this test that you could probably tell what's going on
+
+2
+00:00:56.000 --> 00:01:12.000
+here but basically i'm trying to implement a generic scan on an arbitrarily ranked array, which in this little toy library, I'm calling a tensor. For those that- Yeah, I saw the tensor thing and I was like, it's kind of doing machine learning stuff because if so,
+
+3
+00:01:12.000 --> 00:01:24.000
+I'm going to have to break up with him. Well, just, you know, this confused me for a long time. I think I might've even mentioned this before, either on this podcast or the other area cast that I remember one time when I was working at Amazon,
+
+4
+00:01:24.000 --> 00:02:01.000
+a colleague of mine tried to explain to me what a tensor was. And it was like a 30 minute conversation. And by the end of it, I did not understand what a tensor was. And then at some point, someone just said to me in like, however long it takes to say this sentence, a tensor is just a multidimensional array. And the machine learning people, AI people got tired of saying um multi-dimensional array and technically there's something called tensor algebra which is a slight difference but like they represent basically the same thing it's just an array with an arbitrary amount number of dimensions and uh sometimes i prefer calling it like nd array or md array sometimes i like calling
+
+5
+00:02:01.000 --> 00:02:42.000
+tensor tensor shorter so i decided it for this. Anyways, doesn't really matter. But let's go to the code now. And let's turn this into Zen mode. Maybe somebody should propose that we rename std empty span to std tensor. I mean, I think it's it is definitely sexier, in my opinion, tensor is intimidating in that like, what's a tent like literally, I couldn't and someone tried to explain it to me and all you Have to say is it's just a multi-dimensional array. That's all it is but anyways here we have our scan function and First of all, let me whine about scan I whined about this in a YouTube video that I made once which was the first time that I needed to use a scan
+
+6
+00:02:42.000 --> 00:03:51.000
+so I'm highlighting a row here that Bryce is looking at. And similar to our partial sum function in C++, it takes a binary operation. This version of scan also needs an initial element, which I don't like at all. What's irritating about this scan function is that it needs the binary operation that you pass to scan, needs to return a option, a.k.a. Haskell maybe, a.k.a. a std optional from C++, or a.k.a. optional from c++ or aka optional from swift and that is so that it is able to short circuit if it needs to which i think is silly right explain more so like currently partial sum and reduce and accumulate they always complete their work you know if you're gonna use a oh i understand no that's clever i like that so that it can terminate early right i don't like it i don't like it why do you like
+
+7
+00:03:51.000 --> 00:04:32.000
+it i don't like it um because there are the definitely use cases for it but i just think it's a different algorithm like one a scan that short circuits should be a different algorithm in my opinion because in the times where you know you're going to traverse the whole sequence, having to return a sum or a none or like an optional type from your binary operation is silly. That is annoying. Yeah. or, you know, multiplies. But I have to basically hand write out a lambda where all I'm doing is performing the binary operation on the accumulator and the current element and then wrapping the result of that in a sum. Like there might be a nicer way to do this
+
+8
+00:04:32.000 --> 00:05:04.000
+more idiomatically. Like this is definitely could be done with some kind of like under operation from APL where you, or it's actually, it's very, you know, monadic-ish in that you have to unwrap the optional, perform the binary operation, and then wrap the optional up again. Anyways, kind of irritating. But can you see from staring at this code, Bryce, what the problem I'm having here? And maybe what I'll do is I'll go back and show what I'm expecting from cargo test is 1, 2, 3.
+
+9
+00:05:04.000 --> 00:05:16.000
+And what I'm getting is 2, 3. And what I'm getting is 2, 3. Show me again. So, and if we go back to the code, I mean, the listener at this point is not going to be able to see. But once again, I'll put show notes
+
+10
+00:05:16.000 --> 00:05:35.000
+if people like a permalink to the line of code that we're currently looking at. I hope you aren't listening to this when you're driving. But, so basically the problem that I'm trying to get Bryce to see is that we're using a scan operation and I'm expecting the output to be one, two, three. But the output I'm getting is two, three.
+
+11
+00:05:35.000 --> 00:06:00.000
+Just two, three. And so what is the problem with my current code? And if you want a hint, Bryce, if you look at the three commented outlines underneath, that was my first attempt to just hack it so that it would work. What is rev reverses it? Yeah. And the three lines underneath my scan are dot. So you call the scan with the binary operation. And then you call dot rev, paren paren, dot extend first.
+
+12
+00:06:00.000 --> 00:06:17.000
+Show me the error again. And then dot rev one final time. Expecting one, two, three, getting back two, three. I'm sure there's a few listeners that have figured out my problem. What is shape? Shape is, so right now I don't, when you're running the tests on these tensors,
+
+13
+00:06:17.000 --> 00:07:09.000
+it doesn't have a way to pretty print the tensors. So the length of your shape indicates the rank. So in this case, it says shape bracket three bracket. That just means it's a rank one array with three elements. But there's only two elements. I know because there's a problem with my scan operation that works intensively. I don't know what the problem is. So the problem is, and this is something that any Haskell developers that are listening will know, and if you've watched a few of my talks, I have complained about this in different talks, is that there are multiple types of scans indicated by the fact that we have both an inclusive scan and an exclusive scan in our C++17 parallel algorithms. And partial sum, our C plus plus 11 scan, it takes a binary
+
+14
+00:07:09.000 --> 00:07:49.000
+operation. But one of the restrictions of that binary operation, or of that partial sum algorithm, is that it, that output type of your vector has to be the same as the input type of your vector or your sequence. Because it initializes the first value of that open sequence to be the first value of the input sequence. Yeah. Oh, and this one doesn't. This one just... Well, so this one is basically your exclusive scan-ish in that it requires a first element or an initial element and then proceeds
+
+15
+00:07:49.000 --> 00:08:32.000
+to do your scan but the problem here is that it doesn't it doesn't encode your initial element to be the first element of your vector so you end up with so like here i'm scanning over a sequence but the first thing i do is i actually have to get the first value from that sequence and then i need to basically do a drop one what they call skip one in rust so that i'm only iterating over the last n minus one elements so i skip the first element do a scan there yeah Yeah, but what... So basically, I just want a scan that operates the same way that... But... Oh, it's because...
+
+16
+00:08:32.000 --> 00:09:02.000
+I understand because you don't have like an identity. The scan requires an initial element and you don't have an identity value that you can pass in here. So you're trying to make it scan over all elements except for the first one and then pass the first one as the initial value. I mean, I guess I'm not surprised given that now that I see the skip,
+
+17
+00:09:02.000 --> 00:09:36.000
+I'm not surprised that you um uh that you get the error that you do also because you did you asked you didn't ask it to scan over n elements you asked us to scan over n minus one elements but so that's the problem is that here let's and we're going to now do something crazy um we are going to switch temporarily to Haskell. So Haskell has the two different... Chris, I just, you know, I was going to say at this point, nobody should be surprised by what happens in this podcast. I was like, is it really going to be that crazy?
+
+18
+00:09:36.000 --> 00:09:53.000
+But then you said something that I just didn't expect. I don't know why I didn't expect Haskell. I just didn't expect it. Okay. And I did this wrong. Let's, I guess I can't clear here. So let's break out of this. Go clear.
+
+19
+00:09:53.000 --> 00:10:27.000
+Start GHCI. Come back here. So we're doing a scan L with a plus operation, zero identity element over the numbers one, two, three, and you get back zero one three six and now we're going to change this to call scan l1 and we remove the initial value it only takes a binary operation and you get back one three six and basically so we've got two different scans one that takes a binary operation and initial value,
+
+20
+00:10:27.000 --> 00:10:51.000
+both take sequences, and the other one just takes a binary operation, no initial value. But what is the behavior of the one that takes an initial value is that the first element is that initial value, whereas of the output is the initial value, Of the output, you mean, yeah. Of the output is the initial value. Whereas in the Rust version, this is equivalent to a scan L.
+
+21
+00:10:51.000 --> 00:11:04.000
+It requests both a binary operation and an initial value, but it doesn't give you back n plus one elements. It doesn't hard code, which is, it's just a design choice. I'm not saying it's the end of the world, but the problem is, so the problem that we,
+
+22
+00:11:04.000 --> 00:11:45.000
+now what we have to live code. But you don't get that in c++ either do you oh no yes you do exclusive scan you were so inclusive scan does not require an initial value exclusive scan does and it does initialize the first element and what's irritating so you might be thinking oh so inclusive scan is the equivalent of scan L1 in Haskell, and exclusive scan is the equivalent of scan L in Haskell, which is true, except for one little tiny asterisk, and that is that exclusive scan actually doesn't return you N plus one elements like scan L from Haskell. It returns you N elements. And why is that? It's because it just chops off
+
+23
+00:11:45.000 --> 00:12:22.000
+the last element that you would expect to see, which Bryce and I have talked about. And Bryce says is totally fine. And I think it's completely. Have we talked about that? Yeah. I pointed that out once and you said, oh, this corresponds to stuff that happens in hardware all the time. So it's totally fine. And I was like, I have zero recollection. Yeah, it was I think years ago when we were both back in California. Well, but the – So the six that Bryce is looking at on screen from this – That's the sum – but like that's one of the more useful elements because it's the reduction of the entire thing. Exactly.
+
+24
+00:12:22.000 --> 00:12:48.000
+Oh, I do seem to recall that conversation. Yeah, I think younger Bryce was wrong. Okay. Younger Bryce is often wrong. The point being is that there's like 16 different flavors of all these scans. And the choice that Rust has made, I definitely disagree with the short-circuiting optional thing being encoded in the binary operation. I think those should be two different functions, but whatever, it's a design choice.
+
+25
+00:12:48.000 --> 00:13:12.000
+The second one of them not encoding the initial value to be the first one, eh, it's not the end of the world. But the point is, now we have to live code to figure out how do we add back the first value to this sequence. And the first thing I tried to do, which I explained a little bit earlier, was reversing the list, extending it, aka what we would call a pushback on a vector in C++,
+
+26
+00:13:12.000 --> 00:13:53.000
+and then reversing it again. And not super efficient, but I was just trying to see if it works. But sure enough, this does not. So let's exit out of Haskell. If we try and do cargo test here and build this, it's not going to build because the bounds required by a reversible iterator are not met on the sequence that we have here. So very sad. What do you think we should do, Bryce? At this point, like literally, my thought was before we were recording this is this is what I was working on. Well, actually, before I was doing a couple things. Can't you just insert at the beginning? Maybe. So let's see how to well i mean like what what what what made why was your first inclination to reverse because i looked up how to insert i think
+
+27
+00:13:53.000 --> 00:14:24.000
+i googled rust how yeah rust iter you literally just saw my google from earlier add rust iter because that's the traits that we're dealing with right now, iter traits, add element to front. And the first result is extend instead iter, which if you read the docs is putting something at the end. Well, let's look at, let's extend. Okay, let's look at just like books. Although it actually says extend one. Should we try extend one? No, because it was reversed.
+
+28
+00:14:24.000 --> 00:14:38.000
+It didn't work. Maybe read the docs before you try things. one. Should we try extend one? No, because it was reversed. It didn't work. Maybe read the docs before you try things. I didn't read the docs. Everyone's always telling me to read docs. And it's like you can't read... If you spend all your time reading docs, you're never going to get anything. I'm very much a
+
+29
+00:14:38.000 --> 00:14:55.000
+fan of just go and try things. But like you can at least read what that... I have no idea what extend one might do. I mean, I read this part. It says it extend in a collection with the contents of an iterator. But what we want is, so let's go back to my search result.
+
+30
+00:14:55.000 --> 00:15:31.000
+Like I just, I don't think, yeah, what we want is like a put, so they have a put back. Do they have a put front? Put back? Put back in? I mean, you know, inserting at the beginning is more expensive for certain things like you know a dynamic vector so or a dynamic array rather what would you search for yeah insert element at start of iter rust how do i insert values no's not. Why don't we just look at, like, can you just get a list of all of the things? Of, like, in iter traits?
+
+31
+00:15:31.000 --> 00:16:09.000
+So iter traits, I don't really understand how they're totally designed. But, like, every single operation returns, like, a different object. So if you look at, for instance, filter. Filter, if you look at the signature of this it takes a predicate not surprising and then it returns you a filter that is uh generic over self and p and if you click on filter now it goes to struct stood colon colon iter colon colon filter which now it's kind of like ranges proceeds to yes it's very that's what i mentioned earlier it's very similar to ranges and now this proceeds to implement a set of other iter things. So it's like, you can't just
+
+32
+00:16:09.000 --> 00:16:35.000
+necessarily go and look at the total list of things that are in iter because each object, which is why we're getting this. How are you supposed to know how to do things? I know it's confusing, but I don't know that, you know, once again, as I said at the beginning of this episode or two episodes ago, I'm not a Rust developer. I'm just, you know, once again, as I said at the beginning of this episode or two episodes ago, I'm not a Rust developer. I'm just, you know, I'm an individual trying to get things to work. But so what are we looking for on the side here? Insert? Insert.
+
+33
+00:16:35.000 --> 00:16:55.000
+I mean, if there's a putback in there, like that sort of suggests to me that there should be a putfront. Putback was not in iter, though. Putback was in iter tools, which is… Just Google for, like, putfront. Rust. Rust iter though. Put back was in iter tools, which is... Just Google for like put front. Rust. Rust put front. Put front. Yeah, that was not helpful.
+
+34
+00:16:55.000 --> 00:17:20.000
+Well, you know what we can do? This is a pretty good hack. Hack. The result for Rust put front was a bunch of like non-tech things. Put front is just go to GitHub. A lot of times what you're looking for is specific enough. So there is no put front anywhere in all of Rust code. So let's see if we go and look for put back.
+
+35
+00:17:20.000 --> 00:17:59.000
+It's going to show up probably a couple thousand times. Yeah, 1,362. And what if we go Reverse dot put back rev dot put back hmm not very useful all right Bryce many more suggestions Let's see if we can just I really do like my Attempt to just try and reverse things um method cannot be called on reverse scan skip due to unsatisfied trait bounds does it tell us what we want what we should do though i mean this is probably going to end up working at the end of
+
+36
+00:17:59.000 --> 00:18:24.000
+the day but it's definitely not what you want so So basically I'm collecting the results of the scan. Yeah, it did work. So I'm collecting the results of the scan into a vec, then turning it back into an iter, then calling reverse. No method named extend on the struct reverse. Well, isn't that sad? So that's what I mean is that extend does exist here, but the reverse object that's returned
+
+37
+00:18:24.000 --> 00:19:11.000
+or the rev object that's returned or the rev object that's returned from the rev function does not implement extend therefore we can't use it yeah i got nothing um i mean like it sort of makes sense to me why you wouldn't have this because there's certain data structures where this is an inefficient operation um well let let's see if we can, if we create just a single, so if we just call this F, we're back in Gobble now. Wait, can't you insert it at the end and like rotate or something? Oh, Bryce. Bryce, that's quite clever. Everyone loves a rotate. So the question is, can we just call extend on this scan object? What is extend even implemented on?
+
+38
+00:19:11.000 --> 00:19:30.000
+Well, I mean, it doesn't have storage, the thing that you're extending. It's just this view or... I don't know. No, it is because you're modifying the data. Wait, is this modifying T? What do you mean? What's T? The value T in this code.
+
+39
+00:19:30.000 --> 00:19:48.000
+Is T being modified by this or T.data? We are just essentially destroying T at the end of the day and creating a new tensor. I think that you can't extend because what you're getting back from scan is like a... Is it like a C is it like a, like a C++ view? Is it like lazy?
+
+40
+00:19:48.000 --> 00:20:14.000
+No, it couldn't be right. Create a hitter from. Okay. Yeah. I want to understand more about what, like you call this scan thing, but is it actually modifying the underlying data? Like is t.data being modified here by the scan it's being destroyed rust is moved by default so if you're not if you're not ever taking a reference
+
+41
+00:20:14.000 --> 00:20:46.000
+or a mutable reference you're always destroying it which is very odd coming from c++ like you're always forgetting that like c++ is a copy by default language and Rust is a move by default. So if you're not making a copy, bye-bye. And you get so, like, my experience coming from C++, and I don't even fully understand the memory model of Rust yet, but it's that you're constantly accidentally moving from things and then getting the compiler telling you you're trying to use after it's been destroyed, and you can't do that.
+
+42
+00:20:46.000 --> 00:21:37.000
+So let's try. My next strategy is to create two different iterators, one from just the first element, and then I think you can chain them. And then so if I go.chain and then put everything here and then go collect, will that work? It worked! T worked tests passing i mean that was a shot in the dark i don't have any idea how i got that to work on the first um i mean it wasn't the first shot but the first shot of using a chain so so how did you fix your thing so i ended up so what we were trying to do initially was take our the result of our scan two three in our in our use case yeah and then somehow insert to the front or insert to the end and rotate it but that wasn't even working for any of the cases because you couldn't call extend on any of the objects that we were getting
+
+43
+00:21:37.000 --> 00:21:42.000
+back the scan return to scan object the reverse return reverse object and extend didn't work on any of those so then i i, my next proposed solution is to create two different iterator sequences, you know, the equivalent of ranges basically, and then to chain those together and then basically flatten them into a single sequence. So it now reads sum of first into iter dot chain, and then the sequence that we had where you skip the first element and then call a scan, and then you're good to go. Well, we should have some rest people on. Thanks for listening. We hope you enjoyed, and have a great day. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

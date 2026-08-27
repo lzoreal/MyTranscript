@@ -1,0 +1,209 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:55.000
+So a couple of other algorithms I have in my implementation. I have repeat. I have repeat and repeat until and that takes a sender and it runs it and when it's done it reconnects it and runs it again. I have retry again retry n and retry until which does the same thing as repeat if the sender ends on the error channel right. When the sender ends on the error channel, right? When the sender completes successfully, retry doesn't do anything. But when the sender completes with an error, retry will retry it. Welcome to ADSP the Podcast episode 236 recorded on May 13th, 2025. My name is Connor and today with my co-host Ben, we finish part two of our conversation about algorithms in C++ 26 senders and receivers.
+
+2
+00:00:55.000 --> 00:01:19.000
+Okay, this makes I mean, this makes perfect sense when all when any I'm not sure if you've explored because there are several implementations of senders and receivers out in the wild. Do all of them have? Are there a certain common, like, this is a very logical, like, if you're going to model when all, when any is a very natural step, does this continue to a certain extent of, like, there's
+
+3
+00:01:19.000 --> 00:01:54.000
+these logical operations that, even though it's not standardized, everybody's implementing under the same name or a different name. I mean I think when any is a good example I don't I don't know what other people have implemented but I think I think when any is a sort of logical next step. The interesting design when the interesting design decisions about when all and when any is what do you do? So I think the standard requires that you pass at least one sender to when all when any isn't standardized yet but
+
+4
+00:01:54.000 --> 00:02:37.000
+my implementation I allow you to pass zero senders to when all and indeed to when any. They're variadic functions they could be they could have zero arguments. If you pass no sender to when all what you get back is just is just in fact it completes immediately right you get back a sender that completes immediately because you've asked it to do when all over zero things and and this also ties back so like the sender that completes immediately is the unit for the monoid of when all. Just like true is the unit for the and monoid, the sender that completes immediately, we would call it just, is the unit for the when all monoid.
+
+5
+00:02:37.000 --> 00:03:11.000
+Conversely, if you look at when any, if you pass when any zero arguments, what does it give you back? And the answer in my implementation is it gives you back a sender that never completes. It's equivalent of false, it's the unit for that monoid. Right? If you race that against any other sender, the other sender will always win. How do you actually program that? You just never complete? So it's not an infinite loop. You don't need an infinite loop, right?
+
+6
+00:03:11.000 --> 00:03:45.000
+You literally never call setValue. You start your sender and it literally does nothing. It never makes progress. So the question that always arises is when would you want that sender? Right. And, and as it, so as in so many such questions, it's difficult to answer in a vacuum, but as you know, when you start programming with these things, when you start composing these things, you can very well hit situations. So it's the same, it's the same sort of idea as why, why is the identity function useful, right? It's the same sort of idea. why is the identity function useful, right?
+
+7
+00:03:45.000 --> 00:04:11.000
+It's the same sort of idea. You look at that first and you think, when would I ever want that? But then when you start programming a compositional way, you think, oh, actually, that is useful. I'll plug it in here. And I think it's the same sort of thing with the when any taking zero and the when all taking zero. On the face of it, they really do nothing. But two arguments, one, they could well be useful.
+
+8
+00:04:11.000 --> 00:04:44.000
+And two, I really don't like putting arbitrary limitations for things that will perfectly well compose. It's sort of like, I don't want to go down the road of singling out like anyone who's done metaprogramming knows that you need to handle void, you know, void is special, void is special handling. I don't want to introduce special cases like that into the compositional framework that is senders in my implementation. Okay, that makes sense. I mean, that's a good analogy, because I, I for one, that's the
+
+9
+00:04:44.000 --> 00:05:20.000
+exact thought that I had when I first learned About identity was like what a function that does nothing it just returns you what you gave it like That's the most useless thing ever and now there's been many times where it is exactly. You know you have an algorithm That you know I was trying to think of an example like it might be a bad one But like count if is a thing in C++ but what if you have a vector of a vector of bull a vector of Booleans or a container of Booleans and You want to count how many are true? What is the unary operation that you have to pass to count if right right the projection function on many algorithms
+
+10
+00:05:20.000 --> 00:05:38.000
+The default is going to be the identity Exactly an even better example, right? Yeah. So it does come up. And if my example is not great, there's been a ton of times, not so much in C++, but in other languages, where there is an algorithm that's exactly what you want, but you don't need a transforming unary operation.
+
+11
+00:05:38.000 --> 00:05:57.000
+You just need to count the booleans or do something with the booleans that are there. And it's more than just identity, right? It's all of the small birds. All of the small birds, right? They make up the ecosystem. Yeah, that's a good point. I mean, first, which is the K Combinator,
+
+12
+00:05:57.000 --> 00:06:25.000
+that one also similarly, like if you think identity, a function that just does nothing and passes you back what you give it, first also kind of seems in that similar boat. You give it two things and it gives you back its first one. But I think that's a lot easier for people to grasp why that's useful, especially if we had a convenience function like that that worked on tuple types and pairs because how often are you trying to do some transformation on a pairatupel and spelling that with a lambda where you're
+
+13
+00:06:25.000 --> 00:07:08.000
+doing a dot second or a std colon colon get angle bracket zero zero like a nice convenience combinator that did that for you would be would be very nice which is what other languages often have and I think boost hana louis deon's library which at one point was new but is now a few years old it has all of that stuff because it was modeled after functional libraries and languages. So a couple of other algorithms I have in my implementation. I have repeat, I have repeat and repeat until. You know, they're just variations on repeat. And that takes a sender and it runs it and when it's done it reconnects it and runs it again. You know, they're just variations on repeat. And that takes a sender and it runs it. And when it's done, it reconnects it and runs it again.
+
+14
+00:07:08.000 --> 00:07:35.000
+You know, keeps going. I have retry, again, retry n and retry until, which does the same thing as repeat if the sender ends on the error channel, right? When the sender completes successfully, retry doesn't do anything. But when the sender completes with an error, ret will retry it okay that makes sense but I think actually I just had a thought and it is that and you can correct me if I'm incorrect
+
+15
+00:07:35.000 --> 00:08:06.000
+about this which I might be it sounds like there are buckets of these combinators or operations whatever we want to call them. Some of them take as argument senders, and some of them take as arguments operations or lambdas. And all of them return senders? Yes. All of them return senders. In general they take a sender and maybe some other stuff
+
+16
+00:08:06.000 --> 00:08:59.000
+and they return the sender. They modify a sender in some way. Some of them take multiple senders like when all, some of them take a single sender like then and then they take other stuff as needed which is according to what they're doing like then takes a lambda to run right. Repeat n takes a to what they're doing, like then takes a lambda to run, right? Repeat n takes a size t, which is the n, right? Right. I'm trying to think, there's this mental model forming in my head where, of these combinators, some of them are used for kind of the computation aspects of your graph and then others are responsible for the composing or path constructing of your graph. And really it seems like so far in my head you have then and you have let value and those
+
+17
+00:08:59.000 --> 00:09:24.000
+are kind of responsible for the quote unquote computation. And then almost everything else so far has kind of been this graph constructing. When all has got a many to one. When any is a many to one. Repeat is a one to one that kind of creates a linked list, if you will. Repeat n linked list with a defined length.
+
+18
+00:09:24.000 --> 00:09:55.000
+I'm not sure, is that... Yeah, you know, you can think of it like that. I think that's right, definitely. There's something there. I was gonna say, again, something I've implemented which is not standard is sequence, which is... It's IOTA. No, no, it's sequencing two senders together. So it's like let value except that there is no data exchange from the previous to the subsequent sender, right? In Haskell, bind is spelled greater than greater than equals, right?
+
+19
+00:09:55.000 --> 00:10:33.000
+But there's also another operator which is just greater than greater than, and that's what sequence is. So you just want one sender to run after another, but you don't want the second sender to depend on what the first sender sends So does this return you two senders then it would know it returns you a single sender who's which embodies that sequence So it's like let value except that there is no that the function if you like if you pass let value and nullary function Or a funk or a function which just ignores its arguments would be a better way, right? Imagine you want to pass let value a function which ignores its arguments and just returns
+
+20
+00:10:33.000 --> 00:11:03.000
+the sender you want to run next. And that's what sequence is, right? Because in a sense, the monad is too powerful, right? I don't need all of that power. I don't need all the power of let value. I don't need to make a runtime choice. I just know that I want to run sender B after sender A. Is this for some like side effect thing? Exactly. Yeah, my world everything is side effects. Okay, I was gonna say is the only thing I could imagine that you're trying to write to some screen
+
+21
+00:11:03.000 --> 00:11:25.000
+or something like that. And like, you know, that you want this to write to some screen or something like that, and you know that you want this to happen first, and then the other thing to happen. And the reason why Sequence is useful is because it doesn't have that runtime choice, right? Because effectively, when you have a runtime choice, you are putting a compile time barrier there that you cannot cross with type information because you have the runtime choice.
+
+22
+00:11:25.000 --> 00:11:43.000
+Like downstream with that, you don't know the type information from upstream because it's all changed at runtime. But when you don't have a runtime choice, then you have the opportunity for more type information to propagate across that boundary. Right, that makes a lot of sense, yeah. Okay, so another overload of sequence.
+
+23
+00:11:43.000 --> 00:12:34.000
+So yeah, sequence, and it's just like let value where you ignore the arguments But but the reason it's formulated differently is because of that tight propagation and is there not that Our our C++ listeners care, but is there a name for that in Haskell other than the operator? I don't know how to pronounce the operator, but but the operator? I don't know how to pronounce the operator but I don't know. I think it might be even pronounced seek or sequence one of those two. Okay. And then so we talk about senders. Another important thing to talk about is schedulers, right? Because schedulers produce senders. They're the entry point, apart from just, which is producing a sender. Schedulers are the main way you get your entry point
+
+24
+00:12:34.000 --> 00:13:05.000
+into your computation, right? And the scheduler just represents where work is going to happen, or some execution resource, and it can give you a sender. You call schedule and it gives you back a sender. And that sender represents the entry point into computation on that resource. So you can have a thread scheduler, you can have a thread pool scheduler, you can have, in my case, An interrupt scheduler. So I have several.
+
+25
+00:13:05.000 --> 00:13:43.000
+I have a timer scheduler that hooks up to a time interrupt. I have a priority scheduler, which hooks up to a priority interrupt at a given priority level. And then I have a trigger scheduler, which... So timer is one piece of hardware, priority stuff is another piece of hardware, another more interrupts, but there are tons of other interrupts in general and for the generic style interrupt I have a trigger scheduler. So I can I can give a trigger scheduler a name right and
+
+26
+00:13:43.000 --> 00:14:04.000
+then in an ISR in in the interrupt service routine, when the interrupt is called, I can say, run that trigger scheduler. This is the trigger by name, right? And when that interrupt happens, therefore, that means that now I'm running in that interrupt context, and I'm running whatever sender chain was hooked off of that trigger scheduler.
+
+27
+00:14:04.000 --> 00:14:42.000
+So that's the way I can hook up in general. That's the way I can hook up work to interrupts in the sender's model. Do you have an example of where these kinds of things are interacting in some kind of, I guess, embedded context is what you're working in? Trigger scheduler has been just about the most useful thing I ever came across in this sense. So, you know, the time scheduler is one thing where you can say, give me a scheduler for 100 milliseconds in the future, right? And when you start that, when you start that operation state, when you start the computation, it goes away and it sets
+
+28
+00:14:42.000 --> 00:15:12.000
+the timer interrupt. And when the timer interrupt and when the timer interrupt fires it will run you, right? So that's a timer scheduler. The priority scheduler works very similarly except instead of setting the timer interrupt it sets a priority interrupt which if it's higher than your current priority probably means you get interrupted immediately because the higher priority takes over. Those two are very, very common to think about across a wide range of hardware. Practically every embedded system has those two, right?
+
+29
+00:15:12.000 --> 00:15:32.000
+Right. We could say, I don't know about practically every, but many, many, many, many people that used to think about those. The trigger schedule is for all other interrupts. So any kind of ad hoc interrupt you have. So if you're in my case I'm working with the hardware architects and we can choose to add in interrupts for various
+
+30
+00:15:32.000 --> 00:16:09.000
+things right and in fact you know if you pick up any embedded system you'll see it has various other interrupts. All of those are sort of ad hoc and I you know the trigger scheduler takes care of Pretty much all of them. You just make a different name for each one when you instantiate the trigger scheduler and now you've got a Custom scheduler for that interrupt, right? So like you might get in you might you know You might send something off on a bus and get an interrupt when the response comes. You would hook that up to a named trigger.
+
+31
+00:16:09.000 --> 00:16:23.000
+And these clearly are essential for putting everything together. Yes. Yeah. You're not going to be able to do much with Just. Right. Right. And the extra thing that Trigger Scheduler does is it allows you to send arguments. Like Just.
+
+32
+00:16:23.000 --> 00:16:41.000
+You know, Just takes arguments. Ordinarily, when you have a scheduler and you call schedule, it gives you a sender that sends nothing. It just calls set value with no arguments. But trigger scheduler, when you trigger it, you can give it arguments. So it behaves a bit like, it behaves like just,
+
+33
+00:16:41.000 --> 00:17:38.000
+but in the context of that triggered that trigger resource you know the other interesting part that sort of a synchrony brings into focus for me is that you know it and you can correct me but when when when you're thinking about you know doing computation. even sort of using parallel algorithms or something, typically you are thinking about the computation as somewhat more nullific. You're not thinking about other things happening while you're doing the computation. You might be thinking about splitting it up for parallel use, but even then you're thinking, well, I own the cluster, I own the CPUs that it's running on, whatever. I'm going to split it up for performance. But the other thing to think about in terms of asynchronous, it helps to split tasks up into small pieces, right? Even though there's a little overhead
+
+34
+00:17:38.000 --> 00:18:16.000
+in scheduling the pieces, even though were I able to do this task monolithically, it might finish sooner, right? But by splitting it up, I'm trading off a little bit of time, not a lot of time, but a little bit. But I'm also allowing the computation to be canceled, I'm allowing other things to get in there. I'm being a good citizen in the the wider world of scheduling things right I'm not tying up resources until I'm done and that is also very important in the embedded world.
+
+35
+00:18:16.000 --> 00:19:01.000
+Yeah I mean that makes a ton of sense to me I mean I think about a lot of the code that I written, the topic that comes to mind is my Scrabble game. And there's a lot of like you when you write code, you're writing it in a sense serially on a page, right? But one of the first times I the first pass at, you know, getting the word solver in that game, you've got a 15 by 15 board and you need to explore starting positions for different words. But there's a lot of stuff you can think about like, and that that's what I ended up building into a data structure, but you could have done some kind of asynchronous thing where you're exploring a word try. And you want to you know, at a certain point,
+
+36
+00:19:01.000 --> 00:19:34.000
+you know, okay, there's there's no more words after this. But like the naive way to do it is just create every single combination and look it up in a dictionary. But that proves to be just a combinatorial explosion that just, you know, halts. And I even tried doing that and then creating some kind of thread pool and dispatching, you know, 64 threads. But even still, it's just absolutely awful. So you end up encoding kind of the asynchronous, you know, if even still, it's just absolutely awful. So you end up encoding the asynchronous. You could code it that way. It probably might end up still being less efficient than using your WordTry at the end of the day.
+
+37
+00:19:34.000 --> 00:20:08.000
+But there's a lot of stuff that if you're searching for results, you end up building up that list and then sorting it and whatnot. But you could picture a asynchronous algorithm where it's popping up and dynamically, you know, you have the top five words and then it's inserting them in and you get some live dashboard of like while it's searching the space, it's showing you, you know, incrementally or iteratively when it finds a good solution or good play. But currently, you know, I don't have that any of that built into the game because I don't I don't use asynchronous algorithms in them.
+
+38
+00:20:08.000 --> 00:20:50.000
+Yeah. And when you when you run when you run that regular synchronous algorithm on the desktop, you sort of don't you know, you're running on an OS. So unknown to you, you get you get, you know, underneath under the hood, you get the OS deciding when you can run you get preemption You get you know resource allocation by the OS, but when you're running on bare metal You don't have any of that and so, you know running a monolithic thing means you are tying up resources For that amount of time and this sort of ties back also reminds me of you know, I spent ages in games so a lot of times everything comes back to me mapping it back in my mental model to how games work, you know, and it's
+
+39
+00:20:50.000 --> 00:21:24.000
+sort of, you know, in games you are trying to hit your 60 FPS or whatever it is, but you're trying to hit the frame rate. You're not, you don't want to tie up resources because that would mean that you overshoot your frame time or whatever. I mean, these days games run on machines that maybe deal with that a bit better, but 20 years ago, this was certainly a concern. I think it's still a concern today. So it's things like if you have a very expensive thing to do, you have to structure your computation so that you can do it over multiple frames.
+
+40
+00:21:24.000 --> 00:22:08.000
+You have to make it so you can pick up where you left off. You have to not do it all in one go because that would take half a second or whatever. If you're doing some kind of pathfinding or something computationally intensive like that, you build it so that it can happen piecemeal. It's somewhat the same idea that comes into structuring asynchronous computations at least at least for me I sort of map it to that. Yeah, literally when you were saying that like five seconds before you said the word pathfinding That's what I was thinking in my head too is like another Example is the city stride route run, you and trying to figure out how to do like a Monte
+
+41
+00:22:08.000 --> 00:22:34.000
+Carlo tree search where you set the number of stats that it looks ahead so that you have an efficient algorithm but that is finding an optimal, you can imagine one where you set some condition that as long as one of the paths that is currently being explored hit some threshold, just target now, now reset the search from there. Because I know that in practice, as long as I can find this metric, it goes. But currently, that's not the way my algorithm works.
+
+42
+00:22:34.000 --> 00:23:02.000
+It's just a, I guess it's a breadth first search that does a certain number of steps. But it always completes, regardless of how bad that route is going to be for n steps. And you could imagine, once again, an asynchronous version of this that says, when any of these paths meets this criteria, go from there. I can picture a bunch of different pathfinding stuff.
+
+43
+00:23:02.000 --> 00:23:36.000
+This kind of stuff is very useful. You're already using this on a daily basis. Or is it daily? I'm not sure. Yeah, you could say that Maybe not every day that I have to dip into it, but certainly it is getting used. Yes Yeah, and then other yeah deep mar you mentioned last episode or maybe it was two episodes Yeah, I mentioned him earlier. He gave a talk at super plus now. Yeah, and uh, I mean it sounds like yeah rob's using it As well, so this is slowly even though only it's would you say partially standardized? I guess the foundations are standardized and going forward there's gonna be more algorithms that are standardized I mean sim not not dissimilar to how other
+
+44
+00:23:36.000 --> 00:24:03.000
+Library things like ranges have entered the standard and then the API surface has grown right if folks are listening to this and You know, they're potentially working at a company or have a personal project. Is this, I mean, so you've gone and built your own. At what point, I guess C++26 folks will be able to reach for this. So that means like what C++30 or 2030. It's a library feature.
+
+45
+00:24:03.000 --> 00:24:48.000
+So potentially it might actually come quicker than some of the I guess tooling stuff. It's a bit of work, but you know the library implementers are Up to the job. I'm sure not quite sure when they'll get around to implementing it but coming to a standard library Near you soon and also it's is the Intel one is that I see that I see a lot of this stuff on GitHub it's open source so would you say that that is a is designed primarily with embedded in mind or is it generic it's designed with embedded in mind it is non-standard it obviously follows the same ideas as a standard and this of you know the in terms of parts of it, but it's not.
+
+46
+00:24:48.000 --> 00:25:11.000
+At some point it diverges. And I know for that matter, NVIDIA has one as well. Eric wrote it, I believe it's called libstudexec. Yeah, there's a ton of implementations out there. We will also once again link to Rob's talk. And I think I saw that there was also a couple other, and you mentioned there was a couple other senders and receivers if not specifically adjacent talks at C++ Now.
+
+47
+00:25:11.000 --> 00:25:48.000
+Yeah there are a few talks out there in the wild already now and more to come I'm sure. Awesome any final words of wisdom for the listeners? Wear sunscreen. It's spring, the sun is out in force especially here in Denver where we've got a bit of altitude. It's important to wear sunscreen. It's funny you mentioned that because my my fiancee might enjoy the LLMs and AIs even more than I do and she's taken she has you know AI assisted everything now including
+
+48
+00:25:48.000 --> 00:26:13.000
+recommendations for skin routines. And she took a photo of me and fed it to ChachiPT and got recommendations. And of course it told her her skin was glowing and fantastic. She looked younger than her age. And for me it said, this is clearly early signs of aging, etc. And so now she has me on a skincare program that involves putting some moisturizer cream with suntan lotion every morning.
+
+49
+00:26:13.000 --> 00:26:36.000
+Even if I don't plan on going outside, it's, it's, uh, anyways. The fact that you said suntan lotion speaks volumes. Or what did I, or what did I? Suntan lotion is what we used to call it in the 70s, I think. Sunscreen is what... It's not helping... Well, it depends what your point of view is, but... But the idea is less to tan and more to protect yourself, I think, these days.
+
+50
+00:26:36.000 --> 00:27:05.000
+I mean, it's a speak-o there. Although I think sun lotion, sunscreen, sunblock, they're all good. But honestly, I'm not... I'm the last person in the world You should ever I put her in charge of my skin routine And if she's not reminding me you know I I forget so she's concerned about my my early aging I we can't all look as young as you been. I don't think You're a programmer way after is just stop going outside. It's very natural.
+
+51
+00:27:05.000 --> 00:27:25.000
+That's the secret to aging well is just don't go out much. I really like being outside though. It's nice to be outside. But listen to Ben. Listen to my fiance. Wear sunscreen or block or lotion. Be sure to check these show notes either in your podcast app or at adspthepodcast.com for links to anything
+
+52
+00:27:25.000 --> 00:27:30.000
+We mentioned in today's episode as well as a link to a get-up discussion where you can leave thoughts comments and questions Thanks for listening. We hope you enjoyed and have a great day. I am the anti brace There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

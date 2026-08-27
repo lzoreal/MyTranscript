@@ -1,0 +1,241 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:01.000
+My first point, it's a shadow of APL. My second point, though, is that it's still pretty great. You know, as far as Python goes, if you program in NumPy, your Python code is faster. NumPy is faster than Python because at the end of the day, episode 213, recorded on December 10th, 2024. My name is Connor, and today with my co-host Bryce, we discuss NumPy, summed area tables, and more. You know, you mentioned in the last episode that you've been doing more and more Python. And I also have been doing more and more Python the past six to eight months. And I don't remember. I think we may have talked a little bit in a previous prior episode about sort of my search for understanding about what is Pythonic.
+
+2
+00:01:01.000 --> 00:01:46.000
+And I sort of feel like I've now grasped Pythonic. I now have a sense of what it is. But what I want to talk about before we get into this algorithm is NumPy. And I want to get your thoughts on what do you think of NumPy? Because for me, learning NumPy coming from C++ has been at times, it has been both refreshing and frustrating. And I wonder if you've had a similar experience. Sorry, learning Python or learning NumPy? Learning NumPy specifically. So let's time box this to two minutes so that I don't go on forever here. My first comment.
+
+3
+00:01:46.000 --> 00:02:20.000
+Oh, and we should say what NumPy is. NumPy is the number one popular library probably in the world because Python is one of the most popular languages. First, if not first, second. And it is an array library, which means that you've got your NP, which is typically you go import numpy as NP. NP.array gives you access to a multi-dimensional array where you can do APL, array language-like things, with these arrays, such as they're called different things in different languages,
+
+4
+00:02:20.000 --> 00:02:55.000
+scalar or pervasive operations. So you can for scalar operations, like plus times minus, you don't need to map these operations, the number of maps over the dimensions of your array. So like, I love to show the Haskell example, where if you have a list of lists, and you want to add one to every number in that list, you have to go map map of plus one over your list with some parentheses in there in order to get that to work. Whereas in a NumPy, you just go plus one. And it automatically, using a technique called broadcasting, which is just what they call,
+
+5
+00:02:55.000 --> 00:03:11.000
+it's their form of rank polymorphism. And that's just a, rank polymorphism is just a fancy word for being able to apply these operations to arrays of different ranks. So integers or scalars have rank zero. Lists have rank one. Matrices or tables, however you want to call them, they have rank two.
+
+6
+00:03:11.000 --> 00:03:30.000
+A cube has rank three. And it goes all the way up. I think there's a limit in NumPy. I don't know what it is. I think in APL or J, I think the limit was 63 dimensions at one point, which you don't typically end up doing stuff with 63 dimensions. But, you know, when you're designing a end up doing stuff with 63 dimensions. But you know, when you're designing a language, there's no reason to really limit it if you can design
+
+7
+00:03:30.000 --> 00:03:54.000
+it generically. Anyways, that's what NumPy is. What are my thoughts and feelings about it? It is a shadow of the power of array languages. NumPy is basically just an APL implemented in Python. I was about to say poorly implemented. I don't want to say poorly. It's just like whenL implemented in Python. I was about to say poorly implemented. I don't want to say poorly. It's just like when you're in a language where all functions are words and you have operator overloading, but only to a certain extent,
+
+8
+00:03:54.000 --> 00:04:25.000
+it's what you end up with. You can't do a ton better in Python than NumPy, but you lose a lot of the elegance and power of a... Well, but you don't get composition, right? Because everything is sort of eager. You can't really do like lazy composition of things fusion is what we should say there you don't get the the fusion of operations so there is um there are libraries uh out there that try to do this kind of stuff but um numpy does not so and that also a lot of the array languages as well do not fuse, which is one of the critiques
+
+9
+00:04:25.000 --> 00:05:03.000
+of both NumPy and array languages is whenever you do plus one times two, and then you wrap that all in a summation, that's three different operations. Two, one addition, one multiplication, and one reduction. And a lot of the times that ends up in creating whole new matrices. So like you can imagine that instead of doing some in-place transform and c++ i'm doing like a copy if before each of those and then like then doing my transform and like i very sadly we don't we've already had this conversation we mix up the underscore copy versions like the semantics of some of our algorithms like sort uh is in place yeah um
+
+10
+00:05:03.000 --> 00:05:37.000
+by default but doesn't give you a set of output iterators. Anyways, we've already had that conversation. My first point, it's a shadow of APL. My second point though, is that it's still pretty great. You know, as far as Python goes, if you program in NumPy, your Python code is faster. NumPy is faster than Python because at the end of the day, NumPy is implemented in C and C is faster than Python. So a lot of this stuff, maybe paradoxically or unergonomically, if you take a list in Python, convert it to a NumPy array and then do your operations on that NumPy array and
+
+11
+00:05:37.000 --> 00:06:21.000
+then convert it back to a Python list, your code's going to be like, I don't know if it's an order of magnitude faster, but it's definitely a multiple faster than your Python lists, which means that like, if you're looking for performant Python code, become a NumPy expert. Even if you're not doing scientific compute, it's still a great library to do these kinds of, you know, basic generic programming operations with. And there's also, there's also this JIT compiler Numba, which can take Python code and JIT compile it down to native code. And in particular, Numba is NumPy aware. So it can take your NumPy code and turn it into code that is going to be, in a lot of cases, as fast as if you'd written something in C. So there's one particular
+
+12
+00:06:21.000 --> 00:07:02.000
+thing in NumPy that there's a bunch of like little quirks that I think have just been like stylistic differences between C++ and Python that I've sort of adapted to. But there's one thing that it really is a difference in approach that still bothers me. And that is around like userdefined reductions and scans. So let's say that you wanted to do just a plus reduction, a reduction with just operator plus on an array of ints. You can just do np.sum, right? Yes. And if you want to do a scan, you can do np.cumsum,
+
+13
+00:07:02.000 --> 00:07:55.000
+or there's a longer version spelled cumulative sum. But what if you want to have your own, you want to provide your own operator? Like if you want to do something like a max reduction, there's, okay, there's np.max, but maybe you want to write like your own, like, you know, quirky, you know, operator, like, how would you do it? So there are two different ways. Technically, all of the equivalents of higher order functions like reduce, scan, outer product, which I believe outer product is called outer. And as you mentioned, well, actually, I think the generic version of cumulative sum or cum sum is called accumulate, which I've highlighted in several talks and lightning talks, because I think it's when I first discovered that I was like, Are you kidding me? Our reduction in C++ is what they call a scan in Python.
+
+14
+00:07:55.000 --> 00:08:39.000
+Anyways, so you you all of these higher order functions, I think they have some mechanism where they have binary operations where you can call those higher order functions as methods, which are just manually implemented. So if you want to call, it makes more sense when you don't have basically convenience names. So sum is what they call a plus reduction. But if you want to do an outer product on like the max binary operation, there's something where you go like operation dot max, and then you can call as a method dot outer. And that is the way you do an outer product on a implemented binary operation that NumPy provides for you. So that's probably not the answer you're looking for. That's answer number one, though. The second answer is if you want some binary operation that is not provided
+
+15
+00:08:39.000 --> 00:09:23.000
+by NumPy, and it's some bespoke thing, which is a, you know, whatever, a couple of binary operations combined the way that i have done it in the past is you need to build up that binary operation typically in the form of a lambda you then pass that lambda to this function called from pi funk that i think numpy performs and it basically uh is a function that will take an arbitrary binary expression and then have you you're then able to pass that to whatever like higher order function you want so it's like you go numpy dot from py funk you pass it your your arbitrary binary expression and then you call like dot order or something i can't remember the exact order but it involves like building up a custom lambda
+
+16
+00:09:23.000 --> 00:09:54.000
+passing it to this from pyfunk and then like using that which is coming from like c++ where you just have generic algorithms that you can pass generic operations it is it's painful it's like taking a yeah and so part of that so in numpy there's this notion of a universal function which is what from pyfunk gives you. And a universal function is like a scalar function that NumPy transforms or vectorizes into something that can be applied to arrays. And it's cool because
+
+17
+00:09:54.000 --> 00:10:09.000
+these scalar functions they get they use the NumPy broadcasting rules. And so the broadcasting rules are like what happens if you do, like, if you call something with a matrix and a vector,
+
+18
+00:10:09.000 --> 00:10:25.000
+like a 2D array and a 1D array, how does that work? And there's this complex set of rules that's, I think, fairly intuitive for how this broadcasting works for different shapes of things so that you don't necessarily have to have all the things be the same shape.
+
+19
+00:10:25.000 --> 00:10:42.000
+And one of the reasons why they have these universal functions for writing your own element-wise operations is because writing it as a function and then passing it to this decorator, this vectorized decorator, gives you more
+
+20
+00:10:42.000 --> 00:11:19.000
+efficient code than you would get if you just wrote a for loop that iterated through the entire like array and then did your thing manually so basically it's like to avoid doing like raw loops but the thing that i just don't understand is why why can't we just have the sum function take another operator that's you know know, a function or, you know, like a lambda, and then under the hood, it can call like the vectorize on it. Like, why is it that I have to go in, I have to go and do like the frompy func, something like that.
+
+21
+00:11:19.000 --> 00:11:54.000
+And then I have to call like.outer,.reduce or whatever on it. Like, it just feels very odd. I would prefer to do the C++ thing where it's like, oh, I want to do a reduction. Like I can just call dot sum and it'll just do it with like, you know, operator plus. But if I want to have my own operator, I can just call sum my array comma the function I want to call it on. Like that just seems so much more intuitive to me. And it just is a little bit mind blowing to me that that's not a thing. And I think it just, it just illustrates the difference in, in approaches. Sorry, wait, I didn't understand the, you said you want dot sum to take a custom operation or did you mean to say like dot,
+
+22
+00:11:54.000 --> 00:12:17.000
+dot reduce? Cause like dot sum. No, like, yeah, I want like dot sum to, to, to be able to take a custom operation. I don't want to do this thing. Like what, what does the operation do? Uh, no, no, no. The operation would just be like your reduction operation. Well, so I'm confused. Why do you want to, like, because sum to me is like hard-coded to plus reduce. So why do you want to be able to customize the plus? Okay. Maybe then NumPy should have a top-level thing called like reduce.
+
+23
+00:12:17.000 --> 00:13:22.000
+I guess the thing that I'm getting at that's odd is if I'm doing a sum with like operator operator plus i call a top level algorithm thing but if i want to do my own custom reduction i have to create my operator and then i don't pass my operator to some algorithm what i do is i call the dot reduce method on on it and that is like a difference that i don't want what i want is i want like a unified API where there's like, there's a thing called like numpy.reduce. And I can call it with, you know, array. And if I call it with no operator, it implicitly uses plus, or maybe we decide that we don't want to have implicit things. It should always take an operator. But to me, that's just more natural. It's just to have it be like a top level function that's like reduce like thing like operator instead of what it is right now is it's like it's like operator dot reduce of the thing. I don't know enough about the Python and NumPy implementation to know if there's any specific reason, because I agree.
+
+24
+00:13:22.000 --> 00:13:55.000
+Yeah, I suspect there is. It is a more ergonomic api like every language i shouldn't say every a lot of languages including functional languages c++ etc the way higher order functions work is you pass it the the operation as custom behavior you don't build up some thing and then have like a pre-implemented set of higher order things that you'd then go, you know, dot and then call that method. But my guess is there's a reason that they do that and it has to do with. I think so too. Yeah, but I'm totally on board.
+
+25
+00:13:55.000 --> 00:14:59.000
+I agree with the reduce thing. Definitely. If it was possible. I'm going to use the remaining time to talk to you about a very cool algorithm that I've been messing around with, which is the problem that I first was presented that this algorithm can be used for is a summed area table. Have you heard of summed area tables before? No, only from the messages that you sent me, but I never Googled it afterwards. I just imagined at some point you would be explaining this to me either via talk or via podcast. Yeah. So the idea with a summed area table – so a partial sum, you take an array and you get all the partial sums up until the end of the array. A summed area table is like that but just in like 2D. and image transformations where basically you do a partial sum for each row and then you do a partial sum for each column such that the last element, you know, the element in like the M in
+
+26
+00:14:59.000 --> 00:15:45.000
+row and column, like the bottom right, if you think about it as an image, like the bottom right of the image, that that last element will have the area of the entire thing. Does that make sense? Yes, it makes exact sense. I've got BQM pad open, I've already got my five by five matrix of ones, do you want me to share this? I mean, I can walk. And then I'll stop sharing. Don't worry, we're not going to lose the listener too bad. so we've got our our five by five matrix of ones which is five characters and we do our plus scan with two characters plus and then a backslash and then we want to after doing this we want to do under transpose god you got to love under and then you want to do the same thing um and you got to love under. And then you want to
+
+27
+00:15:45.000 --> 00:16:28.000
+do the same thing. And then you're done. God, that is that is gorgeous, folks. That's gorgeous, folks. You know, what's what's so beautiful about what you've just written, Connor, is that the without even realizing it, you have done the the trick to this algorithm that is essential for implementing it performantly on a GPU, which is the transpose. Because let's think about how we would do this on a GPU. So there's two different scans here. So first, we're going to scan the rows. Okay, so what we're going to do is first, we're going to, let's assume that like the rows are contiguous in our matrix. So first, we're going to go and scan all the rows. So let's assume that how we're going to do this in GPU
+
+28
+00:16:28.000 --> 00:16:52.000
+is that each thread or maybe each thread block will load one row, which is contiguous in memory, and then it is going to scan that row. And so it's going to load a contiguous chunk of memory. That's good performance-wise. Then it's going to scan it, and then it's going to write it. But then, okay, what do we do? So now we have to scan the columns.
+
+29
+00:16:52.000 --> 00:17:35.000
+The columns aren't contiguous. And also, we've loaded in the row to this thread block. And so now what we would have to do is we'd have to do a strided load of the columns, which is going to be a lot less efficient because we'd basically be gathering from a bunch of different locations in our contiguous array because it's going to be a strided load. And so what we can do instead is we load each row, we scan each row, and then this is assuming that this is not in place, but that we're writing to a new output. So then instead of storing in the original locations, what we do is we do a
+
+30
+00:17:35.000 --> 00:18:26.000
+transpose. We store the rows transposed. And the reason we do this is that we're then going to do a second pass. And in the second pass, we're going to do the scan of the columns. But because we've transposed the data, even though the columns originally were not contiguous in memory, because of the transpose, when we do the second pass, the columns are now contiguous in memory. And so we can again do the fast thing. And if we do this with two different kernels, what we end up is in the first kernel, we have load rows do contiguous like load of memory, like for the thread block, the entire thread block loads a contiguous chunk of memory, then it does the scan, and then it does a scatter store. So,
+
+31
+00:18:26.000 --> 00:19:26.000
+it does the transposed store. Now, that writing to non-contiguous memory, doing a strided write to memory like that, yes, it's not as efficient as doing a strided store, but stores are always substantially cheaper than loads on a GPU because the store, you can do it asynchronously. I don't have to wait for it. So I do this store and then this kernel ends and then I start the next kernel, which is going to load those columns. And the reason that I do this in two kernels is because I have to have a global barrier after that first scatter store. I've got to have everybody wait until those stores are done and are propagated. And it's just easier to do that with a second pass. And in the second kernel, I load the memory locations that were originally the rows.
+
+32
+00:19:26.000 --> 00:20:06.000
+So, I load from the output this time, which is where I've stored these temporaries. And I load the transposed data. So, now I'm loading columns. And then I scan those columns. And then I do a transpose store again, which untransposes the matrix, giving us the correct result. And I think this is a very cool algorithm. The thing that got me very excited about this was, one, this is an example of an algorithm where I think that the optimal case might be a two-pass algorithm. Some people have pointed out to me that there's another approach where you don't
+
+33
+00:20:06.000 --> 00:20:48.000
+do a scan of the entire column or the entire own column. Well, we'll get there in a second. But I'll say this. The two-pass version of this algorithm that I just described, I think, is quite an elegant algorithm, which is usually when I look at multi-pass GPU algorithms, I'm like, I have to hold my nose. I'm like, I would prefer to do this in a single pass. But I think the two pass version of this one is so elegant. But I was talking with Bradley Dice, I think one of your former co-workers on the Rapids team about this. And Bradley said like, oh, this is like a multidimensional scan. And I was like, that's interesting. I hadn't thought about it like that. But he's right. It's like a multidimensional scan. This can be generalized to multidimensions.
+
+34
+00:20:48.000 --> 00:21:54.000
+But then he pointed out something else interesting. In the scan, the parallel scan algorithm, which we implement this thing called decoupled lookback, you have this dependency graph where you, you know, if I'm the nth chunk of data, I depend on the 0 to n minus 1 chunks of data. And that dependency chain is like pretty non – it's pretty boring for the 1D case. But Bradley pointed out that for the 2D case, it's got this like wavefront property that like Like if I'm like at like n, m, I depend on like this graph of all of the chunks that are from 0, 0 up to my chunk in m. And he pointed out that, oh, this sounds like once you go to the multidimensional scan, this sounds like it's got a lot more interesting dependencies. Like it's got this sort of dependency graph, and maybe this is something where you want to explicitly have a dependency graph,
+
+35
+00:21:54.000 --> 00:22:25.000
+especially when you get to multiple dimensions. And I thought that was very interesting. It sort of reminds me of some of the – there's some linear algebra algorithms that have a similar like dependency set. I think maybe like Jacobi kernels. But I haven't had a chance to really look into that part of it yet and whether that intuition that this is just a multidimensional scan and that it's got this more interesting
+
+36
+00:22:25.000 --> 00:23:13.000
+dependency graph, does that mean that there's some clever single-pass algorithm that you can use to implement this? But it's very cool. And this summed area table, it gets used a lot in image processing. It gets used for things like depth of field transformations. I'm working on writing like a little, a little example in CUDA Python, that that's going to do some some quirky, you know, like, it'll actually like, be an example where you can give it an image, and then it'll do some image transformation. But, but I'm curious about what this looks like in higher dimensions, too. I mean, if I'm not mistaken, the dependency at M and N, it's just the sum of the rectangle formed. Right, right, right. At any point in time.
+
+37
+00:23:13.000 --> 00:23:39.000
+Yeah. But I guess you could get there if you're doing like a decoupled look back kind of thing. You can get there by looking at different points. Yeah. Yeah. Yeah. And it presents interesting scheduling problems because you want all of your dependencies to be running before you in a scan. And in a 1D scan, that's pretty straightforward
+
+38
+00:23:39.000 --> 00:23:57.000
+because on GPUs today, it's not guaranteed, but the rasterization order, the order in which thread blocks are executed, happens to be monotonically increasing. So on GPUs today, there's this implicit guarantee, which is that not at all promised, not at all documented behavior, but it happens to be the case that
+
+39
+00:23:57.000 --> 00:24:40.000
+if thread block N is running, then you know that thread blocks 0 to N-1 have either run to completion or are currently running. But if you did build a single pass multidimensional algorithm for this, you would need to think a little bit more carefully about rasterization order because I don't know if that implicit guarantee works if you're doing a multidimensional thread grid. But if you linearize the thread grid, which often happens even when you're doing multidimensional stuff, so even when you're launching a CUDA kernel that works on multidimensional data,
+
+40
+00:24:40.000 --> 00:25:30.000
+sometimes you'll end up launching it with a 1D thread grid for a variety of reasons, like usually because you're doing something like row-wise or column-wise. But you'd have to be careful with this multidimensional scan to ensure that you have this monotonic progress that for performance, at the very least, you'd want to ensure that all of your dependencies have started running before you've started running. Yeah. The BQN solution here is, I think, quite elegant because you did more or less the sort of thing that I described where you did the two scans and then you did the transpose there. Note that I've added a second solution which it's it's is it ironic i'm not sure if it's ironic but it's funny that i came to the first one with the with the
+
+41
+00:25:30.000 --> 00:26:28.000
+under transpose first and that's just because i've been really falling in love with the under modifier in bqn and what what does under do so under applies a transformation, then does some operation, and then basically unapplies that original transformation. Okay, so it's like transpose it, do this thing, and then untrans... So the classic way to use this is if you want to do a reverse scan, you do a plus scan under reverse and then if i i give it five numbers so this is the number zero to four zero one two three four and then if i if i if i just do a plus scan i get zero one three six ten but if i want to do a reverse scan i either have to add some other modifier or higher order function which is what they do in functional languages. Like Haskell has scan L and scan R, one from the left, one from the right.
+
+42
+00:26:28.000 --> 00:26:50.000
+But we have under, so we just go under reverse. That reverses it, does a plus scan, and then re-reverses it. So it basically does a plus scan from the back. And we also deal with this in C++ with reverse iterators, right? If you want to do a reverse scan, you just, you use a different type of iterator. But like this under applies to a ton of different things. The one that I've really
+
+43
+00:26:50.000 --> 00:27:11.000
+fallen in love with recently is using it to basically modify certain parts, like filter out. So say I've got my array, let's just do this, an array of five ones. If I want to add one to like a certain subset of my array, how do you do that? You know, you could do some scatter gather kind of thing where it's like, well, I gather the elements.
+
+44
+00:27:11.000 --> 00:27:24.000
+Or like a filter. A filter, but then you need to reconstruct the original, right? Yeah. So like it's a non-trivial thing to do. And like in functional languages where you don't even have mutation,
+
+45
+00:27:24.000 --> 00:27:40.000
+you might end up having to kind of like split your array based on these values, mutate the values you want to and then reconstruct it. And then reconstruct, yeah. Under enables you to apply any kind of filtering, compaction, selection. So this is saying get the first and third index and then apply
+
+46
+00:27:40.000 --> 00:28:11.000
+this unary operation to the indexes or the values that you've retrieved and then like unapply your selection so just like anytime you're using oh which is like it's just beautiful that's very fascinating and so like so it's basically like what you're using it for here is like saying like give me a view of this thing that I can modify in place. Oh, that's super cool. And just in general, I have used unders with reverse and transpose
+
+47
+00:28:11.000 --> 00:28:37.000
+and things like this, but only since doing Advent of Code over the last couple of weeks have I really discovered that it's a super common pattern that you want to either build up a list of indexes or build up a compaction mask, a filtering mask, and then get that view into your data, apply some transformation or replace it with some value. And it's a very idiomatic thing to do. And it's incredibly nice. Sorry,
+
+48
+00:28:37.000 --> 00:29:03.000
+you were going to ask a follow-up question though. Yeah, yeah. I was going to say, so tell me about the second solution that you have to the summed area table, which does not use the transpose. Right. So the first one uses under transpose. The second one, basically, it's just a row-wise scan. So this is the cells modifier, which for a matrix converts your operation to operate on rows instead of columns.
+
+49
+00:29:03.000 --> 00:29:55.000
+So by default, a plus, so if we get rid of this, the plus scan is on the columns. And if we add back the plus scan, use the cells modifier. For a matrix, this says, do this row-wise, which for a bunch of languages... You said it's called cells? It's called cells, yeah. say. I don't know. Maybe it's just that latent exposure to BQN through you has been rubbing off on me. But this is one of the first times that you've shown me BQN code where I sort of intuitively can very easily tell what it's doing. And it just clicked very immediately. At no point in your explanation did I get lost. And usually it takes me a little bit more mental energy to understand what it's doing.
+
+50
+00:29:55.000 --> 00:30:32.000
+Very cool. BQN has been my favorite language for a couple years now. Although I've played around with Jell-O and Wiwa as becoming number one, but having used it more seriously over the last couple weeks from Advent of Co., but also just the last half year, it is the gap that it has put on other languages. There are just so many things that I've realized are incredibly cumbersome in all languages except for array languages like as soon as you're doing something with a grid or a map where you have
+
+51
+00:30:32.000 --> 00:31:22.000
+coordinates and like you're checking whether you're going in or outside the bounds of some maps like all these graph traversals and it's just so so intuitive like you can add a delta to a position and you can add a list of deltas to a position in order to move around and like all of that in a in a normal language you have to manually adjust your x and y coordinates and manually check each whether each one is outside of the grid and it's just uh i gotta figure out a way to to make this you know i you know i need to get paid to write bqn is what i'm trying to figure out how to do basically well you know it's funny you mention that because uh in a in a future episode uh i so i i because i've been working on python and uh this one particular project i've been working on i've been uh i
+
+52
+00:31:22.000 --> 00:31:40.000
+finally at seven years at n, I finally had to learn something about machine learning kernels. And there's actually, like, some of the algorithms are pretty cool and intuitive once you get them. And I was just thinking as you were showing me this, like, oh, it would be really cool to implement, like, Flash Attention
+
+53
+00:31:40.000 --> 00:32:08.000
+and BQN. And I want to show you at some point some of these other machine learning like layers and algorithms like uh uh you know softmax is pretty cool um uh algorithmically but like even like flash attention i was literally just thinking like i don't know what the formula or the algorithm is for flash attention we'll save save it for another episode. But like, I did look into doing some machine learning stuff in BQN or APL one time.
+
+54
+00:32:08.000 --> 00:32:19.000
+And I was just like, and literally I was thinking about Softmax because Softmax is like, it's ridiculous. Like it's two operations, one after the other. It's like, it's like- Yeah, it's so simple. Yeah, they make it sound- Yeah.
+
+55
+00:32:19.000 --> 00:32:30.000
+Yeah. It's like a division with a floor or something. I can't remember the two operations, but it's like, this is nothing. This doesn't need a name. And relu is like the same thing. Like a lot of these terms are just like composed binary operations,
+
+56
+00:32:30.000 --> 00:32:44.000
+which is literally like two symbols. And like, so the APL version, it's like a couple lines of code. Have you heard of like llm.c, which is like a simple implementation of GPT-2? Yeah, yeah. Didn't we do a refactoring of that into CUDA? And we, I'm not sure if there's a link online to that,
+
+57
+00:32:44.000 --> 00:33:29.000
+but well, if there is, we'll find it. I think – I bet you could write, like, LM.C and BQN and, like, have it fit on, like, you know, a slide. Probably, minus the, you know, GPU acceleration. Yeah, yeah, but that's – I i mean when you have it expressed in a real an array language i feel like it's it's pretty straightforward to figure out how do you lower it to a gpu yeah maybe yeah but uh but yeah i i bet it i bet it would i bet it would be very elegant i bet it'd be very elegant yeah oh you have me excited about pqn what are you doing to me yeah well there's a paper out there called convolutional neural networks and apl that was published at a workshop a couple years ago link in the show notes if folks
+
+58
+00:33:29.000 --> 00:34:17.000
+are interested uh so there has been some exploration of this stuff anyways it's funny because you know i've been we i've been in video for seven years and i mostly have worked on like the compute hbc stuff and uh i think i think some people who areVIDIA who don't work on, like, the AI stuff, like, to some degree, I wouldn't say there's resentment. But you sometimes have this feeling as, like, ugh, like, the stuff I work, like, this other thing gets all the attention. And the stuff that I'm really passionate about, you know, which is just, like, general compute, doesn't get as much attention. And it can get to some people. And this is the first time in my time at NVIDIA when I've i've like really had to look into machine learning kernels they're actually pretty cool they got some interesting algorithms in them um and uh and uh i just like i'm seeing out in six
+
+59
+00:34:17.000 --> 00:34:52.000
+months and and uh uh i hope my entire world does not become consumed by writing machine learning kernels. But I don't know. Maybe I'll have fun with it. We'll see. I mean, if we're all out of work in 10 years, I'm just going to write BQN programs full time for fun. I know what my hobby will be if the AI takes over the world. But we're still a ways away from that, I think. Be sure to check these show notes either in your podcast app or at ADSPthepodcast.com for links to anything we mentioned in today's episode, as well as a link to a GitHub discussion
+
+60
+00:34:52.000 --> 00:34:57.000
+where you can leave thoughts, comments, and questions. Thanks for listening. We hope you enjoyed and have a great day. Low quality, high quantity. That is the tagline of our podcast. It's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

@@ -1,0 +1,141 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:11.000
+So the talk is called Think Parallel, and it is a talk where I really just deep dive on how to implement a variety of different parallel algorithms and data structures, all of which sort of build on each other. And sort of try to instill upon people the mindset that you and I take when trying to craft parallel code. Welcome to ADSP the podcast episode 171 recorded on February 22nd, 2024. My name is Connor and today my co-host Bryce previews his upcoming talk, Thinking Parallel. So I've been working on making this new talk that I'm going to give some part of today, assuming that I'm able to make slides in the three hours, two hours that I have. And the talk's called Think Parallel. And it is a talk where I really just deep dive on how to implement a variety of different parallel algorithms and data structures, all of which sort of build on each other, and sort of try to instill upon people the mindset that
+
+2
+00:01:11.000 --> 00:02:28.000
+you and I take when trying to craft parallel code. And so one of the storylines that I'm likely going to include in this talk is, okay, how do we implement a parallel scan? How do we implement a better parallel scan? And then what can we do with a parallel scan? And the first of those, what can we do with a parallel scan is how can we implement a parallel copy if with a parallel scan? So I've given a lot of talks where I've shown the sort of two-pass, up-sweep, down-sweep implementation of parallel scan. But I wanted to implement the more clever single-pass decoupled look- is that when you do this upsweep, downsweep, pass, basically the two-pass approach, you do something in parallel where you split up the problem into chunks. And for every chunk, you do a local scan. And then every chunk communicates some aggregate, the aggregate sum from its chunk, into some array somewhere. And then you scan that array
+
+3
+00:02:28.000 --> 00:03:34.000
+and then that scanned array of aggregates, you use that to update all of the original chunks. But the scan of that array of aggregates happens in serial. You do that by one thread in the sort of traditional approach. And what decoupled lookback does is it replicates and paralyzes the scan of that aggregates array. So, it says, okay, we're going to do some redundant work in the interest of avoiding the global barrier between this upsweep pass and this downsweep pass. And so, the way that you do that is that if you're, you know, a chunk in this parallel scan, you will look at all of the previous chunks that are before you that are to the left of you in the sequence. You'll look and see, have they written their aggregate yet? And if they have, you add it into some local temporary that you're accumulating. And if they haven't, you wait for them to finish.
+
+4
+00:03:34.000 --> 00:04:30.000
+And if you ever encounter that one of the previous chunks has not only written its aggregate, but it's also summed all of the aggregates from all the chunks before us, then you can be like, great, I don't have to keep looking further into the past. And this trick lets you avoid having everybody waiting on just the predecessor that's directly before them. And it allows you to decrease the contention on predecessors when you're doing this scan. So, it's a pretty clever technique. But one thing I started thinking about when I was looking at this is how does this algorithm relate to or what are the forward progress guarantees of this algorithm? And one of the first things that I realized is that
+
+5
+00:04:30.000 --> 00:05:12.000
+I don't think that with just the C++ parallel algorithms that we have today, that we can actually write this code because we don't have a way to request the type of forward progress guarantee that we need. How familiar are you with forward progress guarantees? I watched Olivier's talk that I'm pretty sure is called Forward Progress Demystified or something like that. And I've read the CPP reference stuff, but I am by no means an expert. So concurrent forward progress is the strongest form of forward progress. And concurrent forward progress means that the system will ensure that
+
+6
+00:05:12.000 --> 00:05:54.000
+your thread or your work will make forward progress. So like if you're on Linux or Windows and you spin up a std thread, that std thread will get scheduled and will run. And that'll happen regardless of how many other std threads there are. And if that thread blocks, that's okay. And essentially, the way that operating systems will do this is that they will, at some point, you know, they'll preempt your thread. They'll be like, okay, like, you know, it's time for me to preempt you so that some other thread can run. And that means that you can't end up in a situation
+
+7
+00:05:54.000 --> 00:06:28.000
+where you've got, you know, your thread is using some parallel resource and all it's doing is waiting for some other thing to happen. And the thing that it's waiting to happen can't happen because it doesn't have a resource to run on because the resource that it would run on is being used by the thread that's blocking on it. So an example of, well, I'll get back to the example after I explain parallel forward progress. So, parallel forward progress is a little bit weaker. Parallel forward progress says
+
+8
+00:06:28.000 --> 00:07:13.000
+once your task or piece of work starts executing, the system guarantees that it will run to completion. But if it hasn't started executing, there's no guarantee that it will. So an example of something that would give you parallel forward progress would be a bounded thread pool. So you have a thread pool that has eight worker threads on it. And you can feed tasks into this thread pool. And those eight worker threads are OS threads. So they have concurrent progress guarantees themselves. And all of those eight threads in the thread pool are going to do is they're going to pull queues out of the task and run those tasks.
+
+9
+00:07:13.000 --> 00:08:14.000
+And so once one of those worker threads pulls one of your tasks out of the queue and starts running it, it's guaranteed that that task is going to run to completion. But let's say that you enqueued 100 tasks to this thread pool, and 99 of those tasks were going to wait on one of those tasks. Well, if the first eight tasks that get pulled out by those eight worker threads are tasks that wait on that one other task, then you're going to have a deadlock because each one of your worker threads is going to be running a task that is going to be waiting for a thing, for a task to run, and there's not going to be any thread to run that task that everybody's waiting on. So a thread pool that would provide concurrent forward progress instead of parallel forward progress would either be an unbounded thread pool, so a thread pool that will add additional threads if needed,
+
+10
+00:08:14.000 --> 00:09:20.000
+you know, if things are taking too long or if there's too many tasks in the queue, or it would be a thread pool in a system that would ensure, that would require you to block in a certain way that would on an atomic or a mutex. If your task's instead weighted by calling some function on your thread pool that was called wait, and that function could wait, but it would also, if the thing that it was waiting for had not been satisfied yet, it might go and execute another task. It might go and pull another task. It might go and pull another task out of the queue and then go run that additional task and only come back to your task once it's run that other task. And then in that sort of system where all the blocking defers to the
+
+11
+00:09:20.000 --> 00:10:07.000
+scheduler, you will eventually make forward progress because eventually you'll get through all 100 of those tasks until you get to that one task that will unblock everything else. And then once that one's run, then all the other ones that have been deferred by this boost blocking mechanism is what it's called, would eventually get run. So that's parallel and concurrent forward progress. There's also a weaker form of forward progress called weekly parallel forward progress, which essentially says like, hey, you have no guarantees that execution will run to completion. So weekly parallel, not particularly interesting
+
+12
+00:10:07.000 --> 00:10:55.000
+for what I want to talk about today. And what I want to talk about today is in the case of our scan algorithm, we sort of need a concurrent progress guarantee today because if I'm doing a scan within chunks, the ith chunk depends upon all of the chunks before it. And so, if you were to use a system that has parallel forward progress and it was going to run, again, let's use that example of a worker thread pool with eight worker threads. And you enqueue up in chunks of your scan there.
+
+13
+00:10:55.000 --> 00:12:00.000
+Well, if it decides that it's going to run the last eight chunks of the scan first, then you're going to have a problem because those last eight chunks are going to depend upon all of the chunks before it and so you'd get a deadlock with that parallel forward progress guarantee thread pool system. However, if you ran the first eight scan chunks first, and if you guaranteed that you only would run a scan chunk if all of the scan chunks that were enqueued before it have been run first, then you'd be fine. So, like if your system has this sort of monotonically increasing guarantee where it says like, hey, if you enqueue n tasks, I will run those tasks. I will not start running task I until all of the tasks before I have either started running or have completed running. So, if you have a system that makes that guarantee, which is weaker than concurrent forward progress, then you can implement something like scan. And that sort of monotonically
+
+14
+00:12:00.000 --> 00:12:47.000
+increasing, you know, forward progress thing, it's actually common to a lot of different problems. You know, you need that guarantee for something like a scan. You need that guarantee for something like what we've called the lost reduction or the fold left type reduction here where it's a reduction that guarantees that things will be reduced sort of left to right. And there's a few other important algorithms that sort of could rely upon that property. And on CUDA, we don't explicitly guarantee this. It's very much like undefined behavior but it has happened to be the case
+
+15
+00:12:47.000 --> 00:13:03.000
+since the start of CUDA that CUDA thread blocks are executed in monotonically increasing order that if you're executing CUDA thread block I you know that all thread blocks
+
+16
+00:13:03.000 --> 00:13:48.000
+before I are either currently running or have run to completion. So, this is a very interesting property and I've been thinking about is this property something that should be another forward progress guarantee category in C++? But I don't think that that's necessarily how it would work because this isn't a property about the execution of one thread in isolation. It's a property about I've enqueued in chunks of threads or in threads or in chunks of work. And I want some guarantee about the order in which they are all executed. But I do think it's an important guarantee for us to in some way, shape, or form codify. Because if we can't codify it in some way, shape, or form, then the only way to spell
+
+17
+00:13:48.000 --> 00:14:33.000
+these algorithms in standard C++ would be to require concurrent forward progress, which could be restrictive because some platforms can't guarantee concurrent forward progress while they can guarantee this monotonically increasing thing. Yeah, I recall we've had a version of this conversation because I think we talked about this at one point, maybe even on the pod when we did the loss reduction series. And I think there's even a pull request open right now on the thrust inside of CCCL saying, having like a little chart that points out that we're missing an associative only reduction. And then I think we were talking about that there's a way to implement this kind of
+
+18
+00:14:33.000 --> 00:15:13.000
+currently, if you just call the inclusive scan and then take the last element. But I can't, I can't remember if this was on pod or off pod, but you said that the way that the scan actually works is kind of relies on this implicit, not explicitly stated behavior. Same thing is true of reduction. The reduction today will guarantee ordering in thrust and cup. Sorry, let me rephrase that. When you're using a thrust reduction with the CUDA backend or when you're using a cub reduction, it's guaranteed that it's going to be left to right, that it's going to be, that it won't commute, it won't change the order of
+
+19
+00:15:13.000 --> 00:16:14.000
+arguments. Because all it does is it endues a CUDA kernel that does the reduction. And as I just said, since the beginning of CUDA, there hasDA, it has been the case that CUDA thread blocks execute in monotonically increasing order. And so if you think about it, like the way the reduction works, it's guaranteed that this will happen. each thread block will break up the input into a series of chunks, and each thread will handle that chunk. And then there's a warp-wide primitive that they'll use to do the reduction across the chunk, and that guarantees the left-to-right ordering too. And then the block-level primitive to do that, I believe also guarantees the ordering as well. And then because all the blocks happen in monotonically increasing order,
+
+20
+00:16:14.000 --> 00:16:51.000
+the sort of the grid-wide reduction should also give you that guarantee. I'm like, now that I say it out loud, I'm only 90% sure that that's the case or that that will always be the case because I don't know how the warp level reduction primitive works, but I'm pretty certain that it'll do things left to right. I think we rely upon that in some of our examples and some of the code that you and I have written. It'd be interesting to actually go and see whether that's true. But I'm fairly certain that it's true today.
+
+21
+00:16:51.000 --> 00:17:36.000
+So how does this all tie back? Because you started saying at the beginning of this episode that you've got this new talk coming up, Think Parallel, and you're going to start from showing how to implement a scan using a copy if and how to build things out of scans etc yeah how does this all tie into like what's the ultimate goal of the talk is is uh are you going to be and also to i said uh olivier who's a former nvidia employee now works at apple last time i checked um he gave a talk at CPP North 2022. And that talk was called forward progress in C++. So if you were intrigued by Bryce's explanation of forward progress,
+
+22
+00:17:36.000 --> 00:18:25.000
+or confused, and either way, you want to learn more, go check that talk out. So is that stuff going to be covered in your talk? Or like, what's the ultimate? I think I'll have to cover it a little bit. But I mean, I think that I'm most likely to cover it by just using a stood CON execution policy, which we don't have today. We don't actually have an execution policy that guarantees you concurrent forward progress. We just have std par, which guarantees you parallel. We have std par and seek, which guarantees you weekly parallel. And then we have std unseek, which doesn't give you parallelism at all. So theoretically, we could add a std con that would guarantee you concurrent forward progress.
+
+23
+00:18:25.000 --> 00:18:45.000
+And then I could use that for my examples, and that would be sufficient. But again, it would be too strong of a requirement because there's certain platforms that can't promise concurrent execution but can implement these algorithms. So I'll probably just do that because I don't want my talk to turn into like a
+
+24
+00:18:45.000 --> 00:19:23.000
+massive tangent on concurrent progress guarantees and this monotonically increasing execution property. Sounds like a very, very cool talk. Where are you hoping to debut this talk? At ACCU and I think C++ now. Isn't the ACCU like right around the corner and already submissions have been? Oh, so you've already proposed this talk and it's been accepted. Yes. Gotcha. I thought this was the, you know, you just had this, you know, talk idea in the last week and you were starting to pontificate about it. This has been in the pipeline for months now.
+
+25
+00:19:23.000 --> 00:19:53.000
+Yes, I did. Yes, it's been in the pipeline for four months now yes i did yes it's been the pipeline for a while interesting so accu that means that folks when is when is accu it's in march right yeah accu let's do a little let's do a little not accu weather accu c plus plus we will do a little plug for if i don't need to click 17 links in order to conferences. There we go. Now I click another one. 17th of April. Not in March then.
+
+26
+00:19:53.000 --> 00:20:10.000
+17th to 20th of April in Bristol. Tickets are available. Bryce will be there giving his talk. He. I guess we have to figure out our sticker our sticker situation. Cause we made promises. Oh yeah, we did make promises. And we will have those stickers.
+
+27
+00:20:10.000 --> 00:20:28.000
+My first conference isn't probably going to be until June. And you're thinking about going to C++ now. Yep. I am. C++ now folks is April 29th to May 3rd. April. That is earlier than typically. Oh, it's April 29rd. April, that is earlier than typically. Oh, it's April 29th?
+
+28
+00:20:28.000 --> 00:20:51.000
+Oh, that is earlier. I don't, I didn't realize it was that much earlier. That may be, I don't know. It's going to be a question of whether Ramona is going to come with me because I'm going to be at ACC. Like, I may not see her for a couple weeks before then because I'm going to ACCU and my mom's actually coming with me. And so it is possible.
+
+29
+00:20:51.000 --> 00:21:26.000
+If she's going to come, I'll probably go. But I suppose the logistics of this are not of particular interest to our podcast audience. That's all right. It's like I said, I no longer have my finger on the pulse of what the listener finds interesting because they love that credit card episode. C++, the ISO site no longer lists the conferences. But there was, I did see in the last couple months here, how do I tools? We need to put tools anytime,
+
+30
+00:21:26.000 --> 00:21:57.000
+now we need past month, was it news from upcoming conferences, yeah, so let's, this was posted 16 days ago, so seeing as we've plugged ACCU, we've plugged C++ now, let's plug them all, C++ online is February 28th, oh no, those are workshops, sorry, Thursday 29th of Oh, no, those are workshops. Sorry. Thursday, 29th of February. Ooh, leap, leap year, folks, to Saturday, 2nd of March. We talked about ACCU. We talked about C++ now.
+
+31
+00:21:57.000 --> 00:22:21.000
+Using stdcpp, that's in Spain, I think. Yeah, Madrid, Spain is the 24th to the 26th of April. So right before C++ now. I think I got these in the wrong order. C++ on C, that's in Folkestone, UK. That is 3rd to the 5th of July. C++ North is the 21st to the 24th of July. Yep, lots of C++ conferences. There's also some Rust conferences.
+
+32
+00:22:21.000 --> 00:22:56.000
+I know that there is a rust fest in zurich switzerland in june and then i you said you were thinking about speaking at rust com yeah but that's not until later in the year anyways lots of conferences yeah i should we should probably wrap up because i gotta shower and get into the office yep and i also need to go and watch the quarterly meeting this has been been our lunchtime, technically your breakfast. Yep. And I think the way they let us watch it too, one of the platforms, you can pause it and then put it at 2x speed,
+
+33
+00:22:56.000 --> 00:23:26.000
+just like YouTube, which I love, folks, which I love, because it means I can be even more productive today. Links in the show notes for all this stuff. And yeah, if it's at ACCU, which is in April, that means you should be able to watch this talk on the YouTubes probably within, you know, a month of that, two months of that or so. So we will update retrospectively a link in this show notes when that becomes available. So be sure to check these show notes either in your podcast app or at ADSP,
+
+34
+00:23:26.000 --> 00:23:39.000
+the podcast.com for links to anything we mentioned in today's episode, as well as a link to a get up discussion where you can leave thoughts, comments, and questions. Thanks for listening. We hope you enjoyed and have a great day. Low quality, high quantity.
+
+35
+00:23:39.000 --> 00:23:44.000
+That is the tagline of our podcast. It's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

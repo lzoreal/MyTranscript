@@ -1,0 +1,301 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:58.000
+So I think it's starting from Ampier, you have these asynchronous loads that allow you to load from global memory to shared memory without having to go through registers. And so your threads just issue those loads and then can move on to doing something else. And then you have to synchronize in it to make sure that that has already happened. And so using that is also a very powerful way of increasing and making sure that you're saturating the memory bandwidth. And then apart from that, it's just making sure. that you're not using too many instructions and being too inefficient because that can also be that can also hurt the performance. And another thing that I also find very useful when profiling is the warp stall analysis. Welcome to ADSP the podcast episode 286 recorded on
+
+2
+00:00:58.000 --> 00:01:33.000
+May 5th, 2026. My name is Connor and today with my co-host, Bryce, we continue our chat with Marco fellow Invidian. In this episode, we chat about profiling, with NICU, the GPU Rotate algorithm, and much more. And we'll call this part three of the GPU Rotate story, where we can, and we'll throw the MV Comp explanation at the end and the questions at the end, but then start this off by talking about, and I guess it doesn't need to be specifically for GPU Rotate,
+
+3
+00:01:33.000 --> 00:02:09.000
+but as I mentioned in episode 284, I believe it was, that a part of this presentation, you started going through and showing the, basically results of running NICU on these algorithms and then you started making adjustments to your algorithm based on what you saw from NICU. I'm not sure how well that's going to translate to a podcast format, but selfishly I'm interested to hear that again and then also talk about like just general tips and techniques for if you are trying to design a algorithm to run efficiently at the speed of light on a GPU.
+
+4
+00:02:09.000 --> 00:02:37.000
+what are the like low-hanging fruit things to look at? What are the non-low-hanging fruit things? And see where we go from there. Yeah. Yeah, I would say the first thing is measuring or finding out what the speed of light is, because that depends on the algorithm. But I would say most algorithms or most implementations are going to be memory throughput bound. And so that's the thing that is going to be limiting you from getting faster,
+
+5
+00:02:37.000 --> 00:03:02.000
+that you saturate the memory throughput of the GPU. And so usually whenever you have your initial implementation, so that's how I started. I had my idea of how I would do this, and then I implemented that idea in a simple way, and then I added tests to make sure that a simple way worked. And then once I had a working implementation, that's how I started optimizing.
+
+6
+00:03:02.000 --> 00:03:33.000
+For me, that's a very good way of doing it, that you just start with something simple, and then you go step by step and try to optimize it and make it better. And so, yeah, I had my initial implementation, run NICU on it, and then I knew that what I wanted to do was saturate the memory bandwidth, and that was what was going to be the speed of light and the limiting factor. And so in terms of the GPU, whenever you're doing memory operations, you want to make sure that you're doing wide memory operations
+
+7
+00:03:33.000 --> 00:04:12.000
+so that every thread is accessing or loading as many bytes as possible in one request. And then you also want to make sure, well, for that, you need to make sure that the alignment is correct. And then you want to make sure that you have enough threads, loading stuff at the same time, because that's what you need in order to have enough memory movement happening so that you actually saturate the memory bandwidth. And then you also need to make sure that when you're storing the memory, you also are doing wide stores and you have those stores aligned. So in terms of memory movement, it's always a game of kind of adapting your algorithm
+
+8
+00:04:12.000 --> 00:04:53.000
+so that you can use the specific alignment and also very wide memory movement so that you can actually saturate the GPU. And so for me it was basically that. It was just looking at NICU. It has, I mean, for me, to be honest, it's the best profiler I've used in terms of CPU, GPU profiling. just have a memory workload analysis section where it tells you how wide are your accesses, how many bytes are you accessing compared to how many bytes you actually need, because it could be the case that you are, it looks like you're saturating the memory bandwidth of the GPU, but you're, let's say your array is of only one gigabyte, but due to how you're accessing the array,
+
+9
+00:04:53.000 --> 00:05:29.000
+the amount of memory that you're moving is actually 10 gigabytes. Then it could look like your algorithm is performing the best it can, but it actually isn't because it's moving around way more memory than it needs to. So one way, do you ever use, you know the insight, compute, memory workload analysis chart? Yeah, that's, yeah, my favorite tool for this. Yeah, yeah, 100%. So there, you have, so on the GPU, you basically have these things called sectors, which is kind of the granularity that the GPU moves memory around.
+
+10
+00:05:29.000 --> 00:06:05.000
+And a sector is going to be 32 bytes and a cash line is going to be four sectors. And so in this memory workload analysis, you get a metric that's called the amount of sectors per request. And this tells you per request of a warp or of a warp scheduler, how many sectors are you moving around and how many sectors are you using? So you want to maximize that. I have a much simple, like what I do is I just look at how much memory traffic is there from global memory into L2 and then from L3. 2 to L1, and just like if that's more than I expect, like for mem copy, you know,
+
+11
+00:06:05.000 --> 00:06:20.000
+if you do an uncoelisk mem copy, like of like two gigs in memory, you'll see like two gigs from global memory into L2, and then you'll see like eight gigs from L2 to L1, and it's like, okay, something weird's happening there. Yeah. Or actually, sorry, I take
+
+12
+00:06:20.000 --> 00:06:47.000
+that back, if it's doing an uncoquolest access, you'll even see it from global memory to L2, you'll see more than two gigs of movement. Yeah, exactly. And so for me in this specific algorithm, it was looking mostly at the memory workload analysis. And so you want to make sure that you're loading just as much memory as you need and not more, that you're loading at as many sectors as you can per request, because that's the most efficient way of loading.
+
+13
+00:06:47.000 --> 00:07:13.000
+And then obviously, if you're loading on the newer architectures, you want to use these asynchronous loading methods so that you can overlap the loading of memory with doing other stuff with your threads. So I think it's starting from Ampier, you have these asynchronous loads that allow you to load from global memory to shared memory without having to go through registers. And so your threads just issue those loads
+
+14
+00:07:13.000 --> 00:07:43.000
+and then can move on to doing something else. And then you have to synchronize in it to make sure that that has already happened. And so using that is also a very powerful way of increasing and making sure that you're saturating the memory bandwidth. And then apart from that, it's just making sure that you're not using too many instructions and being too inefficient because that can also be, that can also hurt the performance. And another thing that I also find very useful when profiling is the warp stall analysis.
+
+15
+00:07:43.000 --> 00:08:22.000
+So that also gives you or gives me a lot of information of what is the bottleneck in my implementation right now. So the warp stall analysis tells you at which places in the code are my threads and my warps waiting on some dependency, on some instruction to be finished, or something like that, and what type of weight is it? So they could be waiting on a load from global memory. They could be waiting because a certain compute pipeline is being utilized too much, and so they are waiting for that to free up, and so on. And so from that, you can find out what is holding me back from getting better performance
+
+16
+00:08:22.000 --> 00:09:21.000
+and what do I need to change in my implementation. And so for me, I would say those are the main things. Again, in terms of memory movement, it's always adapting your algorithm so that you can use these wide memory loads that also need a wide alignment. And sometimes the algorithm is not at first sight is not really adaptable to that, but you can use some tricks in order to make sure that you can do these types of memory movement. I mean, that's all probably very, very useful for those that are GPU curious when it comes to algorithm design. The main question that stood out is you mentioned that there's certain APIs that are architecture-specific. So, you know, starting from Amper, you know, implied in that is that, you know, before Amper, you don't have these APIs. What is the, you know, typical solution for people that are writing these algorithms at this level?
+
+17
+00:09:21.000 --> 00:10:07.000
+like do we have backward compatible like if it recognizes the architecture it does one thing or obviously it recognizes the architecture but if it notices your you know amper or greater it does this asynchronous thing if not it does some you know less efficient thing or do people uh you know just assume that you know you're on an ampere or blackwell and they simplify their life like what are because i imagine uh you know for people that are doing this you're probably not running a single workload across different architectures, but you might have, you know, different sets of older GPUs and newer GPUs, and ideally you'd like it if your program ran across all of them. Yeah, what do you, what do people do typically? Yeah. So this is basically why CCCL exists. So in my implementation,
+
+18
+00:10:07.000 --> 00:10:48.000
+I'm using a function called Kuda MemCopyAsync. And this is a function that you give it the source and destination pointers of the memory that you want to copy and you give it the amount of memory that you want to copy and so on, and then it finds the most efficient way of doing it. And so on Ampier, it uses a certain instruction that is called LDGSTS, which means load global store share, which is one of these asynchronous memory operations. And then on Hopper and Blackwell, in case the alignment is correct, it uses something called the TMA, which is the tensor memory accelerator. And this is also another, it's basically like another type of cost.
+
+19
+00:10:48.000 --> 00:11:22.000
+engine that allows you to copy from global memory to shared memory. And so my tip in that case is use already these libraries that have taken a lot of effort and a lot of pain in order to make them as efficient as possible and just read into how you need to structure your data to make the best use of those functions. But yeah, I think in most cases for a lot of stuff, it has already been implemented and it has been implemented very efficiently. so you should try to use existing libraries as much as you can. I see.
+
+20
+00:11:22.000 --> 00:11:56.000
+So if you choose the right API, it'll do the complicated stuff behind the scenes. Yes, but you still have to, for example, let's say you are on Hopper and you are using this Kudamm copy asing function, but for some reason, you are not giving it a pointer that is 16 byte aligned, which is what you would need to use the TMA. then Kudamem copy a thing cannot do it for you and so it's going to use a less efficient way of moving memory. So you still need to know what the correct alignment is and so on
+
+21
+00:11:56.000 --> 00:12:20.000
+in order for the function to actually do the most efficient thing. So there is some stuff that you can get wrong. And this is why one of the reasons why we created Kutail, because Kutail automates all of this for you and lowers down to the most optimal memory movement strategy given the constraints of your hardware and the constraints of the arrays that you're dealing with in terms of alignment,
+
+22
+00:12:20.000 --> 00:12:40.000
+you know, strides, shapes, etc. And dimensionality. So do you think actually Bryce that Kutile would get the memory movement in the rotate, just the memory movement, because you need to think that, for example, for the global to shared memory movement, I'm using, I don't know,
+
+23
+00:12:40.000 --> 00:13:11.000
+I guess you are aware of what overcopying is, where you extend your array virtually so that you can copy whole sectors. And so I use that. And then for copying from shared memory back to global memory, I need to use some funnel shifts and so on in order to get it to the correct alignment. And so you think that Kutail would be like the implementation is flexible enough that it can handle any type of alignment with the best performance. I'm not sure.
+
+24
+00:13:11.000 --> 00:14:15.000
+I had one part of the company telling me that you basically on Blackwell needed to use TMA for all memory band with bound kernels. And I had another part of the company telling me that you only really need to use it for kernels that use the tensor course. And so I wrote this thing called Pressure Bench, which was a synthetic benchmark with a configurable amount of registrules. your pressure because one of the advantages of TMA is that it saves you register pressure because it goes straight to share a memory without going through registers. And so I wrote this little benchmark and I did some experiments and the results are kind of a lot more complicated than and with a no clear winner than you might expect. and the decision tree for how Kutal decides to lower here,
+
+25
+00:14:15.000 --> 00:14:39.000
+I don't know. I think it'd be worth benchmarking to see, you know, for this particular type of access pattern, I don't know. I really don't know. I think the thing, I guess what I'm trying to get at is one thing that we've seen a lot with Kutail and Triton is that the vectorized load stores
+
+26
+00:14:39.000 --> 00:14:56.000
+can often do quite well on Blackwell. Like Kutail generates really good vector ads, like better than Kubb vector ads in some cases with just vectorized those in stores.
+
+27
+00:14:56.000 --> 00:15:37.000
+I think the situation's very muddied right now. you know uh there's not as clear of a winner as i thought there was going to be yeah yeah i've already seen a i've also seen a couple of presentations talking about using the tma or using vectorized lows and so on and that tma is not always or is often actually not better than doing that so yeah i think to be honest it's surprising how complex and how complicated it is to saturate the memory bandwidth on these modern gpues that is also another reason why people should be using libraries because the amount of effort that it takes in order to get the maximum performance
+
+28
+00:15:37.000 --> 00:16:36.000
+is very very large this reminds me of an unrelated well quasi related hence why it reminds me of it and I made this uh Perf Wars YouTube video a month ago a couple weeks ago and it was solving a trivial problem that I profiled across several languages and for every single, there was three different implementations, like, solutions. One uses, one used a sort, one used a partition, and the other one was just basically reduction and construction. And, or like a reduce and then, you know, creation of some sequence. And in every single one of the solutions, one of my favorite array language is BQN1, including the sort, like the sort in BQN, which is an interpreted language,
+
+29
+00:16:36.000 --> 00:16:58.000
+was faster than the O3 compiled like Rust and C++ solutions. And a lot of people in the comments and on GitHub were whining saying, that's not fair, you're not comparing the same thing because the reason why BQM was faster is it would recognize that you were sorting a Boolean array, and that's why you can go
+
+30
+00:16:58.000 --> 00:17:13.000
+from a sort to a partition, because a partition is basically just, just a predicate sort. And so if you recognize that you have a bullion array, you don't actually have to do a full sort. You can just do a partition. And then I realized what I was doing is like, actually, it might just be easier to do like a pop count,
+
+31
+00:17:13.000 --> 00:17:36.000
+count the number of bullions and then just construct, you know, your final string. And BQN has basically like bit-packed vector optimizations for whenever you encounter bullion arrays. And on top of that, when you sort a Boolean array, it just does this pop, it doesn't even sort. It does this pop count and like construction behind the scenes.
+
+32
+00:17:36.000 --> 00:17:52.000
+And on top of that, it has a bunch of SIMD vectorized, optimized code because it's implemented on top of this other language called Singeli that is like, does all these massive like SIMD generated code paths. And so everybody, or not everybody,
+
+33
+00:17:52.000 --> 00:18:09.000
+a lot of people in the comments were just like, that's not fair. You're comparing apples to oranges. Like you can go and write that SIMD code and C++ and Rust and like you should be comparing that. And I was like, what are you talking about? Like, I'm comparing what I'm capable of writing.
+
+34
+00:18:09.000 --> 00:18:37.000
+Yes, you could, and the reason this reminds me of this is because when you mentioned that, like, there's all these dispatching to the TMA or to some other, you know, underneath Kuta Mem copy, Async Mem Copy. And then also like Kutal and Kutahel are doing these things. It makes me think that like, you know, there's some people thinking that like, oh, well, Kutal is unfair because it's automatically doing that stuff, whereas if I wanted to, I could go in hand optimize this stuff myself.
+
+35
+00:18:37.000 --> 00:18:52.000
+But it kind of just misses the point. The point is that you want to give people either a language or a library that is easy to use, and hopefully the naive thing that you would like to express your problem or algorithm is going to give you the most efficient thing
+
+36
+00:18:52.000 --> 00:19:11.000
+and like saying that like, oh, I could have gone and spun up some SIMD-optimized C++ code that would have been the equivalent of this and did bitpacking and whatnot, that misses the entire point, right? It's just that what is the easiest path to, like, getting this either as code on the screen or in this case, like, on the GPU?
+
+37
+00:19:11.000 --> 00:19:26.000
+And, yeah, I don't know. But I don't know. It makes me think that, like, you know, we're encouraging people use the libraries, but then there's going to be some, like, you know, Kuda Ninja Andy out there being like, well, I can do something faster than Kutile because, you know, I know how to use TMA the best.
+
+38
+00:19:26.000 --> 00:20:04.000
+And the goal is we're trying to make it simple for people, not like yeah I don't know I'm not sure if you guys have thoughts on that stuff no no it's a hundred percent the case and I think as the architectures get more and more complex it's more and more it's more and more relevant to hide all of that stuff under the wood because I think even now if you wanted to implement something as simple as a vector ad for example and make it be reached speed of light on blackwell it would probably take you a good amount of Whereas if you use Kutile, I think Brice said that it was even better than Kopp.
+
+39
+00:20:04.000 --> 00:20:39.000
+And probably implementing it in Kutail would take you 10 minutes, 15 minutes. So that's basically why that's the future probably for those sorts of workloads. But then it's not the case for everything. I can think of a lot of things where you couldn't express that in Kutail. And so you're still going to need that lower level abstraction. All right, folks, I'm, um, this is a business business bed time. We got eight minutes left, eight minutes left, and the eight minutes is reserved. Connor. Reserved four.
+
+40
+00:20:39.000 --> 00:21:30.000
+Yeah, I mean, you could have, you could have replied to Marco's Slack message last week, Bryce, last week. And then I forgot too. And then I was like, oh, yeah, we got to do this on Tuesday or Wednesday. And I realized that when it was like 8 a.m. this morning and I was on a short run. And I was like, wait, it is. Tuesday. What do you call a short run, Connor? That was what I was going to ask. Today was seven kilometers, which is definitely the shortest run I've gone on in a long time because my legs hurt from the race that I ran. But anyways, enough about that. We've only got seven minutes left now. So we had the two questions from Alpha Strata, whose name is Jir. And that's all the information we have about this person on GitHub. And the two questions were, and there was a comment afterwards says, I hope this
+
+41
+00:21:30.000 --> 00:22:04.000
+GitHub discussion for asking more questions before the guest comes on becomes more of a thing. We will do our best. Maybe we'll even just post on the socials. Here's our next guest. So because this happened to be split apart, we said, Marco said at the end, if you guys got questions, feel free to ask them and we're more than happy to answer them. Anyways, this person says, do more of that. We'll do our best. Question number one. And I actually didn't really under these, well, the second question is obvious. But the first question I didn't understand. Super Speed benchmarks inbound for a Hadamard slash spinkwant or similar.
+
+42
+00:22:04.000 --> 00:22:44.000
+Does that mean anything to you? Not to me. A Hadamard is a type of matrix, right? No, at Hadamard, I think you have the Hadamard product, which is a sort of inner product. And then I think you also have the Hadamard Transform, which is another type of... I think a Hadamar Transform is something to do with quantum mechanics. It is a type of matrix. It is a type of matrix. It's a square matrix. A Hadamar matrix is a square matrix whose entries are all either plus one or minus one. And whose rows are mutually orthogonal.
+
+43
+00:22:44.000 --> 00:23:14.000
+And then a Hadamar product is sort of a dot product and maybe you implement that with a rotate, no idea. But then what's the second thing? A spin? spin quint s p i n q u a and t or spin quant l-lm quantization with learned rotations so since it has the word rotation in it maybe it has something to do with rotation so i just asked chat chv t i would have asked jemini folks but it's been down today um
+
+44
+00:23:14.000 --> 00:23:58.000
+and there's a bottom line at the end that says spin quant style methods depend directly on what people are calling gp u rotate oh so i guess maybe, so feedback for Alpha Strata, please ask a better, more clear question in the future. But I think the question is, is there going to be benchmarks for these two different calculations or things that could potentially be enhanced by an in-place GP rotate, which I guess the answer is maybe if Marco feels like it? I am working on adding the rotate to Cobb. And so once that is in Cub, everyone can go benchmark whatever they want with the road date.
+
+45
+00:23:58.000 --> 00:24:16.000
+All right. And then the second question is much easier. Where's the code? I guess we just answered that. It's inbound for Cub. At some point in the next couple of months, I guess. Okay. And stuff shows up in Cub on GitHub way before it gets released.
+
+46
+00:24:16.000 --> 00:24:39.000
+So if you want to go mess around with this, it could be available. if you want to go look at the GitHub repo. Should we do a brief? I know Bryce wants to go to sleep, but we haven't talked about NV-comp, and that was Bryce's question from like four episodes ago now. All right, Marco, tell us briefly about MV-comp, and then we'll call it a day.
+
+47
+00:24:39.000 --> 00:25:25.000
+So NV-comp is basically a library that implements many compression algorithms and compression formats on the GPU, so that in case your application has to move data from the GPU to the CPU or loads data from the disk to the GPU in large quantities, NVCOM is probably something that can help you speed up your end-to-end performance, because usually when loading memory from disk to GPU, the large bottleneck is going to be that CPU-GPU interconnect. And so if you could compress your data so that it takes up less. space, you have less time transporting it from the CPU to the GPU, and then you can decompress
+
+48
+00:25:25.000 --> 00:25:58.000
+it very fast on the GPU, and that way you can get some performance. And so we have general purpose algorithms implemented. So, for example, we have deflate implemented, which is what's underneath G-SIP and C-LIP. We have C-standard implemented, LC-4, Snappy, which are kind of these general-purpose algorithms that usually work well for any kind of data. And then we have some other high performance, more specialized algorithms like ANS, which is an entropy encoder that's very fast.
+
+49
+00:25:58.000 --> 00:26:44.000
+And then also BitComp, which is for floating point data specifically, and Cascaded, which is for database and like data, data table type of data and columnar data. And so, yeah, that's basically the library. in case you move a lot of data around between CPU, GPU, GPU, and disk, this is something that could help you speed up your performance, basically. Nice. I mean, we might have to have you back, and then we can talk about compression algorithms for a whole three or four episodes. That is a big, big rabbit hole for sure. Well, we are supposedly, allegedly, the algorithms plus data structures podcast.
+
+50
+00:26:44.000 --> 00:27:35.000
+equals programs podcast um anyways bryce is falling asleep so we got a we got to wind this down uh enjoy the rest of paris are you coming back to america or are you avoiding america you know these days and just trying to stay abroad uh no i'm i'm coming back to new york as soon as a possible can all right um also if i may if i may ask for a a guest recommendation i think perfect one that I would really like to, like, hear talk about that I don't get to hear about enough is Dwayne Merrill, which I think Connor, you probably know since he's from NV Research. Yeah, yeah, he's on the PSA programming systems and applications. That's the research team that I work on. I mean, technically we had Jared Hobrock on, who is the individual behind
+
+51
+00:27:35.000 --> 00:28:18.000
+thrust back in the day. It was, ooh, I'm going to, it's not just Jared. It was Jared, and do you remember his name, Bryce, the guy that went to Google? Nathan Bell is the name that I was looking for. So we talked to Jared and, you know, Thubb's twin is Cub and Duane is the guy behind Cub. So yes, we can't, I mean, pending he wants to come on, but knowing Dwayne, I'm sure he would be happy to. Yeah, I think for me it's just, I don't know, I've already seen, I mean, I think he invented the DeCoppel lookback algorithm that the prefix scanning is based on. he's done a lot of work on interesting algorithms, and he seems to be a guy that really,
+
+52
+00:28:18.000 --> 00:28:40.000
+I would just be interested to know how his head works and how he comes up with the ideas for these algorithms and so on. So the thing that we were going to, the thing to do of her going to do that, Sean Baxter and Dwayne worked together at NV Research back in the day. And like back in the early days of InV Research, Sean says, it's like at the time, you know, they were looking into sorting algorithms.
+
+53
+00:28:40.000 --> 00:28:56.000
+and Sean investigated the merge sort path and Duane investigated the radix sort path and I think it'd be fun to have both them on and talk about like what was it like in those good old days back before Kuta had product market fit
+
+54
+00:28:56.000 --> 00:29:12.000
+and just you know because they both they walked down the two different paths of the sorting tree well I guess okay only one of them walked down the tree based path that's a sorting joke rough
+
+55
+00:29:12.000 --> 00:29:30.000
+rough yeah we'll have we'll have Dwayne on first and then because Sean has already been on was it just that one time oh we can have Sean on to talk about our respective thoughts on the
+
+56
+00:29:30.000 --> 00:29:52.000
+the Moby Dick semi-musical thing that we saw at the Brooklyn Academy of Music that was half in German half in English all right we'll put that on topic stack, but I think Sean's only been on that one time, but he is responsible for one of, I think, our most highest viewed episodes, which was the entitled, the like C++ versus rust,
+
+57
+00:29:52.000 --> 00:30:29.000
+versus carbon versus circle. And I don't think we've had them on. We've talked about having them on since, but all right, we'll do Dwayne, then we'll do Sean, and then we'll ask them who they want to have on. Anyways, we free you, Bryce. Thank you, Marco. This has been a blast. I look forward to seeing in place GPU in Cubs sometime soon. And yeah, we'll hopefully, and I guess you're based in Spain. So will we ever meet at some point? But I was just, I just realized the other day I was on like some video call. You're not going to Spain?
+
+58
+00:30:29.000 --> 00:30:58.000
+You'd never go to Spain again and will we ever meet? Well, it's just funny. I was on a video call with someone the other day and then it was with Asher Mancinelli. And then we had invited another guy, Charles, I believe, was his name. And I was like, oh, yeah, nice to meet you, Asher. And then I was like, oh, yeah, I've actually never met Asher in person. We've been having these meetings for like several years now. And I've known Asher, I don't know, maybe close to half a decade, maybe a little less than that.
+
+59
+00:30:58.000 --> 00:31:17.000
+And we've never met in person. And we work for the same company. But he works in Oregon. And we don't get to go to GTC unless we're speaking. And he wasn't at GTC. wasn't at GTC, and the only time I go on site is for research on site. Which Asher do you mean? Asher Mancinelli.
+
+60
+00:31:17.000 --> 00:31:35.000
+Oh, we should totally have him on. I'm working with him a lot. Oh, yeah, yeah. He was on Raycast, my other podcast. But we had no idea. I had no idea you two were buddies. Yeah, yeah. He has a YouTube channel with a bunch of BQN plus Kuda like work.
+
+61
+00:31:35.000 --> 00:31:50.000
+Yeah, yeah. There's like a small cohort. And we added Charles. Shout out to Charles. He is a K enthusiast, which is another one of the array languages. Which Charles? I want to get his name right. I believe it's Charles Hall.
+
+62
+00:31:50.000 --> 00:32:07.000
+Okay. I thought you meant modal Charles. We should also have modal Charles on at some point. Add it to the queue. It's just going to be a guess from here on now, folks. But yeah, anyways, there's like a small cohort. I think people would probably like that better than Bryce Hot Takes. Well, no, we still got to get Bryce Hot Takes.
+
+63
+00:32:07.000 --> 00:32:36.000
+I mean, that's probably only like, there's like probably 10% of our listeners. They only, you know, tune in just for the occasional Bryce hot take. Anyways, and also, I have to stay entertained, you know. I've been doing this for 290 episodes straight, you know, and I'm about to have a kid. If these things get boring, you know, I'm sorry, ADSP listeners, but I'll just, I'll just be asking Bryce here. Bryce, you find some content, send it to me. I'm just going to post that. No intro, no anything.
+
+64
+00:32:36.000 --> 00:33:11.000
+This is just the content you're going to live with for the first year of me being a father. It's just Bryce rambling to himself while walking down New York with absolutely terrible. I'm just going to make an AI, I'm going to make an AI Connor. I'm going to make, I'm going to just make a distill skill for Connor to. Have you heard about that? So apparently, apparently this is a thing in China where at some companies, people are writing like distill skills to like distill. what their co-workers do into a skill so that they can go to their management and be like,
+
+65
+00:33:11.000 --> 00:33:41.000
+hey, look, you can fire this person, but you should keep me around because I'll help you, you know, automate away more of my coworkers. So I'll just do that. Coming from the guy that said earlier, yeah, it is, it is hard to be empathetic for the guys there, the girls that aren't doing AI and then to the... No, no, no, I thought I took a pretty empathetic take despite saying that. Listen, we got to fire Joe. We got a clod skill that does his whole job.
+
+66
+00:33:41.000 --> 00:33:54.000
+He's out. You're going to get me canceled. Bro, you're going to get yourself canceled. You're going to get yourself canceled. You know what? Maybe I will. Maybe I will. All right.
+
+67
+00:33:54.000 --> 00:34:06.000
+I got to talk to me. Anyways, go to bed. Thank you, Marco. This was a blast. I hope we do meet at some point, whether that's in Spain. Or, yeah. A GDC? Hopefully.
+
+68
+00:34:06.000 --> 00:34:21.000
+And where? at GTC. I also want to go to GTC. Yeah, yeah, yeah. I don't know. I don't know if it's ever going to happen. I've been here for what, six plus years. But anyways, we'll find an event. There is a couple conferences in Spain.
+
+69
+00:34:21.000 --> 00:34:36.000
+If we weren't having a kid, I'd be in, I think I mentioned that last time. Malaga, Malaga. Malaga. And I was in Cadeve a couple years ago. And I love Spain. I love Spain. I love Spain. Great place to run. Great place to run.
+
+70
+00:34:36.000 --> 00:35:00.000
+And the weather there is fantastic, much better than Canada, much better than America. Arguably better than California as well, because it gets a little chilly, but I don't think Spain ever gets chilly, to my knowledge. It does. It does? It does, all depends, of course, of the location. It's very mountainous, Spain, you know? Is it? Oh, that's true. That's, what's his name?
+
+71
+00:35:00.000 --> 00:35:14.000
+Best Ultra Runner in the world, arguably. Philean Jornet. Oh, I thought you were going to mention, like, you know, like, famous. mountainous Spain problem from Napoleon. No, no, no. We're mentioning Killian... He says...
+
+72
+00:35:14.000 --> 00:35:34.000
+He says from France. How do you pronounce? It's Killian Horne or Jorne? I think it's Killian Jorne. But he's from Catalonia. And so in Catalonia, they have a different dialect for a different language, basically, which is called Catalonian.
+
+73
+00:35:34.000 --> 00:36:15.000
+And so I guess maybe it's... it's spoken in another in another way but i mean he lives in norway so he lives in norway well he grew up in spain though because i've listened to podcasts and he's he's like a genetic freak in that like his parents used to take him on like hikes and runs like in the mountains and so his ability like they did some study on him once and it found that he naturally changes his gate during his like ultra runs and runs so that he is like shifting what muscle in his leg and his leg and he is like shifting what muscle in his leg he's using like from mile to mile so that he like doesn't tire out as quick as quickly and i'm just like whoa my guy like that's insane he's like a all right for the third
+
+74
+00:36:15.000 --> 00:36:41.000
+fourth time thank you once again this has been a blast how i'm going to edit this nobody knows um be sure to check these show notes either in your podcast app or at a ds p the podcast dot com for links to anything we mentioned in today's episode as well as a link to a get-up discussion where you can leave thoughts comments and questions thanks for listening we hope you enjoyed and have a great day. Low quality, high quantity. That is the tagline of our podcast. It's not
+
+75
+00:36:41.000 --> 00:36:46.000
+the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

@@ -1,0 +1,221 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:00.000
+The thing with the scan is that the decoupled look back is a clever way to do a scan, but there's still this serial dependence. So the decoupled look back lets everybody do their local scan and writing the results of their local scan, like the sum of all the threads in their block to an aggregate. It lets everybody do that in parallel. And that's all something that everybody's going to do in roughly the same time. Welcome to ADSP, the podcast, episode 175, recorded on March 6, 2024. My name is Connor. Today with my co-host, Bryce, we continue our conversation on Parallel Chunk Buy, as well as talk about a few random topics, including stickers, the NVIDIA AI podcast, and more.
+
+2
+00:01:00.000 --> 00:01:58.000
+Let's go back to the two pass reduced by key. I'm not convinced that works. Why? Because, well, you explained to me how you think it would work is a reduce allowed to reduce a vector like imagine we're doing our uh reduce by key but we know that we're going to end up with a vector of reductions. Correct? Yeah. And as long as I'm allowed to build up some kind of struct that handles, you know, it's one of those operator overloaded structs that knows how to combine a struct with the initial value, an initial value with a struct, a struct with a struct, as long as it's got all those things, at some points... So for what it's worth, I have now started to prefer to not write those that way.
+
+3
+00:01:58.000 --> 00:02:16.000
+What I prefer to do is what I did in the chunk buy by where instead of writing an operator that handles all the cases, I simply figure out how do I can, how do I transform the sequence so that it's homogeneous? And so it's like, okay, if I have, if I have Boolean flags,
+
+4
+00:02:16.000 --> 00:02:45.000
+how do I turn a Boolean flag into one of my interval objects? And that just makes it a whole lot cleaner. Yes. And that is, that is like a classic thing in array programming where sometimes you need to do a scan but a scan you output the result of your operation but you need to the stuff that you want to carry is different so you kind of need these two pieces of information what do you do there and in j uh the apl 2.0 they actually have a special kind of algorithm
+
+5
+00:02:45.000 --> 00:03:01.000
+and there's like six different flavors of it called fold which is specifically for this when you want to like carry state but output a different value at each index you can do that but anyways same idea and so like if you've got a block that is the chunk is
+
+6
+00:03:01.000 --> 00:03:28.000
+bigger than the block on both sides your result of that is like your little, you know, reductions vector. It's going to just have a single value in it because it's going to get added with, you know, things on the left and things on the right. But if you've got a bunch of chunks within your block, your reductions vector is going to have a couple values in it because there's going to be one for each chunk. And when you get to your second pass reduction, all it's doing is you're going to have basically
+
+7
+00:03:28.000 --> 00:03:43.000
+a vector of vectors that have got, like some have got one reduction, some have got five reductions, and some of them... But how do we allocate the space for those? That's the problem. You can figure that out up front. How can you figure that out?
+
+8
+00:03:43.000 --> 00:04:05.000
+You just do the chunk by. You do the pass. You don't even need to do a scan there. You can do a transform zip iterator trick to apply your binary predicate, and then you're going to get your flags. So basically you calculate your flags, and then you know what, because your size of your blocks, you can just look how many vectors are we going to need in here. And if you see no flags in your block, you know you just need one value. If you see three flags how many vectors are we going to need in here. And if you see no flags
+
+9
+00:04:05.000 --> 00:04:21.000
+in your block, you know you just need one value. If you see three flags, you know you're going to need... But we can't do the allocation device size. We have to do it before we launch. That's fine. We can do that. But that might require a first parallel pass to figure
+
+10
+00:04:21.000 --> 00:04:56.000
+that out. So maybe this is why at the end of the day maybe the scan is more efficient but in my i i find i actually find it hard to believe the scan is more efficient the the thing with the scan is that um the decoupled look back is a clever way to do a scan but there's still this serial dependence so that like the decoupled look back lets everybody do their local scan and writing that the result of their local scan like the sum of all the threads in their block to an aggregate that lets everybody do that in parallel and that's all something that everybody's going to do in roughly the same time and then it paralyzes
+
+11
+00:04:56.000 --> 00:05:45.000
+the computation of the the prefixes that every block needs. But it still ultimately has a serial dependence that for, given a block, given a chunk of elements I, for you to complete the scan of those elements I, all I minus one chunks must have completed. And that is this monotonic uh requirement is tough whereas the reduce is just strictly embarrassingly parallel there's no communication or contention outside of within these like local little um blocks or like another way to think about it forget forget blocks like delete blocks from your vocabulary um for a minute way to think about it, forget blocks, like delete blocks from your
+
+12
+00:05:45.000 --> 00:06:34.000
+vocabulary for a minute and think about it in terms of CPU parallelism. So GPU parallelism has this second layer of both, you know, there's thread blocks, which are kind of like the basic, the SMPTE execution environment where you had these threads that are all executing together. But if we think about it just in terms of like CPU parallelism, where we don't have that second layer and where it's just threads, the equivalent CPU parallel reduce would be a reduce where you just spin up in threads, have each one of them reduce some amount of elements, and then write the result for that thread into a vector. And then the second pass would be just, you just have one thread sum up that vector.
+
+13
+00:06:34.000 --> 00:06:57.000
+And that first pass is 100% embarrassing parallel. Like there's no communication at all, which is like the best type of parallel algorithm. Whereas the scan, any form of the scan algorithm has threads talking to each other. So I do find it, unless there is some structural reason for needing the scan for the bi-key algorithms, and there's a lot of people more smarter than me that work on Cubs,
+
+14
+00:06:57.000 --> 00:07:51.000
+so, you know, that's probably the case, but then again, there's also some times when we do find things like this that could actually be faster. But I do find it questionable. I do find it questionable, and I wonder do a pre-pass to compute where the key chunks end um you don't have to you don't have to calculate it's well i guess yeah that's what you're saying yeah you do you do because we need to figure out where the storage goes. We need to know how many keys we end up with. Yeah. Well, it's time to wind down, folks. Wait, wait, wait.
+
+15
+00:07:51.000 --> 00:08:12.000
+Okay, okay, okay. Hang on. In a future episode? No, no, no. Hang on, hang on. It's an hour and 40 minutes now. This is supposed to be 30 minutes. So maybe we talk about a three pass thing where pass number one is just count how many you
+
+16
+00:08:12.000 --> 00:09:29.000
+know unique key segments we have count how many chunks we have, then allocate temp storage for those chunks, then do pass two, which is the reduce, uh, the aggregate reduce, and then pass three is the, um, uh, the summation of uh of the aggregates what's the cost also of launching like another a possible implementation of reduced by key is you just launch one block for every chunk and every chunk is just arbitrarily sized what's the that's basically what that's basically how the reductions work what do you mean that's how the what is the reductions uh um well they they the number of items per thread for reduction or at least for reduce i think the number of items per thread isn't uh fixed in the same way that it is for scan um It will, it picks a number of items per thread, but then it also, it iterates so that it,
+
+17
+00:09:29.000 --> 00:09:56.000
+I think the number of blocks is fixed for reduce. So for like, for scan, because of like. But like, couldn't you implement a kernel that like launches a block with arbitrary number of elements each, like for every chunk, you just launch a block? Like I don't, to me, that obviously has some kind of overhead compared to just launching. You're saying to launch a block for every chunk in the end, but then they may be different sizes.
+
+18
+00:09:56.000 --> 00:10:41.000
+They're almost definitely going to be different, and some of them are also going to be very small. Some of them are going to be big. Yeah, so you can't have different block sizes um that is an interesting idea um you know we have this segmented reduced thing which is when you have different actual inputs or like a uh scatter gather thing that georgie worked on um an employee yeah it's one of our co-workers he's very he's very smart he's like if you like cloned connor or not like he's like smarter than like 10 uh of me and connor's like that's 10 of me's and 10 of connor's um uh he's very good um so for segment and reduce i remember he
+
+19
+00:10:41.000 --> 00:11:32.000
+there was some interesting thing about like sorting the size of the segments um uh and like i think it broke down to like having three phases where there's like big segments go first and then like medium segments and then small segments i remember something about that we should talk about the segmented reduced too because those are the newer algorithms in cub i've not even when honestly when you said segmented reduce i was like is my guy just referring to what we've been talking to about yeah we should maybe we should have georgie literally also too when you just said he's he's worth 20 of you and i combined i was like well why isn't he on the podcast here we are bumbling around for an hour and a half i mean because i think that i think that one of the nice things about the podcast is that people, most programmers can connect.
+
+20
+00:11:32.000 --> 00:12:34.000
+To the struggle. brilliant programmers who are far smarter than us. Everybody's experience is subjective. And so I'm sure that no matter what your intelligence level is, you can connect with the struggle. That's one of the reasons why this podcast and this podcast format works is because no matter what level you're at, no matter your, your, your skillset, your, your learning, um, regardless of how, uh, intelligent you may think you are, um, everybody struggles. Even the people who are like who you look up to they struggle too and uh it's very uh therapeutic to see other people struggle and be like oh yeah it's not just me other people struggle too and i
+
+21
+00:12:34.000 --> 00:13:07.000
+think that's why people tolerate the pot the chaos of the podcast um because there's something very human um and uh there's something very human about the struggle and there's something very human about the struggle, and there's something very human about us making mistakes and being okay with making mistakes and advertising those mistakes to the world. Well, ideally, we're not here to advertise our mistakes. They just happen, and people get to hear them. Ideally, we could— But that's what people connect with
+
+22
+00:13:07.000 --> 00:13:36.000
+i think in the podcast yeah it's not like us just being like oh here's how you know like here's all these things works it's mostly like oh well we don't know let's go find out okay so i gotta add a new to-do list item which is we need to figure out what's going on with reduced by key and whether we can do a better algorithm there. But that's going to require some thought. And we're going to bring on Georgie. We should bring on Jake as well. We've mentioned Jake a couple times.
+
+23
+00:13:36.000 --> 00:14:04.000
+We mentioned the CCCL GitHub repo. He's in charge of all this stuff now. He should be on the pod. So there you have it. I actually don't know what's going to happen now, folks. Maybe I'll put this at the beginning because this was an hour and 20 minutes after the 30-minute couch episode. I just said you'd hear the couch episode in like 20 episodes, but maybe I am going to edit the couch episode. You promised, Connor. You bastard.
+
+24
+00:14:04.000 --> 00:14:25.000
+You promised. What? You promised not to 10x me. No 10x me. No, no episode. You promised, Connor. You bastard. You promised. What? You promised not to 10X me. No 10X me. No, no, no, no, no. I said, what I was saying is I said the couch episode would be in like 20 episodes because I wanted to edit this one for Friday and then leave the couch episode. But now this one is an hour and 20 minutes, which doesn't go into all one episode.
+
+25
+00:14:25.000 --> 00:14:51.000
+It's probably going to get cut up into three parts or at least two parts. I have no idea what the cut is. And so the problem – I don't mind editing the first part of this. But the problem is then I want to get Sean's episodes out right after we record them. We didn't even talk about the fact that the Norwegian ambassador to the UN lives in the penthouse in my building. Yeah, it's unimportant. All right, folks. We are going to wrap this up.
+
+26
+00:14:51.000 --> 00:15:11.000
+Phineas has been waiting. Oh, God. Somebody has been waiting this whole time? That's who you told me not to message while we were recording the pod. I did tell you not to message. Maybe I'll cut all of this out. Not a chance. Not a chance. Not a chance, says the guy that does none of the editing.
+
+27
+00:15:11.000 --> 00:15:37.000
+And doesn't, you know. I still haven't listened to the end of Phone Tag. You're a terrible friend, Bryce. It's been a while to do this. You're a great friend in some respects. And you're a terrible friend in other respects and you're a terrible friend in other respects i'm really interested to know though maybe on my flight to japan all right we should probably wrap it here all right folks this is probably this is like probably either one episode 176 or episode
+
+28
+00:15:37.000 --> 00:16:06.000
+like 179 it's i'm curious just for myself i'll be editing it at some point this, like two months in the future, and I want to see how close I was to it, if I was right with 176 or 179. Woo, we're getting close to 200. Yeah, what are we going to do for episode 200? Remember we recorded a special episode 200 back at like episode 40? I have no recollection of what I said. What did we say about episode 200? Do you even remember the topic? I don't.
+
+29
+00:16:06.000 --> 00:16:29.000
+Wow. I'm going to, I'm going to, you know, you have to tell me because you know, I won't listen to it. I'm going to say, I was literally about to say, you know, there's one way to guarantee that I can get Bryce to listen to at least one episode out of our first 200. And that'll be episode 200 when I air it without us recording. And he'll be like, wait, what? And I'll be like, well, you're going to have to listen.
+
+30
+00:16:29.000 --> 00:16:54.000
+Wait, did we record an entire episode? I think we recorded, truth be told, I think we recorded half of an episode. And the idea was we made some predictions, and we were going to revisit them at episode 200. When would we have recorded these predictions? I think it was around like episode 40 or something. What year would that have been? That would have been, we started in 2019, so 40 would have been in 2020. Okay.
+
+31
+00:16:54.000 --> 00:17:21.000
+Would that have been in 2020 before I became jaded and salty about C++? No, I think it was before. Oh, crap. Then most of those predictions are probably dad ones. This little bit right here, I'm going to splice. I got to remember. Whatever episode this was, hopefully it was 179. I'm going to splice this little bit where Bryce clearly has no idea what he said.
+
+32
+00:17:21.000 --> 00:17:47.000
+I really have no idea. Doesn't know the topic. Doesn't know what he said. I mean, that was pre me moving to new york even yeah yeah it was just like mid-pandemic um actually no it was it was probably like the summer of 2020 why did i even record then god i just have no memory of what happened in life before the last like year or two this is good stuff too honestly i've got to start i got to start looking to see what other podcasts have gone weekly this long
+
+33
+00:17:47.000 --> 00:18:02.000
+because I'm pretty sure we're getting, I'm pretty sure there's a couple out there that have done a couple thousand that have never missed a week. But as far as tech podcast goes, I think I'm- We've come close to missing weeks. Like the past month or two has been week to week.
+
+34
+00:18:02.000 --> 00:18:19.000
+It's been week to week. Let me rephrase what Bryce, Bryce is incorrect. Bryce, what really happened is we got close to you not being on the podcast and me just recording separately for 30 minutes going blah, blah, blah, blah, blah. Guess what?
+
+35
+00:18:19.000 --> 00:18:38.000
+This is episode 169. Bryce, we weren't able to connect and there's no way, even if listeners, one day you get like a three-minute episode. I promise. I promise. I'll need to be close to dead, you know, in order for us – I shouldn't say that because knock on walnut.
+
+36
+00:18:38.000 --> 00:18:58.000
+That was – here, let's get that walnut ring just a little bit cleaner on the pod. Knock on wood that won't happen. Anyways, any final words? Because we're now at an hour 53 minutes. Now I'm getting sentimental about my coffee table. I do have to get rid of it. All right, we're going to end it there, folks. Wait, wait, no, no, no, no.
+
+37
+00:18:58.000 --> 00:19:24.000
+If you live in New York City and you'd like Bryce's coffee table, DM me, I guess. We should actually give it away. We should give it away as like a podcast. You know, that would actually be – It's a decent – honestly, Bryce is saying it's dinged up and whatnot, but like Bryce – like this is a very nice coffee table. I'm running my hands on it. Like sure, there's a couple blemishes on the top.
+
+38
+00:19:24.000 --> 00:20:01.000
+I'm not getting rid of it because there's any problem with it. I'm getting rid of it because not – some of the furniture – like my girlfriend and I are getting a larger place together this summer. And some of the furniture that is my furniture has to go away and some of the furniture that is her furniture has to go away. And while I love this coffee table and it is my oldest piece of furniture, it is one that is going away. And you know what we should do? We should get the ADSP logo, like, etched into the corner. And we make it, like, an ADSP episode 200. Because episode 200 is going to be, like, September timeline.
+
+39
+00:20:01.000 --> 00:20:24.000
+Are you telling me I have to figure out how to ship this coffee table? I mean, yeah, we'd have to do that. But I think it could be worth it. We might start a Patreon, folks. Listen, this is like episode 179 now. The Adobe C++ Meetup, New York Meetup people are not getting ADSP stickers tomorrow. That's because, one, I forgot about it last week. But, two, over the last two days, I've been looking into New York sticker options.
+
+40
+00:20:24.000 --> 00:20:58.000
+I got quoted for, I think it was 100 stickers 329 dollars they they pass very well at the nvidia i know i know i know but i there was other options that were less than 100 for like 200 stickers anyways point is is that uh and also too i really what i want is i've learned they're called die in stickers and they have like the little white border around them. It needs to be rounded corners. I don't want I don't want like because if they would have gotten stickers, they would have been like sheets of stickers where they were square with no border and no rounded edges. And like we want top tier. Yeah.
+
+41
+00:20:58.000 --> 00:21:18.000
+We're not going to give out some first draft kind of like, oh, these were last minute. But here you go. No, this is going to have the logo? Just the logo. We're starting off simple, and then we'll expand the merch empire. I do wonder whether we need a flashier logo. No, no, no, no. There's no way we're changing the logo.
+
+42
+00:21:18.000 --> 00:21:50.000
+I would like to change the Arraycast logo, if you're listening, Bob. I don't like it. What don't you like about it? I like that I've got three podcasts and two of them basically have the same kind of style. It's just a matte color. One's green, one's red, and then just kind of blocky text centered. It's simple, it's clean, and it's got equidistant bordering to the edge from all the text. Whereas a Raycast, it's got, you know, huge margins above and below the text and it's got like negative margins on the left and
+
+43
+00:21:50.000 --> 00:22:35.000
+right. So that just like, you know, you would. I do, I do have to say one, one interesting thing about this podcast name is that when we started this podcast, we picked a name that was mostly for SEO and I did not think that it was going to be an applicable name. And then we went into a phase that was very heavily interview-based. But then increasingly over the past year and a half, this podcast has become more and more deeply algorithm-focused. It's also parallel, but I did notice a pattern that we've got an episode called vectorizing filter. And I think I'm going to go back and rename that one parallel filter. And then since then, we've had like parallel scan. I think we've had another parallel episode, but like we've had three now episodes.
+
+44
+00:22:35.000 --> 00:22:56.000
+And this one is probably going to be like parallel chunk by part one, two, and three. And I have no problem. I mean, I love talking about algorithms. You know, sometimes we just get lost in the sauce. We never talk about the data structures. Well, I mean, every data structure is basically an algorithm anyway, is a quote I heard the other day. It's basically each of your operations is just a different type of algorithm.
+
+45
+00:22:56.000 --> 00:23:08.000
+And we live in a GPU land where, like, the only data structure, not the only one. We care about graphs, too. Just calm down. Calm down, folks. I have been thinking about another podcast project. What do you mean? Like between us or just you on your own?
+
+46
+00:23:08.000 --> 00:23:27.000
+Well, like shouldn't like NVIDIA have like a – We do have a podcast. It's called the NVIDIA AI Podcast hosted by Noah Kravitz. Is it good? Is it good? Is it good? I listen to every episode. What do they talk about? they're roughly 20 to 30 minute
+
+47
+00:23:27.000 --> 00:24:05.000
+episodes uh i'm i'm allowed to give my honest opinion i'm not gonna get in trouble right you can give your honest opinion yeah it's not my favorite podcast um mostly what they do like technical yeah it's very technical but what they do is they bring on uh representatives of companies and startups that are doing cool stuff with uh gpus and like our tech and so it's like okay that is not what i had in mind one of the most recent ones um i think it was uh actually i can't remember it was like it was like health related or something but it's always like you know some startup company and they're trying to figure out a way to use gpus to affect like climate change or to do
+
+48
+00:24:05.000 --> 00:24:49.000
+like genome sequencing or and so like you get to hear about all these stories but like my favorite podcasts are one that they don't really have an ulterior motive like the motive there is to like highlight cool companies that are using our gpus so you can figure out how you could use the motive there is to sell gps yeah weed and then like other podcasts like people have courses people have books uh people have like uh you know things that they're trying it's like oh the bigger our audience the more that we can sell this thing and like uh podcasts that don't have like a goal like oxide and friends like i don't think even though oxide and friends sure maybe they get like a little bit of you know uh press or whatever pr like people hear about them more like literally that's just a bunch of nerds like that have a lot of
+
+49
+00:24:49.000 --> 00:25:27.000
+seniority and have been in the industry for decades that are like talking about what's exciting to them and like literally episode to episode it completely changes and it's literally just like passionate people sharing what they care about which is what this podcast is like we don't make money we don't have sponsors we don't really have a goal which is very clear to the listener sometimes we choose a topic and then change like three minutes later and it's the same thing with the raycast like it's literally like a raycast even more so it's just like people talking about what they're excited about and honestly yeah it's like far and few between i want for an nvidia podcast is i want a podcast where i can grill my coworkers about why cuda is the way that it is so you should should, literally, you should start a podcast
+
+50
+00:25:27.000 --> 00:25:48.000
+because that is what I did with ArrayCast. ArrayCast, I honestly sometimes think of it as like my personal think tank. Like I'll come up with a question and then I'll be like, oh, look at that, Marshall Lockbaum, the creator of the language that I've been thinking about this problem in, BQN, is on the panel. And I'll just be like, all right, so today we're going to talk about game programming but first i've got a question for marshall and then the first 10
+
+51
+00:25:48.000 --> 00:26:15.000
+minutes of the podcast is him answering that question it's fantastic it's fantastic you should call it like uh you know the nvidia think tank or the unofficial cuda podcast i think yeah do it and then that's the thing you have to choose like a panel it can even be a rotating panel which is kind of what a raycast is as well so you just have four or five people and uh the thing. You have to choose like a panel. It can even be a rotating panel, which is kind of what a Raycast is as well. So you just have four or five people. And the thing is you just got to find someone to do the work, similar to this podcast. Yeah, I know. That's the problem.
+
+52
+00:26:15.000 --> 00:26:29.000
+All right, folks. It is two hours, one minute, 18 seconds. We're signing off from Bryce's apartment. Yeah, we're going to go do a fun activity that Connor doesn't know about. Are we going to dinner first though? No, I don't think you're allowed to have food. We can't go to dinner? That's what Phineas thinks we're doing, going to go do a fun activity that Connor doesn't know about. Are we going to dinner first, though? No, I don't think you're allowed to have food. We can't go to dinner? That's what Phineas thinks we're doing, going to dinner.
+
+53
+00:26:29.000 --> 00:26:43.000
+I have different plans. Can he come to the thing? He can come to the thing. Is it a thing he'd want to come to? I mean, he can come. He may not be able to leave, though. He may not be able to leave. Is it a movie?
+
+54
+00:26:43.000 --> 00:26:59.000
+I really can't tell you any more details. We'll send Phineas a voice note and he may or may not come. Hope everybody enjoyed this. Be sure to check these show notes either in your podcast app or at ADSPthepodcast.com for links to anything we mentioned
+
+55
+00:26:59.000 --> 00:27:04.000
+in today's episode as well as a link to a GitHub discussion where you can leave thoughts, comments, and questions. Thanks for listening. We hope you enjoyed and have a great day. Low quality, high quantity. That is the tagline of our podcast. It's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

@@ -1,0 +1,213 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:14.000
+this episode is awful, man. Do you think we're not even discussing the algorithm? Connor, you know what? I was just thinking, I was thinking just a minute before you said that, I was thinking I was going to tell you, I think that this is a sign that this is going to be our greatest year of content ever.
+
+2
+00:00:14.000 --> 00:00:53.000
+I think that this is all absolute gold. I think people are going to love this. You think this is gold. I do. Can you start drinking over the holidays, Bryce? Welcome to ADSP The Podcast, episode 164, recorded on January 4th, 2024. My name is Connor, and today with my co-host Bryce, we chat about the algorithm behind credit card number generation. It might be our worst episode
+
+3
+00:00:53.000 --> 00:01:39.000
+ever. I'll let you decide. Two quick announcements off the top of the episode, some good news and some bad news. We'll start with the good news. The good news is I recently discovered a fantastic podcast called Acquired, which has four different episodes on NVIDIA, which is relevant to this podcast because both Bryce and I work for NVIDIA. It's absolutely fantastic. Link will be in the show notes to NVIDIA part one, two, three, and an interview with Jensen Huang, the CEO of NVIDIA. Absolutely fantastic if you ever wanted to know more about the company and why it's so awesome. That's the good news. The bad news is that the audio of this podcast has been heavily compromised thanks to Microsoft. Microsoft screwed us twice. First, my Windows system restarted. We lost all
+
+4
+00:01:39.000 --> 00:02:48.000
+of my recording, all two hours. And second, we have a backup though. We record in Teams the recording of both our audios at once in case this happens. However, Microsoft Teams also crashed. So for the first four minutes, you're just going to be hearing from Bryce. Then we're going to jump to the 17 minute mark where we have my audio from both tracks. Anyways, if you're wondering what happened with this episode, that's what happened. With that good news and bad news out of the way let's get to the episode okay so i gotta i got a problem for you no no we're just gonna jump right into this yeah we are yeah we are okay pretend let's pretend that you are Visa. Pretend that you're Visa. Okay. Well, pretend that you are Visa and I get a new credit card from you. Okay. And you need to provide me with a credit card number, right? It's a 16 digit number. The number of digits don't matter. You've got some space of credit card numbers, some of which are allocated and in use,
+
+5
+00:02:48.000 --> 00:03:35.000
+and you need to give me one of those numbers. How do you go about deciding what number to give me? You don't just allocate linearly from the space, one presumes. You don't want there to be a pattern, right? Because if there's a pattern, then people could, you know, figure out, oh, hey, well, I have this credit card number. And then, you know, if I can figure out the pattern, then I can guess, you know, somebody else's credit card number that was issued around the same time as mine. And then I can figure out the expiration date. So you need some way to randomize the number that you're being given. It can't be predictable. But you also need to ensure that the randomized number that your algorithm has picked is not one that's already in the database.
+
+6
+00:03:35.000 --> 00:04:22.000
+So how do you, what do? What do you do? And one of the reasons I was thinking about this was I was checking out for a transaction online. And there's this thing now called virtual credit card numbers, where for some credit card issuers, you can, if you're going to like, just for even for a single transaction, you can say, hey, I want you to generate me a virtual credit card number that's going to be used for this transaction and then be discarded afterwards. And that got me thinking like, okay, how do they go about doing that? Like just generating that on the fly? And then I was thinking about like, well, what's the actual size of their address space? Do they have enough address space for them to just be able to generate thousands of credit
+
+7
+00:04:22.000 --> 00:05:07.000
+card numbers per person. And then that got me thinking about, you know, those little like six digit, like codes that you can send, okay, those ones get reused. And that's probably just like some like rotating hash or something. But like for the virtual credit card numbers, do they have some like fancy system in place where they have a pool of the virtual credit card numbers, and eventually they're able to reclaim some of them? Or like, if I get, if I use a virtual credit card number to buy dog food from Petco, is that credit card number just like dead for the rest of eternity? And so then that got me thinking about like, okay, like, how do you, how do you approach this space? And I don't, my guess is that this is not in any way
+
+8
+00:05:07.000 --> 00:06:27.000
+a simple problem. It seems simple on the surface, but I think it's not so simple under the hood. so my my question is is if with a virtual credit card are you even able to be refunded when you order something online no clue um i think you can be refunded though yeah i'm pretty sure that that they that that you can get a refund and that's like that's my main thing with credit cards is like one you're protected from fraud because it's not your money. And two, you can get refunded stuff. This virtual thing. But here's the thing with the virtual credit card number. The mechanism by which the virtual credit card stops working is that like after the transaction – like there are some providers where you can manually generate a virtual credit card and you can set, like you can say,
+
+9
+00:06:27.000 --> 00:07:02.000
+I want a virtual credit card number and give it to me with like this expiration date and with this spending limit so that you can't spend more than X amount on that or that it expires after X period. There are also virtual credit card numbers that are generated on the fly. And I'm pretty sure how those ones work is that they're generated, they're used for that transaction, and then they expire like immediately. And the way that the whole mechanism works is it just uses the existing credit card infrastructure. And so if somebody tried to charge something again
+
+10
+00:07:02.000 --> 00:07:44.000
+to that virtual credit card number, it would show as expired or the expiration date would be bad or the CVV code would be bad or it would be over the virtual spending limit that's been set. However, all of the security that's in place, all of the two-factor authentications that are in place for charging a credit card, I don't think any of that exists for refunding to a credit card. If you refund to a credit card and you don't have the correct expiration date or CVV, I don't think that you need that to do the refund. So I'm pretty sure that in the reverse direction, it's fine. Okay, so let's go back to your algorithm question. So you said something about generating a random number, right?
+
+11
+00:07:44.000 --> 00:08:32.000
+Yeah. Okay, but here's the problem with that then like if i just generate a random number at large then um like how do i know that it's not an existing credit card number so surely the algorithm cannot be generate a random number query query the database, see if it's an existing number. And if it is an existing number, then generate another random number. Why not? Well, okay. There's a number of problems with that. One, it could potentially give you a non-deterministic answer. Like, you know, you could end up just taking like a much longer time to generate a credit card number than you might want. And you might gain information
+
+12
+00:08:32.000 --> 00:09:09.000
+even from that. Two, that just sounds horribly inefficient to like generate a number and then check in the database whether that number exists or not and then try another one. That just, that seems like that's not, that doesn't seem wise. I can't imagine that's how it works. I mean, you're telling me there can't be like a secure way for like you to click on a number, like give me my next number. It's not like you're going to locally generate the number at the bank and then go, ooh, is this one good? And then it's going to say, no, it's taken by Jack Smith in Oklahoma, USA. Uh, no, you're going to click a button. It's
+
+13
+00:09:09.000 --> 00:09:48.000
+going to do that all behind the scenes and, uh, and then give you a number. Uh, second things link will be in the description. We've got a question from Cora.com. Will we run out of 16 digit credit card and debit card numbers, considering that in a lifetime and an individual has a handful at a time, I'm not going to read it out, but literally it mentions that, you know, 10 to the 16 is 10 quadrillion. Uh, and then it says this whole range is not actually in use. Then it goes through a bunch of stuff, check sums, et cetera. And then it says it would take about 800 years before we begin to run out of them. So isn't that a problem? Isn't that a problem? No, because it says halfway through that they start to recycle credit card numbers after
+
+14
+00:09:48.000 --> 00:10:14.000
+a certain period of time. Oh, okay. They start to recycle the credit card numbers. Which I actually already pointed out when I said, like, my guess is that these virtual credit card companies, they issue it once, and then they just, I don't know what the time is, but they've got this range, and they just cycle through them, and then they probably don't even- Like IP addresses yes exactly um and like cell phone numbers as well like get recycled all the time or recycled all the time and like you get those random calls it's like hey is
+
+15
+00:10:14.000 --> 00:10:50.000
+this jim and you're like no sorry i just got this number and it's not a wrong number it's literally like oh i didn't realize they switched their phone number yeah but i still want to know the algorithm for how you pick what's the next one that you're going to hand out. I mean, okay, well, we'll ask Cora again. How do banks... Maybe what you do is you have a database or a list of all of the available numbers, all the unallocated ones,
+
+16
+00:10:50.000 --> 00:11:19.000
+and then you randomly select from that, right? That seems like that would work. Man, Quora is such a, I'm going to whine for a sec. Quora is such a garbage website. They have the question at the top, and then in the same bubble, in small gray font, an and add and then that link is not the top question here's my algorithm here's my algorithm so so here's here's the the structure of uh again we're back to being visa here's the structure why are we doing this we got the answer written for us
+
+17
+00:11:19.000 --> 00:12:46.000
+right here no i i'm i'm spitballing here shut up up and listen to my wisdom. So you got two databases, right? One, we have a database, which stores the actual account all of the available numbers and when you allocate a new number you remove it from that second list and then when you when you want to you know generate a new, what you do is you generate a random number that's within the index space of that second list of unallocated credit cards, and then you just pick one of those. You just take one of those out. you know uh deterministic that you don't have to do this thing of like generate a random number in the entire index space of uh credit card numbers and then check if it's one that's used or not does that make sense it does okay but so you said you claim to have found the answer about how this works i will note now that this high quality podcast is now relying upon quora to get our answers.
+
+18
+00:12:46.000 --> 00:13:14.000
+Hang on. I got to fix. Some of these Christmas lights aren't turning on. You read to me while I – and I know that Christmas is over and that I'm Jewish, but, you know, everybody needs Christmas lights. It says that basically there's an algorithm called the LUN algorithm, L-U-H-N, which is used to generate these numbers. Cool. Let's look that up. So far, and basically it says a lot of this stuff isn't actually generated randomly.
+
+19
+00:13:14.000 --> 00:13:39.000
+You know, the first one to five digits are used to identify, you know, banks, institutions, and blah, blah, blah. None of these answers, though, address generating one that's already not taken. So the LUN algorithm. Hang on, I'm going to look at that LUN algorithm. The team's subscription interpreted the LUN algorithm as the Luna algorithm.
+
+20
+00:13:39.000 --> 00:14:01.000
+L-U-H-N? Yeah. The LUN algorithm. How does the LUN credit card algorithm avoid duplicates? Wait a second. The LUN algorithm, also known as Modulus 10 or Mod 10 algorithm, is a simple check digit formula used to validate a variety of identification numbers. Here we go.
+
+21
+00:14:01.000 --> 00:14:33.000
+Credit card companies. So we're on another QuORA answer. How do credit card companies avoid assigning conflicting numbers to different customers? The answer from ChatGPT, because apparently CORA ignores all the people that answered and they just go to the AI now. Credit card companies use a unique numbering system to avoid assigning conflicting numbers to different customers. They follow the guidelines set by the International Organization for Standardization and the American National Standards Institute, that's ISO and ANSI, for credit card numbering. The first six digits of a credit card are known as the bank identification
+
+22
+00:14:33.000 --> 00:15:13.000
+number, the BIN, which identifies the issuing institution. The remaining digits are unique to each card and are generated, so that means it's only actually 10, are generated using a specific algorithm. It doesn't say LUN here, but I assume that means LUN. This ensures that each card has a distinct number, minimizing the chances of conflict. Additionally, credit card companies maintain strict databases to track and manage the issuance of credit cards, further reducing the possibility of assigning conflicting numbers to different customers. So ChatGPT seems to think it's actually possible that you share a credit card number with someone else. Well, hang on a second
+
+23
+00:15:13.000 --> 00:16:16.000
+because I'm going to share my screen now. I know I'm not supposed to do that. Yeah, I know. But we don't even know if we're airing thising this we're definitely recording again in the next week the next podcast we release is going to be the 2023 connor what am i doing right now price is logging into insights aka the iso website to find the standard well you know you reminded me um let's see it's got to be one of these, right? Probably ID cards, ID card. I know I've seen it in here answer to this question, which was written by a person. And the last paragraph says, institutions face exhaustion of their IIN ranges due to large number of cards issued per customer and an expansion of user base.
+
+24
+00:16:16.000 --> 00:16:32.000
+Many users maintain multiple regular credit cards, debit cards on multiple accounts and can use one time, AKA what you were saying, virtual or restricted use credit card numbers as well. So according to this user, maybe it is a problem. That other one said we're good for 800
+
+25
+00:16:32.000 --> 00:16:55.000
+years, but... Is the standard 7810? Ah, yes. Okay, so that's 7810. So yes, this is the committee. I'm pretty sure this is the committee. What am I doing right now connor oh interesting i'm on stack overflow now why would you he's hovering he's hovering his
+
+26
+00:16:55.000 --> 00:17:38.000
+mouse over the join group for this iso i mean i want to i want to know how things work oh no they charge us they charge us three thousand. I don't know. They charge us $3,000. I don't think I can convince NVIDIA that that's a good use of our money. But I want to know. Another thing is that on Stack Overflow, it mentions that you don't actually need to check the whole number to verify uniqueness. You can just start by checking the last four digits. And if that's already unique, then you can say good to go i mean that's that's not a full solution to the problem but uh um it's it's a valid point querying for uniqueness doesn't necessarily mean pinging to see if this whole credit card credit card number
+
+27
+00:17:38.000 --> 00:18:16.000
+actually exists anyways explain that to me i didn't understand that i was just so like if you if you just check does any um credit card have these last four digits, and you get back the answer, no. You know that you have a valid credit card that's not been taken. You don't need to necessarily query a database on the whole. Yeah, but a lot of credit cards have the same last four digits. Ramona and I have two separate credit cards, one's hers and one's mine, that have the same last four digits. Yeah, I'm not saying it fixes everything. This episode is awful, man.
+
+28
+00:18:16.000 --> 00:18:36.000
+Do you think we're not even discussing the algorithm? Connor, you know what? I was just thinking. I was thinking just a minute before you said that. I was thinking I was going to tell you. I think that this is a sign that this is going to be our greatest year of content ever. I think that this is all absolute gold. I think people are going to love this.
+
+29
+00:18:36.000 --> 00:18:56.000
+You think this is gold. I do. Did you start drinking over the holidays, Bryce? Okay. We just finished three episodes with Sean, sandwiched around a one-hour and 45-minute episode with Zach, and you think this content is gold? I think this is gold. This is a massive step down. Is this one algorithm?
+
+30
+00:18:56.000 --> 00:19:13.000
+Okay. Wait, wait, wait. It's in ISO IC7812-1. It's public domain. Interesting. So it's the final digit. It's a check digit, which is calculated using the LUN algorithm.
+
+31
+00:19:13.000 --> 00:19:36.000
+I don't understand how this works. I think I've actually seen this in a talk before. I think it's basically like you take the first 15 digits, and then you perform the LUN algorithm on that to calculate what the ninth digit is. Not the that to calculate what the ninth digit is. So like, or not the ninth digit, what the final digit is. So it's a way of verifying right off the bat, like whether this is a valid credit card number. So like, I'm pretty sure there's
+
+32
+00:19:36.000 --> 00:20:18.000
+a leak code problem out there that says, implement the LUN algorithm, which is the following six steps. And like, tell me how many credit card numbers in this list of 16 digit numbers are valid wait how does it how does it tell you that it's about oh i understand perform the lun algorithm on the first 15 and then check is the result of that algorithm equal to the 16th digit if it's not then you have a you have a fraudulent card. But doesn't that mean that they have limited the address space? Yes, by one character, one digit. Okay. All right. All right. All right. But also we said that there are five digits on the front end that they use for identification purposes.
+
+33
+00:20:18.000 --> 00:20:52.000
+Yes. We're down to like nine digits. Who knows, man? We're only dealing with a billion credit card numbers but how but that one algorithm that doesn't do anything to help us prevent to generate a unique credit card number that's unique from somebody else generating a credit card number in a valid way just it just prevents you from generating an invalid credit card number which like the the answer that you read earlier that said that oh you use lun's algorithm for that one's algorithm doesn't help you generate a new unique credit card number at all. That's not what that's for. Quora harder, my friend.
+
+34
+00:20:52.000 --> 00:21:10.000
+Quora harder. Come on. I got great lines in this episode like Quora harder. And you're not going to tell me that this is the start of our greatest year of content ever. The very last. So actually, I skimmed over some stuff, but in the longer explanation, which will be linked if this episode ever airs,
+
+35
+00:21:10.000 --> 00:21:27.000
+is that the very last digit is known as the Lund checksum. Actually, if we rewind to the previous paragraph, after all the restrictions, the next five digits of a card combine with the first to form the issue identification.
+
+36
+00:21:27.000 --> 00:21:55.000
+That means for every major industry, there can be 100,000 different issuers. The registration authority for IINs is the American Bankers Association. So what do the last 10 digits in the card number represent? The very last digit is known as the Lund checksum and is used to quickly, but not too accurately, determine whether a credit card number is valid. So it's just something that probably merchants, like in each one of the things, I don't even know if it makes sense.
+
+37
+00:21:55.000 --> 00:22:26.000
+You've got to ping against a database, but maybe it is something that you can do locally on the machine that prevents a network request or something like that. It's really smart. It's client-side it it gives you a client side if you think about it this way it gives you a client side way to um to like check things that are errors or i guess stupid fraud smart smart fraud would you know try to brute force only numbers that match uh you know that that that have a correctly generated one digit. To rewind the summary.
+
+38
+00:22:26.000 --> 00:22:58.000
+And so it says that, you know, that's the last one. So that means the last nine digits, 7 to 15, represent the cardholder's account number. That means each issuer can issue up to a billion account numbers. So that's saying for each industry, you get 100,000 different issuers, a.k.a. banks or whatever, that can issue credit cards. And then for each one of those issuers, you get a billion account numbers. Those are some pretty big numbers is the next thing. And this is the one that results in saying that, like, we're good for 800 years. No, people have a lot of babies, man.
+
+39
+00:22:58.000 --> 00:23:29.000
+People have a lot of babies. All right, here. We're going to keep reading because I figure there's got to be a couple jumps here to get to 800 years. So listen, folks, this podcast, apparently one of our best episodes ever, is now just Connor Hoekstra reading the rest of this Quora response, not from – who's the writer? Micah Henning. By the end of this podcast, we are going to be reading the standard. This is from Micah Henning, former security engineer at Fiserv, which I'm pretty sure is one of those companies. So those are some pretty big numbers. To further
+
+40
+00:23:29.000 --> 00:24:55.000
+facilitate card number availability, expired credit card numbers are eventually recycled. And since. It says that would take 800 years. Honestly, I did not follow that, but there you go. So, Connor, do you have 63 Swiss francs. No, but I owe the Swiss government more than that for the speeding fines that I collected on our, or it wasn't our travels, it was my travels. You know, it's funny because we got a speeding ticket in Austria. but anyways why do i need 63 swiss francs and why don't you tell our listeners who are dying to know 63 swiss francs because i would like to purchase iso ic7812-1 2017 Identification Cards Part 1 Numbering Systems. Actually, wait, I forgot about this. The standards, when you buy the local copies of the standards, they're often cheaper.
+
+41
+00:24:55.000 --> 00:25:16.000
+So let me see if I can find the Insights version of this and then we can buy that or the ANSI version. The ANSI, no, no, I want to be able to buy this thing. Okay, there we go. Okay. Web store. $61. Oh, that's the discounted price. It's $77 for.
+
+42
+00:25:16.000 --> 00:25:37.000
+Yeah, but 63 francs in US is like probably 100 or something like that. Or maybe I'm thinking of Canadian. So I don't know. Maybe you're on par with Swiss. But I know Switzerland is expensive. I mean, seeing as we've just been Googling the whole time, 63 CHF in USD. It's 98 Canadian dollars.
+
+43
+00:25:37.000 --> 00:26:00.000
+Why? What is wrong with you, Google? I said 63 CHF in USD, and then it gave me Canadian. Connor, if I buy this standard, will you promise to not cut it out of the episode? No, I do not promise that. Actually, it's 74 US dollars, so. Connor, will you promise to not cut it out of the episode? I'm not even sure if any of this is airing.
+
+44
+00:26:00.000 --> 00:26:36.000
+I think it'll be really good content. Oh, what's the package? The package is probably more expensive than that includes, but yeah, I don't want the package. I think that there's a good chance that Bryce took up drinking over the holidays, folks, and that he's a couple, probably even like half a seltzer deep. Yeah, okay. All right, we're, um, I'm buying the standard. Honey, I'm spending $70 on a standard that explains how credit card numbers are issued oh my god yes if this ends up airing which i this is really good content i'd like i'd like
+
+45
+00:26:36.000 --> 00:26:58.000
+everyone to know that the way that this episode started was the way that this episode started i didn't cut out oh how, how was the holidays? How was the New Year's? Connor, Connor, Connor, here's the best part. You know what I have to use to purchase? I have to use a credit card. So let's go to this credit card and let's see whether it gives me the option
+
+46
+00:26:58.000 --> 00:27:25.000
+to use a virtual card number. Listen, folks, I've got now his credit card number, his CVV number. You do? You do? card number listen folks i've got now his credit card number his cvv you do you do because listen folks i'm gonna leave this part in okay i will you just probably heard me 10xing the last like 20 minutes i'm gonna it's been an hour um this episode is gonna come out in in 30 minutes or less that's how much okay okay watch this is going to come out in 30 minutes or less. That's how much.
+
+47
+00:27:25.000 --> 00:27:40.000
+Okay, watch this. This is going to be Zach's favorite episode of all time. We're going to try this. We're going to do a virtual card. Boom. It just generated us a card number. We just did it, folks. We executed the algorithm.
+
+48
+00:27:40.000 --> 00:28:15.000
+We don't know what the algorithm is, but it gave me a card number with an expiration date of 2029, folks, 2029 and a CVV. Okay. Now let's see whether we can use this virtual credit card number to purchase the standard that might explain to us how that virtual credit card number was generated. If you, if you put that out. But Connor, I got something I got to tell you. You want to hear it? It's only 14 pages. Oh my God. It's only 14 pages.
+
+49
+00:28:15.000 --> 00:28:39.000
+What is that per page? That's like $5 per page. And one of them was the title with nothing on it. It says nothing about nothing, nothing useful about how the credit card numbers are issued. Well, that was anticlimactic. Oh, we paid $70 for that.
+
+50
+00:28:39.000 --> 00:29:53.000
+Whoa, whoa, whoa. We did not pay $70. If we had a Patreon account and we were collecting funds, that would have come directly out of your own pocket. How do you want to wrap up this, what might be the worst episode recorded ever? I think it's, I really honestly think that this is great content.
+
+51
+00:29:53.000 --> 00:30:16.000
+I think people are going to love this. anyways you wanted a wrap-up for the episode. The wrap-up for the episode should be that I'm sure that we have some listeners who are more knowledgeable about how credit card systems work. And if anybody could point us in the right from ANSI, even though I did notice that there was some big red text that said that ANSI does not issue refunds, I think it was still worth it for the podcast. Well, as promised, I will air some version of this reluctantly. And please, please let us know, folks. You can reach us on Twitter or on GitHub. Tell us. Am I right? Was this the worst episode ever? Or was Bryce right?
+
+52
+00:30:16.000 --> 00:30:42.000
+Is this podcast gold? Should we be buying ANSI standards once a month or ISO standards once a month? Be sure to check these show notes either in your podcast app or at adsbthepodcast.com for links to any of the things we mentioned in today's episode, as well as a link to a GitHub discussion where you can leave thoughts, comments, and questions. Thanks for listening. We hope you enjoyed and have a great day. Low quality, high quantity. That is the tagline of our podcast.
+
+53
+00:30:42.000 --> 00:30:47.000
+It's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

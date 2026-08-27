@@ -1,0 +1,249 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:26.000
+You were discussing this scan duction, which I'm sorry, that's the term now. I think it is. I've told my boss and a couple of people, I said, you know, Zach told me definitely not to use it, but it's just, and you can think of it as like, you know, a map reduce would be a map duction, a scan duction. There's like a bunch of like insert duction. It's, I don't know. I think Zach is onto something. And before we move on to the scan duction. Connor, I want a divorce.
+
+2
+00:00:26.000 --> 00:01:00.000
+Why? First of all. What? We're not married. You can't divorce me. Welcome to ADSP, the podcast episode 127 recorded on April 5th, 2023. My name is Connor, and today with my co-host Bryce, we finish our three-part conversation with Tristan Brindle. We talk about ChatGPT, his library flux, and more.
+
+3
+00:01:00.000 --> 00:01:28.000
+So while we're here, because Emery just tweeted about this, this is CY. CY? I got tired of trying to improve my compiler's diagnostics. So you've got chat GPT to turn C++ error messages into English. Correct. That is correct. That is amazing. That is amazing.
+
+4
+00:01:28.000 --> 00:01:44.000
+It's really, really good. Of course, this is by Emery Berger, the keynote speaker extraordinaire. Oh, sorry. I thought this was yours, Bryce. Oh. Like someone just, that's it. Like a new startup, you will make millions.
+
+5
+00:01:44.000 --> 00:02:47.000
+I feel like i've literally seen that tweet four times about like someone should just do a startup of like parsing c++ template emory created this other thing chat chat debug so like a basically it's a plugin for GDB that does the same thing. And then I started chatting with him about like, okay, well, I'd like that for compiler error messages. And we came up with the CY thing. But both of these are, I think, super brilliant. And one of the reasons is that you look at all these large language models and you look at what people are trying to do with them in terms of developer tools. And a lot of it is code synthesis, like having it help you write code, et cetera. And that's cool, but that's like an open-ended question, right?
+
+6
+00:02:47.000 --> 00:03:34.000
+And when there's an open-ended question, I think there's multiple possible correct answers. And that also means that there's more room for it to do something that's wrong. And also, I think that you end up with a lot more cases where it maybe hallucinates or comes up with something that's nonsense. And also, there's been a lot of concern about the IP around code generated with an AI assistant. But this space is very different because this is root cause analysis. In both the debugging case and the compiler error case, what you're doing is you're saying,
+
+7
+00:03:34.000 --> 00:04:25.000
+hey, I have this, you know, this thing happened. Here's the data. Summarize for me what the root cause was. And that is something that the current technology for large language models is very, very good at. And it's like a concrete problem. It's not an open-ended question. It's like, here's information, summarize it, and explain it to me. And that is something where things like Chet GPT really excels. So I think that we're going to see a lot of development in the space of AI-assisted software engineering tools. But I think that things like this are going to be the ones that are going to have the highest impact the quickest.
+
+8
+00:04:25.000 --> 00:05:00.000
+Like I'm already like using this. I was using the CY thing to write the CY thing because I don't like know Python well enough. And I kept getting these Python errors when I was trying to change something. And then I was like, all right, I'm just going to ask it to, you know, to help me. And there was another thing that occurred, you know, one part of this little tool that we have to do is you have to figure out what you're
+
+9
+00:05:00.000 --> 00:05:42.000
+going to send to the large language model. And You can't send all the source code because it has a limited context size. And so what you do in both the case of the debugger or in the case of the compiler diagnostic is you sort of, you have a, in both cases, you sort of have a backtrace. You know, with a debugger, it's, you know, stack frames, but with the compiler diagnostics, you also sort of get this backtrace style where it tells you in this place, I had this error, and then that was caused by this place and this place and this place. So what you go through, what you do is you go through that, you extract all the source locations, and then you go and you open up those files, you read in those, you know, some of the code around those source locations, and you send
+
+10
+00:05:42.000 --> 00:06:17.000
+it to the large language model so that it can figure it out. What I'd like to eventually be able to do is to use the Clang API to, instead of extracting just random lines from the file, be like, okay, I want the definition of this function and this function and this function and send that around. But one of the things that occurred to me is we're still, we know, we were writing, we're writing some, some code to parse the compiler diagnostics and extract the source locations. And I just was thinking about it this morning because now we have to do it from all to make it work for multiple languages.
+
+11
+00:06:17.000 --> 00:06:58.000
+I just originally wrote something that worked for C++ and then Emory wrote something, changed it to work for Rust diagnostics. And then I realized like, this doesn't work for all of the ways, for all the C++ compilers. Some of them output the source locations in different ways. And then like Python's a whole different story. And then I was like, why am I writing code to parse this stuff? Like what I should be doing is I should just be asking the large language model, hey, here's the full diagnostic. Give me back a list of all of the source locations that are in this diagnostic. And then I'll open up those source locations and then I'll send you the pieces of the source code that you need. And I mean, another idea is just you show it
+
+12
+00:06:58.000 --> 00:07:43.000
+the diagnostic and you ask it, hey, tell me what parts of this source code you need to see to help explain to me what the problem is um and you you end up with like this feedback loop here um and yeah i uh i have drunk the kool-aid on this um yeah one mention of chat gpt and then bryce is off he's like oh i've been talking about this right now. 15 minutes later. Itching all day to talk about this with you, Connor. That does seem really cool. Yeah, I haven't seen the tweet. Yeah, I think that this is going to be a big deal.
+
+13
+00:07:43.000 --> 00:08:36.000
+Like a year ago when GitHub github co-pilot first came out i was like skeptical because like i i am very i am not the target audience for uh uh software engineering tools because like i am very old-fashioned and curmudgeon-y like are you vim in a terminal i use vi on a terminal um it's like i i don't know what an ide is i have no interest in one i don't want graphical tools i barely want like a build system i'm happy to just like write bash scripts i want it as simple as possible um i i'm not like even make is too much i'm not the target audience for this but um i i think that this is so i'm so blown away by this that i think that it's um it's compelling enough to make somebody like me want to change the way that i um develop software
+
+14
+00:08:36.000 --> 00:09:24.000
+um and that to me makes it like if it's if it's that compelling to me then it's got to be a really big deal for all the people who are less stuck in their ways than me yeah yeah and genuinely like error messages in c++ are are a huge are a huge problem and they're you know a lot of people who use c++ daily or use c++ occasionally i should say you know they're not experts and the moment they're hit with like a 200 line error message i mean like imagine if imagine a future where like this is plugged into godbolt or like a future where there's like a github action where whenever your ci fails um the large language model explains to you the like in the github pr it's like hey i see that you're you know this build failed here's
+
+15
+00:09:24.000 --> 00:09:41.000
+why the build failed or like better yet like hey i see that, it's like, hey, I see that you're, you know, this build failed. Here's why the build failed. Or like better yet, like, hey, I see that this build failed. Like here's why the build failed. And here's my suggestion. Here's my patch proposing a fix for it. And then the CI can run on the patch and then like it can just fix it automatically. That's it. I'm sold.
+
+16
+00:09:41.000 --> 00:10:18.000
+I'm in now. Yeah, there's so much stuff that like i have a website that is written in closure script that when you run it locally will like generate and the compiled down to javascript but like that's i shouldn't be pushing the compiled javascript like i should have a little github action that deploys using github pages that does that for me but like closure script is not popular enough that like i can easily go read something of like how to automatically do this via github actions i if i could just ask chat gpt just like yeah i just want a script that that like when i
+
+17
+00:10:18.000 --> 00:10:48.000
+push my closure script changes you will go and download and and uh i'm pretty sure we're like maybe it doesn't do that right now but there's no way generation of like build system of like build systems was another is another low-hanging fruit that i've been thinking maybe maybe a big deal too oh and emory emory's got another really cool project that i just started checking out where it's called commentator and it automatically comments your code for it for you it's it's it's called Commentator, and it automatically comments your code for you. It's so clever. It's so clever.
+
+18
+00:10:48.000 --> 00:11:14.000
+He's a very clever man, I got to say. Yeah, we'll link a couple of Emery Burgers talks. But let's get back because I think we've only got, what, 15 minutes left before Bryce has to go? Yeah, before I turn into a pumpkin. We're going to share a screen, and we're going to share the tweets. So, I mean, we never – we never – Oh, yeah. We got completely sidetracked. This got mentioned two episodes ago now in the first episode that we had Tristan on because we're slicing and dicing this up.
+
+19
+00:11:14.000 --> 00:11:52.000
+And I got – I brought this tweet up, but then we never actually read it. But we'll – maybe we'll come back to – and so this tweet, the tweet, we'll link it in the show notes. It says, given a sequence of N elements, should an exclusive scan yield N elements or N plus 1? And actually, let's just, we can read the tweet. I said it should be N plus 1 because that's what a prescan is. Anyways, the point being here, we were talking about scans. A prescan is definitely N plus 1. Scan is N. here we were talking about scans a pre-scan is definitely n plus one scan is n and actually yeah if you want to hear about post scan which goes from n to n minus one go listen to a raycast
+
+20
+00:11:52.000 --> 00:12:39.000
+episode uh the most recent one i think where in j they have a primitive called fold which has six different flavors three of which are actually scans they call it like a multiple forwards fold and that one does not take an initial value as an argument and also does not make the first element of the output sequence of your scan result it's not equal to the first value of your input sequence. It just adds the first two values and that therefore you end up with one element less than your initial sequence. Does that make sense? Yeah.
+
+21
+00:12:39.000 --> 00:13:14.000
+Am I right in thinking that C++ standard inclusive scan does the same thing if you don't provide an initial value. No. And so actually, let's go look at this. The answer, I believe, is no. I take no responsibility for whatever broken thing. But what's interesting is that this literally came up the other day in Jake Hempstead's fellow InVIDIA, and we have our CCCL meetings on Mondays. And I said that inclusive scan doesn't take an initial value, which I was wrong about. So exclusive scan is our pre-scan,
+
+22
+00:13:14.000 --> 00:13:35.000
+but it's actually a broken pre-scan because we've talked about this on the podcast before. It is a pre-scan that only gives you back N elements when it should give you back N plus one, because it just decides to not give you back the last one arguably the most important value in the output sequence which at one point we've also talked about this bryce used to disagree now he agrees
+
+23
+00:13:35.000 --> 00:14:01.000
+and i thought inclusive scan was uh the parallel equivalent of partial sum. But if you look at the first two overloads here, they take input iterators first and last and then an output iterator. But if you keep going down, at some point, there's a TNIT. Look at this. So I actually, so what is this? This is number five,
+
+24
+00:14:01.000 --> 00:14:56.000
+and there's also a TNIT on 4.5. So let's look at what five does. Where does it describe these? Does it describe them? Doesn't even describe them by number. So let's see when it, let's actually just Google, or let's just search on the page. Computes the inclusive prefix sum operation using the binary op or std plus for overloads that use the default, using init as the initial value if provided, and writes the result to the range beginning at d first inclusive, which means that the ith input element is included in the ith sum. So because they don't mention anything about a differing number of output elements, my guess is that init is just automatically added to the first element.
+
+25
+00:14:56.000 --> 00:15:52.000
+So it's like partial sum, whereas if you're doing a partial plus scan, partial plus sum on 1, 1, 1, 1, 1 one you end up with one two three four five but in this if you're using inclusive scan and you specify a knit to be 10 then you're going to end up with 11 12 13 14 15 i think but i could be wrong about this um i think it's incredibly confusing that is is there another algorithm in c++ that has a overload that specifies basically an optional initial value i can't think of a single one i mean yeah i think this is the only one and that's the reason why that's the reason why it's last here but it's for exclusive scan, it's before the binary operation, which is in the parameter list order. That is, of course, fun.
+
+26
+00:15:52.000 --> 00:16:31.000
+And at one point, it was not that way. It was reversed. But we like to have them appear in order as if it was defaulted if it's not provided. Oh, look at that. I've been exposed. I went to Gobbolt and it's at Rust by default, not C++. I'm actually curious. So I have just tried this out with inclusive scan, and I can tell you that if you don't provide the initial value, you get N elements. And what if you provide the initial value, what happens?
+
+27
+00:16:31.000 --> 00:17:08.000
+It just adds it to the first. Okay. Yeah. So it is, I was going to say, we shouldn't, we shouldn't be misinforming our, yeah, that is. No, no, that was, that was me. That was my mistake. Apologies. I was. Oh, no, no. I was saying, I was saying that about like, I just said, I think that's the way it works, but I had no eye clue. So I was saying i was saying that about like i just said i think that's the way it works but uh i had no eye clue so i was i was saying that like potentially i just misinformed people by guessing at what i thought it did when i realized i could go one of us could go code this in probably less than 30 seconds so yes i think that answers answers the question which then i mean that really is kind of upsetting. Because, yeah, like std reduce, technically, you don't need to specify an initial value.
+
+28
+00:17:08.000 --> 00:17:41.000
+But that's just because, well, I guess maybe that is kind of similar. So std reduce, if you don't specify initial value, it's set to zero, which I guess is kind of the same behavior here. I don't know, though. I don't like it. Anyways, that was the – i want to get back to flux um that was the tweet oh right that uh initially set this up and we've answered it now a full two episodes later for those that were like they were going to talk about a tweet and we got 10 10 or 15 minutes left and this is the other tweet i actually have this linked let's bring up that
+
+29
+00:17:41.000 --> 00:18:25.000
+github repo so there's a github GitHub repo I've mentioned a couple times called Top 10, which currently only has eight problems, but they are eight of my favorite problems that I've ever come across. And I've talked about them in talks, in these ADSP episodes, and you can see down here at the bottom, three consecutive odds. I've linked to your sort of Twitter thread, thread tristan on your various solutions using flux oh where'd it go which one is it there it is because i just think it's fantastic one it highlights how awesome flux is so i'm not sure we said we'll never do this where we show code and then the uh the the listener doesn't get to see but uh because i think this is a great way of highlighting like one how awesome flux is
+
+30
+00:18:25.000 --> 00:19:17.000
+but just to like my sort of passion for algorithmic thinking because it highlights sort of all the different ways. So I'm not sure if we want to spend the whole 10 minutes popping through these or you only want to explain a couple of these. Also to three consecutive odds if you happen to also this being your first episode it's given a sequence of integers return true if there's at least three consecutive odd numbers in a row otherwise false yeah i'm not sure what how you want to do this tristan or if you want to walk people at a high level through the flavors or only look at a couple of them because it's uh this is like idyllic code in my in my mind oh well thank you very much um yeah so this was uh i so every friday i get a new episode of adsp uh you know my phone tells me there's a new episode out and then um i i go and i i take a walk
+
+31
+00:19:17.000 --> 00:20:04.000
+and i listen to the podcast and this one this particular episode uh was it the first one where you were talking to zach um and? And I just thought this was a really, really interesting problem. And I went home and I was like, how would I do this? You know, I've got my own library for doing this. How would I do it in Flux? And so I've got a few tweets that we will link to, I guess, in the show notes. And so the first one is just um it's not using any sort of library it's just using uh you know a for loop and smith statements kind of naive way of doing it without any library trickery and that's kind of okay yeah i'll say in the tweet like i'm sure this will this would be some people's preference and i'm sure connor you mustn't you get comments on your youtube
+
+32
+00:20:04.000 --> 00:20:40.000
+videos going like why don't you just do it the c way with a for loop and this is how you would do it uh that way but you know you know i like doing this this uh i like using algorithms and things um so i went on and i did it uh a couple of other ways i use this um this for each while algorithm that we were talking about. It doesn't make, it doesn't do an awful lot in this particular example. I would say it doesn't actually improve the readability at all compared to the imperative code
+
+33
+00:20:40.000 --> 00:20:59.000
+that we were using before. In some cases, the forEachWhile might be, as we were talking about with internal iteration, it might be able to do things more efficiently than a plain old for loop. But in this particular case, it doesn't make any difference. And the generated code is the same either way. Interesting.
+
+34
+00:20:59.000 --> 00:21:19.000
+So this, the Lambda that your forEachWhile takes actually, it does have a return value. Yeah. Which is different than... I may have to steal this idea. This is very clever. Be my guest. Be my guest. It basically gives you the...
+
+35
+00:21:19.000 --> 00:22:06.000
+Well, that's what the comment says exactly. But it gives you the ability to short circuit. Exactly. Yeah. That's precisely the point of it yeah very interesting okay well we'll link all this stuff so that folks that want to take a look um can we'll move on to the next this is it's hard it's hard for me which one is more beautiful this solution or the next one i i don't know. But this code is, it's just makes me so happy. Makes me so happy. So the next one was actually my, when I was listening to the episode, this was, I was walking along and I was like, how do I do it in my head? And this was the way I thought of doing it. So you take your input vector of integers
+
+36
+00:22:06.000 --> 00:22:39.000
+and then you map it to a sequence of bools, depending on whether each element is true or false. And then you step through that Boolean sequence three elements at a time, and you look at the three bools and you say, are these all true? And if they are, then you terminate and you say, yes, they are. Otherwise, you keep going until either they're all true or you reach the end of the array, in which case they're not. So if you look at the tweet, you have to do this in a
+
+37
+00:22:39.000 --> 00:23:24.000
+slightly strange way. You have to provide this ID predicate which just like passes through the identity function you had yeah but yeah I this was my sort of instinctive instinct is maybe my intuitive algorithm intuition my intuitive way that I thought to do this but actually as a result of the episode, you were discussing this scan-duction, which I'm sorry, that's the term now. I think it is. I've told my boss and a couple people. I said, you know, Zach told me definitely not to use it. But it's just – and you can think of it as like, you know, a map reduce would be a map-duction, a scan-duction. There's like a bunch of like insert-duction.
+
+38
+00:23:24.000 --> 00:24:12.000
+It's – I don't know. I think Zach is on to something. And before we move on to the scanduction. Connor, I want a divorce. Why? First of all, what? We about this is that uh instead of adjacent transform which is what we're getting in c++ 23 flux calls this adjacent map which is in my mind the actual true name of this algorithm which is actually i'm not sure if you are aware of this but it's uh that is the name of the algorithm in haskell uh it's in a library but adjacent map is like is what it should be called but we have to call it in C++ adjacent transform because we are the only language on the planet, that I know of at least, that calls their maps transforms. Very unfortunate.
+
+39
+00:24:12.000 --> 00:24:42.000
+Map is a data structure, so we have to call it transform. But Flux, I call the transform operation map. And there is a map right above it that is also the correct name for what we have to call transform. But also you have these built-in predicates and sort of convenience functions. So you mentioned ID, which is the identity function. But you also have like odd, which is not like a necessary thing. But it's just like it's a very nice convenience for when you need to do things like that, which is awesome. Yeah.
+
+40
+00:24:42.000 --> 00:25:04.000
+So there are only about half a dozen of these little predicates, but it's mostly just because I was writing tests and I just kept on using these little predicates like is positive, is even, is odd, is zero. And I was just like, if I find these useful, someone else is going to find them useful. So as I say, I think there are only six or eight or something, not very many, but they're there.
+
+41
+00:25:04.000 --> 00:25:37.000
+And you can, they're actually, there's nothing really flux specific about it you can use them with the standard library algorithms and everything it's very very nice small touch like that language like closure and a lot of lisps actually they have like you know is positive or pos question mark like just these nice small things that like how hard is it to write you know greater than zero it's not hard at all but like it's also nicer to just read like is pause and like not have to wrap something in a Lambda, which especially in C++ can be unnecessarily verbose as we all know. But anyways, we'll, we'll move on to the scan induction solution, which is also very nice.
+
+42
+00:25:37.000 --> 00:25:59.000
+Yes. So the, the, the solution with the, with the adjacent map is fine. It, you know, it works. It gives the right answer. It's pretty good. It has the downside that for kind of implementation reasons, it's calling the is odd transform multiple times. So the way the adjacent map works is that it sort of has like internally,
+
+43
+00:25:59.000 --> 00:26:37.000
+well, three cursors in flux, but you can think of it as three iterators. And every time you dereference them, it has to call the predicate on the underlying thing. So it's fine, but it calls the predicate more often than it really needs to. So the scan avoids that. And so what we do is we perform this scan, we begin at the beginning and we return the number of consecutive odd elements we've seen so far. So, let's say you have one, three, five,
+
+44
+00:26:37.000 --> 00:27:13.000
+then your scan is gonna be one and then two and then three, because that's the number of odd elements you've seen so far. And so we do this scan we transform our range of ints into well another range of ints which is how many odd elements we've seen the count of all elements so far and if we see an even element we reset the count to zero and then we go through and we have this uh Flux, it's called any, in the standard library, it's called any of. And we look to see, OK, are any of the values in this scan greater than or equal to three?
+
+45
+00:27:13.000 --> 00:27:59.000
+And again, if you look at the tweet, and this is maybe not great audio only, but yeah, so we're using another one of these Fl predicates. It's greater than or equal to three. I wonder, so you have a map. Maybe I'll go and, is flux, flux isn't available on Gobble, is it? This is, this is pretty clever. It is. So if you go to, so it's github.com slash tc brindle slash flux that's the there's uh i should say there is almost no documentation for flux yet like this is literally that's cool because there's a large language model that can make the documentation for you yeah um i might have
+
+46
+00:27:59.000 --> 00:28:32.000
+to look at that it might save me a lot of time um but uh i've got a little bit of introductory info i one of the my goals over the next um you know few weeks when i've got time is to write like documentation about how flux works internally and stuff um but uh i do have a single header that has you know because uh it's a header only like heavily used lots of templates and And so there's a single header file that you can just hash include in Godbolt because it's amazing. I always forget that. Go and download it. So there is, I believe in the readme,
+
+47
+00:28:32.000 --> 00:28:49.000
+there is a link to Godbolt and you can click that and it will take you to somewhere where you can play it. So it's not one of the built-in libraries drop down in Compiler Explorer. Sorry. But you can just do the hash include thing, which is pretty cool.
+
+48
+00:28:49.000 --> 00:29:16.000
+The reason I ask this is because I kind of want to go, there's a slightly alternate version of this where you map, you do the same initial map that you did in the previous solution, map odd, to turn it into a sequence of ones and zeros. And then you can either simplify your lambda here to be, if you call the first argument of your lambda a and the second b, it can be, is it a plus b in parentheses
+
+49
+00:29:16.000 --> 00:30:06.000
+times b? So it's like the times b will reset your odd count to zero if it's zero. Otherwise, it'll do a plus B on your A. So it'll either be your current odd count plus one in parentheses times one, or it'll be your current odd count plus zero times zero, which will reset it. And that pattern actually, actually your plus applied first and then or your your plus applied first and then your multiplies you can spell in array languages with a dyadic fork which is like a combinatory logic thing so and i happen to have a small library called blackbird so like if we combined flux andbird, you could get probably actually one line shorter.
+
+50
+00:30:06.000 --> 00:30:40.000
+Because right now you have three lines for your scan. You'd have one line for your map and then one line for your scan. Because you wouldn't have to spell out a lambda. You could just pass plus and times and identity to your Phi 1 combinator. Anyways, losing the listener. But yeah, both of these solutions are so beautiful. And people have a lot of nice things and not nice things to say about C++. But this is like we're close to the utopic world that one would want to live in if you're me coding in C++.
+
+51
+00:30:40.000 --> 00:31:06.000
+Hopefully, we didn't lose all the listeners. We got to stop doing this though. I mean, says the person who shared his screen to walk through some code. It's hard to talk through tweets when I'm not sure whether people can see them. We do have to wrap up because my mom is texting me that it's time for yoga. All right. Well, so we got less than two minutes left. I know, Tristan, so first of all, thanks for coming on.
+
+52
+00:31:06.000 --> 00:31:30.000
+This has been awesome. We're going to have you back to talk about Find It versus Accumulate and all the ChatGPT things. I guess I'll stop sharing my screen while we do this. Before we go, though, I know that you – I think last time we chatted at CPP North, I think, was probably the last time, like in person, not over Twitter. You were freelancing and doing training and stuff. Is that still what you're... Because anyways, if this is an opportunity to plug what you're doing
+
+53
+00:31:30.000 --> 00:32:01.000
+slash if you're going to be at any conferences, giving talks, now's the time to do all that sort of. Okay, so I am going to be this year at C++ on C. Also just heard a couple of days ago, my talk was accepted for CPP North as well. So I'll be going back to Toronto. So that's awesome because I had a really good time there last year. So I'm actually going to be talking about Flux and iteration and sort of the basics of iteration, how we can do these more safely at both conferences.
+
+54
+00:32:01.000 --> 00:32:42.000
+You know, the windows overlapped and I submitted the same talk for both conferences and they happened to both accept it. So I guess depending on whether it's easier to go to Europe or easier to go to North America, you can, if you wish, hear me chatting about that. So, yeah, really looking forward to that. It's going to be great. And I'll get to, well, I get to see you, Connor, I. It's going to be great. And I'll get to see you, Connor, I assume you're going to CPP North. Yeah, I'll be at both CPP North and C++ on C. So yeah, we'll see each other a couple of times. There's another idea. GPT plugin for PowerPoint.
+
+55
+00:32:42.000 --> 00:32:56.000
+Microsoft, get on that. I want that. I mean, they basically bought the whole company at this point. That would genuinely be a fun lightning talk, right? So you just get ChatGPT to like generate you a script
+
+56
+00:32:56.000 --> 00:33:10.000
+and just stand there for five minutes and read out. Yeah, yeah. I may do that. Half of the stuff that it generates, like when it's like, give us a promo for this podcast. It's like better than what I could have written cpt cast did that um but you covered the talks
+
+57
+00:33:10.000 --> 00:33:50.000
+um are you available for training in case folks want that or absolutely absolutely yep so um uh if you if you want training on c++ i'm most definitely available uh get in contact with me um we can guess, put my email somewhere if you're interested in that. Otherwise, I'm on Twitter, if that's still going by the time this episode airs. So it's at Tristan Brindle at Twitter. I haven't got around to setting up Mastodon yet, but I will do that at some point. Otherwise, yeah. Awesome. Yeah. We'll throw all the links in each of these episodes even though the plugs happen in this one uh in the show notes and yeah folks
+
+58
+00:33:50.000 --> 00:34:22.000
+can find you on twitter it is concerning that there has been uh the what is it shibu inu doge coin yes like what like that does seem like to be like i'm not sure if that's the beginning of the end or we're like very close to the end and the beginning was a long time ago. But it's been there for a few days now. I'm still convinced that he's going to get bored with it at some point. He kind of disappeared for a while. And then I thought that was it. But then he came back guns a-blazin'. Well, he had that poll with, like, should I quit as CEO?
+
+59
+00:34:22.000 --> 00:34:52.000
+And everyone was like, yes. And then he just ignored it he's a large man child eventually he'll find some other toy to play to play with everybody you can it makes me very happy that apparently he tried to be the uh chairman of the board or something like that of open ai at one point because he was a yeah i don't i don't know what he was he probably says he's a co-founder when he wasn't and blah blah blah, blah. But like he had some association. And then I don't know what's his Sam Altman and Susquehanna. They were basically like, no, bye. Yeah.
+
+60
+00:34:52.000 --> 00:35:06.000
+So the guys that are the people that are behind chat to BT and all this LLM stuff, it makes me very happy that they very much ahead of the curve recognized that they didn't want anything to do with, with Mr. Musk. Yeah. All right. I really got to go. to do with Mr. Musk. Yeah. All right. I really got to go.
+
+61
+00:35:06.000 --> 00:35:23.000
+Yeah, Bryce has got to go. Thanks for coming on, Tristan. Okay. Thank you very much for having me. It's been awesome. Cheers, guys. Be sure to check your show notes either in your podcast app or at ADSPthepodcast.com for links to any of the things that we mentioned in today's episode, as well as a link to a
+
+62
+00:35:23.000 --> 00:35:28.000
+GitHub discussion where you can leave comments, thoughts, or questions about today's episode. Thanks for listening. We hope you enjoyed and have a great day. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

@@ -1,0 +1,397 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:51.000
+Hey everybody, how's it going? We have a really killer episode here. I've heard the term WebAssembly a lot. I've done a little bit of studying on it, but we have an expert, Kevin Hoffman, the CTO of Cosmotic on the show to really dive deep and explain kind of what WebAssembly is, how it's useful, why it exists, and what kind of things it can provide for you. So thanks so much for coming on the show, Kevin. Thanks for having me. Appreciate it.
+
+2
+00:00:51.000 --> 00:01:33.000
+Cool. So how has Cosmonaut been handling the pandemic? Has it changed the sort of work style? Is Cosmonaut remote already, or did you have to go remote? What was that like? I think technically Cosmonautic may have actually been formed after the pandemic started. Oh, nice. Okay. We would have been entirely remote regardless. So it really hasn't changed too much of our team dynamic. We just spend all day on Zoom and Google Meet. So what is it like to start a company in the middle of a pandemic? I mean, it's kind of hard to get that firm handshake, like with among the co-founders and kickoff. Everything really just has to be done over Zoom,
+
+3
+00:01:33.000 --> 00:02:16.000
+right? Yeah. When we first got going and we had an off site with the founding members, and so we got a little bit of in-person contact although it was you know six feet apart well there might be advantages to that i mean i i think that if you're six feet apart you can't reach over and strangle that person when uh you know the contract doesn't come in and and uh you know the code doesn't work and you have i think a startup from what i've heard from friends of mine who have started companies it's like extraordinarily it's the ultimate test of your bonds with these folks. Yeah. Six feet apart gives other people an unfair advantage.
+
+4
+00:02:16.000 --> 00:03:03.000
+They have a head start. Yeah, right. Nice. Cool. Yeah. So Cosmonic is one of the companies that's like, I don't want to say sponsoring because it's a CNCF project, but it's sort of what would be the verb you'd use for how you're catering to WasmCloud? Maybe fostering. Fostering. That's a good word. Fostering WasmCloud. Fostering WasmCloud. So let's rewind the clock a little bit and kind of walk us through what kind of your career path was. What inspired you to say, let's do this, let's start Cosmotic, and let's make this a real thing?
+
+5
+00:03:03.000 --> 00:03:42.000
+Sure. So I guess it started with a lot of frustration, anger, shouting. Yeah. I can't even remember how many years now, but I've been building microservices and deploying them in large enterprises in one shape or another for many, many years. I worked for Pivotal, and when I worked for them, my role was to teach other companies that we consulted for how to put stuff in the cloud. And so that was even more microservices and splitting up monoliths.
+
+6
+00:03:42.000 --> 00:04:30.000
+And I finally just sort of just had it with the amount of repetition and boilerplate and ceremony that was involved in that whole process. And I was just looking for a way to distill what I did down to just writing some business logic and then deploying it and then not having to worry about anything else. And so a couple of years ago, I was working for Capital One and I was looking for, you know, something that would give me that kind of new developer experience where we just focus on the business logic. And, you know, when you're building enterprise apps, normally you spend like 90% of your time
+
+7
+00:04:30.000 --> 00:04:57.000
+on your non-functional requirements, logging, tracing, networking, clients, servers, routing, metrics, all of that stuff. Access to databases, all of that stuff gets bolted on to the business logic. And so I was looking for a way to sort of unbolt that. So that's where, that's when I stumbled on WebAssembly way back in the day when it was,
+
+8
+00:04:57.000 --> 00:05:40.000
+when nobody had heard of it. Cool. So, so you mentioned business logic. So when people hear, I mean, when people hear web, you know, they'll think of, you know, people hear web, they'll think of the front end and they'll think of the browser and rendering the HTML and laying it out and maybe video. And so they don't generally think of business logic. They think, oh, that's going to sit on the server somewhere. And so, yeah, what is the role of WebAssembly with respect to sort of business logic and what's the tie in there? Yeah. So what's interesting about WebAssembly is, you know, it's called WebAssembly and most people get introduced to it through the browser. You know,
+
+9
+00:05:40.000 --> 00:06:28.000
+someone has made some flashy demo that does some impressive stuff inside a browser, and WebAssembly gets the credit for it. And so we just naturally assume that WebAssembly is a browser thing. There's all sorts of forum discussions about whether WebAssembly is going to replace JavaScript on the front end and things like that. And I think, you know, obviously for the last couple of years, I've been banking on the idea that WebAssembly is more than that. At its core, it's portable compute. And so if you think about it, like if you're writing code and that code has a side effect, then, you know, it reaches out of the sandbox in order to
+
+10
+00:06:28.000 --> 00:07:34.000
+make that side effect happen. And with WebAssembly, it's physically impossible to escape that sandbox. So it's portable, but it has such a limited instruction set that any side effects from the code that you have in your WebAssembly module, those need to come from the host runtime. So if your side effect is manipulating the DOM, then you might have a WebAssembly module that can interact with the browser. In my case, all of my side effects are interacting with distributed stuff from the edge to the cloud. But the core thing to keep in mind about WebAssembly is that it's fast, it's efficient, it's small, it's CPU and OS agnostic, and it has a secure memory sandbox. And it can only do the things that its host gives it permission to do. Oh, interesting. So that reminds me a little
+
+11
+00:07:34.000 --> 00:08:14.000
+bit touches a lot of different things. I mean, one is, you know, definitely, we've all written, you know, maybe in high school or in college, we've all written that's the first time I implemented a linked list, uh did know what i was doing and all of a sudden you know the characters on the console were you know some like weird you know acrylic characters like i'd somehow like broken the terminal or just i'm writing to random memory and getting really weird errors and so and so that's that's because you know in something like really low level like c you just have total authority to do anything in that process access anything and so you can easily kind of shoot yourself in the foot and so unless you're doing things like like what patrick does where it's it's really low level
+
+12
+00:08:14.000 --> 00:08:58.000
+and and uh and you need really speed and performance but for most of us like we you know have something where you know i couldn't i couldn't really break everything and that way you can kind of work in the inside of one of these sort of sandboxes. And so, so one way of thinking about a sandbox is, is, you know, as you move to something like, let's say, Python, for example, or even Java or something where you're not manipulating the memory directly, then you can't just go to, or at least like easily go to like a specific point in the memory of the Python VM. And so you lose that, that, that sort of real flexibility, but in exchange, like you have something that you can kind of rely on, especially when you're working in a big group. And so you're
+
+13
+00:08:58.000 --> 00:09:42.000
+saying, then, you know, you can think of Docker or like a virtual end for these, you know, vagrants is like these kinds of things too, where they're creating these, these very isolated containers. And in that container, you get sort of reproducibility and a lot of things because you've limited the number of side effects. And so, and so then I, and I think about sort of like Android where you ask for permissions. And so you can't, for example, accidentally blow away someone's contact list if you're writing an app that doesn't have the contact permission. And so is that when you when you talk about the sandbox impressions, is that kind of what you're talking about? So so so your WASM, your WebAssembly program, you know, if you haven't explicitly told it, you have access to the microphone.
+
+14
+00:09:42.000 --> 00:10:12.000
+They can't accidentally turn on the microphone. Yeah, so all of the things that you said about sandboxing apply to WebAssembly in some form. So there's some low-level stuff, and I don't know if you're all that interested in it, but some of the security stuff that comes from WebAssembly prevents things like the most common causes of CVEs. So you can't do buffer overrun failures.
+
+15
+00:10:12.000 --> 00:10:47.000
+You can't. Sorry, what's a CVE? A vulnerability, a security alert. Ah, okay. Got it. for people to attack processes is to trick it into reading past some piece of its own memory so that it will start executing instructions that you've placed in there so that you can then, you know, use it to go and borrow its privileges or pretend to be that process or, you know, exfiltrate data from it with webassembly
+
+16
+00:10:47.000 --> 00:11:37.000
+it's physically impossible to do that there is no way to give a webassembly piece of code an arbitrary instruction to run so if it wasn't compiled into the module when the module was built it'll never run it it also has when ites memory, it never accesses the host's memory. It only accesses what amounts to a big, long, giant array of bytes. And it's given that array of bytes as a playground. And it can, you know, the code inside can use it for whatever heap operations it wants. But that's it. The WebAssembly module can't reach out through the host and see what the host is doing or access other modules that are running.
+
+17
+00:11:37.000 --> 00:12:33.000
+Even things like printing text to the console, that's not physically possible. In WebAssembly, if you build it in what's called standalone or freestanding mode, you don't even have an instruction to print to the console. Oh, interesting. You have to agree on some protocol with the host in order to do your I.O. Now, there's a sort of a second level standard for WebAssembly called WASI, which is the WebAssembly system interface. That has almost like a POSIX-like contract between the host and WebAssembly where you get some low level Unix-like functionality, which includes things like being able to write to the console. But even then, the host gets final say. If the host doesn't want the module to write to a particular file descriptor, it's not going to happen.
+
+18
+00:12:33.000 --> 00:13:19.000
+Got it. And so, yeah, can you tie in WebAssembly? So you're talking about going to different companies that had sort of these legacy, you know, I spin up, you know, eight machines that have a zillion cores and these eight machines need to run everything. And so you're going from that to more of like a cloud, you know, microservices, auto scaling, all these things. And so and you were kind of reinventing the wheel over and over again. Right. So how does WebAssembly tie into that? Yeah, so there's almost like this discovery path that people have when they first start tinkering with WebAssembly. You look at it when you first start playing with it.
+
+19
+00:13:19.000 --> 00:13:47.000
+And your first example is, how do I add two numbers in WebAssembly and return the value? And that's super easy to do. It's a pure function. There's no side effects. Everything works fine. But then you try and figure out how to do more robust things, like how do you pass structured data into a WebAssembly module and get structured data out? There's no standard for that. So you have to pick one or like in the case
+
+20
+00:13:47.000 --> 00:14:33.000
+of the Wasm Cloud open source project, we made one. And so then you have the ability to work on more complex data structures. And then from there, the next question people ask is, well, since the Web Assembly module doesn't have instructions for things like writing to the network, then again, WASI is sort of an exception there, but it doesn't have IO and it doesn't have access to web servers or databases or whatever. How do you connect this module to the capabilities that it needs? And there are a number of open source projects that sort of each take a different
+
+21
+00:14:33.000 --> 00:15:38.000
+opinion on how you empower these web assembly modules. So Cloudflare lets you write WebAssembly modules, but the only so-called power that those modules have is the ability to interact with the Cloudflare edge. And that's it. With a project like WasmCloud, we use cryptographic signatures to inject claims right into the module that describe what the module is allowed to do. So is the module allowed to access an HTTP server? Is it allowed to access a SQL database? Can it make web requests? And so those WasmCloud is responsible for connecting these WebAssembly modules securely to these external capabilities. But I think the underlying point there is that anything that you see a WebAssembly module doing
+
+22
+00:15:38.000 --> 00:16:19.000
+that is over and above pure calculation, so just running straight up instructions, is either smoke and mirrors, or is work done almost entirely by the host. Got it. So, you know, my background, as opposed to Patrick, my background is mostly writing kind of Python and machine learning things. And so for my mental model of assembly is, it's the thing that my compiler does that lets my program run so when we talk about web assembly is that the right mental model is is is do you write code in something else and then it gets compiled to web assembly is it like an idl like llvm or one of
+
+23
+00:16:19.000 --> 00:17:17.000
+these idls or what is what actually is web assemblysembly? So the WebAssembly is a bytecode format. So, you know, the Java virtual machine is also a bytecode format. And so WebAssembly is a virtual machine. And the instructions for that virtual machine are bytecodes inside your WebAssembly module. And you're right in that the analogy to assembly sort of makes sense because the instructions that are in that module are fairly low level. Nobody wants to write that stuff by hand. You can, and it's probably a useful learning exercise to at least try it once. But once you've experienced that, that's when the college professor says, well, now that you've done it the hard way, here's the real easy way to do it. And the easy way to do it is to take a high
+
+24
+00:17:17.000 --> 00:18:05.000
+level language like Rust and compile your Rust code into WebAssembly. There are other languages that support doing that. So you can do it with TinyGo. You can do it with Zig. You can do it with C, C++. There are other languages that are trying to get there, like Python. Fulgo has some issues with WebAssembly. By and large, Rust seems to be where most of the community support is for taking whatever code you've written, using a ton of libraries, and then compiling it into WebAssembly. Right now, Rust has the best experience
+
+25
+00:18:05.000 --> 00:18:53.000
+on that, but everybody else is sort of on their way to it. Got it. So this is like a separate compiler that you would run. And instead of, I'm assuming that like the traditional Rust compiler, actually, yeah, the traditional Rust compiler you know executable and whatever os it's running on and so you're saying you can take potentially at least some of the same code i mean imagine you had something that was that was um that didn't depend on any io or anything as you said the add function or something you could take that same add function and compile it with the WebAssembly Rust compiler? And what would you get? You would get a binary that can run on the WebAssembly VM. Is that correct?
+
+26
+00:18:53.000 --> 00:19:34.000
+Yep. So in Rust terms, what you would end up doing is choosing WebAssembly as your target. So with Rust, you can target certain platforms or certain other environments. And so Rust has a target called WASM32. Use that target and you get a.wasm file as your output instead of an executable. If you want to target WASI, which is where you get operating system-like access, then you just use Rust to target the WASI, which is where you get operating system-like access, then you just use Rust to target the WASI target. Different compilers are different in terms of how you can use them
+
+27
+00:19:34.000 --> 00:20:38.000
+in order to get your WebAssembly code, but what you should get from compiling to WebAssembly is a binary that can be executed by any host on any operating system under any CPU architecture and without modification. And so one of the big promises there is that you get these really small modules that you can just pick up and move wherever you want to move them to. And, you know, one of the, I think the creator of Docker said that if WebAssembly had been around when they were building Docker, they would have just used WebAssembly. Oh, interesting. So how is WebAssembly then different from Python, right? So Python has a VM and you can compile down to these pyc files and the pyc files can run on uh should be yeah it can definitely run on any python vm so you could just built on a windows machine it should run on a linux machine and so it sounds similar what are
+
+28
+00:20:38.000 --> 00:21:52.000
+the what are the differences there so what's interesting there is kind of a dichotomy where you have power that you get from limitations. And so the WebAssembly virtual machine format has no native instructions that are CPU specific or OS specific or even make assumptions about the host runtime. So when you compile Java down to bytecode, you still have bytecode instructions that tell Java to access your operating system. That tell it to do things that might need to be translated from you know windows to linux and so the vm needs to know how to do those those translations right like you create a j frame for example and so that will have to do something very different on windows because actually you'll actually draw a frame on your screen and so that j frame you know that whatever that byte code that new j frame call turns into that byte code now needs to know how to do that on every os so the different
+
+29
+00:21:52.000 --> 00:23:12.000
+vms have to know how to do that yeah and so what you end up with with web assembly is you have this pure compute but then if your code needs to access some host function, there are native instructions in the WebAssembly instruction set for sort of asking the host for help to invoke functions on the host. But like I said, it's still entirely up to the host whether or not it's going to allow you to invoke that. And the host chooses how it invokes it as well so what you're starting to see with WebAssembly and these compilers is some of them are building in this this kind of tight coupling between WebAssembly module and the host so with Rust there's this thing called bind gen that allows you to compile things that would normally violate the WebAssembly instruction set, things that wouldn't normally exist. You can compile them in there because it's baking in assumptions bunch of things in that module that assume that the host is a JavaScript runtime.
+
+30
+00:23:12.000 --> 00:24:07.000
+And so if you are fine targeting JavaScript as a runtime, like if your goal to use WebAssembly is to just build browser stuff, then things like MindGen can be a huge time saver. If your goal is to run compute in the cloud, on servers, on edge devices, on edge networks, then you can make fewer assumptions about your host. And so you need to bake less and less of that in there. Yeah, that makes sense. I think the WebAssembly thing that, and tell me, you know, if this, if this makes sense, but it sounds like it's just much more productive and much more efficient. Like, I mean, one of the challenges that I had when writing Lambda functions on AWS and Python is you have to, you have to package up the Python. And if you're
+
+31
+00:24:07.000 --> 00:24:48.000
+using something like Docker, you have to just constantly be sending Docker images over and you have to worry about layers and, oh, I put my code in the first layer. And so now it's rebuilding the entire image and you put in the other layer. And so a lot of these things just are very complex. And thinking about Java, Java had applets back in the day, and that was also just a total nightmare. You wouldn't really know what functions you could call and what functions you couldn't. I tried to open a TCP connection, and then it's like, oh, no, it would throw a Java runtime exception. And in hindsight, okay, it's obvious you can't make TCP connections from the browser.
+
+32
+00:24:48.000 --> 00:25:05.000
+But when you're just getting started, there's no guidance. Nothing's really telling you what you can and can't do in all these different environments. And so it became really painful. And then getting people to install the thing so they can run the applet. I mean, all of it was just super painful.
+
+33
+00:25:05.000 --> 00:25:54.000
+And it sounds like WebAssembly is building on top of a lot of these things that we've had, but just making it more secure and making it just quicker, faster, less painful. Yeah, I mean, another way to look at WebAssembly is that it's just a secure, portable way to run untrusted code. And so that could apply to anything from building a plugin framework to running pluggable modules in a browser to using it for cloud compute. It's interesting that the fact that its instruction set is so small and it does so little on its own, that that is actually what makes it work in situations
+
+34
+00:25:54.000 --> 00:26:15.000
+where things like Flash and Silverlight and all those other predecessors to it, where those things failed. And I think a lot of the reason why those things fail is those runtimes spread their tentacles out too far and tried to do too much. And so it tightly coupled them to too many things. Yeah, that makes sense.
+
+35
+00:26:15.000 --> 00:26:41.000
+Oh, the WebAssembly. So thinking back about the Java applet thing, it was a huge pain to get people to install. I forgot what it was called. Maybe it was just applets, but whatever it was that they could run the applet, right? Basically install the, the Java VM browser extension thing. Right. And so WebAssembly, is that, is that built in or is that, cause I've never seen anything ask me to install WebAssembly. It's just built in.
+
+36
+00:26:41.000 --> 00:27:32.000
+Yeah, it's built in. You don't actually have to install WebAssembly because, at least today, all of the major browsers have WebAssembly support built in. And they all support the JavaScript API for instantiating and executing WebAssembly modules. Got it. And so I have used something for running code in the browser called Emscripten. And what I found is it's really, really hard to debug. Basically, if your code doesn't work, good luck. And even the interop with the browser JavaScript is also really difficult to get right. I know some folks who work at Zynga, who this is their whole life, or at least it used to be. And it's extremely difficult stuff. So does WebAssembly make that
+
+37
+00:27:32.000 --> 00:28:18.000
+a lot easier? I mean, if I have a C++, you know, huge library of business logic, and I want to move that onto the browser, and then I want to interact with that business logic from JavaScript code. What's that developer experience like? So I guess it depends on which frameworks you're using and what tool set you're using. So if you're just using just a straight compiler and you're not doing anything fancy or putting any shims or layers on top of that WebAssembly module, then what you're going to get is pure compute. So you'll be able to do math and run calculations and things like that,
+
+38
+00:28:18.000 --> 00:29:19.000
+but it won't be able to do anything else. So when you talk about connecting a WebAssembly module to the stuff that it needs in order to do its work, that's when you need to have different hosts. So the browser is one potential host. There are hosts that run inside AWS Lambda. There are hosts that run, like I said, on Cloudflare. And then you also have open source frameworks like WasmCloud, where the developer experience there is you encode your business logic and you interact with your non-functional requirements through abstract contracts. And then the host runtime then takes care of scheduling and running your WebAssembly module and scheduling and running the things that satisfy your non-functional requirements.
+
+39
+00:29:19.000 --> 00:30:07.000
+But because of that abstraction and the pluggability of WebAssembly, you can do things like hot swap your business logic without losing messages. You can do things like hot swap your database client without losing messages. So you can, at runtime, literally switch from Redis to Cassandra without your actual business logic being aware of that change. You can move your compute closer to the source of the data that you're computing against, which, you know, does, you know, that enables models like being able to do sensor aggregation inside a car without having to ship data off of the vehicle. Things like machine learning models where you want the compute to run closer to the stream of data.
+
+40
+00:30:07.000 --> 00:30:58.000
+So all of those types of scenarios are just made easier when your business logic is this tiny little thing that can run anywhere. You know, it enables a ton of extra scenarios that were just not really all not really possible or practical without technology like WebAssembly. Yeah, that makes sense. So so let's let's try and like dive into the example here. So let's say I don't know what you'd call it, like, I guess a service. I have I have something running in WebAssembly and, you know, I want to send, you know, JSON, you know, objects to that to talk to it, like an RPC type thing. So I want to send JSON objects to it. It's, you know, it'll do some machine learning or something like that, and it'll come back with a JSON response.
+
+41
+00:30:58.000 --> 00:31:39.000
+And so if I want to do that, you know, let's say we want to do that on the browser and on the desktop. What does that look like? I guess you said something about contracts. Is there some sort of contract you define that says this is almost like... I'm thinking about Swagger here, like OpenAPI. It says this is the JSON I expect, and then this is the JSON you're going to get back. And is it something like that so again it's it's interesting it's important to to keep in mind where webassembly stops and then the layers that other people have built on top of it begin so you can't do what you just described
+
+42
+00:31:39.000 --> 00:32:31.000
+with a straight up webassembly because you, you can't send a WebAssembly module arbitrary blobs of data, let alone JSON that it can interpret and send back to you. So like I said, there's that path where, you know, people start at the core of what WebAssembly can do, and then they start figuring out the things that they need to add to WebAssembly in order to do things that they're trying to do. So the first thing you need to do is figure out how to get complex data in and out of a WebAssembly module. There are some standards that aren't really, they're not fully baked into all the engines yet that will help with that. So today, you basically have to either come up with your own or use a framework that lets you do that.
+
+43
+00:32:31.000 --> 00:33:10.000
+Microsoft, they built an open source tool called Waggy, which lets you build WebAssembly modules that run as a CGI interface. So you can build little tiny web servers with them. But like I said, the things, once you get past that, that isolated sandbox of WebAssembly, everything you're doing beyond that use frameworks and runtimes. And so you just sort of have to pick which Lego blocks you want to use in order to build what you want. So the scenario you described where, you know, you've got some business logic that you built and you want it to run on a desktop
+
+44
+00:33:10.000 --> 00:33:57.000
+and you want it to run in a cloud and you want to be able to send it some JSON and get some JSON back. That's exactly what frameworks like WasmCloud do. And you know, there are others out there as well that'll enable that scenario in one way or another. Got it. So to contrast this with Python, so with Python, you have a interop library that's built into the, and this is stretching, really stretching the bounds of what I know, but built into like the VM slash language of it. And so if I, for example, want to, you know, call a Python module from C++, then I could actually use the Python C++, you know, the binding to go in and
+
+45
+00:33:57.000 --> 00:34:36.000
+call Python. So all of it is sort of built in. You're saying for WebAssembly, it's like, no, you need a module that would sort of define, maybe that module has C++ headers and then also has something on the... Actually, yeah. So I have to think about that. So the module would somehow have to... So your WebAssembly program could have been anything. It could have been Java or Python or C++ or whatever, but it needs a way to talk to that module, which then has an interface in C++. Did I get that right? Yeah. So there's a number
+
+46
+00:34:36.000 --> 00:35:40.000
+of things going on there. And I didn't mention it earlier, but when you build a WebAssembly function, the only parameters that it can receive or return are numbers. There's no other data type inside WebAssembly other than numbers. And so, like I said, there are limitations in there that need to be overcome somehow. There's standards like interface types, which are going to help translate the data that you are working on in a way that's native to you. So if you're in your C++ code, or if you're in your Rust code or whatever, and then you want to call a function that's been built in a WebAssembly module, there'll be a translation layer there that will sort of get that job done. If you want to do more than that, WebAssembly has these, you know, what are called imports and exports. And that's
+
+47
+00:35:40.000 --> 00:36:37.000
+where you get that sort of interop layer. So in Python and in other languages, you have this thing called FFI or the foreign function interface. And that is a standard that languages use in order to talk to one another from one another. And something similar has to happen with WebAssembly. So you need an import and an export in order to have that communication in and out of the module. But again, those imports and exports can only deal with numbers. your high-level data, your arrays, your structs, blobs, and things like that into just numbers.
+
+48
+00:36:37.000 --> 00:37:00.000
+Today's sponsor is Rollbar. Rollbar is the leading platform that enables developers to proactively discover and resolve issues in their code, allowing them to work on continuous code improvement throughout the software development lifecycle. Rollbar has plans for all situations, from free to large enterprise. With Rollbar, developers deploy better software faster and can quickly recover from critical errors as they happen.
+
+49
+00:37:00.000 --> 00:38:13.000
+We have a special URL at https://try.rollbar.com.pt for programming throwdown. There you can find two free ebooks, How Debugging is Changing and How Dev Experience Matters, as well as sign up for a free Got it. So you're building a program in Rust and you target WebAssembly and your Rust program provides some kind of interface, as you said, an FFI, or maybe it's running a web service or something like that. And so I guess as part of compiling it to WebAssembly, you need to provide, I think, modules, right? You have to provide modules that can fill in some of those gaps. So when you compile your WebAssembly module in Rust, you're compiling some subset of Rust that can be converted into WebAssembly bytecode without invoking functions that don't exist. So you can't just take Rust and compile a web server
+
+50
+00:38:13.000 --> 00:39:15.000
+and then think it's going to work in WebAssembly. You can get closer if you use WASI, which is the system interface on top of regular WebAssembly, and that's also kind of smoke and mirrors because Wazi is really just a set of imports that a host needs to provide to give a module access to low-level operating system type stuff. So even when you're just compiling the simplest of things, some of that stuff just isn't going to work out of the box. And so, you know, the imports and exports, those are all runtime. They are not compiled into a WebAssembly module. So, you know, the WebAssembly module expects its host to provide all of its dependencies at runtime through imports. And how the hosts and the guest module communicate with each other is entirely up to the host
+
+51
+00:39:15.000 --> 00:39:41.000
+and the guest module. And so there's this gap there where we don't really have any high-level standards for how hosts communicate with guest modules. So people are building them. You've got WASI, which is your system-level interface. You have interfaces that frameworks like WasmCloud build. So there's an interface for a web server. There's an interface for a database client.
+
+52
+00:39:41.000 --> 00:40:20.000
+There's an interface for Telnet even. There's an interface for a database client. There's an interface for Telnet even. There's an interface for a message broker. But that agreed upon contract between the host and the guest, that's something that both sides of that half need to agree on. So you can use compiler tricks and macros and code generators like BindGen to take care of generating code on both sides of that line so that they build that contract for you and you don't really have to know it's there. Like I said, if you're using Rust to build code that you know is only going to run in a browser,
+
+53
+00:40:20.000 --> 00:41:01.000
+there's tons of stuff that you can do to make your life easier to pretend that WebAssembly isn't as low level as it is. You know, you can make it look like you can allocate a JavaScript object that's actually an object inside your WebAssembly module, but that's all just generated code and shims and wrappers doing that for you. When people start looking at WebAssembly, the first thing they see is all this JavaScript stuff. And so they just assume that WebAssembly is responsible for all of this power. When what's really driving some of the really impressive scenarios is the clever
+
+54
+00:41:01.000 --> 00:41:42.000
+wrappers and shims and layers that people are putting on top of the WebAssembly modules in order for them to do these powerful things. Got it. Got it. So I think, I mean, I remember in this, this might be a while ago, but someone used WebAssembly to get, I think it was Doom or Quake or one of these games running in the browser. And so if we dive into that, you know, if you're making, let's say Doom, you know, you have making let's say doom you know you have logic you say when i walk forward you know my character x coordinate y coordinate changes like this and here's you know the how often you know like i'm going to update my game tick and my imp throws a fireball and all these things um and all these functions if you if you drill down if you were to sort of really
+
+55
+00:41:42.000 --> 00:42:19.000
+drill down or even you could do this in any program out there you're writing right now, if you call list.sort or something like that in, let's say, C++, that function is also going to be written in C++, right? And that function is going to be made of other C++. But eventually you get down to the point where you're either doing something really fundamental like arithmetic um or you're making you're making calls that um that that are that are in in sort of assembly or really really low level and so some of these calls like um um like open a network connection you know at some
+
+56
+00:42:19.000 --> 00:42:47.000
+point you're not in c++ land anymore you're going and like telling the kernel to give me a network connection. And so that is that sort of import. You're like, you're importing that function into the C++ language. And so you're saying, between this negotiate with guests and hosts, you say, well, this host and I have agreed that you have the open TCP connection, open TCP connection, you know, function that
+
+57
+00:42:47.000 --> 00:43:18.000
+was super low level. And so when you go to compile your code, you know, you either have that or you don't. And so do you know that at compile time or, you know, if you compile on your desktop and run on the browser, could you be in a situation where the function actually doesn't exist anymore? Yeah. So what you're describing is part of it is, you know, what in compiler terms is called linking. So when you compile all the way down to sort of the lowest level primitives,
+
+58
+00:43:18.000 --> 00:44:14.000
+at some point, one of those primitives is going to need to access some function that isn't inside your code that is either you know it's like inside a kernel or it's inside a host or it's it's somewhere that your code can't find it so it needs to cross that boundary somehow and a linker will embed the desk the target of your function call into the thing that you're building. So you get like an executable or something like that. What happens with WebAssembly is when you're compiling these things, sometimes the compilers are clever enough to replace the call that goes across a traditional link boundary with something like executing a WebAssembly import function. But what happens is because it's replaced those functions,
+
+59
+00:44:14.000 --> 00:45:12.000
+instead of being able to link the real implementation of it at compile time, you now have the reliance on the host to have that function for you at runtime. There are things you can do where you can, you know, you can read the WebAssembly module to get a list of the functions that it imports and see if you're ready to provide them all. So you can, you know, kind of pre-validate that. But like with the Doom example, you know, you'll compile this core nugget into a WebAssembly module. And then I haven't seen the code for this, but one way to do WebAssembly module to generate the applicable content for that frame.
+
+60
+00:45:12.000 --> 00:45:53.000
+And inside the Doom code, there were functions that used to render directly to a video card that now ask the host to render maybe through some abstraction. And then the JavaScript host has functions that satisfy those imports. And instead of rendering to a video card, now render to a canvas. And things like OpenGL type support in a JavaScript library make those kinds of translations super easy. So with a combination of shims, wrappers,
+
+61
+00:45:53.000 --> 00:46:38.000
+and very smart compilers, you can do things like distill Doom down to its core calculations and then externalize the rendering into something that javascript does and that pattern of putting the pure business logic and you know for doom the pure business logic is you know calculating damage and location and range and who's where and where the projectiles are and things like that and then converting that into a static image of what one frame looks like
+
+62
+00:46:38.000 --> 00:47:12.000
+but then the external function that isn't in the WebAssembly module that's the responsibility of the host is you know rendering that bitmap onto you onto a canvas inside your browser. And where the portability power of that comes from is, let's say that that function interface for rendering things like a frame buffer, let's say that that was a standard that many different hosts supported. So now you can then take this tiny DOOM WebAssembly module and run it anywhere that can supply it
+
+63
+00:47:12.000 --> 00:47:57.000
+with a renderable frame buffer. And so this is where you start to see some of the promise of what WebAssembly is going to look like in the future when tooling makes a lot of this stuff easier or automatic. So you now just have these bits of compute that run anywhere you want them to, at any scale you want them to, as far or as close to their data sources as you want them to that can consume portable services that may act differently. Like another scenario that I love, and I've done a number of times with WebAssembly,
+
+64
+00:47:57.000 --> 00:48:28.000
+is you have a WebAssembly module that has a contract for turning on or off the voltage in wires. So let's say you have five wires and on those five wires, that contract can say, you know, that, that pin is either up or down. And so when you have, you can put logic in a, in a web assembly module that controls the abstraction of those pins. And then,
+
+65
+00:48:28.000 --> 00:49:00.000
+so when you run that module on a Raspberry Pi, you could be controlling, you know, a big bank of LEDs where you're setting the color and you're setting, you know, which ones are on, which ones are off. You can make all sorts of patterns. You could use it for like an alert indicator for different conditions but you could also take that same module out of the raspberry pi put it on your laptop and run simulations and tests because you have this abstraction now you could then also take
+
+66
+00:49:00.000 --> 00:49:47.000
+that same module stick it in a browser and then then, you know, when the module says, you know, I want, you know, LED one to be red, you can just turn a box somewhere in the browser on and color it red. Cool. That makes sense. Actually. So, okay. Now I think it's really starting to come together, together for us. So, okay. One thing I'm trying to wrap my head around. So I think WebAssembly, we've, we've, I think got it nailed down thing I'm trying to wrap my head around. So I think WebAssembly, we've, I think, got it nailed down. I'm trying to wrap my head around Wasm Cloud now. So you talked about, you're talking to a database and some of those things. It feels like, I'm not totally grokking why Wasm Cloud would be at that level of talking to a database and not at like a much
+
+67
+00:49:47.000 --> 00:50:37.000
+lower level of, you know, like a TCP socket or something like that. So how does, like, why is assembly kind of like going up the scale there and how is that useful? Sure. So if you think about, you know, what the daily experience is like when you build microservices, think about somebody says you need to build this microservice that does a handful of things. And what you end up with is you copy in the boilerplate for starting a web server. Then you paste in the boilerplate for configuring the routes. Then you paste in some more boilerplate for consuming a database client, and that database client is tightly coupled. So, you know, you might have a Postgres client library in there
+
+68
+00:50:37.000 --> 00:51:27.000
+or something like that. Somewhere in that giant pile of boilerplate is like 10 lines of business logic. And then when you deploy, you're deploying that 10 lines of business logic bolted and duct taped onto all of those other things that you just jammed into that module. There's a reason why a Hello World microservice in Java can consume a one gig container. So what we wanted to do was separate those five lines of business logic from all the other non-functional requirements that are crammed into your typical microservice. And so a runtime like WasmCloud sits above the WebAssembly engine level.
+
+69
+00:51:27.000 --> 00:51:57.000
+And it provides, like I said, that mutually agreed upon contract between the host and the module. So with WasmCloud, there are a number of different contracts. So there's a contract for receiving messages from a web server. There's a contract for interacting with a message broker. There's one for talking to a SQL database. You can make your own contracts, in which case you can also make your own capability providers. So you can add as many abstractions as you want
+
+70
+00:51:57.000 --> 00:52:49.000
+to the Wasm Cloud ecosystem. And what you build as the developer is an actor. We follow the actor pattern, but it's a little WebAssembly module. And the units of deployment that we have are, you know, from the biggest language target at around 1.5 megs down to 64k. So if you think about going from deploying one gig mammoths to do a small amount of work to deploying these tiny little things to do the same amount of work in a more portable, more loosely coupled way, then we start gaining all sorts of advantages
+
+71
+00:52:49.000 --> 00:53:32.000
+that we didn't have before. So now that we can write business logic that consumes these contracts, we know that the thing that fulfills that contract can change. And so that same scenario where in one situation, your code is controlling real hardware and another situation, your code is in a simulator, that also applies to going from dev to prod, right? When you build your hello world code in the regular microservices way, you get your hello world code working and it's fantastic. And then when you have to go take it on that pipeline to running in production, chances
+
+72
+00:53:32.000 --> 00:54:12.000
+are you're going to have to rip out three quarters of that boilerplate because your local environment test doesn't match all of the cloud tentacles that your code needs to run in when you deploy it to AWS or Google or wherever. But with that abstraction, you can use an in-memory database when you're developing on your workstation. And then when you push the same code without ever recompiling it, the same sealed cryptographically signed unit of compute out to production, the production version of that environment can supply a Postgres database
+
+73
+00:54:12.000 --> 00:54:41.000
+or Cassandra or Redis or whatever. And the logic that you wrote doesn't change. Got it. So let me unpack this. So, for example, if you were trying to spin up a web service and i'll stick with python because that's the one i know the best but if you're trying to spin up a web service now you would get a you know a fast api server you'd write as you said a bunch of boilerplate for different routes and then and then you would use something like sql alchemy
+
+74
+00:54:41.000 --> 00:55:19.000
+which has clients for it's basically a multiplexer for all these different clients. And so you can tell SQL Alchemy, you know, I want to access this SQLite database for development. And, you know, you can, you know, run locally. And then you have some config somewhere that's saying, okay, when I'm in the cloud, MySQL Alchemy connects to Postgres and when I'm local, it connects to this SQLite that's on my laptop. And so the issue there is that SQL Alchemy has to do a lot of heavy lifting
+
+75
+00:55:19.000 --> 00:55:41.000
+and it also has to know about every single database. And then I have to get really clever about, when I pip install it, I have to pip install just the databases I want, or I end up with this massive binary and it all kind of blows up. And then also I'm really relying on SQL Alchemy to use that language.
+
+76
+00:55:41.000 --> 00:56:30.000
+I'm sort of like expecting a contract from SQL Alchemy that if I call my ORM, if I call my object relational mapper functions, that they're going to do exactly the same thing for every database. And there's just a ton of work that goes into on there and that goes into that. And that work translates into a large binary. And so you're saying Wasm Cloud is trying to move that problem across the, I guess, the VM boundary. And so you can imagine now like Cloudflare has an implementation of a Postgres client and a SQLite client in it. And so now you don't have, you know, my binary running SQL Alchemy and your binary running SQL Alchemy and Patrick's binary running SQL Alchemy all in the same cloud,
+
+77
+00:56:30.000 --> 00:57:15.000
+running different versions. My version hasn't been patched yet and has an exploit, et cetera, et cetera. Like you could move that to, you know, Cloudflare, for example, and that makes our binaries small, you know, and makes their load also smaller. Yeah, that's a really good point. And, you know, it's one of the things that, you know, not everybody sort of sees on first glance when you look at what WasmCloud does. So, you know, decoupling things is just sort of part of the picture. But the way that it gets decoupled is also saving you a lot of time and effort as well. So like you said, you could have, let's say you have a web server and you're a huge enterprise,
+
+78
+00:57:15.000 --> 00:58:34.000
+you've got a web server that everybody has been using, it's a Java dependency, and all of a sudden someone publishes a vulnerability saying that you need to immediately upgrade all of these web servers from this version to some other version. You now have this entire enterprise that has to stop all of its current work and have each one of those dev teams that has taken that dependency, then blow a sprint or more, upgrading their code to the newest version, and then repackaging, redeploying, recertifying, retesting, all of that stuff. Those pipelines to go from a minor code change to production, while we would love those to be, you know, an hour, they're certainly not. And in many cases, it can take weeks worth of paperwork or, you know, bureaucracy to get your code from fixed to deployed in production. But if you have something, a framework that has decoupled those things for you, like WasmCloud, then what you can do is while your code is running, while your business logic is still actively running,
+
+79
+00:58:34.000 --> 00:59:34.000
+deployed and scaled in a cloud, you can live patch the web server from one version to the other and you do it once and uh the problem is is no longer an issue and and it's because those modules are no longer tightly coupled to those dependencies there's there's a saying that like when you build these microservices you own your dependencies and that's not really the case anymore with something that gives you this level of abstraction yeah that is really really cool um i mean i i you see examples of this pattern you know like i know a lot of loggers have different back ends and so you swap out the back end you get different functionality with the same api um or you're thinking of sdl like going back to doom example you know someone someone ported doom to sit on top of sdl and so now um sdl has a million different different back ends
+
+80
+00:59:34.000 --> 01:00:06.000
+and so it's it's um so yeah that that i think that pattern works really well and so you're just taking that to the next level which is really cool yeah, and exactly like you were saying with the Python libraries and with some of these other things that have pluggable backends, with the stuff that we're doing today, without those hard boundaries of a WebAssembly sandbox, you can't swap those backends without either changing a config file
+
+81
+01:00:06.000 --> 01:00:46.000
+and then rebuilding a release or changing your code and recompiling it and then redeploying it. Being able to swap that stuff is a compile time decision for too many people, and it shouldn't be. I shouldn't have to architect my services based on the suite of arbitrary stuff i just happen to have lying around on my workstation but that's what happens right i make when i'm in uh experimental mode you know i build my service so it works on my machine and I make a whole bunch of architectural
+
+82
+01:00:46.000 --> 01:01:30.000
+decisions at compile time that are baked into my work product. And I don't think that's a good enough model. I think we should architect our solutions based on the problems that we want to solve. And then all of this other boilerplate, 90% of our work i don't want to have to care about that anymore yeah that makes sense yeah i love the hot swapping code idea because you know you you know you have like like uh you know as using the lobbying logging framework for an example um you know you have like in python logging you can log to a file you can log across the network you can log different things but all of those different things have to be baked in. And, you
+
+83
+01:01:30.000 --> 01:02:12.000
+know, even if you have 10 different options and you can write a config file to choose which one of the 10 you want, all 10 are in your source code and they're all locked in and you're not able to, you don't really have that flexibility to, to swap them out or definitely not to upgrade them. That is super, super cool. Yeah, that is awesome. So yeah, I think we have a really good handle on WebAssembly and Wasm Cloud. So what's the connection? I know you said that Cosmonaut is fostering web assembly. And so what does that mean day to day? So are you the biggest contributor?
+
+84
+01:02:12.000 --> 01:02:44.000
+Are you managing the community out there? I guess a little bit of everything. Yeah, so we're running the WasmCloud Slack community. And at the moment, we're the largest contributors. But, you know, like I said, it's in everyone's best interest to see the set of tooling and not just the stuff that we're building, but the stuff that everybody is building. It's in everybody's best interest for WebAssembly to gain more traction, to gain more adoption,
+
+85
+01:02:44.000 --> 01:03:07.000
+to get better known so that these tools can be built around it so that the compilers can get smarter to build better hooks into WebAssembly. And then the network effect grows and the WebAssembly ecosystem gets to a mature level where people don't have to worry about, does this thing support this
+
+86
+01:03:07.000 --> 01:03:42.000
+thing I want to do with WebAssembly? They just pick their favorite compiler and go and they pick whatever runtime they want. They choose between, you know, Wasm cloud or some Lambda thing or whatever. And it's no longer a big deal. Making that decision is more a personal preference than anything else. Cool. And so what is Cosmonic like as a company? So how many folks do you have there? And is it distributed? I mean, I'm sure everyone or, well, there's folks working from home,
+
+87
+01:03:42.000 --> 01:04:47.000
+but what's the general situation like over there? So there's seven of us at the moment and we are all distributed. And like I said, there isn't really much I can discuss yet, but it should be fairly obvious that we're building a product built on top of WasmCloud. And we're pretty close to being able to start getting some people into some private testing setups so that we can get some early feedback. Cool. So there's two sort of threads there. One is if you're out there and you're interested in WebAssembly, the idea sounds really cool, then you want to try it out. Definitely try out Wasm Cloud and also get on the Slack channel. best way to get onto one of these private alpha tests and really work kind of hand in hand with
+
+88
+01:04:47.000 --> 01:05:39.000
+the folks at Cosmonaut to see kind of what that future looks like. Because this is really, really cutting edge. I mean, I don't think a lot of people out there are thinking about moving things across the VM boundary. But what I can tell you personally, and I know that a lot of people have shared this story is it is painful to upload giant Docker containers, you know, to get something done. Like I have a project now that's we're using serverless, you know, at work, we use Terraform. And and just, you know, the scripting is not hard. It's just theat and and just a wasted time and cycles and network packets to to do anything yeah i mean if you think about that right just just the fact that the docker images themselves are so large and unwieldy prevents a bunch of scenarios like you don't
+
+89
+01:05:39.000 --> 01:06:28.000
+really have the concept of being able to ship a docker image dynamically at runtime from one place to another in order to make it so that the docker image runs closer to whatever you want it to run closer to because you just can't you can't be pushing around one gig blobs like that yeah and then when you think about compute density right compute density is like that's the holy grail of cloud stuff right now is being able to pack all of your stuff into as small a footprint as possible and waste as little rented compute as possible. And when the thing that you're pushing is a one gig Docker image, then that's going to force you into certain decisions about the underlying VM,
+
+90
+01:06:28.000 --> 01:07:40.000
+about the memory capacity of that VM, because often CPU and memory are coupled when you buy your cloud resources. And when you compare things like the 1 gig or worse, I've seen 8 gig Docker images. When you compare that size Docker image to portable business logic that is 100K, you can ship those around dynamically at runtime on demand and not worry about it. And you can run thousands of those in a single process on a single VM, you know, in the same space as you were running your one gig Docker image. Yep. And the idea of the Docker layers is extremely powerful, but it's also kind of a crutch, right? Because now you're putting the onus on the developer to say, okay, I want to first do all of my pip installs and get all of my packages before I do a git clone. Because if I do it in the other way, then Docker will constantly be rebuilding that thing.
+
+91
+01:07:40.000 --> 01:08:38.000
+So you have to kind of stagger everything. It ends up being this really unnatural thing where your Docker file, if you were to read it top to bottom, it's like the things that change the least down to things that change the most, which is not really a natural way of writing code. Versus something like this where you say, like, it doesn't matter because all of that external stuff is not even going to be in the Docker image. So we don't have to play all of these games yeah when you think one of the other things that comes up a lot is uh the concept of reason to change so when you when you build a thing and you deploy it like what is what's the main reason why i'm sorry about the dog no it's fine what's the main reason why you have to deploy a new version of that thing to production? Is it because your business logic changed? Or is it because something in one of the dependencies that you didn't even want in the first place changed?
+
+92
+01:08:38.000 --> 01:09:09.000
+Yeah. 99% of the time, it is not in your business logic. Yep, that's right. of the time, it is not in your business logic. So when you free yourself of that, and so now not only do you have these tiny little portable images that are secure, like I said, we're embedding signatures inside those modules, but those things don't need to change. They don't need to change. They don't even need to change when their to change. They don't need to change. They don't even need to change when their dependencies change.
+
+93
+01:09:09.000 --> 01:09:50.000
+So if you want to swap the database that one of your WebAssembly modules is using from one thing that implements a SQL contract to another, you can do that at runtime without having to rebuild or recompile your code. Yeah, that totally makes sense. Cool. So Cosmotic is just getting started. Are you trying to hire folks or are you really just focused on getting that MVP out? Yes. Yeah, we're always looking for good people. And we're also heads down trying to get the first MVP out.
+
+94
+01:09:50.000 --> 01:10:29.000
+Got it. What kind of skills are you looking for? So, like I said, we're looking for good people. And so we look at the people that we would want to hire rather than a certain subset of skills. I mean, obviously people need to know how to code and they need to understand distributed systems and things, but you know, language syntax is stuff that can be taught, stuff that can be picked up on the job. So, you know, we are definitely not the type of people that will, you know, make you do a bubble sort on a whiteboard.
+
+95
+01:10:29.000 --> 01:10:53.000
+Because bubble sorts on whiteboards are not compiled code that runs in production. Yep. Yep. The best interview I think is, is, you know, spend an hour, spend a day with the team. Like here's, here's, and the nice thing about something like Wasm cloud is you can, your interview could be, you know, spend an hour, spend a day with the team. Like here's, and the nice thing about something like WasmCloud is you can, your interview could be, you know, here's an issue, you know, give me a pull request, you know, I'll see you in a week or something. Yeah.
+
+96
+01:10:53.000 --> 01:11:54.000
+You can learn more about a person by listening to how they rubber duck their way through solving a problem than you do by knowing what language they choose to solve that problem in. Yep. Yep. Totally agree. Cool. Yeah. So if you're out there and this sounds awesome to you, it should. Take the time, learn it. And I think this is going to be really, really cool tech. It sounds amazing. Definitely take the time to build something web assembly if you're out there you build anything hit us up on twitter you know you can you can add us and um and you know show off what you've built it's really cool if you get if you get doom working in the browser i know it's been done but uh follow along if you get it working yourself let us know and if this sounds like things uh you know the edge um not to abuse that term but if it sounds like things, you know, the edge, not to abuse that term, but if it sounds like you want to be kind of right on the cutting edge of some really amazing tech, then, you know, get in the Slack channel, get engaged with the community.
+
+97
+01:11:54.000 --> 01:12:45.000
+And then ultimately, you know, reach out, reach out to Cosmonic and you might be, you know, the next person they're looking for. So, cool. What is something that is unique about Cosmonic the company so do you uh do you have like a certain off site do you have like a certain story or something that that kind of really sets you apart um so there's a lot of unique things uh one interesting thing is um you know all of our internal release names are from autocorrect mistakes nice okay um another i would say is that all of us are ruthlessly focused on developer experience every one of us has suffered
+
+98
+01:12:45.000 --> 01:13:04.000
+through horrible developer experiences. And so we're basically developers building the product we've always wanted to use, making the company we've always wanted to work for. Very cool. Really well said. Cool. Well, this was amazing.
+
+99
+01:13:04.000 --> 01:13:09.000
+I mean, I feel like I actually have a really good grasp of WebAssembly, which I think is hard to do over audio in an hour, but you've been able to do it, at least for me. And I know for a lot of folks out there. So I really appreciate your time, Kevin. This is really, really awesome. Thanks so much. I was glad to be here. Music by Eric Barnella. Programming Throwdown is distributed under a Creative Commons Attribution Share Alike 2.0 license. You're free to share, copy, distribute, transmit the work, to remix, adapt the work, but you must provide attribution to Patrick and I and share alike in kind. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

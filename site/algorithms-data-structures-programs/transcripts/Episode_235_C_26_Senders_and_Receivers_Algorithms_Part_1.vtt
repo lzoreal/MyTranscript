@@ -1,0 +1,237 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:12.000
+Uh oh. So are we saying that in our different monadic verticals, Yes. in C++ we are choosing different names for these? Yes. Oh no. Yes. Is that something we should be sad about? Maybe.
+
+2
+00:00:12.000 --> 00:00:28.000
+Maybe? Is that- is that pun intended? Oh, I see. It's optional. No, it wasn't. And then they also have and then, so it's not then and and then. No, it's transform and then oh my goodness So you wait wait wait wait wait wait. I
+
+3
+00:00:28.000 --> 00:01:20.000
+Mean I asked if we should be upset the answer is folks we should be very upset now Visibly losing his cool Welcome to ADSP the podcast episode 235 recorded on May 13th, 2025. My name is Connor and today with my co-host Ben, we continue our conversation from a few episodes ago about senders and receivers. Today we focus on algorithms. ["Senders and Receivers"] Which makes this episode 235. And I think we are going to, unless if while we were having that last conversation, we wanna start a new undiscussed topic,
+
+4
+00:01:20.000 --> 00:01:45.000
+we're gonna revisit our last conversation about senders and receivers, which, yeah, we had a lot of great feedback on. People seemed to enjoy the topic and Ben's explanation. And we had said at the tail end of that conversation that we were only scratching the surface and that there's a whole world of algorithms that live on top of this model. And so we would revisit it when we chatted sometime in the future. And that time, I I think has come now.
+
+5
+00:01:45.000 --> 00:02:11.000
+So where should we start? Should we just pick off right where we left off or is there anything you want to say before we... Now there's nothing I want to preface with so let's dive back in. I will accept your praise for the explanation before, although I can't really remember what happened and let's talk more. Well, I enjoyed the conversation, but the praise I was referring to, it came from, I believe,
+
+6
+00:02:11.000 --> 00:02:30.000
+technically, I do feel like we should do this more. Maybe we'll actually look it up right now in real time, folks. I can't go to Twitter because, I mean, I could go to Twitter, but I'm not going to spend time on Twitter. Actually, I was going to say, because it would take time to hop around. But that's not even true necessarily, because you can just go to the episode and people comment.
+
+7
+00:02:30.000 --> 00:03:13.000
+But if we go to the GitHub discussion, or actually maybe this wasn't praise necessarily. Paul, who is a attendee of the virtual Meetup that I run, says this is his feedback. At CPP online 2024, there was the evolution of functional programming and C++ by Abel Sen hopefully I'm pronouncing that correctly and two talks on coroutines and a talk on flat Map that I first became confused and then disappointed to find that this is only talking about a new dictionary made from two vectors Working out some good way into category theory for programmers that bind equals fmap then join was a great learning moment in my life. So yes, less praise and more of a comment that he was confused on the overloading of
+
+8
+00:03:13.000 --> 00:03:48.000
+flatmap, which we probably should have mentioned because I think we are both aware of the data structure. Well, and this is the perennial problem here is like what to call the monadic characteristic operation. Haskell calls it bind. Some languages call it concat map also, I think, is in Haskell. That's more specialized for the list monad, I think. Yeah, C++ doesn't have a good term and then is used, but to my mind I don't
+
+9
+00:03:48.000 --> 00:04:28.000
+I don't think and then is not a natural term for me. So I had seen in the proposal pipeline at some point too that I think transform join because that like we use transform for map. Yeah that would make sense I suppose. Yeah flat flat map did that end up actually getting standardized I don't I can't recall it flat the data structure yes yeah is that C++ 23 26 now you are asking I think it's 26 but I I wouldn't bet on it. Yeah. Uh, oh. No, it might be 23.
+
+10
+00:04:28.000 --> 00:04:44.000
+Yeah, now I think it's... Yes, it's 23. Okay, C++23. That got flatmapped. And... I am now buzzing around Twitter. I went to the... ADSP the podcast Twitter.
+
+11
+00:04:44.000 --> 00:05:15.000
+And that had some reposts but no comments and now I'm trying to find my repost of the ADSP Twitter and we have almost found it and there's also retweets here I can't find the comments folks but I definitely know I feel like Steve Downey just mentioned on the last episode I think he had a comment about it Where these happened? I don't know. Oh, you know, that's the problem is it's bifurcated It was definitely on blue sky or Macedon. Oh
+
+12
+00:05:15.000 --> 00:05:41.000
+And I'm just conflating where commentary happened because They're all you know in my head I see a comment and I'm like, oh it just happened on one of the social quote unquote tweeting platforms. Anyways. Well, okay. So, so back to senders and receivers, the interface on the algorithms. So yes, algorithms. We didn't really talk much about the world of algorithms that live on top of senders and receivers.
+
+13
+00:05:41.000 --> 00:06:28.000
+So maybe that's a good point to pick back up from. You know it's interesting, Eric refers to them as algorithms. I don't really, they don't occupy the same space in my head as like the standard iterative algorithms do for me. But true, they're algorithms. What do you refer, and this is actually maybe we can take a step back because I have in a couple of talks described my algorithm mental model where I think of the C++11 iterator algorithms, the C++17 parallel iterator algorithms, the C++20 range overloads of those algorithms, and then also the C++20 and 23
+
+14
+00:06:28.000 --> 00:07:06.000
+and soon 26 views as also algorithms, even though technically in the standard they are not referred to as algorithms, but all of those I think of as, you know, technically there is a transform in four different flavors, the iterator, the parallel, the range overload, and the view. And I kind of think of those as all as the same thing. Do you have the same mental model? I would say yes. I think of those in the same category. For some reason, I don't think of senders and receivers in the same category, but maybe I should. They are, you know, instead of doing synchronous function calls, they're doing asynchronous
+
+15
+00:07:06.000 --> 00:07:42.000
+function calls and the algorithms are the same. But I think because I think because I came from already knowing Haskell, already mapping the concepts to monads and functional constructs, I tend to think of them that way. So when you think of the label on the bucket that these sit in, is it constructs? Is it operations? Do you have a word like algorithms that you use for them or not really? Well, you're not probably going to like this one, but I would mostly say combinators. Combinators.
+
+16
+00:07:42.000 --> 00:08:18.000
+Interesting. Because most of them are working on their higher order functions, right? They're higher order asynchronous functions. They're composing together functions. I use combinator as a generic term for anything that does that. Like a parser combinator would be another example that I would use. But in this case, it's just a sender combinator. However, the function that composes together more than one sender and gives you back a sender, I would call it, in general, I would call that a combinator.
+
+17
+00:08:18.000 --> 00:09:01.000
+Okay, so now I have a couple questions and we will do our best folks to keep this on topic about senders and receivers. Do algorithms qualify, and when I say algorithms I mean the C++ algorithms we just spoke about, qualify as combinators as well? Probably some do. But honestly, if we take any analogy too far, it starts to break down. I'm sure we could, yes, I think the answer is yes, we could construct a valid mental model where yes, we could say they're all combinators under some definition. But ultimately, this is just, I don't know that it matters too much having different
+
+18
+00:09:01.000 --> 00:09:38.000
+mental models. It's just your mental model. It's your labeling. And for the listeners that have not memorized my composition intuition talks, combinators definitionally are functions that I'm not even sure if you're supposed to use the word functions, but we'll use the word function functions that rely only on their inputs. Meaning that if you've got a function like, my favorite example is a Forex conversion rate that converts Canadian to US dollars, and it hardcodes some kind of currency right in there. If you're hardcoding a constant that isn't taken in
+
+19
+00:09:38.000 --> 00:10:00.000
+as an argument, that's not a combinator. And so in Haskell, a lot of times they refer to reduces and scans as combinators because they're just higher order functions, even the ones that take initial values because there's your fold L and fold L1s. Those are still technically all combinators. And it's one of my least, I mean, it's not just combinators.
+
+20
+00:10:00.000 --> 00:10:33.000
+We just talked about flat map. Overloading of these terms is pervasive in computer science. science well having said that I think that most of the most of the things in the senders and receivers bucket do fit that category like Okay, you know so so Well, so let's just talk about them. So so in in terms of the monadic operations, you know There's just, just is lifting a value into sender's world. You give it a value and it gives you back a sender
+
+21
+00:10:33.000 --> 00:10:55.000
+which will produce that value. So that's the same as pure or return is what Haskell would call it. Okay, yeah, that makes sense. And I should interrupt to ask here, because in editing the last senders and receivers discussion, I was upset that I didn't ask this question at the time, maybe because I just didn't think to ask it.
+
+22
+00:10:55.000 --> 00:11:32.000
+But when you were saying monadic bind, and right now you said monadic operations, are you using the word monadic to you to mean single argument or are you using it to mean the second yes I'm using to mean the functional construct I'm not using it in the array language sense of right now they're dyadic functions which is probably only my problem because array languages use it to mean monadic and dyadic one argument to argument But I remember hearing monadic bind and I wasn't thinking Monadic from like you were thinking single argument bind. Okay. I was I was thinking
+
+23
+00:11:32.000 --> 00:11:59.000
+Yeah So to be clear when Ben or I for this episode use the word monad or monadic we're referring to you know monads as Category theory and more than that, you know, again, through for want of terminology, I sometimes, when I say monadic, I'm actually including the functor, I'm including a functor, I'm including applicative functors, I'm including monads all under that same umbrella.
+
+24
+00:11:59.000 --> 00:12:43.000
+Right. And in terms of, you know, that, so just is, is, is pure return or lifting a value into the into the senders world, then then is the characteristic function of a functor. So it's F map, right? It's the same as transform on a vector in the that would be in the list monad. It's the same as transform one optional that would be in the maybe monad on senders it's called then so you want to apply a function to something in the sender change it in some way you know you use just to lift the value and then you use then to change that value right I think and I think that is one of the easier
+
+25
+00:12:43.000 --> 00:13:32.000
+it might even be easier than just for some folks, because transform is something you use on a everyday basis. Even if you don't get the idea of kind of putting the parentheses, or I shouldn't say parentheses, the brackets for the list monad, or however you represent an option for a maybe monad, you're used to applying some kind of operation on a sequencer, an optional or something like that. It makes intuitive sense, I think. The listener can send us feedback if it's not the case. And then the next, so then if then is fmap, which is the characteristic function on a functor. Then let value is bind, which is the characteristic function on the monad. Right. And senders calls that let value. So
+
+26
+00:13:32.000 --> 00:14:29.000
+so in, if we think about stood optional, stood optional has transform, and it has and then, right. And the difference between them really the only difference between them from the outside is that you pass you pass transform a sort of regular function so a function that return a value you pass and then the function that return an optional right so a monadic value because we're in the in the maybe monad in the optional monad. Right. And so, and then on optional is monadic bind. When in senders let value is monadic bind. Right. So you pass again, you pass it not a function that returns a regular value, but a function that returns a sender. Right. And, and then corresponds to flat map so flat map is is is buying is what bind is sometimes called in the
+
+27
+00:14:29.000 --> 00:15:04.000
+list monad yes only in the list monad pretty much yeah I see I see so and then equals bind equals flat map in specific contexts aka the list monad. Right. Equals let value in senders, which is the continuation monad. And so I guess, is there a concrete example, like if you've got an optional int, if you're trying to do a plus operation, you don't need to use bind or and then for this. You just use then.
+
+28
+00:15:04.000 --> 00:15:37.000
+You just use transform you just use buddy transform Yeah, this is called transform an optional. Yeah, sorry we have to navigate the Yeah, I mean, that's the problem right you know it's every It's not it's not constrained just to the nomadic monadic interface world you know across array languages They rename everything everything's got six different names, and right. It's just part part of the journey But if you're trying to do something, and I think you used this example last time, was like square root. That's not something that is ignoring kind of overflowing issues that I'm sure a certain couple of listeners are being, well, if you're at the max int and you do
+
+29
+00:15:37.000 --> 00:16:01.000
+a plus one, it's not going to... Ignoring that kind of stuff, square rooting when you have a negative is going to potentially be something that you don't want to define. It's a partial function. Exactly. And so in that case, plus 1 is just int to int, whereas square root is going to be int to optional int. And if you start with an optional int,
+
+30
+00:16:01.000 --> 00:16:20.000
+you will end up with an optional int when you use bind. And so I guess you can't use, yeah, in a strongly typed language where your function signatures have to match, you can't use a square root function that goes into optional int with then. You'd have to use and then. Yeah, yeah.
+
+31
+00:16:20.000 --> 00:17:04.000
+Well, like we said, and so bind prevents you from getting the doubly wrapped thing, right? Because it's FMAP followed by JOIN. Right. So, let's do the verticals. We've got pure slash return, FMAP and bind and then we've got in C++ sender land just then and and then and and let value and Let value yeah, and then doesn't exist in senders land and then is in optional land Oh, so are we saying that in our different monadic verticals? Yes in C++
+
+32
+00:17:04.000 --> 00:17:12.000
+We are choosing different names for these? Yes. Oh no. Yes. Is that something we should be sad about? Maybe. Maybe?
+
+33
+00:17:12.000 --> 00:17:35.000
+Is that pun intended? Oh, I see. That stood optionally. No, it wasn't. Actually, this was a topic of conversation at C++ now and some folks were doing something, Steve Downey included with it They were doing some work to try and map to try and produce The table for each where we're down down down the sides of the table. You have the different monads
+
+34
+00:17:35.000 --> 00:18:21.000
+You know, so optional is one expected is another Vector is another senders is another And across the top of the table you have the operations so just F map bind etc. a hoogl translate for monadic combinators so anyway we can be a little bit sad about that but yes in senders we have just we have then we have let value now the other thing that bind does let value, what it's really for is a runtime choice, right? Because you can choose based on the arguments that get passed to your function, you can choose what kind of sender to run next. And that's embodying this
+
+35
+00:18:21.000 --> 00:18:53.000
+idea of there's a choice at runtime. If I get a certain value, I might want to do one thing. If I get another value, I might want to do something else. And that is, that's a fundamental power of monads, right? That choice. That's, if you like, that's what monads bring to the table above and beyond functors. Is let value, is there, I don't know, I guess my reaction to this is that it's, I mean, not that bind is necessarily a better name,
+
+36
+00:18:53.000 --> 00:19:23.000
+but let value, I don't know, it does not elicit any kind of intuitive for like what it does, as you just described. Does it come from somewhere? Like I don't know it come from somewhere like I don't know if it does I don't know the origin as far as I know it's made up for senders There's this let value let error and let stopped to deal with the three different channels I should say I've just mentioned let value up till now because that's the happy path right
+
+37
+00:19:23.000 --> 00:19:55.000
+But because receivers have these three different channels, because senders have these three different channels, then you have a let over each one of them. And let value is of course the most interesting because in some sense that's what's... that's embodying the thing you actually wanted to do, that's where you wanted the choice. The others exist to handle errors and cancellation obviously, sir, right? Okay, I mean while I'm keeping up. Hopefully the listener is as well Do you have feelings or thoughts about the names of these or it's just it is what it is in the documentation
+
+38
+00:19:55.000 --> 00:20:19.000
+I I I wrote some for my in a documentation for my implementation I wrote something like if you think these aren't good names, don't at me. You know, take it up with the standards committee. I'm just interested in not introducing yet another source of confusion by changing names. So. Ah, yet another source of confusion. What is that?
+
+39
+00:20:19.000 --> 00:20:48.000
+Yasok as an acronym? Right. You should put that. Yeah, avoiding Yasok. Yeah, so interestingly senders adds, there is one more thing in the sort of functional hierarchy of constructs that doesn't really exist yet in other monads in C++, but we senders adds and that is the characteristic function on
+
+40
+00:20:48.000 --> 00:21:19.000
+applicative functors. So the hierarchy in Haskell sort of goes functor, applicative functor, monad. Every monad is an applicative functor. Every applicative functor is a functor. But in C++ we tend not to... We've got functors, we're happy thinking about those. We've got functors, we're happy thinking about those. We've got monads, we're happy thinking about those. We don't have a reification, an idea that's well formed in C++ of what's an example of an applicative functor.
+
+41
+00:21:19.000 --> 00:21:51.000
+And so we also don't tend to use apply. Again, another terminology clash, but apply is the name given to the characteristic function on applicative. But in senders, we have whenall. And whenall is actually that characteristic function. It's the apply function. And is there a concrete extension? is there an extension to our concrete example of optional ints
+
+42
+00:21:51.000 --> 00:22:36.000
+with a plus one for our map and a square root for our let value? What would apply be? Well, apply would be like transform except a variadic transform that worked over multiple optional values. One of the problems we have is that we keep on defining member functions and member functions are by their nature sort of unary because they have one object that they work on. But applicative, if we wanted it, if we wanted to apply on optionals, we'd have to make a version of transform that worked across a variadic pack of optionals. And I showed that in my talk last year, was it?
+
+43
+00:22:36.000 --> 00:23:12.000
+Yeah. Where I talked about the forgotten functional pattern, the applicative. Yeah. I have two thoughts in my head. One is that I watched that talk and I feel like I'm just learning something for the first time here So I clearly didn't grok what was in your talk. Although I do recall it was that in identifying monoids Although I definitely will say the identifying monoids one was easier to grasp for me Than the applicative talk. So that my first thought is that okay clearly I didn't understand I need to go rewatch that talk because I didn't understand it. Although I'm talking to you now, so maybe I won't have to rewatch it just via this conversation. My second thought is you said that all monads
+
+44
+00:23:12.000 --> 00:24:03.000
+are applicative functors and all applicative functors are functors. So I mean the applicative all applicative functors or functors make sense. Does that mean that all monads are variadic by definition? Because in what way? If the differentiating feature between a functor and an applicative functor is that applicative functors are variadic and all monads are applicative functors, if my understanding is correct in my head. It seems that the logical conclusion is that all monads have to be. Very adding. Yeah, I would say so. One, what the natural way to sort of spell the function or structure the function in C plus plus is to make it very attic, but if you look at Haskell,
+
+45
+00:24:03.000 --> 00:24:50.000
+Haskell doesn't do that because Haskell doesn't have variadic functions. What Haskell has is partial application. So in Haskell, an n-ary function is really n nested unary functions, right? So Haskell is able to sort of strip argument by argument, strip them off or bind them and end up and shrink down the the arity of the function that way. Right. We probably wouldn't do that in C++. We would just make a variadic function. But they are equivalent. In my talk, I got asked the question, are these things actually equivalent? And I wasn't able to give a good answer in the talk but since then in fact very soon after the talk I think David Sankal asked me that question
+
+46
+00:24:50.000 --> 00:25:39.000
+we satisfied ourselves that yes they were and the way you do that is you implement one in terms of the other both ways around and it's perfectly possible. I see okay I think this makes sense and so that means now we are at we're at in the two verticals, or I guess there's three, although you're saying that this when all slash apply does not exist in the optional and other monadic verticals. As far as I know, it doesn't exist in any other of the monads we might point to in C++. So it's in Haskell land, pure slash return, fmap, bind, apply. In senders, it's just, then, let value, and when all,
+
+47
+00:25:39.000 --> 00:26:17.000
+and then in optional, and we'll forget the rest, even though it sounds like there's a table out there that Steve Downey and friends constructed it is Well, actually, I guess we didn't cover the the pure return. It's the optional just a constructor. Yeah, and then Then try and try and or transform. It's called transform one optional Yeah, and then they also have and then so it's not then and and then. No, it's transform and and then. Oh my goodness. So you wait, wait, wait, wait, wait, wait. I mean I asked if we should be upset. The answer is folks we should be very upset. So now if we're visibly losing his cool.
+
+48
+00:26:17.000 --> 00:26:57.000
+If we if we ignore Haskell land for a second just stick with C++ folks. If you can visualize this table, we're gonna go left to right through each row so it goes it goes just optional constructor that's fine then we have then transform mm-hmm and then on the next line we have let value and then yeah oh my goodness. What are we? Yeah, we've put then into both columns now in some form. And it seems like it would have made a lot of sense if there was a then that could have been called then and the next one was and then.
+
+49
+00:26:57.000 --> 00:27:25.000
+I don't, maybe they were trying to disambiguate so that you don't reach for and then when you want then, but oh boy, oh boy, oh boy. Yeah. Anyway. That's anyway it is what it is all right we won't get upset about the naming so let's draw a line under the functional stuff and and and and talk get back to talking i think more about like let's think of senders as just asynchronous operations again because that might be a bit easier okay yeah i mean that's the problem is you're you're a big fan of Haskell.
+
+50
+00:27:25.000 --> 00:27:55.000
+I'm a big fan of Haskell, so, yeah. As soon as we start talking about this stuff, we're happy to stay in that land. But yes, ignore Haskell from now on and we're back to C++. For folks who are not okay with all of that, or... It might, and indeed for us sometimes, it's easier to think about these things as working on just just the the asynchronous functions. So when all when all is a good example that you can think like for all for all that you can put when all in that box of applicative if that's not intuitive to you, you can equally
+
+51
+00:27:55.000 --> 00:28:42.000
+think about it like when all it is where it sounds like it you give it a bunch of senders. It gives you back a sender that completes when all of those senders have completed. It's waiting for all of them and then moving on. In that sense, its name is perfect. I mean, that description totally makes sense, and that's good. But when I try to map that back to the fact that if we stay in senders land with then and let value, each of those take a lambda, we'll say. They can take other things, but they take lambdas. Whenall doesn't take a lambda, it just takes senders.
+
+52
+00:28:42.000 --> 00:29:13.000
+It takes senders, yeah. So imagine you have two separate computations going on and you want to say I'm done when they're both finished. That's when-all. Okay, I mean, it's like I said, it make when-all makes sense as its behavior, but I guess yeah, we're trying to avoid the functional talk, but my brain is trying to map the, you know, technically the hierarchy of, you know. Sure, sure. You know what I'm trying to say. We'll move on. The point being is that we're exploring an alternative explanation, staying just in C++ land.
+
+53
+00:29:13.000 --> 00:29:46.000
+But yeah, that makes it makes a lot of sense if we just think about it from that. When all take senders as arguments, waits for completion, and then, and let value take operations that have slightly different signatures, but do the same sort of thing. So those four operations, just, then, let value and when all, they give you a really nice set of basis functions that you can use to do a ton of things, right? A ton of things. Most computations are expressible with just those things, in
+
+54
+00:29:46.000 --> 00:30:18.000
+fact I would say. But, you know, and in some sense at this point we move off script as far as standardization towards what the future holds. So more algorithms that aren't necessarily proposed for standardization yet. The existence of when all implies the existence of when any, for example. Right. Right, which you can think of instead of being the and operation, it's the or operation. Right.
+
+55
+00:30:18.000 --> 00:30:49.000
+Similar to any of and all of. Yeah. And C++. And to bring it back, to just touch back to functional, when any and when all, they're like or and and. When any forms a monoid over senders, right? With the unit of the monoid would be the sender that never completes. When any, if when all is waiting for all senders to complete, that you give it, when any is
+
+56
+00:30:49.000 --> 00:31:12.000
+racing senders against each other. Right. Yes. And as soon as any one of them completes, you're done and the others get cancelled. Yeah. You can think of this as the same way as when you implement any of or all of with a std accumulate, although short circuiting aside, which is important, you pass it the std logical and std logical or, but then the identity operations
+
+57
+00:31:12.000 --> 00:32:07.000
+are true and false for their corresponding partners. Yeah. So in terms of practical application, when any is pretty important because you can model races, right? I mean, safe races, obviously, but you can race one computation against another. You can cancel something when it's been overcome by events. One simple idea here is imagine you've got a UI and the user sets off some some long-running operation with a progress bar and there's a cancel button right effectively what how you can model that is you're racing the completion of the operation with the completion of the user hitting cancel right that the user pressing cancel is one sender,
+
+58
+00:32:07.000 --> 00:32:24.000
+and the other sender is the operation that's completing asynchronously, and you're racing those against each other. Right, right. That's one example of many. Yeah, yeah, that's one example of many. Be sure to check these show notes, either in your podcast app or at adspthepodcast.com
+
+59
+00:32:24.000 --> 00:32:29.000
+for links to anything we mentioned in today's episode as well as a link to a get-up discussion where you can leave thoughts, comments, and questions. Thanks for listening. We hope you enjoyed and have a great day. I am the anti-brace. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

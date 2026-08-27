@@ -1,0 +1,153 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:55.000
+Let's get back to the taxonomy. So there's maps, first category within those, shape preserving, shape destroying. Yeah, the next category you talked about were reductions. So I consider those folds or reduces. In category theory, they're called catamorphisms, things that go from N to 1. Then you said sort of the growing category. I consider those generators. Welcome to ADSP, the podcast episode 123 recorded on March 21st, 2023. My name is Connor, and today with my co-host Bryce, we talk about a taxonomy for algorithms, stood views filter, and more ranges from C++ 20, 23, and 26. Start episode 123. Go.
+
+2
+00:00:55.000 --> 00:01:25.000
+You know StoodView's filter? I definitely know StoodView's filter. Tell me what it does. It filters things. In. And some people say, oh, it's ambiguous. No, all filters filters things in and some people say oh it's ambiguous no all filters filters thing in there's no there's no filter that i've ever found that filters things out just describe for me how it operates how it operates yeah i mean i've never looked at the implementation of it but like from a high level point of view you pass it a unary predicate, which is a function that takes a single argument
+
+3
+00:01:25.000 --> 00:01:43.000
+and it will iterate over each of your elements, evaluates the predicate on each of those elements for those that returns true. It keeps that element, AKA filters it in. And the range that you are left with has the same kind of rank, AKA it didn't reduce the rank.
+
+4
+00:01:43.000 --> 00:02:12.000
+It just potentially reduced the number of elements. So if you've got the numbers one to 10 and you filter in even ones, you.k.a. it didn't reduce the rank, it just potentially reduced the number of elements. So if you've got the numbers 1 to 10 and you filter in even ones, you're left with 5. Okay. That's a good explanation, but we're going to dive a little bit deeper down into it. I think that was a really good way of describing what it is, how it operates. But I really want to get down
+
+5
+00:02:12.000 --> 00:02:50.000
+to some of the gritty details, in particular so we can understand how this performs and how compilers see it. So std views filter is a range adapter, right? You call filter with your function and it gives you, sorry, let me put it this way. You have like some range pipe filter F.
+
+6
+00:02:50.000 --> 00:03:14.000
+What does that give you back? That gives you back a filter view, which is a range. Yeah? Correct. That is lazily evaluated. So it itself, until you perform some kind of reduction or take or collecting operation does nothing. Okay, so it's a range. And so a range is basically just a pair of iterators or an iterator and a sentinel.
+
+7
+00:03:14.000 --> 00:03:38.000
+So let's talk about what happens when we get an iterator from this range. Like we call begin on this range. We get back an iterator. What does that iterator do? What does that iterator do? What does that iterator do? I don't understand the question. Yeah, like we've gotten an iterator. We've called begin on our filter view.
+
+8
+00:03:38.000 --> 00:04:01.000
+And like what happens when we dereference that? Oh, okay, I was going to say like just calling and assigning the result of, you know, range.begin does nothing. If you dereference it, I assume it iterates through the range until it finds a value that returns true for the evaluation of the unary predicate that was passed to the views filter.
+
+9
+00:04:01.000 --> 00:04:17.000
+Okay, all right. So let's recap what Connor just said. So, when you call begin on this iterator, that, or when you dereference this call to begin,
+
+10
+00:04:17.000 --> 00:04:33.000
+when you dereference this first iterator, it's going to go and iterate through the elements. So, it's going to apply some algorithm, right? Correct. And that's, you know, it's going to apply some algorithm, right? Correct. And that's, you know, it's going to do a find if, right? The moral equivalent of that or yes, something like that. Yeah.
+
+11
+00:04:33.000 --> 00:05:22.000
+So it's, you dereference this filter iterator and it's going to say, hey, I'm going to say hey i'm going to go do a a find if on my underlying range to look for the first element that matches the predicate that i've been given okay and so then you know we go and we increment this iterator and we dereference it again and what happens we rinse, repeat what we just explained? Yeah, we're going to do another find if. Now, and I should put a big caveat here because I'm sure that there are some ranges people right now that are maybe up in arms that... I know that in some cases, some range adapters like this,
+
+12
+00:05:22.000 --> 00:05:56.000
+they actually do that searching on the, or they do that lazy operation on the increment versus on the dereference. That's immaterial here. I don't care whether it happens on the increment or decrement operation or on the dereference operation. That particular detail is not important to the conversation that we're having right now. And so what I mean by that is like, you know, instead of doing the find if when you decrement the iterator,
+
+13
+00:05:56.000 --> 00:06:27.000
+you could instead do the find if when you call begin, and you could also do the find if whenever you increment the iterator. And then whenever you decrement, you wouldn't have to do the find if. And there's also this whole thing where you can cache the results because obviously if you decrement the iterator twice, you don't want to do that find if twice, right? Like if I call begin on the filter view and I decrement it twice.
+
+14
+00:06:27.000 --> 00:06:55.000
+Right. You don't want to do that search twice. Ideally not, correct. Yeah. So ideally you'd have some caching mechanism. I don't care about that. That is immaterial to the conversation we're having. Okay. So now let's imagine that we've got a for loop, a range-based for loop that is iterating the elements of a filter view.
+
+15
+00:06:55.000 --> 00:07:29.000
+So what is happening in every iteration of this range-based for loop? The rinse-repeat thing that we talked about? Right. We are calling find if. So we've got this range-based for loop, and inside of it, in the body of that range-based for loop, we essentially have another loop, a nested loop. And that nested loop is doing a find if i mean in my mental model
+
+16
+00:07:29.000 --> 00:08:16.000
+of what's happening here we don't care about your mental model well okay i care about the compiler's mental model all right well tell me how far off my mental model is from what the compiler is doing but i would assume that this is the same thing your nested loops is kind of or maybe i'm wrong but it's uh mischaracterizing in my opinion what would be happening because each of these find ifs when you do a quote-unquote find if to get the first kept value or filtered in value you're going from zero to n where that value exists. And then the second time you do a find if, you're not going back from zero and then finding to N, the second N. You're going from N where you left off to the second N. So even though it's a nested loop,
+
+17
+00:08:16.000 --> 00:08:43.000
+it is still going to be like an order N operation because it's... That's correct. And that, my friend, is the secret word for today. What? It's still an order in operation. Well, I mean, I also wouldn't call it like a nest... When I hear nested loop, I think quadratic. So I think it's like, like I said, a mischaracterization to call it a nested loop.
+
+18
+00:08:43.000 --> 00:09:12.000
+I don't... Well, nested loops are not necessarily quadratic. I don't care about whether you think it's a mischaracterization. But the key thing here is that we are iterating over an underlying range of in elements. Yes. Right? underlying range of n elements. Yes. What filter does is filter takes a range of n elements and it produces a range of n
+
+19
+00:09:12.000 --> 00:09:47.000
+minus m elements where m is the number of elements that have been filtered out. Correct. And is potentially zero. Correct. And the same can be said about drop, take, remove if, a whole variety of different range adapters. They reduce in size the passed in range. I agree with what you are kind of saying,
+
+20
+00:09:47.000 --> 00:10:10.000
+but there is a distinction in that the repetitive find ifs that occur implicitly within a filter do not exist within a drop and a take. That's a single one-time operation that like you're, you're doing that iteration once. And then once you've either taken or dropped, like for in the take situation, you actually don't do any iterations to skip elements, only in the drop case. And that pass happens once.
+
+21
+00:10:10.000 --> 00:10:55.000
+And I don't even – I mean, maybe it actually does happen on the dereference. But my point being is that there's this kind of iterative nature of multiple findifs within a filter, whereas that doesn't – Yes, I will certainly give you that this one is more challenging than others, and that's why we start with it. As for the kind of like it's N minus M, yeah, completely they're all in the same category. Yeah. Now, there's a few other categories of these range adapters. And when we say range adapters here, just generally of algorithms like this. If we looked at the taxonomy of the algorithms library,
+
+22
+00:10:55.000 --> 00:11:55.000
+there's a family, the remove if family, that takes a thing of n and produces a thing of n minus m. There's also, you know, the transform family, which is things that go from n to n. There's the reduce family, which is things that go from n to 1. There's presumably a family of things that go from m to n plus m or n times m, you can imagine an adapter that repeats every element of the underlying range a certain number of times. So if I have an input sequence of A, B, C, and I pass it through this adapter. The adapter produces a sequence of A, A, B, B, C, C. I'm sure we have one of those.
+
+23
+00:11:55.000 --> 00:12:28.000
+I don't know which adapter that is, but I'm sure there's one in ranges V3, if not in the standard. Do you know what that one is called? You could mess around with repeat. So like your taxonomy that you're describing right now, I actually have names for each of these. So the first one is map, mapping operations. That's why you're here. And it's interesting because I actually consider filter, like there's two categories within mapping operations. There are the shape-preserving ones, which are the transforms that you described, end-to-end. Shape-preserving. And then there are shape-destroying
+
+24
+00:12:28.000 --> 00:13:14.000
+ones, which are take, drop. And there is the case, the corner case, where you don't actually destroy the shape, but in general, the shape can be destroyed. So if you filter, and like you said, you end up with n elements, technically you didn't destroy the shape but uh it doesn't that's not the case for all circumstances so in the map umbrella there's shape preserving aka the transforms and then shape destroying i'd actually be curious you said there's other ones take drop filter off the top of my head i can't actually think of a third one um um do you know? And it's, it's interesting too, because take and drop, take a sequence and an integer, whereas filter takes a sequence in a unary predicate. There is, um, there is like, uh,
+
+25
+00:13:14.000 --> 00:13:59.000
+Oh, actually there is one in range V3 called adjacent remove if. Yeah. And there's like, like there is remove if in range V3 um trying to think about it i mean what's the difference between remove if and filter it's it's not it's just an inversion right yeah so those those are the same algorithm in my opinion um i'm wondering about like what about like what about like what about like chunk no so chunk is in a different category if the listener is thinking in their head i know either go to twitter and comment on this episode or go to discussions because i'm interested if there is actually so so so chunk is an interesting one
+
+26
+00:13:59.000 --> 00:14:34.000
+because in the context of what we're discussing today, loop optimization, chunk presents similar problems to filter, which I think we'll get to later. Is there something like chunk but where the size of the chunks is dynamic? Yeah. So wait, let's get back to the taxonomy. So there's maps, first category within those, shape preserving, shape destroying. Then the next category you talked about. Split, split's what I'm thinking. Yeah, the next category you talked about were reductions.
+
+27
+00:14:34.000 --> 00:14:58.000
+So I consider those folds or reduces. In category theory, they're called catamorphisms, things that go from N to 1. Then you said sort of the growing category. I consider those generators. So like iota is the simplest example of this where you start just with a single number and then it generates you a sequence yep there's also stood generate uh there's repeat there's a bunch of these in uh rangeland they're actually called factories not generators and that probably is a better name for them considering
+
+28
+00:14:58.000 --> 00:15:22.000
+that in in python and you know coroutines land generators are overloaded in terms of how they're used so actually maybe i should start referring to them as factories, but then factory is also an overloaded term. Anyways. Yeah. And then there's this fourth category of where chunk fits into, and you just said the category name is splits. So you said, is there one where it's a dynamic shape? Yeah. And split, stood views split is the example.
+
+29
+00:15:22.000 --> 00:15:54.000
+Yeah. And well, so what's really interesting is to think about, like similarly to how within the map shape destroying category, think about how do you change the API to get different behavior? Take and drop took integers with a sequence, whereas filter took a sequence and a unary predicate. And the reason that I thought about adjacent remove if, because in my head, I cycled through, okay, you have an integer, you have a unary predicate. The other option is when you have a binary predicate, which is what adjacent remove if has. So the way that I ended
+
+30
+00:15:54.000 --> 00:16:25.000
+up thinking about that was answering the question, what do you get when you have a mapping algorithm that is shape destroying that takes a sequence and a binary predicate? And the answer to that is adjacent remove if. So if we flip over now to the splitting category, chunk, what does chunk take? Chunk takes a sequence and an integer. So that ticks the integer box. Then there is, so what do we, so maybe I'll ask you this question. I know the answers to them. What do you get when you have a splitting algorithm?
+
+31
+00:16:25.000 --> 00:16:54.000
+In this case, we'll stick with chunk specifically. And you have a unary predicate. And when you have a binary predicate. Because those are two specific named algorithms that have been discussed in ranges land. And they will be showing up in C++26. I don't know. So the more popular one is chunk that takes a sequence and a binary predicate. And that was originally in range V3 called group by, but it's now been called chunk by.
+
+32
+00:16:54.000 --> 00:17:40.000
+And what that does is it looks at adjacent elements, performs the binary operation, and then based on whether it returns true or false, it'll split and start like a new range inside the range of ranges. And a very related algorithm, but slightly different behavior is when you have chunk with a unary operation or unary predicate. And this is basically does the exact same thing. But instead of looking at adjacent elements, it just looks at individual elements. And then any time that individual evaluation of that unary function returns a different value, it starts a new sequence. And this is what is probably most likely going to be called chunk by key. And if you are familiar with JavaScript or a bunch of other sort of functional libraries,
+
+33
+00:17:40.000 --> 00:18:36.000
+a lot of times these functions are called key selectors or selectors because they are, you know, I think in Python in the iter tools library, there is a function called group or group by that does this exact thing, that it takes a unary function. And what's really irritating is that a lot of the times only one of these two flavors exists, the chunking function that takes a unary function or the chunking algorithm that takes a unary function and one that takes a binary function. And when you can – sometimes when you really want the binary function, you can get away with using a unary function. But there are times where you specifically need the binary one that looks at adjacent elements. And there's nothing – if you have access to one that just has a unary function that doesn't do anything for you so like you can implement chunk by key the one that takes a unary function in terms of the one that takes a binary
+
+34
+00:18:36.000 --> 00:19:26.000
+function and so really that's why i like chunk by i actually submitted a talk once to meeting c++ called chunk by versus zip because i think they're two of the most like useful algorithms that are missing from c++ and uh anyways that's my long so there's there's another one not to stray too far from example but um joins also another interesting case because that's another one of those growers right join takes a sequence of n and gives you something that is you know join is a reduction in my opinion because really join is just a reduction with the binary operation of concatenation applied to a list of things all right well that's going to be a topic for a whole different podcast all right so let's go back to filter.
+
+35
+00:19:26.000 --> 00:19:35.000
+So. Is this going to be a two-part episode? Because we're already. Probably. Okay. I think it's, I think it's at a point where, where it's time for us to start looking at some code. Are we,
+
+36
+00:19:35.000 --> 00:19:40.000
+are we doing the screen share thing? Because we got, we, we got to. Not yet. I, I, you're,
+
+37
+00:19:40.000 --> 00:19:54.000
+you're, you're not, you're not ready yet to see. I was going to say, we're, we made the decision to try not to share code. No, we're doing it now because we need to. We made the executive decision never to do it, but we need to now, so we will.
+
+38
+00:19:54.000 --> 00:19:59.000
+Of course. Dude, it's a programming podcast. We need to be able to look at it. Should we hit the record button? I'll just upload this to YouTube because every single time people comment, why don't you just post this to YouTube? Be sure to check the show notes either in your podcast app or at ADSP the podcast dot com for links to any of the things that we mentioned in today's episode and for a link to the GitHub discussion section where you can leave questions, comments or thoughts that you had about the episode. Thanks for listening. We hope you enjoyed and have a great day. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

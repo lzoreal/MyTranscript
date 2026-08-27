@@ -1,0 +1,257 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:03.000
+Continuous lifelong learning, though. Continuous lifelong learning is a fancy way of saying we don't actually know shit. Welcome to ADSP, the podcast, episode 23, recorded on April 17th 2021. My name is Connor and today with my co-host Bryce we talk about anamorphic algorithms and much more. We got a bunch of reactions on Twitter but then one of them was Tristan brindles saying he didn't know what segmented algorithms did um which we explained two videos ago or two two videos two uh podcast episodes ago and so there we could we could go into an explanation of like the the by key algorithms yeah so we could try and restate that just because i think it's important but also too like within that there's a class of algorithms
+
+2
+00:01:03.000 --> 00:01:23.000
+called anamorphic algorithms, which are the opposite of catamorphic algorithms. So like reductions, aka folds, or the opposite of reductions, aka unfolds, like split group by. But we can save that for another day and we can just sort of chat about. So I think the best intuitive way to understand
+
+3
+00:01:23.000 --> 00:02:37.000
+the by key algorithms is to think about them like they're batched operations. That what I really want to do is a bunch of, like I want to do reductions on a bunch of different things, but I want to batch it into one pass. And that's sort of my mental model for ByKey. Now, I've gotten into plenty of debates with people over this, whether this is a good mental model because batched APIs may look a little bit differently, but truly batched APIs would be a bit different. Like, you know, you'd be able to have different data. But I think the best way to think about it is that like you've got one set of input data and you've got some operations that you want to do on parts of that input data. But instead of doing each one of those operations separately, you can construct a single operation that will operate on those segments in one fell swoop.
+
+4
+00:02:37.000 --> 00:03:17.000
+That makes sense to me, but I could see why some people would disagree that that's a mental model you want to use yeah so i guess what do i want to what do i want to say so i guess we are going to talk about this then um so the first thing like the way that i learned about by key algorithms was by translating haskell code into sort of a c++ thrust solution and I'm almost certain that I told you about by key algorithms, like right after we met. And that was how you first heard about by key algorithms. Yeah, yeah. So I think I mentioned this in two episodes ago was that I gave my talk.
+
+5
+00:03:17.000 --> 00:03:50.000
+And then after that talk, you said, oh, you could probably just use a by key for that one solution that I had written in Haskell. That, listeners, was back when I was clever. And that was 100% correct. And this actually, so it got asked by, so Tristan Brindles, we'll put a link in the show notes. And actually, I'll just get the tweet and forward it to Bryce here so he can stare at it while we're chatting about this.
+
+6
+00:03:50.000 --> 00:04:16.000
+Copy link. And we paste it to Bryce. Exciting podcast content. On Twitter. So yeah, Tristan, he responded to one of the ADSP tweets and said, just listen to episode 20. Really, really enjoying them so far. Could you use this approach to solve the maximum consecutive ones problem? That's the third problem, right?
+
+7
+00:04:16.000 --> 00:04:56.000
+The one that we actually we actually record after that episode. I went off for three hours and tried to solve it in one pass. And then I thought i had it and so i made you get back on for us to record another hour of content where i was very excited because i thought i had the solution then i got off and i tested a little bit more and i realized i didn't have it and i told you throw out that entire so i think i think i still have that recording let me check if i still have that recording and if we do maybe at some point um oh i think he may be right ha my intuition was correct i do think you can do it in a single pass well no no so but this this is a single pass but this is multiple
+
+8
+00:04:56.000 --> 00:05:29.000
+algorithms so this doesn't um this is yeah but i'm but i'm no no no because i'm pretty sure that all of these can reduce down into like a single kernel. Potentially. So wait, so let's finish reading the tweet. Okay, okay. Tristan says, can you use this approach? I'm not sure what the thrust segmented algorithms do. And then his code, it's using a library that he's written called Flow, which is similar to ranges but has a couple different design. But basically it's sort of composable algorithm. So it starts off with a group by using a binary equal predicate
+
+9
+00:05:29.000 --> 00:05:53.000
+and then does a map of the sum operation and then just calls a maximum, which basically is if you click on this tweet, you'll see that I responded and my response shows the Haskell solution which is literally the composition of an algorithm called group which is just a shorter way to spell group by
+
+10
+00:05:53.000 --> 00:06:16.000
+with the equal predicate and then mapping some over each of those groups and then taking the maximum. So basically you're chunking together all contiguous ones and all contiguous zeros into separate lists. So you end up with a list of lists and then you just sum each of those sub lists. So all of the consecutive zeros are just going to become zero. And then anything with a one is just
+
+11
+00:06:16.000 --> 00:06:58.000
+going to be equal to the number of ones. So technically you could also map length instead of sum their equivalent in terms of uh the result that they produce a performance will obviously be a bit different and then once you do that you just take a maximum of those values i i hesitate to say this because this could very well turn into my afternoon being consumed by me once again going and trying to implement this algorithm um but i'm pretty sure that this can be done in a single pass then because the map's just a transform and the max is just a reduction. So those two fuse together. It's just a transform reduce.
+
+12
+00:06:58.000 --> 00:07:43.000
+And then the question is, can you fuse the group by into that transform reduce? And I'm not sure about that, but maybe. That's the thing, though, is and so and so we're sort of skipping around here a bit. So I apologize to the listeners if this is hard to follow. But my journey was from this solution, basically, where it starts off with group, which is just a shortcut. So group is equivalent to the algorithm groupby, where you pass it equal to. So in C++ land, it stood colon colon equal to. In functional languages like Haskell, it's just paren equal equal n paren.
+
+13
+00:07:43.000 --> 00:08:31.000
+And basically what that's doing is that is an example of an anamorphism. So you're taking a list and then the result is like a list of lists. And that's the opposite of a catamorphism, where you take a list and then you reduce that down into, quote unquote, a single value. So typically like classic reductions or catamorphisms are summing a list of numbers, taking the product of a list of numbers, taking the maximum, taking the minimum. Those are all catamorphisms. And we use those all the time. But especially in C++ land, there's a whole category of algorithms called anamorphisms, which are the opposite of reductions and we don't use those as much because they don't really exist currently in the stl um standard library of algorithms what is the opposite of
+
+14
+00:08:31.000 --> 00:09:05.000
+a reduction so the easiest example of the anamorphic algorithms is an algorithm like split so you have a string or a range of characters. You go from one to many. And you go from one? And so like classically in Python. Reductions, of course, are going from many to one. I tend to think about these algorithms in terms of communication. Because I tend to think about algorithms in terms of how you would write them in parallel. And so in a reduction
+
+15
+00:09:05.000 --> 00:09:52.000
+it's about everybody communicating information to one point um and it sounds like in an anamorphism it's about um it's sort of like a um uh a fork it's you've got one input you and you split it out into into multiple inputs yeah and that's the thing is like this type of algorithm doesn't really exist in pre C++ 20 algorithm land. And so that's why we're not, as C++ developers, we're not very familiar with them. But like when I transitioned to Haskell and functional programming, there are like a set, they're basically like several different flavors of these, and they are just so extremely useful. So like the classic one is split, where by default, you know, it splits on a space.
+
+16
+00:09:52.000 --> 00:10:37.000
+And you can usually customize that, like if you want to separate a CSV file, a comma separated value file, you can just split on comma. But there's a bunch of other algorithms that are coming in C++, you know, 23, 26 ranges that are other versions of anamorphic algorithms. So group by is going to be one of them. I'll explain that one last because it's the hardest to wrap your head around. The other two that are very popular in other languages go under different names, but typically in Swift and Rust, so I'll use their naming mechanism, are called chunks and windows. Chunks, basically given a list of 20 numbers, if you want chunks of four, you just specify an integer k equal to four, and then it's going to give you a list of lists
+
+17
+00:10:37.000 --> 00:11:28.000
+where each of the sublists has four elements in it. And so you're going to end up with five sublists because 20 divided by four equals five. So chunk is just take, take N at a time repetitively. Windows is the exact same thing, except instead of having non-overlapping sublists, they're overlapping. So, um, and technically there's usually like a general version of this algorithm called like, uh, it's sometimes it's called windowed. Sometimes it's called sliding. And that generalized version, it has like three different parameters. And the two key ones are a step size, step size equals x, and then window size equals y. And so by specifying the step size and the window size to be the same, you get chunks. And to specify the window size to be whatever x and the window size to be the same, you get chunks. And to specify the window size to be whatever x
+
+18
+00:11:28.000 --> 00:11:47.000
+and then the step size to be one, so you're only stepping one at a time, that's the example of windows. And so sliding... Go ahead. And for those who come from the HPC space or the numerical computing space, the idea of window is very similar to the idea of a stencil.
+
+19
+00:11:47.000 --> 00:12:27.000
+Yeah. And the idea of chunks is very similar to the idea of tiling up your problem. Yeah. I think literally in certain languages, tiling and stenciling is the exact same thing as windowing. Windowing typically is just in a single dimension, though, and in APL for sure, when you're doing it in more than one dimension. So if you're instead of a list of numbers, you have a matrix of numbers that's classically referred to as a stencil or a tile. And windowing is something that we very commonly do with C++ algorithms today. There's a series of algorithms
+
+20
+00:12:27.000 --> 00:13:18.000
+that take two different input sequences. Like there's an overload of transform that does this. There's a overload of scan that does this. And a common pattern, for example, we used it in that word count example that we talked about two episodes again, a common pattern is to have your two input sequences be from the same actual underlying sequence where the first input sequence is zero to n minus one of your input sequence. And the second input sequence is one to n. And so what that gives you is that at each iteration, you're going to get, you know, like in the first iteration, you'll get element zero and element one. In the second iteration, you'll get element one and element two. That's a window. Yeah. And that technically is,
+
+21
+00:13:18.000 --> 00:14:08.000
+that is implicitly the behavior that's going on between algorithms adjacent difference and adjacent find. They're finding a way to take a window of size two that steps by one. So it's a very common in functional languages. They call it zip tail or like that's the pattern. And there's a number of different names. But so the three anamorphic algorithms that we've talked about so far, split, windows, and chunks, they all have something in common. And that's that they specify a list and then a value. So split specifies, like we were talking about it in the sense of strings, but in Haskell, a string is just a character of arrays.
+
+22
+00:14:08.000 --> 00:14:52.000
+So if you've got an algorithm called split, you could have numbers there and you could just split on the number one or the number 10. It would work just the same. Connor meant to say array of characters, not character of arrays. Oh, sorry. A list of characters, yes. And for windows and chunks, you're just specifying an integer value for the number that you want your window size to be. And so these are extremely useful. But then there's a whole other set of anamorphic algorithms that instead of taking values, take either unary or binary predicates. And these are like, in my opinion, what are the truly, truly powerful algorithms. So in the problem maximum consecutive ones, this is where we want an anamorphic algorithm that we can actually use a version of this algorithm that takes a unary predicate or a binary predicate. So group or group
+
+23
+00:14:52.000 --> 00:15:34.000
+by, so group is basically a specialization of group by that already has the binary equal to predicate hardcoded in there. But group by, you can specify that binary predicate to be whatever you want. And in this case, we would want it to be equal equal, which is why we're just using group. But we could actually use a different version of group by that instead of taking a binary predicate, just takes a unary predicate and says, you know, group by some unary function. And whenever it's returning the same value, group those together. And whenever it's returning a different value, you want to start a new sublist. And because we only have ones and zeros, technically, you could just do a group by with a unary operation that sort of groups based on whatever
+
+24
+00:15:34.000 --> 00:16:16.000
+that returns. Here, we can just use a group by and then identity. And so pass it back 11111. So basically, anytime you get the same value, you're going to be grouping them. And this is what makes group by confusing is that there's actually like three different implementations of group by there's the group by from SQL, which is basically not like the two we've been talking about so far. So it doesn't have anything to do with the order in which you are traversing your sort of list of data. It basically is just going to give you a hash table at the end of the day, and you provide it a unary operation, and that any value that returns you some value x based on that unary operation gets put in a bucket in this hash table.
+
+25
+00:16:16.000 --> 00:16:43.000
+So the easiest example, or an easy example, is if you have the numbers 1 to 10, and you want to group by, you want to do an SQL group by on whether or not the values are even. And so you're going to end up with basically a hash table with two keys, true and false. And the true one is going to contain all the even numbers, 2, 4, 6, 8. And then the false value is going to, or false key is going to have all the odd numbers.
+
+26
+00:16:43.000 --> 00:17:08.000
+If you were to do a group by with a unary operation that actually did care about the order, that's what the Python group by from iter tools does. You would just end up with a list of sublists where every sublist is a single character because the result of applying even to each number in a sequence, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, is going to be true, false, true, false, true, false, true, false. So it's just going to start a new sub list.
+
+27
+00:17:08.000 --> 00:17:37.000
+So basically, the SQL group by doesn't care about order. And then there's two types of group bys that do care about order. One takes a unary predicate and only looks at a single element at a time. And then the other one is a binary predicate that looks at adjacent elements. And this brings us full circle back to the by key algorithms, because that's how I think of thrust by key algorithms is that by key algorithms, correct me if I'm mistaken, but all basically look at adjacent elements
+
+28
+00:17:37.000 --> 00:18:18.000
+to determine the segments. So a reduced by key is doing a basically like a single pass reduction. Obviously, in parallel, it's going to be different, but you can think about it like that. And anytime the binary predicate returns false, you're going to start basically a new segment. And so for the maximum consecutive ones, the default binary predicate once again is equal to, and then we just provide another binary operation to do the reduction, which is the sum in this case. And so we call them segmented algorithms because we're providing each of those algorithms with a binary operation or using the default equal to in order to implicitly create these segments within the list.
+
+29
+00:18:18.000 --> 00:19:04.000
+And then on top of that, we're doing a reduction on that list. So in a sense, the thrust by key algorithms are anamorphic behind the scenes, but because we're immediately doing some reduction afterwards, or I guess that's the thing I'm just talking about reduced by key. So maybe it's useful at this point to talk about another you are right that it is when you know, the predicates always binary. Yeah. Yeah. And so that's that's sort of like, you know, the predicate's always binary. Yeah. Yeah. And so that's sort of like, you know, you gave an explanation at the beginning, and I was trying to map that back. So, like, whenever I think of by key, I always think of Haskell or we're going to be getting a group by in C++ 23 ranges, hopefully, if not 23, you know, a later version, a group by algorithm that takes a binary operation.
+
+30
+00:19:04.000 --> 00:19:41.000
+And that's what I think of. So basically, in a more composable algorithm library, you're just calling group by or some anamorphic algorithm that does some segmenting or grouping. And then you're doing something after that. And in Thrust, the way that we give you that ability is in these by key algorithms that are reduced by key or inclusive scan by key um so maybe let's think of like what is a i know that there's a unique by key um so let's like just without looking at the docs a unique by key so unique in c++
+
+31
+00:19:41.000 --> 00:20:15.000
+is doesn't doesn't deduplicate it deduplicates adjacent equal elements yeah yeah they unique if you want if you want to get all the unique elements you don't need to sort it first so it it's um uh it's a version in some ways of of an algorithm we have in cub called run length encoding which is basically an algorithm where it goes and it finds all the consecutive elements and it like compresses them. So if it goes and finds 10 elements that are the same, it replaces them with one element in a count of 10.
+
+32
+00:20:15.000 --> 00:21:10.000
+Right. So it's very similar in practice to what Unique is. You can sort of think of it as like a you know a form of compression almost so yeah i'm at the docks now and the example that's shown on the thrust docks are our keys are one three three three two two one and our values are nine eight seven six five four three so just descending from nine and then when you do a unique by key on those um keys and values and in this example it's passing in the equal to binary predicate but i assume that's the default so technically you can omit makes sense uh i think and then the first four values in b
+
+33
+00:21:10.000 --> 00:22:02.000
+are now nine eight five three interesting is that actually what i would expect so i'm like it's a little it's a little surprising because it um it will discard it's sort of like um it's sort of like having a map where um uh if you if you try to insert an element that already exists you you know you discard the um the new element um or like json has this property too where like i believe where you can have like duplicate um keys and it's sort of unspecified in JSON, which of the values for duplicate keys will be used. And I'm pretty sure that thrust unique by key guarantees that it'll always be the first one in order.
+
+34
+00:22:02.000 --> 00:22:33.000
+This is interesting though, because this is almost an entirely different class of algorithm. This is really just stood unique or thrust unique with a second range that follows the same mutation. Whereas reduced by key really is two different operations. It's, it's segmenting and then it's doing reductions on those segments. Whereas here, really, you're just doing unique on two different ranges and you're specifying
+
+35
+00:22:33.000 --> 00:23:18.000
+that you want the keys to be the one where we're determining uniqueness from. So maybe let's take a look at a different by key algorithm. We've got reduce by key key scan by key is not going to be easier um yeah what's a sort a sort by key there we go that's yeah sort sort by key is i think more the example that you're looking for or we talk about merge by key but that's a weird one yeah i would assume that sort by key determines the segments based on the binary predicate and then performs a sort operation on each of those segments which is right analogous to the reduced by key so we're just replacing the reduction with a sort our keys are one four two eight five seven and then our
+
+36
+00:23:18.000 --> 00:24:06.000
+values are a b c d e f and keys are now sorted interesting okay my mind's being blown here this is not at all this is this is exactly what unique did well this is this sort sort by key is just saying like like i have a separate data and and separate keys it's it's i think one might argue that naming the scan by key and the reduce by key algorithms, I think are a different class of things than the sort by key. Sort by key. And this has been one of the criticisms of the by key interfaces and thrust in general.
+
+37
+00:24:06.000 --> 00:24:41.000
+In Cub, which is the CUDA-specific backend of thrust, there is an explicit notion of segmented algorithms. There's not this notion of by-key algorithms. And in Cub, the version of this sort is not called sort by key. It's just a sort that takes disjoint keys and values. That's what this is. Whereas in Cub, if you want a reduce by key, I believe you need to use a segmented reduction. I could be wrong about that.
+
+38
+00:24:41.000 --> 00:25:09.000
+This makes sense, though. Yeah. So this is fantastic. I apologize to the listeners if you all are confused, but I just, I just learned something, um, which I think is extremely important. And it's that it's exactly what Bryce just said is that really the reduce and the scan, um, by key algorithms are actually the only ones that are really following this anamorphic behavior that I've described,
+
+39
+00:25:09.000 --> 00:25:36.000
+where we're first identifying segments and then doing either scans or reductions on those segments. So far, we haven't checked them all, but unique by key and sort by key, what they're doing is they're basically just saying, perform this algorithm on the keys and then also perform the same mutation on the values so we're sorting the keys and so basically it's the same behavior um wow wow yeah it's the
+
+40
+00:25:36.000 --> 00:26:20.000
+same behavior if you basically were to just take a single range put them in pairs yeah and uh building up a std unique that worked on a pair and only checked the first value of that pair, it would be a little bit more complicated to write up. That is essentially what you're doing. You're deleting all adjacent equal elements, but only based on the first. And this actually, this is going to make no sense, but there's something from a combinatory logic called the psi combinator, P-S-I, which is where you perform a unary operation on two different things first and then perform a binary operation. So it's similar to the S combinator, which is what's called forks in APL.
+
+41
+00:26:20.000 --> 00:26:57.000
+And like what I just said made no sense, but when you see the examples, it makes complete sense. So say I want to take the difference between the length of two strings. What do you do in that example? You've got the string cat and the string mouse. You first apply the size or the length operation, which gives you 3 and 5, and then you perform the binary minus operation on three and five, which gives you two. So that is an example of using the psi combinator, where basically if you compose together minus and size with the psi combinator in a language that supports it, you can just automatically
+
+42
+00:26:57.000 --> 00:27:23.000
+basically feed two arguments cat and mouse to that, and it works, which is basically what sort by key and unique by key are kind of doing. Note that in Haskell, the psi combinator is what's known as on, O-N, from the data.function library. And in APL, we actually have the psi combinator as well. They call it something different. It's beside, I believe. They make names up for things.
+
+43
+00:27:23.000 --> 00:28:29.000
+And it's known as like the, uh, big circle with two dots on top of it. Not that anybody cares. Um, are you looking something up? Yeah. So, so I'm looking at what cup does. So cup has a distinct reduced by key and segmented reduced by key. Um, uh, and there's some nuance in the difference between them. And it also, I don't believe it has a segmented sort. It just has the sort and then the sort that takes either disjoint key values or just keys. Um, but, uh, yeah, it's, it's, I, I, I am, I suspect that the, that the device segmented reduce, yeah, yeah. Device, the segmented reduction in Cub, um, uh, I think it can, it can work over disjoint regions of memory, not just one consecutive region of memory.
+
+44
+00:28:29.000 --> 00:29:12.000
+But I could be wrong about that. Yeah, yeah, because the segmented one in Reduce, it takes like offsets in a number of segments in addition to an input. Yeah. So, I mean, I think I would argue that it's probably reduced by key and sort by key is probably a, and like unique by key, it's probably not a good naming convention because I think they're actually quite different in how they operate.
+
+45
+00:29:12.000 --> 00:30:00.000
+Yeah. Arguably, I think sort by key, unique by key, the ones where they're actually doing something by applying the operation to keys, that makes sense. But for reduce by key and scan by key, basically anything that's not applying a mutation and is doing some sort of reduction or operation, those ones should be called like group by reduce or group by, or like that's the problem is that the fact that there's three different definitions for group by the SQL one, the unary operation one, and then the binary operation one makes it seem that potentially group is not the best name but like identifying the fact that you're doing this like so yeah like a segmented reduce or a segmented scan inclusive scan might be better um because really there's no the fact
+
+46
+00:30:00.000 --> 00:30:47.000
+that you're passing a binary operation to unique by key has nothing to do with segments. It has to do with that's what unique requires. Unique requires and sort by key, if it's taking a binary operation, the only reason it's taking it is because it's for a custom comparator. It's not actually because it's identifying segments. Well, that's fantastic. Well, it's fantastic for me because I learned something. Whether or not our listeners learned anything. So I'm still wondering whether the max consecutive ones can be done in a single pass. And I'm starting to become convinced that it really can't because you sort of need global information before you can make that decision. Like, you sort of need to look at everything
+
+47
+00:30:47.000 --> 00:31:16.000
+before you can decide whether, like, who is the maximum one. But, but... If we had an algorithm called, and literally at one point I wrote this algorithm, I didn't call it segmented reduce-reduce. I called it sliding reduce-reduce because it's such a common pattern. And in APL, it's so easy to build it up because you just do an NY's reduction, which is a segmented reduction.
+
+48
+00:31:16.000 --> 00:31:52.000
+And then you do another reduction on top of that. And like juxtaposition, literally just putting things side by side is basically composition. But like having the sliding reduce, reduce algorithm in pre ranges land is very, very useful, because you're doing a slided reduction, and then a reduction over the results of those reductions on the segments. And that's the thing is in ranges land, this becomes such an easy thing to build up because we have an algorithm called sliding that gives us the segments, then we just map a reduction over those segments. And then we just call another reduction on the result of those reduced segments.
+
+49
+00:31:52.000 --> 00:32:28.000
+And so by just, you know, composing three different algorithms together, sliding, transform with a reduction in the lambda, and then a reduction as our final algorithm, you get the behavior that you want. So, okay, here's a question about maximum consecutive ones. When we're doing the reduce by key, within the reduce by key, when we get to the end of a series of consecutive ones, we know it, right? The algorithm knows it, yes. So then, I I mean I think you definitely could do it in a single
+
+50
+00:32:28.000 --> 00:32:42.000
+pass the simplest solution would be you just have an atomic that would have the maximum length and when you get to the when you get to the end of to a run of consecutive ones you just
+
+51
+00:32:42.000 --> 00:33:30.000
+check that atomic you just check that atomic and you the value in that atomic is less than your length, then you try to set it with your length. And then at the end, you're done that that atomic should have the length of whatever the maximum run was. I do suspect that there's a way to do it without an atomic, though. Isn't that just like you're saying, just have a global variable that I can write to? Yeah, essentially. Isn't that cheating? I don't think it's cheating. So you're calling an algorithm, and then at the end of the day, you don't want any of the output.
+
+52
+00:33:30.000 --> 00:34:04.000
+You don't want the keys. You don't want the values. You can discard all that stuff. What you want is some global that you were you're finding the length of these, you're finding the length of who has the longest consecutive sequence. And that iteration is, yes, it's a reduction,
+
+53
+00:34:04.000 --> 00:35:04.000
+but it's like a localized reduction. And then once you, like, if you can, once everybody's done their localized reduction and found their maximum in the general neighborhood of where they are, then it's just a matter of um uh reducing globally down to who had the greatest one um yeah yeah definitely that would work but i'm not actually sure you can hook into reduced by key like passing it a custom you might be able to like passing it a custom binary operator that basically does equal to but then in the two different cases does the writing to the atomic um but at that point in time i don't actually yeah your your binary operator that's doing the equal to doesn't have the length well so so when we tried to solve this two weekends ago um we tried to do it with
+
+54
+00:35:04.000 --> 00:35:35.000
+like a reduce that it was a heterogeneous reduce that accumulated into some state. And that proved to not work because of associativity. But it's sort of in the same way that we have like a transform reduce. I think sort of what we need here is like a reduce reduce by key, sort of a two-phased reduction. That's what I just said. Yeah, like a group by reduce reduce. Yeah.
+
+55
+00:35:35.000 --> 00:36:12.000
+Group by reduce reduce. That's the thing is it sounds like a silly name, but in terms of like, but that's the thing is like, I'm not knowledgeable enough to know that in thrust 2.0 land where we have composable like parallel composable algorithms is like i would imagine that a group by reduce reduce is going to result in like much more performant code than a composed group by and then a transform of a reduction and then a reduction like i i don't know enough about compiler optimizations my guess is whatever parallel code gets launched behind the
+
+56
+00:36:12.000 --> 00:36:54.000
+scenes isn't like equivalent to a single algorithm called group by reduce reduce where we can definitely implement that algorithm with like the fewest number of kernels as possible. I mean, I, I, I, I believe that this is something that you can fuse together. Like, like ultimately, ultimately, I think it's just like the underlying kernel is a reduction. And it's just, it's just a question of sort of like, it's just like phase reduction. But yeah, like I think if we were, I think in the future, if we were writing this with like a range-centric thrust,
+
+57
+00:36:54.000 --> 00:37:16.000
+we might have a way of expressing this more natively. If, I don't know, now that I've had further insight in this, maybe if I had the time this afternoon, I would go back and give it another whirl. Every time we start talking about thrust, we end up realizing, how come there's no parallel fold left?
+
+58
+00:37:16.000 --> 00:37:42.000
+Oh, we named these algorithms wrong. It shouldn't be by key. They should be group by group. That's all right, though. Like I said, even if our listeners did yeah i think that i think that reduced by key probably should have been called group by um uh yeah by reduce because i think it's sufficiently different from what um oh yeah yeah like group by reduce or something like that um i think it's sufficiently different
+
+59
+00:37:42.000 --> 00:38:17.000
+from what theuce does. Which is sad because I just gave my GTC talk. And, you know, what is continuous lifelong learning, though? I will say that two of the coolest... Continuous lifelong learning is a fancy way of saying we don't actually know shit. So we got to talk about C++ now a little bit? Well, I will be giving a keynote at C++ now on what belongs in the C++ standard library.
+
+60
+00:38:17.000 --> 00:38:57.000
+And yeah, it's interesting the act of presenting remotely because for GTC, we had to record our talks. And usually I have like two slides for every minute I'm going to be talking. And I usually end up going a little bit long on content. But I found for like pre-recorded talks, I was like way short on, like I went at a much faster pace through my slides. And I think it's because with prerecorded, you're able to stop yourself from going off on tangents. I think that's it. It's like it's just better discipline and control.
+
+61
+00:38:57.000 --> 00:39:43.000
+But yeah, I think the keynote is going to be interesting. I think that there's going to probably be three pillars to the talk. And those pillars will probably be the question, what belongs in the C++ standard library, and sort of like fundamentals of standardization and the challenges associated with it and what the standard library is. And then I think that there'll be a pillar where we'll talk about um stability versus velocity and we'll talk about what abi is and then i think we'll we'll end up talking about um package management um and then build systems by way of that um so yeah i think that's i think that's what the talk will will be about um
+
+62
+00:39:43.000 --> 00:40:09.000
+yeah you heard you heard that I retired from speaking? You retired from speaking? Yeah, you didn't tweet about it. I tweeted that because Tony's giving one of the keynotes. Yeah. And someone, he tweeted about it. Someone responded to him saying, oh, that means you won't be able to win any awards this year because keynotes aren't eligible and then tony for some reason blamed me and said that i spoke to the committee and obviously changed the
+
+63
+00:40:09.000 --> 00:41:20.000
+rules to get that to happen and then uh so that i could win more awards and i said haven't you heard tony i've retired you've not retired i have a talk you just yeah i know that was my last talk that was my 20th talk in just over two years, of which 55% have been virtual. So I have now spoken more virtually than I have in person. And I've retired at the young age of 30. me like by a by a few months yeah you are you are older than me by a few months yeah i'll be 30 in in july folks which me which means the uh the the jokes about me being young uh can can uh can can terminate well no so that's the other thing that you're gonna have your birthday in canada next year is that right i'm gonna have my birthday in canada next year yeah 2022 cpp north oh yeah yeah yeah i'll come do that yeah we got lots of we got lots of waterfowl here bro i'll take you to the i'll take you to the ponds we got a beaver um we had two beavers but then one of the beaver
+
+64
+00:41:20.000 --> 00:41:25.000
+uh was either killed or died and maybe i'll save my um well well should i i have i know the i know a good talk that i would give but should i should i ruin it should i spoil it for the audience sure we always that's the thing i've spoiled my tattoo my my my apl talk we just anyone that listens to this podcast wait remember we're getting the rotate tattoo oh that's right that's right uh i but here's the thing nobody's gonna remember i can spoil it now because it's a year off nobody's gonna remember but i have a talk about naming that i'd like to give and so maybe i'll give that at uh at c plus c plus plus north thanks for listening and have a great day There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

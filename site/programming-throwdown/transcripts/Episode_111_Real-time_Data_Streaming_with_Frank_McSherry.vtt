@@ -1,0 +1,693 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:05.000
+Hey everybody, so this is going to be a really, really interesting episode. A lot of folks are interested in big data. Big data is still hugely, hugely important. It's still growing at a really, really fast pace. There's so many companies that are figuring out how to manage a lot of information that is coming through and how to harness that and how to use it to make better products. And so we're here to talk with Frank McSherry, who's the co-founder of Materialize, who's going to really kind of walk us through really what is real-time data streaming, how that works under the hood, and how everyone else can kind of get their hands on
+
+2
+00:01:05.000 --> 00:01:45.000
+this tech. So thanks a lot for coming on the show, Frank. Oh, it's not a problem at all. It's my pleasure. Cool. So how are you handling the COVID situation, the work from home? How has it kind of changed your day to day? Yeah, it's maybe unsurprising. It's changed everyone's day to day pretty substantially substantially we went from being a group of people who are basically all in the same room more or less you made a sort of 16 person office that everyone showed up and worked and you know a certain collaboration style and that sort of pivoted 100 180 degrees to everyone is somewhere else and you know it's in some ways good like from my point of view we need to be a lot more thoughtful
+
+3
+00:01:45.000 --> 00:02:00.000
+about our communication and our processes and stuff like that. You can't just yell at someone to try to figure out how a thing works. You have to ideally write it down and everyone can see at that point. I don't know, but super disruptive, yeah. How do you handle that situation
+
+4
+00:02:00.000 --> 00:02:33.000
+where someone needs to ask for help? I found this is a real challenge with our team is it used to be you kind of just yell and whoever, uh, someone will just, you know, kind of jump in. But now it's like, if you posted the chat, it's kind of a little bit more disruptive and there's this kind of Mexican standoff among all the folks in the chat, like who's going to answer this. And, uh, yeah, I was wondering how, how do you deal with that? It's you're right. It's, it's definitely a little tricky. I think at the moment, at least we, how do you deal with that? You're right. It's definitely a little tricky. I think at the moment, at least, we're still, you know, things are changing, of course,
+
+5
+00:02:33.000 --> 00:02:56.000
+but we're small enough that there's still some sort of sense of ownership for who is in charge of a certain thing. And that person might not be looking at the moment, but there aren't a bunch of people saying, oh, not me. I didn't do it. Generally, there are enough folks who are interested in sort of the health of the good and stuff like that, that someone will pipe up and say, like, I thought it was this, or here's a PR that looks relevant. Maybe that's where the problem is. Yeah, makes sense. Makes sense. Yeah, I think I've been telling folks to try to do point to point,
+
+6
+00:02:56.000 --> 00:03:40.000
+like it might be easier to message one person and that person tell you go some like, it's actually this other person, then you message the group because you end up in this situation where uh potentially maybe no one answers and and everyone's kind of looking at each other but but yeah i think that all of these things and and whiteboarding is another thing i've found to be a real challenge but all these things i think will will be able to make you know that we'll be able to sort of make progress in these areas it's just going to take time yeah no it makes it very clear that this is, for me at least for sure, this was an underappreciated aspect of how do you get work done. We can certainly, we're faking it a little bit now in terms of figuring out the right ways to communicate, but clearly people who are good at
+
+7
+00:03:40.000 --> 00:04:18.000
+remote first, for example, it's impressive that, oh, wow, you must have some great processes in place, or just fundamentally different ones, but clearly more robust to someone isn't available for a little while, or someone's sick or something like that, and they're just out for a bit. Can your org resist that? It's neat stuff. And I hadn't really thought very hard about this at all beforehand. Yeah, yeah, definitely. Yeah, it's wild how it just kind of happened right away. I mean, I still actually have, you know, a bunch of little tokens and picture frames and stuff at my desk, I think. I mean, I don't even know if someone cleaned them off or not.
+
+8
+00:04:18.000 --> 00:04:50.000
+But, you know, it's just one day we were told not to go into work. And so it's just kind of like, I wonder if it's just, if it's just a snapshot of March, 2020 over there. I mean, I don't, I can't even get in the building. So I don't know. We had that for a bit. We had someone go in, we were at a, we work essentially. And our, our lease was up at some time in June or so. And we had some folks go in and basically put things in boxes and put addresses on them and ship them. So you got like a, essentially a care package, which was this was the stuff that was on your desk, which is a bit like, well, it's nice to have,
+
+9
+00:04:50.000 --> 00:05:07.000
+but it's also a bit weird to think, like basically just been moved out or something. Yeah, totally. It's very emotionally jarring, a lot of the stuff. I'm sure for many people for many different reasons, but that's also been a big problem, I would say. There's the mechanical aspect of writing code and building a business,
+
+10
+00:05:07.000 --> 00:05:34.000
+but there's also just big emotional attacks on a lot of folks who are trying to get their head around the world being different and stuff like that. Yeah. Yeah. Totally makes sense. So, so let's rewind from, from the materialize in the, in the, we work and let's kind of start from the beginning and kind of what's your backstory and what kind of led to you co-founding Materialize? Yeah, okay. Well, it goes back a ways.
+
+11
+00:05:34.000 --> 00:05:49.000
+Tell me if, no, that's too far. Speed it up. No, go for it. I mean, you could say, you know, first there was the womb and then- Yeah, yeah. No, I think like in terms of formative moments, you went to grad school, standard computer computer science education went to grad school which is maybe a
+
+12
+00:05:49.000 --> 00:06:31.000
+little less standard and did some some great work with i thought great work with anna carlin who's this person who works at these are intersection of theory and systems work and got a little bit of a taste for both you know thinking about things for long enough that they make, but also trying to get your head around whether the thing that you've thought about should actually be turned into something that computers do. It actually results in something meaningful and of consequence. From there, I went to actually start working at Microsoft's research lab in Silicon Valley, which was there for 12 years or something like this. Lots of great people. This is very formative. This is a lot of really interesting combination of theoretical computer
+
+13
+00:06:31.000 --> 00:07:28.000
+scientists and people working on systems, in principle distributed systems, but computer systems. And a great place to really learn a lot. The people there were very strong. And you learn a lot both about the actual technical bits of computer science, but also how to think about research, how to do things of consequence. You're relieved a bit from a bunch of the academic pressures of publishing at a very fast cadence and sort of wait until you've actually got the thing that you think is right before telling people about it. Yeah. Were you there when MSR in Silicon Valley closed down? I was. Oh man, that broke my heart. I mean, I read about it in that I'm totally happy.
+
+14
+00:07:28.000 --> 00:07:52.000
+I have to be careful framing this, but like it was a very comfortable place. And I do kind of like the idea that folks get moved out of their comfort zone occasionally and have to go and do new and interesting and different things. And I was very happy that I was moved out of my comfort zone because I feel like the time after that was, for me at least, was very good. I got to do new things, think about new stuff, try different ways to the world that I wouldn't have bothered to do if I had still been around. I would have just stayed there for another 12 years
+
+15
+00:07:52.000 --> 00:08:17.000
+on autopilot, writing papers, doing things. So I'm personally glad that I got shaken up a bit by that, though I have lots of colleagues who weren't nearly as glad. Yeah, I mean, I was in a similar position where I had a job that was very, have lots of colleagues who weren't nearly as glad but yeah I mean I was in a similar position where I was had a job that I was you know very it was a very comfortable job and I was getting kind of good ratings and um and I had a in this case you know I didn't I wasn't I chose to take this
+
+16
+00:08:17.000 --> 00:09:01.000
+opportunity but I was always kind of you're always kind of really nervous leaving your comfort zone because you feel like I can never really go back and and uh you know and kind of really nervous leaving your comfort zone because you feel like i can never really go back and and uh you know and kind of taking this big risk um but you know there's two things that i kind of learned from from my experience and i'd love to hear what you learned from yours for mine i learned one is that no matter how kind of much time and energy you've put and how much you're part of the process at your current company that when you leave everyone else just picks up the slack and like you know you i actually thought that is the team was going to struggle a lot more than they actually did they were just fine and the other thing is going the other direction you know you can always go back and uh people you
+
+17
+00:09:01.000 --> 00:09:21.000
+know if you tell your boss you're leaving and why you're leaving, provide it's on good terms and everything, they're always happy to welcome you back. And so both of those made me feel a lot better. Now, obviously in the MSR case, there was a going back, but I know from someone who saw that from another company that there's always really good opportunities
+
+18
+00:09:21.000 --> 00:09:34.000
+for good people who work hard. I think that's totally right. I mean, those, my experience as well, which is that mechanically it would have been difficult to go back to Microsoft at the time based on how things happened. But if you're,
+
+19
+00:09:34.000 --> 00:09:49.000
+you know, if you're good at what you do or close enough, there, there's lots of opportunities out there for a lot of different folks. There shows up a bunch to be totally honest in the startup space as well, where we just have materialized, continually have these conversations with people that we're, to be totally honest, in the startup space as well, where we just have materialized, continually have these conversations with people. We're trying to
+
+20
+00:09:49.000 --> 00:10:38.000
+recruit great people who have a cushy job somewhere and are a bit worried about the risk, right? The risk of like, well, do I want to leave my job to do something that's a little riskier? What happens if in the worst case scenario? And the answer is usually, well, the worst case scenario is you just go back to your existing job or something similar. It's not like they're not going to be at your throat just because you wanted to go off and do something interesting. Generally, they're super welcome to either have you back or, you know, doing a similar thing at a different company if for any particular reason your opportunity is gone. So it's a thing that you don't, I certainly didn't think of ahead of time. I thought like, wow, it's really comfortable here. And indeed, if I go somewhere else, it's gonna be tricky to get this again. And it doesn't, it's not necessarily the case. Yeah, that makes sense. I've heard that in the startup world, you know, there's,
+
+21
+00:10:38.000 --> 00:11:14.000
+yeah, it's a really good point. In the startup world, there's a sense less protection. Like, for example, if you're at a startup and the startup pivots and they just don't need your particular skill anymore, then you could, you know, be let go for that. Whereas if you're in some giant company, there's almost like always someplace you can go or they'll give you time to retool. And so that can make people nervous, but the same thing still applies that, that, that there's always kind of a, you know, a ton of demand there. And so if you find some startup that's doing something you're really passionate about, you know, you can, you can join it with, with confidence.
+
+22
+00:11:14.000 --> 00:11:52.000
+I think that's right. I mean, that's certainly been what I've seen. And I, that might be coming from a position of privilege for sure, but it's certainly the case that although a startup might do something surprising and you decide you don't like them anymore, or maybe it just doesn't fit. And that's bad news. The larger world is at the moment still really excited for computer scientists, especially ones who are doing bold, innovative startup-y things. Usually companies are pretty happy to get in touch and find something for you to do. Yeah, that makes sense. So you were at MSR and then did you go from there to another big company or did you jump straight into the startup world?
+
+23
+00:11:52.000 --> 00:12:11.000
+Yeah, no. Actually, what I did is I hadn't taken any vacation in the 12 years I had been at Microsoft. No vacation of consequence. Wait, no way. Are you serious? I had taken one like a year or two before I took about three weeks off. But other than that, it was all, you know, visit folks for the holidays type things. No particular vacations of consequence.
+
+24
+00:12:11.000 --> 00:12:28.000
+Did your vacation accumulate? How did that work? Is there a limit? I mean, it's California, so they're not allowed to. It's, you know, it builds up, but it maxes out at some six weeks or something like that. And so you just had maxed out. You're just shedding vacation days for years. That's wild.
+
+25
+00:12:28.000 --> 00:12:46.000
+I mean, you must be really passionate about what you're doing. No, I mean, yeah, maybe, but no. It was much, I certainly hadn't at that point in my life come across building up a good work-life balance and sustainability and stuff like that. It just- Yeah, actually, we should do a show on that.
+
+26
+00:12:46.000 --> 00:13:04.000
+Maybe we'll invite you. We'll invite you to talk about work. I don't think people want my advice. We never covered that. And now that you mention it, that's so, so important. It could easily be a whole hour. This past year has made that really clear, I think. We've had a lot of folks at the company
+
+27
+00:13:04.000 --> 00:13:18.000
+that are just getting wound up and stressed for non-standard reasons, It's made that really clear. I think like a lot of, we've had a lot of folks at the company that, you know, just getting wound up and stressed for nonstandard reasons, right? Like not things you would have anticipated, not things that you sort of put on your calendar as make sure to, to unwind. And it's been really important for us to try to pay attention, remind people that like,
+
+28
+00:13:18.000 --> 00:13:45.000
+you should absolutely think about taking time off. Don't sweat the fact that you can't go to an Island somewhere and, and drink, you know bright colored drinks yeah take some time yeah you know i i get these automated emails from uh when people get close to their limit on on pto um and uh you know usually i mean i've never even i don't think i've ever seen them before but now everyone is at their limit and and i think you hit the nail on the head,
+
+29
+00:13:45.000 --> 00:14:17.000
+people say, well, you know, I don't want to go on PTO if I'm just gonna have to stay around the house. But then they're completely burnt out. And so you almost have to kind of force people and say, look, you need to spend a week just sitting around your house doing nothing like you just have to because you are just flipping out over stuff that doesn't matter. And yes, this is an incredibly difficult time for that. So you had asked, what did you do after Microsoft? And that was the segue into here. But what happened essentially was I concluded I should take some vacation and vanish to Morocco
+
+30
+00:14:17.000 --> 00:14:37.000
+for a little bit for some surfing. Surfing and yoga, stuff like that, and just chilling out. It was actually really pleasant. It was, even with the surfing and the three meals a day and yoga, it was a rent reduction from San Francisco. So that was pretty sweet. And just started doing a bit more of like lo-fi living, I guess, like not wearing quite so much.
+
+31
+00:14:37.000 --> 00:15:15.000
+I had a laptop, had one suitcase that was everything that I'd owned pretty much and sort of wandered a bit around. I had some work obligations in Europe. I had agreed to chair, uh, some workshops and so, you know, did a little bit of work, but mostly just, uh, slumming around doing, doing some work on the side, but at my own pace. Yeah. That's, that's super nice. I don't know if you know, uh, Richard Stallman's lifestyle, but this sounds a lot like... I interviewed Richard Stallman a while ago. He basically goes conference to conference, gives talks,
+
+32
+00:15:15.000 --> 00:15:40.000
+and he asks, can I sleep on your couch? He has this email thread, list serve type thing of all the couches he can sleep on. And he just goes from place to place meeting new people. And it sounds like a really, really kind of exciting, you know, kind of life where it's exciting, but it's also chill, which is kind of hard to get. It definitely was interesting. Like, so some of the time was going, yes,
+
+33
+00:15:40.000 --> 00:16:20.000
+there's of course some just hanging out and surfing and Rocco type things, but there's also dropping in on the people doing Apache Flink in Berlin and dropping in at Cambridge in the UK to work with them for a few weeks. And then eventually it turns out dropping in on ETH in Zurich, which happened to be doing a bunch of related work stuff, work on data flow processing. They were looking at building systems that would essentially take the exhaust out of data centers. So whatever's happening in your data center, not the actual work that's going on, but what messages are getting sent around, who's communicating with whom, what was going on between your various racks, and feed that into some sort of analysis subsystem they're trying to build.
+
+34
+00:16:20.000 --> 00:16:58.000
+And just as a technical segue, this is a moment where they were struggling to make, for example, Spark work. They had gotten Nyad, which is what we had done at MSR, up and working, but they're on Linux and the C-sharp support on Linux at the time was not stellar. So the guy in charge, Mothy Roscoe basically said, look, why don't you just show up and help us sort this out? Because this sounds like it's exactly what you've been claiming your stuff is good at, and we could really use it, and we can pay you, and you're in Europe. And Switzerland's nice, so go for it.
+
+35
+00:16:58.000 --> 00:17:15.000
+So that led to some recurring collaboration with them. So I worked there for about seven months. So just so I understand, so you got Spark to work or you got this thing from Microsoft? Oh, I didn't get anything to work. Sorry. They were already trying to, they knew what they wanted to build, essentially,
+
+36
+00:17:15.000 --> 00:17:48.000
+like sorts of analysis they wanted to do. And they had tried to do that with Spark. And Spark, unfortunately, at the time was just falling behind. It couldn't keep up with the data volumes. Ah, I see. The work from Microsoft Research, the stuff that led into this real-time streaming work timely data flow and stuff like that was originally at microsoft this project called niad that was a c-sharp project and worked great on windows and worked on on linux but um how do you spell that? It's N-Y-A-D? Oh, no, N-A-I-A-D. Oh, NIAID, okay.
+
+37
+00:17:48.000 --> 00:18:10.000
+It's Greek. The NIAIDs were the animating spirits of rivers and streams and flowing water. Oh, that makes sense. There was a big data project called DRIAD. Yes, yep, the same group of people. Oh, interesting. Okay, so is DRIad like an evolution of 9? No, it's the other way around, though evolution is maybe a bit strong. So Dryad certainly came first.
+
+38
+00:18:10.000 --> 00:18:34.000
+Dryad sort of came to be after MapReduce rose in popularity, and Dryad essentially said, why not think about larger data flow graphs, but still use roughly the same principles? So Dryads are the animating spirits of trees and forests. Yep, yep. That's where that came from, building sort animating spirits of trees and forests. Yep. Yep. That's where that came from, building sort of DAGs of data flow graphs. But it's still very much in the spirit of batch computation. So this data flow graph runs by looking at its
+
+39
+00:18:34.000 --> 00:19:10.000
+inputs, which are probably very large data sets, turning on the bits of work nearest those data sets, running them to completion. They produce output data, you start up the next people. Yeah. So I mean, maybe just to give. They produce output data, you start up the next people. Yeah, so I mean, maybe just to give a bit of context here, like people know about, let's say, let's see an example here, like MP3s, where you have to kind of encode something in an MP3. And so you wouldn't necessarily have some incremental MP3.
+
+40
+00:19:10.000 --> 00:19:39.000
+Like most MP3s are, you know, there's some sort of bookkeeping and some stuff built into the file. And it might be random access, but there's usually some kind of paging. So it's not totally random access. And so you end up with like this kind of big volume that's effectively immutable. If you want to mutate it, then you would run it through a process that produces another big volume that's slightly different. And so this is kind of the essence of MapReduce, or let's say batch processing.
+
+41
+00:19:39.000 --> 00:20:27.000
+So you can take this, you can break it up based on how the data is chunked so let's say the data is is separated in chunks such that you have a thousand chunks and at most you can have a thousand machines um uh you're reading in a chunk doing something to it and then emitting um another another set of chunks um now those chunks get you know sh. That's a shuffle part of MapReduce. And then the shuffled chunks end up in buckets. And then those buckets can be processed a second time. And the output of all of this is just another huge batch of data. Spark and other things are kind of built on the idea of MapReduce. And there's a lot of also cosmetic things built on MapReduce. Like there's Apache Crunch, which was kind of a, you know,
+
+42
+00:20:27.000 --> 00:21:01.000
+something that sat on top of MapReduce and just made it more accessible. But one thing that's not really clear is how do you handle like a fire hose? Like if you have something that's a machine that's generating logs incrementally, you know, one a second or something, well then this idea kind of doesn't fit that paradigm. And that's where the real-time streaming is really important. And actually, your example of MP3s is pretty good. I don't want to pretend to know a great deal about how MP3s are encoded, but you could totally imagine, we've been talking now for almost half an hour, and we could record all of that and plop
+
+43
+00:21:01.000 --> 00:22:04.000
+it down in a file and then have someone pick that up and start the encoding process. But it's just as reasonable to imagine that as we've been producing data, someone could be picking that data up and start the process of transforming it and encoding it. So that by the time we're done, the computation is also pretty nearly done and ready to disseminate. Or for example, if people were listening, they could in near real time be picking up the output of the encoding process, something more efficient than just the raw wave file, and not have to wait for the entire session as these batch computations. It's just done staged slightly differently. So instead of doing all of that first work at once and waiting until you're done, you can start the first step, whatever that happens to be, and start producing partial results. And then whatever the second step is, that can also start working at the same time. And you just sort of keep things busy where they would otherwise be waiting. So otherwise
+
+44
+00:22:04.000 --> 00:22:28.000
+everyone's just waiting for that first hour of data to be finished before they can even start working. And rather than do that, no, you just get everything going all at once. It's a bit more bookkeeping, for sure. But the nice thing, I think, is that potentially from the user's point of view, they don't need to think of new idioms necessarily. The system itself can just change its behavior. And it just is suddenly a bit more responsive than it was previously.
+
+45
+00:22:28.000 --> 00:23:08.000
+You don't need to educate the user to tell them you must write a new program. So that's potentially really powerful if you can harness people's mental model for how do I approach working with big data and not have to change that to be some new, totally different way of working with data. Yeah, it totally makes sense. I think that, yeah, streaming from a functionality standpoint is like a superset, right? Because you can always stream in a batch of data. But then in terms of what you can do, I'm sure there's some limits, like you don't have random access to the entire data set all the time. And so, you know, there's some things that you can't do with streaming.
+
+46
+00:23:08.000 --> 00:23:50.000
+Or if you are going to do them, you have to accumulate some kind of bookkeeping versus just doing it in one shot. I think the closest I've come to data streaming is, or with the issues, let's say I can imagine coming up with data streaming is through Presto. So Presto is this SQL engine. It's not for real time, but it keeps everything in memory. And so because of that, it's really fast. But because of that, as soon as you run out of memory, it just gives up. And so for example, if you wanted to, if you have a giant database, it doesn't even matter the size and you want to just see how many times your name shows up in the database, Presto can do that because it can read
+
+47
+00:23:50.000 --> 00:24:45.000
+as little as one row at a time, look for your name, and then just keep a count. But if you wanted to do something like generate a histogram of names, then, or maybe a better example is if you wanted to join the table to itself so that all of the rows for the same name were grouped together, well, then Presto has to keep the entire database in memory in some way, shape, or form to do that self-join. And most likely Presto will just blow up. And so the same limitations there apply here where you don't want to be in a situation where you need the entire data set at one time. Yeah, I mean, you're not wrong. One of the things I suppose that streaming does is start to expose some limitations, essentially. As you say, you can look at a batch computation just as a streaming
+
+48
+00:24:45.000 --> 00:25:35.000
+computation. And of course, the process reading the data off of HDFS or off of your disk or whatever is not loading it atomically into memory. It's looking sequentially, most likely, at the data. So it's sort of streaming in off of your hardware. So it's a type of streaming computation already. But as soon as you give people streaming systems and tell them, ooh, low latency, something, something, something, they start to believe that. They start to use it. And they start to be surprised if their computer catches on fire when you do something like this. Yeah, that makes sense. So we're starting to see how Materialize got materialized, right? So you were working with ETH on NIAID. You're helping them kind of with that.
+
+49
+00:25:35.000 --> 00:26:04.000
+And did you kind of see a lot of the issues that led you to start Materialize? A little bit. I wouldn't say directly, no. led you to start Materialize? A little bit. I wouldn't say directly, no. Let's see. So I'm just going to roll back the clock just a little bit so that I avoid tripping myself up in the future. One of the things that happened as I departed Microsoft Research is that we were no longer meant to be affiliated with Microsoft.
+
+50
+00:26:04.000 --> 00:26:44.000
+We were no longer, in particular, no longer working on the NIAID code base. And it felt like a good time to pick up a new programming language. So I pivoted over from C Sharp to Rust at the time and started essentially doing a reboot of that project. So a different version of NIAID that fixed some of the issues that we had the first time around and almost certainly didn't quite get as far in all the dimensions, but started being what is now this timely data flow in Rust project, which is actually what I went to ETH with and worked with them on there. I would say that at ETH, this is an academic setting and you have a lot more
+
+51
+00:26:44.000 --> 00:27:29.000
+liberties. So one of the big distinctions between academia and materialized we'll get to, but in academia, you have a lot more liberty to just do what you want and what you need. So in a sense, they were acting as the consumer of the technology, so they could just build bespoke pieces of technology that would just work because as a bunch of computer science PhD people, they're all empowered to just write a whole pile of new code and say, great, works for us, ship it. And Materialize by contrast is very much the opposite. We, the people building Materialize have these skills, but the goal is to target people, users who don't want to have to get an advanced education in streaming data flow infrastructure or anything like that.
+
+52
+00:27:29.000 --> 00:28:27.000
+The goal is very much to take the ideas, the things that were learned along the way, essentially, and try to map them to concepts and idioms that a lot more people are already familiar with. In the case of Materialize, that's SQL, which is a language that doesn't say anything about streaming or any of that stuff, but does have sufficient concepts, things like joins and views and indexes and reductions that you can allow people to express queries and ideas in that programming language and then transport them. We do the hard work to do this, but transport them to streaming infrastructure. Oh, interesting. That makes a ton of sense. Yeah, there's a lot to unpack there. So yeah, I guess since we're on that topic, how do you prevent people from doing things in SQL that would just cause a lot of Harper and trying to join a table to itself, for example? Yeah, so we don't. Okay. I think
+
+53
+00:28:27.000 --> 00:28:57.000
+that's sort of fair to say, like the, it feels a little bit like databases back from the nineties or something like that, where you could, with a crappy query, take down, you know, your production database. If, if you go and try to do something that's a cross join or something like that. Yeah, that makes sense. But with, you know, the right window size, I don't know if that's in ANSI SQL or if it's only in Presto, but yeah, there's this whole, we have this thing where we do a self join, but the where clause is such
+
+54
+00:28:57.000 --> 00:29:26.000
+that we can do it within a window. Like if we sort, basically sort the database, although sorting, I think in streaming would also be a challenge. Yes, some of these joins, I think, But I think the streaming doesn't have to do everything. It just has to do some of the things that need to be done in real time. And so it's a good complement to something like Presto or Spark. Yeah. So for example, you brought up one of the main pain points, to be honest, with SQL streaming, which is window functions in SQL.
+
+55
+00:29:26.000 --> 00:29:52.000
+And for folks not familiar, window functions in SQL are roughly a way to write in SQL the equivalent of a for loop. It's just sort of you can say, put these records together and now attach to each record its ordinal position in this list, like 1, 2, 3, 4, 5, 6, 7, whatever. And you can write queries that are really problematic. Like you could say, yeah, do this and then get me all of the odd records out. And that's a query.
+
+56
+00:29:52.000 --> 00:30:37.000
+You can write it. It's a little mysterious, but you can totally write this. And it's very problematic if someone adds one record to the beginning of this list, right? Because all of the answers change and not just slightly change. The entire set of data flip-flops each time you add one new record. And it's just very problematic in terms of performance and resources for that query. And it's a good question. Should you work hard to prevent people from writing these queries? Should you let them write them and learn that their performance isn't good? Some of the queries are fine, right? If instead of saying, give me odd versus even records, you say, just give me the top five, it doesn't flip-flop nearly as much. You can add one record,
+
+57
+00:30:37.000 --> 00:31:00.000
+and the worst you can do is bump someone out of the top five. But it's a great question. And really, this is the heart of what a lot of the big data problems out there have been. How do I figure out how to present an API to users that these are like handles to scissors? Like, how do you present handles that you can grab safely? You don't grab the cutting part of the scissors. You only grab the safe part.
+
+58
+00:31:00.000 --> 00:31:42.000
+So it's a tool that you can pick up and only use safely. How do you do that? We know how to give people access to computers from EC2. You can just check them out, write whatever code you want, and cause the computers to be arbitrarily problematic. That's easy. We know how to give people access to computers. How do you give them gloves that they can wear to access the computers safely and effectively? And sometimes that means telling people no, that's sort of where this, the essence of a lot of these big data design questions are, is like, how do you prevent people from, you know, I guess, give them enough rope to be useful, but not so much that they can get themselves into trouble. Yeah, yeah, that makes
+
+59
+00:31:42.000 --> 00:32:26.000
+sense. Yeah, I think that, you know, it you know it's it's yeah i think over time you build this kind of mental model of what kind of works well with what engine um it's like for example like sorting sorting is almost never a good idea in presto because as soon as you want to sort then you never know if as said, a record's going to come that needs to belong in the first position. Like the very last record you look at could actually be the first record when it's sorted. And so the only way to sort is to hold everything in memory, right? So now with Spark, for example, sorting is not an issue because it spills the disk. And so Spark will basically, imagine you have a huge database you want to sort by one column.
+
+60
+00:32:26.000 --> 00:33:12.000
+Spark will effectively create a file for, let's say, each letter. So the A file, the B, it's kind of like what you would do if you were sorting a list of folders is you'd have an A group, a B group, a C group, so on and so forth. And then Spark could just sort the A group. And you don't have to do it by the first letter. You could even do it by the first two letters, three letters. And so you could always find a way to do it in Spark where it will be fast and efficient. And yeah, I think you hit the nail on the head that it's very hard to encode that knowledge. It's almost kind of like, you know, you can go to Home Depot and buy a saw. You can't really buy a saw that won't cut your thumb off.
+
+61
+00:33:12.000 --> 00:33:53.000
+They haven't invented that yet and they probably never will. And so it's really about how do you let people experience, you know, materialize or presto or spark in a way where they make mistakes, but they don't kind of blow up the system or cut their thumb off, right? Yep, you're absolutely right. One of the things that's a bit tricky with materialize, I suppose, is that whereas folks have this expectation with a lot of big data tools that you might cut your thumb off or that, you know, you should not randomly do things on your prod cluster, for example. The database community, with their products, have gotten pretty solid about trying to bulletproof a lot of the tools there so that you can't quite as easily
+
+62
+00:33:53.000 --> 00:34:15.000
+catch your system on fire. If some person shows up, if quota's in place, they have ways to protect queries from interfering with each other. So the expectations are a bit higher with that crowd, actually. So this is definitely one of the slightly awkward moments is that the prospects are showing up like, well, I expect to be able to have 20 people use this and not get in each other's way. What's your story?
+
+63
+00:34:15.000 --> 00:34:58.000
+And we sort of have to come back with, well, our story is big data sort of side of the story, which is that if you really need these people to be isolated from each other, you should probably turn on a few separate copies of Materialize. And it's not as exciting an answer as they're hoping for, for sure. But it's realistic, at least at the moment. Yeah, that makes sense. Yeah, I think the way we do it at my company is there's like a Presto quota, probably same thing for Spark. There'sas um and uh and so if you maximize the like in in theory the worst case scenario is where you get as close as possible to once you exceed the quota the job dies so that's actually not that big a deal but it's if you're right at the quota
+
+64
+00:34:58.000 --> 00:35:23.000
+for a really long time and if a bunch of people are doing that, then things can start to get really bogged down. But that should be super, super rare because it's hard to really design something. You can't really optimize your query so that you're just under the quota. Yeah, no, you're totally right. And if people did, there's some clever things. You can totally randomize the quotas a little bit
+
+65
+00:35:23.000 --> 00:36:06.000
+to make sure that... Oh, yeah, just introduce white noise in the quota. Yeah can totally randomize the quotas a little bit to make sure that oh yeah i just introduced white noise in the quote you know harmless just plus or minus a little but enough that no one can actually sniff out where is that that i can safely operate on yeah that's funny um okay cool so so yeah so you kind of actually one thing about materializing we'll go back to the background is it is it ANSI SQL or or have you added things to SQL the target is ANSI SQL um we were very uh very cognizant of the fact that with with SQL the language there's a bit of an uncanny valley where if you are in fact SQL compliant great people can use you tools can use you uh so a lot of people's tooling use SQL if you're only 90% SQL compatible
+
+66
+00:36:06.000 --> 00:36:23.000
+things catch on fire pretty quick you can demo, here's a join and a reduction, oh that's great, join and a reduction pretty happy with that but as soon as people realize that maybe you've got different semantics for nulls in some places or maybe you don't do a great job at multi-way joins
+
+67
+00:36:23.000 --> 00:37:00.000
+or support prepared statements or various things like this. Your tools start to fall apart. Things that used to get correct answers suddenly get mysterious glitches in them. And although you thought 90% compatible, the actual usefulness of the SQL is closer to zero at that point. So we've cleaved very strongly to ANSI SQL. SQLite has a 5 million query test battery that we're in total compliance with at the moment. All sorts of really obscene cases, like things that I would never have thought
+
+68
+00:37:00.000 --> 00:37:32.000
+someone would write these queries. You can write correlated subqueries in the join condition of outer join, and it was some pain to get those to be correct, and correct in a streaming fashion. But it makes a lot of sense. It's very sensible to try to do SQL right if you're going to do it. We've not really added too much. There are a few, I would say, interesting interpretations that we've done of things. They're a bit technical.
+
+69
+00:37:32.000 --> 00:38:14.000
+I'm happy to go into them. But there are things that don't really make quite as much sense in a standard database, but have really cool interpretations in the streaming space. Yeah, I mean, what's an example of something that, of one of those things? Yeah, so like one of the things that, so in a standard SQL database, you can use, I'm going to lie a little bit here, but you can use the now function to get the current time for when your query is being run, which I don't know, you might do to print out along with your results, when did a thing actually happen? Well, yeah, something like that. And that's, that's fine. That's a good use of now. You can do something really interesting, though, in materialize, which is to put that now term in a
+
+70
+00:38:14.000 --> 00:39:08.000
+predicate, like in a where clause. So you can say like, where my data dot timestamp greater than now. And what that does is holds back the data until the current time is equal to whatever value is seen in your data. So since we're evolving the results of this query over time, it's going to give essentially a temporal instruction to the system that says, here's an interesting record, don't show it to anyone until the time that is written down in this piece of data. And it allows you to start programming with time and stuff like that in a way that, yeah, you could write that query in vanilla SQL that just does one-off queries and gives you the answer. But it introduces some really interesting new behavior in a streaming system that is going to update the data over time.
+
+71
+00:39:08.000 --> 00:39:45.000
+Yeah, that's wild. I mean, as soon as you introduce something like that, then you can't really throw any data out because you just don't know when it could become relevant, right? Yeah, though, delightfully, right? You can use this exact same query to say, where my data dot timestamp, I think it's less than now. The other direction, the other inequality direction, eventually says like, throw my data away as soon as this time passes, right? Oh, that makes sense. This record will never pass this predicate again, because we know that now only goes up, and you had some piece of data that we've now passed. So this is actually a way to give, in your query, to describe what data are okay to garbage collect and
+
+72
+00:39:45.000 --> 00:40:19.000
+and clean up. So you can keep a, you know, if you wanted to have for example a one hour window that you're maintaining that slides continually through time, you could totally say you know blah blah select all the records where now between mydata.timestamp and mydata.timestamp plus one hour. And that will wait until that time to introduce the data. And one hour later, clean up the record, throw it away. You'll have a constant memory footprint over time. And just stuff like that, that again, if you're thinking about, no, I'm just going to use real data, like a data warehouse.
+
+73
+00:40:19.000 --> 00:41:05.000
+You've got to plop all your data in there. It's got to look at all your data over and over again, because who knows what's going on in there and it's got to look at all your data over and over again because you know who knows what's going on in there by giving clearer instructions to the stream processor we actually can learn a bit more about what do you really need to keep around like what data can we throw away and how can we you know more efficiently operate to keep your query up to date yeah that makes sense so what about you, one of the things that I was really excited to see Spark 3.0 add is the sort of array aggregation and all of that. So like you can, for example, you know, there's an array column type, which is in, you know, in Hive and SQL, but not in ANSI SQL. And that array data type ends up being super, super useful. Like you might say,
+
+74
+00:41:05.000 --> 00:41:41.000
+take all the records with this person's name and build an array of, I don't know, all the ages the person said they were. And then let's analyze that distribution or something. And so that seems to be the thing that I miss the most whenever I'm using something like SQLite. I always kind of miss array ag and map ag and some of these functions. Yeah, we have several of these. I don't want to, I get myself tied up a little bit when I try to distinguish all of them. There's arrays and there are lists and there's a little bit of a difference because Postgres has, we're basically following a lot of Postgres.
+
+75
+00:41:41.000 --> 00:42:26.000
+There's some distinctions between the raggedness of arrays versus multidimensional arrays. And it hurts my head to try to keep all of thesegres. There's some distinctions between the raggedness of arrays versus multidimensional arrays. And it hurts my head to try to keep all of these straight. But yeah, I'm thinking of what we have literally at the moment. And we literally have a JSONB aggregation that allows you to do these groupings and then pack them into a common JSON object. If we don't have an array aggregation, it seems like the sort of thing that's super easy to add. But yeah, the functionality, I guess we've generalized it a little bit. I think we've not invented too many things of our own. I want to be careful. But when you look at what folks come to us with, they show up with Avro data. And Avro can represent some quirky things in it. And we got to figure out, someone showed up with some Avro data. We need to make sure that the type system is rich enough
+
+76
+00:42:26.000 --> 00:42:46.000
+to reveal the various things that people might've shown up with for data. And that includes various forms of arrays and stuff like that, that aren't as commonly seen in NC SQL. Yeah, that makes sense. Okay, so we got to ETH Zurich. We went back a little bit to talk about NIAID.
+
+77
+00:42:46.000 --> 00:43:20.000
+And so yeah, let's sort of continue the story there. I mean, was Materialize created while you were on this road trip? Or was it like conceptualized while you're on this road trip? So I think the right way to frame it is that Materialize was conceptualized by my co-founder Arjun Narayan, who was working at Cockroach Labs at the time. And he had, during the course of his PhD, been working in the same sort of area, big data systems, stuff like that. Yeah, correct me if I'm wrong, but CockroachDB is like a key value store, right? Like a big data key value store.
+
+78
+00:43:20.000 --> 00:43:55.000
+Yeah, roughly. I mean, it's more of a transaction processing-y OLTP-style system than an analytic processor. And this makes a bit of sense, to be honest. I would say I'm not an expert here, but they were good at what they were doing, which is storing data, keeping data consistent, all these sorts of things. And we're sniffing around for what's the right way to process all this data. It's sort of silly to do all this and dump it out to HDFS and call into Spark or something like that. And Arjun's take, at least, I hope I'm not misrepresenting him, was that the NIAID paper, the thing that came out of Microsoft Research, was a great answer to
+
+79
+00:43:55.000 --> 00:44:38.000
+all of this. It sort of resolved a lot of the quirks that stream processing systems had at the time, and that this would make a lot of sense for anyone who uses a transaction processor to keep the primary source of truth for their data, but wants to attach to it some analytics that will continually be able to ask questions and also keep answers up to date for questions you've already asked. So I would say he, and potentially collaborators at Cockroach, but he was the one who was pushing forward on the idea that this is really interesting technology. And there's actually a pain point that people have out there where you can use a data warehouse for sure and just ask questions over and over again. But there are a lot of people who have relatively fewer questions, I suppose. They want to see the
+
+80
+00:44:38.000 --> 00:45:13.000
+answers to their queries refreshed as quickly as possible, always up to date. And ideally, this shouldn't have to mean you have to go back to the data warehouse once a second and reissue the query from scratch. So he was the one who showed up, I would say, with the, like, let's actually do something specific here. His pitch to me was roughly like, we, sorry, we knew each other from before, but his pitch with respect to the company was, it's super interesting, like all the stuff and rust that you're building. And you write a bunch of fun blog posts. But if you actually want to see if this has legs, if this can actually go anywhere, there are going to be annoying things that you don't want to have to do.
+
+81
+00:45:13.000 --> 00:45:40.000
+Someone's got to write documentation. People are going to have to write tests. People are going to have to go and shake hands with potential customers and stuff like that. And that's not what you want to do in your day to day. And you're totally right. But the right vehicle to do this was to put together a company, basically put together something that has some funding so that you can pay people to put together marketing information, to put together documentation websites, write tests, write SQL compatibility layers, stuff like that.
+
+82
+00:45:40.000 --> 00:46:48.000
+Yeah, this touches on a really, really good point. I think there is this kind of misconception that a startup company is, you know, like Steve Jobs and Steve Wozniak in their garage, just writing, you're building a bunch of systems, or just, you know, one person in their garage. to have sort of sales. You need to have people writing documentation. You need to have that whole ecosystem right at the beginning. And yeah, I see a lot of people who have some really good technology, but I think they kind of missed that part of it, that you need to have that whole part of it. And we talked a little bit about this in the last episode about Docker. And I don't want to beat up on Docker again, but your Docker has amazing technology. But then on the business side, you know, there were some real challenges. So it's really important to kind of have a person who's really plugged into that, who can help out with all of that. You know, I definitely found this to be the case. I mentioned in most startups, these roles exist, whether you like them or not, of course, you
+
+83
+00:46:48.000 --> 00:47:17.000
+know, someone to do community management or tech support or these things. And presumably in most very small startups, everyone just wears five different hats and you probably do a little less good of a job than if you got in a specialist to do a thing. And so part of, I mean, part of what was compelling, I suppose, about Argent's proposal is like, this is good enough stuff that we can get some funding and actually get people who are good at these jobs and like doing them rather than have to slog through the unpleasantness of doing them ourselves necessarily.
+
+84
+00:47:17.000 --> 00:47:51.000
+Yeah, makes sense. And so did you go straight from ETH to Materialize or was there something in between? Oh, yeah, it, yeah, sorry. There's, there's a bunch of time dilation that went on. Uh, and I was, I was at ETH twice, actually. I was there for seven months the first time and, you know, having, having done the thing that I thought I was there to do, went off and tootled around a bit more, uh, a bit more in Europe. I just happened to be where I was and did some more surfing and just relaxing. Eventually, I ended up going back to ETH for a little over a year and was a bit more
+
+85
+00:47:51.000 --> 00:48:28.000
+formally there at the time. I was working with students, advising folks, sort of helping some folks see through their PhD dissertations. But then it became clear that that was not for me forever and that Material that Materialize made a lot more sense. And the second time there was departed, I would say, early 2019, roughly, and landed in the US. And at that point, Materialize had already been started up, essentially. Arjun and I had chatted about it beforehand and thrown some decks around. But yeah, I came back from Switzerland and was employee, I think, number five,
+
+86
+00:48:28.000 --> 00:49:11.000
+I guess, at Materialize at that point. Cool. So what was it like to talk to investors? So I also have an academic background. And since going to university, I've really only worked in research labs. And so you kind of share that background, at least up to ETH. And so what was it like going from that to, you know, creating a pitch deck, talking to investors and, you know, what was that transition like? It was, for me at least, it was very surprising. The thing that's surprising is I think we went through uh about a week of of pitching stuff in in the valley and each meeting that we went into i went in with some
+
+87
+00:49:11.000 --> 00:49:35.000
+preconceptions and came out with exactly the opposite conclusion basically about what i had expected and like what's an example of that no i mean just like we went in i don't the very first thing we went into we were like oh this is great you know we're pretty solid the the deck looks pretty good. And came out of that, and there was a lot more skepticism about things than we had realized. Not of the type. No one doubted the technology or anything like that. They were less sure about how big the market was, for example.
+
+88
+00:49:35.000 --> 00:50:06.000
+I didn't even thought of that. Oh, that makes sense. We went into the second meeting, and I was pretty sure that ahead of time, the person that we were going to chat was already invested in and what was essentially a competitor and um we're basically thinking like oh i guess we're we're in deep trouble and like this isn't going to work out we can just sort of warn them and go home and they're immediately like no no i'm interested i'm very interested were you afraid of even giving the pitch you know because because you know, if they're already invested in your competitor?
+
+89
+00:50:06.000 --> 00:50:38.000
+Not really. I mean, I think one of the nice things about Materialize that's very reassuring is that nothing we're doing is secret. So it's not that there's some cunning information that if anyone got access to it, they would suddenly have a big advantage over us. The main advantage that we have is the technology that we're using is pretty cutting edge, I would say. I mean, that's self-serving, but that's the main thing that distinguishes us. And it's not trivial for anyone else to say, oh, I see. We should just use the same technology and we'll be where they are. So we weren't too worried.
+
+90
+00:50:38.000 --> 00:51:11.000
+At least I wasn't too worried about showing up and saying, hey, we're going to do a thing. This is the thing we're going to do. Keep it a secret. I don't think anything that we were talking about was particularly secretive. So no, I wasn't too worried about that. Maybe I should have been. I don't know. I'm hopelessly naive when it comes to some of these things. No. I mean, I think what you said really resonates. I mean, I think to replicate it, they have to really replicate your whole history um it's not good enough just to take take a snapshot of of um you know what you're thinking
+
+91
+00:51:11.000 --> 00:51:49.000
+right now you have to it's not markovian right like it's it's kind of based on your trajectory is kind of based on your all of your experiences and you can't easily transfer that that's totally true so for example one of the things that things that we've had to do and has been some of the value that's been added and materialized is trying to figure out how to take a bunch of these crazy SQL idioms and map them down to dataflow computation. So when someone has a correlated subquery, someone's got to figure out how to turn that into dataflow computation. And that's not explained anywhere else. That's not a thing that exists in the open source software that I had previously written. So it was very much on that like the team will be able to figure this
+
+92
+00:51:49.000 --> 00:53:09.000
+out was was the bet that the vcs were making not that the software already does it but that there will be some some problems they'll be faced but these people are well prepared to get out clear those hurdles essentially that makes sense and so this this investor was super interested and then did did you kind of uh what was that conversation like? At some point, you had to kind of talk about the elephant in the room, right? Which the people they're invested in but they also have responsibility to the people who've invested in their in their funds and as long as they're not in conflict i think this person's particular take was like as long as it's not zero sum right if it's if all the money that you would make would come at the expense of these other people uh that's no good that that's not a thing that they can yeah but if investing in two people who happen to be sharing a pie in the course of that, the pie is actually, let's say, 50% bigger than it initially was, then, you know, okay, company one doesn't get all the money in the world. Companies one and two have to share it. But it's, it's, in this case, much better for their, the investors in the fund that the vc is managing i i have to imagine also that there's different takes on this right across the the spectrum of vcs you know some people are
+
+93
+00:53:09.000 --> 00:54:05.000
+perhaps a bit more kind and gentle maybe and some people are more vicious and and uh you know trying to get access to whatever money is that they can get i have i have no idea i definitely don't want to want to judge there. Yeah, totally. This is just one meeting. But I think it's really an interesting kind of dichotomy because on one side, yeah, I think you hit the nail on the head. It really depends on is the pie growing. So if there's 1,000 customers and the startups are only able to sort of acquire one at a time, and you know that there's a whole ecosystem full of startups, um, you know, when companies get so
+
+94
+00:54:05.000 --> 00:54:35.000
+big that they basically exhaust the market and then they go to war with each other. Um, and, and, uh, it's, it's a fascinating podcast, but, but yeah, I think that is maybe, you know, if you're, if you're, uh, if materialize is like competing with, you know, the next biggest player, uh, you know, and both companies are, you companies are dominating the world together, then that's not a bad position to be in if you're an investor. It's like, okay, I'll take that. Yeah, no, you're not wrong.
+
+95
+00:54:35.000 --> 00:54:49.000
+And each of the participants, Materialize and the other person, would really love if the other person would sort of not be there. Their lives would be a lot easier. But from the investor's point of view, presumably, no, this is great. Like both of you are going to make better products.
+
+96
+00:54:49.000 --> 00:55:12.000
+You know, both of you are going to compete to be price competitive. I'm sorry, I'm making up a bunch of economic stuff. I have no actual background here, but I can imagine a world where it's not inappropriate to support folks who are, yeah, again, eating more of the pie as opposed to trying to fight over the same piece of pie. Yeah, yeah, totally.
+
+97
+00:55:12.000 --> 00:56:16.000
+So, okay, you start up Materialize, you're employee number five, and you have this sort of academic background. I'm assuming there are a mixture of people who are really into the theory and handling a lot of these edge cases and doing a lot of these really complex transformation of SQL to your engine. And then there are a lot of, I guess, front-end engineers, and there's a whole engineering area. How do those two areas kind of collaborate? It's a great question. I think the short version is that the folks who are really interested in the theory, like the me type people, needed to adapt a little bit. And this is mostly because when you look at it, what Materialize actually needs to do, the goal isn't specifically to advance some very cunning theory and to be really smart and write obnoxious blog posts. It's actually to do a specific thing. And if you look
+
+98
+00:56:16.000 --> 00:56:34.000
+at if the folks, generally speaking, the engineering side of the house at Materialize is a bit more eyes on the prize about like, we need to actually make this work. That's the actual goal. The goal is, okay, the friends are made along the way. That's also very good. But the reason that we're here is to try to put together a thing that looks and behaves a lot like,
+
+99
+00:56:34.000 --> 00:57:01.000
+in this case, Postgres complies with SQL and under the covers does it all very efficiently, hopefully, things like that. And that's actually the goal. So folks should, in some sense, to get in. And that's actually the goal. So, you know, folks should, in some sense, to get in line and do that, that sort of work. And I remember when I showed up, I was very initially very like, Oh, this is exhausting. SQL has so many, so many warts. It's just, it's gross in a few different ways. Do we have to do this? And, you know,
+
+100
+00:57:01.000 --> 00:57:18.000
+at the time, maybe, I was thinking, maybe we don't, you thinking maybe we could do some funny business somewhere. And the answer is pretty clear. No, no. It's really important to do SQL correctly. That may suck. I'm sorry. But the thing that we're making makes sense if we do SQL correctly and not otherwise. So let's figure out how to do that.
+
+101
+00:57:18.000 --> 00:58:01.000
+Yeah. I mean, speaking from the other side of the table, there is something that wasn't ANSI SQL. I'm trying to remember. I think it was maybe like Hive. Yeah, Hive. So Hive isn't ANSI SQL. And so just converting queries from Presto to Hive or from testing them locally on SQLite and converting them to Hive, it's never a straight conversion. It's always a huge pain. And you're always kind of wondering like, why didn't they just take the extra step? Now, I mean, Hive, I think that whole Hadoop ecosystem was filling such a huge void that they had a lot of latitude in terms of the product. But ultimately, I mean, Hive was replaced by Presto and Spark and things that were
+
+102
+00:58:01.000 --> 00:58:36.000
+more compliant. So, I mean, even then, I mean, it didn't last, it was just a honeymoon phase. Right. But yeah, you hit the nail on the head. I mean, if it, if, if, you know, especially if you're at a bigger company, if you have, you know, 20,000 queries that you run and you push them to materialize and like a hundred of them fail, you know, for one person who's trying out a new product, that's insurmountable to try to fix 100. It's usually really ugly fixes 100 times. And so it kind of can't be 99% done. It has to be 100% for you to really get those customers.
+
+103
+00:58:36.000 --> 00:59:24.000
+Yeah, that's absolutely correct. And again, one of the changes, I guess, coming from the academic space is like in the academic world, it's a bit introspective there. You're like, my goal is to think of a clever thing and then tell the world about it. Whereas in the business, the real world side of the things, your goal is to meet the potential users where they are. You want to get some technology to them that they can pick up immediately and start working with. And they're more and more delighted the less they have to screw around with it or figure out. Or if their life is now fixing these 100 queries as people write new ones, that's terrible. I mean, that's not the thing that they were hoping it was going to be. You get to notice this a bit more as you show up. I was learning this, at least, coming from academia, where you get rewarded for being clever and different.
+
+104
+00:59:24.000 --> 01:00:06.000
+To a space where absolutely the goal is to try to be as not different as possible ideally not have to tell anyone about your cleverness they just sort of experience that your product is for whatever reason much more pleasant to use than the competition yeah that makes sense and so in terms of customer acquisition is is your is your is materialize the style kind of like a bottom-up thing where you have a free tier and you try and get developers to convince their manager or director to jump on board? Or is it more of like an enterprise thing where you go and make a pitch to the leadership? What's the kind of model for Materialize? It's a good question.
+
+105
+01:00:06.000 --> 01:00:28.000
+I probably just screwed up the answer to this because there are very clear takes on each of these things. My experience with Materialize has been that the people that we end up trying to convince Materialize is good have so far been not strictly the bottom-up, just random developer trying to get a thing done, but maybe a tier up from that. So a person who's trying to think about,
+
+106
+01:00:28.000 --> 01:00:48.000
+how should I organize infrastructure for my group or something like that? Or I need to support a few people, various people writing SQL queries. How should I go about doing that? And this person has some latitude to make a good decision or bad decision. But they're a decision making type of person rather than a person who can pull whatever they want onto their laptop
+
+107
+01:00:48.000 --> 01:01:14.000
+and start using it. At the same time, we're not sort of going over and scheduling meetings with Coca-Cola to try to tell them like, you know, please, please stop using big competition and start using us instead, you know, business, business, business, handshakes, martinis. I would say the motion is a bit more bottom-up in the sense that it's technology-led. Folks are meant to understand, the users are meant to understand that this is a valuable thing to do,
+
+108
+01:01:14.000 --> 01:01:46.000
+that they like the experience more, low-latency responses to queries are better, as opposed to more top-down, like your organization will be better, cheaper, whatever, if you pivot over to materialize. That might also be true, but it's harder to put that in front of people at the moment. Yeah, I think anything having to do with, you know, data, you know, anything having to do with data will require you to be a step up from the developer because it's not something you can run on the cloud. Like people aren't going to just move all their data
+
+109
+01:01:46.000 --> 01:02:04.000
+to some kind of public cloud that Materialize has access to. And so something has to be, I'm assuming something has to be kind of done where Materialize is kind of plugged into whatever, you know, their data system. I mean, it might be on AWS, but it's obviously not going to be something that's exposed to the public.
+
+110
+01:02:04.000 --> 01:02:18.000
+Yeah. Oh, I should say, to take this opportunity to throw out there, that Materialize Cloud has just entered private beta. Folks, go to materialize.com slash cloud and hop onto the sign-up list. Folks are being admitted in waves, but
+
+111
+01:02:18.000 --> 01:03:03.000
+the intent is for sure to try to put together a thing where an organization can try this out. We'll deploy inside your private cloud in AWS. But if you've got your data in Kafka or something like that, we can attach a materialized instance to it and start reading it and give you 30 seconds or something like that. An interactive experience where you get to see what it's like to start using this. Maybe start to make some decisions about, are you loving this or is it the same problems as before? Yeah, that makes sense. But insofar as like, it is kind of a bigger commitment than trying out a different ID, for example. And so insofar as that's true, like I would say from what you described, Materialize is sort of bottom up
+
+112
+01:03:03.000 --> 01:03:36.000
+at the lowest level that you you can reach and still get the kind of commitment that you need to set up it's you're right that it's more sophisticated than just getting a new a new id or a new a new theme for vs code or something like this for sure we've tried to make it not terrible from the point of view of an incremental deployment so for for example you know step one is not reformat all of your data into our native representation or something like that. We'll look at your Kafka topics, pull data out of there that could be CSV formatted, could be Avro or JSON, various things.
+
+113
+01:03:36.000 --> 01:04:12.000
+Hopefully the ways you've already written your data down so that we're not actually introducing any new costs for you. So it's not as bad, for sure, other systems out there systems out there step one is okay we need to pivot all of your data and hdfs into a columnar representation because that's the only way we work efficiently so like one week later you can actually try running one of these yeah yeah exactly uh sort of grindy uh olappy style uh analytics tools that makes sense so you're kind of plugged into um kafka and i think the amazon is like i want to say it's kinesis this is another one that they have yeah yeah yeah there's a bunch
+
+114
+01:04:12.000 --> 01:04:40.000
+of these um pub sub type things or you know basically sources we'll say sources for real-time data and so you've written kind of adapters for a lot of these different sources and so as long as people are using one of these, you know, kind of standard things, then they can, they can try out materialize. Yeah. And the goal for sure is to show up from our part, show up with as many of these points of integration as we can reasonably manage with, with the team that we have. So, you know, if you can pull data Kafka is the easy one at the moment,
+
+115
+01:04:40.000 --> 01:05:28.000
+Kinesis has some interesting characteristics that make it a bit harder to show people the data and be correct and show them the same data again the second time if it crashes and starts up again. But for example, also there's some recent work to pull data out of Postgres as a read replica, essentially. So to use the replication protocol out of just a Postgres instance and say, if you have your data in Postgres, materialize can attach to that. Oh, that makes sense. Yeah. So stepping back a bit, looking at someone who's in high school or college and maybe they have some very, very limited SQL, like maybe they've written, they've made some MySQL queries on a startup, a small project, a hobby project. How can they get started with Materialize?
+
+116
+01:05:28.000 --> 01:05:44.000
+And is there sort of a free tier? Or what's a way for students and hobbyists to learn more? Oh, absolutely. I mean, you can definitely... Materialize is source available and very nearly as available as we can make it. It's BSL licensed. So basically anyone can go and grab it.
+
+117
+01:05:44.000 --> 01:06:26.000
+And as long as you aren't building a competing database as a service style product, you're free to use it for whatever you want. And you can go grab the code, build it. We have Docker images that we should push out each time we successfully build something. And you can just grab this down, pull it down to your laptop. You don't need any complicated Apache infrastructure. You don't need ZooKeeper up and running, any of that stuff. It's literally a single binary. You turn it on, you connect to it as if it were Postgres. So if you have a terminal and you use P-SQL, which is a standard way to shell into Postgres, you can use that to connect and materialize. And if you don't have Kafka up and running, you can point it at a file, for example, and you can append rows of, let's say,
+
+118
+01:06:26.000 --> 01:06:51.000
+text, a bunch of different formats, but append rows of text to the file and see the results continue to update there. This is one of the sorts of interop that, it's a little janky, but this is how folks have prototypes on things. You have a file on your laptop that's continually scraping some other source of data on the internet, appending stuff to the file, and then materializes essentially tailing that file. It's watching for changes to it, and anytime new data show up, it'll push them into the pipeline
+
+119
+01:06:51.000 --> 01:07:15.000
+and update all of your queries. And you can do all of this without a complicated enterprise infrastructure or anything. It's just on your laptop. This is how I use Materialize a lot, to be totally honest. Oh, that makes sense. You could use it as kind of like a tail on steroids. No, absolutely. If you're used to using, I don't know, like awk or something like that to do a little bit of data munging through your CSVs and needed something more advanced than
+
+120
+01:07:15.000 --> 01:07:59.000
+that, like awk is great at what it does. I use awk a lot, but if you're like, geez, I really need to take these five CSVs and find things present in here and not present in there, get the distinct these things back out, yada, yada, yada, something sql like um yeah you totally use material let's do that and and keep things up to date as data change if that's if that's exciting to you that is really really cool yeah that is that's really let me just give a bit of tech background and feel free to kind of correct any any records here because this is uh this is just shooting from the hip here. So a bit of background. So in Unix, there's tail. So you can have a big text file. You do tail file. You get the last 10 lines, right? Simple enough. There's also tail-f. If you do tail-f, instead of just giving you the
+
+121
+01:07:59.000 --> 01:08:49.000
+last 10 lines, it will actually just listen to that file just forever. And anytime a line is added, appended to that file, Tail will print it out. So think of Tail-F as like this monitor that's just listening for changes and writing them out. There's also a bunch of other Unix commands, like there's awk and there's sed and there's jq. All of these are ways of extracting data so if you if your if your file is rows of json objects so every line in your file is a json object you could you could pipe that over to jq and you could pull out one of the entries one of the keys in that object right if your file is just is rows of text and maybe there's a timestamp you're interested in, you can use tr and set and awk,
+
+122
+01:08:49.000 --> 01:09:15.000
+these other tools to pull out that timestamp. But then, as soon as things start to get complicated, like maybe you need to keep a rolling histogram or something like that, you're really kind of stuck. I mean, at that point, I mean, you could try doing something with Python. You know, at that point, you're basically writing a Python program that reads from standard in. And as soon as you jump into Python, you're writing a lot of code and et cetera, et cetera.
+
+123
+01:09:15.000 --> 01:10:02.000
+So SQL would be really attractive. There's a lot of times where I've converted things to, or just loaded things into a SQLite database just so I can run queries. And it takes a long time. You have to transform the data, especially if it's just flat text. And so Materialize, running it locally is a really, really attractive alternative. You could have a Materialize that's tailing CSV or I think it's called JSONL, where there's a JSON object per line, a JSONL format, and do more complicated things like groups and windows and all of that, without having to, you know, that sounds absolutely correct. I realized I say tail a lot. And we say tail outside materialize, but tail dash F is actually you're right, absolutely the exact
+
+124
+01:10:02.000 --> 01:10:36.000
+specific use of tail that we should be thinking of. Yeah, I mean, there's tail the verb, and then there's tail the command, right? I think tail the command is just as one-shot thing. But I think you're totally right. One of the things we've seen a lot of interest from folks about are not even necessarily big data, anything in particular. Those folks are interested, of course, but there are other folks who are just putting together, let's just call them web apps or something like that. I suppose at the moment they would be using something like Firebase to get told about changes to their data, but in fairly primitive, elemental
+
+125
+01:10:36.000 --> 01:10:59.000
+ways. Maybe they pass a filter and you get to see records that pass the filter. That might then prompt them to redraw a web page or do some work like that. Materialize is pretty appealing and you get to have the same experience except you push a more interesting query through to the server, essentially. You could say, this is wonderful, but just only show me when a particular,
+
+126
+01:10:59.000 --> 01:11:36.000
+more complicated property happens. Show me when new distinct users show up or someone logs in after five minutes later than they had ever previously logged in, things like this. These people don't necessarily have terabytes of data to work on, but it's really handy to have someone save them the pain of writing the Python or the JavaScript or whatever it is that is handwritten bespoke code to try to put together a thing that does the not necessarily very complicated task of figuring out when should i tell someone that a new thing has happened and materialize is well sort of popular in that space at least as as an idea like why can't we
+
+127
+01:11:36.000 --> 01:12:11.000
+have this for other classes of programming essentially sql and big data is is great but there's lots of other people who deal with reactive applications, essentially. They're trying to build whatever, literally React-style webpages that you want to express what it should look like, the data might change, why can't the computer system take care of all this for me? So the bug, I think, is getting out there in terms of people expecting, even wanting, but eventually expecting that their system can actually take care of all of these updates for them. They don't have to handwrite a whole bunch of triggers and weird callbacks and stuff
+
+128
+01:12:11.000 --> 01:13:08.000
+like that. Yeah, that makes a ton of sense. I think one of the biggest challenges or biggest mistakes that people make when they're starting out is um is is using is using a programming language or maybe in other words saying is using something like python or c++ instead of using you know unix commands and and sql um i think that uh you know i know when i was when i was going to college um you know i I kind of thought, oh, well, SQL, that's for, you know, that's for, you know, people with real jobs, you know, like I'm a PhD student. So if I needed to, you know, read one column out of a CSV, I would just start, you know, into main and writing C++. And that made me extremely unproductive. And I think that it's a lesson
+
+129
+01:13:08.000 --> 01:13:44.000
+that's super, super important. And having the ability to do a real time, yeah, I think there's a massive, massive tail of folks who can make really, really good use of something like that, that just don't know about it. There's there's a computer science principle actually that gives name to this, this thing called Oosterhout's dichotomy, where this is, I think John Oosterhout at Stanford who proposed essentially this, roughly two types of programming languages, right? There's sort of this productivity level language. That's a bit like, I don't know, awk would be a good example or SQL. You know, you can use it to get your job done as quickly as possible.
+
+130
+01:13:44.000 --> 01:14:10.000
+And then there's more systems-y programming languages. Let's call them C++ or something, which is, let's say you want to build one of these tools. Someone actually has to build the things. And if you know one of each of these languages, that's pretty good. Only knowing a productivity language or a systems language, you're going to have some limitations, either because you only know C++ and you spend all of your days trying to open files and read lines and stuff like that. Or if you only
+
+131
+01:14:10.000 --> 01:14:25.000
+know SQL, it's a little hard to invent a new thing, essentially. If SQL isn't doing what you want, you're kind of in trouble at that point and need to get someone else to help you. But if you know one of each of these things and can move between them, that's a really good place to be.
+
+132
+01:14:25.000 --> 01:14:49.000
+Yeah, that makes a ton of sense. Cool. Yeah, I think this is amazing. So folks out there, we should definitely, I'll give it a shot. I think folks out there should definitely grab Materialize. So I know there's Docker. Docker is usually pretty heavyweight, but are there just standalone, statically compiled binaries for different OSes? Yeah, hopefully I'm not screwing this up, but I think we have them. We have like an app get repo.
+
+133
+01:14:49.000 --> 01:15:26.000
+There's, I believe we have it at times. I should make sure it's up to date, but homebrew versions of these things, you know, you just grab the code and build it from source if you're that sort of person. I should double check all of the package managers we have, though. I think there's a few that we for sure keep up to date and some that we might have uh either let slip or lost some traction with yeah i mean someone who has i have a package in a bunch of these package managers and it's it's so difficult i mean i'm currently right now i have i have an issue on ubuntu 18 but it works on all the other ubuntus and 10 different other OSs.
+
+134
+01:15:26.000 --> 01:15:45.000
+And so it just never ends. There's always something that breaks somewhere. It's a real job keeping that up to date. I think one of these days, someone needs to write some way to automate that. But that's going to be a challenge because they're all so different. I mean, I'm sure someone has written that thing,
+
+135
+01:15:45.000 --> 01:16:02.000
+but it's only supported on some of the OSs, so you can only use it in some stuff. I mean, it's one of these, like the XKCD cartoon about there are 14 competing standards. We should invent a new one that encapsulates all of them. Now there's 15. Now there's 15. Yeah, it's so true.
+
+136
+01:16:02.000 --> 01:17:12.000
+Yeah, I guess that thing is probably Snapcraft, which doesn't have enough market penetration. Like, I don't think they cover Windows. And so, yeah, you're right, you can't really, I mean, maybe you could lower your number of things, but you can't get it down to one. cool so let's let's jump into into materialize as as a company um so what is a day like for a scientist or an engineer and materialize like how you know specifically like how is it everyone kind of or i guess pre-covid let's say everyone drove into work you know had a cubicle or has a bullpen but is there something kind of unique about life at Material Life? Well, we're in New York City, so no one drove anywhere. You would hop into your metal cylinder and be propelled from one end of the city to the other. I mean, it's changed. I guess it's part of the problem. So I'm trying to get a snappy way to characterize it. But early days, it was, you know, we're all basically in
+
+137
+01:17:12.000 --> 01:17:40.000
+within 10 feet of each other. And there's a bunch of rapid prototyping and sort of turnover where like, I'd put together some code and then hand it over to someone else. And they'd come back and say, like, this doesn't, you know, this isn't correct from Seek. Okay, well, let's iterate on it. There was a lot of dynamic energy where things were randomly changing and we were trying stuff out. As we've gotten bigger, this has cooled down a little bit in that people go crazy if you just randomly change what they're working on while they're working on it.
+
+138
+01:17:40.000 --> 01:18:03.000
+So we have, I mean, sorry, this is not unique to Materialize, but a process now of sort of goal setting and stuff like that, trying to figure out, for example, in turning on the Cloud product, what are the steps we still need to do before we're comfortable putting that in front of people? Folks have nicely carved up bits of work where we're pretty comfortable. I mean, if the work gets done, it
+
+139
+01:18:03.000 --> 01:18:22.000
+doesn't necessarily matter how it gets done. You don't need to be butt in the seat for any particular hours of the day or anything like that. Depends a little. The cadence changes a little bit. Sometimes something new and exciting gets put out there, and it's worth having you sit around for a little while to see, did anything catch on fire,
+
+140
+01:18:22.000 --> 01:18:53.000
+help out people who don't understand exactly what you did but but generally speaking what's the coolest uh off-site that you folks have done well so we haven't we haven't done two we've we've got a few and i'll name my favorite one but uh we haven't done too many because uh it's just about a year um and then uh and then covid happens oh yeah that's right it's not too much not any off-site since then we desperately want to do one but we've done we've done, we've done two basically. We went to upstate New York and did some hiking. This is when we were about five or six people. And I don't know, you know,
+
+141
+01:18:53.000 --> 01:19:07.000
+I would say fairly stereotypical, but super fun. You know, like hiking during the day and then, then smash brothers at night and you know, some new calling and some whiskey and stuff like that. But this, it was totally appropriate for, for who we were and what we wanted to do at the time. Some folks went rock climbing.
+
+142
+01:19:07.000 --> 01:19:33.000
+Everyone was just happy to get out of the city and just sort of stretch their legs in the outdoors. And that was great. And then come, I think it was February, actually, before anything got especially weird, we actually went on essentially a skiing trip. It was up in Vermont and it was raining rather than snowing and you know it was just mostly getting some time out of the standard work environment where you still get to be social with your colleagues you get to
+
+143
+01:19:33.000 --> 01:20:01.000
+you know it reinforces the fact that these are actual humans not just people who write annoying comments on your on your pr or something like that and just chill with chill with people spend some time socializing that uh doesn't have to be in a bar drinking or something like that. It can just be pretty mellow, taking walks or just over dinner. Yeah, that's awesome. Yeah, I think with COVID it's a challenge. I mean, most of our, I guess, quote-unquote off-sites have been just playing video games.
+
+144
+01:20:01.000 --> 01:20:27.000
+We just take some time out and play some games together, play a bit of Counter-Strike or something it's a little complicated because during covid i would love to do this i have like a virtual offsite though it feels like a very weird thing to require of people like it's it's one thing to say like we're all getting in a car and we're going somewhere awesome which basically like okay fair enough um but if you tell them like we're all taking next week and we're not going anywhere interesting but you got to log on and play some video games or something like that and And a lot of the folks, I'd rather do something else,
+
+145
+01:20:27.000 --> 01:20:36.000
+to be totally honest. And it's hard to, I mean, on the one hand, you'd love to, you know, take some time off of work to get people a bit more social interactive, but it's a bit hard to tell them like,
+
+146
+01:20:36.000 --> 01:21:15.000
+you know, your time, which is scarce at this moment, needs to be spent screwing around with us, playing Scattergories online or something like that. Yeah, it is. It is super awkward. I think it's a real challenge. And yeah, it's a fine line you have to walk between. If you make it kind of, let's say, if you don't hype it up and promote it, then people won't show up. But then then if you make it mandatory then it kind of feels like you're in the show the office right yeah so so there's some fine line there so we had we had a holiday party for example which uh was done virtually and you know straddle
+
+147
+01:21:15.000 --> 01:21:43.000
+this line pretty pretty well i guess like you know we it wasn't strictly speaking mandatory but everyone was definitely encouraged to come and and folks leaned into that and you know got dressed up and made their own fairly nice dinners and showed them off on zoom and stuff like this. And this felt pretty good. Like it felt good that it wasn't, you know, and now mandatory sit and look in a camera and have dinner together, which is not nearly as exciting as we're all going to go out and have some, some cocktails and then a nice dinner.
+
+148
+01:21:43.000 --> 01:22:02.000
+Yeah. One thing I, my team hasn't done this, but another team, I think it was like HelloFresh. Yeah, there's this thing called HelloFresh where they'll deliver ingredients to cook a meal and it's just enough ingredients to make a very specific meal. And so they delivered this to everyone's house on the same day.
+
+149
+01:22:02.000 --> 01:22:37.000
+And then everyone set up know set up uh uh their portal device or their phone on a stand or something like that and we all i mean they all just kind of cooked together i thought that was really clever i like the idea a lot though i got to say like the same sort of problems creep up especially uh you know folks in new york who you know some folks that are at least you know kitchens are not not the centerpiece of the apartment and if you tell them like unfortunately you're gonna have to cook your own dinner tonight um you know no ordering yeah it's in the interest of the company that that you cook your own dinner and eat what you make uh almost sounds like punishment i think it's really fun i like
+
+150
+01:22:37.000 --> 01:23:12.000
+cooking you know i never i never thought about that yeah i mean i also really love cooking because it kind of shows how uh you know we all kind of like bring our own biases right like i never would have thought that but when you put it in that perspective it totally makes sense right i bet there's some people who uh were just like like what you know what i don't you know like my kitchen is just like this stack of of uh of boxes yeah i mean same thing our first offsite was this hiking stuff in upstate new york and i could i loved it i think that's i love being out in the woods and running around and stuff like that. But I could totally imagine there's some other folks who are like, why is this is not what I thought of when I thought it was fun.
+
+151
+01:23:12.000 --> 01:23:40.000
+I was thinking we're going to sit in a chair and drink some beer or something. And it's a different structure for folks, I suppose. But like this, I suppose, again, this is one of these things that there's an art to doing it. And it's not necessarily a thing that's super easy to fake. So I'm impressed when people do it well of how do we bring together a bunch of people who have you know different different goals different ideas of fun and nonetheless get them to connect yeah when you can do that that's great yeah that makes sense so are you folks uh hiring like either interns or full-time or oh totally yeah yeah no everyone
+
+152
+01:23:40.000 --> 01:24:20.000
+anyone who's interested should reach out. I think generally the answer is yes. If you have a particular affinity for this sort of thing, we're interested for sure in interns all across, I think all across the spectrum of engineering background. I don't think any particular thing where we said, no, no, we just need to stop hiring this that or the other thing that makes sense and so post-covid the office is in new york city and so so people should uh uh you know if people are interested that's one of the things they should expect that that they would uh head over we have we have actually several
+
+153
+01:24:20.000 --> 01:24:47.000
+locations now and we have we have people sorry several locations is too strong we've hired remote people who are not going to be moving to new york you know folks are in california folks are in europe stuff like that so that's definitely on the table i think you know we're excited by all of this there's a management overhead associated with it so so the engineering management for example for sure has the ability to say like no like we don't know how to handle someone in this time zone um and i don't want to wake up at two in the morning to do their, their one-on-ones.
+
+154
+01:24:47.000 --> 01:25:10.000
+So there's a bit of a pushback if they're not in an existing time zone that we have, we'll need to figure out how to manage that growth. But I think if, if you're interested and excited about this sort of thing, I think reaching out is a hundred percent the right thing to do. And we can try to figure out, you know, if not now, when, or, or see what makes sense. Cool. And so for folks who are figure out, you know, if not now, when, or see what makes sense. Cool. And so for folks who are interested in, you know, grabbing a copy of Materialize, trying
+
+155
+01:25:10.000 --> 01:25:33.000
+it out, like we said, it's super, super accessible. You can get it from, you know, an app repo or brew or whatever. But definitely check out the website first and learn about it. You can go to materialize.com. It's materialized with a Z. So I think that's the American version. I think materialized with a z so i think i think that's the american version i think materialized with an s is the british version that's right and something like the main interesting point i guess is that there's if you go to materialize with an s there's a
+
+156
+01:25:33.000 --> 01:26:40.000
+company there they're a different company um and you might have a very different experience if you apply for an internship uh there you might yeah that's right So they're actually a fish farm. I have no idea. But yeah, Materialize with a Z. And, you know, you can, I'm sure there's a careers page, you could check all of that out. There's a place where you can try out materializing and uh actually so one day just to be clear you can like run materialize over a file right i mean if you're totally totally yeah text files um like a csv is a classic thing that you can um we have we have a few worked examples on the web page and one of them literally as long as you have an internet connection uh just starts w getting data from uh from wikipedia about what are people editing, for example, at the moment. Just starts pulling that down to your computer and has a built-in query that asks who are the top contributors as this data set evolves. And it's just grabbing the data continually once you start the little tasklet.
+
+157
+01:26:40.000 --> 01:27:02.000
+And there wasn't necessarily any data in your computer beforehand, but there is now. And you're just sort of looking at that as it evolves. You could do some other crazy stuff with that, too, and play with it. Yeah. Cool. It makes sense. And so if people want to talk to you about Materialize, they can also at you at Frank McSherry on Twitter. Absolutely. And we'll post all of that in the show notes.
+
+158
+01:27:02.000 --> 01:27:21.000
+Yeah, no, for sure. We're definitely active on Twitter. I mean, a thing that I didn't mention, I suppose, is that if you're going to materialize, there's also, for example, a bunch of blog posts, stuff that we've written, just I would say slightly more conversational content about what's interesting or different going on in here. And it's a great place to look to sort of form some questions, for example, like this looks great.
+
+159
+01:27:21.000 --> 01:27:42.000
+But and then reaching out in person is totally fine. Like that's I spend a bunch of my time trying to help people work people through like what's different here, or I don't see how you can do that or whatnot. And it's a great thing to do in public. Bunch of people learn from it who didn't necessarily know to ask or couldn't figure out how to frame their questions. Yeah, that makes sense. I think, you know, another thing is, is for folks out there who are trying to get into
+
+160
+01:27:42.000 --> 01:28:07.000
+maybe like, you know, uh, database engineering, you know, the best thing to do is to get your feet wet, you know, using some of these tools. And at some point you might kind of be scratching your head saying, you know, I don't really know how to do this in materialize and I don't really know how to do it any other way either. You know, maybe I'll write a plugin or maybe I'll fork it and make some changes. And the next thing you know, Frank comes knocking on your door saying,
+
+161
+01:28:07.000 --> 01:28:37.000
+hey, this is some pretty cool stuff. Why don't you come work at Materialize? So, I mean, you jump into these projects and dive in. And the source, it's totally open source. So it's an amazing way to kind of learn. And it sounds like it's a very powerful tool for just about anybody. I would definitely say Materialize, I was supposed to say more than other things, but maybe that's not fair. But Materialize has this cool property so far that you can do some pretty interesting things with it, some unexpected things, stuff we hadn't planned for, for sure.
+
+162
+01:28:37.000 --> 01:29:16.000
+So I think maybe, well, as much as other projects out there, getting your feet wet and starting to use it often leads to something surprisingly cool and interesting. And I don't know, maybe Jeral is interested in it, but even just your friends are posting on Hacker News or something. There's some cool things that you can do with Materialize that many of us didn't expect ahead of time and didn't know. Like, oh, well, I didn't realize this was the main problem in sports statistics or something. It's something we don't know anything about. And you're like, yeah, I just put. And now it does a thing. And everyone's super stoked. You can build some pretty cool and new different things. And telling people about those is wonderful as well. But I think you're right, just to sort of loop back around a thing
+
+163
+01:29:16.000 --> 01:30:00.000
+that getting your feet wet, whether it's with materialize or other data platforms, is a great way to start getting a handle on like what's hard what's easy what do you find to be most most unpleasant a lot of the folks the engineers who aren't materialized are there because i literally just asked some folks recently they're there because this was painful in their previous lives and if they can make this better they find that really exciting but getting that context for like what's hard hard, what's easy, what would I like to make better is invaluable. That makes sense. And so for people who have never worked with SQL before, what do you recommend to them? Does Materialize link to some like kind of generic SQL tutorials or is there your favorite tutorial that you point people to?
+
+164
+01:30:00.000 --> 01:30:35.000
+I don't think we do link to a generic SQL tutorial. That's a really interesting point. Actually, we have documentation on the SQL that we support. So as if Materialize had invented SQL, of course, that's not the case, but that's the way the docs are sort of structured. It's a really good question, actually. I came to SQL in a very non-standard roundabout way, having done a whole bunch of data parallel computation first and then looped back around and tried to map SQL onto it. So I wouldn't recommend that path. I liked it a lot, but it took many years. I'm not really sure. There's a bunch of, I think, for example, Marcus Weinand has a fairly well-regarded
+
+165
+01:30:35.000 --> 01:31:03.000
+introduction to SQL and also skilling up SQL stuff. I don't know the webpage off the top of my head, but I could try to track that down. I have to imagine there's good and bad SQL tutorials, yeah. Yeah, I mean, we can add anything to the show notes. I'll track it down and I'll hand it out and we can make sure it's linked. Yeah, I also, like you, I kind of learned SQL through, yeah, I was basically at a place where a bunch of the code was written in SQL.
+
+166
+01:31:03.000 --> 01:31:29.000
+And so that was kind of my way of getting thrown into it. And then I kind of realized post hoc, like, oh, I should have learned this a decade ago. And so, yeah, I actually, I'm pretty sure we've done a show on SQL. It might be dated now, although the standard doesn't change very often. So it's still relevant. But in that episode, I'll see if I can link to that one as well. We'll have a bunch of references.
+
+167
+01:31:29.000 --> 01:31:50.000
+So yeah, definitely check out, learn SQL, I guess that's step one. Really, really important, super useful. SQLite is very, very accessible. Materialize is very, very accessible and they will make your life so much easier. And then after you learn SQL, check out Materialize and very, very accessible and they will make your life so much easier. And then after you learn SQL, check out Materialize and start using it.
+
+168
+01:31:50.000 --> 01:32:18.000
+So yeah, I think we can kind of put a bookmark here, but Frank, that was a really, really amazing inspiring talk. I mean, I feel like I wanna try, I'm gonna go and grab Materialize right now and I have some files that I want to see kind of how it works on them. And I think the idea of having kind of a SQL query that works on streaming and running that same one on batch and not having to write two of everything, you know, all of that is
+
+169
+01:32:18.000 --> 01:32:47.000
+super, super appealing. I think people out there have learned a lot in the past hour. And so I really appreciate your time and you coming on the show. It's not a problem at all. I'm happy to be here. And actually, the questions are great and really sort of draw out for me at least what's exciting and sort of stimulating what we're doing, why we're doing it. And hopefully, you know, the listeners, some fraction of them agree and like, yeah, that does sound like a thing that I either need or really want or something like that. That sort of then resonates with us for building it.
+
+170
+01:32:47.000 --> 01:33:01.000
+Yeah, totally. Thanks again. You know, for folks out there, we're working on doing two shows a month. So you might be surprised to see this show considering we, we already have an April show.
+
+171
+01:33:01.000 --> 01:33:29.000
+So you might be surprised when you're seeing another April show. And so that's, that's what's going on there. We're going to, we've been working with some really, really nice folks who have been helping us with a lot of the post-processing and that's allowed us to ultimately produce more content, which is super exciting. And the reason why we can do that is because of your ongoing support. So thank you so much, folks out there who are subscribed on Patreon and people who found out about Audible through the show, through our shows.
+
+172
+01:33:29.000 --> 01:33:45.000
+So thank you all so much for all of your support, your emails. We get a whole bunch of new ideas over the past few weeks that we've added to our list. So the content is still growing faster than we can consume it, which is really, really important and great.
+
+173
+01:33:45.000 --> 01:33:50.000
+And everyone have a great rest of the month and we'll see you all next time. Music by Eric Farndeller. Programming Throwdown is distributed under a Creative Commons Attribution Sharealike 2.0 license. You're free to share, copy, distribute, transmit the work, to remix, adapt the work, but you must provide an attribution to Patrick and I and sharealike in kind. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

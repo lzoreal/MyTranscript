@@ -1,0 +1,209 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:30.000
+what did exist were the old SGI documentation for the original STL. And at some point we came across that and I didn't know what a reduction was at the time. So anytime I would come across those documents about the SGI STL, I thought it was just, you know, gibberish. I didn't know what they were talking about. I didn't know what an iterator was or a functor was. But I knew that like std vector was helpful. I just sort of assumed that this other stuff to the
+
+2
+00:00:30.000 --> 00:01:36.000
+side was kind of for nerds or something. But eventually I learned what std transform did and realized, oh, that's exactly what that's the kind of thing that we need to do this this GPU parallelism stuff. And at that point, you know, I sort of had to get good with STL and figure all that stuff out. And it turns out that stuff is actually pretty useful and well designed, at least for the time. Welcome to AD SP the podcast episode 237 recorded on May 21st, 2025. My name is Connor and today with my co-host Bryce, we chat with Jared Hobarock, original author of the Nvidia thrust parallel algorithms library. This is part one of a most likely four or five part series. Your actual physical background is better than most folks virtual background and you
+
+3
+00:01:36.000 --> 00:02:27.000
+you look like you're at like the edge of a national park with some I don't actually know what your situation is but it looks like a good situation like you've got windows behind your shelves and a window on the side walk us through. Don't dox yourself if you don't want to but it I when Bryce said that I was also thinking this is a this is a setup that looks better than most CEOs in a keynote talk. Well, NVIDIA's salary goes a lot farther in Kansas City than it does in Silicon Valley, as it turns out. That is true. Jared, do you live out in the woods? Or how rural is where you are? No, I live in a I live in a suburb
+
+4
+00:02:27.000 --> 00:03:12.000
+There's just you know Like greenery, so there's trees and there's trees and I do not have I do not have greenery Do you have neighbors I mean I assume you definitely have neighbors But it does look like you have a massive backyard or front yard Whatever that is in the background I've got a neighbor. Well, I've got lots of neighbors. I live in a little actually I live across the street from a Saturday Night Live cast member We live in a little cul-de-sac of mid-century modern architecture. And we've all got lawns and interesting looking houses.
+
+5
+00:03:12.000 --> 00:03:32.000
+A man after my own heart, I did not know this. I'm a sucker for the mid-century modern architecture. So we should talk to our boss about having our next research offsite in Kansas City then then it sounds like. We could have it downstairs. That is right. You two have the same boss.
+
+6
+00:03:32.000 --> 00:03:55.000
+I forgot about that. That is, well I guess I knew that but I did not realize the possible podcast implications of that. Yes. I mean we should probably, now I feel like some of this banter is gonna make it on to the actual podcast. Let's introduce our guest though. We have the man, the myth, the developer behind the library that we spend an immense amount
+
+7
+00:03:55.000 --> 00:04:37.000
+of time talking about on this podcast, the thrust parallel algorithms library, Jared Hobrock from Kansas City. We spent a whole, we had our trip to Slovenia and to Italy where we were talking about unique count and algorithm that I assume you personally authored back in the day, only to realize that it was a reduction with some zip iterators behind the scene. And anyways, we're now talking to the individual that I'm not I don't actually know where thrust originated if it was with with your dissertation anyways we'll throw it over to you now Jared what we'll get some updates from Bryce because he's in the States not in New York
+
+8
+00:04:37.000 --> 00:05:11.000
+I'm home now oh are you home all right well we'll get a little update from Bryce later but we both work on the same research team and throw it back to wherever you want. The first computer, the first time you encountered parallel programming, the first time you encountered a GPU, take it back however far you want and then bring us up to speed with where you are now. The thrust library you're working on, you know, things that are bigger and better, hopefully, than thrust Library. But yeah, over to you. Hopefully.
+
+9
+00:05:11.000 --> 00:05:48.000
+Well, I'm always surprised to see that Thrust still gets talked about. I'm surprised it could fill up enough content for, I don't know, some portion of your podcast so far. But yeah, I guess just to talk a little bit about where it came from, it did originate as part of some work I was doing in grad school. So I came from a computer graphics background. And in grad school, I was working on things like
+
+10
+00:05:48.000 --> 00:06:15.000
+path tracing renderers on the GPU around the time that CUDA was first released. And Thrust sort of emerged from that renderer project because I needed something. If you've ever written CU... kuda kernels you know that there's a lot of uh... well at the time at least not a lot of batteries were included with kuda so if you wanted to do anything with kuda
+
+11
+00:06:15.000 --> 00:06:58.000
+it required a lot of effort it required a lot of labor and during that project while i was working on this render i just noticed that i was you, repeating certain things I needed to do for a kernel launch over and over and over again and it became clear that, you know, we needed some more code reuse and eventually this library sort of came together for automating some of the stuff you do as part of writing kernels and launching them And that sort of evolved to become the Thrust Library over time. At some point, I learned about the standard template library and realized this is what we should be targeting. This is what we actually need.
+
+12
+00:06:58.000 --> 00:07:47.000
+And it sort of coalesced around this thing that already existed. So interesting, so you started off Thrust, Thrust was not originally inspired by the STL. You started off as just a collection of like common utilities and then you learned about the STL and then took inspiration from it. Right, at some point, so this was probably back in 2007 or eight. And things like cpp reference.com didn't exist, right? Stack overflow maybe didn't exist. But what did exist were the the old SGI documentation for the original STL. And at some we came across that and I didn't know
+
+13
+00:07:47.000 --> 00:08:33.000
+what a reduction was at the time so anytime I would come across those those documents about the the SGI STL I thought it was just you know gibberish I didn't know what they were talking I didn't know what an iterator was or a a functor was but I knew that like STD vector was helpful. I just sort of assumed that this other stuff to the side was kind of for nerds or something. But eventually I learned what STD transform did and realized, oh, that's exactly what that's the kind of thing that we need to do this GPU parallelism stuff. And at that point, I sort of had to get good with STL and figure all that stuff out. And it turns out that stuff is actually
+
+14
+00:08:33.000 --> 00:09:10.000
+pretty useful and well-designed, at least for the time. But maybe originally wasn't presented in the most sort of, it wasn't obvious why it might be useful at the time, because C++ in like 2008-ish of it wasn't obvious why it might be useful at the time because C++ in like 2008 ish it wasn't really in a state where you could use the STL in a productive way right that'd be before things like lambdas and so all look very alien to me until eventually sort of figured out what the purpose was and having the use case in GPO parallelism was sort of what made that click for me.
+
+15
+00:09:10.000 --> 00:09:43.000
+Did this work that you're doing on that eventually led to Thrust, was that, was any of that pre-Cuda or was it all like after the initial CUDA release? Before CUDA came out, we would write, they had what was called GPGPU, right? So general purpose programming on GPUs. And in those days, that meant you were writing shaders in something like HLSL or whatever the OpenGL shading language was at the time.
+
+16
+00:09:43.000 --> 00:10:12.000
+You're sort of trying to do what you wanted to do in a graphic, in like a, in a pixel shader actually. So there was a bit of that going on, but we really wanted like the surrounding code in a renderer was all C++, and you just prefer to write it all in C++ and not have to switch between, you know, the renderer code in C++ and then the shader code in some sort of pseudo C++-like
+
+17
+00:10:12.000 --> 00:11:23.000
+language. And anyway, before CUDA came out, that's sort of what we had to settle for. But once CUDA did come out and C++ sort of, kind of sort of worked at the time. That was just like so much better than trying to do things in shaders, in graphic shaders. So at some point I started working on a GPU raytracer based on CUDA. And of course that would be like the renderer was a C++ application and the CUDA stuff was close enough to C++ at the time. So anyway, at some point, thrust sort of evolved from that work when CUDA C++ actually became available. Before, before CUDA, there was some people at Davis had a sort of a thrust like thing they were doing with graphics shaders, sort of had the same same idea. You had these parallel primitives, but they were sort of compiling them to graphic shaders. And, you know, of course,
+
+18
+00:11:23.000 --> 00:12:05.000
+it was just a research project. No one was building products with it or anything like that. But the idea has sort of been around for a long time. I think even Ian Buck's work at Stanford was it was all setarting shaders and maybe had some of the same kind of flavor at the time. But this is all like a long time ago, you know, before before CUDA, you know, ever existed. So you said at one point that pre discovering STL, you weren't really thinking about reduces and you can correct me if I'm wrong, but like, you know, the thrust reduces, you know, a, I don't know what you call it, a paramount algorithm of the
+
+19
+00:12:05.000 --> 00:12:39.000
+thrust library. Like reductions are the bread and butter of parallel compute. And I know that I think it was 2003 or four that the Jeff Dean MapReduce came out. So when you're working on these repetitive CUDA kernel patterns and you're working towards this algorithm library and then you discover the STL I mean, it's both, you know Bryce and my one of our favorite algorithms What is? Were you aware of like reductions and parallel reductions at that point? Like what's the state of the academic literature?
+
+20
+00:12:39.000 --> 00:13:17.000
+Because you made it sound like you stumbled upon the STL and that helped you crystallize it. Was that what led to like, stood reduce or not stood reduce, but like thrust reduce? Or was that like clearly a part of your algorithm library before then, and it just kind of matched up well? No, not at all. So remember, this is in the context of a path tracing renderer. So I needed to fire a bunch of rays for each ray, trace array. There was no need for a reduction. I certainly didn't know what a reduction was at the time. I wasn't aware that...
+
+21
+00:13:17.000 --> 00:13:41.000
+Really? And that's like to me, like I went to school 2008 to 2014, maybe didn't learn about it, but like functional programming was a thing while I was learning programming languages. So like reductions and folds. It's everywhere. Like you go to a language, they've got an algorithm. But at your time, you're saying you weren't even aware that wasn't like a. Well, remember, it wasn't everywhere.
+
+22
+00:13:41.000 --> 00:14:27.000
+We introduced the term into C++, so it wasn't in that language. I took a programming languages class in grad school, and that class was taught in OCaml, which is a functional language. And I didn't understand it. I didn't get it. It didn't click for me at the time. Now I sort of get, I understand functional programming a lot better. But at the time, I tried to write everything as if I was writing C code and it just never really clicked for me and certainly wasn't exposed to something like a fold until much later in my career. So no, at the time when Thrust was coming together, you know, I probably
+
+23
+00:14:27.000 --> 00:15:24.000
+didn't learn about a reduction until someone demonstrated how to probably until Mark Harris demonstrated how to do it in CUDA. That is that's both surprising and inspiring that the fact that it's such an essential part of Thrust and CUDA programming in general that you didn't discover that until so late. I would have just assumed it was like part of the genesis of Thrust. Well, parallel programming at the time was something that people did at national labs. And they did it on Intel chips. And they I imagine everything they did was sort of ad hoc. It's not like there were libraries of, you know, parallel primitives in 2005 or anything like that. Maybe
+
+24
+00:15:24.000 --> 00:16:00.000
+the closest thing there was was threading building blocks. I don't know when that came out, but they, TBB probably had a reduce at the time, but I had never used TBB. It's not something I was experienced in. I was just, like I said, my background was in GPGPU, and that meant doing stuff with pixel shaders and couldn't do a reduction in a pixel shader at the time. It wasn't possible. No communication was possible actually in pixel shaders at the time.
+
+25
+00:16:00.000 --> 00:16:58.000
+So I do believe that the original origin of the term reduce comes from APL and Ken Iverson. And then the question is when did it become a popular thing in parallel programming? So I can think of a couple different places. First of all, MPI, the message passing interface, which was created in the 90s, has a reduction primitive. And I think that's certainly one of the places where the notion of a generalized, semi-generalized reduction would have come up as a basic parallel operation. TBB certainly came later, but I do wonder, I asked ChatGPT in the background, so it's looking for answers, but I do wonder where is the first programming language that had
+
+26
+00:16:58.000 --> 00:17:34.000
+a parallel reduction operation, a generalized parallel reduction operation, and by generalized I mean one where you could plug in different operators. I wonder which the first would have been. Yeah, I have no idea. I assume the term reduce comes from... It comes from APL. Yeah, I mean, so APL, the book was written in 1962. The first implementation was 1966, but the term reduce comes from these array languages where when you perform a reduction on a matrix, you are reducing the dimensions
+
+27
+00:17:34.000 --> 00:18:07.000
+by one. So if on a matrix, if you do a column-wise or a row-wise reduction, you end up with a rank one array. If you are doing a reduction on a rank one array, you end up with a rank one array. If you are doing a reduction on a rank one array, you end up with a rank zero scalar. And so a lot of people think that the term reduce comes from that you're reducing a bunch of elements down to a single element, but that's actually not it. The term comes from you are reducing the dimensions on an arbitrarily ranked array from n to n minus one. the dimensions on an arbitrarily ranked array from n to n minus 1. Interesting.
+
+28
+00:18:07.000 --> 00:18:56.000
+To think that it comes from a sequence down to a scalar, I mean, it's not wrong. It is technically a subset of the arbitrarily ranked array of n rank to n minus 1 rank. But I mean, this is all very fascinating because, I mean, the state of thrust today is a very polished usable parallel algorithm library, which as you mentioned earlier, like you said, you're surprised that people are still squeezing so much usefulness out of it. But like, I think of thrust transform reduce and thrust reduce and thrust inclusive and exclusive scan as like very fundamental primitives that if I were to write the history for this algorithm library, like of course that is what you started with, but you're saying that that wasn't the case at all.
+
+29
+00:18:56.000 --> 00:19:41.000
+Like you were working on ray tracing and these things evolved over time. Yeah. evolved over time. Yeah, and especially for something like transform reduce, that sort of, you know, that evolved as a as a as a means to get fusion between, you know, something like a transformer reduction because you know, you want to avoid the memory traffic that would occur if you applied those as two separate passes rather than one fused pass together. And it wasn't obvious, starting out, it wasn't obvious that, at least to us, that that's something that could be really useful to do. But now, like you said, maybe it's one of the first things that you would reach for
+
+30
+00:19:41.000 --> 00:20:48.000
+whenever you need to do something interesting. When, Jared, when did the notion of the fancy iterators, of the lazy iterators come in? Or let me put it another way, at what point did you realize that instead of having a special transform reduce op that you could have a reduce op and something like a transform iterator? Well, originally, I think, so at some point, collaborator Nathan Bell came on to work on the project. And it was sort of the two of us working and before we had settled on the idea that the SGI STL API was something that we needed to target, there was some like, it wasn't clear what the inputs to the algorithm should even be, right? So it wasn't even clear that iterators were the sort of model to target. And Nathan had a background in Python. So he was used to like NumPy. And he had suggested I remember he suggested, well, what if these inputs to these algorithms were more like generators?
+
+31
+00:20:48.000 --> 00:21:35.000
+So they're sort of just like black box functions that you call and they return something to you. And at some point it was clear that that was not going to work. Like C++ wasn't like Python and that couldn't be made to work correctly. So iterators was probably something that we need to understand really well and target. And at that point, I realized I needed to get better at C++ because the stuff going on in the boost iterator library was pretty wild at the time. So, you know, I started mining booster ideas and you know, they've got the iterator library and that's, I mean, Thrust essentially
+
+32
+00:21:35.000 --> 00:22:07.000
+cargo-culted all that stuff and brought it all in. I don't remember exactly, I'm sure the release notes say exactly when this came in, but at some point it became clear that adopting that sort of model would be a good idea because it would allow things like fusion and transform reduce and zip and all that sort of thing. Did Transform Iterator come before Transform Reduce or did it come after or do you recall? I don't remember. I believe from,
+
+33
+00:22:07.000 --> 00:22:38.000
+because I saw a little piece of context here is that I had the unfortunate distinction of having to do a significant amount of version control engineering on thrust, because we've had to migrate it between three different version control systems. So I've looked through all the commits, at least all the commit messages a couple of times. And I believe, if I recall correctly, that transform reduce came first and that later
+
+34
+00:22:38.000 --> 00:23:11.000
+transform like the current implementation or transform reduces implemented as just reduce with transform iterators came later. Just in general, like right now at this point in its life cycle, you know, Thrust is mature and it's sort of implemented in terms of itself, right? So like one algorithm can implement itself by lowering onto another. But you know, projects don't begin like that, right? They begin as like, you put in this hack into this, in this part of the code to make it work. But, you know, really,
+
+35
+00:23:11.000 --> 00:23:46.000
+you sort of know that it should sort of just use itself in a different way and be sort of self similar. But so it doesn't surprise me that maybe transform, or transform came before transform iterator? So Thrust has, I think its architecture is in some ways elegant. In some ways, there's some dark holes of it. But I think by far the most beautiful part of Thrust is what's called the generic back end, the dispatch layer. So when you write a thrust backend,
+
+36
+00:23:46.000 --> 00:24:19.000
+you can customize how each function in that backend. You can customize how reduce works, how transform works, how sort works, how unique works. But there's this generic layer where at minimum, your backend has to customize like five or six basis algorithms and you can customize more if you want but if you don't customize more then all the rest of the algorithms are implemented in terms of those five or six basis algorithms and those implementations in terms of the basis algorithms are in
+
+37
+00:24:19.000 --> 00:24:57.000
+this generic layer and I think that's the most beautiful part of thrust and actually if you like it's one of the best places To like find examples of how to write good thrust code Just like that's where you can go to find Like the unique count implementation that we've talked about on the podcast before in terms of reduce or like the reduce Implementation in terms of like transform iterators. It's a really, it's a very elegant part of the code. I have to disagree. I think it's a gigantic mess of spaghetti code.
+
+38
+00:24:57.000 --> 00:25:35.000
+So I know what you're talking about. Like the idea is you want to call an algorithm and maybe get a default implementation if there's not a specialization and a backend somewhere. I think we have better ways to do that in C++ in 2025, but at the time, I remember, at the time, there wasn't a good understanding of things like customization point objects and how to make that stuff work. So the way it does work to the extent that it does work was sort of implemented in what C++ 03 made
+
+39
+00:25:35.000 --> 00:26:06.000
+possible because that was sort of the constraints of the time. But what you get is this mess. I know it's a gigantic mess of spaghetti, but it doesn't work. It is sometimes very subtle because it works on, it works on the principle of ADL dispatch, and there's some amount of upcasting of execution policies. So there's this tag, the execution policy, and that is used to route your call to the right place.
+
+40
+00:26:06.000 --> 00:26:56.000
+And as it goes through all of these forwarding layers, the forwarding layers have to ensure that the execution policy is correctly casted or upcasted to the most derived execution policy so that it dispatches to the right place. And if any of that goes wrong, you end up with all sorts. I mean you don't have to do that anymore. I mean a lot of those a lot of the reasons that it does work like that is because there were no there was nothing better forwarding references at the time. Yeah you could do much better these days I think if someone were so inclined. So it's very interesting to me to hear that Nathan Bell, one of the other founders of Thrust was a Python person when he was a NumPy person because Jared, do you know the largest
+
+41
+00:26:56.000 --> 00:27:39.000
+user by volume and compute of Thrust today? No. So I think I can give you a pretty accurate accounting of the top users of thrust, specifically thrust. I'm going to exclude libraries that use a lot of cub and some thrust. I mean just people that will heavily rely on thrust. And by users, the metric I'm measuring by is not like lines of code written or number of developers using it, but I mean like number of GPUs right this moment that are running that thrust code.
+
+42
+00:27:39.000 --> 00:28:18.000
+And I'm not sure which of these two is number one and number two, but I think number one is Kupai and Kupai is just a Kuda accelerated version of numpy. So I think there's something there's something very elegant here that back in the day Jared and this numpy fellow came and wrote thrust and, and Thrust has some of that NumPy DNA in it. And then, like 15 years later, Thrust is the thing that powers Kupai, the GPU accelerated NumPy.
+
+43
+00:28:18.000 --> 00:29:10.000
+Now, you asked about the other ones. The one that I think is probably number two and again this is by the metric I gave of like number of like amount of thrust code that's running right now would be PyTorch and there's PyTorch is in more use than Kupai but PyTorch uses thrust in fewer places than Kupai does. Kupai uses thrust very very extensively to implement a ton of the different algorithms. It also uses KUB but it uses it pretty extensively. At least that's my understanding. So yeah I would say Kupai, PyTorch are the top two. Rapids is probably like number three or number four. And then I think after that, I think it's hard to say,
+
+44
+00:29:10.000 --> 00:29:54.000
+there's probably one or two more Python users, and then probably it's whoever the largest C++ user is. But like definitely the top three or four users of the thrust library today are Python frameworks. That's interesting because around 2009 there was sort of a question of what's next there was a question like what was gonna be next for thrust and we had abandoned plans for doing a bunch of like numeric extensions, some very numpy like numeric extensions. And that would have been very valuable if we had actually done that. And like in hindsight,
+
+45
+00:29:54.000 --> 00:30:31.000
+the landscape might be quite, might have been quite different had we had actually gone through. Why did you abandon it? You know, if I'm in a bunch of, Nathan ended up going to Google and Thrust was productized and sort of left our control. So it became, you know, this product and was sort of maintained by product folks. So it began as a research project and at some point was decided that we should productize it, which meant finding someone in a product team to sort of own responsibility for it. And at that time, that meant that, you know,
+
+46
+00:30:31.000 --> 00:31:01.000
+the research people that had been working on it to that point would find something else to do. And that's essentially what happened. So we didn't get thrust numeric, unfortunately, because of that. It would have been something like, you know, like expression templates for NumPy like things. Something like MatEx. Maybe. You said MatEx?
+
+47
+00:31:01.000 --> 00:31:40.000
+Yeah. Something like that, probably. I don't know. You can probably still find it on my GitHub. What's interesting is that in the example subdirectory of the what is now cccl slash thrust slash examples, but at one point was thrust slash examples. There are several examples that are basically like array library examples. I'm not sure if Bryce added this, but we had an episode, I don't know if it was 10, 20, 30 episodes ago where we talked about summed area tables.
+
+48
+00:31:40.000 --> 00:32:26.000
+There is an example in the thrust example repository of a summed area table in Thrust, which you would think is pretty hard to make happen in Thrust, which is a rank one array library basically, a single sequence. But the way that they do that is they define a function called transpose which makes use of a permutation iterator and a gather algorithm and it just it just calls transpose twice and then it defines a horizontal scan which is implemented in terms of inclusive scan and so it calls that twice interleaved with a transpose algorithm. Anyways the point being is that like technically you can
+
+49
+00:32:26.000 --> 00:32:45.000
+Do this with thrust. It's just non ergonomic and I Don't know Did you add? This example, right? Although I think it was it was one of the original examples Although I do plan on adding it was one of the original examples called although I do plan on adding another. It was one of the original examples.
+
+50
+00:32:45.000 --> 00:33:25.000
+It's called summed area table. It's called summed underscore area underscore table dot cu. And it makes use of inclusive scan by key, which is where you can, you know, do your kind of row key algorithm. And then it has a transform iterator, which I believe uses a permutation iterator, which gets your kind of bi-column indices and then does a gather at the end of the day to permute your sequence, which is, I imagine, highly inefficient in the world of array libraries, machine learning, deep learning.
+
+51
+00:33:25.000 --> 00:34:02.000
+But I was very curious to stumble across that the other day, given that you said that your co-author of the library, Nathan. That looks like Nathan coming to me, yeah. He was always good at figuring out the way to do it. He was better than me at figuring out how to make the prefix sum do what you wanted. I've gotten better over time but um... Oh I don't I don't want to tease too much but towards the end of the Jared interview oh boy do I have something I've been working on the past two days
+
+52
+00:34:02.000 --> 00:34:07.000
+that I'm very excited to show you guys in that vein? Be sure to check these show notes either in your podcast app or at adsp the podcast com for links to anything We mentioned in today's episode as well as a link to a get-up discussion where you can leave thoughts comments and questions Thanks for listening. We hope you enjoyed and have a great day It's not the tagline our tagline is chaos with sprinkles of information There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

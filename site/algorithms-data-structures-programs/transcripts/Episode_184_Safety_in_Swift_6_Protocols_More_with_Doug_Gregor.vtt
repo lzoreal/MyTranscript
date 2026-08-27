@@ -1,0 +1,237 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:00.000
+So the Swift generics model is rooted in exactly the same ideas as C++ OX concepts. So some of the names are different, but the ideas are the same. So the equivalent to a concept in Swift is called a protocol. And a protocol is an abstraction that describes a set of types that have a certain set of common operations. Now, just like with concepts, you can compose protocols. So a protocol can inherit from another protocol, for example, meaning every type that conforms to the one protocol also conforms to all the ones that Welcome to ADSP, the podcast episode 184 recorded on April 29th, 2024. My name is Connor, and today with my co-host Bryce, we finish part five of our five-part interview with Doug Greger.
+
+2
+00:01:00.000 --> 00:01:52.000
+In today's episode, we talk about safety in Swift 6, protocols, generics, ABI, and more. You mentioned that, you know, half of its lifetime has been working up to Swift 6, which obviously then sets off a bunch of bells in my head. What is the reason for that? And my guess is that it's because there are some big features that are coming in Swift 6 that are, you know, if the last couple of years hasn't necessitated, you know, a version bump or a major version bump. There's probably some exciting stuff that obviously the people that follow the Swift community and the Swift language probably have been teased about or know about. So, to the extent that you can talk about it, I would love to not leave our listeners hanging on what, uh, is coming in Swift six and what should get them excited. So feel free to answer those in, in whatever order you want. And maybe that's how we'll wind down.
+
+3
+00:01:52.000 --> 00:02:32.000
+And then we can dive and do a full blown, you know, history of the Swift one, two, three, four, five, six, or whatever you'd like to come back and talk about. But yeah, uh, let's see. Well, maybe let's start with Swift six. Cause I think it says interesting things about how Swift evolves. So we have not done a major version bump since 2019. That was Swift 5. And this does not mean that we didn't get new features in Swift. So we deliver new features to Swift every six to 12 months. So there's new release every six months, and usually it comes with major features. Since we declared Swift 5, we added a concurrency model.
+
+4
+00:02:32.000 --> 00:03:03.000
+So async await and actors is the basis of the concurrency model in Swift. We added that in 2021 and have been refining it ever since then. We added macros support last year, and we've been involving the generic system and so on since then. So new features we just deliver on the annual cadence. There's no surprises here. So Swift has an open evolution process. So if you go to the Swift forums,
+
+5
+00:03:03.000 --> 00:03:42.000
+you can see reviews on new Swift features as they're being discussed. And they're discussed in the community, then decided upon and implemented throughout this process to come available. So it's a fairly rapid turnaround from a programming language standpoint to have these features discussed, designed, rolled out pretty quickly. So why are we doing Swift 6? So Swift 6 has one major goal, which is that we are expanding on the memory safety that we've always had since the beginning of Swift time to include data race safety.
+
+6
+00:03:42.000 --> 00:04:20.000
+Oh, wow. So the idea here is that the language statically has an understanding of where data is created and where concurrency is introduced, so that it can tell you whether you are leaking shared mutable state across concurrency boundary, therefore introducing a database. So there's no way to do this without breaking some source code, because there is some source code today that is accepted in Swift 5 and has data races that will necessarily produce
+
+7
+00:04:20.000 --> 00:04:56.000
+errors in the Swift 6 language mode to diagnose the fact that there are data races here. And the goal is we want Swift 6 to be at a point where, you know, you already didn't have to think about memory safety in Swift. You just program. It's fine. We want that same thing when you're doing concurrent programming, that you don't have to worry about data race safety because the system is supporting you and will tell you when you've made a mistake. That's, that's essentially what the whole run up to Swift six has been about. That's really exciting.
+
+8
+00:04:56.000 --> 00:05:16.000
+And that is going to, I mean, already I think Swift is, you know, in the space of sort of languages that get compared with rust, but definitely is going to elevate it even more because I, I know that, you know, in the space of sort of languages that get compared with Rust, but definitely is going to elevate it even more. Because I know that, you know, D as well, there's been lots of conversations about safety in D. I don't follow the D community that closely. But I do know that
+
+9
+00:05:16.000 --> 00:06:07.000
+I attended certain meetings and meetups and those conversations have been there. Anyway, so in the system space, it is obviously the hot topic. you follow obviously the c++ conference uh circuit you know half of the keynotes in 2023 my guess were all about safety and c++ and you know i'm sure folks that you know uh have given you know these these safety talks um anyway so it's uh not my keynotes though not my keynotes but uh that yeah i imagine that that's gonna um cause a certain amount of uh whatever ripples or or waves in the uh because you know the white house documents whatever it was called got released and they had a short list i think of six languages i don't recall i don't recall swift being on that short list but maybe they were yeah um it was but they were yeah okay yeah so i mean this will i mean you've already made the short list, but maybe they were. It was. They were? Yeah. Okay. So, I mean, this will, I mean, you've already made the short list,
+
+10
+00:06:07.000 --> 00:06:31.000
+but this is obviously already adding to that sort of argument for why Swift and, you know, how safe is it? Yeah. And concurrency safety, it's a really tricky one. So, like, I haven't seen a proposal in the C++ space, for example, to introduce concurrency safety. Rust has managed it using strict ownership rules.
+
+11
+00:06:31.000 --> 00:07:18.000
+It's an interesting model. We found in Swift that that would be too onerous. So in Swift, the fact that we are very value type centric helps a ton because it is completely safe to share a value, like a value of value type centric helps a ton because it is completely safe to share a value like a value of value type across concurrent tasks because all the copies are independent and local reasoning wins but we swift has classes like with inheritance and people use this feature and so you can't share those in any meaningful way. And strict ownership, like unique putter style, good for concurrency, not so great if you actually have more interesting graphs. So a class in Swift doesn't have value semantics?
+
+12
+00:07:18.000 --> 00:07:49.000
+No. They are reference types. types so structs and enums and anything built on them like uh arrays of structs and dictionaries of structs and so on all value semantics you can build pretty much anything out of a value semantic model and it's you know a copy when you when you pass it around so so is an array isn't a what type of thing is an array it's a a generic something, but what is, it's a generic what? Yeah. So it is a generic struct. Okay. All right.
+
+13
+00:07:49.000 --> 00:08:13.000
+That wraps the class and implements copy on write semantics. Okay. Gotcha. So copy on write is the way out, right? Because like in C++, you wouldn't copy a vector everywhere, right? That would be problematic. You pass them by const reference. Const reference doesn't give you actual guarantees that your copies are distinct from your source.
+
+14
+00:08:13.000 --> 00:08:47.000
+Right. Copy and write does. Yeah. So with classes, we needed a better answer in Swift. And actually, we found it when I was chatting with you two at PLDI two years ago. There was an amazing paper there on fearless concurrency, which had a type system that was far more usable than what we've seen in any other language. And we worked with those authors to bring those ideas into Swift.
+
+15
+00:08:47.000 --> 00:09:18.000
+And they are actually forming part of the backbone of Swift 6's data race story to make reference types like classes work much better. Interesting. Yeah. Well, it certainly sounds like a language in development that we, as two people who work at NVIDIA, the parallel programming company, should be paying more attention to. Does Swift have Atomics? Yes.
+
+16
+00:09:18.000 --> 00:09:48.000
+Okay. And does Swift have GPU support? Can I program my GPU with Swift? Swift does not compile to GPU. No. You could possibly make it do so. I assume that on Apple that there's some metal compute way of doing things. You can't program NVIDIA GPU with it today, I would imagine. But if you want to do compute on Apple, I would presume that there's something. Maybe I'm wrong about that, though.
+
+17
+00:09:48.000 --> 00:10:05.000
+You can use the Metal libraries from Swift, certainly. But your actual code that runs on GPU would still be Metal. Okay, gotcha. Interesting. Okay. All right. So we should talk about the generics. We should talk about generics they're
+
+18
+00:10:05.000 --> 00:10:54.000
+so much fun the poor listener okay what do you want you want a rundown of the swift generic system um yeah yeah i mean you said that it's rooted in c++ ox concepts so absolutely start from how you got start start from the beginning of your there C++ OX concepts is rejected, then you start working on Swift, and what do you come up with? Yeah, we come up with something that is very similar, but without the holes. So the Swift generics model is rooted in exactly the same ideas as C++ OX concepts. So some of the names are different, but the ideas are the same. So the equivalent to a concept in Swift is called a protocol.
+
+19
+00:10:54.000 --> 00:11:39.000
+And a protocol is an abstraction that describes a set of types that have a certain set of common operations. Now, just like with concepts, you can compose protocols. So a protocol can inherit from another protocol, for example, meaning every type that conforms to the one protocol also conforms to all the ones that it inherits from. Any type can describe that it conforms to a protocol, meaning it implements the interfaces required of the protocol. And it can do so with what's called an extension. So let's say I want to, I talked about this earlier, right? I want to make a Swift array conform to the equatable protocol. Equatable
+
+20
+00:11:39.000 --> 00:12:33.000
+protocol will say protocol equatable, and it will have a function equal equal in it that takes two values of type self and returns a bool. And so now I can write extension array that says array conforms to Equatable. That's going to be fully type checked. And the compiler will say, ah, no, you don't, because your equal equal operator requires that your element type be equatable. So you can correctly state, you know, extend the array type to make it equatable where the element type is already equatable. And implement any logic that you need to make sure that that is true. Generics in Swift follow the same notion as a constrained template. So you can write a generic. We still use angle brackets. Same thing as many other languages.
+
+21
+00:12:33.000 --> 00:13:25.000
+And that template, that generic definition is separately type checked. There is no specialization. There's no overloading at instantiation time. So the separately type-checked body can never go wrong. Instantiation failures don't exist. And more than that, the generics can actually be separately compiled. So the actual default is you separately compile your generics, and the entire body is written in terms of these constraints on protocols. And that code will work for any type that conforms to the protocols, that meets the requirements of that generic function, even if you don't know about these types. You can ship a generic function in a shared library if you want and and use it with
+
+22
+00:13:25.000 --> 00:14:11.000
+unknown clients is that is that because it's like it's not like a static system like c++ but it's more like a type erase sort of thing at the implementation level it is i'm afraid of the word type erase the phrase type erased because there's very specific meaning in Java, which is that it loses the information about parameters. That information is never lost in Swift. It's maintained, even though you don't know what the type is until runtime. There's metadata there that's passed along to the generic function to say what the type is. And you can always have that information. So it's not erased, but the implementation is essentially dynamically dispatched such that it can deal with any type that meets the requirements.
+
+23
+00:14:11.000 --> 00:14:45.000
+Gotcha. Yeah, yeah, yeah. So there's indirection there. Yeah, that's, yeah. And we treat sort of instantiation in Swift is just a compiler optimization pass. So if you have access to the body of a generic function and you have a call to it with concrete arguments, then the compiler can go and do the equivalent of instantiation to create a faster version exactly for that type when it's profitable, when you have the information and it looks profitable. So, so, so yeah, I mean, what, what in C++, you essentially have two very explicit systems
+
+24
+00:14:45.000 --> 00:15:19.000
+where you have a way of doing templates which are instantiated at compile time. And if you want to do any form of dynamic dispatch, you either have to roll your own thing or you have to do inheritance and classes. And so it's sort of two worlds. Whereas in a language like Swift, it's one world where the generics can be optimized by the compiler in the places where it matters. People don't have to think about and deal with these two different things. It's a very C++-y way of doing things where it's like we care about the performance and we don't care if there's half a dozen ways of doing things.
+
+25
+00:15:19.000 --> 00:15:40.000
+Sure. And in C++, you have mechanisms if you need them. Like if you don't want to instantiate the template for every use, you can do tricks, right? You can put std functions in there or you could use like one of the type erasure libraries. Yeah. They're available. I know Boost has an interesting one. I'm not sure what people are using today.
+
+26
+00:15:40.000 --> 00:16:32.000
+Swift also builds that notion of type erasure into the language. So if you have a protocol, you can use it for generic constraints. You can also create a value of type any space and that protocol name, which dynamically erases the type that's been put in there and lets it vary at runtime. So let's say I want a container of strings. I don't care if that container is a set or an array or something else you came up with, right? In C++, I would write like a type erasure class of some sort that maybe does some virtual dispatch to do that. In Swift, you basically write any collection of string.
+
+27
+00:16:32.000 --> 00:17:38.000
+And the compiler handles that type erasure for you. The idea here is most of the time you should be using generics and keeping all that static type information because it can optimize well when you need to optimize it well. But if you really do need that indirection, you're going to deal with like collections of heterogeneous types, for example, then the same mechanism that is there and you can sort of like seamlessly shift into the dynamic dispatch world and back to the static world when you need to. This reminds me of another topic that I was neglectful in my role in not bringing this up, but Swift has a rather interesting approach to ABI resilience that I think is often talked about in the C++ world whenever our ABI problems come up. And maybe you can explain a little bit of how that's approached. Yeah, sure. So this is one of the things I think is almost unique to Swift.
+
+28
+00:17:38.000 --> 00:18:27.000
+There are very few languages with a stable ABI at all. C, C++, and the managed languages that are stable like at the bytecode level, but not necessarily at the low-level calling convention. And of those that do, they're not really built to make it easy to evolve something while maintaining an ABI. This is the challenge that C++ has always had, where it has a stable ABI and people do ship shared libraries of the standard library. But you really can't change anything in the implementation without breaking the ABI. It's very hard to reason about. We knew with Swift, as we were going into designing it, that one of the fundamental things we wanted to do was be able to ship system like platform libraries written in Swift.
+
+29
+00:18:27.000 --> 00:19:02.000
+And so a platform library is this interesting breed of library where it ships in the operating system and it's used from third-party apps. And users completely expect that they can update their operating system and their apps still work. Right. And maybe even get new features, which means the implementations need to be able to change without breaking that binary interface. And so in the design of Swift, we realized, okay, we have to not just provide a stable ABI like C++ does, sort of the de facto ABI that C++ has is stable.
+
+30
+00:19:02.000 --> 00:19:47.000
+We actually need to make it deliberately designed such that teams that are working on these platform libraries can do like real serious feature development and evolve their libraries without breaking those interfaces. And so this is actually, it is a part of the language only in subtle ways that you don't see, but it's deeply embedded in the way that Swift compiles code when you are building a library that is meant for this. So, you know, stepping back to like the language itself. So, you know, imagine you are a vendor of a platform library and you have a struct, like a URL struct, right?
+
+31
+00:19:47.000 --> 00:20:17.000
+It's a value type. You're going to provide some APIs on it. And you know, you, you know, at some point you're going to say, okay, I'm going to give this out to my users. Now, Swift takes the view that unless you explicitly make something public, no clients can depend on it, right? So you might have your struct, you can develop yourself. No one can touch it outside of your module. If you want to make it public, you slap the public keyword on it. And that means you must continue providing this thing or else you will break your client,
+
+32
+00:20:17.000 --> 00:20:58.000
+which is both a promise on the source code side of things, like they'll continue to compile. When your library is built in this form, this library resilience form. It also means that clients will be compiled in a way that you can change any non-public detail of your type without breaking the ABI. So things like reshuffling your fields, fine. Changing the size and layout of your type, fine. You can go and do that because those are non-public details of your type. So mostly that's just the compiler sort of introducing in direction where it needs to when it knows that it's at a boundary where something underneath it can change
+
+33
+00:20:58.000 --> 00:22:01.000
+and needs to maintain the ABI. And for the most part, it doesn't affect users other than we have other checking technologies to make sure that when you changed and delivered a new version of your library, you didn't actually break the ABI or break the interface. But it's a very pervasive system. So from the user perspective, you add this library evolution flag to the compiler, and now your code builds in a way that it is ABI stable. And you can change the implementation for your clients. Your clients will not even know that you did this because the language impact is zero for enabling this. This is actually super important that the language impact is useful because the same code needs to be able to run against a platform where like the Swift standard library is baked into the platform itself. It's part of the operating system and also run somewhere where
+
+34
+00:22:01.000 --> 00:22:35.000
+you don't have those constraints and you just want to not have any of these resilience barriers in there and compile down to even just one statically linked binary, for example. Yeah, I don't know any other language that has a system quite like us. I wish we knew of one so we could see if they had some ideas that we missed. So I guess it's a little late for us. But as far as I know, this isn't a thing that other people have tackled. Maybe Connor knows. Connor is the researchers here. He would maybe know.
+
+35
+00:22:35.000 --> 00:24:09.000
+I do not know of any languages. And that was the talk that you gave at PLDI 2022 was on ABI evolution. And if I recall correctly, you kind of at the end of the talk said, you know, the point of this talk is, you know, I'm sitting in front or I'm standing in front of an academic crowd. And for better or for worse, this is not a topic of interest for most of you. You know, like I'm not sure if you said this, but, you know, it is true that 90% of, you know, PL research these days is in type theory and, you know, this ABI evolution, you know, different techniques, etc. It may not be as sexy and cool as, you know, Agda and all these different proof languages, but this is extremely important. And only folks in industry really care about this. And to be honest, there's not really that, you know, like you said, like, what are the other languages that actually experiment with this i cannot off the top of my head think of any really and uh maybe you could argue that rust with you know epochs uh or additions or whatever they ended up getting i think it's additions right um and then c++ it's not really the same thing at all no i don't i don't think rust's epochs thing provides any form of ABI resilience and C++'s Epoch proposal didn't either. Different thing. Different thing?
+
+36
+00:24:09.000 --> 00:24:28.000
+There have been discussions in the Rust community around a stable ABI, but I haven't seen anything that is crystallized there. Okay, so maybe this is more API evolution than it is ABI evolution. But yeah, it's interesting, not even just with respect to this feature, but like the
+
+37
+00:24:28.000 --> 00:25:05.000
+disconnect between academia and industry when it comes to programming languages, because there seems to be, at least from my perspective, like a gap in the usefulness necessarily of the stuff that gets researched on versus the interest and sort of like academic nature of the work. And yeah, I'm not sure if you want to add anything to that, Doug. And I think that talk was recorded. If it is, I will definitely find a link and throw it in the show notes if folks are interested. I'm not sure if it was, but I mean, I was there in person, so I saw it live. If it's not recorded, maybe I'll try and find it. I'm not sure if you gave that talk again
+
+38
+00:25:05.000 --> 00:26:08.000
+at a different venue that you definitely know it was recorded um there's a form of that talk that is more compiler centric that i gave at the llvm developer meeting and i can't remember if it was 2020 or 2021 okay one of one of the lvm developer, I gave a talk that was more about how we do code generation for this ABI resilience model. Whereas the talk that you're mentioning at PLDI was very much like, this is a real problem we have in industry that, yeah, it is getting ignored. I think it's really unfortunate that this problem is getting ignored because as it stands, how do we talk to our operating systems today? It's C, right? It's POSIX C interfaces, which is a little bit unfortunate, especially as we talk toward, well, we want to improve the safety of our systems for memory safety. Having to funnel everything through a C API to talk to your OS is not good for that overall goal, right? And this is part of where we for memory safety, having to funnel everything through a C API to talk to your OS is not good for that overall goal.
+
+39
+00:26:08.000 --> 00:26:25.000
+This is part of where we're coming from. But we want to build the platform APIs in a language that is both expressive and safe. And so we had to have an ABI there. But yeah, even new languages. I wouldn't say it's academia that's specifically at fault here. You look at brand new programming
+
+40
+00:26:25.000 --> 00:27:30.000
+languages they don't they won't commit to an abi right yeah and i understand the reasons you you do give up optimization potential and it becomes harder to evolve your compiler once you've locked down an abi yeah i find this stuff interesting from from like a pl point of view of of the stuff that kind of falls through the cracks like the other thing that comes to mind because it's topical zx or xz whatever that uh the massive uh almost like near miss of um and like that's that's completely oh wait i have i you've completely lost me what are you talking about you didn't you didn't hear about this bryce no it was uh do you know what order of the two letters it was doug it was it was either yeah xz xz the open source project yes was essentially socially engineered into yeah social engineering basically but like over over years. So somebody was contributing to this project for like two or three years and then inserted malicious code.
+
+41
+00:27:30.000 --> 00:28:10.000
+And it seems like the whole entire thing was a setup for him to insert malicious code. Yeah. But this is, I bring it up because it's one of these things that, you know, it doesn't really get talked about in the, you know, well well we got a program in memory safe languages and safely safety is such a huge topic but like this is another like it's adjacent to safety or should be under the safety umbrella but no one's talking about this stuff and like this would have been like this would this was like what do they call it uh you know level 10 like cve like this like it's getting it's getting uh you know access like, like SSH access. It would have just been, anyways. And I listened, I think, was it Brian Cantrell from Oxide and Friends?
+
+42
+00:28:10.000 --> 00:29:23.000
+He had a podcast where they had the Microsoft engineer that found it. And he, like his story of like how he ended up like noticing the perf difference. It was like, it could have been a gust of wind basically that uh caused him to not look at it and that is like that's terrifying that like it was it was pure coincidence that he happened to notice one thing a month ago he happened to not be super busy and so we all take some extra time anyway so it's this kind of stuff that like there's always these sexy topics in like programming language, whether you're a compiler writer or an academic in industry or an academic in academia. And then there's these kind of topics that don't get talked about as much and not just how are we going to get dependent types into Haskell and then into every other language. Because as cool as that would be, there's probably more important things that will have a larger impact on the industry of software engineering.
+
+43
+00:29:23.000 --> 00:29:50.000
+But for whatever reason, there's less folks with eyes on that stuff. It's hard to know. I mean, part of the nature of research is you often don't know what the ripples will be from your success. I mean, I would love people to be looking at, you know, what it takes to how to maintain a stable ABI. And if we had some formalism around the way we tackle resilience, so we have this abstract notion of like these resilience domains, like code that's compiled together
+
+44
+00:29:50.000 --> 00:30:41.000
+and what optimizations you can do in there without breaking code that's outside of it. It's very ad hoc, like we think it holds together. I would love if someone went out and researched it and, you know, proved us right or wrong right or wrong and told us where the problems were. I don't know how to get people interested in that. On the other hand, we've pulled for research and seen things where people did chase a cool type system and it actually solved a real problem for us in the data safety realm. So I don't know. I don't know how to tell people to work on, but I would love seeing more wild papers at academic conferences. I feel like there's way too much of a group of researchers all get interested in the same topic and publish a ton of papers,
+
+45
+00:30:41.000 --> 00:31:32.000
+pushing it forward and everything else gets starved out. And that makes me a little sad because there's a ton of wild ideas that got submitted that won't get, you know, the airtime that they need to turn into something cool. Well, hopefully with AGI right around the corner, you know, everyone's going to be able to make their own TV show and everyone will be able to make their own, you know, fully fledged with a language server and tooling and package management language language over a weekend so uh you know look look i i saw the face palm dog but uh we got it we got to mention ai they uh they they at nvidia they pay us a little bit extra every time we mention ai in the podcast what i haven't seen any of this money this is uh very upsetting to hear all right all right we got we got one more one more question for you doug and then we we we do
+
+46
+00:31:32.000 --> 00:32:02.000
+have to go because we're now in the third hour and my microphone now has a red light on it which i think means the battery's gonna die it looks ominous so so here's my last question so has swift become the language that you thought it would be when you started working on it? Like, has it evolved in the ways that you thought it would? Has it succeeded in the ways that you've expected? And how has its evolution surprised you? That's a big question. I like to end big.
+
+47
+00:32:02.000 --> 00:32:58.000
+Yeah. So I think the evolution path has been more or less what I expected. So, you know, in the early days, we were just getting the pieces in place for what we felt like was the minimum you needed for a general purpose programming language. And as we turn the corner to the point where, you know, we were writing system libraries in it and people were using it at a large scale, our evolution has sort of necessarily turned toward more niche things. So, you know, a macro system that gives you language extensibility but doesn't really change the way the language is used. Or an ownership system. So like move only types is one of the big new things in Swift world. And, but it doesn't really change the way you program in Swift.
+
+48
+00:32:58.000 --> 00:33:24.000
+It's been fairly stable for the last couple of years, five years, probably. And it's more about filling in the niches so that we can take Swift anywhere. And sometimes you actually need the extra performance benefits of like move semantics and knowing there is nothing going on behind the scenes that you're not privy to, right? To share performance or to fit in, you know, down in firmware or something.
+
+49
+00:33:24.000 --> 00:34:10.000
+And so I think that is the right evolution of the language. I keep wanting things to slow down a little bit. You know, the language can't grow forever. It won't. But we can continue to fill in gaps. So I think, you know, has it done as well as I thought? I think it's kind of a split verdict for me. So the uptake within the Apple circuit for Swift are young. And it's people that started with Swift for the first time and found exciting things.
+
+50
+00:34:10.000 --> 00:35:00.000
+And it's like a much more energetic and diverse group than we've had in other communities, language communities that I've been a part of. And I think that's been amazing. And it's been wonderful to see people pick up on some of the things we designed, hoping that they would be usable by everyone. The generic system comes back to that a lot for me because I love generic programming. But people are writing generic algorithms in Swift, like fairly new Swift programmers, and they're fine. It works well for them. That's been great to see. I want Swift to break out further from the Apple universe to really, you know, be the language people want to reach for, for whatever platform they're doing.
+
+51
+00:35:00.000 --> 00:35:48.000
+Because I feel like it's a great language for getting your work done right. And when we see reports of people that have done this, they seem pretty thrilled at what they've been able to do. But the perception is ever there that it's an iOS app language. And that's the thing that bothers me a little bit because I think it's so much more than that. Do you, when did you know that, or when did you feel that Switch was going to succeed? Did you like from the moment that you started working on it, were you confident? No, not that early. So, I think, all right. So, there were, I would say there's, there's actually three points, which are very, very clear for me.
+
+52
+00:35:48.000 --> 00:36:43.000
+The first one is just when we actually introduced it and people were super excited and went out building cool stuff. Like the amount of cool things that people built in the first like two weeks of Swift being available was just amazing. The second point is in 2016. So this was Swift 3. Swift 3 was a major change from Swift 2. Almost not the same language in many ways. But it marked a complete shift from Swift kind of like being a language that was like a better Objective-C or a layer from which you used Objective-C libraries to like this is a language that has its own identity and feel. And like value, this is when we were really pushing value types hard and getting people to think differently, like to really use Swift as it was meant to be used.
+
+53
+00:36:43.000 --> 00:37:19.000
+And people picked up on that. And I think the third part was actually 2019 with Swift 5. When we nailed the ABI stability and we declared, it's ABI stable, we have the feature set that we need to move forward. That is the point at which Apple started shipping platform libraries written in Swift with Swift interfaces. That's the point of no return because ABI is forever, right? We are invested. This is the path forward.
+
+54
+00:37:19.000 --> 00:38:04.000
+And we can build on this for years and years to come. So we've done a lot of cool things since then. And there's a whole lot more coming. But that's when it's clear that this truly is the way forward. And you can look at other languages that have started in a corporate environment that never got to that point or failed before they got to that point. So, that was a major mark of success And we're still maintaining that ABI. And it's hard work, but it has not stopped us from doing major language features and revisions to improve the user experience. And as a final note, if after these four episodes, five episodes, six episodes, we don't know how many it was, you decide to go and check out Swift,
+
+55
+00:38:04.000 --> 00:38:52.000
+probably this should have been at the beginning. You have to make sure that you include the algorithms library. There's a standard library that ships with Swift. But I remember the first time I went and checked out the standard library, I thought there's a bunch of missing, missing like what I would expect standard algorithms. I think famously one of them was scan. And I was like, wow, this is just incomplete. And then sure enough, a little while later, I found the algorithms library, which had every single, I swear, every single algorithm that I thought was missing was there. They don't call it scan. If my memory serves correctly, it's called reductions, which is actually quite nice because uh that's the same name that closure calls it and it's kind of kind of reflects the symmetry between reduce and and scan where you know from
+
+56
+00:38:52.000 --> 00:39:35.000
+those two names you'll never guess that they have anything to do with each other uh but yeah make sure make sure folks if you check if you check out swift you got to include the algorithms library they got adjacent pairs to one of the few languages that calls the adjacent adjacent connor connor is just lost without a scan like if he doesn't have access to a scan and reduce he's lost without a scan too what are we talking about i'm i'm lost without a scan like you know we're all lost without a scan if you're an array programmer and you don't have a scan it's like what are we doing here what do got to write a for loop? Give me a scan and a reduce and I can dild you the world. Anyways, thank you so much, Doug. This definitely, I think, has set the record as longest recording.
+
+57
+00:39:35.000 --> 00:40:07.000
+I mean, we've done two hours plus before. I didn't think we would ever break it, but I guess. This is what the dog thinks, the length of the recording. She's like, can you stop and take me out now take me for a walk now oh yeah thank you so much this has been an absolute blast i know for a fact i mean whatever i call it the c plus plus ox story with doug gregor whatever clickbaity title i find for the first couple episodes they're going to be our best in a while Be sure to check these show notes either in your podcast app or at ADSPthepodcast.com
+
+58
+00:40:07.000 --> 00:40:16.000
+for links to anything we mentioned in today's episode, as well as a link to a GitHub discussion where you can leave thoughts, comments, and questions. Thanks for listening. We hope you enjoyed and have a great day.
+
+59
+00:40:16.000 --> 00:40:21.000
+Low quality, high quantity. That is the tagline of our podcast. It's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

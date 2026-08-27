@@ -1,0 +1,289 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:21.000
+All right, folks. Well, this has been fascinating. We're from this little square in Venice that we're sitting in. We hope you enjoyed our... This is kind of similar to the Lost Reduction series that we did where we went three different iterations, except this one all happened within a three-hour period or four-hour period. A three-hour period in a car and wandering around the streets of Venice.
+
+2
+00:00:21.000 --> 00:01:14.000
+So I think this is going to be it for the road trip. Welcome to ADSP, the podcast episode 147 recorded on June 21st, 2023. My name is Connor and today with my co-host Bryce, we continue to record live from the Slovenia 2023 road trip, this time while walking through the streets of Venice. In today's episode, we revisit the implementation of our parallel stud unique. All right, folks, we said goodbye on the highway on the way to Venice, but here we are. Live from the streets of Venice. This is a first, folks.
+
+3
+00:01:14.000 --> 00:01:33.000
+We took you on the road. Now we're taking you on a walk. We are headed to Osteria alla Staffa. Something like that, right? Something like that. And we are in the southeasternmost part of Venice, and the restaurant seems to be a lot further west. We've got about 30 minutes of walking.
+
+4
+00:01:33.000 --> 00:01:52.000
+It is fantastically beautiful here. Nice, serene, quiet, peaceful in the area that we're in. There are birds chirping. There's nobody on the streets. It's lovely. We are about to cross a bridge. And we took a boat to get here. We dropped off our rental car,
+
+5
+00:01:52.000 --> 00:02:11.000
+our trustworthy steed for the past four days. We dropped it off at the entrance to Venice. And then we took a little boat that took us six stops here. And it was a lovely journey, I thought. What did you think? I thought it was fantastic. And now we're going to chat.
+
+6
+00:02:11.000 --> 00:02:36.000
+I don't know why. Well, we're going to chat because we got to the hotel room, we checked in, and Connor, we'd been talking earlier about how to implement unique and parallel, and I came out of the bathroom, and Connor was just sitting there, staring at his suitcase, lost in thought. And he said, I think I figured it out. Yeah, honestly, folks, I apologize. It's going to be interesting to see how we edit this and how much of the original back and forth we keep in.
+
+7
+00:02:36.000 --> 00:03:10.000
+But I just realized that adjacent difference, as it exists in Thrust currently, now renamed in the rangeland Adjacent Transform, is really just a map. It's a map looking at two different indices. And it could be a fancy iterator. We don't have a fancy iterator called Adjacent Transform, but you can actually spell it currently in Thrust with the zip. Wait, wait, wait. Okay, with zip? With the zip iterator and with the transform iterator.
+
+8
+00:03:10.000 --> 00:03:31.000
+Okay, how do you do that? You basically just zip together two iterators, one pointing at the first element, one pointing at the second element. You zip that together, and then your transform iterator is going to be whether or not they are not equal to each other. Perfect. And, ooh, and yeah, and then you're going to have to use, but that is the copy if that is used.
+
+9
+00:03:31.000 --> 00:04:02.000
+It's using the stencil. So you're using the zip iterator, checking whether they're not equal to each other as the stencil, aka the sequence that's going to determine whether we copy elements. And then the sequence that we use to copy elements is the original sequence. So there's an overload there that doesn't exist you should probably explain the stenciled overloads because i don't those are not part of the standard library but you're referring to the stenciled overload that's just in thrust right correct yes this only exists in thrust i think we actually have talked about it two or three times before and the last time or one of the times we talked about it the
+
+10
+00:04:02.000 --> 00:04:35.000
+closest thing that i can think of um because it doesn't really often exist in too many programming languages or libraries that I've come across but it does exist in Excel in the form of the sum if function where you can basically point at two different ranges and use some a range based on some predicate or you know unary function that evaluates or some condition of another range. So, for example, I use that function a lot in a lot of my accounting spreadsheets where I'm like, sum up all of the values in this column
+
+11
+00:04:35.000 --> 00:04:56.000
+if I set another column to true or something. Exactly. And currently, the copy if as it exists in the STL, this is ridiculous, folks. We've got to stop and take a photo here. We're basically on the seawall of Venice here, walking to dinner, recording an episode. I mean, our life is surreal.
+
+12
+00:04:56.000 --> 00:05:24.000
+Our life is pretty surreal. We are so grateful. We are very grateful to all the conferences that invited us out here to speak in Europe, to our employers. I mean, my employers are not paying. Our employers were generous enough to support us coming to these conferences, even if they weren't paying for the travel. They were supporting us coming here as part of our job function. We didn't have to take off vacation for this.
+
+13
+00:05:24.000 --> 00:05:39.000
+I'm on vacation right now. I mean, I didn't take off vacation when I was at the conferences two weeks ago before Switzerland. To be fair, this is vacation for me too. I just meant that the parts where I'm at the conferences, that's not vacation. Yes.
+
+14
+00:05:39.000 --> 00:05:56.000
+Anyway, super grateful. I mean, it's very amazing that we're doing this podcast live on the seawall of Venice. Very beautiful, very sunny. And, of course, we are thankful to all of you, the listeners, because I don't know that we would necessarily be here without all your support. This is true.
+
+15
+00:05:56.000 --> 00:06:18.000
+I mean, the reason for this part of this trip is because we got an email about our podcast statistics that said we were the number eight ranked technology podcast in Slovenia. And so now here we are, just outside Slovenia in Venice. Anyways, thanks to everybody for listening. This is wonderful. I feel very grateful in this moment. Back to the STL. Yes.
+
+16
+00:06:18.000 --> 00:07:00.000
+The copy if and all other algorithms don't have any overloads that take sort of this third sequence, if you will, or second sequence, if you will, that is used. So when you make a call to copy if, and you are evaluating a predicate to like copy the even elements, you're always applying that predicate to the sequence that you were going to copy from. There's no ability to, you know, evaluate that predicate on a different sequence and copy from another sequence. So thrust has that overload. And the point is, is that, you know, this, the zip iterator combined with the transform iterator to make a hand rolled adjacent transform iterator is going to evaluate to trues and falses. So we
+
+17
+00:07:00.000 --> 00:07:30.000
+obviously don't want to copy those trues and falses. We want to copy the original sequence, which is going to be the values. Anyways, and so I realized while I was sitting on the bed that I have one realization, is that you, Bryce, mentioned that we didn't need to do the second unique in the original implementation. And I was thinking, yeah, you could have actually just made sure you don't copy when you were doing the merge. So however you implement that merge, you can deal with the edge cases there as well. So there's a couple different ways to make sure you're avoiding that last unique. That's a great point. I didn't think about that. Yeah, but I was thinking, and then I just realized, like, wait a second.
+
+18
+00:07:30.000 --> 00:07:51.000
+This adjacent transform is just basically a modified transform iterator. And transform reduce and other algorithms are just basically transform iterators. You make use of them before you pass them to some final algorithm. And the final algorithm here is copy if. There's no reason you couldn't do that. Anyway, so that's why I was staring. And then I was about to explain to Bryce while I was sitting on the couch. He's like, what's wrong?
+
+19
+00:07:51.000 --> 00:08:15.000
+And I was like, no, I'm just thinking about, I think you can do it in a single pass. And then I was about to explain it, and he was like, no, no, no, no. We're going to record a podcast while we go to dinner. And I was like, we're not bringing the mic. And he's like, why not? So often, you and I have a conversation, and it's a great conversation. And then afterwards, we're like, oh, that should have been a podcast episode. And so I was just trying to preempt that.
+
+20
+00:08:15.000 --> 00:08:34.000
+And it's like sometimes we start to have a conversation, and then we're like, no, no, no. Can't talk about that right now. We've got to save it. Save it for you, the listener. And so maybe I actually will go and open a PR. I mean, it takes forever to build Thrust, but this is actually something, like, I know that this zip iterator
+
+21
+00:08:34.000 --> 00:08:46.000
+combined with the transform iterator trick, it does exist. I'm not sure other places in Thrust, but I've definitely seen CUDA code, or Thrust code, if you will, that uses this pattern. So I don't think there's actually any reason why it wouldn't work.
+
+22
+00:08:46.000 --> 00:09:12.000
+And then we have successfully achieved Bryce's goal of eliminating the linear storage for this. Well, and here's, I have a couple questions. So first of all, when we were in the car, I looked at the CUDA-specific implementation of Unique and confirmed that it was the version that you described. Did you look at that version or did you look at the generic version? And the generic version did that head flags thing too. I was looking at the version in the generic.nil
+
+23
+00:09:12.000 --> 00:09:30.000
+file. So if that's what the generic is... It's interesting to me that... And just to fill listeners in, Thrust is built in such a way that there's multiple backends that it can target. So it targets I think Thrust building or thread building blocks from Intel. Anyways, there way that there's multiple backends that it can target. So it targets, I think, Thread building blocks from Intel. Anyways, there's a bunch of different backends, including CUDA.
+
+24
+00:09:30.000 --> 00:10:19.000
+And so when you go and look at the implementations, usually I just check the generic.nil. And one of the key things about the way that Thrust is designed is to implement a backend, you only actually have to implement a couple of functions, like reduce and foreach. And if you implement nothing else, then there are generic versions, generic overloads in that generic folder that will get picked up. And they are implemented in terms of those primitives. So, like, for example, if you didn't want to implement your own, you know, findif, then you could just implement a reduce for your backend. And when somebody calls find if with your backend, it would call the generic version of find if, which is defined in terms of reduce. And then that would call through to your reduce. But maybe on your platform, you wanted to implement your own version of find if because
+
+25
+00:10:19.000 --> 00:10:47.000
+you wanted to do something that was going to short circuit, or that was otherwise clever, you could then provide your own customized version of Findif, and then that would be found instead of the generic version. However, the generic versions in Thrust are often a good way to look at what is a general purpose, generic, good way to implement this algorithm in parallel. Because oftentimes looking at the specialized version for a particular implementation, it's a lot more code, it's a lot more code. It's a lot harder to understand.
+
+26
+00:10:47.000 --> 00:11:14.000
+And so oftentimes when Connor and I want to figure out how something's done in parallel for a particular algorithm, we'll just go and look at that generic folder in Thrust. Yep. So anyways, I interrupted to explain why we're talking about generic versus CUDA. What was your thought? Or do you recall what you were thinking about? I'm interested as to why this hasn't occurred to anybody else, and whether we're missing something.
+
+27
+00:11:14.000 --> 00:11:41.000
+Like, because the... It is a big deal for an algorithm to need ON temporary storage versus needing no temporary storage. And it was actually a much bigger deal earlier in the development of libraries like Thrust because GPUs used to have a lot less memory than they did today. If it takes ON temporary storage to unique your array, then if you had a GPU that had four
+
+28
+00:11:41.000 --> 00:12:27.000
+gigabytes of memory, you could only unique array of two gigabytes of memory. And now if you have this algorithm that doesn't require temporary storage, then you could work with a data set that is twice as large as you previously could. That's a huge deal. Yeah, what is also interesting, and one other thing on that point and and oftentimes i would be willing to pay a lot more computationally for a problem that doesn't need temporary storage just so that i can fit the problem size onto the gpu even maybe it would even be slower in some cases and that might be okay just because it lets me run with a larger problem size. Yeah, this is a... I think we should definitely...
+
+29
+00:12:27.000 --> 00:12:45.000
+I mean, we've talked about... I think we were supposed to do some episode on some other thrust algorithm and the implementation of it or some change we could make. But this one is actually pretty easy to do. It's not that hard. And what's even more interesting is a whole other layer on top of this
+
+30
+00:12:45.000 --> 00:13:12.000
+is there is a sibling algorithm that exists right next to unique that doesn't exist in the STL. Do you know what it is, Bryce? I don't. It is unique underscore and then one more word. So it's like a unique prefix. I don't think it's unique sort. Actually, now that I say this out loud, there's actually two unique underscore algorithms.
+
+31
+00:13:12.000 --> 00:13:31.000
+Unique sort two? There's not a unique sort. There's a unique underscore. Two different ones. Listener, play along. Can you think of... And also, these don't exist in the C++ standard template library. You are going to have to be creative if you're not familiar with thrust to think is there unique if not unique if
+
+32
+00:13:31.000 --> 00:14:03.000
+good guess though uh although i don't know actually what unique if would do because if underscore if algorithms usually take unary predicates you could change it to take a binary predicate that would replace the default of equal to with something else. Or maybe unique if. That could be the semantics of it. But no, it is not unique if. I don't know. I'm not sure. All right, the one I was thinking of was unique underscore count. And the other one that popped into my head while I was saying this
+
+33
+00:14:03.000 --> 00:14:50.000
+was unique by key, which is one of the segmented algorithms about that we talked a little bit about the stenciled versions of the thrust algorithms how do they relate if all to the by key versions of the algorithms so I think we should save this for a follow-up because when I was actually giving my gtc i want to say it was 2021 thrust algorithms talk i gave a tuck comparing stl algorithms and the standard library versus thrust algorithms i mentioned all these segmented algorithms yeah but they're actually really really poorly named in my opinion because um of them, like reduce by key, are actually like a segmented reduction, meaning that you, I believe
+
+34
+00:14:50.000 --> 00:15:10.000
+provide a unary function or unary predicate and it's going to then not actually materialize segments but it's going to do reductions that basically the unary predicate is going to be the key function that determines where the segments start and end. So for instance, you could do a
+
+35
+00:15:10.000 --> 00:16:04.000
+reduce by key for once again, like contiguous odd and elements in a row, and then even elements in a row. So your unary function would be odd or even, and then you could do a sum, you could sum those elements up. So like you can mentally think about this as like creating a sub lists of contiguous even elements and odd elements and then you sum up those sub lists yeah however there are by key algorithms such as sort by key and unique by key where these are not segmented algorithms they are algorithms that i believe are the equivalent of the projections that got added in c++ uh 7 20 c++ 20 in the range uh overload algorithms where for instance um if you want to sort based on like the length of your string right your projection is stood colon colon size and you
+
+36
+00:16:04.000 --> 00:16:35.000
+pass that as one of the arguments, and now instead of having to write your custom binary operator that does a comparison on the sizes of your strings, you are just passing the std colon colon size function, and that is basically the semantics of what the underscore by key mean for unique and sort. You're passing some kind of unary function that is then performing the uniqueness and the sorting after applying that unary function, I believe. And that is a completely different semantics
+
+37
+00:16:35.000 --> 00:17:04.000
+than the segmented reductions. Anyway, so this is why I said we should kind of save it for a whole other episode, because I think it's just like a, that's like the equivalent of, you know, we've got different suffixes and prefixes and then like having two different semantics for them. So like if underscore if meant one thing for copy and one thing for another algorithm that uses it. That second meaning I think is in some way related to the stenciled versions.
+
+38
+00:17:04.000 --> 00:17:36.000
+And I think I would have to think more about what that relation is. But I do agree that I think that the current nomenclature is a little bit confusing. So maybe we should do a whole episode on that. Yeah. It is absolutely beautiful here. We are getting to, I think, more of the main part of Venice and it's just gorgeous. It is hot, also. It is very hot. So the reason I brought up unique count is that the first question is, one, how do you think that's implemented? I actually haven't thought. I've kind of thought about it a little bit in my head.
+
+39
+00:17:36.000 --> 00:17:53.000
+A reduction, I imagine. Yeah, so Bryce just said a reduction. I would guess the same thing. However, naively, you could just once again allocate the linear memory and then just do a plus reduction on that ideally they don't do that and you hand roll your own now the real question is
+
+40
+00:17:53.000 --> 00:18:15.000
+although actually why do we have a unique count instead of a unique reduce that's generic and that can take like you know a plus operator if you want to do count or something or like not a plus operator but something that would just do a count if you want. I mean... Perhaps there's no real use for it, but...
+
+41
+00:18:15.000 --> 00:18:40.000
+No, my guess is that the implementation, I would hope that the implementation doesn't require that linear... Like, it doesn't require, one, the... Actually, the reason that exists has to be that it doesn't require the copy if at the end. But the question is, does it still require the linear allocation for the adjacent difference?
+
+42
+00:18:40.000 --> 00:19:13.000
+And if it does, that means we can turn that algorithm into not only eliminating the uh linear memory requirement but like uh it's now avoiding the copy f it's kind of weird now because we're in like this uh keep going we're right bryce literally nobody's fixing bryce bryce is american so he doesn't mind uh disrupting everyone else's vacation time. Ooh, it's nice and cool in here. It is nice and cool in here, which is a pleasant difference. So you have internet on your phone. Are you able to check right now the unique count implementation?
+
+43
+00:19:13.000 --> 00:19:52.000
+Because my guess is that it actually makes a call to adjacent difference. So we could actually do two refactors here, and the refactor on unique count would be would be massive like yeah you're changing basically a linear transform into a linear memory transform to an o1 memory reduction that would be pretty pretty awesome while bryce is looking that up I will just Give the Give the listener I wonder if we can get a donut We didn't get a donut in Croatia
+
+44
+00:19:52.000 --> 00:20:05.000
+That is true We failed to get a donut We also failed to run a street We did walk a street There could be donuts here Let's check it out I don't want to walk into a store While recording I mean you can follow me Hello There are donuts Are there, are these? There could be donuts here, let's check it out. I don't wanna walk into a store while recording.
+
+45
+00:20:05.000 --> 00:20:17.000
+I mean, you can follow me. Hello. Hello. There are donuts. But, there are donuts. They are filled. No, there's one sugar donut. I don't think you see the sugar donut.
+
+46
+00:20:17.000 --> 00:20:35.000
+Oh, perfect, yeah. Yeah. What's your favorite, what's your favorite? Ah, it's all good, but do you want like a croissant or a pizza? A pita, yeah. For me, this would be the best one with cream and fruit. All right, I'll take one. So healthy, Connor.
+
+47
+00:20:35.000 --> 00:20:51.000
+Hey, we're on vacation. Vacation calories don't count. And also, I actually am pretty healthy. Bryce trying to make me feel bad about eating a donut. Shame on you, Bryce. I'm just kidding. Donuts are food for the soul. Look at me.
+
+48
+00:20:51.000 --> 00:21:05.000
+And you're in much better shape than that. Thank you. Have a good day. All right, folks. Coke Zero's in hand. Pastry's in hand. We're going to have to find somewhere to sit down now for a second. All right, we're walking to have to find somewhere to sit down now for a second.
+
+49
+00:21:05.000 --> 00:21:24.000
+Alright, we're walking. Bryce did not get to... We got distracted by the donuts and we did not... Alright, we're going to go sit down on this bench. Bryce is going to get back to finding the implementation. This is honestly... If we manage to, while on a road
+
+50
+00:21:24.000 --> 00:21:56.000
+trip, refactor some thrust algorithms to eliminate linear memory requirements, that's pretty, I mean, I feel like at this point we should not be on vacation and we should be being paid for this, you know? All the benches are kind of occupied. Hmm. Do we keep walking? What? We are going to see if there's a bench on this other side.
+
+51
+00:21:56.000 --> 00:22:16.000
+There's not. I mean, we could just sit. We're just going to sit on this wall. It looks clean enough. It doesn't look like it'll kill us. We're just going to sit on this wall. It looks clean enough. It doesn't look like it'll kill us. At least not quickly. Alright, folks.
+
+52
+00:22:16.000 --> 00:22:34.000
+I'm going to put the mic down for a second while we take a sip of our Coke Zeros, get our donuts. This donut honestly doesn't look as good as the Roman donut I had. First bite. Don't worry, folks. I will record this for posterity. We're recording.
+
+53
+00:22:34.000 --> 00:22:46.000
+Yeah, that's a big miss. That's a big miss. Not a good donut. Compared to the Rome donuts, I mean, look at the sugar. There is a lot of sugar. It's all crusty-ed up, you know? Yeah. You know, we're going to suffer through it, though, sugar. There is a lot of sugar. It's all, it's all, it's all crushed it up, you know? Yeah.
+
+54
+00:22:46.000 --> 00:23:09.000
+You know, we're going to suffer through it though, folks. Bryce is taking too long. So we're going to go find, we're going to race him. And he's not even trying right now, so I'm probably going to win. Stay, stay tuned, folks. Oh, sorry. So we just came across unique copies, so I guess there's actually, there was three. Unique copies in the standard too, right?
+
+55
+00:23:09.000 --> 00:24:02.000
+I actually don't think it is. Maybe it's all right we're looking it up i'm looking that up all right here we go unique count it is a unique copy is in the standard all right i was wrong wow i just okay so i just look look at this i found the i found the issue on uh adding the unique count algorithm and uh there's a little code snippet that shows a zip iterator and then just count effing on that so it looks like they're actually doing it correctly but this is just a little code snippet it's not actually the source but then a year ago jake hemstad our colleague, says that, or he CCs me, and he CCed me to ask about naming because I always get involved in this stuff. And I said, long story short, I agree with Jake that Unique Count is the correct name. But let's find the PR.
+
+56
+00:24:02.000 --> 00:24:19.000
+The PR. Also, look at this the third result for unique copy on the internet says stood unique copy can be used to remove all the duplicate elements whether consecutive or not that's not how it works unless if it goes on to say but you need to sort it first yeah
+
+57
+00:24:19.000 --> 00:24:54.000
+in which case then you can so to say that you can use it to do that is true but that is not what it does for any arbitrary sequence. 14 files changed. All right, we're getting to it. No, the code example here is just wrong. Maybe they mean that if you have two sets of uniques of the same, like, value that are not sorted, like, it will remove those two uniques as long as they're next to each other. But I think that that's very confusing.
+
+58
+00:24:54.000 --> 00:25:13.000
+Anyways, people on the internet are wrong. I'm angry. All right, we found the PIN. We have, we're looking at, Right now we're looking at a file called thrust detail unique dot I-N-L. Now we're looking at system slash CUDA slash detail slash
+
+59
+00:25:13.000 --> 00:25:45.000
+unique dot H. That one's, yeah, a lot. Ooh. There's a struct called zip underscore A-D-J underscore not underscore predicate which is basically exactly what you want yeah and here we go so we are at unique count if first equals last return zero auto size equals the distance between first and last auto it equals thrust colon colon make zip iterator and then you've got your make tuple
+
+60
+00:25:45.000 --> 00:26:28.000
+first and then thrust colon colon next first so that's exactly what i said you're zipping the first element uh first element and then and the second element and then you're making a call to one plus thrust colon colon count if yeah passing, passing your execution policy, and then passing the struct zip underscore adj underscore not predicate. So interesting that at some point, when was, so we're, this is all very fascinating. This got merged a year ago. Whose PR was this? This looks like it was merged by Allison, but UPSJ who is Tobias Ribizel
+
+61
+00:26:28.000 --> 00:26:42.000
+PhD student research software engineer on HPC library for numerical linear algebra it says that sort of this PR for the common count to allocate to fill pattern count if copy if there are some fill algorithms without corresponding count algorithm
+
+62
+00:26:42.000 --> 00:27:00.000
+and so he just suggested it. I would have thought that this was motivated a little bit by the Rapids libraries because I definitely know that these exist in the Pandas and like NumPy libraries but I guess not. I guess
+
+63
+00:27:00.000 --> 00:27:15.000
+we must have hand-rolled our own or maybe when this showed up we replaced it. But the point being is that even though these are sibling algorithms, they weren't implemented at the same time. This was proposed and then merged a year later. You mean unique count and unique? Yeah.
+
+64
+00:27:15.000 --> 00:27:34.000
+Unique existed a long time ago. And because of that, even though they're sibling algorithms, this zip pattern is used in the unique count one, but it's not used in the unique one. So this is basically everything but like 100 confirmation that we can go and do this um anything we're sitting on the ground now we're probably gonna stop recording so we can go to dinner i'm not sure if rob's
+
+65
+00:27:34.000 --> 00:27:56.000
+waiting for us we should have brought our laptops we could we wouldn't have been able to build it on my laptop unfortunately i gotta leave i got leave. We got until 5.30 tomorrow morning when I got a leave for the airport. But I think we can get this done by then. I don't think so. But do you have a box we can build on? I do. Okay.
+
+66
+00:27:56.000 --> 00:28:10.000
+A box meaning like a box somewhere... Somewhere in the cloud, yeah. Somewhere in the cloud. No, I didn't bring a workstation with me. All right, folks. Well, this has been fascinating. We're from this little square in Venice that we're sitting in. We hope you enjoyed our...
+
+67
+00:28:10.000 --> 00:28:32.000
+This is kind of similar to the Lost Reduction series that we did where we went three different iterations, except this one all happened within a three-hour period or four-hour period. A three-hour period in a car and wandering around the streets of Venice. So I think this is going to be it for the road trip. Well, no, we might talk to Rob. We might talk to Rob. Hey, we have the microphone.
+
+68
+00:28:32.000 --> 00:28:54.000
+What's interesting, too, is I talked to Michael Garland, my boss, about this, probably two weeks ago or a month ago, and this is how this whole conversation came up, because we were chatting about the implementation of Unique and about which algorithms could be stream fused or could take advantage of stream fusion. And Unique was not able to do that. Maybe explain what stream fusion is.
+
+69
+00:28:54.000 --> 00:29:12.000
+We're not going to explain what stream fusion is right now, but we'll talk about it in a future episode. So I was talking with Michael, my boss, about this. We talked about, I asked him, do you know how Unique is implemented? We might have mentioned this a couple episodes ago he mentioned the adjacent difference and copy if and then I was like yeah that makes sense but then
+
+70
+00:29:12.000 --> 00:29:29.000
+at that point in time neither of us thought like oh could we do better here but here we are hey hey hey that's what I'm here for that's what the road trip is all about we are improving algorithm implementations. You heard it here first, folks.
+
+71
+00:29:29.000 --> 00:29:49.000
+No more linear memory requirements for unique copy. I mean, technically there's a linear requirement for the copy part at the end, but the intermediate storage, not necessary. We're signing off for now. Enjoy your night, folks. Enjoy your night. We will be back soon. Adios.
+
+72
+00:29:49.000 --> 00:29:54.000
+Be sure to check the show notes either in your podcast app or at ADSPthepodcast.com for links to any of the things we mentioned in today's episode, as well as a GitHub discussion where you can leave questions, comments, or thoughts. Thanks for listening. We hope you enjoyed and have a great day. Low quality, high quantity. That is the tagline of our podcast. thoughts. Thanks for listening. We hope you enjoyed and have a great day. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

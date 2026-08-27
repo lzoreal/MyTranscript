@@ -1,0 +1,285 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:39.000
+Well, I mean, I'm like a APL programmer at heart, not a... Right, right. I think it's like you, you're approaching it like top down, whereas I'm approaching it like bottom up. Yeah. That's what makes us such a, such an awesome pair. Make that the cold open. And the last part of this episode. Welcome to ADSP the podcast, episode 294 recorded on July 9th, 2000.
+
+2
+00:00:39.000 --> 00:01:32.000
+26. My name is Connor and today with my co-host, Bryce, we chat about the histogram algorithm, histocash, and more. It's going to be fun. It's going to be so much fun. I am going to get to give you a quiz. A quiz? A quiz. About what? I don't think the quiz is going to go well for you. That's fine. All right. All right. Here's the quiz. You are given a graph. And the answer is, or the question is, not the answer. I'll give you the answer eventually. But this is a graph that on the x-axis shows different bin counts,
+
+3
+00:01:32.000 --> 00:02:20.000
+and on the y-axis shows speed-up. And this is for a histogram algorithm, in particular, a multi-channel histogram algorithm. Multi-channel means a histogram where it outputs to multiple different places. Like if you're doing a histogram over an image, over the pixels in an image, and you want to output different red, green, blue, alpha counts. and the question is for this diagram, why is performance progressing for some of the large bin counts,
+
+4
+00:02:20.000 --> 00:02:41.000
+but not other of the large bin counts? And all of the information that you need to answer this is on the graph. You don't need to see the code. The answer is very simple. And we will see whether you can get there. So in particular,
+
+5
+00:02:41.000 --> 00:03:21.000
+this graph shows the perf from bin counts starting at 16 to 12K bins. But the wording of my question is we're only interested in the performance of the 32K bins up to the 1,024K bins. Well, first of all, let's take a step. step back and understand multi-channel histogram. So all it means is you're just, you're binning multiple things instead of a single
+
+6
+00:03:21.000 --> 00:03:38.000
+thing. That's all it means. You are taking one for like, like when you take your value in for histogram, in this case here, your value is something that you're decomposing into multiple constituent parts.
+
+7
+00:03:38.000 --> 00:03:53.000
+The example I gave was like a pixel where you know, it has a red, a green, a blue, and an alpha component. So you have some composite thing that is your value, and the output is going to multiple different
+
+8
+00:03:53.000 --> 00:04:08.000
+output locations. So you're splitting it up into its components. Or like if you have like a a 3D point value, like a 3D point struct that have an X, Y, and Z coordinate, your histogram
+
+9
+00:04:08.000 --> 00:04:42.000
+algorithm in this case would a separate output histogram for the x's, a separate for the y's, and a separate for the z's. Okay, that makes sense. And yeah, you've got speed up on the y-axis, and then on the x-axis, you have zero all the way up to a million, because it's a thousand, thousand. Yeah. And at the 32,000 mark, there's a degradation right there. and then it pops back up,
+
+10
+00:04:42.000 --> 00:05:00.000
+and then at 64,000, it degrades again. So, obviously, those are both powers of two. Ah, interesting. Interesting. Those are both powers of two. Well, I mean,
+
+11
+00:05:00.000 --> 00:05:19.000
+everything I guess technically on the x-axis is a power of two. It's not like I'm Sherlock Holmes here. Is it? Is it? Oh, yeah, that's true. It's not. a lot of them are well it goes 1632 64 128 256 512 1, 1,000 and I'm assuming that's
+
+12
+00:05:19.000 --> 00:06:38.000
+1024 uh but then in between 32 and 64 is 48 and 56 which is rather odd because other than those two I will I will I will give you an information here that is not applicable to the solution of the problem, but explains why 56K is on this graph. The reason that 56K is on this graph is because that is the number of 32-bit bins that you can fit into shared memory on a Nvidia B-200 GPU. And so that bin count was important to include on here for the single-channel case. And this is the multi-channel case. It just happened to be that when I did the benchmark sweep, that it included that point here. And 48K, I think, was put on here because we were interested in more granular information about the performance between 32K and 64K. So 56K was like a specific,
+
+13
+00:06:38.000 --> 00:06:54.000
+interesting case that we wanted to look at it's not applicable here because in the case of the multi-channel histogram you need like if for the single channel you can fit
+
+14
+00:06:54.000 --> 00:07:15.000
+56 bins then for the multi-channel you can only fit 56k divided by however many channels you have in this case we always have four channels but it is beneficial that we did include the 56K bin count on here because it helped us learn something.
+
+15
+00:07:15.000 --> 00:07:40.000
+Oh, and I didn't read the tweet. The tweet says that the correct answer is one word? Yes. That's, I think, me being a little bit cheeky, but the answer is not complicated. Or the answer I will accept is not complicated. Well, that's not true. The answer is complicated.
+
+16
+00:07:40.000 --> 00:08:12.000
+However, you really only have to name the general area that the problem is in to get the answer correct here. So, take a step back. No, no, no. You're going to get there. You've already identified one of the key pieces of this, which is, so from 32K to 1224K, Look at all of the ones that regress. What do all the ones that are regress have in common? That they're a power of two.
+
+17
+00:08:12.000 --> 00:08:35.000
+Right. And all the ones that don't regress are... It's just the 48 and 56, so... Yes. But I tell you, if you did any other non-power of two, it would not regress. What do you know about the histogram algorithm? Or what do you know about histogram in general? And what do I know about your algorithm?
+
+18
+00:08:35.000 --> 00:09:05.000
+And the implementation. What do you know about the nature of solving a histogram? The nature? Like, what are the bottlenecks in computing a histogram? Does it do a lot of compute? Depends on the implementation. You believe that there's an implementation of histogram that does a lot of compute? Of course you can construct a compute-intensive
+
+19
+00:09:05.000 --> 00:09:42.000
+What is the compute? By compute, I mean, you know, arithmetic. I mean, the easiest way to implement this in an array language. Well, is it the easiest? Is to do a, well, it depends on, yeah, the bins and whatnot. But if you have like a, you know, every value gets its own bin, you just do an outer product and then a reduction on every row. Okay. So an outer product and reduction, what is the arithmetic intensity of those operations?
+
+20
+00:09:42.000 --> 00:10:12.000
+Arithmetic intensity? Is histogram more like a matmole or a mem copy? Is histogram more like matmole or more like mem copy? It's definitely not like mem copy. Would I say it's like matmole? Not really, but I, I guess if I have to choose, I'll choose Matmole. But I feel like I'm getting, you're trying to lead me,
+
+21
+00:10:12.000 --> 00:10:38.000
+you're trying to lead a horse to water and you're failing. How many, in Matmo, what are the, what are the operations that you're doing? You're doing multiplication and addition. And also addition. Multiplications and additions. Roughly, order of magnitude, how many multiplications and additions are you doing? doing? Is it a linear number? No. No.
+
+22
+00:10:38.000 --> 00:10:54.000
+It's like it's in cubed or n squared depending on whether you're doing batch or whatnot. But like let's, you know, it's nonlinear, right? Okay, you're doing a lot of flops. Depends on the size of your matrix, right? And it depends on whether you're doing
+
+23
+00:10:54.000 --> 00:11:19.000
+it, you know, whether it's a sparse mat mall, like structured spars, etc. But like a dense mat mat mall, nonlinear. Okay. So you said it's doing multiplications and additions on the values. Are you doing multiplications and additions in a histogram? You're doing additions.
+
+24
+00:11:19.000 --> 00:11:46.000
+Okay, you're doing additions. That's correct. What type of additions are you doing? You're adding ones and zeros. Well, you're always adding ones and zeros, technically. Are you adding, let's assume, let's pretend here that our, let's pretend here that our, our histogram input type is floating point numbers. Okay. So assume that it's FP64.
+
+25
+00:11:46.000 --> 00:12:05.000
+When you're doing your histogram, are you adding those FP64 values together? No. What are you adding? Ones and zeros. Okay, you're adding ones and zeros. What data type are you adding? Whatever integer you decide to represent your bin counts. So you are adding integers.
+
+26
+00:12:05.000 --> 00:12:23.000
+Mm-hmm. Okay. In Matmole, are you adding integers? Not all the time. Let's assume we're doing an FP-64, a floating point. Okay. Okay. So, in your histogram, in your, in your map mall, you're doing floating point multiplications
+
+27
+00:12:23.000 --> 00:12:47.000
+and additions in a non-linear. Right? Sure. In histogram, you are only doing integer additions. What? How many are you doing? The count of the number of values you have? You're also doing comparisons to potentially. What is the big O complexity?
+
+28
+00:12:47.000 --> 00:13:05.000
+Linear? And also too, the reason I zoned out for a sec was because, like this is all dependent on your implementation. Like I said, if you're doing an outer product... It's not... It is. It is. If you're doing an outer product and then summing each of those rows, that's a quadratic amount of work.
+
+29
+00:13:05.000 --> 00:13:23.000
+It's not linear. Like the implementation that we're talking about where you just go one by one, sure, that's linear. But like an outer product, you're going to do a quadratic or not a quadratic amount of work. Yeah, that is quadratic. Because you're going to, yeah, yeah, I'm correct. And it all, yeah.
+
+30
+00:13:23.000 --> 00:13:47.000
+So it depends on the implementation. You want to talk me through how it's quadratic? Yeah. Say you've got 10 elements, an outer product, an equality outer product on a 10 element array is going to give you a 10 by 10 matrix, which is 100 values. And then you're going to do a linear reduction on each row of that matrix, which is a square.
+
+31
+00:13:47.000 --> 00:14:14.000
+So you're doing a quadratic amount of work. Like each reduction is linear. But if you're doing a reduction on a Boolean mask, that was the result of an equality with each element with the rest. Anyways, That's why when you were talking about the bites thing, which kind of is, I don't understand the point of this thought exercise. But I was thinking like, wait a second, like, depending on the implementation, you could be doing more than a linear amount of work. Anyways, that's why, that's why I was, I didn't actually zone out.
+
+32
+00:14:14.000 --> 00:15:06.000
+I started thinking that, like, what are we talking about here? We're talking in the, in the abstract about an algorithm that we haven't actually described. And the things we were saying may or may not be true dependent on what the algorithm actually is. Okay. Let's do some quick math. There are 148 SM cores on a B200. This is like going to be, is this episode even going to air? We're going to have to record for an hour because we're going to toss this episode. This episode is going to air.
+
+33
+00:15:06.000 --> 00:15:34.000
+This episode's going to air. I mean, I feel like didn't we have a disagreement at one point on some algorithm that was like you were arguing? I've got to go figure it out. Oh, yeah, is it more similar to a Transform or something? And I still, like, even describing all this stuff, like, a MemCopy is just copying. It's just moving.
+
+34
+00:15:34.000 --> 00:15:50.000
+What is the dominant operation in a MemCopy? Maybe a Transform. How about a Transform? A Transform is a better example. Is it more like a Transform or a MapMol? Or is it, how about this?
+
+35
+00:15:50.000 --> 00:16:05.000
+Is it more like a vector ad or a mat-mol. I don't know. I still think it's more similar to a mat-mull than anything you've mentioned. I mean, this is the thing. This is why I bring up that previous example because, like, I refuse to agree
+
+36
+00:16:05.000 --> 00:16:21.000
+that something was more similar to something, but it's just because, like, my categorized... The way that I categorize things is different than the way you think about, like, the things that it's doing under the hood. I look at, like, the shape. Like, if you look at what Matmole does, it takes something in one shape
+
+37
+00:16:21.000 --> 00:16:36.000
+and turns it into a different shape. If you look what MemCopy does, or if you look what Transform does, or if you look what Vector Ad does, it takes something in one shape. The shape doesn't change, and it's just the values that change. Histogram does something that's more similar to the Matmole
+
+38
+00:16:36.000 --> 00:16:59.000
+in that, like, you have data, and then you get something with a different shape that's just based on the values of those data. But you're thinking about this in terms of what the algorithm does. I'm thinking about this in terms of what are the bottlenecks limiting the performance of the of the algorithm. I don't care what the algorithm does.
+
+39
+00:16:59.000 --> 00:17:23.000
+I'm just thinking about what are the limiting factors of the algorithm. Well, then you have to phrase your question differently. Like you can't say like, oh, which one is more similar if like, to me, the implied statement there is based on like what the algorithm does. And you're saying, oh, it's based on some other characteristic. That's fair. But this is why I think this is an interesting problem, because you and I look at an algorithm in a completely different way.
+
+40
+00:17:23.000 --> 00:18:02.000
+I look at it from the bottom up, from the performance side. You look at it from the top down from the algorithmic side. So that whatever weird performance effect we're seeing has something to do with the memory subsystem. Well, that was a very boring 28 minutes to get to that single statement. All right. So in a histogram, when you're doing the store, the store, stores generally the expensive part because you have to somehow synchronize updates from different
+
+41
+00:18:02.000 --> 00:18:43.000
+threats, right? So it would typically go through Atomics. So the bottleneck here is not actually the compute or the loading for the most part, except in some cases where you have low contention. The bottleneck primarily is the speed at which you can store the data into the result because you have to ensure that you store it in a data-safe way, which means you need to use Atomics. So I'll tell you the other thing. This weird performance effect does not happen for the single-channel version. So most cache subsystems are banked,
+
+42
+00:18:43.000 --> 00:19:03.000
+which means that when routing requests through the cache, based on the the memory address where the request is going to it gets routed to a different part of the cache subsystem now in our case here
+
+43
+00:19:03.000 --> 00:19:17.000
+this is a multi-channel histogram so when we load one value like a pixel we then split it into its four constituent parts and then we have to issue four stores into the memory
+
+44
+00:19:17.000 --> 00:20:01.000
+subsystem that are going to hit four separate memory addresses to store the increment of the count for those four constituent parts. In this case where we have these power of two bins, the last bits of the address, for all of these four addresses, all four of these bins are a power of two size. and they all have the same alignment and they're all going to have the same last set of bits and so when they go through the cash subsystem all four of these store requests are going to get sent
+
+45
+00:20:01.000 --> 00:20:43.000
+to the same part of the cash, to the same bank in the cash when they're a power of two size because the cash happens to be power of two sized or rather the way that the cash routes requests happens to be based on, you know, some of the low bits of the address. When we have a non-power-of-two bin count, then the last bits of the address of each of the channels is different. And so they get routed to different L2 banks.
+
+46
+00:20:43.000 --> 00:21:13.000
+and that is why if we do 64K, we see substantially worse performance than if we do 64K plus one bins. Now, the interesting thing is how you solve a problem like this. There's a couple of ways. One, you can change your data structure. So the data structure that we're using here is a structive arrays. So each individual channel has its own arrays.
+
+47
+00:21:13.000 --> 00:22:10.000
+So we have one block of memory. for all of the red components, all the green components, all the blue components, all the alpha components. You could change your data structure to a data structure where you instead, you know, just have one, you know, you have the RGBA right next to each other. But in that case, you've just got a single-channel histogram. Like the person who chooses this multi-channel histogram algorithm has intentionally decided that they want to have all of the individual components segregated into their own array where they're densely packed. The other way that you can solve this problem is by padding. So when you allocate the storage for these channels, you make sure that you put some space in between each of those allocations. Usually the best way to do it
+
+48
+00:22:10.000 --> 00:23:10.000
+is to do one big allocation and put the padding in yourself. manually because if you do four separate allocations of a power of two-sized chunk, you're likely to get addresses that are right after each other and that have this unfortunate alignment where they're all going to end up hashing into the same L2 bank. And so what you instead do is you allocate one big chunk of memory and then you put a little bit of padding space in between each channel's storage, such that their addresses will hash differently. And of course, I probably would have gotten to the bottom of this if I hadn't added the 48K and 56K bin counts here. But many years ago, like 10 years ago, when I was working at Berkeley Lab on writing high-performance tri-diagonal
+
+49
+00:23:10.000 --> 00:23:36.000
+solvers for the Intel Xion Phi chips of the time, I ran into a very similar, effect like this. And had to do a similar trick with adding padding to it. And actually, that is what motivated me to go to the C++ committee because I wanted to make sure that we added a proper multidimensional
+
+50
+00:23:36.000 --> 00:24:17.000
+array abstraction to C++. And in particular, that we added one that would support arbitrary layouts so that you could express a layout that has padding in between the dimensions. Because one way that you can add this padding is conceptually if you think about the big block of allocation for the channels as being a multi-dimensional array, where one dimension is what channel am I on and the other dimension is how many bins are in that channel. One way you can add the padding is by adding a dimension in between those two that adds the stride that you
+
+51
+00:24:17.000 --> 00:25:05.000
+want. Anyways, I looked at this graph and it took me like three minutes and I was immediately like, ah, this is some sort of L2 cash, you know, bank conflict effect. So what's the single word? Memory? Cash. Oh, man. And just after having had a great episode where we had lots of great feedback on the GitHub discussion and, you know, one person DM'd me. And then we go and do this. This was maybe one of the worst episodes. I think the people are going to love it. I think you're going to get great feedback on this.
+
+52
+00:25:05.000 --> 00:25:37.000
+And like also too, like they're not what they're not looking at this graph. Like did we even describe the graph well enough? And we never even actually described the algorithm. And that's my, that's my problem is that like technically. you know, you say, oh, there's only really one at all, all algorithms, and they're not really. Like, I was thinking, like, if you have a low enough number of bins, which clearly you don't based on this graph, but, like, if you only are got, you know, I don't know what the right threshold is, but, like, you could just have every, you know, if you're chunking this up,
+
+53
+00:25:37.000 --> 00:26:08.000
+every, you know, set of threads could just have their own array. And, and then basically you just add those together. and then you avoid all your atomic's issues, you know? We call that privatization, but you still, like, you can do, you can have every thread have their own bins, but you can also have every group of threads have their own bins. And that's what the lower bin count algorithms do, is that every group of threads has their own bin,
+
+54
+00:26:08.000 --> 00:26:24.000
+their own set of bins that live in shared memory, and the fast GPU memory. and then at the end they merge their local privatized bins together so anyways I think I think the problem with this
+
+55
+00:26:24.000 --> 00:26:41.000
+is with this episode is that you went in assuming a ton of stuff and you just said oh all algorithm implementations are the same and yet already here now this is the interesting part is that like you're actually dispatching to a different algorithm based on the size of the bin and you just we just like kind of blanketly said
+
+56
+00:26:41.000 --> 00:27:02.000
+like oh there's only one algorithm they're all the same and that's like just demonstrably false. For the points we're looking at the graph, it's all one algorithm. So the problem with the approach you just described is what do you do when you have a larger number of bins? I mean, it's just not going to work, right? Well, when you just have too many bins
+
+57
+00:27:02.000 --> 00:27:38.000
+to store a local copy of the whole histogram? You're just not, I mean, that would be a terrible idea. To have that many, just to have that many bins? No, no, no, no, to store a local copy. Like I said, you need to have, like, a number of bins that's below some threshold. I don't know what it is, but, like, you know. But then what's the thing that you should do when you have a larger number of bins? The algorithm that you've alluded to that we haven't talked about, where, you know, you're protecting a single one with Atomics so that you can do updates and whatnot.
+
+58
+00:27:38.000 --> 00:28:29.000
+Yeah, but the problem is that if you have a lot of contention, if you have, if it ends up, you, you, you have, if it ends up, you, you, you, you have. a lot of bins, but most values go into just a few bins, then you have a lot of contention. And then that becomes very slow, because you have a ton of atomics going to a couple of bins and your performance tanks, because all the atomics on any individual bin gets serialized. So there's a couple different things you can do. You can still do a privatized histogram, but you just, you can't have it be local to the thread. You have to allocate dynamic storage for it. And that's what Cub currently does today, which is a little bit slower. This algorithm, which is entirely something that an LLM came up with during auto research,
+
+59
+00:28:29.000 --> 00:29:11.000
+is one where I call it histocash, where you build a small cache, like a small hash table, basically, for some of the bins in shared memory. And so for bins that are more frequently used, or in this case just a lucky set of bins, because there's no eviction, they get to use the local storage, and then for other bins, they have to go up directly to the global memory.
+
+60
+00:29:11.000 --> 00:29:58.000
+But one of the advantages of the advantage of, having the cash is if you all if most of your values are only going to a small number of bins, then the cash will absorb it. And if your values are evenly distributed with a large number of bins, then it doesn't matter if the cash misses because you don't have a lot of contention. So the atomics going to the global memory are mostly cheap because they're not contended. And the interesting thing about the caching algorithm is it's the only way like you don't if you knew about the structure of your input if you knew oh most of my values are concentrated ahead of time then you could pick a better algorithm but the problem is you don't have a way of knowing that and having a
+
+61
+00:29:58.000 --> 00:30:25.000
+little cache lets you have one behavior when your values are concentrated and a different behavior when your values are not concentrated oh how am i going to edit this i mean that last part was interesting histo-cash histo-cash maybe that's the name of the episode at least it'll have a good title yeah it's interesting
+
+62
+00:30:25.000 --> 00:30:40.000
+because the cash that I use it does not evict because it would be too expensive to do an eviction so the cache is it's directly probed so what you do is
+
+63
+00:30:40.000 --> 00:30:56.000
+you get a value you go and you find your bin and then you look up where your bin should be in the cash and if somebody else has already claimed that spot then you just you've missed in the cash
+
+64
+00:30:56.000 --> 00:31:23.000
+and you go to global memory but if nobody's claimed that spot then you get to claim that spot and so it's nice because it's a very cheap cash the cost of a miss and the cost of a hit are very very cheap the downside is that you know if somebody's claimed your slot you're just screwed interesting and so there are some adversarial there are some adversarial inputs
+
+65
+00:31:23.000 --> 00:31:59.000
+I'll show you a public implementation of this uh people I'm in the process of upstreaming it to cub so by the time this airs there should be a PR open maybe I guess this is airing tomorrow I was going to say it's airing tomorrow maybe not cool There's a bunch of different infrastructures that you have to look at, which is one of the interesting things with this problem. Like, if you just have, like, if all of your values are in one bin, then this works very well because you're always going to hit in the cache. And if they're sort of, like, randomly distributed,
+
+66
+00:31:59.000 --> 00:32:47.000
+you're going to have a pretty good cash hit rate. But you have to, like, kind of work hard to construct an algorithm. Like, this here is a specific construct. where, like, you can construct an adversarial input where you calculate, like, what two bins will collide, and then you first poison the cache by filling the bin with, by filling the slot in the cache, that you're going to then fill the rest of your input sequence with values that would go to that slot. and then miss. And if you do that, then, yeah,
+
+67
+00:32:47.000 --> 00:33:04.000
+the performance is pretty atrocious. But a lot of the, like, reasonable inputs that would represent real data it does pretty good on. I mean, this one's, like, kind of mad. But anyways, yeah, histocash. I think it's pretty clever. I will tell you, Bradley,
+
+68
+00:33:04.000 --> 00:33:20.000
+Bradley got this quiz right in, like, I don't know, three or four minutes. That's Bradley Dice, our coworker. Have we had Bradley on this podcast? I think we might have. We have not. We have not had Bradley on the podcast, really? No.
+
+69
+00:33:20.000 --> 00:33:41.000
+Unless if I'm forgetting, but I don't really forget that kind of thing yet, at least. So it's interesting. You, my first instinct when I look at an algorithm, is to think about the bottlenecks. Well, I mean, I'm like a APL programmer at heart, not a... Right, right.
+
+70
+00:33:41.000 --> 00:34:08.000
+I think it's like, like you, you're approaching, it like top down, whereas I'm approaching it like bottom up. Yeah. That's what makes us such an awesome pair. Make that the cold open. And the last part of this episode. Be sure to check these show notes, either in your podcast app or at ADSP thepodcast.com for links to anything we mentioned in today's episode, as well as a link to a get-up discussion
+
+71
+00:34:08.000 --> 00:34:13.000
+where you can leave thoughts, comments, and questions. Thanks for listening. We hope you enjoyed and have a great day. Low quality, high quantity. That is the tagline of our podcast. That's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

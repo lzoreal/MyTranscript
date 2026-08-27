@@ -1,0 +1,277 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:55.000
+It's a two range transform reduce where you're looking at adjacent elements and then the binary operation that you're applying to those to those two adjacent elements is not equal to. And then you're doing a reduction of plus. So here's what's beautiful is that this is a bit obfuscated. There is a much, much nicer way of implementing this. It's amazing to me how often we see these, these like fundamental parallel algorithmic patterns come back. Welcome to ADSP, the podcast episode 16, recorded on February 7th, 2024. My name is Connor, and today with my co-host Bryce, we chat about how to implement a parallel mode. All right, well now I'm recording too.
+
+2
+00:00:55.000 --> 00:01:10.000
+All right, you looking at my screen? Yes, but you need to be slow and gentle with me. It's all right. Hit the Windows key, type sound. Leave the play black. Type sound. Leave the play black. Oh, no. Play black? Play black?
+
+3
+00:01:10.000 --> 00:01:45.000
+Play black? Listen, all right, listeners, if this makes it in, I apologize. I'm pretty deathly ill right now. The fact that I'm even recording this is a testament to the importance that I, the reverence that I have for the platform that we we've created because we 167 episodes this is going to be 68 we've been cutting it pretty close though you know we used to always have like a queue of episodes like in the pipeline but like the past two to three weeks it's just been like oh crap it's wednesday or thursday we gotta record something
+
+4
+00:01:45.000 --> 00:02:28.000
+although i gotta say that's true i think uh i think phone tag one of my favorites i mean here's a question while we're fixing our audio because my audio is still clipping like crazy did you actually listen to the fourth part the fourth part yet um it's on my to-do list i'm gonna do it today hopefully i knew i knew he wouldn't know i knew he wouldn't but importantly i did actually listen to the second part which was you i did well that's because you needed to in order to debated not listening to the second part that actually would have been pretty entertaining everyone would have been like what the heck but then i would have i would have as soon as i heard what you were saying i was like i got it he just he didn't listen he just recorded his own side of
+
+5
+00:02:28.000 --> 00:03:04.000
+the conversation anyways i actually i actually could have pulled it off because i in my in my second message the third part i i asked a second kind of was starting a new topic yeah yeah yeah you could have just said oh that's that's really interesting. Really interesting. Got a follow-up question. And then that would have been funny. Anyways, hit this little speakers thing. Click properties. Well, we're not going to fix it in today's episode. I will look into this.
+
+6
+00:03:04.000 --> 00:03:25.000
+And we're supposed to have a guest, but we reached out. Should we say who we reached out to? Sure. Tease the listener. We reached out to Andrew Kelly, but he's a busy guy, I guess, and he did not reply to our email. Yes. Yeah. If you happen to have a personal line to Andrew Kelly, creator of the Zig language, who is no longer on
+
+7
+00:03:25.000 --> 00:04:05.000
+Twitter or Reddit, let us know. Reach out to him on our behalf. I think he'd like to talk to us, especially considering our space over the last year and a bit has been, you know, a big portion of our conversation has been, you know, C++, Rust, Circle, Hylo, etc., all the successor languages. And although Zig is not a successor language at all, it does compete in an adjacent space, which is the C space. Rust is arguably to C++ what Zig is to C, although a bunch of people are going to be upset that I just made that comparison because Zig doesn't do much for memory safety. My point is, is Zig is like a modern, quote unquote, better C. That's still
+
+8
+00:04:05.000 --> 00:04:36.000
+going to upset some people. The same way that a lot of people argue Rust is a modern better C++. Anyways, let the, you know, internet have a field day with that. Do you have a topic today? I do have a topic. However, I also have a problem. And the problem is that the heater is on right now and it's very loud. Now I could turn it off, but it's also freezing cold here and I can't feel my extremities. So, I'm not really sure what to do about that. I mean... I'll fix it as best I can in post.
+
+9
+00:04:36.000 --> 00:05:31.000
+And already the listener is being upset by my nasally voice. So, you know, episode 168, it's not the best quality in terms of the audio experience that we're bringing you. But you know what? The alternative was just either we didn't ship and we missed our first week in 167 weeks, which I'm not about that life. I don't care if I'm in the hospital because I got a concussion on a bike accident. Honey, you gotta remember, you gotta help me remember to turn this heat on later. Oh, I nearly died on a dog toy just a moment ago. So Ramona got herself the Van Gogh Starry Night Lego set, which has how many pieces? 2,136 pieces. And she has begun assembling it. Woo! How long is it supposed
+
+10
+00:05:31.000 --> 00:05:57.000
+to take? Still eight hours, but I think it's gonna take faster because I'm halfway through and I've just been doing a couple of hours. And have we lost any Legos yet? We have not. However, the dog has decided to plop herself down over some of the bags of Legos, so there is dog fur all over Lego. Well, stay tuned, listener, till episode 169 when we find out
+
+11
+00:05:57.000 --> 00:06:17.000
+how long it took Ramona to finish the Van Gogh Starry Night Lego puzzle. See, I have a theory, which is that this is going to be like an ongoing project over the course of the next two weeks of our lives, and there's just going to be Legos everywhere, and I'm going to step on them at night, and my feet are going to get all cut up.
+
+12
+00:06:17.000 --> 00:06:37.000
+It's going to be fun. Anyways, you know how to implement parallel mode? Parallel mode, as in the statistical stat? The statistical stat. Man, I'm on my A game today. Ever heard of statistical stats? They're my favorite kind of stats. Parallel mode.
+
+13
+00:06:37.000 --> 00:07:06.000
+Yes, parallel mode. Mode is the most common, correct? Median's the middle, average is average, and mode is the most common, correct? Median's the middle, average is average, and mode is the most frequent. It is so sad that I had to pause. I'll leave that pause in there for you, folks. That pause was a genuine, you know, I'm hopped up on day Tylenol, couple of zinc pills. I'm really hoping that that pause was brought to you by the mental fog that i have
+
+14
+00:07:06.000 --> 00:07:49.000
+and not like my neural degeneration at age 33 parallel mode so so mode is it's it's the the number or the the the value that appears most frequently if you've got a parallel hash map like in cuco that's pretty simple yeah so that's like you do like a you know histogram style yeah and then just a reduction afterwards um pretty good guess parallel mode i mean oh obviously that would be i'm not actually sure which is more performant on a gpu but i can i can solve that in like 10 characters in Jellyfish. All right. Or is it Jello?
+
+15
+00:07:49.000 --> 00:08:03.000
+Show me. Is it Jelly? Show me or tell me. It's actually probably – I can't show you. I could show you, but we don't do that here on ADS-P podcast anymore because that's – Show me. All right. All right.
+
+16
+00:08:03.000 --> 00:08:46.000
+Only because I'm sick, I'm going to'm gonna allow myself i mean i still am sharing my screen i just realized let's take our little wsl terminal whoa look at that there we go can't mention that because that's not public yet we're gonna cancel out of that docker hop into jello i guess that means we can never publish the video of this one no no although honestly it should be on our 2024 goals or new year's resolutions not we'd be setting it a bit late i keep getting people telling me that we got to put this stuff on youtube because apparently the youth the youth bryce and we care about the youth we care about the youth apparently they don't listen to podcasts and because of that the number one podcasting platform is youtube
+
+17
+00:08:46.000 --> 00:09:19.000
+and we're missing out on a huge demographic and we don't we don't like that anyways back to jello jello we definitely couldn't put this video on youtube as i sit here in my pajamas with my fancy winter coat on top because it's cold actually i mean i think that's i think that's par for the course that's uh for the course. That's the, you know, you talk enough about your first class flights as if you were wearing just your pajamas, they'd be disappointed. You know, they're expecting a pajama top coat combo. But these pajamas are my Emirates first class pajamas.
+
+18
+00:09:19.000 --> 00:10:01.000
+All right. Let's mix this up a bit. So, I'm typing out a list of numbers where two is gonna be the mode and i think i've got it he's got like eight numbers there just like you know a test case and yes it's not a whatever cop we're not going to comprehensively test this but uh i believe the the solution and the reason i said that i could do this so quickly is note that I'm typing in Jell-O. But this – what I have typed so far, I typed ID, which is the keyword in Jell-O for identity. But the conversion of ID, which I borrowed from Haskell because that's what Haskell calls the identity function, is a superscript one in Jelly.
+
+19
+00:10:01.000 --> 00:10:17.000
+Fantastic, folks. But wait, the what of – what – Jelly. Fantastic folks. But wait, the what of what? Jelly is a code golfing language that is, even for an array language, Unicode glyph fans such as myself, very difficult to
+
+20
+00:10:17.000 --> 00:10:47.000
+decipher, to comprehend, because it's just using a bunch of stuff. Anyway, so superscript one is the identity function we're just doing that to show that we got our expression but we're going to replace this id for the identity function with and look at that autocomplete absolutely beautiful brought to you by prompt toolkit of the python programming language folks and what do you think this function is right here bryce it's rle rle What do you think that stands for? I mean, you should know. You should know, man. Run length encoding?
+
+21
+00:10:47.000 --> 00:11:38.000
+That is correct, folks. And actually, run length encode is not what we want yet. We need to sort first. I just, I gotta say, I, after like two years of this podcast of me just completely failing at quizzes, I feel like this year has been very good to me yeah fantastic you're crushing it so now we have we have a sort followed by an rle a run length encode we should explain what run length what run length encoding is oh would you like to explain or should i explain you go you go for it run length encode is a it's a fantastic algorithm we We love it. We love it, folks. And it's actually kind of a super specialized chunk by. So we've talked about chunk by quite a bit over the last year,
+
+22
+00:11:38.000 --> 00:12:13.000
+which is a view that showed up in C++23, but it exists in other languages like the D language and Haskell under the name group by. It takes a binary predicate, and then it chunks your list into sub lists based on whenever that binary predicate fails. And in Haskell, in a library called data.list.ht, they have a version of this called group by, and then they have a specialized version called group where the binary predicate is fixed to equal to. So if you have chunk by equal to in C++23 with views, that'll give you a range of ranges where each range is the contiguous elements that are equal
+
+23
+00:12:13.000 --> 00:12:52.000
+to each other. So in my case, our example list is 1, 1, or it's actually 1, 1, 3, 2, 4, 2, 2, 6, 2. But if you sort that, you get two 1s, four 2s, 1, 3, 1, 4, and 1, 6. And so if you sort that you get two ones four twos one three one four and one six and so if you were to go chunk by equal and actually i think if we go sort and then group i think group is the name look at that beautiful so so we should also mention like like one link encoding is uh uh it's it's sort of it's often a building block in things like compression, right? Yes. It is a way to take data and express it in a different way, which is a shorter sequence. Yes.
+
+24
+00:12:52.000 --> 00:13:10.000
+And we didn't even get to the full explanation of run length and code, because I've just gotten excited about chunk by, which is called group by in this Haskell library. And then it has the specialization in Jell-O. That's why I stepped in, because, you know, one of the two people on this podcast have to be the adult in the room. Oh, no, no. We had track of the stack.
+
+25
+00:13:10.000 --> 00:14:08.000
+We knew the topic stack and we were coming back to it. But in Jell-O, the equivalent of group in Haskell is also called group. So, you can see here, well, you guys can't see or the folks listening can't see but i started with a list of however 10 elements and now the resulting after you go sort group is that we have these uh inner lists and note that if it has a single element in jello for whatever reason it just keeps it as a single element a little bit confusing because it's kind of uh but anyways run length and code is basically a chunk by equal to followed by a map or what we call in views land and C++ land, a transform where we are basically doing a make tuple and then using a unary function on each of, for each of the elements in our two tuples. So like a make pair. The first one is going to be head, aka the first value of our sub range.
+
+26
+00:14:08.000 --> 00:14:32.000
+And then the second value is going to be size. There is no elegant way to spell this in C++. Like literally it would be stood colon colon, views colon colon, transform parentheses. And then you're going to spell a lambda, which is going to be an empty capture list. Then you're going to go paren auto and then like ref ref r for the range n paren and then embraces return stood colon colon make pair
+
+27
+00:14:32.000 --> 00:15:10.000
+technically i think with ctad you don't even need to spell what it's going to be and uh then you're going to go uh range dot first and dereference that or like range r dot front comma uh stood colon colon distance of the range and this would necessitate it it being like a sized range oh look you want to be on the pod ramona was on the pod no she doesn't want to be on the pod do you want to come say hi to bryce at least uh she just just said that she listened to our phone tag podcast literally just today. She listens to the podcast. I didn't mention you?
+
+28
+00:15:10.000 --> 00:15:36.000
+Oh, yeah. So this is why I was asking if you wanted to be on the pod because last time when I was recording on Thursday, Shima actually lent into the mic and recorded the Welcome to ADSP the podcast, but then I ended up cutting it. And so now this is your opportunity. Even though I did it better.
+
+29
+00:15:36.000 --> 00:16:05.000
+She kind of did it better hello welcome to ADSP podcast recorded on January 30, 2024 to February 1, 2024 and released today February 2, 2024 on this, Bryce and I played phone tag. He's in Florida, and I just got back from Costa Rica. Everybody's on the podcast now. Do you have COVID, Connor? We're going to find out in a couple minutes here once we're done this recording. No, no, no. Connor, we're going to find out live on this episode. Do you want me to do a COVID test while we're explaining? Yes, I do want you to do a COVID test while we're explaining? Yes, I do want you to do a COVID test.
+
+30
+00:16:05.000 --> 00:16:36.000
+So literally, did you get this from the hospital? I've been sick since Monday. And anyways, while I'm opening up this... This is great podcast content, I gotta tell you. Anyways, I spelt out, almost finished spelling out the lambda that would go inside the views transform to turn the result of our chunk by into basically a list of pairs where the first one is the value in that contiguous sequence. And the second one is the length, aka you are run length encoding your values, which is, I'm not sure if it's related to like
+
+31
+00:16:36.000 --> 00:17:05.000
+Huffman encoding, but it's like, as soon as you start doing compression stuff, it comes up as like a very classic example. If you need to, you know, reduce the density of the stuff you're storing. This is going to be hard to type and do this COVID test at the same time. But here, I'll continue typing to go back to our sort RLE. And note that sort space RLE is in Jell-O. But like I said, Jell-O is a Python wrapper around this Jelly Code Golf language. So really, the Jelly Code is s under dot and then i don't
+
+32
+00:17:05.000 --> 00:17:41.000
+even know how to read this like o e r should we ask chat gpt so the symbol o e is known as the latin small ligature o e okay so like how do we how do we refer to that we just call it o e it's the o e ligature sure all right we're done with this. Yeah. So it's S under dot OE ligature R, which is technically only two symbols. And now what we need to do is we need to, I wonder if we can do a, I think it's a each last or is it a, is it a last each? I think. There we go. And then a max.
+
+33
+00:17:41.000 --> 00:18:02.000
+So in Jell-O speak, look at how, look at that. We got syntax highlighting. But hang on. This is only giving you the count of which one has the highest. Oh, yeah, yeah, yeah. You haven't actually given the mode, right? So the answer that he's given us here is the count of how many times does the mode appear, not actually what the mode is.
+
+34
+00:18:02.000 --> 00:18:26.000
+That's true. So really you want a max with a custom binary operation, but there's another way to do this, which is index max. But I don't think you can do that. You can do that each last index max, and then we're going to need to use a combinator. So this gets us the index, which is index one. Oh, he's cooking here, folks. He's cooking.
+
+35
+00:18:26.000 --> 00:18:42.000
+I mean, this is still definitely going to be less than ten characters in Jell-O, in Jelly. That was the challenge. How do you do select? Hang on one second, Connor. Oh, oh, I've been told that there have been zero missing pieces in the Lego project thus far. Zero lost pieces, zero missing pieces. Zero lost pieces
+
+36
+00:18:42.000 --> 00:19:26.000
+as well. I don't know how to choose. I don't know how to index into this array because i'm not a jelly expert but basically we just need one more thing so it's sort rle dot each last index max which gets us the index and technically if you've got multiple of them it'll return you all the indexes and then is there a filter compress keep oh there's a keep a keep does the keep need to go in front does the keep need to go in front there it is folks boom yeah that didn't work what do you mean didn't work gave you the right answer no that's not the right answer get rid of the plus one wait i'm confused about what you think didn't work um because i think this is getting us the first right it's not actually getting us
+
+37
+00:19:26.000 --> 00:20:28.000
+the second and so yeah my expression oh my expression when i did last should actually be first head so it's actually one so that makes me think that that makes me think that this is a it gives you the zero indexes which then this plus one is that it it's still not it i don't know what this two three thing is anyways the details of how to spell this in jello right now we're at one two three four five six seven eight nine ten eleven technically but i'm not sure we'll work on it we'll post it in the show notes but how about we look at how Thrust does this? Mode? Yeah, there's an example.
+
+38
+00:20:28.000 --> 00:21:16.000
+I was looking through Thrust examples, trying to find good examples for async algorithms. code that uses multiple parallel algorithms in some sequencer ordering and would be interesting test cases for an asynchronous parallel algorithms interface. So I went through all the thrust examples. But actually, you know what the interesting problem was that I've been, like one of the more interesting examples that I've now got in my paper is the rainwater problem from uh from your talk that we've discussed in this um uh episode um but uh let's talk about how this mode works wait so just just to recap the two different solutions i proposed were just a parallel hash map which you can find in the koo collections library and the second one was a sort followed by a like max by key aka max reduction where you've got some custom binary operation that is doing the reduction on the first one or the basically length of each of your sequences.
+
+39
+00:21:16.000 --> 00:21:32.000
+And then it keeps a pair of things and throws out the last thing. But now we're going to see how this happens in Thrust. Yeah. So the Thrust example. So first there's a sort with a comment that says, sort data to bring equal elements together. Pretty straightforward. Then it does an inner product.
+
+40
+00:21:32.000 --> 00:22:14.000
+An inner product where the reduction is a plus. Is that right? And the, hang on, take a look at this and help me sort this out. Sorry, I uh disassembling my covet test so that to make sure that we get the listeners a report by the time we finish wrapping this up so we got online 41 a thrust sort then we've got online 45 and then you've got this inner product and then we've got a count the number of unique keys which is an inner product aka transform reduce and it's got as the so it's a it's so it's a binary transform reduce it's like the the adjacent transform reduce where
+
+41
+00:22:14.000 --> 00:22:41.000
+it's looking at every two adjacent elements it's checking whether they're not equal to each other and then uh it it's doing a sum so it it's essentially doing like a parallel word count. I've used that as an example a bunch of talks where you're looking for like the ends of words or the ends of sequences. Connor is now inserting the swab up into his nose. It looks like he's not having a fun time, I got to tell you.
+
+42
+00:22:41.000 --> 00:23:14.000
+My eyes are watering a little bit, that's for sure. But so this transform reduce, it's transform reduce where it's got two input sequences. One is the elements from zero to n minus one. And the second one is the elements from one to n. So every transform is going to look at two adjacent elements. And the transform operation is not equal to, which will return true once for the start of every new unique element.
+
+43
+00:23:14.000 --> 00:23:48.000
+And then we just reduce that transformed pseudo sequence, and that gives us the count of how many unique keys we have. That's kind of cool because it's got that parallel word count problem embedded inside of it. We're going to pause here, though. We're going to pause here. This is fantastic. I don't think the listener necessarily followed that because I didn't necessarily follow that, but we've got an inner product, aka transform reduce, where the thing, yeah, so you've got the parallel word count is in the two ranges, the two range transform reduce, where you're looking at adjacent elements and then the binary operation that you're applying
+
+44
+00:23:48.000 --> 00:24:30.000
+to those to those two adjacent elements is not equal to and then you're doing a reduction of plus. So here's what's beautiful is that this is a bit obfuscated. There is a much, much nicer way of implementing this. Well, is it actually nicer? There's an alternative way of implementing this well is it actually nicer there's an alternative way of implementing this which we have also talked about on this podcast with respect to a different problem that is actually yeah actually this is a this is messed up you need to refactor this but uh yeah so i didn't write this code reframing reframing how should this code actually be spelt and it's and if you need a hint i'll give it to you in three seconds because it is the the hint is going to be like it's actually absurd that we're
+
+45
+00:24:30.000 --> 00:25:00.000
+doing this all right lay it on me read the comment above this inner product on line 48 yeah count number of unique keys it should probably be some form of count what algorithm would you reach for with a comment that says count the number of unique keys? I would probably reach for count. I would probably reach for unique count. Oh, there's a unique count. Weren't you at my presentation in January, which we can't name what it was about, where this was one of the motivating examples that I used? Like it is actually,
+
+46
+00:25:00.000 --> 00:25:42.000
+this is fantastic. In my 2.0 version of that presentation, I'm going to use this because there's no stood unique count, but there is a thrust unique count.0 version of that presentation i'm going to use this because there's no stood unique count but there is a thrust unique count and the way that thrust unique count is implemented is using a count if with a zip iterator that it zips adjacent elements together and what's what's what's confusing is not just the choice of inner product but also that like not equal to technically is returning you a Boolean because it's a predicate operation. And then you're summing Booleans, which C++ allows. But if you tried to do something like this in Rust or Java, it would yell at you and say you can't sum Booleans. Anyways, we have the algorithm, a one-line algorithm for this whole thing called unique count.
+
+47
+00:25:42.000 --> 00:25:59.000
+And even our, you know, NVIDIA engineers, and actually potentially when this was written, unique count didn't exist. This example, I believe, predates unique count being in Thrust. Fantastic though, folks. We love it. The reason I say that I think it predates
+
+48
+00:25:59.000 --> 00:26:23.000
+unique count is because this is spelled as inner product, not as transform reduce. And inner thrust didn't have transform reduce until later in its evolution. I mean, still very early in its revolution, like we were still in college, but later. Okay. So here's the part where I think that this approach starts to break down or becomes less optimal than what you...
+
+49
+00:26:23.000 --> 00:26:54.000
+Also, update on the COVID test. I spent too long and it all evaporated, so now I need to start over, but continue. Okay, so next we create two O number of unique element device vectors. And we're going to use these to count the multiplicity of each key. And we're going to use these to count the multiplicity of each key. And we're going to do that by doing a reduce by key that is on the original data and writes to,
+
+50
+00:26:54.000 --> 00:27:24.000
+what is this doing? There's a lot of iterators here. So a reduce by key, there's a bunch of different versions of it. Whoa, whoa, whoa, whoa, whoa. Hang on, hang on. This reduced by key takes one, two, three, four, five iterators? Yeah. Okay, so the first two iterators are the input sequence. The next iterator is the key, and then you've still got two more iterators. So here's the thing about reduced by key is that reduced by key has two outputs. It has both the keys and the values.
+
+51
+00:27:24.000 --> 00:27:49.000
+And here's what actually Michael Garland, my boss and I, had a discussion about this the other day, because the scan by key algorithms only have one output. And that's the values. They don't have the keys. Reduced by key has two outputs, the keys and the values. But it actually only makes sense in the case where your binary operator is an equal to predicate. What if your binary operator is like less than? What do you put, what do you output for the key? Because in the case
+
+52
+00:27:49.000 --> 00:28:20.000
+where your binary predicate is equal to, you know that all of the values in your sub, your basically your segment, your subsegments. Wait, what predicate? You mean the reduction operator? So reduced by key in this example doesn't give you, you're looking at one out of six, doesn't give you, if you look at the docs right here, it says this version of reduced by key in this example doesn't give you, you're looking at one out of six, doesn't give you, if you look at the docs right here, it says this version of reduced by key uses the function object equal to, but there's an overloaded version that lets you customize this binary operator. And technically, I think what they wanted you to do. It uses equal to to test for equality.
+
+53
+00:28:20.000 --> 00:29:18.000
+Yes, but you can customize that to any predicate. And I think it wants you to, in general, to only ever use equal to or basically like an overloaded equal to that works for your custom type. But technically, there's nothing preventing you from using like less than or less or like less equal, in which case, you're going to end up with a bunch of different values in your sub segment that are different. And it's like like which one do you use i think when i checked it uses the last one but like it basically the key output is nonsensical unless if your binary predicate that is passed either by default or by you is an equal to predicate anyway so what you're seeing here is that you've got your keys output your counts output the constant iterator is so that you can sum up you're basically doing a run length and code. And if we sum up the actual keys, you're going to get some like the number of keys times the key. And we don't want that. We just want the sum. So how do you do that? You sum up a bunch of ones where one corresponds to every single element. And then your first two iterators is your input.
+
+54
+00:29:18.000 --> 00:29:53.000
+Reduced by key. And this was the whole point of that presentation is that like I can generate all of this. Well, I shouldn't say that because that kind of a little teaser is the tool that i've been working on generates this like i can write a couple like a couple keywords and poof it works i literally have a thing called chunk by len that like generates all of this and actually including the inner product but my inner product is not that it's a count if with a zip iterator now i'm pretty sure that doing a run length encoding is better than what they're doing here. And one of the reasons that I feel that it's better is that they need more temporary storage
+
+55
+00:29:53.000 --> 00:30:14.000
+here. Well, yeah, no, they need, well, one, they need temporary storage in general. I mean, you can do the, if you're okay with doing it in place, you can do the run length encoding in place. But here you need to store both the keys and the counts. I know, I guess you have to do that in run length encoding too. Is this just a less elegant way to write run length encode? Yeah, I think it is.
+
+56
+00:30:14.000 --> 00:30:54.000
+Okay, so we do a run length encode and then... Well, the run length encode hasn't happened yet. Or yes, this is a less elegant way to do run length encode, which doesn't exist in Thrust, but it does exist in code. And then what we do is we do thrust max element to find the index of the maximum count. In this case, what you're doing is because you're, you don't like in my jello program, your run length and code gave you a list of tuples. But in this example, you've got two separate lists with two separate iterators. So you do the max element on the counts. And then you use that iterator to basically back out the index and then index into the keys is what it's doing here. Whereas my explanation was like, well, you want to do like
+
+57
+00:30:54.000 --> 00:31:37.000
+a max. So in Rust, there's an algorithm called max by key, which you can basically give it a projection like exists in C++ 20 and 23 views, do the max by that, and then it'll return you the tuple, and then you just want to index into the first one, which is the... So one thing that occurred that I thought that occurred to me when I was looking at how you do this in Jell-O, and that occurs to me now again, is there's another way that you could do this, which is, I think, objectively a worse way, but perhaps will lead us to a better algorithm, which is you could do sort, run length encoding, and then sort again to get. Because once you have the run length encoding, sorting the run length encoding will give you. But I wonder if the thing about that that's
+
+58
+00:31:37.000 --> 00:32:32.000
+potentially a revelation to me is if you think about it that way in terms of like you essentially need to do two sorts, is there some way to combine that final sort or that final find with the run length encoding itself? And I think the answer is yes. I think you could do a run length encoding where you also, during the run length encoding, find the maximum element. I'm 100% certain that you can now do this because run length encoding is implemented as a scan under the hood because it's just like stream compaction. Yeah, I'm fairly certain that you can write, I think you need to write a bespoke kernel for it, but I think you can write a bespoke kernel that does the run length encoding but keeps track of which run is the longest run, and then gives you the answer. And then you don't have to do that third pass of the max element. I'm trying to think about how exactly would this
+
+59
+00:32:32.000 --> 00:33:06.000
+look. I think we'd have to dive into how the CUB run length encoding algorithm is implemented to truly get to the bottom of this and see if we can do this in two passes. But one interesting thing about this algorithm is that because of the first sort, which seems to me unavoidable, it is almost certainly a two-pass algorithm. You'd want to do this as a two-pass algorithm because you need to sort the data first. I can see a path by which we can combine the later passes.
+
+60
+00:33:06.000 --> 00:33:57.000
+But if I need to sort the whole thing, there's no way for me to avoid this having two parallel passes, unless we can find a way to not need to do the sort. And I mean, the one approach to that would be the histogram style approach that you suggested at first of like, oh, you have a parallel hash map. And that is almost certainly going to be the fastest way to do this, I think. Because with the parallel hash map, you don't need to sort. You don't even really need multiple passes. So that's just got to be the best one, right? And you know what? A fun problem that we should talk about in the future how would we do a parallel rolling mode yeah it's a lot more complicated i think that's a little bit more complicated well we should land this plane because we've got two minutes left but uh while bryce was
+
+61
+00:33:57.000 --> 00:34:29.000
+pontificating this is what i was or you can you can't see my screen anymore because you're the one sharing or yeah this is what my tool my un you can't see my screen anymore because you're the one sharing. No, I cannot. Or, yeah. This is what my tool, my unnamed tool, like, generates all this. You can literally see, like, there's the make constant iterator. Yeah. Discard iterator because I, like, you can't use this for RLE because I'm discarding the keys. But, like, the equal to, the plus, and this count if with a zip iterator is exactly what they've spelled using an inner product, which of course, mine is much nicer. Anyways, folks.
+
+62
+00:34:29.000 --> 00:35:09.000
+That's beautiful. That's very cool, Connor. That's very cool. We can't show, we can't tell, we can't tell the listener. You know, it really amazes me how, you know, you just happen to check your tool and it spits out basically the same pattern. And that same pattern that we saw in that first example is also more or less the way that you do it in Jell-O. And it's just, it's amazing to me how often we see these like fundamental parallel algorithmic patterns come back. Like, the more and more we look at how do you solve, you know, a problem in parallel,
+
+63
+00:35:09.000 --> 00:35:34.000
+the more and more I find that it breaks down into, like, one of three or four different fundamental answers. You know, like, it's a reduction, it's a sort, it's a scan, or it's a stream compactation which is what run length encoding is or it's just like a parallel four leap like like almost everything that we've talked to has
+
+64
+00:35:34.000 --> 00:36:32.000
+boiled down to one of those and in some cases two of those but usually when it's two of those it's a sort followed by one of those yeah it's just it's just mind-blowing to me how how how often we get these deja vu moments of like hey we've seen this before haven't we oh yep completely agree and you might have missed it in that presentation but this this is the code that i had to write to get that we will we will demo that hopefully in the future at some point folks i think the best way to end this is by me stopping sharing my screen and by showing the negative covid test folks hang on you gotta hold it back a little bit because sometimes that line can be very faint nope yeah it looks like connor doesn't have COVID. Connor's just sick. Fantastic. Well, I hope you feel better, buddy. I am reminded of a time during the pandemic
+
+65
+00:36:32.000 --> 00:37:12.000
+when you thought you had COVID, but could not get access to a COVID test. And so I... Oh, yeah, yeah, yeah. I bought, I had COVID tests because I'm a little hoarder and I had a stock of them. So I took the COVID test down to FedEx and I overnight FedExed it to you in Canada at what can only be described as an exorbitant fee. And did that arrive overnight, Connor? It did not. It did not. It did not. It got held up by Canadian customs for a while. I think, did you ever get it?
+
+66
+00:37:12.000 --> 00:37:37.000
+I did. It was, I think, two or three days later, and I did test positive. I thought it was a while. Yeah. I don't remember why there was the great urgency for me to get you that COVID test. I think it was just you couldn't get the test and you didn't want to go out and risk exposing people no and so i was just like hang on i got you at the time you couldn't get tests in canada there was a period
+
+67
+00:37:37.000 --> 00:38:14.000
+of time where they basically said you could no longer you couldn't buy them or get them at a store and you also couldn't go like unless unless if you were like pregnant or you met some criteria you couldn't go in and get one and then when i told you this you were like this is ridiculous i have the solution yeah but was it actually useful or am i correct in remembering that before the covid test arrived you found some other way to get a COVID test. I did. There was a couple, I don't know if they were rogue operations, but I did find a place that would give me a test,
+
+68
+00:38:14.000 --> 00:38:42.000
+and then I did test positive there. But I used yours a couple days later and test positive again. So they did come in. They did have some utility. It was not zero. But anyways, FedEx, I'd like a refund, please. Yeah, we've been waiting a couple years, FedEx. I think it was like $120 or something. It was like not cheap. It was it was up there. But anything for my buddy, anything for my buddy. Be sure to check the show notes either in your podcast app or at ADSP to podcast.com for links
+
+69
+00:38:42.000 --> 00:38:47.000
+to any of the things we mentioned as well as a link to a GitHub discussion where you can leave thoughts, comments and questions. Thanks for listening. We hope you enjoy it and have a great day. Low quality, high quantity. That is the tagline of our podcast. It's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

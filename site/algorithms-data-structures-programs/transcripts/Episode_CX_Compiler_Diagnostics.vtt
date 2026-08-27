@@ -1,0 +1,181 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:46.000
+They didn't teach you Roman numerals at your fancy high school with the telescopes? No, they did not. No, they did not. Seems like something they should have done. I mean, does it really come up that often? Welcome to ADSP The Podcast, episode 110, recorded on December 22nd, 2022. My name is Connor, and today with my co-host Bryce, we talk about compiler diagnostics, printf debugging, and more. And we're moving straight into our New Year's Eve episode, and we're now going to let Bryce talk about compiler diagnostics.
+
+2
+00:00:46.000 --> 00:01:37.000
+So some of the compilers I work with don't have great diagnostics. And so what is a compiler diagnostic? What I mean by compiler diagnostic, what I mean is, when what there's one of two things that leads to a compiler diagnostic. Thing number one is you, the user, did something wrong. You wrote some code that was incorrect, and the compiler has to communicate that to you in some way. And the second thing is the compiler did something wrong. Like, you know, the compiler, like, you wrote valid code, you know, maybe it was very, maybe it was very obscure code. Maybe it was code you shouldn't have written, but you wrote valid code and the compiler, like,
+
+3
+00:01:37.000 --> 00:02:25.000
+sees it and is like, uh, like, I give up, I blow up, I run out of memory, something. And then the compiler has to in some way tell you, like, you gave me something that I choked on. Like, sorry. Like, you know, here especially in c++ are are an important part of your tool chain experience um there's this thing this sort of amorphous thing that i talk about which is um uh like the robustness of a compiler there's like a question of like you know how many how many of the language and library features
+
+4
+00:02:25.000 --> 00:02:43.000
+do you support, right? Like how many of the boxes do you check off? But then there's also the question of like, how robust is your support? And, you know, that's like partially a question of like, how well have you tested it? But also there's only so much testing that you can do outside of like compiling real world code.
+
+5
+00:02:43.000 --> 00:03:07.000
+And when you do compile real-world code, some amount of it might be quirky or weird and might lead to problems where the things that your compiler can't handle even though it should have, or things where maybe it's a little bit unclear whether the code is correct or your compiler is correct. But still, it's something that that um uh you know it'd
+
+6
+00:03:07.000 --> 00:03:45.000
+be nice if uh if the compiler could handle even if it's maybe you know undefined behavior or you know an edge case or something that's like not officially supported um and sort of the degree to which your compiler can handle you know real world code is is what I like to call robustness. It's sort of like the quality of the features that you support. And I am faced with this perpetual problem where it's hard to get people to care about robustness and diagnostics. In the compiler space, people primarily care about performance. For the
+
+7
+00:03:45.000 --> 00:04:37.000
+code that you can compile correctly, like how well does that code perform at runtime? And also how well does it perform at like how fast, how long does it take to compile? And like increasingly in the past few years, we've cared more and more about tooling and like things like safety and static analysis and stuff like that. But I think it's still been hard, at least in some organizations, to get people to care about diagnostics. And they're so important, especially if you have a less robust compiler. And I think one of the reasons why it's hard to get people to care about diagnostics, as opposed to things like performance, is that it's hard to quantify, right?
+
+8
+00:04:37.000 --> 00:05:26.000
+Like, how do you quantify how good your diagnostics are? And, you know, some compilers do test their diagnostics they're like okay well if you give me this ill-formed code i'm supposed to produce this type of um you know of error message and sometimes like you know clang and llvm have a um uh have testing tools that make it pretty easy to test whether you get a particular error message or a particular kind of error message from a particular piece of ill-formed code. And so that's part of what the testing is. But I don't think that a lot of compilers do this, and certainly maybe they don't do it as well as they should.
+
+9
+00:05:26.000 --> 00:06:19.000
+So I've been thinking about how could we do a better job of quantifying um uh diagnostics and um you know i i've over the past few years i've been accumulating um a collection of what i consider diagnostic failures of like real world um uh cases where somebody hit a bug and they were like, I got this error message. I don't know what it means. And then like eventually we figured it out and we're like, oh, well, that was just an unclear diagnostic. And, you know, there's some, there are some attributes of a diagnostic, you know, does it point you to the correct location in the code where that like this point, does it correctly point you to the origin of the issue um uh does it correctly like describe um uh the problem that's being encountered um you know we could
+
+10
+00:06:19.000 --> 00:07:05.000
+probably go and make a list of like those those attributes um but one thing that i've been thinking about a way to like quantify this would be just take a corpus of like bad of diagnostic that may be questionable or maybe it's just like include good diagnostics too but just like take like 100 test cases of like some ill-formed code or maybe some some well-formed code that some compilers choke on and then generate those diagnostics that that code produces for code that some compilers choke on and then generate those diagnostics that that code produces for all the major compilers and then like create a survey where each person is shown the diagnostic um maybe like without the code and then they're like asked like hey what's the problem like like or how helpful is this diagnostic um and then
+
+11
+00:07:05.000 --> 00:07:58.000
+you know they they like they pick a score and then like in the next screen they're shown well okay here was the source code and here was the actual problem and then they're asked like now that you've seen the actual problem um like how helpful do you believe the diagnostic was was it like that you just misread the diagnostic or like was the diagnostic actually not that helpful? Or some sort of survey like that which would then give me some actual concrete data on how good are different compilers' diagnostics. And maybe that would also help me learn more about how to improve diagnostics. But yeah, this is something that I'm quite interested in, in trying to learn how we can quantify diagnostics, because I feel like if I can quantify it, then it makes it easier for me to
+
+12
+00:07:58.000 --> 00:08:22.000
+convince people that it's an important, something that's important, that it's something that we should strive to improve. All right, folks. Here's what we're going to do. There's two Connors. Have you seen Rust Diagnostics is my question. Not as much as I would like to,
+
+13
+00:08:22.000 --> 00:09:03.000
+but I hear that they're very good. Which code base do I want to work in because I have three different rust ones open right now let's do this one but let's just go down to a test and so like for instance let's see if I actually have this turned on right now I have a couple local variables so we I always say we're not going to live code but just while Bryce was talking about diagnostics I just I consider I consider, I haven't worked with Elm, but I heard Elm was the language that coined the term compiler driven development. And Rust has really, I think it's like the, one of the best languages. What is compiler driven development?
+
+14
+00:09:03.000 --> 00:09:46.000
+Compiler driven development is this idea that you should design your compiler errors and diagnostics to be so helpful that it actually guides you while you're programming. Versus, it's kind of the opposite of what you were just saying. Like, you know, your diagnostics being so unhelpful that it's just confusing and it's going to waste time. Whereas like there are literally extensions in Rust that not only can the, are the diagnostics so good, it tells you what's wrong. You can like set up your editors to just like, I know Gonzalo, who's a individual we, we both work with at NVIDIA. I don't know what editor he used, but he says he just hits tab and that does cargo fix, which just automatically like fixes sort of does
+
+15
+00:09:46.000 --> 00:10:24.000
+You know the equivalent of Klein clang tidy fixes in C++ I don't know. I didn't I didn't ask But so I just added mute the mute keyword, which is basically the Analog of const except they do the opposite things and you can see here that I have a VS code extension called error lens or something like that what is it yeah error lens and it in lines the errors that I get and so this is technically a warning but it's saying that this variable does not need to be mutable so it immediately you know does
+
+16
+00:10:24.000 --> 00:11:07.000
+that and if i do something else uh like this well so that's not the error i was trying to get so i just took a variable that i'd already used and then used it again but i just typed it and put semicolon and it says path statement drops value okay okay but but but let's so so go back to that previous diagnostic because i have some questions about that so this is basically saying like it's it's this is the equivalent of your no discard. So it says path statement drops value. And then in backticks, warn path statements on by default. So is the diagnostic just the first first part path statement drops value
+
+17
+00:11:07.000 --> 00:11:45.000
+so actually let's just so that because this is not actually the this is a modified version of what you get when you the reason i'm asking is because the way that that's phrased i think it's a bad diagnostic because it it it doesn't have the context like if it says something says like path statement drops value it should say like what's the value that was dropped you know it should like quote it in the diagnostics of the so this is the actual diagnostic which they are okay so in the actual diagnostic here it does give you carrots well but but okay um what what is a path statement i'm just i think it means this statement in this current path.
+
+18
+00:11:45.000 --> 00:12:06.000
+I've actually never seen this error before, but my guess is that they're telling you literally right here that like, if you are not going to use the value that's being returned from this expression or statement, put drop parentheses around expected. Is it possible for us to construct a statement like this that drops to value or that hat or the, sorry, the possible for us to construct a statement like this that drops two values? Or that – sorry.
+
+19
+00:12:06.000 --> 00:12:53.000
+Is it possible for us to construct a statement like this that has – like this statement that is just, you know, the name of the variable semicolon. So it's pretty clear here. But I want to see, like, what happens if that statement was, like, more complex and it, like, it named multiple variables? Because if it named multiple variables, then that diagnostic path statement drops value might make it – it may be variables because if it named multiple variables then that diagnostic path statement drops value might make it on it may be unclear which thing it drops i don't know does rust have a semicolon operator comma operator i think is what you're getting oh yeah sorry comma operator my guess is no it does not no um so i off the top of my head i don't i don't know yeah but but see like for me like i i would I would want that diagnostic to tell me in the warning message part, like, what is the thing that was dropped?
+
+20
+00:12:53.000 --> 00:13:25.000
+Expect it. It's pointing right at it. In the carrot part, yes, it's pointing at it. But I mean, if it's always going to point out i still think it's in more complicated expressions like if we go back to adding the unnecessary mute and compile you get like you get like multiple colors yeah you're you're putting mute on input and then it points directly at mute and says remove remove this mute and then i'm pretty sure if you go yeah but but even though it shows the carrot where it
+
+21
+00:13:25.000 --> 00:14:37.000
+points you towards that particular thing um i don't know that i still think i would prefer for the textual warning to name the variable that does not need to be um mutable it's pointing right at it what are you talking about right but in in the in the tooling example that you just showed um go back to the ide so um is there a way to declare multiple variables on a single statement in rust uh yes okay but you would have to use like destructuring to do it and my my point is that the carrot like the carrot syntax is great, but the textual diagnostics are obviously used in tooling. And sometimes people don't always look at the carrot statements. Sometimes the carrot statement, if you're on an environment where the line is so long that it wraps around sometimes the carrots can be like hard to read and by carrots i mean like like that it reproduces the source code and that it puts like you know um uh the little carrot uh symbol and the line below the source code to show you like oh this is the
+
+22
+00:14:37.000 --> 00:15:23.000
+thing in that line of source that caused the problem interesting so when i used uh when i destructured a tuple into two variables, a and b, and then put mute in front of a, it doesn't say anything. So you don't get a warning for that. Although I'm not even sure, like, I assume this is valid code. It's compiling. I mean, let's try and do this a plus equal one. Right, because we have to call it under bar a, which actually at this point, now we don't need this to be under bar see like these diagnostics are like better let's see instead of saying like variable you know can be you know it doesn't need to be mutable it says variable a is assigned to but never used that's a better diagnostic to me it like it talks about what its subject is i don't want diagnostics
+
+23
+00:15:23.000 --> 00:15:51.000
+to ever say anything that's like like uh ambiguous about like what it what it means and like these are simple examples that we're looking at but it when in you when you get to complex code like the the it may become not unintuitive. Like what is meant? Like if it, if it just says like variable, you know, uh, uh, doesn't need to be mutable. Like in this case,
+
+24
+00:15:51.000 --> 00:16:10.000
+it's clear what variable is meant. But my point is that like in the wild, and when you're developing diagnostics like this, all of the test cases that you write, like this is going to make sense. But then like in the wild, in a big production code base um you know maybe there's some some some complex case where somebody gets this diagnostic and
+
+25
+00:16:10.000 --> 00:17:07.000
+they're like i don't like what which variable are you referring to like it doesn't cost anything for the diagnostic to explicitly say like hey this is the thing this is the name of the thing that that uh i'm talking about you i mean i think in this case like there's only one variable on the line so in the case we're using error lens it's pretty clear and here there's only one variable and there's five carats underneath the underneath the five characters of that variable name so like asking this asking you're basically saying that you want this warning colon variable does not need to be mutable it doesn't cost anything to put the name of the variable my point is more like as a as a as a matter of policy when a diagnostic talks about like a thing like a variable or an object or something it should say which thing it's talking about always because you never you
+
+26
+00:17:07.000 --> 00:18:39.000
+never know um uh how that diagnostic may that diagnostic may come up in more complex it may be emitted in more complex scenarios than you originally mattered and in the scenario that that then that you originally envisioned i mean in the scenario that you like in the scenario that you originally envisioned, I mean, in the scenario that you, like in the cases that you envisioned this diagnostic being emitted for, it may be cases where you know the the user reads it and i think this is often what happens where somebody like we like the diagnostic does tell you what the problem is but you've um uh like you read it quickly and you assume that it's something else you assume that it's talking about some other variable or something. And then you go and spend 30 minutes trying to figure out, oh, this other thing that I assumed it was talking about, that's where the problem is. Instead of if it had just been clear, if it had just told you specifically which thing it was talking about, I think things would be better. Like I'm picking on this one particular case here because I think this is exactly the source of a lot of C++'s diagnostic problems. If you look at a lot of like poor quality C++ diagnostics, it's because of like diagnostic messages like this. Now,
+
+27
+00:18:39.000 --> 00:19:31.000
+a lot of those are from the era before diagnostic messages reproduced the source line and before diagnostic messages did things like the carrot diagnostics where it shows you where the problem is and like that has made things better but i still think that like this is one of the root causes of of uh of poor diagnostics is when when the error message does not um uh like tell you uh what things it was dealing with and are like think about um uh you know assertions um in sort of the early days and i think still um common a lot of code bases when you have like assertions and see um uh you know the simplest form of assertion just like it checks the thing and then um if it if it fails it um you know it just simplest form of assertion, just like it checks the thing. And then, um, if it, if it fails it, um, you know, it just says assertion failed. Um, a lot of testing frameworks,
+
+28
+00:19:31.000 --> 00:20:28.000
+that are like assertion based or that have like some macro for, you know, testing this A equal B or, you know, something like that. They, those macros these days are constructed in such a way where if you want to do some something like you know assert or test that a is equal to b um uh if that fails it will print out to you what was the value of a and what was the value of b um because you know that's useful information if it just tells you hey like hey this assertion that a equals b fails then you're like okay well like well then what was the value of a in this case and what was the value of b um like i like that's the information that i would need to know to be able to diagnose to diagnose what the problem is or i think diagnostics that don't provide um uh diagnostics that aren't format strings i think are often bad
+
+29
+00:20:28.000 --> 00:21:02.000
+diagnostics diagnostics that don't like substitute in um context from the source of the error are often bad diagnostics f strings for the win you know that in python they have this beautiful feature where with an F string, if you just have an F string, you know, F quote, brace, name of your variable, and brace, end quote, it prints it out. But if you add an equal sign at the end of that variable, it'll turn the value of that variable into the name of the variable equals this. I'm not sure I understand.
+
+30
+00:21:02.000 --> 00:21:38.000
+Let me find it again. So like the initial F string is F quote, brace of your variable we'll call it x and brace end quote and that's just going to print out whatever the value of x is but if you add an equal sign right after the x it's then going to instead of printing out the just the value of x it prints out x equals and then the value so that anytime you're doing printf debugging, which, you know, admittedly, is not the always the best way to debug, but you know, we've all been there. And sometimes you just need to do something quick and dirty, putting a bunch of those statements all over the place, you just need to add equal sign to each of your variables. And then like, how often
+
+31
+00:21:38.000 --> 00:22:45.000
+are you creating a little f string that is, you know, the name of the variable equals or colon, and then the actual value uh it's just a very nice thing that i found out a couple weeks ago i was like wow that's such a nice small addition people give printout debugging a lot of uh it gets a bad rap but um at least in my career in a special i you know i mostly work on concurrent systems um in a lot of cases um uh firing up a debugger um will uh you know running the code under the debugger will mean that the error won't reproduce um and so you know isn't that isn't that a problem with the debugger though and not like no if it's if it's a race if it's a if it's a race condition like it is almost always the case that running, that building, just, don't, forget even, forget even, like, running a debugger. the way depending on how you build the code and the
+
+32
+00:22:45.000 --> 00:23:32.000
+platforms that you're on um but often the platforms that i'm on the like the production version of the code doesn't just build in release mode it like builds in release mode and like explicitly like turns off like a lot of additional debugging things and like stack frames and like information that like without which the debugger can do absolutely nothing. And the difference between that release build and the debug build is sufficiently large that you've almost got a completely different code that you've compiled. And the performance characteristics of it are sufficiently different that something like a race condition may not appear in the debug version at all.
+
+33
+00:23:32.000 --> 00:24:51.000
+And so that's why I've often had to lean on printf debugging. And sometimes I can't even do the printf debugging because the IO itself will cause the race condition to go away. And so instead of actually printing out what I want, I will instead you know store um i'll sort of buffer somewhere the information that i need to print out later like i'll have some variable that that will save like like the value that i wanted to print out and then afterwards i'll like only print it out at the very end so i i think people i think people you know people who are very anti-printfab debugging have perhaps worked in an environment where they've only had to deal with like some sort of concurrency bug or some sort of performance bug or something that only occurs when you're building and running sort of at speed of light.
+
+34
+00:24:51.000 --> 00:25:20.000
+So what should all the front-end, back-end compiler engineers that are listening to this take away? That there's some survey coming out that's going to help them in the future or that they should just do better? I don't know yet because I haven't started down this road of trying to come up with a way of quantifying diagnostics. If anybody has done that or has thought about that like or i i guess i'm sort of looking for two things one i'm definitely looking for case studies of of poor diagnostics so if anybody has code that leads to like c++ code
+
+35
+00:25:20.000 --> 00:25:51.000
+like like like that's ill-formed where they got a diagnostic message and they spent a good amount of time trying to understand it and the problem was just that the compiler just provided a vague or unclear diagnostic. I'd love to get a lot of test cases of that. So send me those test cases. Anything where there was code that was ill-formed or code that was ill-formed or, or code that was well-formed, but just like any compiler, poor compiler diagnostic, um, test cases that, that you've
+
+36
+00:25:51.000 --> 00:26:31.000
+come across. Um, I'd love to see those, but I also, I'm, I'm, I'm trying to understand what are like the attributes of a good diagnostic, what makes a good diagnostic. Um, there's, you know, what we talked about before about that. I want to see diagnostics that provide the relevant contextual information that points you to the correct location and the source that sort of describe the issue in the right ways. But I'm sure that there's some way of quantifying what good diagnostics are and like the sort of the attributes, the key properties. I just haven't quite figured out yet,
+
+37
+00:26:31.000 --> 00:27:12.000
+or I guess I haven't really started the exercise of sitting down and thinking about what are those attributes. But if people have ideas, I'd love to hear that. Or if there's prior work in this area, I'd love to hear that. I know we, I think we already have a couple guests that we said we were going to bring on, and the next two episodes are going to probably be the retro and forward looking podcast that we do on 2022 slash 2023. But then we should, because on our short list of Rust people to bring on is JT, Jason Turner's cousin, and they are, I know they've done a lot of work on the Rust compiler diagnostics. So, I mean, they were recommended to us by Jane to, you know, come on just in general
+
+38
+00:27:12.000 --> 00:27:52.000
+and talk about Rust, et cetera, but we could also have them on to talk about compiler diagnostics as well. Here's a question. Who invented carrot diagnostics? Like, not just like for, not in like Rust or in C++, but just in general, who invented carrot diagnostics? I don like for not in like ruster and c++ but just in general who invented carrot diagnostics and also i know that a lot of the stuff though was invented in like in in rust land i don't know if the carrot stuff exactly well i i think maybe some uh a listener will correct us if we're wrong but i believe clang was the first c++ compiler to have carrot style diagnostics i i think i think that even before that gcc maybe had diagnostics that pointed you to the line of code but um i don't
+
+39
+00:27:52.000 --> 00:28:34.000
+know maybe we should have something like richard smith on because maybe he'll he'll be able to tell us more about the history because i really think clang was the first c++ compiler to revolutionize diagnostics and everybody else sort of followed suit so maybe we can have richard smith on some time and he can um tell us a bit about the philosophy of diagnostics and claim yeah i mean what he's one of the main three folks at the moment on the carbon yeah yeah and maybe maybe then he could tell us a bit about what they have in mind for for diagnostics and um and carbon yeah i mean we've been ever since cpp north back in july which is almost half a year ago by now we were supposed to have uh chandler on um on the very last day but then it ended up just being too
+
+40
+00:28:34.000 --> 00:29:07.000
+hectic and we we didn't get a recording with him and ever since we've been it's been on our back burner i think we have like a you know on the back burner like 20 different folks that we're supposed to bring on but 2023 we'll make it happen. All right. Happy. I mean, technically I said it's the new year's Eve's new year's Eve episode, but it's actually December 30th today. Potentially you're watching, listening to this on Saturday though. So if it is Saturday, December 31st, happy new years. And well, I mean, for those of you that celebrate the new years that corresponds to the, what is it? Gregorian Julian? I don't even know what calendar the, uh, Western world follows.
+
+41
+00:29:07.000 --> 00:29:32.000
+So my, my, my thinking on this is it's pretty safe to say happy holidays because pretty much everybody across the planet gets time off around this time of year. So, you know, that's a holiday. That was last episode though. What about happy new years though? Is that fine? So, you know, that's a holiday. That was last episode, though. Whatever. What about Happy New Year's, though? Is that fine? I mean, I think.
+
+42
+00:29:32.000 --> 00:29:57.000
+What is the calendar? Do you know? Is it Gregorian? I mean, if Howard Hinton is listening to this, he's. Yeah. Yes. I believe it's the Gregorian calendar is the one that's used in most of the world yeah all right yeah gregorian happy new years introduced in october 1582 by pope gregory the i can't read roman numerals um as a modification
+
+43
+00:29:57.000 --> 00:30:45.000
+of and replacement for the jillian calendar yeah it's x i i i i don't know what that is x i i i come on really take a guess i don't know 13 take a guess yeah that's correct i guess again they didn't teach you roman numerals at your fancy high school with the telescopes um no they did not no they didn't seems like something they should have done middle school um i i i mean does it really come up that often they probably tried to teach it to me in montessori school but i uh i very much rejected the montessori educational program it was very structured like like in montessori school they give you like these these um like wooden blocks and they want you to like stack them from like smallest from largest to smallest
+
+44
+00:30:45.000 --> 00:31:01.000
+to build a tower. I would be like, no, I want to go do something creative, like build some other structure. They'd be like, no, creativity is not allowed here. You're supposed to do this thing. I'm like, no, I'm a creative soul. I want to go do this other thing instead. It was not a great fit for me.
+
+45
+00:31:01.000 --> 00:31:06.000
+Montessori school was very structured and I am a very montessori school is very structured um and uh and i am a very chaotic and uh a creative person all right on that note folks 2022 that's a wrap we will talk to you in 2023 yes we will thanks for listening we hope you enjoyed and have a happy new year There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

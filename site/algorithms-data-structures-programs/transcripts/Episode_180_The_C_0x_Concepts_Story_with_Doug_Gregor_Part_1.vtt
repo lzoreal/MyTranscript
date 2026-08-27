@@ -1,0 +1,301 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:58.000
+The idea is we wanted real first-class support for generic programming, the discipline, in C++. And generic programming, I learned about it in college and I thought it was amazing because it's this idea that you can write an algorithm or a data structure in its most abstract form, right? This beautiful thing that looks like it's looks like it's in a textbook, and yet it compiles down to efficient code for any data type that it works with. And C++ is pretty good at making a lot of that possible. Welcome to ADSP, the podcast episode 180, recorded on April 29th, 2024. My name is Connor, and today with my co-host Bryce, we interview Doug Greger from Apple in this multi-episode series.
+
+2
+00:00:58.000 --> 00:01:43.000
+We start off by talking about the history of C++ OX concepts. Very excited to introduce our guest for today and probably over the next couple episodes because we usually split these things up into, you know, two or three. Our guest is Doug Greger, who I actually don't remember what episode we casually mentioned that probably one of Doug's friends or coworkers listens to this episode. And we put like a call out into the wild that we wanted to have Doug on. Sure enough, I'm not sure. We'll let Doug mention if he wants to, you know, name that individual that ended up reaching out to him. And if you don't know, Doug has worked at Apple.
+
+3
+00:01:43.000 --> 00:02:13.000
+I looked it up, and correct me if I'm wrong, for 15 plus years. So a counterexample to the folks that like to jump around from company to company. And while he's worked at Apple, I don't actually know what you did necessarily before working on Swift, but you are one of the main individuals. I don't know if there's like a top N that you fit into, but definitely you were probably in that top N for your work on the Swift language. And before Swift, I know that you were massively involved in the C++ community. I'm not sure how much of that tied in with your work at Apple.
+
+4
+00:02:13.000 --> 00:02:52.000
+And my guess is that you went to a bunch of C++ nows. I could be wrong about that. And hopefully one of the topics we will get to today is talking about the original C++ OX concepts, or I guess concepts light is what we ended up getting, but there was this original OG concept proposal that ended up not making it, and then out of that proposal came the concepts that we have today. And I think, if my memory serves correctly, that is how your name came up, is we were talking about concepts as they are today. And we made a reference back to that we, at one point, we had the hope of sort of a better
+
+5
+00:02:52.000 --> 00:03:29.000
+concepts. And I think most of the C++ community has kind of acknowledged at this point that the original proposal did give, you know, the future concepts more than what we have today. At the time, maybe that wasn't clear there was a lot of discussion and i think i think doug was involved in those discussions so we were gonna we're gonna get a first-hand account of what what happened a decade ago and uh yeah i think maybe i'll leave it there i'll throw it over to you doug if you want to fill in or bryce is going to add something you also you know greg dimension but doug uh was uh uh been heavily involved in the lvm community and in clang prior to being Mr. Swift.
+
+6
+00:03:29.000 --> 00:04:08.000
+Yeah. But yeah, I think when we were talking about concepts in the previous episode, and this has come up a few times in the podcast, where I've said effectively that I would like a refund on the concepts that we've gotten because almost none of the things that we were hoping to get out of concepts have materialized like the one the one that i think is just a real egregious um uh crime is that like a large part of the selling point of concepts is that oh we're going to get better diagnostics better messages which is like if anything it's worse um i feel in in many cases um and uh to the point that um i feel like i i tell people
+
+7
+00:04:08.000 --> 00:05:07.000
+only use concepts when you need to um use them to like disambiguate like overloads like use it as like a proper form of svine um and otherwise like be very careful about where you use it like maybe use it in some of your interfaces but don't put it everywhere because then the diagnostics will be awful. And yeah, so I feel like we could have done better. And I think it will be interesting to hear about the saga of how we got to where we are. Well, it's great to be here. I think the saga of how we are should start with what we were actually trying to build in C++ OX concepts, because the idea here wasn't better error messages, although that was one small piece of the expected outcome. The idea is we wanted real, first-class support for generic programming, the discipline in C++.
+
+8
+00:05:07.000 --> 00:05:51.000
+And generic programming, I learned about it in college and I thought it was amazing because it's this idea that you can write an algorithm or a data structure in its most abstract form, right? This beautiful thing that looks like it's in a textbook, and yet it compiles down to efficient code for any data type that it works with. And C++ was pretty good at making a lot of that possible. So the template system, especially with Svina and with overloading, you could get an expression of generic programming that worked, but it took a ton of effort. You had to be a wizard with C++ templates to sort of make it happen. And the idea behind the C++ concepts
+
+9
+00:05:51.000 --> 00:06:35.000
+effort was you shouldn't have to be a template wizard. It should just be easy to figure out what your concepts are, write your generic algorithms in a manner that's always going to work. So, so yeah that was the initial goal and did this come from because i know uh in the elements of programming concepts uh are used even though they didn't exist and i think that was one of the things that have been it's been talked about for a long it's like uh you know when alexander stepanov was was writing his you know first initial drafts like in the comments of his implementation, like were the concepts, but just he didn't have a way to, he didn't have concepts then. And then fast forward, you know, till C++20 and a version of concepts got in.
+
+10
+00:06:35.000 --> 00:07:00.000
+But this is an idea that's existed for like two plus decades, maybe even more. I'm not sure actually where the genesis of it comes from. Much more than that. So like the first paper on generic programming was from 1989. And it was actually Alexander Stepanov and Professor Dave Musser, who I met. I got to meet in college. He's got me interested in generic programming. And they actually used Ada in their paper, which is fun.
+
+11
+00:07:00.000 --> 00:07:57.000
+This was before they discovered that C++ was the closest thing to express their ideas. But the idea of concepts, Dave Musser was working on it in his own little proof programming language called Tekton to get the ideas developed. 2003 when there is this first paper on, hey, let's bring concepts into the C++ language as part of C++ OX. And the paper is interesting. It actually lists, I counted them, 14 design aims for this feature called concepts, which is a lot. But it's interesting because it covers all the bullet points we talked about. So it should make it easier to program with generic programming. It should have this thing called concepts to abstract over types. It talked about, you know, when you call a generic algorithm,
+
+12
+00:07:57.000 --> 00:08:28.000
+we should check all the requirements there and give you nice error messages if you got it wrong. And if it passes that, well, the definition should have been separately type checked. So you wouldn't get one of these instantiation time failures. It talked about performance. It even talked about separate compilation of templates, which is a tall order, even beyond concepts. But it really did lay out the ideas for what this feature could and should do. And the ideas for what this feature could and should do. And the ideas were great.
+
+13
+00:08:28.000 --> 00:09:08.000
+Some colleagues and I at Indiana University, when I was there, thought the idea of putting generic programming into Swift was great, but we had different views on exactly how it should be done. And so we wrote a separate proposal for C++ OX concepts in early 2005 that laid out this model based on a research language that we were working on that had full support for expressing concepts and separate type checking of templates using concepts. And when you were at Indiana, you were there with Andrew Lumsdain, right?
+
+14
+00:09:08.000 --> 00:09:37.000
+Right. So Andrew Lumsdain ran the Open Systems Laboratory. One of the legendary C++ university shops of the good old days. Absolutely. Lots of generic programming, high-performance computing. The Boost Graph Library came from those folks. Lots of paper on formalizing the notions of generic programming support for programming languages. It's a really fun place to be. And so, yeah, we worked on the concept effort from there.
+
+15
+00:09:37.000 --> 00:10:38.000
+It's interesting that you say 1989 has been the first paper because, well, that's a good time ago, a couple of years, not that many years, but a couple of years before I was born. I almost feel like it's surprising that it's not older. It feels like I wouldn't have been shocked if you'd told me, oh, there was somebody in the 60s wrote this paper and that was the foundations for generic programming. But is it really that new? Or is there some older computer science lore and theory in which the idea of generic programming originally comes from? There's certainly older lore and theory. And there are languages that had abstraction mechanisms that could be used for generic programming. I think of that paper as the one where Stepanov and Musser really laid out the process of generic programming. So, you know, when I think about generic programming, what is the idea? The core
+
+16
+00:10:38.000 --> 00:11:09.000
+idea is this thing, we call it lifting, where you take an algorithm or data structure that's really concrete, you know, it's all concrete types all the way down and it works. And now you want to make it more abstract. So it's more reusable. And so you sort of lift away concrete requirements to discover the true requirements behind, you know, the algorithm. And you keep going up until the point where you have to make this compromise and say, well, I can make it more general, but I lose some efficiency guarantee.
+
+17
+00:11:09.000 --> 00:12:04.000
+And then it's a good place to stop. And so, I think of the beginning of generic programming as we know it as when that process was defined, which is this paper. And it's exactly what the programming language should support if you're going to do generic programming well. Can you maybe tell us a little bit about the concepts model that y'all came up with at Indiana? Yeah, sure. So the model we came up with had three parts. And really, that model translated directly into the C++ OX model. So I can describe them both. I'll use the C++ OX terms because it's easier for folks. But essentially, there's only three pieces to it. So the first part is concepts. So this is a way of describing in the language that there are certain types that have these capabilities, right? You can use the plus
+
+18
+00:12:04.000 --> 00:12:37.000
+operator on them. There's a nested type, named value type, whatever these capabilities, right? You can use the plus operator on them. There's a nested type, named value type, whatever they are, right? And if you know C++20 concepts, the idea here is the same, even though the syntax was very different back in the C++OX days. The second major piece is constraints on templates. So the idea here is you have a template and essentially the template, as you write it, can do nothing with any of its template arguments because there's no constraints. You haven't said that they can do anything, therefore they can do nothing. So to actually implement behavior, you need to add a constraint to your template to say, well,
+
+19
+00:12:37.000 --> 00:13:25.000
+I need this type T to be equatable, meaning it has an equal equal operator. And now I can use the equal equal operator in the body of that template. The foundational thing here is the separate type checking. If you don't have a constraint that gives you access to some particular operation and tells you what the types involved in that operation are, you cannot write it in a template. Now, the flip side of that is once you've satisfied the compiler, you know your template is good. So I talked about lifting. Imagine you start with just a simple algorithm that's just summing all of the elements in an array of doubles. Super easy. Now make it an array of Ts for some template argument T. But what do you need? Compiler won't tell you. We will know, well, okay, we need a plus operator that takes two Ts,
+
+20
+00:13:25.000 --> 00:14:21.000
+it returns a T, whatever. But you just have to know that. In the C++ OX model, the compiler will tell you, well, you can't add two Ts, please go add a concept requirement. And you add that, and then you get to the next error, which is maybe, well, you don't have a zero value, you can't turn zero into your Ts. So you add a concept constraint for that. And once you finish with this process, you know your function is good. So if you go and try to call it with something like, I don't know, some type that doesn't have a plus operator, you will get a nice error message that says, well, this type U that you gave me doesn't actually meet the constraints of this template. So the final piece we called concept maps. Now these are really interesting. So what concept maps do is they establish a mapping between types and concepts. These don't exist in the C++20 concepts model,
+
+21
+00:14:21.000 --> 00:15:05.000
+but they're really powerful. And so the basic idea is you might have a type and this type has a completely reasonable interface to do what you want to do with some other generic library from some other place. You want to use them together. What do you do? If you're lucky, you might be able to add some free functions at namespace scope and adapt things or add some operators. If you're unlucky, that template was written with member functions or some kind of syntax that you can't just go and add, right? So you start writing wrappers. With concept maps, you're basically saying, here's how this type over here meets the requirements of this concept over here. And you could actually put in the body of that concept map extra declarations that were
+
+22
+00:15:05.000 --> 00:16:00.000
+only used and definitions for the purpose of establishing that mapping. So there's useful things and cool things you can do with this. So for example, is a array of double values a container? I think it is, right? We've defined it such that we can make it a container in C++. Now, there was a time when the begin and end functions were always member functions, and you would have written them as member functions. That, in C++20 concepts, precludes you from using a built-in array as a container, because you can't add member functions to a built-in array. Concept maps let you do this sort of thing. So with a concept map, you could say, well, any array of Ts is a container.
+
+23
+00:16:00.000 --> 00:16:40.000
+Here's what the begin and the end functions look like. Here's the value type you need to express what the type of that container is. And you could build this mapping sort of as a third party. The important part is this also fit the notion of separate type checking. So again, here's a question. When is a vector equatable? Like you have a stood vector of something. When is it equatable? It's not always equatable. If you had a vector of things you can't compare, then you can't compare the vector because it's an element-wise comparison. Do you mean like when it's equatable with another vector?
+
+24
+00:16:40.000 --> 00:17:16.000
+Yeah. When can you take two vectors of the same type and compare them? Oh, okay. Well, yeah, it's a property of whether the two things are equatable, like whether the element types are equatable. Right. So this is a conditional notion. And so the way you would express this in a C++ OX concept map is to say, you know, vector of T is equatable, but that requires that T itself be equatable. And you could express this notion
+
+25
+00:17:16.000 --> 00:17:36.000
+of this sort of conditional modeling of the behavior, and it would be fully type checked. So had you tried to forget, had you forgotten to write that requires T, behavior, and it would be fully type checked. So had you tried to forget, had you forgotten to write that requires t, equatable t, on your concept map for vector, you would have gotten a compiler error that said, nope, there's no equal equal that works.
+
+26
+00:17:36.000 --> 00:17:58.000
+Gotcha. Now, how does this differ from the model that we end up having? Right. So the concepts are fairly similar with a giant asterisk there on the syntax side. Yeah, yeah. Maybe you can comment a little bit on that about how is the syntax different for the OX concepts.
+
+27
+00:17:58.000 --> 00:18:33.000
+Sure. So the syntactic difference is that in C++ 20 concepts, what we have today, you essentially write sort of how you would use a type, right? So if I have a type T, I say, well, okay, you can write X plus Y and it's convertible to a T. In C++ OX concepts, it used this approach that was referred to as pseudosignatures. Basically, you write a declaration. So you would write in the concept T operator plus that takes T comma T.
+
+28
+00:18:33.000 --> 00:18:59.000
+Yeah. And while the syntax differences are maybe not the most significant thing, I personally found pseudosignatures far easier to reason about than writing this C++20 concepts thing where you're writing these usage patterns. And I think that they're just far more expressive. And I back this up with, if you look at pre-C++11 code that has concepts written in comments, they were almost always written
+
+29
+00:18:59.000 --> 00:19:31.000
+in sort of pseudo-signature form. That like, hey, you need a struct that kind of looks like this sort of thing with like a, you know, here's the things that needs to have it inside of it. And that's just always, you know, that's always what made more sense to me. Um, yeah. That's been my, my view was that the benefit is the, of the, there's two benefits I would say to pseudo signatures. one is technical when you have them it makes it easier to do the mapping into what you need to do separate type
+
+30
+00:19:31.000 --> 00:20:11.000
+checking to like type check the definitions of templates because you have a signature you can use right right that's helpful but the other part is more what you're saying which is you know what do you want to do with the concept usually? Sometimes you want to use it to write an algorithm against. And in that sense, a pseudosignature is just like looking at a type and writing against the type. Like we know how to look at a declaration and figure out how to call it. So I think that's easier. And it's much easier when you're saying, oh, I need to create a type or make my type match the requirements of this concept. I'll just copy and paste the definition into my type and do some replacements to make it work. And I find that a lot easier.
+
+31
+00:20:11.000 --> 00:20:46.000
+Certainly, that's what we did in Swift, and it has been much easier. And it feels more like C++. I feel like every time I read a concept declaration, a C++20 concept declaration, it's like a different language, and it's hard to parse what exactly the requirements are. Whereas the pseudosignature, it's like, it looks like C++. It's like almost like a little pseudocode. Like I can understand what it wants of me. I think so too. I mean, to be fair, there was history for usage patterns. So the standard template library for concepts used usage patterns. So there was a history of doing it that way. I always found it awkward,
+
+32
+00:20:46.000 --> 00:21:03.000
+which is why we ended up with pseudonym. And I thought that elements of programming also did the usage patterns thing. I could be wrong about that, but I thought that that was partially where it came from. It could be, although most of this predates the actual publishing of elements of programming. Oh, okay.
+
+33
+00:21:03.000 --> 00:21:38.000
+We're still back in 2005, 2006. So, yeah, back to the how does the C++ OX concepts differ from the C++ 20 concepts? Right. So, we talked about concepts as being the same notion between the two kinds of concept features with differences in syntax. The constrained templates, again, the notion is the same. You have the requires clause that you can put on templates to add constraints in terms of concepts. That notion is the same. The massive difference is that C++ OX concepts check the template
+
+34
+00:21:38.000 --> 00:22:18.000
+definition at the point that you wrote it. Whereas C++ 20 concepts only do a check when you're using a template. So they check that the template arguments you've given to the template actually meet the constraints that were written down. But nothing checks in C++20 concepts that the template definition you wrote is only using the operations that are stated in its requires clause. So it's like a contract, but only one side of the contract is actually held to it. So this is really fundamental. Connor, you look skeptical. No, no, no. I just, my brain mapped what Doug was saying
+
+35
+00:22:18.000 --> 00:23:10.000
+to how I actually described this in a talk that I gave in 2020, I think. So it was a while ago, but I remember at kind of surface level digging into the differences between Swift protocols and Rust traits and Haskell type classes and D type constraints and C++ concepts. And I think my vision for the talk was a lot more grander than it ended up being because I got, I tried to include too much in the languages. And by the time I was done, like two basic examples, my 60 minutes was up, which is, you know, biting off more than you can chew. But I do recall at one point having a slide that, and maybe this is a small question, but I've always been curious about it that kind of grouped the these different language facilities that in some cases are basically kind of like one to one, even if the features are different.
+
+36
+00:23:10.000 --> 00:23:45.000
+But, you know, in all cases, superficially represent the same thing. But they I had these these two names. One was kind of constraining and the other one was consenting, which is what I think Doug is describing here in different words. And that in certain models, if you don't add any constraints, you basically can't do anything with the function. And as you add constraints, the ability to add things, the ability to do other things, you basically grow the number of operations and things that you can do with this function. Whereas in the other model, you start with the world. You can do everything
+
+37
+00:23:45.000 --> 00:24:21.000
+and until you put constraints on it you basically are restricting what you can and cannot do and like these and what so i i think you just said earlier that you were like the two models are like basically diametrically opposed like one you're starting with nothing and adding constraints and the other one you're kind of just like restricting over time, which leads to the small question is what the first time I ever heard constraint, like my semantic attachment to that word is kind of when you have a constraint like cuffs on your hands, you are now limiting what you can do. Whereas really in this sense, type constraints, I guess, because depending on the language
+
+38
+00:24:21.000 --> 00:24:49.000
+feature, they do one or the other. But as you were using it in C++ OX concepts, the constraint is really enabling you to do something. Like when you constrain the type on a function, you are now enabling it to do the addition operator. So I've always been confused on why the word constraint in my mind kind of means the opposite. Or I guess it's maybe like where you're starting from. Like if you start off from not being able to do anything other than basically like the identity function
+
+39
+00:24:49.000 --> 00:25:29.000
+then you you can increase it's it's anyways i don't know if what i'm saying is making sense but no i i i follow you like if you if you start off with the entire world if you can do everything then you know a constraint like like the idea of a constraint is limiting what you can do everything, then, you know, a constraint, like, like the idea of a constraint is limiting what you can do. It makes sense. Whereas if you start off with a world where you can do nothing and then it's more like a capability, you know, it's like saying it's, it's now, now you can do a thing. It depends on who you're thinking, like the perspective you're taking. If you're taking the perspective of the person that's implementing the template, it's, you know, not having a constraint means you can't do something.
+
+40
+00:25:29.000 --> 00:26:23.000
+If you're thinking of the person that's using the template, each constraint that's added gives you fewer choices for what you can pass into the template. This is why it's unfortunate that C++ contracts has a very definitive meaning in the C++ world, because thinking about this as an interface contract is really valuable. Because it's saying, this is a thing that is promised. And the implementation of the template, the definition of the template, promises to only use those things that are in the requires clause. And the user of the template promises to provide at least what is specified in the requirements clause. And if both sides maintain, stick to that particular interface constraints, then the instantiation will succeed.
+
+41
+00:26:23.000 --> 00:26:47.000
+You won't get a failure. Right. So I would say C++20 concepts actually do have that notion that the requires clause is supposed to be this interface contract, but it's only enforced on the client that's trying to call the template. It's not enforced on the person implementing the template. They just have to be careful. Right, right.
+
+42
+00:26:47.000 --> 00:27:30.000
+That seems less useful. Or maybe not less useful is the wrong description. You're getting less from your tools and your compiler. Right. So this is where I think without, so the property of separate type checking is both sides are being kept to that set in the requires clause. When you have that, that's when you get a lot of the benefits of language integration for this feature. Because you can go and write your generic algorithm and you could discover the requirements. So a very long time ago, after we did the initial Indiana proposal for concepts, I did an implementation, a prototype in GCC.
+
+43
+00:27:30.000 --> 00:28:05.000
+It was called Concept GCC. And I did a demo of it at the committee meeting. And we did exactly this lifting exercise of starting from a concrete algorithm and then lifting it up to be a fully generic algorithm. It was probably building accumulate out of summing an array of doubles. And along the way, you discover the iterator concepts and you discover the numeric concept that you need to deal with the zero value and so on. And every step of the way, you say, ooh, I want to generalize here and work on an array of Ts or replace the array with an arbitrary container. The compiler would tell you, hey, I want to generalize here and work on an array of Ts or replace the array with an arbitrary
+
+44
+00:28:05.000 --> 00:29:09.000
+container, the compiler would tell you, hey, you don't have this operation, please go add it somewhere. And so you'd build the concept and have this nice feedback loop to help you discover what are the right abstractions to express my algorithm. And does the concepts OX model make it easier to diagnose when you give something to a constrained algorithm and you're missing some operation. For sure. So how does it, because this is a, with the C++20 concepts model, this is a common problem where like, you know, you've passed in some iterator and it's missing like some, one of the many iterator operations in some subtle way and instead of getting like a clear like this thing is missing you get a uh a message that's like it failed to satisfy this concept which is a refinement of this concept which is refining this concept which is refining this concept and then you have to like go all the way down the chain. And that, to me, is not very good on the diagnosis side.
+
+45
+00:29:09.000 --> 00:29:54.000
+Instead of just being like, hey, you need to have this. In the OX concepts model, did we have a better way of diagnosing a failure on the provider side or the person who calls the algorithm side? It's interesting. We did. So the concept GCC prototype was pretty good at diagnostics of error messages. The thing that's strange is I think compilers could be doing a whole lot better with C++20 concepts than they are. And so I think there's some aspects of C++OX concepts that made things easier. So we did have the notion of a concept map. So when you wrote a concept map that said, hey, this type meets the requirements of this concept, we would tell you right there if it
+
+46
+00:29:54.000 --> 00:30:36.000
+worked or not. So it's much more localized. You can do something similar in C++ 20 with a static assert, but you're static asserting based on a given type you're not saying all instantiations of this template type work this way and so you don't get quite the feedback i do think there is something in the design that made c plus plus ox concepts a little easier and it's actually getting back to pseudo signatures because of the pseudo signature you check for for each of the pseudo signature say okay i need a plus plus or plus operator that takes two t's and returns a t go try to do that right as part of establishing the concept map and if it's not there i can point to here's this plus operator you need
+
+47
+00:30:36.000 --> 00:31:26.000
+something that looks like this right right um and we did go as far as to say if your type looked like it met all the syntactic requirements of the concept, but it didn't have a concept map to say it, concept GCC would say, hey, I think you're just missing this concept map definition. Here's what you should write in your code to try to guide you along. Was it ever onerous to have to write these concepts maps? That like in the C++20 model model you don't have to write like things either satisfy the concept or they don't and isn't that isn't that better great question so it was certainly a major point of contention and concern the fact that you need to write concept maps c++ ox concepts did have a notion of an auto concept which is one where if you met all the syntactic
+
+48
+00:31:26.000 --> 00:32:03.000
+requirements, the compiler would just automatically create the concept maps for you. And in fact, most of the concepts that we'd specified for the standard library were auto concepts because it met the backward compatibility constraints that the committee had for our design. And so it's a little interesting because it worried people a lot for backward compatibility reasons. And it worried people a lot because people might have to learn about this concept map feature and concepts before they were ready. And so there's a lot of concern about that. I feel like that concern was well overblown. We've seen
+
+49
+00:32:03.000 --> 00:32:34.000
+a lot of other languages that require something like concept maps. Like Swift requires you to explicitly say, you know, my type conforms to this protocol. And it is not a concern for beginners. It's really easy for people to pick up. And they actually, most of them come back and say, actually, I like it being explicit because I know this happens and I know it's checked. So is the benefit of the concept map that that explicitness that you get the check? I would say so, yes. So I guess there's maybe two benefits. So one is that you get the check.
+
+50
+00:32:34.000 --> 00:33:08.000
+And the other is that there's an implicit meaning behind these, which is in addition to meeting the syntax requirements of the concept, I also have the right semantics. Right. So this happens with c++ 20 concepts as well right like what is the difference between an input iterator and a forward iterator yeah it's kind of nothing except the semantics of what happens if you start over iterating a second time or like what's the difference between like a range and a view or like you know a range that happens to be movable in a view um Yeah, where you have these semantic requirements on views
+
+51
+00:33:08.000 --> 00:33:48.000
+that you don't necessarily have on ranges. It's interesting. I feel like one of the major themes throughout the evolution of C++ has been this struggle between more implicit ways of doing things that maybe have foot guns and more explicit ways of doing things that maybe have foot guns and more explicit ways of doing things that uh people worry maybe too too verbose um in fact this is this famously happened with c++ 20 concepts where the reason that we have this uh the abbreviated uh concept syntax um we have you know if you if you want to use a concept in a parameter list without
+
+52
+00:33:48.000 --> 00:34:35.000
+putting it, without having a template, you know, open brace, close brace list before, you have to put concept name auto, you know, name of the parameter. And the auto is there to make it very clear that this thing is a concept and that you've now turned this function into a template. And that was a major source of contention because there was someone on the committee who felt like we had to have that because otherwise you could just be reading code and you'd just see like thing, you know, like parameter, like thing that looks like a type and then the name of the parameter. And then you wouldn't know that that was a concept and that that made this thing into a template. And there's just multiple cases of, I feel like almost all of C++'s woes are either from making the wrong decisions about
+
+53
+00:34:35.000 --> 00:35:11.000
+implicit or explicit or picking the wrong defaults about things. That certainly does happen. And I think there is this notion of when something is new, it's always a little bit scary. There's always something to learn. And you're worried that it's going to sneak up on you. So you want to make it more explicit. Yeah. And so sometimes we make these decisions more out of fear, I guess, of being surprised than thinking about where we want people to be after they've gotten over the hump. I think this happened with C++ OX concepts a little bit.
+
+54
+00:35:11.000 --> 00:35:36.000
+People were worried, like, oh, no, you might encounter this concept map and you won't know what it is. You have to go learn it. On the other hand, if you do that system, once people learn concept maps, well, now they can really do generic programming and get all the benefits of this feature that we built rather than hiding it. So there is a balance here, right? You don't want to keep throwing complexity at users all the time and have things changing underneath them all the time.
+
+55
+00:35:36.000 --> 00:36:29.000
+But you need to aim for where you want them to be a couple years from now, not where they are today. Connor, you look either troubled or thoughtful i mean uh both i'm just i'm uh i'm surprised to hear that like the main it sounds like correct me if i'm wrong that one of or if not one of the main problem with getting this through the committee and standardizing it was this worry about the complexity of concept maps. And that is very surprising for someone who is a massive fan of language. Like, you know, you'll hear Sean Parent say that, you know, software engineering is a profession. It's, you know, beholden upon us to know about the history and to treat it as a profession. If you know, it's
+
+56
+00:36:29.000 --> 00:37:01.000
+a lot of professions, lawyers, doctors, et cetera, they have continuous learning and there's becomes, you know, better tools and things. And you have to continuously, you know, read whether it's the academic papers or seminars and stuff so that you're not a doctor operating, you know, with 50 year old techniques because, you know, the best practice is constantly evolving. And I love that sentiment. I love that statement. You know, it's part of the reason why I love ranges and these kinds of interfaces, because one of the biggest arguments against things like ranges or, you know, they're called different
+
+57
+00:37:01.000 --> 00:37:28.000
+things, but like the iterators and rust,, etc. Swift has sequences and multi-pass. I can't remember what they're called. Sequences, what's the other one in Swift? Collection. Collection, yeah. And you can build these kind of pipelines of operations. I love, I absolutely love the elegance and, in my opinion, the readability of this kind of code. It's this kind of data flow model where you start with an input, you do a bunch of operations, and then you end up and you can read it. It's linear, it's beautiful. However,
+
+58
+00:37:28.000 --> 00:38:11.000
+you go to Reddit, you go to certain corners of the internet, and there's a huge faction of folks that will argue that like, holy smokes, this is very complicated. It's not the way I'm used to writing code. You know, for loops and if statements are so much easier to reason about. Every language has those. Not true. But the languages they know all have them. And anyway, so the same kind of argument at a certain level exists for other language features, or I guess this is a library feature, that ended up getting into C++ that is the exact same kind of like, oh, this requires learning. You're going to have to go and learn what is a filter, what is a transform, what is an adjacent, you know, etc. All these things, what does it chunk by? But if you go and learn them, you now have a tool that is much more
+
+59
+00:38:11.000 --> 00:38:50.000
+powerful. And the ability to write these kind of expressive pieces of code, you now have and to try and do that with a for loop in an if statement, it's going to be way more complicated. And monologue is coming to an end, which is that like you know ranges got in um and i'm sure that there were some people arguing the same thing uh so how come like concepts in the version that they were uh presented like like how did it's too complicated it will require people to learn too much how did that create like a stump a stumbling block to the extent that like we needed to go and redesign it or rip some stuff anyways that was what the frown on my i was thinking like
+
+60
+00:38:50.000 --> 00:39:41.000
+ranges got in and there's a lot of people that are upset about the complexity of ranges but it's a tool that you need to learn and if you learn it you you get special powers basically and it sounds very similar to this concepts ox with you know concept know, concept maps. I'm hearing this. It's, it's sure a little more complicated. You will have to go learn, but if you do, you get these tools and these powers that you won't have otherwise. Anyway, so that was what the frown was for. I'm not sure if you can inform what I, what I'm saying, Doug, or Bryce has something to say. So, so before we, uh, before we, we ask Doug the, uh, the question, which is the reason that we're here, of course. I'll read from the isocpp.org, the standard C++ Foundation's website has an FAQ. And one of the FAQ pages is C++ OX concepts history.
+
+61
+00:39:41.000 --> 00:40:18.000
+And there's a section that talks that has a question, what happened to C++ OX concepts? And it says, quote, they were overly complex for C++ OX slash C++ 11. And so we're removed from that standard so that work could continue to simplify them for a future standard. That work has been ongoing and a radically simplified version. Concepts Lite will be part of the C++14 wave of deliverables as a technical specification. So I guess, Doug, the question is,
+
+62
+00:40:18.000 --> 00:41:05.000
+what happened to C++ OX concepts? Why was C++11 late? And are you to blame? Wow. So I am not going to take blame for C++11 being late. But I think what happened to C++ OX concepts is a little what Connor's monologue was all about. So, so concepts, they were in the draft standard in 2008. There was wording, which I think ran something like 30 pages of wording with new chapters for concepts and constrained templates and all that. There were 10 proposals that came along with it, adding concepts to all of the standard library. So, you know, we had fundamental concepts,
+
+63
+00:41:05.000 --> 00:41:21.000
+iterator concepts, container concepts, all the algorithms got constraints. We had all these- In a much more comprehensive way than the current conceptification of the standard library, right? Yeah. I mean, this was, this is the real, sorry, I don't want to say the real standard library,
+
+64
+00:41:21.000 --> 00:41:57.000
+but, you know, the things that were already there, the C++ 98.03, those containers and algorithms got concept constraints. They were backward compatible, and they were checked. So they were in the concept GCC's implementation standard library and checked the template definition time. So we knew they were right by checking, not by just thinking through it. So it was pretty far along. It was in the 2008 draft. And then there was a discussion on the committee mailing list with the provocative title,
+
+65
+00:41:57.000 --> 00:42:54.000
+Are Concepts Required of Joe Coder, which was a thread basically saying, oh no, with the way concepts are designed and the way you need to write concept maps in some cases to make a type meet the requirements of a concept, the sort of average Joe Coder, the C++ programmer out there that's been ignoring everything we're doing in the committee is going to be forced to learn this new big feature. And, you know, will resent us for it or whatever. Right. And they'll be forced to learn this feature and they're going to be upset with us because we broke their existing code. And the feature is too hard for them to learn. And there were a bunch of side discussions that were sort of weird, but getting at this overall unused with complexity.
+
+66
+00:42:54.000 --> 00:43:18.000
+Things like if you wanted to use the brand new for each loop with a built-in array, you might have to include the iterator concepts header. If you had nothing else in your CPP file that pulled in the iterator concepts header, you needed to pull that in to get the concept map that made built-in arrays into a container or a
+
+67
+00:43:18.000 --> 00:43:50.000
+view that you could iterate over. And the compiler told you, but this was considered a potentially massive stumbling block for c++ ox so you said that there was a concern about breaking existing people's code was this about a concern about breaking existing people's code who were using the standard library which was being conceptified interestingly it wasn't about breaking people's working code, because we handled backward compatibility in the same way pretty well.
+
+68
+00:43:50.000 --> 00:44:35.000
+I mean, we didn't have it rolled out through millions of lines of code, but we could run the entire lib standard C++ test suite against the conceptified STL, and it worked, and it worked the same way, and the performance was pretty close. So it was more about, I as a user, maybe I'm dealing with one of the concepts that wasn't auto, or I'm using a library that is expressed in concepts. Now I have to go and learn about this concept map feature. And the expectation here, I think, is that all concept maps would be empty. So you could write an empty concept map if your interface already matched up exactly
+
+69
+00:44:35.000 --> 00:45:05.000
+with what the concept expected. Oh, OK. And then it became basically just an assertion that says, yes, this is true. Make sure you check it for me. And I think the concern was, well, we're going to be writing lots and lots of empty concept maps everywhere that aren't providing value. Right. I can certainly see how that would be a concern the committee would have. But that would only be the case for concepts
+
+70
+00:45:05.000 --> 00:45:27.000
+that were not auto concepts, right? Right. OK. And nearly every concept was an auto concept. And for things like iterators, where having an auto concept between input and forward iterator would be a little dangerous, you'd get it wrong. In the concepts version of the STL,
+
+71
+00:45:27.000 --> 00:45:59.000
+we would write concept maps that were able to go and inspect the existing iterator traits to see which iterator tag was used so that we could map over the hierarchies seamlessly. And so at some point, a decision was made to remove concepts from the standard, or to remove C++ OX concepts from the standard, yes. And then at that point, all of the work to conceptify the standard library had to be rolled back.
+
+72
+00:45:59.000 --> 00:46:52.000
+And there were presumably other things, like any work that was using concepts now had to be rolled back. Um, and, and my, I think my understanding of that time was that, that, that was partially, um, uh, one of the reasons why C++ 11 was, was, took longer than anticipated, right? Because we decided to remove this large feature late in the process. Maybe. So there was some unwinding to do. So we had 11 or 12 proposals full of wording that had to be backed out of the standard. There weren't that many features that depended fully on concepts. The one I can think of is the for each loop. So the for each loop was expressed in terms of a concept that had, you know, begin and end and the iterators that had to be recast in terms of what you
+
+73
+00:46:52.000 --> 00:47:03.000
+see today, which is informed by the concepts discussion. So, you know, looks for a begin function, I think as a member function. And if not, it falls back to a free function and then has some fallbacks,
+
+74
+00:47:03.000 --> 00:48:07.000
+I think for built in arrays, because we don't want to force someone to include a header to use the for in loop. That one turned around pretty quick. I think I may have written the wording for the for in loop because I felt so guilty about it having been tied to my concepts feature that then died. But there weren't that many features like that that had gone all in on concepts and had to be backed out. I think the other thing that we would have gotten but didn't get is there were some proposals for iterator concepts that came out of the Boost iterator library to separate out traversal from access. That was a proposal it was in good shape early on in the c++ ox time frame got subsumed into the concept effort partly because it was the same people and then didn't get a chance to come back for c++ ox and it wasn't really until ranges came along that you started to see that that that formalism come back interesting so joe coder
+
+75
+00:48:07.000 --> 00:48:12.000
+killed c++ ox concepts i i think projections of the thinking onto a mythical joe coder is the the main thing here there were complaints. So there was concern about the compile time performance of the concept GCC prototype because it was doing all this template definition checking for the algorithm setter. And so it compiled slower. Be sure to check these show notes either in your podcast app or at ADSP the podcast.com for links to anything we mentioned in today's episode, as well as a link to a GitHub discussion where you can leave thoughts, comments, and questions. Thanks for listening. We hope you enjoyed and have a great day. Low quality, high quantity. That is the tagline of our podcast. It's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

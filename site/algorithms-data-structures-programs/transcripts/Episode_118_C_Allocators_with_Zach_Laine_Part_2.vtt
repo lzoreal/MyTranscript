@@ -1,0 +1,245 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:36.000
+Wait, weren't you a ninth grader? Yeah. Okay. I don't know. I think of like, you know, a young kid wants to cut up frogs. I'm thinking like eight. I'm thinking like eight. Welcome to ADSP, the podcast episode 118 recorded on February 16th, 2023. My name is Connor and today with my co-host Bryce, we interview Zach Lane.
+
+2
+00:00:36.000 --> 00:01:18.000
+This is part two of a probably four-part interview series. If you missed part one, check the link in the description for episode 117. We talk about C++ allocators and lots more. Well, speaking of strong opinions that you hold, you are, I think, famously one of the people on the committee who has very low tolerance for allocators. Yes. What do you have against allocators? I want to create a scenario in which allocators are just asleep in their bed and then they smell smoke and the allocators try to get out of the house, but I've locked them all with padlocks on the outside. The allocators die in fire. That's what I want.
+
+3
+00:01:18.000 --> 00:02:03.000
+I'm not going to say they should die slowly. I want it to be quick, but I want it to be painful. I just don't like allocators. I hate them. So to me, the killer argument against allocators is just think of vector, like the simplest type that we have that allocates memory, right? So a vector at a high-level abstraction, a vector is a thing that manages the storage of heap-allocated buffer of stuff, okay? Heap-alloc allocated array of t um and you can or this is not actually allowed with with the typical allocator um people have tried to change the allocator model so that you can do this and the this i'm thinking of is uh make it
+
+4
+00:02:03.000 --> 00:02:28.000
+where you can substitute in an allocator and basically you get a small vector, right? Like it's got a small buffer optimization and then it goes to the heap. Or worse yet, you just drop in an allocator and now it's a static vector. So all of its allocations happen in a fixed size buffer. If you exceed that, it's either UB or you get an exception. There's different schools of thought on what to do there. But the idea is it never allocates, right? But it gives the same vector interface, right? That's incredibly useful.
+
+5
+00:02:28.000 --> 00:03:11.000
+The problem is when you do it with an allocator, you've already lost before you've started. And the reason is that if you implement vector, you will find that the way you do things when you reallocate is completely different based on whether you may or may not be going to the heap, you never go to the heap, or you always go to the heap. So adding a new element, the code looks completely different when you have to resize the array, right? And the problem with that is that if you just substitute in the allocator, you cannot make the code change in something like pushback or insert. It's fixed. It only works a certain way. Now, what you could do is you could write the vector
+
+6
+00:03:11.000 --> 00:03:37.000
+where it knows about all these possible styles of allocation, appreciates them as alternatives, and there's some kind of static thing about the allocator model where it can detect, oh, I'm a thing that never allocates, or I'm a thing that only allocates, or I'm a thing that might allocate. And then you can have this really complicated code for what vector does. I think a better alternative is to say we have three flavors of vector. We have the three flavors that do those things, and they never deal with an allocator.
+
+7
+00:03:37.000 --> 00:03:49.000
+And if you want the old allocator stuff, use std vector, and we have the std2 vector that does the right thing, right? Which is it just allocates. That's it. Boom. Use the new, right? Her is it just allocates. That's it. Boom. Use new, right? Heresy, but that's what it does. And then we have another one that's a static vector,
+
+8
+00:03:49.000 --> 00:04:10.000
+and it just works with a buffer. And then another one's a small vector. And I think if we had a good story for people writing a std vector for a std vector compatible thing of their own, then we would have a good story for standardizing such a thing because we'd have a small interface, and you could just standardize a small interface, and it's not much work to standardize, just like it's not much work to write it as an end user.
+
+9
+00:04:10.000 --> 00:04:37.000
+I think that is the much, much better answer. But the big problem that I have with allocators, the thing that started getting me so dead set against them was when I heard that we added all these constructors to the container adapters. And for those of you who don't know, container adapter is something that takes an existing container and just provides some semantics on it. So like std stack takes by default a vector, but you can also use a deck, any random access thing,
+
+10
+00:04:37.000 --> 00:05:02.000
+anything that grows at the end efficiently. So you can push back, push back, push back, pop back, pop back, pop back, and then it acts as a stack. Well, under the covers, it's just a vector. So if you have a vector that has a custom allocator, which is part of the vector's type, that's the way allocators work, you can just stick that into your stack. There's no need for the stack to know about allocation or allocators. It doesn't allocate.
+
+11
+00:05:02.000 --> 00:05:20.000
+It just forwards through operations and the like thing. But it has all these constructor parameters that are optional for allocators. So we're polluting these non-allocating things with allocated parameters. Worse yet, we've done the same thing with tuple and pair and now optional. People are trying.
+
+12
+00:05:20.000 --> 00:06:02.000
+All these other things. Yeah, people are trying to add all these interfaces that do this allocating stuff to things that never allocate and that makes me crazy like because there's a non-trivial cost to all these things sorry so what's what's what are these extra constructs constructors that are customized by allocators doing i miss that that's one of the costs explaining it to people teachability is hard right i'm not kidding that's like really like what is that doing i don't understand that interface okay so what it's doing is there is a a notion in the the library part of the standard of uses allocator construction right so all of those things do uses allocator construction on the
+
+13
+00:06:02.000 --> 00:06:38.000
+vector that you pass in like the in the stack case, right? You construct it with a vector, let's say, okay? And then you provide an allocator, and it uses that allocator, not the one that comes with the vector, and it uses allocator construction to do the allocation for constructing that vector. Sometimes you might also use the, there's another interface like just basically the um the default constructor you can pass an allocator parameter so like it's now a unary constructor instead of the default constructor and it again does uses allocator construction except you're
+
+14
+00:06:38.000 --> 00:07:20.000
+not even passing in a vector you're using the one inside right so this all begs the question like why do we need any of these things i can just take an existing vector move it into there and then i've got the uses allocator construction because i did allocate construction aside of it why are we why don't we have separation of concerns here the answer is it is a mystery like i've never been able to get a straight answer about why we have those things to those but the the reason for adding them to things like tuple is that, again, the tuple might contain something like a std string. And so it needs to know about uses allocator construction. And so it needs to be allocator aware is the term of art that the allocator folks use. So I find that to be anathema.
+
+15
+00:07:20.000 --> 00:07:36.000
+That's something that doesn't allocate. Yeah, that is, you know, I have mixed feelings about allocators. I have very strong opposition to the uses allocator pattern and its viral nature across
+
+16
+00:07:36.000 --> 00:08:22.000
+vocabulary types that do not allocate. But so, okay, so your argument for why we shouldn't want allocators in vector, I actually buy that. Yeah. like memory pool that I want to stick into vector, or if I want to have a vector that is backed by some special memory, like GPU memory or some fast memory that's available in my system. Why should I have to write my own vector for that? So this is a classic example of asking the wrong question. You've asked a question that has an obvious answer,
+
+17
+00:08:22.000 --> 00:09:02.000
+but the answer feels obvious because the question is wrong. So I think you should turn around and say it this way. We know that the number of template instantiations of std vector that contain an allocator template parameter is less than a percent of a percent, right? Like just the total number of instantiations in the world in user code is somewhere. Let's be gratuitous and say it's about a percent. So the real question is why should that 99% of users have to deal with allocators to support that 1% of users, right? Like we want the standard library to be like useful tools that everybody can make use out of.
+
+18
+00:09:02.000 --> 00:09:18.000
+And if there's some squirrely edge cases, then you write your own squirrely edge case code. But here's the crazy part. Like people are doing exactly what you said. They're making pool allocators and they're using with vector and they're getting great results out of it. And that's fine. We already have that. We don't need, if you want to use a vector with an allocator,
+
+19
+00:09:18.000 --> 00:10:01.000
+hey, go crazy. We support that already. There's another, so we can just keep the existing code and just not write any new allocator-aware stuff. And we've covered most of the people that are doing exactly these things we're talking about. Then we've got other people like EA and Bloomberg where they've re-implemented the SDL and they've re-implemented all their own allocators. And they don't actually need the standard stuff because they do their own thing and so the allocator model has been adapted adopted by lots of organizations that don't even use the actual like code from the standard library because they really like this model and wherever they they find something like well i'm allocating with an allocator here but
+
+20
+00:10:01.000 --> 00:10:35.000
+then the value type doesn't use an allocator. I need to be able to pass all that through. They want allocators all the way down. And so they have to have a different organization to their code than what is provided in the standard library. And so to those people, I say, go crazy. Do your thing, right? But don't make everyone else drag that stuff around because you're making use out of it, because you are in the 1% case. I really think it's more like a percent of a percent. We talk about instantiations, but I think if we're talking about in terms of organizations, maybe it's more like, you know, 1% of users. Do, uh, do automotive companies that have to follow MISRA, do they all write their own stuff?
+
+21
+00:10:35.000 --> 00:11:17.000
+Or, cause I know that I'm not, uh, I haven't read MISRA, but I've heard that they aren't allowed to do like dynamic allocations. And so they, they do a lot of like creating their own memory pools to read from and they have to like yeah meet guarantees do they write their own stuff or do you know so there are now some stand it used to be the case that they couldn't use anything in like the c++ standard library but there are now some um safety certified c++ standard libraries. So like in the, I think in the latest QNX stacks, which is a popular real-time system that's used for various card things. I think in the latest QNX stacks,
+
+22
+00:11:17.000 --> 00:11:52.000
+there's an option to get a safety qualified standard library, but that obviously means, you know, you're not going to be using things like, you know, vector or string without, you know, your own allocator or something like that. It just means that like the base vocabulary types that the vendor has certified them. Yeah. Yeah. And I, so I don't know a lot of the details of MISRA and I don't know a lot of details about how people work in automotive, but I do know that I've heard more general statements from people who do
+
+23
+00:11:52.000 --> 00:11:59.000
+embedded where they say like, yeah, we just don't use the SDL. It's just not there, but they use the algorithms, but they don't use it. And it's like, it's,
+
+24
+00:11:59.000 --> 00:12:25.000
+it's an interesting question for like, you know, would, would NVIDIA just use stood vector for GPU stuff? And, you know would um would nvidia just use std vector for um gpu stuff um and you know we have our own version of vector in libraries like thrust um and that's in part because like thrust is a really old library like it has its own version of everything like it has its own version of tuple because like it predates there being a std tuple but um right but the vector that we have in thrust is actually
+
+25
+00:12:25.000 --> 00:12:49.000
+subtly different than stood vector in that if you do something like uh construct it from a range of things it does that construction in parallel um so all of the all of the operations of the thrust vector will do things in parallel in the gpu if it can um and uh if you look at it requires a different category of iterator to do that, though, and so it's not... Yes, yeah. Because the vector constructor takes...
+
+26
+00:12:49.000 --> 00:13:04.000
+Yeah, well, it takes a forward iterator. The thrust vector takes a forward iterator and it dispatches to the thing where it can construct them in parallel. If it knows the iterator category, if it knows it's a random access iterator or one that it can do the clever thing. Oh, okay, that's nice.
+
+27
+00:13:04.000 --> 00:13:55.000
+Or at least, let me say this, I hope it takes that code path because that, that code path happened, like exists in thrust. It might also take the code path where it's just like, no, I'm going to require that you have a random access iterator or the code path where it just assumes. But, but, you know, so, so you might think, okay, well, maybe you don't need to have that. But even for the use cases where I don't want the basis operations to be paralyzed, I oftentimes don't find myself reaching for a vector. vector because what I'm often looking for if I'm dealing with GPU memories, like I just want something that's like a buffer where I'm going to be able to like, where it will not try to initialize things because I'm going to create like a whole lot of them. And then I'm going to do something parallel on the device where I'm going to initialize them. And so in like both of those
+
+28
+00:13:55.000 --> 00:14:38.000
+cases where like on paper, what I really want is the moral equivalent of vector with my own allocator. In reality, I had equivalent of vector with my own allocator. In reality, I had to go and create my own thing because I needed something that was actually different from vector. And so perhaps you do make a compelling case here. And if we lived in a world where it was easier to write vector-like things, where you didn't have to write 64 methods for something to be vector-like, maybe there would be less of a compelling argument for, or maybe people would feel less compelled to insist that things like vector support allocators because it'd be easier for them to write their own.
+
+29
+00:14:38.000 --> 00:15:12.000
+Yeah, and that's exactly the kind of thing that I want, I think David Stone wants. And David Stone and I disagree on so many technical things that if you knew the two of us you'd be like wait a minute they agree on this like this is a i think it's a significant agreement that we both want that to be like sort of embarrassingly easy like i want a vector here with how i write a vector and i'm done with you know i it takes me four hours including unit tests or something like this right we want it to be that easy um and you you know, one thing that reminded me of when you started talking there was I would, I mean, obviously you don't have exceptions in the runtime model on CUDA, right?
+
+30
+00:15:12.000 --> 00:15:35.000
+So you probably also have a vector that does two-stage initialization, which is what they do in EA, right? That's another thing, EAS deal, right? So you construct the vector and then you initialize the stuff because the construction is essentially a no-op. It's just a, you know, it's an empty struct at that point doesn't do anything in the constructor because the only way to communicate out of an instructor out of a constructor something wrong is to throw an exception if you can't throw an exception you can't really have real
+
+31
+00:15:35.000 --> 00:16:00.000
+constructors right so you end up having all these no-op constructors or like pod types when that was still a thing but pod like types like literal types that don't have construction, and then you do some initialization step. And then that can return an error code or something like that that you can check. And so that's another aspect is that a lot of times these, when people talk about, I need to use pool allocation because I'm on embedded, they really don't understand the environment.
+
+32
+00:16:00.000 --> 00:16:37.000
+They're making an argument that doesn't work with a vector anyway because it can throw up. environment they're making an argument that doesn't work with a vector anyway because yeah like like you like by the same logic that we use to um uh to rationalize a vector having an allocator parameter you could also rationalize vector having a param a template parameter that somehow describes like its error handling policy or like any other number of things um in terms of what what so the thrust vector is one where you have a, you create a host side and then it does the stuff device side. So it can throw an exception. The thing that you use within device code obviously can't.
+
+33
+00:16:37.000 --> 00:17:13.000
+And we also, we have a thing internally to thrust that, that does the two phase thing. And that just sort of acts as like an uninitialized set of storage. Yeah. So what is this obsession with ATL? I don't understand. I've heard the – you know, the funny thing is the reason I started listening to this podcast is because Barry told me that he mentioned me by name or one of the podcasts. And so I was like, I want to hear my name. And then I, I started listening to more of the podcast and I found that Tony did the same thing. And then, and then I was like,
+
+34
+00:17:13.000 --> 00:17:46.000
+but now I've heard like all the ones with interesting titles anyway. I've heard a bunch of them. I haven't heard the whole thing, but now I'm just like, I don't, I don't get the APL obsession. I don't, I don't know enough about APL to know why you're obsessed. I'm really curious though. Like what is it about APL that's so exciting? So wait, one question and one comment before we switch topics here. First, the comment. We've mentioned these now. So I actually wrote a blog September 9th, 2020, which is called C++ STL-like algorithm libraries, which refer to all three of the libraries that we've mentioned. So if you didn't catch,
+
+35
+00:17:46.000 --> 00:18:10.000
+EA, which is Electronics Arts Gaming Company, is actually based in, I think it's headquartered in Vancouver in Canada. And then Bloomberg and then Thrust. So each of those are like STL libraries. So we'll link in the show notes at the end of this episode. Headquartered in Redwood City, California.
+
+36
+00:18:10.000 --> 00:18:49.000
+Your memory is aspirational. Well, they have a massive campus in Vancouver, technically in Burnaby. And the reason I know that is because I don't actually know if this has come up. So I went to three national science fairs when I was in high school. And every single time you go, it's in a different province. But then it usually happened in like May. And then the next October, in the next school year, they would fly all the students in BC down to Vancouver and put you up in a Fairmont, which is like a very fancy hotel. And then they take you on this like little two day tours of all these different places to like say thank you for representing the province at science fair nationals which is like super nerdy but one of the stops was
+
+37
+00:18:49.000 --> 00:19:38.000
+always ea games and then they would give you a computer any computer game so i've toured that place like uh three three times and it's uh what's up right it's it's cute that you think that a fair man say all right we get it we get it you've got points first class bryce bryce fancy everyone knows bryce fancy all right anyways so links to the guy with a sweatband and a heather gray t-shirt wants to tell us what's fancy and what's not all right bryce we got it oh my god i might that i might this is gonna probably get cut into three episodes i might i might make that the cold open on every single one of these three. The funny thing is I've known Bryce since he was a student of Hartmut's that was like, I'm recently unemployed and now I work for Hartmut.
+
+38
+00:19:38.000 --> 00:20:16.000
+And then now he's like, I run everything. Like I run a quarter of the committee. I run this big organization inside NVIDIA. So Zach's actually one of the people I've known the longest in the C++ world because Zach's been to like every – you've been to every BoostCon? Yeah. Yeah, yeah, yeah. Me and Marshall Clow and Jeff Garland are the only three that've been to all and so the first you know right after i got started programming one of the first things that happened was uh within a couple months of me dropping out of college and going to work at louisiana state university with hartman
+
+39
+00:20:16.000 --> 00:21:10.000
+i went to boost con 2011 and so that's where i met um marsh Zach, probably like a half a dozen or a dozen other people that I met there who have been sort of the longtime members. But so there's this handful of people who have known me since I was this little squirt. Do you remember my talk from that year? I don't remember that you gave my talk from that year i didn't i don't remember oh that's that's that you gave a talk what was the talk about it was about we actually seen as bryce brought it up we'll send you the link after zach it's uh it got brought up and he's like there's no way you can find that listen listen i'm a i'm a show notes collector uh, and we found that and the slide deck. I thought you were going to say, let's play the clip. We're going to go to the audio right now.
+
+40
+00:21:10.000 --> 00:21:38.000
+I gave a talk about this U-tree thing, which was an AST for spirit. Oh, yeah. No, I remember that. Yeah, yeah. I remember liking the idea but not really understanding how to use it you know i've used spirit a bunch but i remember after the talk i was like i gotta i gotta read more on this i don't i don't get it yet i wonder if that code is still around it looked like a really interesting technology i i i wonder if that
+
+41
+00:21:38.000 --> 00:22:26.000
+code is still around and i really hope not because it was not but but so kind of going back to the science fair thing um and this is also wait i'm gonna cut you off i'm gonna cut you off bryce you said fairmont's not fancy we had very different upbringings we're very similar now in terms of our first programming language was on a ti blah blah blah i you know you said the first time i ever it's not the fourth season when i was in high school i hadn't been in a hotel, I don't think, in grade eight, which was the first time I went, or on a plane. Like when I won that local science fair, maybe I did tell this story. I was so excited. Like when they called my name, I was literally like jumping up and down. Like I'm sitting, I'm standing next to three other people that have won the gold prize.
+
+42
+00:22:26.000 --> 00:22:53.000
+And I'm this little, like, you know, four foot 11 eighth grader. And, uh, I'm thinking in my head, I've never been on a plane. I've never stayed in a hotel. Like this is like, I've never traveled. Like, this is like, I'm thinking, oh my God, I hope my parents let me go because this is going to be like the best thing in the world. And, uh, and so then like five months or six months later, after we go to nationals and then they fly me down, like everything's plated and go, I was just like this, like ninth grader that had never like explored the world.
+
+43
+00:22:53.000 --> 00:23:15.000
+And it was, it was so fancy to me back then. So like, you know, you're, you're hating, but like grade nine Connor, uh, was just like, I thought I was on top of the world. I was like thinking about retiring then, you know, it's just like, I got it. I got of the world. I was like thinking about retiring then, you know, it's just like, I got to put it all on my head. It's all downhill from here. It's all downhill from here. Anyways, what's your question about the science? Well, we will get back to APO.
+
+44
+00:23:15.000 --> 00:23:34.000
+We will get back to APO. First, you've reminded me at some point today, I got to talk about my flight's home from the CPPs committee meeting because I just had a very lucky and excellent experience. But we'll get to that later. So did you win a National Science Fair, Connor? I feel like this is a thing that,
+
+45
+00:23:34.000 --> 00:24:10.000
+this is one of those like Connor facts that I wouldn't at all be surprised by. The best I ever did is I got silver in my category. So there's three different levels, grade eight, no, grade seven and eight, nine and 10, and 11 and 12. So it's like a junior, I don't know, something to senior. And then within each of those three levels are like six or seven categories. And then they give out gold, silver, bronze. And then if you place gold in your category, then you can win your whole level. And if you win your whole level, then it's between you and two other people that
+
+46
+00:24:10.000 --> 00:24:38.000
+won from those levels. And like the monetary prizes are like, I think 1500 for gold in your category, 3000 for winning your whole level and then 10,000 for winning overall. So if you win basically the top prize at nationals, you'd get like 10,000 plus, maybe it was 5,000, 10,000 plus 5,000 plus 1,500. But this is all Canadian dollars. Yes, yes, Bryce. We know they're, they're basically, uh, you know, you can go to McDonald's in America if you win that much money.
+
+47
+00:24:38.000 --> 00:25:15.000
+But, um, uh, and so I, I, I think I got, uh, 800 bucks for silver or something and then managed to buy a laptop. That's still that's still like pretty impressive. What was your what was your project? My first two were called SCI one or it was just SCI and then SCI two, which standard stood for spinal cord injury. And basically they were studies of uh planaria which are these nerve regenerating worms and i was like my theory was you know we'll see what conditions if you cut
+
+48
+00:25:15.000 --> 00:25:35.000
+these worms in half they grow back faster and then my theory was that you know uh if you because there's a drug called who am i going to remember itylprednisolone, which they have on this. Who made that up? No, no. You can look it up. Methylprednisolone. It's a drug. It's an anti-inflammatory drug that they keep on the sidelines of football games.
+
+49
+00:25:35.000 --> 00:26:17.000
+Because if you're able to administer it to the site of a spinal cord injury, like within minutes of it happening, you can actually like fully repair the spinal cord. This all happened because one day I was on a walk with my mother and I was just, I was like grade seven. I actually might've been grade six because my grade six, or no, it was grade seven. And my science teacher, Mr. Jackson wouldn't let me do this science fair project because he said it was silly. And then, cause I'd asked my mom, how come when you break your arm, you just go put a cast on it. And then a couple of months, you're good to how come when you break your arm, you just go put a cast on it. And then in a couple months, you're good to go. But you break your back and you're either paraplegic or quadriplegic for the rest of your life. Because I think we had just finished watching one of the Superman movies with Christopher Reeves.
+
+50
+00:26:17.000 --> 00:26:49.000
+And he very famously, you know, became paralyzed. And she was like, you should do a science fair project on it. And that led me down this path. The problem is, is that the second time I went to nationals with the follow-up project, which is actually where I got my hands on methylprednisolone because my mom knew a doctor, it's just asked if I could have some, the judges, I ended up getting honorable mention that year. And I realized that the judges thought I was cheating because they, a lot of the students, they work with like university professors or like local colleges. And so when they're talking like,
+
+51
+00:26:49.000 --> 00:27:23.000
+where'd you get the methylprednisolone? I'm this grade nine student at this point saying, oh, like my mom's friend's a doctor. And they're like, yeah, like, so, but who did you work with? And I was like, oh, I just did the experiment in my bedroom. And they're like, they just, they, they had these repeat judges they kept coming to me and basically trying to figure out and i realized it was very odd because usually you get like two sets of judges um two at a time and then they do the judging but they kept on coming back and asking these things like you know are you sure you didn't work with anyone etc etc and the truth is is no my mom just had a friend that was a doctor and asked for some
+
+52
+00:27:23.000 --> 00:27:53.000
+methylprednisolone and explained that her son was doing a science fair project. So if I understand correctly, a part of this project was you were cutting worms in half? Yeah, planaria, but they regenerate. And they're like very commonly used in science experiments because they regenerate. You just wanted to cut some worms in half, didn't you? I mean, you're a young kid. It's like an interesting project, you know, watching them grow. Wait, weren't you a i mean you're a young kid it's like a interesting project you know watching them grow weren't you a ninth grader yeah yeah okay at that time i wanted to be a
+
+53
+00:27:53.000 --> 00:28:24.000
+immunologist okay i don't know i think of like you know a young kid wants to cut up frogs i'm thinking like eight i mean this was this was a rigorous science experiment. I had three dishes on top of my, you know, some of them were in the dark, so they were in my closet, and the other ones were in the light, which weren't in the closet. So the methamphetamine stuff, did it make the things grow back together faster? Yeah, those were the winners. I don't think it was methamphetamine, though. Whatever. It's a long word.
+
+54
+00:28:24.000 --> 00:28:54.000
+Close enough. It's some scientific word. They're all the same. Yeah. My final science fair project, though, in grade 11 was a poker. It was called Project Poker. It's hilarious to look back at what it actually was at the time. But basically, I had written an algorithm that I claimed was better than the WSOP computer game tournament of champions. But like in hindsight, it was garbage. Like the people that were interviewing me just did not
+
+55
+00:28:54.000 --> 00:29:42.000
+know how to ask the right questions. Like first of all, I calculated these formulas using my graphic calculator and basically did like manual curve fitting of these like graphs of what your pre-flop odds are given any two pocket pairs there's like 1329 different pocket pair combinations and like you can get little programs that give you you know the stats uh but like i just basically reverse engineered it but like it was just like plugging in different coefficients on this formula which was very silly and then i based my results off of like 10 games or something. And then like the betting had, was absolutely not part of the algorithm. It was only like whether I should fold bet or whatever, but however much I bet that was just completely up to me. So like it was the high, in hindsight, the whole thing was just like garbage. Um, but, uh, it was
+
+56
+00:29:42.000 --> 00:30:15.000
+good enough to fool the professors that were judging me. Um, so, you know, um, uh, it was good enough to fool the professors that were judging me. So, you know, um, uh, David Stone, like I mentioned before, like he apparently when he was younger, he was like extremely well known for playing a Pokemon online. Like he was like his handle, whatever it was, you know, a super whiz bang 98. I don't know. Some, some idiotic handle that he told me one time. Anyway, like he would meet people and if they found out that like you're Super Whizbang 98, you know, they were just like amazed. They were like, you know, this guy's a god or whatever.
+
+57
+00:30:15.000 --> 00:30:51.000
+So apparently he was like a champion Pokemon player. And one of the things that got him into programming was he wanted to um he wanted to basically make a bot that was he said i it took me a long time to figure out like what the good strategies were and why they worked every time and so i was like i could just make this into a program that does this like that i can automate what i'm doing i'm not doing anything crazy but now that i've done all the hard work of figuring it out and i thought that was really fascinating that fascinating that that was one of the things that got him into programming. Because apparently he had not done much, if any, programming before that.
+
+58
+00:30:51.000 --> 00:31:26.000
+Yeah. I love those stories. We got to have David on to talk about that. I had a co-op that when Pokemon Go came out, he was very motivated to win that game. And so he wrote a little program that would use the pokemon go api and give send him a text anytime there was a rare pokemon or a pokemon that he didn't have within a 10 minute uh radius of where his desk was at work and so while he was working every once in a while throughout the day his phone would buzz and he would shoot up and be like, I'll be back in 15 minutes.
+
+59
+00:31:26.000 --> 00:31:30.000
+It was, uh, he was awesome. Um, I just, you know, it's, uh, yeah.
+
+60
+00:31:30.000 --> 00:31:38.000
+Your passion for certain things, you know, the lengths that they'll take you to, um, to, yeah, program stuff. Thanks for listening.
+
+61
+00:31:38.000 --> 00:31:43.000
+I hope you enjoyed. Stay tuned for part three of this four part interview next week. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

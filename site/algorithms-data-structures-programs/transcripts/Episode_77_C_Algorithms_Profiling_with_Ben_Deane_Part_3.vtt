@@ -1,0 +1,253 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:17.000
+I mean, std shuffle got removed, so. No, random shuffle got removed. No, random shuffle got removed. Oh, man. Std shuffle's the replacement. You just got owned, my friend. You're listening to three algorithm experts, clearly one of which is less of an algorithm expert than the other two.
+
+2
+00:00:17.000 --> 00:00:58.000
+Boom. Boom. welcome to adsb the podcast episode 77 recorded on april 19th 2022 my name is connor and today with my co-host bryce we continue part three of our four-part interview with ben dean talking Ben Dean talking about C++ algorithms. Yeah, we should move on to the profiling because Bryce is, I'm fading fast. It's approaching my bedtime. I don't know how you're still alive given that you exercised more than me today.
+
+3
+00:00:58.000 --> 00:01:27.000
+I'm wired. I'm wired. I mean, we're talking about birds, combinators. The crash hasn't happened yet. It's coming. It's coming. I mean, you also have a way earlier bedtime than me you know i typically go to sleep at like midnight my bedtime has been disrupted the entire winter not entirely because of winter but because of my bring up the profiling make bryce nice and angry so he stays awake. There are things wrong here, Bryce. All right. There's no,
+
+4
+00:01:27.000 --> 00:01:36.000
+there's no, there's no error bars. So, you know, it's using quick bench. All right. Whatever. I,
+
+5
+00:01:36.000 --> 00:02:07.000
+I have, I have, there is no, there is nothing in this graph that tells me anything about the measurement uncertainty. So I have no idea whether or not I can trust these numbers. So first of all, let's do a tiny bit better job. The tweet that we are looking at is the first photo that Tyler tweeted out, and it's profiling five different solutions, sort, nth element, max element,
+
+6
+00:02:07.000 --> 00:02:42.000
+std reduce, and and stood transform reduce and in order or would you like to say something now bryce this is like not even a graph like you gotta you gotta you gotta label both axes no i look like tyler you've done great work you've done great work. You've done great work. But here are my notes. What's the y-axis? I think it's just a relative measure. I don't even think it necessarily needs to have all this stuff. I agree. These are notes, I think, less for Tyler and more for...
+
+7
+00:02:42.000 --> 00:03:00.000
+But if it's a relative measure, then you need to say what it's scaled to. Well, as a relative measure, we should say... I mean, some things we can say. Yeah, no, wait, wait. This is 100% not Tyler's fault. This is whoever writes for him. Isn't it... I don't want to say... I feel bad if I'm giving the wrong
+
+8
+00:03:00.000 --> 00:03:47.000
+credit. But is it Fred? Yeah, yeah. Fred, you're coming on the podcast i have i have some constraints like probably how much computation time fred wants to pay for for the site to devote to this kind of thing but no no no this is nothing about computation time like this is basic best practices of statistical performance analysis um okay all right let's look at the actual code for what for what's uh what's being done here well so first we should i mean for the for the individual the listener that is not going to go and look at this yeah from worst to best uh the sort is the worsting it, it's about twice as bad as the next.
+
+9
+00:03:47.000 --> 00:04:18.000
+Now, the bottom of this graph says lower is faster. And any time that you produce a graph where you have to explain something that should be intuitive, that typically means that something has gone wrong. Instead of saying lower is faster, why don't you just change your visualization so that higher is faster, which is the intuitive reading of graphs. Oh, well, actually, look here. We do have the X and Y axis. They're just not labeled on the X and Y axis. It's CPU time.
+
+10
+00:04:18.000 --> 00:05:00.000
+Yes, I noticed that, but they should have been labeled on the axis. And also, what is CPU time? What is no op time okay what can we say that's useful here for the listener one is that um after the very low numbers basically all the graphs are linear um and sort is the outlier in terms of comparing the slopes of the graphs sort looks to be about about double the slope of the next highest, which is reduction. But interestingly, there's a data point at about 4K for all of these,
+
+11
+00:05:00.000 --> 00:05:41.000
+but there's no data point for 8k for two largest sort which is the the worst performing one and i assume that's because like it just took too long actually i thought now i never looked at that but now that you say that nth element is actually the fastest at uh is it or is it just the the painter's algorithm that's happened to put it in front? Yes. It looks because at this point, at the 1,000 mark, it looks like they're definitely overlapping. But on my screen, I can see a slight green above. Instead of inferring things from lines, why don't you look at numbers?
+
+12
+00:05:41.000 --> 00:06:23.000
+Because numbers don't lie, except for these numbers, because we don't have uncertainty bars. You can actually do that. Okay, quick benches. It is pretty cool that it does this in real time. What these numbers seem to say, if we can say anything, is that sort is definitely the slowest in all cases after the very small numbers. And maxElement, I assume that's just run maxElement, remove the found, and then run maxElement again. Seems to be marginally faster than the rest. Let me see the code for that.
+
+13
+00:06:23.000 --> 00:07:14.000
+Let's see the code for that. We'll look at the code in a sec um but so this is this we should note just to to finish this narrative this is for the original original uh solutions that tyler programmed but i responded to this because he was basically asking why is this the results and uh and that maybe you'll have because i i might be wrong about what i initially posted back to him you may have quote tweeted yeah so there's two different ones that i ended up doing so i i don't know why this is so small can i zoom in yeah so i programmed a accumulate which ended up being slightly faster than the max element. And then I also ended up finding my initial transform reduce, which is hard to see here,
+
+14
+00:07:14.000 --> 00:07:33.000
+but it's the purple that's underneath the green. So it's slightly faster than the accumulate. So now that we've said all that. Wait, why is yours? Okay, let's look at his first, and then let's look at yours. The code. I want to see code now.
+
+15
+00:07:33.000 --> 00:07:56.000
+Well, I think I included my QuickBench, and my QuickBench has all of the solutions. It's just that you can only run on the web version four of them at a time, which is why only four of them show up. Yeah, I want to see. So let me zoom in a tiny bit here because I'm sure this is not super. All right, I want to see his max element one first.
+
+16
+00:07:56.000 --> 00:08:36.000
+All right, so now we're doing live code review. Yes, we are doing live code review. We are doing live code review indeed. So he's not randomizing the input, right? No, it's just a modulus operation. You should probably try... Let me tell you from my experience benchmarking Cubs Radex sort implementation, you want to test with a few different input patterns for anything sorting or partial sorting related
+
+17
+00:08:36.000 --> 00:09:28.000
+or any problem of this class. Okay. Two larger sort, not surprised. Let me see the, I want to see the max element. This is the max element one he's erasing in the vector uh did we we didn't ever get unstable arrays did we yeah if the things aren't sorted you might as well swap it with the last element or well well okay so so i wouldn't i actually wouldn't erase i would just uh i would just change it to not be the largest that's going to be faster you don't have to actually remove the element and move other things yeah try try instead instead of doing the erase there, try just changing it to be zero and then rerun it.
+
+18
+00:09:28.000 --> 00:09:49.000
+I want to see what happens. All right. We're doing live coding, which we said we wouldn't do. I believe we have been explicitly requested to not do this anymore. But you know what? It's a programming podcast. And let's get rid of...
+
+19
+00:09:49.000 --> 00:10:05.000
+Because right now the ones we're profiling are the max element, my accumulate, my transform reduce and then Tyler's transform reduce. But Tyler's transform reduce is a lot slower than mine. Because I think it's because he's using a sort. I mean, slightly less destructively if you're worried about that,
+
+20
+00:10:05.000 --> 00:10:52.000
+is just to do an iter swap with the end minus one and then run your max element on the end minus one. Ah, that's very clever. An iter swap on the largest iterator in what iterator? The prev of the end. end yes that's very clever now we're cooking now we're cooking oh yeah that is nice that is nice if this proves to be the fastest way to do this it's's ridiculous, Max. I mean, a swap is doing a bit more work than just setting it to zero, admittedly, but it's slightly less destructive.
+
+21
+00:10:52.000 --> 00:11:33.000
+It's a difference of complexity class. And this is the same as doing the assignment. All right, this is going to take potentially 30 seconds or 60 seconds okay so then while that's happening i want to see his transform reduce and understand why it's we uh we made a compilation error list to your listener so is this swap defined if you pass it the same iterator twice? I do not know the answer to that question. Let's find out.
+
+22
+00:11:33.000 --> 00:12:00.000
+I mean, because if you do that, I guess no matter what it does, it might trash that element because it might do a move assignment to self or something, but not in the case of integers. But getting the second largest element will still work because you'll just do n minus 1. All right, so let's look at his reduce. So his transform reduce, is that actually? I'm going to zoom out a tiny bit just so you can see more of this.
+
+23
+00:12:00.000 --> 00:12:15.000
+Is that OK? You can still read this? What? What? What? What? What? What? of this is that okay you can still read this what what what what what embrace having problems reading no no i think i i'm just trying i think why are we so
+
+24
+00:12:15.000 --> 00:13:08.000
+so that's he did mention in his video he's not sure if there's a better way to do this if we compare it to the way i did it, I just used structured bindings and then did actually all of the, you know, cases. Yours makes more sense. It is a bit laborious to write out those four different cases, like admittedly. No, I actually, I kind of, I'm kind of liking his approach of basically he makes an array with um the left hand side and the right hand side and then he does a sort of that array so the profiling is done sorry to the listener for hopping around but um the max element is still slower than both the really what we need to do is we need we need to compare we need to compare the before and after of the max element.
+
+25
+00:13:08.000 --> 00:13:27.000
+Would you like me to do that? Correct. That's easy enough to do. Just copy and paste. I do have a feeling that in this case it may not matter much because... Well, no, it really, I mean... So we'll call this 2 and what we had before
+
+26
+00:13:27.000 --> 00:13:49.000
+was vec dot erase largest it and then How large is n? Oh no, n is very bad. It's 10,000. I'm worried about the seed sequence in that.
+
+27
+00:13:49.000 --> 00:14:31.000
+We're going to copy and paste this, and we're going to call 2 there. We're going to call 2 here. So 2 is the original, which doesn't make any sense but we're just hacking modulo zero can you show me can you show me the initialization code again yep so we're running now hopefully i got that right um see some compilers in a second here oh no times the input modulo 1000 favorite algorithm
+
+28
+00:14:31.000 --> 00:14:45.000
+Ben while you're on the podcast did we ask you that last time I'm not sure favorite algorithm well two questions favorite algorithm in the standard and then outside the standard as well if you want uh algorithm in the standard and then outside the standard as well if you want uh
+
+29
+00:14:45.000 --> 00:15:46.000
+that's really difficult to answer oh i i thought you were gonna say the name of your guinea pig i thought that honest i thought it was yeah is that i was gonna say yeah well i it's a special place in your heart min element wait you you have a guinea pig that you gave the name min element yeah min for short she's the largest of my pigs now she was when we got her she was tiny and now she's like three times the size it's a self-fulfilling prophecy right there let's see yeah i like uh what did i say i iota's good i like a bunch of them partition is good how is reduce not your answer how is reduce not my answer well for the same reason that you know reduces an algorithmic atom right it's not it's not i don't view it as the name of an algorithm at a at an application
+
+30
+00:15:46.000 --> 00:16:29.000
+level sometimes it is but often it's just the way an algorithm is implemented sort of thing there's a there's a question i mean not to interject this question that we're already giving you but is um what do you think about uh oh yeah we haven't even i've totally forgot about our heap um the the difference between calling things algorithms and functions i get a lot of flack sometimes from the array community for calling primitives algorithms they're like it's a primitive it's not an algorithm but like unique is a primitive and partitions a primitive and a bunch of things that we think of as algorithms in c++ are primitives in APL. So they think of it as if it's spellable with a single character
+
+31
+00:16:29.000 --> 00:16:49.000
+and it's a primitive, that's not an algorithm. That's a tool. That's a function that you use for building up algorithms. But I don't know, interested to get your thoughts. I suppose it's just a matter of where your head's at. You know, I think in C++, we tend to think of algorithms as things that work on sequences.
+
+32
+00:16:49.000 --> 00:17:07.000
+If you view a sequence as a value, if you're working in an array language, then an array is a value to you. And so I can see how it'd be normal to think of what we think of as algorithms as functions. Interesting. It's context dependent, well at least i that
+
+33
+00:17:07.000 --> 00:18:12.000
+seems plausible i'm not trying to say this is how people think i'm somewhat potentially i'm somewhat concerned about um uh the initialization sequence that he's using because one of the the this like this sequence of modulos that he's doing um the the the maximum that any of these values is going to get is going to be 10 000 um uh because he's moduling by it. And using this initialization sequence regardless of input size, like the 60th element or so of this sequence is almost always going to be one of the answers. While we're live coding,
+
+34
+00:18:12.000 --> 00:18:54.000
+we should probably change this to, you know, to use... Right, right. We're not going to implement Mersenne Twister. You can include random. I mean, if you spell it out for me, maybe I'll type it. But just while, before we do that, so we have gotten back the results for our two different max element solutions. And definitely the max element that does an iter swap with the last element and then does a max element up until the second last element inclusive is slower, is faster, faster sorry in all cases than the original one um and actually interestingly um that max element so previously it went
+
+35
+00:18:54.000 --> 00:19:41.000
+max elements that was doing the erase then the transform reduce that i implemented and then the accumulate that i implemented and accumulate that i implemented is the fastest by far, or I shouldn't say by far in all cases. Um, but now the max element that does the inner swap, uh, is actually basic. I won't say faster. It's slightly faster and slightly slower. So we'll just call it the same as the, my, uh, the transform reduced that I wrote. So interesting. Um, and while, before we go and change the data here, one of the reduce that I wrote. So interesting. And while before we go and change the data here, one of the things that I had said to, I actually don't need to bring up the tweet that I'd said to Tyler initially, when he was seeing the transform reduce was slower is that he had done all that building up of the operators for the function objects and had the four overloads.
+
+36
+00:19:41.000 --> 00:20:28.000
+And I said, without calling, calling you know stood reduced with the execution policy so that it's in parallel you're sort of doing all that work for nothing um but like one if you call stood reduced with a non-commutative and associative operator but don't pass an execution policy it's it's still like broken correct you always have to do that is that the case or is the non-execution policy version you can think of it as like a fold i think it's still broken because i think commutativity is required for vectorization i believe even without the i wasn't parallelism sorry i wasn't paying attention because I was writing the initialization code.
+
+37
+00:20:28.000 --> 00:20:51.000
+That's what I thought, Ben. The question, Bryce, was... Can you repeat the question? Reduce has a few overloads. There's the execution policy, parallelizable one. There's one without execution policy. Does the commutative constraint apply to both or only to the parallel ones? Yes, it applies to the non-parallel ones.
+
+38
+00:20:51.000 --> 00:21:25.000
+And if you look at how it's implemented in GCC's standard library, they actually take advantage of this, of the fact that they know that it's non-communitative to do a few fewer operations. That basically like each pass of the loop, they'll do like two reductions and then they'll add them together. And so it will actually break. Essentially, it's a little bit of like, you know, loop on manual loop unrolling. And it's a good optimization, I think. Wait, so you said it because it's non little bit of like you know loop on manual loop unrolling um uh and it's a good optimization
+
+39
+00:21:25.000 --> 00:21:54.000
+i think um wait so you said you said it because it's non-communitive but i think you meant community yeah yes that that's that's what i meant um but what i meant really was it will break from for things that are non-communitive connor i sent you the initialization or a snippet of of how it's very easy to to like to to do this initialization using the std shuffle. It's super easy. It's one line. I mean, std shuffle got removed. No.
+
+40
+00:21:54.000 --> 00:22:10.000
+Random shuffle got removed. Std shuffle is the replacement. That's what happens. You're listening to three algorithm experts, clearly one of which is less of an algorithm expert than the other two. At least when it comes to the topic of the shuffle algorithms. Go to Twitter.
+
+41
+00:22:10.000 --> 00:22:56.000
+I sent you the code. Just wait. Let's finish this topic, though, because what I told Tyler is that basically all of that work of building up that function object, if not parallelizing it, is sort of a waste. But that's totally wrong because you need to do that no matter what. Otherwise, it's totally wrong because you need to do that no matter what, otherwise it's broken. And it shouldn't really be the case that that is slowing down the, like, would you, or so here's the question, because what we're staring at right now is a stood accumulate that's faster than a transform reduce. So if you aren't using parallelization, is it the case that stood accumulate a left fold or fold left is going to be in many times faster when you don't have a simple associative binary, commutative and associative binary operation like plus because then you have to go and build up a function object?
+
+42
+00:22:56.000 --> 00:23:26.000
+So like is it that really you should only be reaching for std reduce if you are able to parallelize it? Otherwise, you're just going to be slowing your code down? Is that like a universally true thing? No, no, no. I mean, std reduce, like, if you have an operation that's commutative and associative, you should be using std reduce because your implementation can take advantage of it. Here's what I'm showing you what GCC's standard library,
+
+43
+00:23:26.000 --> 00:23:51.000
+std reduce, does here. And inside of the while loop that it does, so it does the while loop, it does one while loop where it does four elements in each iteration. So sort of vectorized, if you will. And then it has a finalization loop that takes care of any remainder.
+
+44
+00:23:51.000 --> 00:24:10.000
+And so it does, within each iteration of this loop that does four elements, it does the binary op on the zeroth and oneth element. Then it does the binary op on the second and third element. And then it does a binary op
+
+45
+00:24:10.000 --> 00:24:30.000
+on those two intermediate results here. And so this one does some loop unrolling and two, it saves you some operations. And it gives you some vectorization potential. I don't think this is requiring commutativity though from what I'm reading here. It's requiring associativity. Yes, yes. So, yeah, yeah.
+
+46
+00:24:30.000 --> 00:25:15.000
+Yes, but this is just one example of how an implementation could optimize this. Another way that an implementation could optimize this would be to do vectorization inside this loop. And that would require the commutativity. would be to do vectorization inside this loop. And that would require the commutativity. But this is just a demonstration of one such optimization that this allows, and that's actually done in the wild. There's other, you could also use that information to do the vectorization.
+
+47
+00:25:15.000 --> 00:25:45.000
+Well, if you're really being standards conforming, you couldn't like always like say like, hey, we'll always vectorize this loop. But you could give a hint to the compiler because to actually do the vectorization requires some additional C++ standard blessing. But an implementation could choose to do these, like to do, it doesn't have to do these in like the order here. It could choose to do a binary op on first, on the zero with element in the third element, and then the first element in
+
+48
+00:25:45.000 --> 00:26:29.000
+the second element if it's so chose i mean not that there's like a particularly good reason to do that but you could do it if you wanted so i mean what i'm sort of thinking here is that um if you have just an array of floats um with this implementation accumulate could well give a different answer to reduce yes that is correct that is correct and actually i think one of the reasons why so i'm sure that the gcc implementation did this because it gives you know some performance benefit and fewer evaluations but another good reason to do this is that it it breaks the code of anybody that yeah that makes the wrong assumptions about reduce, which is a nice thing. Okay.
+
+49
+00:26:29.000 --> 00:26:48.000
+All right. Connor, put in my initialization code. Let's rerun this thing. We'll do that in three minutes. So the question is then, maybe it's not because it's going to take three minutes to answer the question I'm about to ask. My favorite algorithm not in the standard. Oh, yeah. There are a couple of six minutes on the standard. Oh, yeah. Let's do that for six minutes on the clock.
+
+50
+00:26:48.000 --> 00:27:07.000
+Candidates. One is HyperLogLog. Oh, great one. Yeah. There's someone from Facebook that has a talk about four different algorithms, and that's one of them. Fantastic algorithms and where to find them. CPCon 2017, I think. Can you re-say what the name was?
+
+51
+00:27:07.000 --> 00:27:22.000
+Hyper Log Log. Hyper Log Log. Come on. Come on. I'm not processing. It's a probabilistic algorithm, right? The sort of poster child use case for it is counting unique logins, right?
+
+52
+00:27:22.000 --> 00:27:42.000
+So you run a website. You have billions of logins over the course of a month. You want to know how many of them are unique. HyperLogLog allows you to estimate this in a probabilistic way. And like many probabilistic algorithms, it has the characteristic that you can spend either computation power or memory
+
+53
+00:27:42.000 --> 00:28:33.000
+to constrain and bound the error on your result. And the way it basically works is the intuition for it is that you're going to take each username and hash it. And conceptually, you're going to hash it a few different ways. And it's unlikely, you're going to assume that all of these hash functions are ideal. So let's say you log in Bryce and Connor logs in and under one of these hash functions your usernames collide. But it's unlikely they'll collide under all of them. This is one of the intuitions behind probabilistic counting. You're using hashing to get that bounded space.
+
+54
+00:28:33.000 --> 00:29:18.000
+The way it works is actually by using the hash as a bit string. One of the insights is that if I'm just seeing random numbers go by i.e. ideal hashes when I've seen the odds that I will have seen a number ending in n zeros is correlated with the fact that I have seen two to the n numbers, right? So if I've seen two numbers only, odds are one of them will have ended with a zero. If I've seen four numbers, the odds are higher that one of them will have ended with two zeros, right?
+
+55
+00:29:18.000 --> 00:30:13.000
+If I've seen eight numbers, the odds are higher that one of them will have ended with three zeros. And so you keep track of effectively the longest string of trailing zeros that you've seen and this allows you to recover an estimate for the total number of logins that you've seen a unique logins this is you know i'm i'm simplifying greatly but that's the intuition yeah a lot of that that reminds me a lot of uh quantum computing uh techniques for solving uh uniqueness uh counting yeah yeah it's related to things like bloom filters um there's a similar algorithm called count min sketch um which allows you not only to sort of count the number of things you've seen but also remove things from from the set of things you've seen if you haven't
+
+56
+00:30:13.000 --> 00:30:50.000
+because underneath the hood it's it's keeping effectively several hash tables and all of these functions, so there's another great talk I want to plug, which is I think from Strange Loop 2013, it's called Add All the Things. It's by, his first name is Avi, I think, I can't remember his last name. Avi Brandt.
+
+57
+00:30:50.000 --> 00:31:18.000
+Can't believe you already have it in your list of talks in your spreadsheet. I'm almost positive you recommended this talk and I watched it, but unfortunately I lost. We're looking at afolio of Words, which long-time listeners will know is the spreadsheet that basically tracks Connor's entire life. It's weird. I mean, so I don't have it in the list,
+
+58
+00:31:18.000 --> 00:31:36.000
+but I recently realized that a talk that I watched. There's a tab called Witticisms. Oh, yeah, yeah. I mean, he used to be an actor, and so I would write down things that I watched. There's a tab called Witticisms. Oh, yeah, yeah. I mean, you used to be an actor, and so I would write down things that are like... Whoa, whoa, whoa. Take a step back. Repeat what you just said? I used to be an actor, professional actor in my
+
+59
+00:31:36.000 --> 00:31:53.000
+youth. What? You know this. You know this about me. No, I do not! Yeah, you said we gotta talk about it at some point. Oh, my God. Were you in things? I mean, it was professional local theater.
+
+60
+00:31:53.000 --> 00:32:25.000
+It was not Broadway or anything. We do have to talk about this more. People paid to come and see me. I was in a play called Lost in Yonkers, which was a movie. Connor, my mind is blown how did i not know this about you uh i don't know anyways the point is is that uh i when i would read things in books like uh flexibility of thought or palpable falsity or a jocular remark i like to write them down and then because they sound they they roll off the tongue. That's what Witticisms.
+
+61
+00:32:25.000 --> 00:33:43.000
+Add All the Things is a talk that kindled my love of monoids. And in it, Avi Bryant talks about, he talks about a statistical framework for doing probabilistic things among other things and one of the points of the talk is that all of these things are monoids hyper log log in other words having a monoid is one of the keys to being able to distribute the computation right you can calculate you can you can split your logins load balance your logins and on on each separate machine, you can run this hyperloglog algorithm, and then you can combine the resulting data structures because they are monoidal. And you can get the same result as if it had been just one machine i'm almost positive you told me about this talk at the same time you told me about um yes is it called algebra twitters statistics framework algebra more birds yeah yeah yeah so i'm positive i watched it i just clearly didn't update my spreadsheet um yeah more birds birds
+
+62
+00:33:43.000 --> 00:33:59.000
+are everywhere we should probably start wrapping up because Bryce is getting tired, but I want to see what happens when we use a proper pseudorandom number sequence. Connor and I have to get in all the algorithm content
+
+63
+00:33:59.000 --> 00:34:04.000
+by the end of the Quick Bench content. Because the Quick Bench content is keeping Bryce awake. Thanks for listening. We hope you enjoyed, and have a great day. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

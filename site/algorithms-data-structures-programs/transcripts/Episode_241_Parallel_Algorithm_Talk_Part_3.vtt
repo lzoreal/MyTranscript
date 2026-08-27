@@ -1,0 +1,249 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:33.000
+What say you Jared? It's always difficult at first glance to find the parallelism in a problem. I will say that. And it usually comes as a surprise when you figure out the solution to the puzzle. Yeah. That is how I often feel. I feel like I keep telling myself that, like keep we've talked regularly on on this podcast about how we so often reach for scans, or reductions or transforms like those like, I
+
+2
+00:00:33.000 --> 00:01:29.000
+think in my mind, the three basis operation is scan, reduce and transform. Welcome to ADSP the podcast episode 241 recorded on May 21st, 2025. My name is Connor and today with my co-host Bryce, we continue part three of our four part chat with Jared Hobrock. In this episode, we chat about a tricky parallel scan problem, parallel rotate and more. All right, so as I mentioned, as I mentioned, NumPy does have some unfortunate warts, like there's a lot of, it's a lot of weird historic quirks in how a bunch of the API's work. And, and you know, it's like object model is not great, where a lot of
+
+3
+00:01:29.000 --> 00:01:45.000
+things give you back copies. And then over the years, they've tried to make some things give you back views. But so you never really know with a NumPy API whether you're getting back a view or a copy. But that is not the thing that I'm going to pick on today. I'm going to pick on one very particular thing that's going to be near and dear to our hearts. That is not the thing that I'm going to pick on today. I'm going to pick on one very particular thing that's going
+
+4
+00:01:45.000 --> 00:02:11.000
+to be near and dear to our hearts. And I get to uniquely pick on both NumPy and something that Connor used to work on, which is RAPID, specifically CoupDF. So one of the first things that I did when I started writing more Python code, which was like a year or so ago. I've always used Python a little bit, but in a very crude way, but I started using it in earnest, you know, one to two years ago.
+
+5
+00:02:11.000 --> 00:02:31.000
+One of the first things I tried to do was to write a user defined reduction. How do you think I went about doing that, Connor? You read a Mark Harris blog and you implemented that? No, no, no, just like imagine that I have a NumPy array. What do you think I tried to do to write a user defined reduction? Wait, in NumPy?
+
+6
+00:02:31.000 --> 00:03:00.000
+Yeah. You looked for a generic reducer fold. That's correct. I tried to do NP dot reduce and then pass it a lambda. And you know what happened? It didn't work because there is no such thing there. And as I learn more about like, you know, sort of the NumPy and Python mindset, I discovered that the thing, the reason that this doesn't exist is because in this sort of NumPy worldview,
+
+7
+00:03:00.000 --> 00:04:02.000
+as far as my best guess is that in this NumPy world view, where you've got this rank polymorphism, if you needed to write a user defined operation, you should really write like a UFUNC, which is a UFUNC is a function that takes things that seem like scalars but then can be applied to tensors. And there's this particular way of doing this application with a uFunk that makes sense for reductions. However, I always find this answer very unappealing that I just want to be able to call dot reduce in place. And also, I think for parallelism, having to write your reduction as a ufunk is a much more general form than writing a purely scalar reduction
+
+8
+00:04:02.000 --> 00:04:30.000
+operation. And so for serial code, maybe it doesn't matter so much. But if you've got a parallel array API, you would prefer to have the much more closed form of, hey, you just give me purely a scalar thing, purely a scalar operation, and then I do the application of this operation across this whole array. So anyways, NumPy does not have a user defined reduction
+
+9
+00:04:30.000 --> 00:04:56.000
+function, does not have a user defined scan function. And because of that, pandas never had these things either. And then because pandas didn't have them, pandas is this data frame library. For people who don't know what a data frame is, it's just like a 2D, it's a fancy 2D matrix. Okay. It's like a spreadsheet, but like it's really just a fancy 2D matrix. Maybe that's an unfair classification.
+
+10
+00:04:56.000 --> 00:05:21.000
+But anyways, that pandas is how you make these fancy 2D matrices for dealing with tabular data. The primary difference between a NumPy array and a Pandas data frame is that your columns can have different types. NumPy matrix all has the same type, whereas a data frame, the columns can have different types, which makes it much more amenable to, I don't know, data analytics.
+
+11
+00:05:21.000 --> 00:06:13.000
+Yeah. So because Pandas didn't have it, then KudiF doesn't have it. And do you know Bradley Dice, Connor? Of course, he gave me a very nice Jigglypuff sticker when I left the Rapids team. Okay, so good. I was at PyCon last week and me and Bradley were talking about a particular interesting problem. And the basics of the problem was, hey, I've got this data, this time series data, and I want to apply the data in one column into a time series, and I want to apply this recurrence relation to compute some value that depends upon the values
+
+12
+00:06:13.000 --> 00:06:47.000
+in this time series. Specifically, I'm going to share my screen now. I know, I'm sorry. I'll try my best to use words here. Specifically, the operation that I wanted to apply. So if I'm doing something where I'm computing a sum for each value in this time series database, then it should be a scan, right? And essentially, over the course of three days, Bradley and I were discussing
+
+13
+00:06:47.000 --> 00:07:43.000
+whether or not this scan could be paralyzed. So this is what the operation looks like. So it's a reduction style operation where it takes two inputs, and like if the two inputs I have written here are o and i, and so the result of this operation is O plus k times I minus O. And so this is another way of expressing it as a recurrence relation here where it's like xi equals xi minus 1 plus k times xi minus xi minus one. All right, so wait, just for the listener, because the listener got lost there, guaranteed, because I got lost looking at this code based on your explanation. The relation here is between two adjacent elements. Yes and no.
+
+14
+00:07:43.000 --> 00:08:23.000
+What do you mean yes and no? It says xi minus xi minus one. You have to think about this in the sense of an accumulation here where the left hand side is the already computed value. Like the left hand side is the value of like, you're computing this new column, right? The left-hand side here is the value that's coming from this, like this column. And the right-hand side is the value from the other column that you're using as an input. Are you following Jared? Because I'm lost.
+
+15
+00:08:23.000 --> 00:08:46.000
+Are you following Jared because I'm lost? It looks like the kind of thing you would write down if you were trying to figure out how to implement a prefix sum. That's what it looks like to me. Is that not what it is? Yeah, yeah, no, it is. It does look like something that is the input to a scan, but I just said you're looking at it. If it's the input to a scan,
+
+16
+00:08:46.000 --> 00:09:04.000
+I should see an accumulator and a current element. What I see is xi and xi minus 1. And then on the top line, I see o and i. Spell this out to us. What's going on here? Let's leave that one alone. Let's just focus on this binary operation here. This is a binary operation.
+
+17
+00:09:04.000 --> 00:09:29.000
+OK, the op o i, where O and I are the two inputs. This is an operator that you could presumably pass as an operator to a scan. A scan just takes a binary operation. An operation that takes two things. This is a binary operation. Yes? I mean it's definitely a binary operation. Whether it is suitable for a parallel scan is unclear. All right. Is this binary operation...
+
+18
+00:09:29.000 --> 00:10:16.000
+So we understand what this binary operation is. It takes two inputs, O and I, and it returns you O plus K times I minus O. So is this operation associative? I don't remember the rules. I was gonna say it's entirely unclear to me whether it is. Okay well it's simple enough to test right? So it's not simple enough because he copy and pasted some like 56 character duplicate lines of some expansion of this formula it's simple enough to test yeah says the guy who couldn't type it out and had to copy and paste this stuff into his notepad.
+
+19
+00:10:16.000 --> 00:10:48.000
+I typed it out live when I was talking to Jake earlier you want it fine boom we'll type it out live alright we're gonna type it out. I don't want to type it out live Copy and paste it and walk us through it. Okay, so how do we test for associativity? Well, associativity means that if I do op of a of, or sorry, let me phrase it another way. Associativity means that a plus parens b plus c is the same as parearenz B plus C.
+
+20
+00:10:48.000 --> 00:11:33.000
+Or sorry, is this, I'm gonna start that over. I mean, it's parentheses don't matter. I'm gonna leave this in to make sure that you are on record as just absolutely destroying the understandability of this topic. Okay, so A plus open parens B plus C closed parens has to be equal to open parens A plus B closed parens plus C for an associative operator. Was that clear? Associativity means, yeah, you can move the parentheses around and you get the same result.
+
+21
+00:11:33.000 --> 00:12:10.000
+And the reason why this is useful for parallelism is because when you can do this, when you can arbitrarily move the parentheses around, this allows you to essentially arbitrarily introduce intermediate values. So what this means is if you you have an operator that's associative, it means that you can have one thread go and apply this operator to four values producing a result for that thread. You can have another thread go and apply the operator to its own four values producing a result and want to apply the operator to its own four values producing a result and then you can take those two aggregates from each thread and you can apply the
+
+22
+00:12:10.000 --> 00:13:00.000
+operator to combine them and that's why we need associativity for parallelism. Unfortunately however in the case of this particular operation as we can see if we expand out those the two sides of this equation of the the op of a comma op bc and op of op ab comma c this expands out to some you know complex thing which is not going to be equal to each other. And so that means that this is not associative. And so what do we do? Do we just give up on parallelism? Well I started thinking because everybody else in the room at the time with me, including my dear colleague Bradley, was like no, can't be done, can't parallelize
+
+23
+00:13:00.000 --> 00:13:41.000
+this. Just the minus sign is the problem? The minus sign does get to be the problem here, ultimately. If you think about where does the non-associative part comes from, it does, I believe, fundamentally come from the minus. Because if you just had pluses here, because addition is associative, I think you'd be fine in that case. So I like the best way to distract me for a week is to tell me that you think that something can't be
+
+24
+00:13:41.000 --> 00:14:39.000
+paralyzed. So I started thinking more about this. And then I came up with the idea of, okay, what if we could separate this? We could decompose this operator into two operators, into an associative part and a non-associative part. And that is where we start going down the rabbit hole. Let's see. So I started talking to ChatGPT about this. And we came up with this idea of using an affine map here. So we decompose this operation. So first of all, you can rewrite this operation as being like parens 1 minus k close parens times z plus k
+
+25
+00:14:39.000 --> 00:15:45.000
+times x, which is what it's done here. And so it rewrites it in that form and then the idea is that we can separate this operator into two parts and that we can represent this as an affine map. map, so this little 2 by 2 matrix here, and we represent these terms to 1 minus k, n to k. And it's not important that us or the audience necessarily understand the specifics of the math here. The key thing is that you take your operation and you go and you look at if I apply that law of associativity and it fails Okay, what is the difference? Like what is like when I when I do that a of? B of like a op b op C versus the a op B op C
+
+26
+00:15:45.000 --> 00:16:09.000
+opc versus the aopb opc. When I do that comparison and they fail, I just subtract those two out. And then I can figure out what's the correction that's needed. And then I can split this operator into an associative component and a non-associative component. And then what I can do is, going over here to where we have some code, I can do my operation, in this case a scan.
+
+27
+00:16:09.000 --> 00:17:20.000
+And what I'm going to do is, I'm going to call scan with a transform iterator as the input. And then a special scan operator. And then a transform output iterator for the output. You with me so far, Connor? I'm hanging on for dear life. I'm not sure if I'm totally with you, but I've been following to the extent that one can say, I think I'm following. Yeah. So what do these transform iterators, transform iterator and transform output iterator do? The basic idea here is that you take your problem and you figure out some associative space, specifically you find some monoid that you can linearly transform your operator to this monoid space and then later you can transform it back. And in particular you want, ideally you want a form where the representation of this
+
+28
+00:17:20.000 --> 00:17:45.000
+monoid, of this the function composition of monoid, has a very small state. Like one way you could do this is like for, you could scan where for every element, you just built up the expression that you would apply, but that would be very inefficient. But in this particular case, where it's just this linear like recurrence relation, the only state that you need
+
+29
+00:17:45.000 --> 00:18:39.000
+is two elements of this little 2 by 2 matrix. And so our encode function is this little make affine function here, which takes a single number, a float, and transforms it into the two elements of this matrix that we need to store, which is 1 minus k and then k times x. And then we have our compose operation, which is going to do some math, some associative math in this monoid space that we've mapped into. And then later, our transform output function is going to apply the initial element to this matrix
+
+30
+00:18:39.000 --> 00:19:02.000
+to produce the actual result in the space that we care about. And so this allows us, by splitting this operation into an associative part and a non-associative part and then doing this encoding and decoding, we can paralyze this operation. Details of it, not really super important. I don't know if it generates the graphs. But anyways, it works.
+
+31
+00:19:02.000 --> 00:19:25.000
+It's very cool. Make some nice little diagrams here. The particular algorithm that Bradley and I were talking about here was one that's called the proportional error control. This is what you'd use for if you had an industrial machine that you wanted to keep on a certain target or a self-driving car. You want the car to follow the road. You would use a formula like this.
+
+32
+00:19:25.000 --> 00:20:07.000
+So like imagine that you have a data set where your data set is like time series historical data of like, you know, a car's posi- like, of like a road conditions. And you want to see how well your lane keeping algorithm would work on this historical data. Well, you could use something like this to, in parallel, simulate how well your algorithm would perform. You can also do things like differential equations, stuff like this, using this technique. Going down to the next part of my long conversation with the LLM here, The interesting thing, I think, is
+
+33
+00:20:07.000 --> 00:20:38.000
+this is where it's talking about this encode to a monoid space, do stuff in the monoid space decode pattern. But the interesting thing is the classes of operations that it says that it came up with as being a good fit for this, because they have a small state. So it says things like what we just gave, which is like a, it calls it an exponential moving average, or like a moving average with some factor to it.
+
+34
+00:20:38.000 --> 00:21:00.000
+Because the problem that I just described, turns out it's actually just like some fancy form of a moving average. The other one is doing things like polynomial evaluation, which is a trick that we actually have some thrust examples showing this. This is a more common like scan and reduce thing. Things like integer carry, like propagate ads.
+
+35
+00:21:00.000 --> 00:21:37.000
+Things like a running minimum with a dropout, which comes up in like machine learning like layers, and things like a max plus convolution all can be implemented in terms of this. And there's like a couple other classes of algorithms or classes of non-associative operators that you can paralyze using this technique of encoding each input item into like a little state machine or a little state transformer, and then composing those state transformers together,
+
+36
+00:21:37.000 --> 00:22:13.000
+and then scanning through, and then decoding afterwards. The idea here is that instead of applying your operation, like you just store in your state that you're scanning like two or three terms. And then the composition of those terms is associative. And so you build those up. And then at the end, When you do your transform output iterator you apply you actually like piece everything together using those parts that you've accumulated
+
+37
+00:22:13.000 --> 00:23:12.000
+Oh, I'm very excited about this kind of I'm sure that not not much of this No, I have to say that this is just very upsetting from an it's very upsetting from a non academic point of view because a lot of what you just explained, I was going to ask Jared if he was following because I am not. But then when you got to the end and you mentioned Horner polynomial evaluation, it's just academic speak for something that's very simple. If people think about a polynomial x squared plus 5x minus 6 or whatever, you can think about evaluating that polynomial as a scan because each term in that polynomial has an x with a coefficient and
+
+38
+00:23:12.000 --> 00:23:47.000
+You can evaluate that by multiplying the value of x by scanning that kind of sequence where the coefficient is the number in an array which Whether or not you understood my explanation just now is so much simpler than saying, oh, Horner slash polynomial evaluations, scam, blah, blah, blah, blah, blah. Anyways, the point being is that like a lot of this stuff is a lot simpler than it seems. I got lost in Bryce's explanation. I'm not sure maybe Jared. I mean, he is the author, co-author of thrust. I mean, Nathan's still a Google. I'm not sure if maybe Jared, I mean, he is the author, co-author of Thrust. I mean, Nathan's still at Google.
+
+39
+00:23:47.000 --> 00:24:15.000
+I'm not sure if Nathan would've hung on, but I imagine, you know, Jared was sitting there being like, this is basic stuff, why is Bryce so excited? I was sitting there being like, uh, this seems way too off in the weeds. And then it wasn't until that end table that chat GPT showed me where I was like I did I still didn't understand what you were saying but that stuff in that table I do know which is it's not that like Horner
+
+40
+00:24:15.000 --> 00:24:45.000
+polynomial evaluation is three words that are you know a dollar to explain something that's quite simple that's all I have to say is that I'm confused, but I probably do understand it in some sense. So I will say, Connor, the reason I went through all that is because I too was quite confused by all the theory. But then once I got to that point of seeing the other, of seeing that table and seeing the other examples, I started thinking about a lot of the problems
+
+41
+00:24:45.000 --> 00:25:10.000
+that we've talked about here. In particular, a lot of the problems involving scans, and in particular, a lot of the problems where we have built up some sort of custom state for our scanner reduction operator. And then the more, like I went back and looked at some of them, like the chunk buy example that I use in my Think Parallel talk and then like some of the interesting reductions that
+
+42
+00:25:10.000 --> 00:25:46.000
+we talked about on the lost reduction episode. And I realized that all of them fit into this like high level, you know, mathy formulation. And then I think there's some, there's some like general lesson to be taken from here. And I also think that if you had like a high level, like a rape programming language, that where you could do some analysis on your operator and determine some of the properties of your operator,
+
+43
+00:25:46.000 --> 00:26:20.000
+that you could automate this transformation so that you could you could paralyze a non-associative operator. And then that got me thinking more about whether scans actually really require that your operation be associative. And I think I came to the conclusion that that's probably just a convenience requirement that we've put, that I don't actually think that a scan requires this. A scan probably requires that you have some associative component of your operation or
+
+44
+00:26:20.000 --> 00:26:56.000
+that your operation can be decomposed into an associative and non-associative part where the associative part is non-trivial. And as long as you can do that, where there's some non-trivial work that you can do in the associative component, then you can paralyze your operation. And so I think that there's actually, like, I keep encountering people who believe that they have a problem that cannot be paralyzed with a scan and a reduction. And I think that a larger class of those problems can be paralyzed than people think. What say you Jared?
+
+45
+00:26:56.000 --> 00:28:14.000
+It's always difficult at first glance to find the parallelism in a problem, I will say that. first glance to find the parallelism in a problem. I will say that. And it's usually comes as a surprise when you figure out the solution to the puzzle. Yeah. That is how I often feel. I feel like I keep telling myself that, like we've talked regularly on this podcast about how like we so often reach for scans or reductions or transforms like those are like, I think in my mind, the three critical the three basis operation is scan, reduce and transform. And like just last week, I was talking with someone about how we could implement a rotate in this new tile programming thing that we talked about earlier. And in some ways, it's like, oh, that rotate could just, in theory, be a scan on a matrix. And I was like, oh my gosh, you're right.
+
+46
+00:28:14.000 --> 00:28:45.000
+How did I not realize that? Why didn't my first reaction should have been, oh, yes, I should try to fit this parallel programming problem into one of these three patterns that I know they almost always fall into But I think it's hard. It's like it's hard for us to to see those connections and then it's like I always had these aha moments Well, I mean, uh, I mean if we haven't mentioned it on this podcast I mean a rotate in parallel which is currently not implemented in thrust is just a permutation iterator plus a gather Yeah, yeah, that's that's the other way. Yeah a thrust is just a permutation iterator plus a gather.
+
+47
+00:28:45.000 --> 00:29:27.000
+Yeah, yeah, that's the other way, yeah. A gather is just a scan, which is what you just said, so a scan on a matrix. I mean, Jared is, his eyes are pointing up at the ceiling. I'm not sure it's just that, because you're mutating as you're, I think you need to synchronize it carefully. Remind me how rotate works. You want to move part of our array to the beginning. Yeah, basically it's shifting the first n elements to the back. There's technically a rotate left, a rotate right, but take N elements and
+
+48
+00:29:27.000 --> 00:30:01.000
+shift those to the back and then the other... I mean doing it out with, doing it without like a scratch scratch buffer would take some thought. Yeah, I think if you do, I think that Jared's right that if you, that you can't do it in place with the scan of the permutation iterator, you'd have to write to a new location. But I actually think that that's, in the particular case I was thinking about, it was perfectly fine because you can't do in-place updates anyways. In this tile programming model, everything is a value.
+
+49
+00:30:01.000 --> 00:30:31.000
+There's no in- place updates of anything. I was gonna say is pending that you are doing a Gather to a output sequence It definitely works, right? like if you're doing a permutation iterator from an input sequence and then a gather operation to an output sequence You don't have to think hard about it, correct? Yeah, that's right. But I think the interesting case is when you want to rotate in place, which definitely
+
+50
+00:30:31.000 --> 00:31:18.000
+requires some synchronization. We don't implement that in Thrust. We don't even implement a rotate that I was thinking of is imagine that you've got a tensor and you want to do like do like adjacent difference on this thing but you have to work with a tensor of that particular size. You can't make smaller tensors. And so you can't like, you have like an n by n thing. You can't make an n minus 1 by n minus 1 things. You can only make n by n things. And so how do I do adjacent difference?
+
+51
+00:31:18.000 --> 00:31:52.000
+Well, in that world the way you could do adjacent difference is you have one n by n thing, and then you create another n by n thing, which is just the first one rotated. And then you can subtract the two together, and then you ignore the last element, which is invalid. But then the first 0 to n minus 1 elements in each dimension have the correct result.
+
+52
+00:31:52.000 --> 00:32:17.000
+You see what I'm saying? What would a JSON difference on a tensor mean? Like a stencil operation. Yeah, it just means look at adjacent elements in the same row and take the difference. But I was going to say, as the library that is yet to be released that I've been working on, I mean, I literally ran into this. In the thrust examples is a simple moving average, where the way that they do that is
+
+53
+00:32:17.000 --> 00:32:57.000
+they take the, they do a plus scan on your 1D sequence, and then they take the difference between the i-th element and the i-th plus four element. But you need to do an exclusive scan where you prefix it with a zero. I don't technically have a pre-scan or an exclusive scan implemented in my library, but I do have prepend. So I just prepend the zero and then use that to do the differences. So what you're saying is you're saying do a rotate one, a one rotate and then take the differences.
+
+54
+00:32:57.000 --> 00:33:48.000
+But if you had a prepend zero, you can do the same kind of thing where you take the difference. So there's a couple of different ways to do it. I mean, it's all coming back to what Jared said, is that in this day and age, doing this on 1D sequences is just the wrong way to do it. You should be doing this from a multi-dimensional perspective because so many of these things, yeah, don't come out ergonomically. Another interesting thing that I, insight or conclusion I came to from looking at this proportional error control algorithm is, This is the second time in the last couple of months where I've had a sort of scan by
+
+55
+00:33:48.000 --> 00:34:41.000
+key type algorithm where I had a complex aggregate state type that I was working with and where when I move to the next key, I have to reset one of the things in the state. Like, OK, when the key changes, in chunk by, when the key changes, you reset the count of how many things are in the chunk. In this particular algorithm, when the key changes, you reset the initial value to the current value. And whenever these, whenever I've run into these, instead of using scan by key, I just end up using scan and just putting, you know, the key into this aggregate state. And I've also just found myself, instead of using the
+
+56
+00:34:41.000 --> 00:35:29.000
+by key algorithms, I'm more and more I'm just like writing the by key part myself because I almost find it like a little bit cleaner to just expose like all of the state that I care about which is like okay like when am I at the end of a group and then like what am I gonna do once I get the end of the group and I just I don't know I thought that that it was interesting that when I get to these more complex cases I have to switch from scan by key to just Scan and do the do the the the grouping myself Well, I mean the question for Jared is where did the motivation for the reduce by key and
+
+57
+00:35:29.000 --> 00:36:05.000
+scan by key algorithms come from? Was it specifically for these kind of matrix operations where you want to do row wise reductions or is it, do you recall where it came from? I think it, I think some people were publishing results on segmented scan at the time that people were interested in and It was clear it was clear it could be useful to have a primitive like that You know do interesting things and the question was how do you? How do you I guess the interesting question is what should the interface be?
+
+58
+00:36:05.000 --> 00:36:52.000
+Because you could do it like Thrust does it, or you could do it, Cub does it differently, they use like head flags. Instead of encoding per element which group each element is in, you encode a bit where each run begins, or each group begins in the array. So there's, you know, trade-offs, depending on how you choose to phrase the problem. But I think at the time we already had sort by key, so there was nice synergy with a scan by key to go along with that. You could write nice example codes. Basically if it made for a nice example program, it was probably a good idea.
+
+59
+00:36:52.000 --> 00:37:25.000
+So it went in the library. When did the first Thrust sort algorithm come around? Because I think like the sort algorithm is sort of what Thrust is known for, and it's one of the most widely used. There are some projects that they write their own reductions, but the only place that they use Thrust for is for the sort. Right. Michael Garland had a summer intern who published a merge sort.
+
+60
+00:37:25.000 --> 00:38:11.000
+I remember I inherited that code and tried to make it work and like for real, and in thrust. I don't remember if merge sort preceded radix sort or not. I don't remember. My guess is that, so there was a similar library called CUDPP that Mark Harris worked on with some people at Davis and they published some scan results and I think they also had a radix sort result but I don't remember if we maybe adapted the radix sort code before the merge sort code or what but
+
+61
+00:38:11.000 --> 00:38:36.000
+At the time lots of people were publishing how to do X on the GPU so we would just Steal from those results and You know put some polish on them and publish them in the library Be sure to check these show notes either in your podcast app or at adspthepodcast.com for links to anything we mentioned in today's episode, as well as a link to a GitHub discussion where you can leave thoughts, comments and questions. Thanks for listening. We hope you enjoyed and have a great day.
+
+62
+00:38:36.000 --> 00:38:41.000
+Low quality, high quality. That is the tagline of our podcast. It's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

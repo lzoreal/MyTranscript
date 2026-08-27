@@ -1,0 +1,265 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:57.000
+I'm going to fight you on the ranges transform being better than for each year. All right, this is here we go. This is what this is what our listeners have been waiting for a for loop versus algorithm war. No, that's not code. I thought it was a smiley face. Connor, I thought that was a smiley face, not APL code. Welcome to ADSP the podcast episode 36 recorded on June 30th 2021. My name is Connor and today with my co-host Bryce we talk about stood for each versus stood transform and a ton of other algorithms as well as a little bit of APL. What are the circumstances in which you would use std 4-h instead of a range-based for loop? I honestly don't think I've ever coded
+
+2
+00:00:57.000 --> 00:01:33.000
+a std 4-h in production. And I mean, yeah, like std 4-h is like, in my opinion, I think Jake Hempstead, he's a co-worker that works on Rapids and NVIDIA. He says that, like, basically, like, we both agree, but he has some great quip that I'm going to fail to get correct. But it's basically that, like, a stood for each, like, isn't an algorithm. Yeah. The only time when it's useful is if you call it the parallel version but yeah i've i've seen that but also too i just like uh a lot of times where
+
+3
+00:01:33.000 --> 00:02:17.000
+there's a stood for each i think that there's like another algorithm that's more like better named that you just uh oh interesting so your argument is that you should use another algorithm not a range-based for loop yeah if it seems like you need a std for each like odds are you can refactor your code a tiny bit and find out that oh this is actually a reduction or oh this is a this is a transform so i was writing an example the other day um where I was, so essentially it was an example where I would go and find the min element in a vector and then in a second pass, I would go in, divide all the elements of the vector
+
+4
+00:02:17.000 --> 00:02:37.000
+by the minimum element. So essentially it was like scaling everything to the minimum element. So after the second pass, the minimum element in the vector would then be one. This is assuming that the vector was of a numeric type. So after the second pass, where you divide everything by the min element,
+
+5
+00:02:37.000 --> 00:03:10.000
+the min element would be one and everything else would be, you know, that its original value divided by the min element so it would be normalization yeah normalization well not really not not uh normalization in the sense of like math normalization because that would be that would be the value divided by the unit the the unit norm which is a different thing. But it's sort of like a scale. I don't know, actually. I'd have to go remind myself how math works.
+
+6
+00:03:10.000 --> 00:03:39.000
+But I don't think it's normalization in the math sense, because I think normalization in the math sense would normalize everything to be a value from between zero and one, I believe. But yeah, it's sort of like, it's what you do if you want to take a series of like time measurements and convert them to speed up relative to the slowest. And so then I was like asking myself, well, how do I write that second loop in the most C++-y way?
+
+7
+00:03:39.000 --> 00:04:02.000
+And the first thing I was going to do was astute ranges for each, but this was for slide code. So I'm like, that's a long identifier. And then I got to put a lambda in there too. Maybe this will just be clearer as a range-based for loop. And so what would you use for that second pass? It's a transform. Yeah, I was thinking about that too. I mean, that's what it is. It's a transform.
+
+8
+00:04:02.000 --> 00:04:18.000
+But if you use the transform, then you have to write the lambda function yeah I mean in APL this is four characters that's what I've been thinking the whole time but okay so if we're using ranges I've already started off I've got to do stood ranges transform that's like
+
+9
+00:04:18.000 --> 00:04:47.000
+that's already as verbose as like the for loop and the parens for the range based for loop and then on top of that i gotta stick a lambda in there and the lambda has to capture because it has to capture that min element i think that code is way clearer as a range based for loop not as a transform i mean uh is it clearer hang on let's let's let's let's write this let Hang on. Let's write this. Let's write this.
+
+10
+00:04:47.000 --> 00:04:59.000
+Let's write this right now. Let's do it. Let's do it. We're going to do it. Audience, we are. I am firing up. I am firing up a text editor. I am firing up a text editor.
+
+11
+00:04:59.000 --> 00:05:19.000
+All right. You ready, Connor? I am ready. I mean, I can see this code perfectly in my head. But yes, let's do it. Yeah, but no, no, no. I care about the count, the count of characters. I'll narrate.
+
+12
+00:05:19.000 --> 00:05:46.000
+Here we go. We got std vector v equals dot, dot, dot, semicolon. Line two. Auto min equals std colon colon ranges colon colon min underscore element paren v paren semicolon. And, well, we're definitely not doing a four each. Well, we're going to write it first. Connor sees the four each, and we're not doing that. No, we're not. We're not doing that. No, we're not. We're not doing that.
+
+13
+00:05:46.000 --> 00:06:02.000
+I mean, yeah, this is like, this kind of example just makes me sad about C++ though, because... Alright, so I've written it with the 4-H. It's pretty bad. So if we write it with a transform, now we have to take... I'm also opening my
+
+14
+00:06:02.000 --> 00:06:21.000
+APL editor. We'll put this in the show notes as well. Actually, I can just do this and try APL. Send you a link. Yeah, you're going to... Now we are live coding on the podcast audience. Now we're live. I'm going to fight you.
+
+15
+00:06:21.000 --> 00:06:43.000
+I'm going to fight you on the ranges transform being better than 4-H here. All right. Here we go. This is what our listeners have been waiting for, a for loop versus algorithm war. So, okay, let's look at the 4-H here. The 4-H takes one input range, right? The vector. And it modifies in place.
+
+16
+00:06:43.000 --> 00:07:34.000
+The transform, I want to modify these elements in place. So I got to give it the input range, which is in this case, it's just going to be the vector V. But then I also have to give it an output iterator, not an output range, but just an output iterator. Right? Correct. So the code, the for each line, the lambda is the same in both cases. No, it's not the same in both cases. In the transform case, in the for each case, the lambda takes the element by reference and it does divide equals to it. And it does it in place. In the transform case, we still need to capture, but we'll take the element by value and we'll return e divided by min.
+
+17
+00:07:34.000 --> 00:07:58.000
+But the big flaw that I see in using the transform here is that I have to pass the input twice. I have to pass v once as the input range, and then I have to do v.begin. Oh, that is just, like, no. This is the use case for 4-H. Like, I reject your and Jake's argument that there's no use case for 4-H.
+
+18
+00:07:58.000 --> 00:08:33.000
+Like, in-place modification of a thing, that's what 4-H is for. But that's not even the one that I'm arguing for. The one that I'm arguing for the one that i'm arguing for is this this little beauty which is going to be a whole lot nicer so this is the range base for that bryce is typing now which there's no lambda it's just four auto ref e E colon V, E divided by equals min. And it's like half the characters. It is, it's 27 characters.
+
+19
+00:08:33.000 --> 00:09:19.000
+The transform one is a 71 character line. The 4H one is a 54 character line. And even if you are using like, even if you take out the namespace qualification, the stud ranges namespace qualification, the 4H line is still 41 characters. The transform line is still 58 characters. Now, there's no way that anything other than the range-based for loop is the correct option here. But anyways, why don't you show me how you do this in APL? Well, we should. I do know that I believe in Sean Parent's C++ seasoning talk.
+
+20
+00:09:19.000 --> 00:09:44.000
+He does argue that anything that's like less than one or two operations, I think, it's fine to use a short for loop. I don't know. I have a hard time. I mean, I definitely would not use a non-range-based for loop for that. And actually, let's look at what that would look like. Let's look at what that would look like. And the reason I wouldn't use it is I just think it's more error. Well, you know what? I take it back.
+
+21
+00:09:44.000 --> 00:10:18.000
+If I'm doing something index-based, I might do that. And yeah, I know that we're not supposed to. But in some cases, if you'm doing something index-based, I might do that. And like, yeah, I know that we're not supposed to, but in some cases, if you're doing something index-based, it might be, you know, the way to go. All right. All right. So we're looking at, we won't, we won't do a classic for loop with iterators because that would just be, that would just be rough. And we won't do the correct thing of doing stood vector size type. We'll just assume it's going to be size T because secret, it always is size T. Or we could just use int here. That'd be fine.
+
+22
+00:10:18.000 --> 00:11:01.000
+Size T equals zero. Maybe I should use int here because that'll be fewer characters and that is how a few fewer characters. And that is how people would write it. So like even this one is like shorter than the 4-H one. And of course, it's not all about size. I mean, the reason to not use this one, the index space for loop one, of course, is that it's index it's index space so you know it's very easy to make a mistake here um and to end up going out of bounds um and actually when now that i've finished reading the line is actually like like one character longer exactly
+
+23
+00:11:01.000 --> 00:11:48.000
+one character longer than the uh stood ranges for each one yeah i don't know i just you can't parallelize anything other than the transform no you can paralyze the four oh right sorry the 4-h as well uh compared to like your two right and and that's what i think i said at the beginning is that the reason to use the 4-H, the algorithm, is if you want to parallelize it. Going from the range-based for loop to a parallel for loop in C++ requires completely rewriting. Going from a stood 4-H to a parallel stood 4-H is adding one argument. Going from a transform to a parallel transform is adding one argument. Going from a transform to a parallel transform is adding one argument.
+
+24
+00:11:48.000 --> 00:12:14.000
+But can we agree that the transform one is strictly worse than the 4-H here? Because we're doing the transform in place and that's exactly what 4-H is. No. You're not going to convince me that transform is worse than for each um that is a trend that's a transform regardless of it's in place or out of place that's a transform um it's not a for each
+
+25
+00:12:14.000 --> 00:13:05.000
+okay all right well okay then can we agree that for each is syntax sugar for for transform can we agree that for each is syntax sugar for transform um no how is it not syntax sugar for transform uh how is it not syntax sugar i don't even know what like that's the thing is i just i don't use for each for each why do i need for each i need to iterate over a range and then do something totally side effecty um that's what do something in place do a modification of something in place like that's what that's what that's what transforms that's what transforms for
+
+26
+00:13:05.000 --> 00:13:54.000
+no because like with trans like that's literally the purpose for forage existing no this is actually a great argument for us to have right now or a great debate for us to have right now because the next topic we're going to talk about is going to be the parallel scan algorithm and in the downstream of the parallel scan algorithm we have exactly this problem and uh and i believe i use in my examples of for each so i yeah i i think that like uh for each is for like side effecty things and that is not what a transform is for a transform is for. A transform is for applying a unary operation to some range of values. And you can do stuff that side by side, these look
+
+27
+00:13:54.000 --> 00:14:34.000
+similar, but fundamentally a transform doesn't need to have side effects. So maybe should the thing that we call transform be called transform copy, and then we should have an in-place transform, which is called transform. This is actually amazing that you're bringing this up. I was just having a meeting. Or wait, actually, did you end up discussing this with, what's his name, George, Georgie? Who do you think told George to speak to you about adjacent difference? Yeah, you pinged us. I like how Connor's like, oh, it's this amazing coincidence, not realizing that the meeting that you just had was orchestrated by me.
+
+28
+00:14:34.000 --> 00:15:20.000
+You pinged all four of us. You pinged all three of us and were like, you all should talk. I was there when you DMed. I probably mispronounced his his name though uh he um this this is a new hire on uh on my team uh uh he his name is spelled um like george but with two i's at the end um but he has told uh he's um uh he's he's russian he he lives in moscow um he's told us that he um prefers to go by george at least among english speakers so that's what we've been okay that's how we've been saying it so i i i do not speak russian i do not know i'm actually not i i do not know if you speak
+
+29
+00:15:20.000 --> 00:16:11.000
+russian or not no no no i'm not sure I'm not sure. I'm not sure whether. I'm not sure the origin of his name, but he likes to be called George. All right. So George, Jake and I had this meeting. All the details don't matter. But we were talking about naming at one point. And the observation was made that certain algorithms have underscore copy versions and then certain algorithms do not. And like finding the what what's the like delineating factor that causes that? Because like arguably replace and replace copy or not arguably replace is just a specialization of transform.
+
+30
+00:16:11.000 --> 00:16:40.000
+You can like in, in a couple of times on Twitter, I've like posted little diagrams of like algorithm hierarchies where like mismatch is the most general version of a bunch of other algorithms like adjacent find, et cetera. And transform is also at the root of a hierarchy. And there's only a couple that are specializations, but replace is one of them. And so we have replace and replace copy, but we don't have transform and transform copy. Or in the case that we were specifically talking about
+
+31
+00:16:40.000 --> 00:17:19.000
+with George and Jake, adjacent difference and adjacent difference copy. And so an example of the dichotomy here is we have sort and uh and then we have sort copy is that right uh we don't have sort copy but um don't we do have like partition and partition copy but that's the thing is those i guess the dichotomy here is we have sort, which is the, sort is the unannotated name. It doesn't have like, you know, a sort in place or anything on it. And so sort is in place, whereas transform is not in place. Right.
+
+32
+00:17:19.000 --> 00:18:07.000
+And so one could argue that the naming style of the algorithms is inconsistent. That we should have said, okay okay all of the in-place algorithms will have a suffix or all of the non-in-place algorithms will have a suffix we should have picked one kind to have the good names and by good names i mean names that don't have a prefix or suffix um and so like in that world, you would either have sort, like the current thing currently called sort would be called, you know, sort in place. And then you would have a sort that takes both an input and an output. And then you'd have a, you know, and then transform would be as it is today. Or the alternative would be, you would, sort would be as it is today. Or the alternative would be, you would sort would be as it is today, where it takes one range
+
+33
+00:18:07.000 --> 00:18:22.000
+and it does the sorting in place. Then you'd also have a sort copy. And then you'd have, like transform would be different from what it is today. It would be an in-place transform. And the thing that we call transform today, we would instead call transform copy.
+
+34
+00:18:22.000 --> 00:19:07.000
+In either of those two worlds would be consistent. But that's not the world we live in. So what's interesting is that I haven't gone through and checked every single one, but for the copy algorithms, underscore copy that has that suffix, I'm almost certain, actually that's not true, what i was about to say uh but a lot of them are permuting algorithms like sort sort um for instance i was about to say that but then i just realized replace copy is is a counter example because replace is not doing a permutation so like partition and sort uh it makes it makes sense for those the defaults of those to not have a third iterator with like an output
+
+35
+00:19:07.000 --> 00:19:32.000
+where you're doing some copy. The most common case I would assert is that you're sorting that range. You don't need to do, like you don't need a second or a third iterator to define your output. And arguably, like just having said that out loud, it's kind of makes sense why you would do the same thing for replace because replace almost always you're going to be doing that in place.
+
+36
+00:19:32.000 --> 00:20:17.000
+Whereas it's not as obvious that for the more general version of transform that you always want to do that in place. Exactly. I think that's a mistake. But that is the reason behind – that is the rationale behind the design. And if you look at the standard itself and if you look at how it's organized, there's a distinction between what's considered the modifying sequence operations, the non-modifying sequence operations, the partitioning and the sorting operations. Like when you look at the way that they're organized in the standard and the way that they're grouped together, it makes a little bit more sense. And, you know, we've been talking about consistency
+
+37
+00:20:17.000 --> 00:20:42.000
+because I think both you and I have a great desire for consistency across APIs. But the design of the algorithms today picked a design that was not consistent across all the algorithms. But the reason for that was to be consistent with what the use cases were going to be. That, oh, the most common case for sorting
+
+38
+00:20:42.000 --> 00:21:15.000
+is we're sorting this thing in place. So therefore, the thing called stood sort should be the one that does that. But for transform, in places, I think was assumed at the time that it was thought that that was not the most common case. And so therefore, the thing called stood transform should not be the in place one and so there is a logic there it's not just like that it was random there was a thinking that certain algorithms permutation type algorithms you'll typically do those in place
+
+39
+00:21:15.000 --> 00:22:04.000
+whereas other algorithms you'll often not do them in place and you know I think one of the interesting things that you and I share in Common Connor and one of the things that makes your perspective and analysis of our algorithms library unique is looking at things with a bird's eye view. Or another way I think of it is taking a step back. One of the things that you do that you're really good at is you take a step back and you don't look at locally what's the right decision for this one algorithm. You take a step back and you look at how do all of these different algorithms fit together?
+
+40
+00:22:04.000 --> 00:22:30.000
+How do they form a collective set of operations? And like, what series of combination, what combination of different operational semantics are missing? You know, those tables from your algorithm intuition talk. That's the sort of thing that I mean. But like, you and I both look at the C++ standard algorithms and we sort of like take a step back
+
+41
+00:22:30.000 --> 00:22:59.000
+and we look at the trends and patterns across all of the algorithms. And I think that's why we see this inconsistency and it bothers us. As I frequently joke, it's Bryce's law. I would rather be consistently wrong than inconsistent. Yeah.
+
+42
+00:22:59.000 --> 00:23:37.000
+Yeah, this makes me think of a couple things. But yeah, this is now the second time in like a week that I've been thinking about this underscore copy thing. And it makes me want transform and transform copy. Because also, too, a part of the reason you don't like the transform and you prefer the for each is because of that iterator. And if we had the transform version that was just in place, you would be less averse to using, in my opinion, what is the correct algorithm. Right. And that transform in place has an interesting and notable difference from 4-H, which is that 4-H, as I said before, the way that the 4-H version of this algorithm worked was
+
+43
+00:23:37.000 --> 00:24:24.000
+you took the input argument by reference in the lambda. You took the argument by reference, the parameter, the element by reference and inside and in the lambda you took it by you took the argument by reference and the parameter the element by reference and you would modify it within that lambda so it was it was less functional right that that i'm taking this this this argument by reference i'm modifying it whereas in an in-place transform I would take it by value and I would return it and I would return a new thing. And that is, you know, more pure and more functional. Right. Yeah. Yeah. Yeah. And I don't, I don't know what, what the significance or the importance of that is in this particular case, but I bet you there's,
+
+44
+00:24:24.000 --> 00:25:03.000
+I bet you that that is a significant difference. Yeah. And this this sort of, you know, you say the word consistency. I really like the word and prefer symmetry. There's a book that is called The Pursuit of Elegance, I believe. And it's a fantastic book. I'll make sure I got the title, right? If not, I'll come back and fix this in post, but I'm pretty sure it's the pursuit of elegance. And it talks a lot about symmetry and why, um, we find symmetric things beautiful. Um, there's a whole chapter section on Jackson Pollux, who's a famous artist, um, who basically like all
+
+45
+00:25:03.000 --> 00:25:26.000
+his paintings are just like flicking paint. So it's these like crazy sort of just like amalgamation of different paint colors. And, you know, it looks sort of like a child could do it, but they've studied these paintings and they have like fractal properties that like the people have tried to duplicate with like, you know, ladders and they've
+
+46
+00:25:26.000 --> 00:25:53.000
+tried all these different techniques and like people can't figure out how Jackson Pollock does it. And in fractals, like there's a certain sense of symmetry because you zoom in and zoom out and it's always the same ratio of, you know, pieces of the fractal that you're looking at. Anyway, so yeah, I love symmetry. And this brings me to the second point that I was gonna mention earlier about Kate Gregory has talked about how like partial sort copy
+
+47
+00:25:53.000 --> 00:26:11.000
+is a terribly named algorithm. And we should call it, you know, top N or something like that. But there is a part of me that actually really likes the name partial sort copy because it's symmetric with its sibling algorithms. There's a partial sort. There's a sort.
+
+48
+00:26:11.000 --> 00:26:45.000
+The underscore copy is, you know, as Jonathan Bacara calls it, a ruin. But just like it's a common prefix or suffix. In this case, it's a suffix. And I really like the symmetry of the names and that's something that we've like taken into consideration with the C++23 range algorithms that we're adding in adapters where we're trying to be consistent when we were adding algorithms that look at adjacent elements we you know we we are trying to choose the prefix that's common so like I personally don't necessarily prefer adjacent, but because
+
+49
+00:26:45.000 --> 00:27:37.000
+adjacent find and adjacent difference like exist already in the C++ standard library, that's the prefix that we went with. Anyways, so yeah, symmetry, symmetry, I think is super important. And yeah, when it comes to like renaming things to I'm not sure how you feel about top end versus partial sort copy, but it's it, but I'm actually torn on like, yes, top-end is what you would reach for, but a part of me thinks that like, you know, what does Sean Parent say is that, you know, like engineering is a profession and it's something that needs to be studied and like our libraries and the standards. Like he advocates that everyone, every C++ developer should read through the standard, which I'm not necessarily saying I agree with, but I think the sentiment that, you know, our libraries and our tools,
+
+50
+00:27:37.000 --> 00:28:06.000
+like they deserve time and study. And yeah, so I actually don't have my mind made up on top end versus. Yeah, I don't know. I don't love either of the names, if we're being honest. Don't read the C++ standard if you're a user. You don't need to do that. You know, while symmetry, you know, we do find symmetry beautiful, you know, asymmetry can be elegant too i had
+
+51
+00:28:06.000 --> 00:29:14.000
+one of my uh old friends from when i was at lsu uh zach um uh he was really into uh uh biking um uh and uh bikes are inherently uh asymmetric because um you have the gear set on one side of the bike right um uh and so he um he drove a hyundai velociter um and uh he described it as like the ideal car for him and everyone's asked him why and he said well um it's asymmetrical like bikes because the hyundai velociter is it's this like a compact car um and it's a hatchback and it's got only three doors so on the passenger side there's two doors um but on the driver's side there's not a door behind the driver's side so the car so it's it's like even now cars are of course a bit asymmetric because the driver's side is you know on one side of the car but they're usually pretty symmetric but like this is a more asymmetric car than most i'm like that's what sold them on the car was like this is asymmetric like bikes
+
+52
+00:29:14.000 --> 00:29:43.000
+and i really like bikes and i think that there's some beauty in asymmetry when you think when you think about cars in general though they are from like to look at it from the outside are completely symmetric like and that's what yeah yeah that's what a lot of the times. Yeah. I think, I think there's been studies done that like objectively beautiful people have very symmetric faces. Yeah. It's just something, something about pattern recognition of our eyes that are just like, Oh, that's easy to digest because it's, it's exactly the same on both sides.
+
+53
+00:29:43.000 --> 00:30:37.000
+And so it's, it's easier for the brain to process. I don't know if I just made all that up, but sounds right. And because I caught the visual cue, but Connor didn't, when Connor said objectively beautiful, he put it in quotes, presumably to suggest that he meant that what a study considers objectively beautiful or what society considers objectively beautiful is not necessarily what is actually beautiful. Right. Yeah. Beauty is in the eye of the beholder. You know, it's interesting. I just realized humans have similar, have that same property of cars where humans look very symmetrical from the outside, but internally we're quite asymmetrical, right? Our brains are asymmetrical. Like our organs are asymmetrical for the most part, hearts on one side, et cetera. So yeah, so sort of like how a car externally looks pretty symmetrical,
+
+54
+00:30:37.000 --> 00:31:03.000
+but like internally there's a driver's side, et cetera. Yeah, it's sort of interesting. Yeah, that is an interesting observation. I wonder if there's some life, life lesson there that the things that, or some software engineering lesson there that the things that we make symmetrical are often not symmetrical under the hood. And it's all just an illusion. I, uh, I put the APL code in the, in the message.
+
+55
+00:31:03.000 --> 00:31:23.000
+Oh, I, I thought I saw that. But I thought it was just like random characters. The question is, can I find out where the chat is? I saw you. Oh, I found it. I found the chat. I found the chat. No, that's not code.
+
+56
+00:31:23.000 --> 00:31:43.000
+I thought it was a smiley face, Connor. I thought it was a smiley face, Connor. I thought that was a smiley face, not APL code. So walk me through it. Walk me through it. Here, I can share my screen quickly. Yeah, yeah. But then, yeah, we do need to talk about scans because I need to go and get my haircut. Your entire screen.
+
+57
+00:31:43.000 --> 00:32:09.000
+I think your hair looks good long. I like it like this. There was a length before this current length that I did not approve of. And I think it was mostly the length before the current length plus the mustache I did not approve of. But your current hair, I like your current hair. I don't think it helps with dating. I don't think women like it. So that is of the utmost importance.
+
+58
+00:32:09.000 --> 00:32:35.000
+Do you think my giant head of hair might possibly be an impediment there too? I think your personality shines through, Bryce. I don't know if mine does though. Yep. Back to APL. So this basically on the right here, this is your min reduction. So the slash is a reduce. And the min glyph makes it a minimum.
+
+59
+00:32:35.000 --> 00:33:07.000
+And then the right tack is just identity. So it just gives you back what you have. And then the whole expression is a fork. So what happens is it applies the unary operation, aka identity and minimum to the list first. And then it takes the results of those two things and provides those as arguments to the binary divide function. The ordering confuses me a little bit because... Yeah, this is infixix and then the unary
+
+60
+00:33:07.000 --> 00:33:54.000
+operations are technically like prefix yeah that's i would have expected based on the description you just gave i would have expected the first two to be inverted but yeah in apl um unary operations are prefix and binary operations are infix which honestly is something I don't really ever say much because you just sort of read it and it works. But when it comes to forks, I guess, yeah, that might need a tiny bit of explanation. A.K.A. S-prime combinators. This is pretty elegant. Like, it is pretty, you know nice like like i guess what's not what's elegant it's not that i find the code elegant because i don't understand i think enough about apl to you know fully grok this um but the
+
+61
+00:33:54.000 --> 00:34:45.000
+elegant thing is the fact that you somebody who understood apl were able to code this up and in four characters you know express this problem that problem that like, you didn't, you didn't know that I was going to suggest this problem ahead of time. This is not something that like you select that we selected as, you know, something that you, you knew was easy to express in EPL, but just like the fact that off, off the cuff, you were able to express this and you know in four characters two operations um uh i think speaks a lot to the power of apl um i mean also speaks a lot to connor as a programmer but um it is pretty impressive the apl fans that are listening are like hooting and hollering bryce is uh he's a convert.
+
+62
+00:34:45.000 --> 00:35:04.000
+He's on his way. Well, and it's not, it's not like, it's not like this is like a standard problem. Like, okay. Minimum element. That's a pretty standard problem. But like take the result of that and divide it by something like that's not, you know, it's not uncommon, but like, it's not a standard thing. Forks are, forks are everywhere.
+
+63
+00:35:04.000 --> 00:35:38.000
+Averaging is a fork, right? So what, are everywhere averaging is a fork right you take what what what is a fork exactly a fork is uh the name that ken iverson has given um what is known as the s prime combinator from combinatory logic but it is it's basically just like a function manipulation so you're whenever you have the pattern where you need to do two unary operations on the same input and then take the results of those and feed them to a binary operation, that's a fork. And so like average, you sum the list and you take the length of the list. Both of those are unary operations. And then you divide those two numbers.
+
+64
+00:35:38.000 --> 00:35:54.000
+That's a fork. Figuring out if something is a palindrome. If you reverse it and then take identity and then just check if those things are equal, that's a fork. Like forks are everywhere. Speaking of palindromes, one of the GitHub Copilot examples that I saw
+
+65
+00:35:54.000 --> 00:36:16.000
+was it writing like an is palindrome function for you. Oh yeah. So what are we going to call that episode? This is going to be so, this is going to be cut into like three episodes and we're naming an episode that people have listened to two episodes ago. I don't know. I mean, Skynet maybe. Skynet is here. Skynet is here.
+
+66
+00:36:16.000 --> 00:36:21.000
+Skynet is here. Yeah, I think that's that's got to be the name. Thanks for listening. We hope you enjoyed and have a great day. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

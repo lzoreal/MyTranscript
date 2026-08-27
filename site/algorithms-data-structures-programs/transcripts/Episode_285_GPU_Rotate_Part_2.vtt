@@ -1,0 +1,189 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:37.000
+No, no, I agree with you. It's incredible also how I think this is one of the interesting things and nice things about GPU programming is that an algorithm that can be so simple to understand and so intuitive as a rotate can get so complicated when it comes to implementing it if you want to achieve the best performance. That's basically the beauty of GPU programming, that everything is so intricate. I mean, it's definitely a property of GPU programming, but if you think about the implementation of rotate on the CPU, like, it's very, very complex as well. Like, before I knew about iterator category tag dispatching,
+
+2
+00:00:37.000 --> 00:01:10.000
+you'd think it's just a bunch of swaps, which I guess it is at the end of the day. But depending on the iterator category, it's dispatching to like a bunch of different implementations. Anyway, so just like rotate visually, very simple. But like, not just on the GPU, but also on the CPU. You know, it's like the algorithm rabbit hole that never ends. Welcome to ADSP, the podcast, episode 285 recorded on. May 5th,
+
+3
+00:01:10.000 --> 00:01:19.000
+2026. My name is Connor and today with my co-host, Bryce, we continue part three of our five-part chat with Marco, our fellow NVIDian.
+
+4
+00:01:19.000 --> 00:01:36.000
+In today's episode, we continue our discussion of a GPU implementation of the algorithm rotate. All right, so we're gonna rotate to rotate. And this is actually going to be episode 285. We'll lose the listeners
+
+5
+00:01:36.000 --> 00:01:51.000
+in a couple weeks when we release this out of order. And so now we are going to rotate back to our GPU rotate. Do we want to, I guess we'll add MVComp at the end. We'll save the questions for the end. And we'll just pick up where we left off
+
+6
+00:01:51.000 --> 00:02:12.000
+when we recorded two weeks ago. And so where we left off was that we had covered the first implementation of rotate on the GPU. And then we had to pause because Bryce was late. We never, we'd actually, I do know that you managed to pick up Ramona because I saw a video that you sent me. And so Ramona is safe and sound at home.
+
+7
+00:02:12.000 --> 00:02:25.000
+Anyways, back over to you. Marco. Tell us about the second GPU rotate implementation. Why do we need to? Not only that, I managed to, I did bring flowers. Yeah. Anyways, over to you, Marco. All right.
+
+8
+00:02:25.000 --> 00:02:57.000
+So, do you want to do a recap on why we needed a long algorithm and how the short algorithm works? Let's do that, yes. In the short algorithm, it's called short because you're assuming that the rotate distance is going to be less than the size of the tile. that you use for tiling the array for parallelizing the memory movement. And so in the short algorithm, how it works is that each block of threads is going to get a tile starting from the back of the array and moving forwards.
+
+9
+00:02:57.000 --> 00:03:35.000
+And then they get a tile, they cache it into shared memory. They set a flag flagging that that tile has been cached and another thread block can override that memory location. And then they look at the flag of the tile that they are going to overwrite to make sure that they are not overwrite. make sure that they are not overwriting memory that has not been read yet, and then they can store the tile in its destination and move on to the next tile. And so since you're moving the tiles in a spatial order from the back forwards, in a specific, in a situation where your road day distance is large enough that you cannot cover that road day distance with the amount of
+
+10
+00:03:35.000 --> 00:04:17.000
+tiles that you're processing at the same time, you're going to have a deadlock because all of your blocks of threats that are waiting for the flags to be released in order to store something are going to be waiting indefinitely because there's not enough blocks running in order to make that work. And so that's why it's called a short algorithm. This is a very interesting property of this particular algorithm, you know, that if you, you have this linear parameter, how much you're going to shift by. And if you go over a certain size, then you have to switch to a completely different implementation strategy. And that shift point is like going to be some unintuitive number
+
+11
+00:04:17.000 --> 00:04:44.000
+that's just like a property of the underlying hardware and the underlying degree of concurrency. I just find that's like a very fascinating property. I don't think that any of our other core algorithms have a similar property in that they have some linear parameter like this. That just so, it's almost like, you tell me that there's these two very different implementations, it's almost as if maybe one could imagine them,
+
+12
+00:04:44.000 --> 00:05:08.000
+they're different algorithms, you know? Like in other circumstances where it's not a linear parameter, we would probably have two different named algorithms. But in this case, because the interface, like there's no reason to surface this in the interface because it's just this like linear parameter. Like why if it's, you know, a thousand versus a thousand and one do I need to call a completely different API?
+
+13
+00:05:08.000 --> 00:05:46.000
+Yeah, it's just fascinating to, I really think this is very unique in our parallel algorithms library design. I mean, maybe there's some other analogy that you can think of that I can't. No, no, I agree with you. It's incredible also how I think this is one of the interesting things and nice things about GPU programming is that an algorithm that can be so simple to understand and so intuitive as a rotate can get so complicated when it's, comes to implementing it if you want to achieve the best performance. Yeah. That's basically the beauty of GPU programming that everything is so intricate.
+
+14
+00:05:46.000 --> 00:06:21.000
+Well, I think it's you can almost, I mean, it's definitely a property of GPU programming. But if you think about the implementation of rotate on the CPU, like, it's very, very complex as well. Like before I knew about iterator category tag dispatching, you think it's just a bunch of swaps, which I guess it is at the end of the day. But depending on the iterator category, it's dispatching to like a bunch of different implementation of which, you know, the generalization of GCD, which, you know, I've gotten comments on videos before is like, GCD isn't used for anything. It's like, well, it's actually used for a lot of stuff. And it's, and it's not just on integers. You can think of it on, like, sequence lengths.
+
+15
+00:06:21.000 --> 00:06:56.000
+And anyway, so just like rotate visually, very simple, but like not just on the GPU, but also on the CPU. You know, it's like the algorithm rabbit hole that never ends. Yeah, yeah, for sure. And so, yeah, so that's basically that. And then you need to switch. to the long algorithm. And so actually it's very similar, quite similar in terms of the memory movement and the implementation. It's just that now you no longer process the tiles in spatial order, because if you did that, you would deadlock. And so now you need to say, let's say we start at the tile that's at the back.
+
+16
+00:06:56.000 --> 00:07:41.000
+Then we know that the tile that's at the back, it's going to override the tile that's wherever. And then that tile is going to overwrite another tile. So you start creating this dependency chain of how do you need to process tiles in order to minimize the distance between them whenever processing and minimize the possibility of a deadlock. Yeah, so now, of course, now that our road day distance is large, we also need to tile the part that we are moving into the back. So in the short algorithm, since we knew that our rotate distance was less than the size of a tile, we wouldn't bother with that. We just said, OK, the last tile in the ones that we're processing is the one that takes care of moving the first elements into the back. But now, since our rotate distance is large,
+
+17
+00:07:41.000 --> 00:08:12.000
+we also need to tile all of the elements that go into the back, because that's now a big part of our array. And we would lose a lot of performance if we did it. And so now in the implementation, those tiles that are going to be rotated into the back are going to be negative tiles. So the tile that starts at the beginning of the array is tile minus 1, and then you go to tile minus 2, minus 3, minus 4, until you get to the boundary where the road day distance is, and then you start with the positive tiles, which start at 0,
+
+18
+00:08:12.000 --> 00:08:43.000
+and so on. And so how the implementation now works is that you create a dependency map, so to speak. So you calculate, this is basically a mathematical calculation where if you know the array size, the tile size, and the road day distance, for any time, you can mathematically find out which tiles it is going to override. So which memory location is going to overwrite. And so you do that for every tile. And once you have that, you basically start at tile zero.
+
+19
+00:08:43.000 --> 00:09:07.000
+And let's say tile zero overrides tile minus one and tile minus two. Then, since you know that it's going to override those, you start at tile zero and then you go on to minus one. And then you see, okay, which tile does tile minus one overwrite? overrides tile 30. And so you jump to tile 30. And then tile 30 overrides tile 50 or whatever. And you do that.
+
+20
+00:09:07.000 --> 00:09:46.000
+And so you have this dependency chain that you follow until you've covered all of the tiles. And so you do this on the CPU and then you pass this, you copy this array onto the GPU. And so now, instead of processing the tiles in spatial order, you process these tiles along the dependency chain. And so that way you're minimizing the possibility of a deadlock. And so this is basically the only. change. In terms of the memory movement is the same. It's the same in terms of that you cache into shared memory, you free the override flag, and then you look at your dependencies override flags in order to write to the destination. What changes is how you process the tiles and in which
+
+21
+00:09:46.000 --> 00:10:55.000
+order you do that. But this is also another interesting thing that it's also not impervious to deadlocking, because for certain array sizes and rotate distances, you can get a dependency chain where the distance between one tile and its furthest dependency that it needs to be freed in order to override is actually larger than the number of third blocks that you have on your on your GPU resident so you would again have a deadlock and so you actually need a third implementation that is then the naive implementation where you just do it naively you just do the road date by copying the first element I'm sorry you lost me on the third third one I don't I don't know I don't know I'm not seeing the deadlock. Can you explain this to me again? Yeah. So you understand how now we're using this dependency chain so that we process them in the order that they are going to be needed to be processed, so to speak. Because if tile zero is overriding tile minus one and tile minus two, for it to be able to override them as, or for it to be able to override them and not deadlock, after a threat
+
+22
+00:10:55.000 --> 00:11:31.000
+block grabs tile zero, you want the next threat blocks to grab tiles. minus 1 and minus 2, so that you free up, tile 0, and it can move on and store into its location. And so that's the concept of the dependency graph. That you get the concept of them. Do you have a visual? Yes. I know we're not, I know we're not supposed to ask in the podcast, but. Yeah, yeah, I know. This is, the listener is going to have to visualize it, but I can, I can show you a visual. The listener may not be, the listener may not be as, as tired as I I am.
+
+23
+00:11:31.000 --> 00:11:42.000
+Connor, maybe please can give me an exception. I mean, I was thinking that, you know how Wikipedia for at least the sort algorithms, they have all these really nice animations of like, you know,
+
+24
+00:11:42.000 --> 00:11:59.000
+merge or bubble sort, that it's an equivalent animation for the two different implementations here that show the tiles being, you know, copied in the dependency order would probably be like an order of magnitude easier if you could show that in a
+
+25
+00:11:59.000 --> 00:12:35.000
+podcast, which you cannot. I mean, we could if we had a video format, but we don't right now. So, I mean, technically this is being recorded. We've talked about it. We have, yeah. Once both Bryce and I retire and, you know, whenever that is, a couple decades, maybe we'll add video. Okay, so you can see the screen. Okay, so I guess basically I can describe what we're seeing. So we're seeing an array that has 10 tiles where we want to rotate it by three and a half tiles. Right. And so how we do this is that we first create this dependency table where each tile is going
+
+26
+00:12:35.000 --> 00:13:07.000
+to have as there, if you think of it as a hash map, the tile number is going to be the key and the value is going to be a list of the tiles that that tile overrides. So for example, since tile zero, it's always going to be going into the front of the array because it's the first one after our rotate distance, it is always going to be overwriting tile minus one, which is the first tile at the beginning of the array. And so the key would be tile zero, and the value would be tile minus one.
+
+27
+00:13:07.000 --> 00:13:35.000
+And so if we do this for all of our tiles, we now have our dependency map, and we now start the dependency chain in tile zero. And so tile zero, as we've said, overrides tile minus one. And so we add that one into our dependency chain. And then we look at tile minus one, and then from accessing the hash map, we see that it overrides tile three in our example. And so we add tile three to our processing order or to our dependency graph.
+
+28
+00:13:35.000 --> 00:14:10.000
+And then we look at tile three, and tile three overrides tiles minus four and tile zero. And so we add minus four. But since tile zero has already been processed earlier, we don't need to add it again, so we don't add it. And then we look at tile minus four, and we do that on and on. What does processing mean? If zero depends on negative one, then how do you process zero before negative one? No, well, what zero depends on negative one in the sense that in order for the threat block that has grabbed Tile Zero to be able to continue with its processing,
+
+29
+00:14:10.000 --> 00:14:36.000
+it needs someone, some other thread block, to have grabbed Tile minus one and have cached it. Because if not, it's going to override whatever was here. So while, so after you grab Tile Zero, then you're waiting for somebody to grab tile negative 1? Exactly. Okay. And so this is just the processing order is to make this go faster. Well, it's to make this go faster, but also to make it not deadlock.
+
+30
+00:14:36.000 --> 00:15:16.000
+Because imagine in our example that we only had three processors. And let's say we started in the front, just to make it simple. Then we would grab tiles minus 1, minus 2, minus 3. But tile minus 1 would be one thing to overwrite something that no other processes. processor is grabbing, so it would deadlock. So it has that twofold. When you build this processing order, there's a natural pattern to it. So you don't have to actually build a list, right? You can just encode the pattern? No, I do build a list. It would be nice. This is something that I want to investigate a bit further, whether there's a way of mathematically calculating the processing order
+
+31
+00:15:16.000 --> 00:15:50.000
+without actually calculating it. I wonder if the processing order, if you can make it like a lazy iterator so that it like you generate the list on the fly. Connor, Connor, maybe can can think about the type of lazy iterator that would spawn this sort of sequence. He's cranking on it, folks. I don't fully, well, I raised an eyebrow when you asked that initially and I was thinking in my head, I don't fully understand what you're, so you want this. So, so, so this, this sequence of, the sequence of the processing order of zero, negative one,
+
+32
+00:15:50.000 --> 00:16:27.000
+3, negative 4, 6, 2, negative 3, 5, 1, negative 2, 4. Like, come up with some lazy iterator invocation that expands to that. I mean, what's the goal of doing this lazily? The thing is that right now, in the actual implementation, you calculate this processing order on the CPU, and then you allocate an array on the GPU that contains this processing order, and that's what you use so that the thread blocks grab tiles. They grab tiles according to this processing order. And it would be ideal if you didn't have to do that.
+
+33
+00:16:27.000 --> 00:17:28.000
+And a thread of blocks could say, okay, I want to, right now I want to process the fifth tile along the processing order. And it would be nice if the thread block had a way of calculating which tile is the fifth one along the processing order without having to go through all of this, because then this would be super costly. I mean, and it's pretty simple the way that this is generated in that, once you have your dependency table of, like, key value pairs, you're just following it, starting at zero, right? You go from the zero key to the zero value, which is then going to be your next key that you look up. But it does get a little complicated once you get to the end of this dependency graph, because then you have some entries that have two in the table. Like there's negative fours, zero, there's zero. There's very little that have two. In real implementations, most tiles would be overwriting two tiles.
+
+34
+00:17:28.000 --> 00:17:52.000
+Why is that? Well, okay, maybe not most, I think, probably. But why are you ever overriding two tiles? Aren't you just ever overriding one tile? No, because here, for example, since our array has a size of three and a half tiles, the last negative tile is going to be partial. And so whoever overrides it, it's not going to override fully, and so it's going to jump into two tiles.
+
+35
+00:17:52.000 --> 00:18:25.000
+Let's for right now, I think for, if you limit yourself to the case of no partial tiles, then I think it becomes easier to imagine how you could write a lazy iterator for this. Yeah, and it probably doesn't affect generalized ability, I would guess. Yeah. Come on, Connor. Crank out some, crank out some APL or something. The other problem is also that you don't want to have to generate the dependency table on the GPU either, because right now we only have 10 tiles,
+
+36
+00:18:25.000 --> 00:18:52.000
+but you have to imagine that for an array of a gigabyte, you have tens of thousands of tiles, and so generating this dependency table would take more time than actually doing the road date. And so that's kind of the problem. So wait, you said you don't want to do that on the GPU? No. So the processing order generation and the dependency table generation takes part on the CPU. And then the array that is the processing order, you copy it to the GPU, and then you do the actual rotation on the GPU.
+
+37
+00:18:52.000 --> 00:19:37.000
+And you were saying you want to keep the dependency table generation on the CPU, but the order... No, I want to find a way of not having to generate the dependency table. Of, let's say, I want to find a way where a thread block says it wants to process the fifth tile along the processing order, which in our case is tile six. and the question is, would there be a way of calculating that the fifth tile along the processing order, if we start at zero, is tile six without generating the full dependency table or the partial dependency table that we would need up up until that point, and doing the, and like walking along the dependency graph. That's... Yeah, I see.
+
+38
+00:19:37.000 --> 00:20:13.000
+Wow. It seems like it could be possible, but it's hard to kind of find the mathematical... Now, I lack brain cells right now to be able to think through this. However, I think we should both think about this. I have another, I said earlier, I can't think of an algorithm that's sort of similar to this, but I did just think of an algorithm that I don't think it's similar, but maybe it's in the family. And the algorithm is transpose. And the similarity that transpose has to rotate is that both algorithms,
+
+39
+00:20:13.000 --> 00:20:49.000
+are purely data movement, and both algorithms have like some data reuse pattern, but like at the L2 level, they would have some data reuse pattern. However, both algorithms only ever, you know, load each element once and store each element once from like global memory. Now, the other thing about transpose that I think is a little bit interesting is so when you transpose, you sort of do like a local transpose, and then, you do like a, you know, a global transpose. Like you load a tile, you transpose within the tile,
+
+40
+00:20:49.000 --> 00:21:10.000
+and then you like write right back that tile to some new look, to some new transposed location. I don't know. Something about that pattern sort of reminded me or of rotate. I felt like maybe there was some similarities there. We don't have like a transpose algorithm in cup, just like a pure transpose, but. And can you do the transpose in place?
+
+41
+00:21:10.000 --> 00:21:46.000
+I'm not sure about that. I don't know if the usual implementations do it in place or if they just allocate a new array. Because it's hard to imagine that it could be done for large enough matrices. Well, I mean, actually, I think if you took a similar approach, right? Like, if I know, for any given tile, I know where that tile is going to go. And so I know the same thing, the same dependency thing can be done, I think. Yeah, but the problem is, because I thought about this also for, doing a bit plan transpose, which is very similar to a normal one,
+
+42
+00:21:46.000 --> 00:22:13.000
+where you're just basically, if you have an array of characters, you're then transposing them so that you now have the most significant bit of the character, one after the other, then the second most significant bit, and so on. And in that case, you basically have an infinite dependency chain where everything depends on everything, and so you always would have a deadlock, because you wouldn't have enough parallelism to cover everything, basically. I don't know if that would be the case with the normal transfer.
+
+43
+00:22:13.000 --> 00:22:40.000
+I don't think so. I think in the case of a 2D or like a 2D matrix transpose, if I break everything up until tiles, like the tile, the ith jth tile is going to be written into the jeth ith tile. And so if I load tile IJ, then I have to wait for somebody to load tile jai. And your dependency order thing may help with that.
+
+44
+00:22:40.000 --> 00:22:59.000
+Yeah, actually, it seems like the tiles would be just dependent upon one another. And so that would actually make it very easy because you would actually never deadlock. You would be able to just load both tiles and then just do it that way. Yeah, yeah. So maybe it's simpler than that. Maybe you can just do it that way. Nice.
+
+45
+00:22:59.000 --> 00:23:27.000
+Yeah, yeah, that's a good point. Maybe you could just do it that way. Interesting. Connor, you've been very quiet. No, no, I've been thinking about the processing. thing and maybe we should have a separate episode on is there an algorithm to do this but i feel like you might need to put more constraints in place right and also too it's unclear right because in the case like are you you're always going to have when there is a like partial tile you're always
+
+46
+00:23:27.000 --> 00:24:12.000
+going to have the case where you've got a single key pointing to multiple values right and that's what makes it tricky right because you don't well it's one of the things that makes it tricky because you're not able, like if every key only points to one value and all of those values are unique, then you're guaranteed that like everything is one to one and you don't need to worry about, like, has this already been covered before in the case where, you know, we have a key here that's three pointing to negative four zero, like the zero already happened at the beginning and this one has two. Anyways, I feel like a simpler version of this problem, it's definitely possible. But anyways, like, maybe we'll defer that because I'm sure we've lost
+
+47
+00:24:12.000 --> 00:24:17.000
+the listener in between bouncing around from GPU Rotate, Implementation Number 2, and Transpose, back to Rotate. We're at the, I don't know, almost half hour mark of this part of this recording. Should we, should we, I don't know, slice this now? Be sure to check these show notes, either in your podcast app or at ADSP thepodcast.com for links to anything we mentioned in today's episode as well as a link to a get-up discussion where you can leave thoughts, comments, and questions. Thanks for listening. We hope you enjoyed and have a great day. Low quality, high quantity. That is the tagline of our podcast. That's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

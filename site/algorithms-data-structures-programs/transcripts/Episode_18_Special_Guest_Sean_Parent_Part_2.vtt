@@ -1,0 +1,189 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:06.000
+A lot of the characters in APL were chosen because of how they look visually, and Aniota... Welcome to ADSP The Podcast, episode 18, recorded on March 18th 2021. My name is Connor and today with my co-host Bryce we wrap up part two of our conversation with Sean Parent. Be sure to check out part one before listening to this one. Do you think that C++ should have adopted a destructive move model where the object left behind was not in a valid state but was gone? Ideally, yes. I think now we have kind of a better idea of how that could have been done at the time when move was being defined. Nobody could come up with a way to make it work. You know, one of the
+
+2
+00:01:06.000 --> 00:02:04.000
+problems with it is it changes the strict ordering of destruction rules that we have in C++, which is somewhat problematic. If anybody's used Objective C++, which mostly on Apple platforms, the Objective C language gets used. A lot of people don't know, but if you just stick an extra M on the extension for your file, so you have files that are type.mm instead of just.m, then you get a language called Objective-C++, which is basically all of C++ with the Objective-C constructs added in. And Objective-C in recent versions has a feature called ARC, which is automatic reference counting. So for a while, Objective-C had a garbage collector,
+
+3
+00:02:04.000 --> 00:03:14.000
+and then Apple kind of backed away from the garbage collector and decided to go with automatic reference counting. So Objective-C objects are, you can think of the the pointer that you get to them as being very similar to a shared pointer, except the language manages the shared pointer as opposed to you managing it manually. But one of the unique features of arc objects is they have more precise lifetime rules than C++ objects would. So if I have an arc object, it is destructed at the end of the last sequence point where it is last used. So that allows for a destructive move of arc types, which saves you additional increment-decrements on your ref counts, and it happens automatically without ever having to put in an explicit move.
+
+4
+00:03:14.000 --> 00:04:18.000
+And so one of the biggest problems that we have with C++ is that explicit move is is a is a cast circumventing the type system and that makes the move operation unsafe you know you're ended up you end up with this shell of an object and you have to take care in how you deal with that that object with a with an unspecified value right yeah it's it's it's a odd quirk of the function called stood colon colon move that it does not actually move. It just casts it to a type that then the thing, whatever it gets passed to could move from it. Could move. Right, right, right. And within the language, if you just have an implicit move, then the only thing the language is going to do after the move is destruct it. And so that makes the move safe. But when you circumvent the type system and you cast with stood move, now you've got got an unsafe operation. And there's only a few places in the language where
+
+5
+00:04:18.000 --> 00:05:03.000
+stood move is required, right, to get a move. If you had the rule that you could somehow decorate a type and say this type supports a destructive move, then you could get rid of those cases, and you could just say this thing will automatically move on the last use, or the compiler is allowed to automatically move it on the last use. And that would make those cases safe, because now your object would be out of scope, and you couldn't reference it after that. But it would be a significant change to the language.
+
+6
+00:05:03.000 --> 00:05:25.000
+And it was something that I believe was considered in the original design of Move, but the destructive model, they were not able to work it out in the C++11 era. Yeah, there were a lot of ideas in that time frame. I think post then, I think a number of people have a lot of newer ideas and kind of a newer take on it. One of the best proposals i've seen float
+
+7
+00:05:25.000 --> 00:05:59.000
+around is the idea of uh uh just having something be trivially movable and it turns out most types are trivially movable and what that means is is if you just mem copied them and then didn't do anything with the hole they left, that would be sufficient. Is that Arthur O'Dwyer's paper you're thinking of? I'm horrible with names, so probably. I believe it is, yeah. I think it's Arthur O'Dwyer's paper. Yeah, so I think if we had a notion of trivially movable
+
+8
+00:05:59.000 --> 00:06:40.000
+and the notion of allowing the compiler to then say, if my type is trivially movable then I can can move it on last use. Then you get this automatic move on last use and you don't have to cast. And it's safe because if then if then you add another use app post that point then that becomes the last use and and you know you don't get any kind of compiler error that says hey you use this after it fell out of scope it did fall out of scope but now you just extended the scope and what was a previous move safely became a copy and and now the last use becomes a move and so you know it's less for the user to
+
+9
+00:06:40.000 --> 00:07:21.000
+type and it's easier to get correct and it's less error prone if if we could get to that state so what uh what paper or what mailing are you aiming to for your paper to be coming out in uh you know i'm trying to rush through at least getting a uh an r0 out because um uh this came about because in John Lakos's upcoming book, he's got these sections called annoyances, and he reached out to me and said, I know you've got this annoyance about move. Could you write a couple pages on the annoyance of move?
+
+10
+00:07:21.000 --> 00:08:16.000
+And so we just kind of finished up a couple rounds of editing. I just wrote it right after ACCU wrapped up. And part of that is I want to cite a paper with a proposal to fix this annoyance. And I had started about a year ago on actual wording for how I would go about fixing this annoyance and I had a round of conversations at that time with with with Nico who was at the time what kind of set it all off was he was writing his book on move and he had on our value semantics and he had reached out to me to get some clarifications on some things so we had a conversation about that and that led to my complaint and we kind of started on some wording and I roped in Howard Hinnant and
+
+11
+00:08:16.000 --> 00:08:46.000
+and Herb Sutter and and got some you know additional feedback and so I just kind of had this this bunch of scraps of notes for something that could have been a proposal. I was hoping that an employee who recently left Adobe was going to, and he had joined the standards committee, was going to kind of pick it up and see it through. But he recently left, and then this whole thing with John came up, so now I'm resurrecting it. So I'm going to try to get a quick number for it and get a paper into whatever the next mailing is that
+
+12
+00:08:46.000 --> 00:10:22.000
+would just basically say it's going to outline the problem with some potential proposed wording. The whole fact that over time the requirements have been weakened so much in the standard makes it a little complicated, but I think that we can cover it with just kind of an upfront requirement, which we, that's how we handle the move semantics already, that basically says, you know, there's a precondition that for all of these functions that they have this notion of a domain of operation. And we can't reassociate that domain of operation with specific semantics because that would then be a breaking change because it would be strengthening the semantics of the existing library. But we can, I think, introduce the notion of the domain of operation and then simplify the wording in a whole bunch of the algorithms where we don't have to say, you know, the equal equal has to apply in all of these cases because that's just globally covered by this notion of a lot of things that would then simplify the wording, you know, and then we get into the wording of how we make the exceptions for the post conditions of a move from object,
+
+13
+00:10:22.000 --> 00:11:11.000
+which basically says it gets pulled out of the domain of operation for everything but destruction and assignment 2. And then there's a little complication in there, which is if you swap and if you swap, if you do a self swap, so you call swap a to a, in the middle of swap a to a, it's going to do a move from a move from object to itself. And the standard indirectly guarantees that swap a to a is valid and should be a no op. And so that adds an additional wrinkle,
+
+14
+00:11:11.000 --> 00:11:58.000
+which is how do you specify that you can move from an object that's been moved from into itself and get that into the spec. So I've got kind of two options for proposed wordings on that. One of the proposed wordings gets a bit complicated, and to satisfy the other conditions of move, it requires you to introduce a fixed point, which the standard hasn't done anyplace else, but it kind of wraps everything up neatly, even if it's a little complex. The other approach is to just say, no, we don't support swap AA, which would be a breaking
+
+15
+00:11:58.000 --> 00:12:50.000
+change, but most people on the standards committee agree that any time in the wild they've actually seen a self-swap, it's been a bug anyways. So this sounds like, if I recall correctly, at one point you told me, Sean, that you don't identify as a C++ committee standards member. You identify as someone who sometimes drives by the committee and lobs a Molotov cocktail into it just to cause discussion. Are you promoting yourself now to be a committee member or do you still identify with the latter? I can confirm this is a Molotov cocktail. Yeah. I think my actual quote is a hand grenade, but Molotov cocktail. Yeah. I think my actual quote is a hand grenade, but Molotov cocktail works too, I guess.
+
+16
+00:12:50.000 --> 00:13:36.000
+Lobbying hand grenades into the committee. Yeah. I think this is a little of both. Going through finding the kind of, you know, weakening of the semantics in the standard library has kind of reminded me of why I get so frustrated working with the standards committee. This has been my, you know, the post conditions of MOVE since, you know, ASL, if you go back, it had a MOVE library, and I think it was one of the first, it was not
+
+17
+00:13:36.000 --> 00:14:29.000
+the first MOVE library, but I think it was the first MOVE library that actually worked. There was a library that Andre Alex Andreescu wrote that was, I think it was called loci or loci, that introduced the notion of move. It was a fairly complex library and in most cases it didn't actually work, meaning that it would fail to generate a move. And then Howard Hinnant and Dave Abrahams wrote another move library that they put out that kind of worked, but failed in a bunch of cases. That was Boost Move? That was Boost Move? That was Boost Move.
+
+18
+00:14:29.000 --> 00:14:56.000
+ASL, for those that don't know, I believe is the Adobe Standard Library, correct? Adobe Source Libraries. Or Source Library. Yeah. And they're still kicking around, still available. If you go to github.com slash stlab is where they are. And we've got a website, stlab.cc, which I think is a nice domain name for the libraries.
+
+19
+00:14:56.000 --> 00:15:36.000
+And the idea of all libraries in this class was before C++11, when move was a language feature, there were a bunch of attempts to emulate move in a library, partially with macros, partially with other things, to varying degrees of success. To varying degrees of success, yeah. And so ASL implemented move, which relied on on RVO which is return value optimization and and it turns out at that time I validated a whole bunch of compilers.
+
+20
+00:15:36.000 --> 00:16:59.000
+Every compiler if you put it in optimization mode implemented named return value optimization which was allowed by the standard at the time, but not required. I don't think it's actually required till C++ 17. So even going way back to C++ 03, everybody implemented it for release builds. And so in ASL we had a move library that looks very much like the move library that was that standardized to that you know it was it was STLAB colon colon move was the way way you invoke to move and and that got you know a lot of commercial use and actually worked very well to good effect. In fact, the last standards committee meeting I actually attended, the reason why I attended was to pitch a library solution instead of all the complexity that came in with rvalue references. And I demonstrated that if we just required NRVO, which we do now, and all the compilers already implemented it, that we could get more than 90% the benefit of move semantics.
+
+21
+00:16:59.000 --> 00:17:52.000
+There are some cases that you can't do that way, but the vast majority of cases you can. So we can get the we can handle the vast majority of the cases without introducing a new language construct of r-value references, which are kind of weird and all the complexity that came out of that. And it was interesting because the counter argument was largely that without rvalue references, we didn't get forwarding references. And at that time, rvalue references and forwarding references were the same thing. And later, forwarding references became something else with the same syntax. So had we known that at the time, maybe we could have gone with a library solution for moving
+
+22
+00:17:52.000 --> 00:18:53.000
+and had a separate construct for forwarding. Would we still have needed forwarding references in a world where we didn't have our value references? If you want kind of the perfect the perfect forwarding yeah you do because you need to be able to know know you know is this thing a move or a copy and carry that down through through your levels so so do you remember what uh committee meeting that was at, the last one you went to? I don't remember the dates. It was in Bellevue, Washington. And basically, it was interesting because I gave a presentation and I gave a demonstration of the ASL MOVE library. And I hadn't written a paper on it. I just come in at the request of a committee member to kind of show it and and there was a you know It was a small group that was actually worried about our values and we had a straw vote and the straw vote vote
+
+23
+00:18:53.000 --> 00:19:51.000
+there was to yes, we should abandon our value references and go with a library solution and then largely because of political reasons in the In the larger meeting, that got overturned. And so, which for me was an interesting lesson, which is, you know, convincing the people who matter isn't necessarily enough. Right? You know, convincing the people who are actually working with the stuff. And it wasn't 100%, you know, the people who are actually working with the stuff and and it wasn't a hundred percent uh you know you know even in the small room but it was it was was in favor and um uh yeah that was in 2008 by the way 2008 2008 yeah so that um uh so we kind of lost in the in the in the in the larger committee, and that's when our value references got voted.
+
+24
+00:19:51.000 --> 00:20:54.000
+I think the terminology is voted out of the standard, which has the reverse meaning of what you was allocators at the time, which broke the notion of a regular type for pair. And that was something that I was, you know, this is why, you know, the implementation of std pair is so incredibly long and complex and that pair supports allocators. And it's, in my opinion, ridiculous. I think you're not wrong. It is quite unintuitive that pair needs to support allocators. And the number of times in the committee that a good feature has been unnecessary has been hung up on oh do we need to add allocator support for this thing and the pains associated with that
+
+25
+00:20:54.000 --> 00:21:46.000
+yeah so the the stood pair gaining allocator support which broke regularity of stood pair. That even more than, you know, the R-value references, I thought, you know, Howard's proposal was sound, I just thought it was too much complexity for the language, but breaking regularity of pair was the, you know, for me was kind of the last straw. And at that point I walked out of the meeting and that's the last standards committee meeting I've attended. So. I, I, um, so, so John Laco, who's, uh, another member of the committee, uh, very well known for his talks about an advocacy for allocators. Um, he has in recent years started, started promoting the idea that, that allocators should be
+
+26
+00:21:46.000 --> 00:23:11.000
+something that are supported at the language level and i actually think that he's probably right about this because the amount of complexity that has been added to the library to support allocators the library facility is is really great That's come with a huge amount of cost. And for types that avoid that cost, for things that we say don't support allocators, that takes control away from users. And I do wonder if maybe we would have been better off if we had thought up some language-based solution for customizing allocation. Yeah, the fundamental problem with allocators is part of the allocator. And so you can't put the allocator into call, you know, an incidental data structure.
+
+27
+00:23:11.000 --> 00:24:18.000
+It means now really what I've got is an allocator that contains objects, but I've expressed it the other way around. I've got a bunch of objects pointing to an allocator that actually contains them. So my opinion has always been that we don't actually need allocators, what we need are better data structures that manage their parts, you know, that manage the allocation of their parts. So flip that equation around and that's, you know, harder to do than just say, well, we can take a vector and we can slap an allocator into it and now we have a different behavior for a vector. It means you actually have to have to think through, you know, a class that makes sense of structures that
+
+28
+00:24:18.000 --> 00:25:22.000
+require custom allocation. You know, it is so it means you end up with more types and there's not quite the same uniformity, but you get rid of these issues. Is there a library out in the wild that implements this kind of idea? You know, I don't think there's a library out in the wild, but if you look at, you know, some of the adapters which are, you know, if you just just look at, you know, adapting a vector to be a priority queue by using a heap structure in there, that's really just using the vector as if it were an allocator for a heap structure object, And so one could imagine having something like a pooled list if you wanted to say, oh, I've got a list for the allocations for the nodes.
+
+29
+00:25:22.000 --> 00:26:03.000
+Since I know they're all fixed sized, I can do that more efficiently within some pool and So I can create create a structure for that So no, you know, I don't know of a library that's that's that's taken that approach although, you know, I will say This is the approach that you know, like the Photoshop teams takes say, oh, well, we've got within our tiling system, which is this quad tree data structure. We don't say, and that's connected to this allocator. The allocator for the quad tree structure is part of the quad tree structure. All right.
+
+30
+00:26:03.000 --> 00:26:54.000
+Well, we're like 15 minutes past our scheduled time. And I have a stack of questions, but we'll have to... So Sean at ACCU said he'd be happy to be a regular recurring guest, which is definitely something that we're going to make happen. We'll have to defer the whole Mac OS X in the greg gilly uh story for a whole episode um because i wanted to ask about that but i knew like that yeah we're gonna have to do a whole whole episode of sean stories about about apple and mac os yeah well that's good we're gonna have to part i don't know how we're gonna partition this up we. We said mismatch earlier. Now we're saying partition. But also all the stories from when you worked with Alex Stepanov.
+
+31
+00:26:54.000 --> 00:27:38.000
+And then also, too, we haven't even talked about your time before Adobe. And also, too, I was. Oh, so maybe I'll ask. I'll ask this quick follow up because it was. You know, we talked a lot about Stepanov today. And you mentioned sort of he got into C and C++ while at Bell Labs. And we had sort of chatted about this at ACCU, is that I recently discovered from watching one of the A9 lectures that were recorded when Stepanov worked at Amazon, that he actually spent a decade teaching Scheme. And that, like, I like to think I know quite a bit about Stepanov and that I've, you know, I've spent a lot of time on stepanovpapers.com, but I had no idea that he sort of made the
+
+32
+00:27:38.000 --> 00:28:31.000
+joke that he lost a decade to Scheme. And so I'm not sure if you want to comment because you knew Stefanov a lot better about... You know, I don't know how much to add to that. Yeah, he was, you know, he had certainly taught courses in Scheme and, you know, he'd been an associate professor, I forget, I think at RPI, if I might get that wrong. So yeah, so he was an avid Scheme user, and all the time I worked with him, he would frequently prototype an algorithm first in Scheme, and then write it in C++. So he was definitely very comfortable in Scheme. Put it that way. Yep, so we all got to go learn Lisp, or
+
+33
+00:28:31.000 --> 00:28:58.000
+your favorite language of choice. Yeah, on that, you know, one thing I think I agree with you, Connor, about is that learning other languages has a huge amount of value. I think one of the things that set off my career was I went to school at Seattle University and
+
+34
+00:28:58.000 --> 00:29:26.000
+there were 12 of us in our graduating class for computer science. It was their first graduating class in computer science at the university their first graduating class in computer science at the university. And we had a couple of young professors who taught the course and they decided that, or who taught the program, the professors there decided that they would teach every course in a different language and not teach the language.
+
+35
+00:29:26.000 --> 00:30:12.000
+So you would walk in and you know first day of a class and they would say you know this class we're going to to be looking at databases so you're going to be programming in Ingress, so go learn Ingress and we're not teaching it. And in this class we're going to be doing image processing and we're going to do all of that in Lisp, so go learn Lisp. And so we could talk about the pros and cons. I think there were only a couple of us for which this plan actually worked. I'm not saying it was a good teaching strategy.
+
+36
+00:30:12.000 --> 00:30:40.000
+But for me, it was one that did. And it just gave a huge exposure and appreciation to a bunch of different languages very early in my career. This is crazy that you're saying this because literally just last night, I was watching a talk from Channel 9 with Herb Sutter and Eric Meyer. Most of our listeners probably know Herb Sutter as the chair of the ISO C++ committee. Eric Meyer worked on C Sharp
+
+37
+00:30:40.000 --> 00:31:09.000
+and he's a big functional programming advocate. And they had an hour-long discussion. And at the end of it, Herb Sutter says probably one of the most important things for his career. Um, and the best university course that he took and he went to Waterloo in Canada was a course on comparative languages where every week they looked at a different language and they looked at lisps and prologue and et cetera. Anyway. So just the fact that I literally listened to that last night and now you're saying basically the exact same thing with a different flavor is crazy.
+
+38
+00:31:09.000 --> 00:31:30.000
+Yep, yep, yep, yep. I think there's huge value in that. Language affects how you think. And so learning other languages allows you to think about problems from different perspectives. So I think what Sean, and this is where we'll end the episode,
+
+39
+00:31:30.000 --> 00:31:49.000
+is trying to say is that everybody needs to go learn APL. Absolutely. Absolutely. Connor must have some deal with the people that sell those funky APL keyboards. He must get some cut with the people that sell those funky APL keyboards. He must get some cut of it or something. Yeah.
+
+40
+00:31:49.000 --> 00:32:38.000
+You guys got to put a link in your show notes for where to get your APL keyboard. I don't even have an APL keyboard. I'm going to send you one, buddy. I'm going to send you one. Yeah. All right. It's funny. I'm going to send you one, buddy. I'm going to send you one. was suing everybody who did a unix knockoff but mpw was kind of a unix knockoff but to not uh step on att's toes um they used different syntax for everything and so the like the wild card
+
+41
+00:32:38.000 --> 00:33:54.000
+character if you were doing a search instead of just being an asterisk was, you know, a squiggly equal sign. So, yeah, they were all, you know, non-ASCII unusual characters. And I still, to this day, you know, when I'm typing in bash, will type those just by habit and have to go, oh, no, wait, I need an asterisk, not a squiggly equal sign there. This makes me think, now I said we'd end the episode, but this now made me thought of, you taught me something, Sean, at ACCU, which is you said you remarked while listening to an earlier episode is that I said that I don't actually know why they chose Iota to represent sort of like a sequence, an arithmetic sequence that increases by one. And you said you actually know. Do you want to educate our listeners why they chose Iota? Sure. So a lot of the characters in APL were chosen because of how they look visually. And an iota looks like a small 1, and it's kind of a backwards J.
+
+42
+00:33:54.000 --> 00:34:42.000
+So it's like a small 1, and then it kind of hooks out to the right. And so if you say, you know, iota 5, that kind of looks like 1...5. So, and that's what iota 5 would do, is it would generate the sequence from 1 to 5. You know, APL was 1-based instead of 0-based. You know, out of that now we get, you know, std iota, which is not a glyph. It's spelled out as iota, and it's zero-based by default. There's only one algorithm in the Thrust algorithm library that renamed a C++ standard algorithm. And Bryce, do you want to? What, iota?
+
+43
+00:34:42.000 --> 00:34:57.000
+Yeah. You mean stood sequence? But there's a difference. Thrust sequence predated stud iota. That's not true. We've had this discussion before because it was in the SGI docs. And so a lot of us actually think. It's not even in the SGI.
+
+44
+00:34:57.000 --> 00:35:42.000
+It's in the original HP STL. There's a lot of stuff in the original HP STL that didn't make it into the standard. But yeah, iota is what it is. Is that on steppingoffpapers.com i believe yeah yeah yeah the hpstl is up there maybe we'll have to do an episode where bryce and i dig through and see all the algorithms that um alex had to to cut off yeah yeah they went through uh alex and bjarnene went through an editorial process where Bjarne wanted to strip everything that wasn't necessary. So kind of, it's interesting, you know, what's left is you have a couple of the higher level functions like, you know, stable sort and sort.
+
+45
+00:35:42.000 --> 00:36:00.000
+And almost everything in the rest of the libraries is just to build stable sort and sort. And almost everything in the rest of the libraries is just to build stable sort and sort. Yep. They're all puzzle pieces. I'll link your talk, Generic Programming from 2018 at Pacific C++, which is one of my absolute favorite talks of yours. Because I think you talk about that in that talk.
+
+46
+00:36:00.000 --> 00:36:16.000
+I believe I do, yeah. All right. With that, I feel like we should wrap it up. Thank you so much, Sean. Hey, thank you guys. Once again, thanks to Sean Parent for coming on. It was an absolute blast chatting with him. And one final announcement is that if you
+
+47
+00:36:16.000 --> 00:36:21.000
+are listening to this before March 31st there is a free half-day conference for APL beginners or the APL curious that are looking to learn a little bit more about the language. You can go to dialog.com, that's D-Y-A-L-O-G.com, or you can go to the show notes for a direct link to register. Hope you enjoyed, and have a great day. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

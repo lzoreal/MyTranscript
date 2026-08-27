@@ -1,0 +1,217 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:19.000
+2022, I think, will sort of be remembered, at least like in the systems programming languages community and the C++ community, 2022 is like Star Wars Episode IV, A New Hope, the podcast episode 111 recorded on January 4th, 2023. My name is Connor. Today with my co-host Bryce, we talk about C++ 23 ranges, our 2022 retro and the future of C++. Okay, actually, we will start the podcast now. I was going to start off talking about something we need to talk about, which you're probably aware of. But before we just hit the record button, we were talking about ranges. And so I will say, ranges, oh, they're glorious. C++23 ranges, GCC13, which is GCC trunk as of this recording today, I'm sure GCC13 will officially, when it gets released, get uploaded to Godbolt or Compiler Explore, has implemented every single range adapter in factory. The only thing they haven't,
+
+2
+00:01:19.000 --> 00:02:01.000
+and I thought Microsoft was leading the charge in terms of implementing ranges. So I was tracking their progress and issues. And they have, I don't know, above 50%, I think, of the range adapters implemented. And then I think I was just bored one day. Or no, actually, this is what happened. There's no support for the format library with MSVC on Compiler Explorer. And so I logged a bug, but then the Compiler Explorer folks said that because of MSVC issues, it's not always possible to get libraries working there, which sure, fair enough. So then I went and downloaded
+
+3
+00:02:01.000 --> 00:02:56.000
+the most recent community edition of Visual Studio and tried to, because I want to use Victor's format library until we have C++23 format print. And then when I used the community edition, I used NuGet to fetch, I don't know, whatever the most recent format library is, was like 7.0 something. And that's broken with chunk by so for whatever reason there's some bug that the c++ 23 stood views chunk by doesn't work with the lib format library so compiler explorer doesn't support the format library you mean i'm confused like like you're trying i'm trying to just uh basically use the thumped colon colon print and the ranges header so they have basic c++ 23 comes with the ability to print a range and containers and stuff like that but just very necessary if you want to basically create a little
+
+4
+00:02:56.000 --> 00:03:36.000
+gobbolt snippet um that prints out some code using some c++ 20 or 23 ranges. So Compiler Explorer with MSVC doesn't support the libformat library. And Visual Studio 2022 Community Edition has some bug either in the format library or the ranges, C++ 23 ranges, chunk by implementation that they are not compatible. And so I was about to say I got bored. So that's why I checked GCC. But what I realized is like, I can just go create the equivalent code using range V3 and lib format, because I know lib format works with GCC. But then when I was doing that,
+
+5
+00:03:36.000 --> 00:04:29.000
+I said, I'll just check to see what they've implemented of C++ 23 ranges. And it turns out they've implemented everything, which is just so amazing. So amazing. Chunk by. Yeah, I saw Eric retweeted something that you sent about this. And Eric said that this is great because when you look at what ranges looks like as of C++23, this is a lot closer to what his original vision for ranges was because when ranges was put into c++ 20 um just because the scope and size of it a lot of it had to be paired back a lot of the important uh range adapters were were left out of the initial pass and now a lot of them have been added in 23 yep it's uh it's beautiful that's i've decided for the couple C++ conferences that I'm going to submit to, one of them I already submitted to. Which one?
+
+6
+00:04:29.000 --> 00:05:13.000
+C++ on C. Oh, they're open already. I believe the call for papers is open until January 8th. And this is getting recorded a couple days before that and will get released. When this get released on january 6th so if you're listening to this between january 6th and january 8th i mean there's a chance that the call for papers might get extended but yeah i mean i am this is before they've you know started accepting so it might not get accepted but i plan to submit it to a couple of c++ conference so hopefully one of them it'll get accepted and it's just going to be a talk basically covering everything that's new in C++23 ranges. And also an overview of the algorithm slash range landscape. Because it's actually like hella confusing now.
+
+7
+00:05:13.000 --> 00:05:50.000
+If you're just coming to C++23, even C++20, there are now basically three different ways to call transform algorithm. There's the iterator overload. There's the range overload. And that's sort of like one vertical. And now there's like range land, which technically, like they don't call those algorithms, they're range adapters and range factories, which I mean, I consider them all under like the algorithm umbrella. But if you're coming to C++ as like a new C++ programmer, and you Google, Google like how do I, you know, map, how do I do a functional map kind of thing, you're potentially going to get like three different answers.
+
+8
+00:05:50.000 --> 00:06:13.000
+Anyway, so I think some little like mini lightning talk at the beginning of what's new in C++ 23 ranges that talks about like there's like two different verticals and there's two different overloads in this vertical. But really, if you're trying to do like functional composition kind of things, just stick to this vertical. Anyways, that's all some mini side note. What I really wanted to mention, happy new year, by the way, because it is now 2023. Yeah, happy new year.
+
+9
+00:06:13.000 --> 00:06:39.000
+Did you hear the big news that happened right at the end of the new year in the C++ podcast world, Bryce? Did you hear the big news? I didn't directly hear it, but I saw some tweets that did not directly mention it. And I suspect, based on those tweets, that I know what the news is. There's a certain other podcast. But have we fallen in the rankings? Well, so, yes. I mean, I am both.
+
+10
+00:06:39.000 --> 00:07:12.000
+I'm conflicted now. I'm both, one, very excited. Kind of sad that it's not. So wait, for the listener that is not informed and not in the know, CppCast, the number one podcast by all measures and the first, and at one point was the only, but then in 2022, like four podcasts started in two months, one of which was ours, is back. It's kind of sad because it's not Rob and Jason that are coming back to host it. It's two new hosts, Phil Nash and Timur Dumler. I hope
+
+11
+00:07:12.000 --> 00:07:52.000
+I'm pronouncing Timur's name correctly. And very interestingly, I actually plan on making a YouTube video about this because like the landscape of C++ podcasts, This is technically Phil's third C++ podcast that he's co-hosting because he did CPP chat initially, and then he did a podcast called No Diagnostic Required. And now he's taking the, what do you call it, steering wheel of this pirate ship that is CPP cast. And I'm conflicted because one, obviously it's one of my favorite podcasts of all time. So happy that it's coming back. But two, what does that mean for us? You know, we were on track to be.
+
+12
+00:07:52.000 --> 00:08:19.000
+I mean, we were the number one active C++ podcast. Although kind of we're like a C++ slash Rust podcast. But now they're back. And also, too. So they're not going to be releasing episodes every week. It's going to be releasing episodes every week it's going to be every two weeks for now which means that now it's going to take us twice as long to catch up episode wise which they're at 350 we're at like what 111 which is 240 so divided by 50 weeks is roughly
+
+13
+00:08:19.000 --> 00:08:49.000
+that would have been five years now it's going to take 10 years well is that they're not weekly no they're going to be bi-weekly so twice a month once every two weeks was it free wasn't it previously it was previously weekly yeah i think they're trying to make it but we will we will still eventually catch up yeah i mean we're like you said we're doing this till one of us dies so as long as we can hang on for a decade both of us we will be able to episode wise. Anyways, your thoughts and feelings. I know you're not a big podcast listener, so I guess you're probably much less excited about this than,
+
+14
+00:08:49.000 --> 00:08:58.000
+than I was. Well, I mean, I do listen to a decent number of podcasts, I guess, just not pergurating podcasts. I mean, I think it's great.
+
+15
+00:08:58.000 --> 00:09:32.000
+I think it's, it was really sad that CPP cast, that the original hosts, you know, were decided that it was time to move on um because it it was i think a an important part of the the ecosystem in the community um and you know not everybody consumes content uh or consumes things the same way. You know, some people for podcasts, some people for conference talks. And I know that there was a lot of people who, you know,
+
+16
+00:09:32.000 --> 00:10:17.000
+listened to every episode of CppCast. And CppCast kind of needs a marquee podcast. You know, this is not, this is a very different podcast than their podcast like cpp cast is actually a c++ podcast and you know covers all the made the latest developments major news we just you know talk about whatever we want so yeah um you know there was a gap and uh i'm glad to see that that uh that it's back with new hosts. And I think those are two great hosts. It'll be interesting to see whether they change up the format at all.
+
+17
+00:10:17.000 --> 00:10:42.000
+It seems like based off of what they did in the first episode, because what they did is halfway through, they were sort of interviewing each other. And then they did like a little record scratch. And then like they said, let's start it from the top. Because like they were the new host now. And they did the exact same sort of intro, news for a little bit. And then sort of interview. But I mean, you know, you're obviously not going to come into a thing and just immediately. That's true.
+
+18
+00:10:42.000 --> 00:11:24.000
+You know, change everything unless you're elon musk um so but you know over time maybe they'll maybe they'll um decide that there's some things they want to change or there's some things they want to innovate it's true i wouldn't be surprised if there's a new jingle because i'm not you probably didn't see this but uh c plus plus on C's YouTube channel just released a video of Phil Nash singing a C++ song called I Build Myself. Yeah, I seem to recall listening to a live performance of something like this when I was at CPP on C last year. Oh, you saw it live. Wow. I think so. That's impressive.
+
+19
+00:11:24.000 --> 00:12:11.000
+And speaking of of we're going to get into today's topic which is going to be the 2022 retro but uh on the last on the topic of podcasts and stuff we actually got mentioned um in some top 10 tech programming podcasts of 2022 on some twitter twitter thread but um for the description it just took the first sentence of our podcast description which was we're a podcast inspired by magic read-along which is at this point a podcast that like less people know about than our podcast so then i was like oh snap like and that's all they said like they didn't say anything else and And I was like, maybe that is a bad description. So I went and updated our podcast description. So it is more descriptive of what we actually talk about.
+
+20
+00:12:11.000 --> 00:12:26.000
+Anyways, 2022 retro. First of all, how was the holidays? You had a good time, time off? Yeah. Family, friends? Yeah. We went to Florida, visited my parents. It was bitterly cold the first two to three days which
+
+21
+00:12:26.000 --> 00:13:31.000
+i mean at least it was warmer than than than uh the new york it was like in the in the 30s and 40s the first two to three days here in florida but then it got uh the weather got a bit better um we spent some time chilling out in the pool we went on a boat nice um yeah we did all the all the florida things didn't go to the beach not really that uh that part of florida and also we're just not really beach people um we're all very very pale we uh we burn very easily that's what they have umbrellas for yeah yeah yeah it's it's funny and uh and sun and sunscreen um um my my parents live in uh this very nice uh gated community um just south of tampa um and i i was um uh born in tampa my my mother uh who was a bankruptcy lawyer, she went to Cornell for her undergrad.
+
+22
+00:13:31.000 --> 00:14:03.000
+Cornell was in upstate New York, in that part of New York that gets very cold and gets a ton of snow during the winter. And she grew up in Long Island. And then decided that Long Island wasn't cold enough. So she went to Cornell for undergrad. And then she decided that, you know, Cornell was not cold enough. So then she went to the University of Chicago for graduate school, which isn't even colder.
+
+23
+00:14:03.000 --> 00:14:51.000
+And for law school, which is even colder. And then after that, and she hates the cold. So then after that, she's like, you know what, I am done with being in cold places. I'm going to go, you know, as far south as I can. So she went to Tampa, where she started practicing law. And she was the first female attorney at a good old boy's Southern law firm. And there are lots of interesting and amusing stories about that. But that's why they're in that part of Florida and just south of Tampa, because that's where she lived for a number of years. That's where I was born. I don't usually like to talk about the fact that I am technically a Floridian. I think this is the second time it's come up on the podcast.
+
+24
+00:14:51.000 --> 00:15:30.000
+Yes. And you always post fix it with, I try not to mention it. But now they're in this very nice little gated community. Are the gates, you've mentioned that twice now. Are the gates important in Florida? Yeah. Oh yeah. But so in these gated communities in Florida, they have these super powerful HOAs, homeowner associations, that tell you your house has to be this color. don't leave your garage door open because nobody wants to see the inside of your garage. You can't put lawn gnomes on your lawn and stuff like that.
+
+25
+00:15:30.000 --> 00:15:47.000
+Are you serious? All the houses sort of look very similar. In Florida, in these communities, they have this thing that they call lanai, which I'm convinced is something that only people in Florida know about. Can you spell that? N-I-G-H? I have no idea how to spell it. Lanai. Or lanai. Okay. Yeah,. Can you spell that? N-I-G-H? I have no idea how to spell it. Lanai.
+
+26
+00:15:47.000 --> 00:16:05.000
+Or Lanai. Okay. Yeah, I think it starts with a N. And it's like this – it's basically like a backyard that's covered in this structure that has like this mesh stuff. And so it's like you're outside. You get the sun. If it rains, the rain comes
+
+27
+00:16:05.000 --> 00:16:21.000
+through, but the mesh keeps out leaves and bugs and stuff like that. You have one of these that covers your backyard and your pool and your hot tub. How do you get the leaves off of it when the leaves get caught by this thing?
+
+28
+00:16:21.000 --> 00:16:53.000
+What? How do you get the leaves off of if it's this mesh net kind of thing that's keeping the leaves out you gotta you have a guy for that you have a guy that he just what goes around with a really tall stick i think it's it's mostly like to keep the bugs out so you like don't have to have like mosquitoes and okay stuff like that all right um and so like then everybody who lives in these little gated communities they they have like, you know, they have their indoor kitchen and they have their outdoor kitchen. Which is funny in my parents' house because their indoor kitchen is in the back of the house.
+
+29
+00:16:53.000 --> 00:17:37.000
+So it's about 10 feet away from their outdoor kitchen. And then they have like their indoor dining table and their outdoor dining table. And then they have their, you know, they have their living room with with their tv and then there's a tv outdoors in the lanai so you can watch tv from the hot tub um it's just it's a very interesting lifestyle down there i've gotten like i'm getting like wally vibes from like, you know, I don't know why. I think more like Stepford Wives. It's like the, you know, everyone's on a track, you know, there's no creativity. You can't keep your, you know, your garage door open.
+
+30
+00:17:37.000 --> 00:18:46.000
+You know, it's the same. Everyone's got the same paint on their houses. And there's this one house in the neighborhood that's painted in this i think you know not awful pale green color and apparently it was a big controversy um the pale green color was one of the like four or five approved colors that you could paint your house but like nobody picked that color Everybody else picked like one of the, you know, one of the three shades of beige and brown. But this one couple picked this green and everybody else, you know, you're not going to remember like the five different options for house color when you pick your house. assumes oh they this is a non-approved color and and so then they complain to the hoa but the hoa is like no actually they're allowed to have their house that color and apparently it's a whole big hubbub wow there was one couple my mom was telling me uh one couple moved in and um they painted their um their house red um like non-approved shade of red and And the HOA is like, Nope, you got to paint it back.
+
+31
+00:18:46.000 --> 00:18:54.000
+And apparent. And I, and, and so we asked what would happen if you just said no, well, then the HOA would, uh, uh, start giving you a daily fine.
+
+32
+00:18:54.000 --> 00:19:20.000
+And if you don't pay that, then eventually they could get a lien on your house and take your house because you painted it a different color. This sounds like not real. Like what group of people put this gate up and then had a meeting and they were like, all right, folks, what are the ground rules here? Nothing on the lawn. It needs to be the same color. Like who cares?
+
+33
+00:19:20.000 --> 00:20:11.000
+Clearly these people do. I mean, the gate keeps like unauthorized vehicles out but there's like a two foot gap under the gate and like it's not that tall a gate like you could get in if you wanted to yeah all right so let's um the things you learn on adsp the podcast all right 2022 retro go what's your your top three your top five well okay so so uh so i'm gonna give you my i'm gonna i'm gonna i have to tell you part of my 2023 you know predictions at the same time well no we usually we save our uh 2023 looking forward for a separate episode so you gotta split those up unless if they're intertwined in which case we can do something different this year they are intertwined all right you go right ahead you do you do you do you bryce 20 2022 i think will sort of be remember at least like in the systems programming languages
+
+34
+00:20:11.000 --> 00:20:47.000
+uh community and the c++ community 2022 is like star wars episode 4 a new hope the c++ successful languages. We've had, you know, the announcement of Carbon. Wait, wait, wait. I have to interrupt. What is the scene of Anakin trying to jump over Obi-Wan? And, you know, you lie. What does he say? I have the upper ground.
+
+35
+00:20:47.000 --> 00:22:46.000
+Yeah. And then he ends up getting his legs cut off and then he's burning at the side what is uh what is that map to in your analogy here bryce i uh no comment no comment that's just a typical c++ users experience with a compiler i'm gonna cut in i'm gonna cut in uh the actual audio from uh from that part it's over anakin i have the high ground you underestimate my power don't try it You were the chosen one. It was said that you would destroy the Sith, not join them. Bring balance to the Force, not leave it in darkness. I hate you! That's just what happens when you write some bad template heavy C++ code and the compiler punishes you for it.
+
+36
+00:22:46.000 --> 00:23:02.000
+Maybe I'll join TikTok or something and create some little meme of Obi-Wan being the compiler and Anakin being the C++ developer. It's like, don't, well, and I think like earlier, before he says I have the high ground, I think he says something like, don't try it. I have the high ground. And that's like the Kamali, like, don't try it. You're going to be unhappy. You were the chosen one. All right.
+
+37
+00:23:02.000 --> 00:23:49.000
+I interrupted you. Sorry. So it was the year of successor languages. 2022 is, I think, going to be remembered as the year of the C++ successor languages. There's, you know, Carbon. I think there's been growing interest in developments around Circle. Did Sean give his keynote on Circle at C++ Now last year in 2022? I think that was the year. I think it was 2022. Yeah, because we talked to him about, yeah, we talked about it on this podcast. Yeah. And's also Dave Abraham's language, Vow.
+
+38
+00:23:49.000 --> 00:24:26.000
+There's CPP2. What else am I forgetting? Any others? I mean, technically, Yoct, which is the language being developed inside Serenity OS. But I don't think... We haven't heard much about that being a successful language, but that is, you know, in the space of. There's also been growing interest in success for Rust. One thing in particular there that I think was sort of a hallmark moment was the first Rust code getting into the Linux kernel. You know, that's a place that C++ has not been.
+
+39
+00:24:26.000 --> 00:25:08.000
+So, okay. So if 2022 has been Star Wars Episode IV, A New Hope, then of course, 2023 will be Episode V, Empire Strikes Back. I think that one of the themes of next year will be um uh languages like c and c plus plus um responding to uh uh the successor languages and responding to the criticisms of them, the claims that they are legacy languages.
+
+40
+00:25:08.000 --> 00:25:50.000
+One of the other things that happened in 2022, there were some U.S. government agency that put out some cybersecurity advisory, which suggested that C and C++ were unsafe languages or unsuitable languages because of the memory safety concerns. Or at least somebody interpreted the advisory they put out in that way. And so what will the empire's strike back be in 2023? It was the NSA. The NSA, yeah. Yeah, the NSA.
+
+41
+00:25:50.000 --> 00:26:44.000
+And it was like the two big things were the Microsoft Azure CTO saying that like C++ should be deprecated as a new language that new projects use. And the NSA came out saying memory safe languages are the way to go. Yeah. I don't think they explicitly said don't use C and C++. They just said use memory safe languages. And some people interpreted that as don't use C and C++. So how will the empire strike back? Well, C++23 and C23 will be published and go out the door this year, and we will see implementations start shipping support for C++23 and C23 this year. I think Fortran may also,
+
+42
+00:26:44.000 --> 00:28:10.000
+the next revision may go out this year, but don't quote me on that. I don't remember the dates exactly. But the other thing is that there's been a renewed interest in what we could do in C++ to improve safety, including some very bold proposals that we do things on a very accelerated timeline. One of the interesting proposals is from my dear friend, JF Bastian, who is the chair of the C++ Evolution Working Group. He works at Woven Planet now, which is a subsidiary of Toyota. And he wrote a proposal a few years ago, I think, proposing that we zero-initialize objects of automatic storage duration. Because one of the leading causes of UB that leads to security issues is reading uninitialized values, which can allow an attacker
+
+43
+00:28:10.000 --> 00:29:17.000
+to get an information that they shouldn't have been able to, and then thus control execution. And I think it's a CWE457. And so the proposal is pretty simple. It's just like, hey, we should just zero initialize objects of automatic storage duration. And why don't we do this today? Well, there's obviously the performance concern, right? Okay, if we have to settle these things to zero, well, that requires some work. The proposal from JF actually talks about this in a good bit of detail. It both talks about concrete numbers, but also in the, you know, why do we see a performance problem? And it's not just the cost of actually setting
+
+44
+00:29:17.000 --> 00:30:15.000
+the values to zero. It can also screw up compiler optimizations. It can like break dependencies, which can mess around with various compiler optimizations. And it can also mess around with various hardware, various optimizations that your CPU does when scheduling instructions. But JF's paper sort of explores these performance implications and presents some numbers and suggests that it's pretty negligible these days. That it's, in the case where there are regressions,
+
+45
+00:30:15.000 --> 00:30:49.000
+and it's usually like less than 0.5%. And then in some cases, the code actually gets faster. And there's also a pretty small code size impact. So it seems like there's not really a strong performance case. I mean, there are some applications, there's some places where, you know, a plus or minus 1% can actually be a really big deal. Wait, you went from 0.05 to plus or minus 1? Yeah, I'm rounding up.
+
+46
+00:30:49.000 --> 00:31:31.000
+Okay. From five bases points to 100. I will, I will, we're talking orders of magnitude here, right? I mean, that is a different order of magnitude. But anyways, roughly we're talking about a percentage yeah or less um uh andre alexandrescu uh gave a great talk a few years ago um at uh uh when he was still working at facebook and he talked about the uh the impact of some performance optimizations that got like a 2% to 3% improvement across some like core Facebook code.
+
+47
+00:31:31.000 --> 00:32:13.000
+And he was like, that's actually like a really big deal if you look at like this code is deployed at scale and, you know, that actually saves us like millions of dollars, you know, having to like allowing the code to run 2% to 3% faster. That means we can have 2% to 3% less, you know, machines in the fleet or 2% to 3% more throughput. So, like, that can, you know, that can be a big deal. But I think JF's argument in this proposal is the performance cost is small enough that that the the benefits far outweigh it and of course you know like almost everything in c++ there will be some
+
+48
+00:32:13.000 --> 00:32:56.000
+compiler flag where you'll be able to opt out of it yeah i think that's the important part is that though yeah i remember jf talked about this in his meetup youtube recording that i saw and they said that there would be for the people like, you know, high frequency trading firms and stuff where every little, you know, cycle matters that, you know, they're not going to have to worry about upgrading their compiler and then having a performance degradation or pessimization because of trying to gain safety for stuff. I'm sure that they don't, not that they don't care about safety, but let's be honest, HFT firms care about, uh, like speed of light. And in addition to a, uh, uh, I'm sure there'll be a compiler optimization to just globally turn
+
+49
+00:32:56.000 --> 00:33:40.000
+this off there. The proposal also, um, uh, suggests that we should add a, um, an uninitialized attribute, which a programmer can put on variables that'll indicate, hey, don't zero initialize this. Like a double square bracket attribute? Yeah, yeah, yeah. But the idea here is to get the default right to instead of having a zero initialized attribute that becomes something that everybody has to put on every variable, you make the default that we're going to change by default. And if you want to opt out, you add this attribute, which that's not normally how we have done things in C++. Usually we're like, well, make people opt into the new thing.
+
+50
+00:33:40.000 --> 00:34:17.000
+But in this case, that would have, I think, very limited utility here. And so it's nice to see a proposal that actually suggests that we take the right default. And what are your thoughts on C++'s ability within this proposal slash outside of this proposal over the next immediate year? I think this is low-hanging fruit. Yeah? I mean, I think that's why JF has suggested it, because it's low-hanging fruit. It's something that is pretty easy for us to do,
+
+51
+00:34:17.000 --> 00:34:56.000
+and it'll address a certain class of vulnerability. It'll make us a little bit more memory safe. So we should do it. It doesn't, it's not a full solution. It doesn't magically make C++ a memory safe language. There's still many ways in which C++ is memory unsafe. But this is... A lot of the ways in which C++ is memory unsafe,
+
+52
+00:34:56.000 --> 00:35:52.000
+or a lot of the common causes of vulnerabilities in C++ come from aspects of the language that have fundamental utility, like things like pointers or references or the fact that we don't have a a safe ownership model of objects like rust. All of those lead to vulnerabilities, but those are all things that if you can't just like change them because they're, they provide fundamental utility. Like, yeah, they can be foot guns, but they're also useful tools. Not zero initializing stack variables doesn't really provide any utility.
+
+53
+00:35:52.000 --> 00:36:27.000
+The reason we don't initialize them is for performance, or historically it's been for performance. But this is not, you know, a change which like takes away some functionality from people, right? Right. So I think it's low-hanging fruit. We should just do it. The empire strikes back with potentially an uninitialized attribute which like uh it sounds
+
+54
+00:36:27.000 --> 00:36:32.000
+ugly to me but to be honest i never write code like that so like it and maybe that's okay that it's ugly that you know most of the times you shouldn't be doing that and making a bad choice ugly maybe not bad choice but like a for the majority of times a bad choice i'm sure there are cases where you know there are there's a reason why there's a whole set of uninitialized algorithms that uh they exist for a reason yeah thanks for listening we hope you enjoyed and have a great day There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

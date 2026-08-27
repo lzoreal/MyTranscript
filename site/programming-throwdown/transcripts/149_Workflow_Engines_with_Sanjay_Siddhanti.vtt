@@ -1,0 +1,333 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:57.000
+programming throwdown episode 149 workflow engines with sanjay sadanti take it away patrick we're here with another great and exciting episode, a topic that I think we've talked around and most people probably have the problem of needing, but we already said it in intro, so it's not a spoiler. Workflow engines. We all kind of get to this thing. It's a design pattern, I guess, is almost a way of thinking about it. I think a lot of people, when you first discover design patterns, you read the first few and you're like, these are kind of obvious. Why is everyone making such a big deal about software design patterns? Then you sort of start thinking more clearly about them and having the language to describe them and
+
+2
+00:00:57.000 --> 00:01:13.000
+be succinct, but also precise when you communicate with other software engineers. If you don't know what I'm talking about design patterns, I think we have an episode on them. If not, definitely Google them up and take a look at them. But I think there are other, not captured by necessarily design patterns themselves, but other concepts,
+
+3
+00:01:13.000 --> 00:01:27.000
+which once you start doing practical, real world software engineering, you start to run into recurring issues. We've talked about some of them that get addressed for things like continuous integration, continuous deployment. The reason why we talk about those are because it's something that comes up again and again.
+
+4
+00:01:27.000 --> 00:01:56.000
+When people don't do those things, they run into this set of problems. And it's not the only solution, but it's a recurring and good solution. And so today we're going to talk about some things in that same vein. And here with us today, we have Sanjay Sadante, Director of Engineering at Acasa. Welcome to the show, Sanjay. Thank you. Thanks for having me. Awesome. Well, we always love to start by learning a bit about how people got to where they are. I think life story is just kind of that interesting thing. Maybe it's because I've grown a little more
+
+5
+00:01:56.000 --> 00:02:38.000
+mature, a little older. I like hearing how people also have their own journey and also to just sort of learn the diverse ways people end up in jobs is always just fascinating to me because when people always give career advice, there's always like this one way you do things and it's the way they did things. And so I like hearing that breadth. And so do you have, some people do, some people don't. Do you remember kind of like the first time you either like did programming or your first piece of tech or what got you really excited about this field? Yeah, absolutely. I think the first time I programmed a computer was in eighth grade, and I built a simple website just using HTML and CSS. I didn't even use JavaScript at the time,
+
+6
+00:02:38.000 --> 00:04:14.000
+and I really liked it. And so all through high school, I ended up building a lot of websites and taking AP computer science. So learned a bit of Java. And I came into college with, I'd say, a fair amount of programming experience and pretty sure that I wanted to major in computer science. Awesome. I also took AP computer science and also did Java. But I'm not curious if they still, do you know you know they still teach it in Java? I'm curious if they've gone to something else. You know, I went back to visit the AP Computer Science class at my first, I guess, academic exposures, but also had been programming a bit before. And so yeah, it's interesting, the web design and sort of so HTML, CSS, being able to, you wanted to do computer science, it sounds like. And then when you went to college, you continued to pursue it? Or did you try something else at first? I had a lot of interests going into college. So I was always taking computer science courses, but also a lot of math classes and also a lot of biology. And I wasn't totally sure how I wanted to mix all of these interests. I had, you know, one idea that I might go to medical school and, you know, be a computational person in that space.
+
+7
+00:04:14.000 --> 00:05:03.000
+And another idea that I might be a software engineer. So it took me a couple years in college to sort of figure out what I was interested in. And I would say, once I heard about bioinformatics for the first time, that's when I realized what I really wanted to do. Both my parents are scientists. And so growing up, I was always really interested in science. And we would talk about biology and chemistry at the dinner table. But I didn't ever realize that there were opportunities for computational folks to work on analyzing big data sets in that space. But once I found that in college, that's what I ended up focusing on for the rest of undergrad and for grad school.
+
+8
+00:05:03.000 --> 00:05:47.000
+Oh, nice. So I know the term bioinformatics, and I guess using the prefix and suffix and your context, I could guess. And part of me thinks like things like gene folding, I guess, has been like popular recently in the zeitgeist of, you know, some of the machine learning techniques as applied to those. Is that like the bulk of it is stuff related to that? Or is it I assume it's much broader than that, bioinformatics. Can you maybe tell us a little bit about what did that field? Yeah, absolutely. I think if I had to think of a generic definition, it would be using computational techniques to analyze large data sets in biology. And I can give some examples. So, you know, protein folding is
+
+9
+00:05:47.000 --> 00:06:38.000
+certainly one example. But the area that I focused on and that I actually worked on in industry for my first couple of companies was analyzing DNA sequencing data coming off of a sequencer. Basically, the idea is, you know, you sequence someone's DNA and you get a bunch of letters out of it, you know, A's, T's, C's, and G's. But how do you figure out what those letters actually mean? How do you figure out where a gene is and if this person has a mutation in that gene? And then once you figure out if there's a mutation, how do you devise computational methods to figure out if that mutation actually causes any effect to the person's health? For example, does that DNA mutation actually lead to a different protein being produced? And will that
+
+10
+00:06:38.000 --> 00:07:40.000
+be harmful to the person? So these are some of the things that I worked on for a few years and I would say are part of bioinformatics as well, is basically, you know, we're getting so much data off of DNA sequencers now that you can no longer analyze it by hand. And so you have to create computational methods to figure out how to make sense of this data at scale. That's awesome. I have this, like, I guess I'll share it publicly, even though it's still fresh in my mind, but always best to do it on a podcast where everyone can listen to it. I think like this, so this thing you're talking about DNA sequencing, I recently fell into some YouTube sort of raffle about DNA synthesis and how actually like it's accessible even for people at you know, at home, I guess, but like semi sophisticated. And so it fell in this whole rabbit hole of like plasmid engineering and like inserting your own sort of DNA synthesis that you designed into like E. coli or into yeast, and then sort of like having the expression of certain proteins,
+
+11
+00:07:40.000 --> 00:08:23.000
+either glow in the dark proteins, or even things that are components of milk or whatever be expressed via this like technique where like you said it blew my mind when they opened up this editor and they were showing like genes and copying and pasting from open source almost like i guess what we do for stack overflow no we don't definitely copy code from stack overflow they were copying various open source you know genes into these plasmids checking. It had like a linter equivalent, but then they would open up one of these and it's literally just the letters, right? It's just, and they could go in and make slight tweaks because some equivalencies are, they matter, but you can swap them. And it just like, it got me super excited until I realized just how much like time,
+
+12
+00:08:23.000 --> 00:08:57.000
+because I know nothing about biology. So to go from like where I am to like making mine glow in the dark bread is a very big leap. Yeah, it's incredible. Actually, it's it's really exciting to see. In my opinion, one of the most exciting things is that this space is now open to people who are not, you know, bench scientists. So you can be a computational person and you can contribute to the bioinformatics space in ways like you were doing or by designing more efficient algorithms or even more software-oriented solutions
+
+13
+00:08:57.000 --> 00:09:34.000
+like better parsing libraries to parse and create the text file formats that are used to share DNA sequencing information or coming up with a more efficient text-based representation of that data. So it's actually really exciting to see all the progress going on there. It is. I was excited to learn that I kind of, I guess, cynically assumed most of that software would be horrendously expensive. And it turns out now most of it you can kind of just like get, you know, it's just like open source, or the company that does a synthesis will provide it for free or whatever. So that got me kind of excited, too. So you came
+
+14
+00:09:34.000 --> 00:10:48.000
+out of you said, undergrad and master's studying bioinformatics. And then, you know, obviously, that time comes, you decide, I guess, to either go into academia or to go find a, I don't want to say a real job, but go find a job outside of academia. And where did you kind of end up? Yeah, I agonized a lot about whether to go back for a PhD program in something like computer science or bioinformatics or whether to go to industry. I decided to go to industry first and sort of try out the type of job that I would do after getting a PhD to see if I even liked it. So I started a company that was working on basically DNA sequencing technologies and providing a commercial product to patients to let them know if they had a hereditary risk for cancer or if there were a carrier of a hereditary disease that they might pass on to their children. mix of standard, you know, full stack software engineering, as well as some bioinformatics and
+
+15
+00:10:48.000 --> 00:11:39.000
+data analysis work. So that was a good role for me to sort of try out both opportunities and see what I liked. And I think over the years, I figured out that I actually really like software engineering. I find working in the healthcare space to be very meaningful and motivating for me. I've always wanted to work on something that was important to me and something that I thought could hopefully make life a little bit better for other people. So over time, I started thinking that maybe I want to be a software engineer, but still focused on something in the healthcare space. And I was interested in finding a pure software company that I felt could move a little faster, like software companies can. I think that sort of more of the biotech, bioinformatics companies are
+
+16
+00:11:39.000 --> 00:12:32.000
+very, very interesting, technically. But sometimes as a software engineer, it could feel a little bit slower since you're sort of only moving at the pace of science, if that makes sense. And, you know, you can't force scientific progress forward and it takes a lot of money to spin up a lab and pass regulations and that type of thing. And so I was looking for somewhere where I could ship software a lot faster, but still make an impact on the healthcare system. Yeah, I think this thing that you mentioned, interesting, is not only found in the healthcare kind of fields or biofields. Like, there's a big difference between working at a place where software is the main product, I guess, and something else is the main product. And I previously had worked somewhere
+
+17
+00:12:32.000 --> 00:13:17.000
+where software was a big part, but not the only part. And then switching to a company where software is the whole part is just a very different approach. I think we need software engineers in both or everywhere, I guess. But yeah, there is this, for I guess, coloring the conversation for people out there thinking about career choices, there really is a difference. I won't say one is better than the other because sometimes when something else is the focus, the sort of cross-function are, are very engaging and entertaining, and even the ability to make a sort of very large difference, because the amount of code being produced, there might be a little bit smaller, so your impact can be pretty big. But as
+
+18
+00:13:17.000 --> 00:14:11.000
+you kind of alluded to, maybe maybe in some of those companies, you're limited by science, or by like the turn time of the iteration cycle, like you may be able to iterate your software, you're limited by science, or by like the turn time of the iteration cycle, like you may be able to iterate your software, you know, continuous delivery, you may every day have a new version of the software, but you know, hardware cycles are such that it takes, you know, things have to be produced or made six months, you know, a year, and that can be a challenge. And so I think that observation is, is very astute that's like this difference between a software first company and, you know, also software thing. And so you look to transition from the company doing the sequencing to a software company. And then that sounds like it wasn't it's not your role now, not to spoil it, but it sounds like you're getting closer. Yeah, actually. So first of all, I think you make a great point that I think we do need software engineers in all of the different aspects. And I certainly don't mean
+
+19
+00:14:11.000 --> 00:15:01.000
+to say that one is better than the other. I think for me, so I actually did two companies first that were more focused on sequencing and analyzing the data coming off of the sequencer and delivering, you know, actionable results to patients. And I left that feeling like it was very interesting, but I just wanted to try a pure software company so that I knew what both sides of the coin looked like. And so actually after those two jobs that were focused on, you know, more on bioinformatics work, that's how I ended up at Akasa, where I'm at now. And I joined Akasa when we were maybe five or so full-time employees. And I was one of the very early software engineers. So that was also a really exciting experience to, you know,
+
+20
+00:15:01.000 --> 00:15:46.000
+join at the beginning and help build the initial versions of the product while we were just trying to get product market fit and then see how much it's grown since then. Oh, wow. So yeah, I think it's always interesting. So like only five people working there. That's pretty tough. Like I guess like that's, you're not one of the people, it doesn't sound like you were the kind of group of people founding the company, which I kind of get that. And then the big company, but that those first few people, did you know some of the people who had founded the company? Or were you just like so convinced by their pits that like you were won over? I did. I knew one of our co-founders, our VP of engineering from my first job. And, you know, that was a big factor in leading me to join the company. Otherwise,
+
+21
+00:15:46.000 --> 00:16:25.000
+you know, it's very hard to get signal on a seed stage startup and know, you know, know if it's going to be successful or not, or know if you're going to enjoy working with the people. Because by definition, at that stage, there's very little product maturity, and you're kind of signing up to take a lot of risks if you join a company at that stage so at least knowing somebody personally who I who I liked and respected was really helpful I guess there's signal and knowing someone that you don't like as well it just might be it might be a different kind of signal exactly yeah oh that's awesome okay so you started early and then I imagine i i actually
+
+22
+00:16:25.000 --> 00:17:00.000
+just uh confession time again i've never worked at like a small company i always worked at like very large companies i always think kind of like you're like it's something i i would i kind of in my mind feel one day i want to try and just experience the difference but how was it being at a company trying to kind of get the product out, find the fit, like, you know, probably build sales, all that kind of stuff as a software engineer? Like, what did you find the experience to be like? I found it to be really exciting and also a lot of responsibility, which was what I was looking for. So that was a good thing.
+
+23
+00:17:00.000 --> 00:18:10.000
+You know, in the early days, it was really just trying to build the first version of the product, get it in front of customers and get feedback and iterate quickly. I think that was the most important thing was to make sure that we could make changes quickly and speed up that iteration cycle of, you know, getting feedback and putting another rev on the product, getting it in front of customers again. And at the beginning, I think we were really in the sort of do things that don't scale phase, which even if it takes a ton of effort to make one customer happy, it's totally worth it. And we just wanted to prove that we could provide value. And once we did that, repeatedly, you know, two or three times, then we started to think about basically how to replicate this and how to be able to turn it on with less effort. And also, you know, a non-trivial challenge is also how to bring on more people onto the team and, you know, sort of give them a template for how we do our work and how they can, you know, take
+
+24
+00:18:10.000 --> 00:18:51.000
+a customer and go make a new customer happy using the tools that we provided. I think that's another really good observation. I was having a very related conversation with people at work, several people about what you're saying, which is there's a difference between having more work that needs to be done. And like, having stuff set up in a way so that like the work needing to be done can be solved by bringing more people on. And it was like a very wordy, I need to come up with a catchier way of saying it, I guess. But like, this thing about the rotation of, you know, how things are built and done that going from, I have 1000 tasks, but I'm the only person who can do them to I have 1000 tasks, but
+
+25
+00:18:51.000 --> 00:19:28.000
+they're organized in such a way that like, I can effectively communicate to others, like, how that we can, you know, efficiently combine our powers together in a, in a, you know, cooperative way, rather than just stepping on each other's toes or constantly accidentally doing the same work. And so I think that thing you mentioned about thinking about the work in a way that you could hand it and describe it to someone new so they can replicate it is a challenge I don't hear talked about a lot. Yeah, absolutely. Have you read that famous essay called The Mythical Man Month? Have you heard of that? I do know about it. I do know what the theory says, but I haven't actually read it.
+
+26
+00:19:28.000 --> 00:20:03.000
+I guess this will be my conviction to have to go read it after this. Yeah, it's a good read. And it's pretty short. And I often recommend that people on my team or new people who join the company read it because I think it talks about exactly this problem where, you know, you have a team of two or three people, and they're doing really well. And then you want to make them be able to do more. So the first instinct is, you know, what happens if we double the team, we should expect twice the output, right? But that turns out not to be right due to
+
+27
+00:20:03.000 --> 00:21:04.000
+onboarding and communication overhead and people not knowing exactly what their responsibilities are. And yeah, I think that that's a big part of technical leadership actually is figuring out how to set up projects in a way that you can effectively bring new people onto the project and make sure that they're productive and they have enough runway. And you want to avoid that N squared communication problem where everybody has to talk with everybody else in order to figure out what their integration points are. Ideally, you want to make sure that people know exactly what they're building and someone has sort of planned it up front. So it's all going to fit together if everyone builds it correctly. All right. I have it. I wrote it down. I'm adding it. I feel called out. It's a classic. I know it's been recommended and I've been lazy. So to the topic though, you were mentioning doing a lot of things that don't scale and just getting it done. And not necessarily, I don't want to say
+
+28
+00:21:04.000 --> 00:21:36.000
+getting it done right is a second thing, but just getting it done. And not necessarily, I don't want to say getting it done right is a second thing, but just getting it done in a way that gets it out, gets the feedback, gets the cycle started, you know, getting iterations and these kinds of things. I got to imagine like at that time, a lot of the work is you might step in and do it yourself rather than, you know, trying to write the software that you know you should write to do it. Is that kind of well describing of what was happening at the time? Yeah, that's right. You know, initially, when you're just trying to test the value of something, you want a
+
+29
+00:21:36.000 --> 00:22:33.000
+cheap prototype before you invest a ton of effort in automating it. So sometimes it would be, you know, testing something manually and just, just seeing if it would even work if we, if we built a computer program to automate it. Or, you know, sometimes, you know, before we invested in fully automatic CICD and, you know, deployments running all around the clock. You know, it would just be, what if I run this once a day manually and see how much work it picks up and see if it can do the job for our customers. And then, you know, once we get past that phase where it's clear that the solution is providing value, then it makes sense to really invest in it as a fully automated solution. I think that is a, I don't want to say, I think when we have software only companies, sometimes that bit of difference in big companies,
+
+30
+00:22:33.000 --> 00:23:04.000
+at least I've seen gets missed, which is people just go straight to the glamorous solution that sounds really awesome, right? And so you end up building this big infrastructure that has a lot of latency from when you go to start to when it's ready to be done. And then you deliver it and then it gets used once or twice. And it's bit rots and you know, all these problems and then it just the payout wasn't worth the investment. And so I think that this way you describe it of sometimes just biting the bullet and kind of getting it out making sure that it gets used once or twice is is really annoying. You have to do
+
+31
+00:23:04.000 --> 00:23:25.000
+this thing once a day. But yeah, I think that's such a great way to get a minimally viable product out, get feedback on it, and not on the whole product, but even on just like little bits of functionality. Yeah, absolutely. And especially at a startup, inherently, you have limited resources, and there's a lot of opportunity cost. As a startup, you're trying to prove
+
+32
+00:23:25.000 --> 00:24:17.000
+yourself and you're trying to make money and do it with a small team. And so if you spend three months or six months building some glamorous solution and it turns out that customers don't like it, then you're actually just wasted really valuable resources and more importantly, wasted time and wasted some of your social capital with that customer as well. So you guys are working at the startup in the, we haven't really said, but like in the healthcare space and you're talking about customers, what is kind of the flow of stuff you guys are working on looks like? Like what is it that you're trying to do to get out in front of people? Yeah, absolutely. So basically, ACASA's goal here is to help hospitals that end up having a ton of manual human repetitive work, you know, often centered around working with health insurance
+
+33
+00:24:17.000 --> 00:25:06.000
+companies. And, you know, the health healthcare industry is super complex. So hospitals have hundreds or thousands of workflows that they're running, and they basically have humans serving all of these every day. So our goal is to build an end-to-end automation. So learn what a human does at a hospital system, figure out all the manual and repetitive tasks that they're doing, and then build a computer program that can completely automate it end to end. And so, you know, we often start by carving out specific pieces of what we call the revenue cycle management or medical billing. So for example, carving out a product where humans are paid to check the status of a claim that the hospital submitted to the insurance
+
+34
+00:25:06.000 --> 00:25:47.000
+company a month or two ago, but didn't get paid for. Or humans are paid to look at every denied claim that comes through and decide if it can be fixed and resubmitted to the hospital or to the insurance company and have that revenue recouped. And so basically, Akasa's idea here is, you know, effectively enterprise software company, helping hospitals automate a lot of the manual work that they have to do today. I think like, I want to come back, I want to come back to Akasa here in a minute. But but to kind of like, I see now, okay, so you guys are looking to automate these processes.
+
+35
+00:25:47.000 --> 00:26:18.000
+I think this sounds like not even all that specific to healthcare. There are things even just in software engineering day-to-day that I do by hand and think about automating. So you guys are kind of taking, trying to understand which of those matter, how do you do them? And you're sort of going through and finding, there's this sort of, not to spoil, but there's sort of a big pipeline of stuff that flows from, you know, sort of inputs to something at the end. Maybe there's cycles in it, maybe there's not.
+
+36
+00:26:18.000 --> 00:27:00.000
+Hint, we're teeing up some future discussion here. But at the beginning, there are all these things where there are effectively humans or manual processes sort of getting the ball rolling. And so you're starting by figuring out where those are and trying to automate them. Yeah, that's exactly right. And you're actually alluding to something really good, which is everything we've built in our platform is completely generic. So we've been pretty intentional about this as a company. And we sort of structure the company in terms of the platform arm and then the integrations arm. And on the platform side, everything we've built is totally generic. And you could really use it to automate almost any task that you can do on a computer. We've started
+
+37
+00:27:00.000 --> 00:27:40.000
+out by focusing in revenue cycle management, or again, medical billing, because it turns out that there's just a ton of manual repetitive work that happens in that industry. But in the future, we could totally take our platform and, you know, go help customers and almost any industry that has a lot of manual work, because we've built our platform in a generic way. So I guess in thinking about, in the generic sense, I guess, thinking about this task automation and doing these things, I guess one place where I see humans step in is when you're going between two systems
+
+38
+00:27:40.000 --> 00:28:12.000
+that don't have a good way of communicating. And then the other thing I'll think about, but I don't know that we'll talk too much about that is like sort of sensory related like oh i want i need the thing to count the number of humans that come in this door or whatever where you might need to solve a sort of bigger problem that i don't know is as generic you know or you're trying to sense something in the real world where you might ask a human to do it trivially and then put it into the computer but i think this i i don't know if kind of which you sort of fall on, but I've seen both cases. But this case, even just from one system,
+
+39
+00:28:12.000 --> 00:28:46.000
+I have something in an Excel sheet and I need it in a SQL database. And it's like, yeah, I probably could find a tool to do that, but I could also just like, you know, write it myself. Yeah, exactly. And I think we focus more on that former end. So it's a couple of things. One is coordination between systems, like you mentioned. So healthcare software is complex. The insurance companies are running their own software systems. Hospitals are running their own electronic health record systems. And one of the big problems is effectively synchronization
+
+40
+00:28:46.000 --> 00:29:33.000
+between all these systems. So, you know, hospital submits a claim and they wait a month or two and they don't hear back from the insurance company. So they're effectively paying someone to go into the hospital system, which we call the electronic health record, grab all the information about that claim, open up a web browser, go to the health insurance company's website, type in the information about this claim, click, you know, where's my claim, get a web page back, read that web page to understand the status of the claim, and then go back to the electronic health record system and update the status of the claim accordingly. And so this is an example of a very simple revenue cycle workflow. And we can basically automate all parts
+
+41
+00:29:33.000 --> 00:30:20.000
+of it end to end. So not only the synchronization between systems, but we can also automate the specific data entry and data scraping within a system. So for example, within the electronic health record application, which typically don't support good APIs, we can, you know, build robots to effectively automate, you know, the scraping and the data entry that a human would normally have to do. Awesome. So like hearing this, my brain is already sort of like we're in and we kind of, I think a bit tried to tee this up in the in the intro, even for this pattern here, where if all of these things were already available in a single program running for a very limited time span, you would just write it in, you know, Python or C++ or whatever, right? Read from the
+
+42
+00:30:20.000 --> 00:30:59.000
+database, write to the database, you know, wait for the human input, do this thing. And if we're running over just a short time span where everything was available, very, very clean APIs or whatever, you might just say, you know, I'm going to do this in a piece of software. But this recurring problem that you're sort of describing occurring here or starting to allude to, maybe I'm jumping ahead, but starting to allude to here is that, you know, you need to have a program itself to do a very complex, latency-heavy job of like pulling this system once a week or once a day, you know, reading some data out via some, you know, headless web server that you have to,
+
+43
+00:30:59.000 --> 00:31:46.000
+you do this very complicated thing where it's not a clean single program, but in fact, you actually need to coordinate a set of programs and tasks. You need to run some repeatedly. There's decisions. You need this almost kind of meta program that needs to be described and coordinated. And so this is something that's not unique to what you're saying. But anything where you have this, it could be batch jobs that just take a long time because they process terabytes of information. And so, you know, basically what we're doing here is
+
+44
+00:31:46.000 --> 00:32:37.000
+you can think about Akasa automations as we can build an API around any action that you can do on a computer. So let's say you need to scrape a desktop application. And, you know, under the hood, we're going to use computer vision to, you know, train a CV model to understand what's happening on the screen. And that model is going to be running and telling us where to click and where to type and helping us read the data on the screen. the ways that they're often served in healthcare, you basically only have pixels. You don't have any structured information about what's on the page. And so we have to sort of impose that or determine that ourselves. But all of that is abstracted behind our API call. So you can effectively call
+
+45
+00:32:37.000 --> 00:33:19.000
+an API that says, you know, go get me the information about this claim. Or similar to what you were alluding to, you can call an API that says, you know, run a headless web browser and go check the status of this claim at the insurance company. And you can imagine as the company has grown, when we've taken on all different sorts of workflows, and, you know, we're live with hospitals all over the country, that the number of these API endpoints that we have internally has grown tremendously. And then the question becomes, how do we make it so that we can tie
+
+46
+00:33:19.000 --> 00:33:50.000
+any of these building blocks together in any order that we want to build an automation for a customer? And then how do we get all of the nice stuff like results management and error tracking and asynchronous execution and things like that? Okay. Yeah. I was just about to say, but you already kind of started alluding to it. In my head, I'm trying to kind of think about, in the case that I had it, like when there's always this timing we mentioned going from, you know,
+
+47
+00:33:50.000 --> 00:34:04.000
+human building a prototype to like automating and you try to measure something and monitor, like, is it worth that jump? And here I'm trying to think like, what are the kinds of things which would make you reach for the technology, the solution of a workflow engine and sort of helping you with these things?
+
+48
+00:34:04.000 --> 00:34:22.000
+And I sort of alluded in the beginning about like latency or like the length of running. workflow engine and sort of helping you with these things. And I sort of alluded in the beginning about like latency or like the length of running. But then you sort of said this like results management. I'm interested to hear a bit what that is. You also said like this asynchronous stuff. So I start to think like, you know, parallel. But also one that I was thinking about too is like retrying. So a lot of these things you're saying you do it
+
+49
+00:34:22.000 --> 00:35:13.000
+for reasons outside of your control, probably occasionally just don't work or the website is down or, you know, whatever. And so trying it a few times, then maybe alerting you, you know, if like, hey, this job hasn't been running in so long, there'll be another thing in my head that I think would sort of cue me up that like, I probably should reach for more than just like a hacky script. Absolutely. You're exactly right. And you know, these are all things we've, we've built into our workflow engine. And I think how we noticed it was, we noticed that on the integration arm of the company, people really liked, you know, effectively the API end points that we were exposing. But, But we saw more and more of the work on that end going towards, you know, making sure that the bot retries if it fails, because,
+
+50
+00:35:13.000 --> 00:35:53.000
+you know, maybe the customer's VPN system went down, or, you know, making sure that it only retries a few times, and then we get an alert and making sure that we had logging and tracking, and we can see which API endpoints were succeeding, which ones were failing, and that we had good visibility into those types of issues. That's when we thought about maybe on the platform side, we don't just expose these API endpoints, but we also expose a framework for basically being able to tie them together however you want and get a lot of functionality for free in the process. So I mean, I also, I guess I have heard the in the
+
+51
+00:35:53.000 --> 00:36:14.000
+same space, and maybe I don't know if we can try to come up with a definition or if you if you sort of know, but I think I've heard the same same kind of description described as like ETL frameworks is sort of extract, transform, load. And I think workflow engines, like do you is there kind of description described as like ETL frameworks, this sort of extract, transform, load. And I think workflow engines, is there kind of in your mind, like a difference between these two? Is one like just an umbrella term and workflow engines are kind of like,
+
+52
+00:36:14.000 --> 00:36:53.000
+how do you kind of think about those different terms? Yeah, it's a good question. I'm certainly, I would say not an expert in all of the different solutions in the industry. Yeah, fair enough. But I think you'll see a lot of workflow engines, you know, or you'll see people call something like Airflow a workflow engine and then often use it for ETL processes. And so I think often these solutions go hand in hand and ETLs are sort of one type of business problem that you can solve with a workflow engine. I have seen sort of a distinction between, you know, engines that you
+
+53
+00:36:53.000 --> 00:37:23.000
+use to move data around, like doing things such as ETL, and then more of the almost microservice orchestration frameworks. So frameworks that you use to coordinate calls between a bunch of different APIs or a bunch of different services and make sure that they run in the right order and the inputs of one get, or the output of one call gets passed into the input of the other and that type of stuff.
+
+54
+00:37:23.000 --> 00:38:13.000
+And so if I had to try to, you know, bifurcate the tools that I've seen, they probably fall into these two categories of, you know, ETL or data management processes, and then more business process management. So orchestrating a bunch of API calls or microservices to kind of achieve a final outcome. Okay. Yeah. I'm also not an expert, so I'll buy it. I'll buy what you're selling. And so I guess a couple other interesting things. So you mentioned a startup trying to think about the opportunity costs. You guys are saying that we're sort of fluctuating between the description of workflow engines and how you guys applied it. But I think it's interesting as a case study, if not more, which is you guys are starting to do these tasks, these scraping, and these are like things that feel pretty custom.
+
+55
+00:38:13.000 --> 00:38:44.000
+Maybe you're using some existing stuff, but very specific to each program, to each website. Everybody's different. And getting good at that is a skill. But then these integrations these workflows these you know like you mentioned there are other people doing them you know the things so i hear about i think like the apache one is airflow or there's like argo like there's a what makes you decide that hey we we think that there's a i guess the specifics of why you built your own but even just in general like how did you guys approach this trade-off of reaching for
+
+56
+00:38:44.000 --> 00:39:28.000
+an existing one that maybe is not an exact fit but it's a lot closer of a starting point than sort of like starting from scratch? Yeah, absolutely. I think this tension of buy versus build is present in a lot of startups where, you know, at a startup you have limited resources and you don't want to reinvent the wheel for every piece of software that you have to use. And so an example I like to use is most startups probably should not be inventing their own CICD system unless that's the product that they're offering. And the reason is that CICD systems maybe aren't perfect or maybe don't do exactly what you want, but are good enough off the shelf
+
+57
+00:39:28.000 --> 00:40:01.000
+to enable your teams to keep moving fast. And spending your valuable resources, building something like a new CICD framework, takes away from the investment that you can put in to your own company. And so at Acasa, we actually looked for existing workflow engines and did a pretty detailed audit of a lot of solutions that were in the space. And we ended up building our own for a few reasons. The first reason was that a lot of
+
+58
+00:40:01.000 --> 00:40:53.000
+workflow engines are focused around this idea of constructing a DAG, which is a directed acyclic graph. So basically a graph with no loops in it. And then your job is to construct the DAG, and then the engine's job is to execute that DAG very efficiently. But in Akasa's domain, what we found is that a lot of automations are too dynamic to fit into this concept of a DAG. And, you know, we have to ask one insurance company, and they tell us that, you know, they are not the ones that insure this patient,
+
+59
+00:40:53.000 --> 00:41:33.000
+but they know who might be and they give us some more information. And then we adjust the search graph from there. So maybe I'll pause there. There were sort of several reasons that we decided to build our own, but that was the first and I wanted to see if that makes sense. Yeah, I think this, like, no cycle, not really a decision tree, but just this march from left to right with maybe some retries is a pretty big distinction, a pretty big upfront thing to talk about the difference between sort of just having the stages and maybe they fan out and fan in is that I don't know if that's the right words, but like sort of branch out and then, you know, come back together, can be complex. And you may reach for workflow image, but this like dynamicism that like, you
+
+60
+00:41:33.000 --> 00:42:28.000
+know, hey, you're it's there's conditionals. And there's, you know, this is more elaborate. I think, oh, I'm also even already talking about it talking like left to right, I guess, like a lot of these come with visualization, you kind of think about i guess terms can different but sort of stages and then in branches and sort of visually because the complexity can grow pretty large for all these workflows and so even if you don't allow sort of what is that whizzy wig what you see is what you even don't allow like a gui for editing the workflows at least like visualizing so people can sort of audit or track the progress is another component just to kind of throw that out there. But yeah, that's a great, great point when sort of thinking about these and whether it's something critical to what you like. Is it just that you don't love the other ones or is it something that if you go build, this is actually going to move the needle for the output of your company. Yeah, exactly. And that kind of leads into the second point, which is basically the output of
+
+61
+00:42:28.000 --> 00:43:32.000
+our company is how quickly can we go build automations for new hospitals? And another thing you'll see in a lot of workflow engine tools is it's a little bit annoying to write the code. You know, it's not necessarily hard, but sometimes you have to write the graph in YAML or you get some limited version of Python that has, you know, limited syntax. And that's what you're restricted to using. And as I said, Acasa automations are very dynamic. And I think Acasa is also sort of fundamentally different from a lot of the, you know, big companies in the industry, you know, Airbnb, Pinterest, those types of companies that are building a lot of these workflow engines in that every single hospital in America has different workflows. Even for the same exact product, you know, claim status or eligibility or denials management, every hospital in America does it differently. There's actually a saying in
+
+62
+00:43:32.000 --> 00:44:26.000
+healthcare that if you've seen, you know, one hospital system, you've seen one hospital system. Like, you know, basically, a lot of these workflows really don't generalize. And what that means is that in the limit, a CASA might have to build thousands of workflows that each run at, I would say, small to medium scale, because, you know, data size in healthcare is a lot smaller than what you'll see in the telecom industry or other industries. And that leads to sort of different trade-offs for us, where we would rather make the code really easy to write and basically give people, you know, the full expressiveness of Python, let them write conditionals and loops and, you know, have it be pretty transparent about how that's going to be executed on the backend.
+
+63
+00:44:26.000 --> 00:44:46.000
+We would rather do that than make the code harder to write and squeeze out a few extra milliseconds on the execution time. I see. I guess like another decision point there that you're describing is like, and even I think also has applicability more broadly. I feel like i keep repeating myself
+
+64
+00:44:46.000 --> 00:45:37.000
+but is uh this thing about when you're building these steps and modules and you know allowing people to kind of piece them together is the consumer of those things like other engineers in your company people on your team only like you're just building this up to make your team go faster or is it even people at an outside company? And sort of how are you like, to what end are you building like the integrations and the flow and these these things? That's a great question. So right now, the consumers of everything my my group builds is other engineers in the company. So you know, I mentioned we have a, you know, platform arm of the company and we're building the workflow engine and we're building, you know, this API framework to be able to wrap any tasks that you can do on a GUI and make an API endpoint
+
+65
+00:45:37.000 --> 00:46:30.000
+around it. And then we have engineers at the company who are working directly with customers and helping build an integration for a specific hospital. So right now our user is internal, though the way we've built the tooling is we're hoping that, you know, it's easy enough for someone outside of the company to use as well. And so that's certainly something we hope to do in the future. Maybe it's not an interesting decision there, which is fine. But how do you guys think about this difference between sort of, okay, you have the platform arm, you're building the stuff, you have an internal more like getting under contract. I guess this gets into inside baseball, but like contracting to do the work itself right and so when i look across we talked about software first companies i think there are software first companies which like largely just deliver you an end product and there
+
+66
+00:46:30.000 --> 00:47:06.000
+are other ones which deliver you like the pieces of the lego and you can build anything you want with the legos and you can also pay them to like you know build you your lego castle your lego whatever and i'm just curious like as like startup, like how did you guys approach that thinking about whether you wanted to have that contracting arm? I don't know what to call it, the arm that would like do these things themselves or whether like to try to convince another company to do that or individual hospitals? It's a super interesting question. And I'll talk about it, I think, to the extent that I'm able or allowed to. Oh, yes, please don't do anything. Pardon that.
+
+67
+00:47:06.000 --> 00:48:00.000
+No, no, no, of course. I think it's a super interesting question, which is, you know, do you, as a company, do you just want to deliver a platform or do you want to deliver the end solution? And Acasa's model is that we're a managed service, at least so far for most of our customers. How we run the model is that we not only build the platform, but we also understand the customer needs, build them a custom integration, and also handle maintenance and monitoring and healing or retraining the bot when something in the system changes so that the end goal is that we're a managed service and we can sort of deliver an end-to-end solution that the customer doesn't have to think a lot about.
+
+68
+00:48:00.000 --> 00:48:42.000
+There are other companies that are more focused on, you know, we're going to give you the tools and then you can use these tools to build whatever you want. And there's obviously trade-offs there for the customer. You know, in that case for the customer, they would have to hire engineers internally and go build something and then hire a maintenance team to, you know, write some alerts and monitor them and be proficient enough to fix them if something goes wrong. So I think this is almost like what we talked about earlier. Software-first companies or non-software-first companies, there's a big difference. And then even within software-first companies, there's this difference
+
+69
+00:48:42.000 --> 00:49:19.000
+of do you handle the integrations for your customers? Or do you just build the platform and release it? And so far, we've thought about it as a managed service, which has shown to be pretty valuable for our customers. Nice. Yeah, I think that's like another one of those recurring or even like, with like you were describing the sort of like platform team versus the integration team doing these things like even split within a company or whether like the team should be forced to consume its own dog food i guess like at some point it grows but like should the team itself be responsible also also for writing them so i guess like a couple more
+
+70
+00:49:19.000 --> 00:49:58.000
+questions about about some of the specifics one is a little goofy one's a little more serious i'll start with the serious one first and i'll ask the goofy one uh so there's a more serious question is like not from a like obviously like health care laws in the u.s are complex and they are what they are um and there's a lot of you know focus on that but from a technical level do you guys with all of this stuff we're talking about software but the environment and the data is i guess particularly unique here and that like it's medical information there there are regulations, I think, in the US, we have laws like HIPAA laws for the privacy of people's medical information. Does that cause a lot of complication for you guys? Like where the processing needs to be run, how the data is stored?
+
+71
+00:49:58.000 --> 00:50:52.000
+Like, does it need to be on premise at the hospital? Like at a technical level? What kind of issues does that cause? Yeah, it's a great question. And yeah, we take security very, very seriously. So I would say one thing that was unique about Acasa compared to most startups I've seen is that really from day one, we had a very legit infrastructure and security team, because that's super, super important when you're working with patient data. And yeah, it does cause, you know, some, I would say complications. But I think because we went in eyes wide open, and from day zero, we were planning on building for healthcare, we were able to architect our platform around it. One thing that you'll often see that can be troublesome is when a otherwise normal software company tries to
+
+72
+00:50:52.000 --> 00:52:08.000
+enter the healthcare space. And, you know, they have a lot of interesting functionality that can be useful. But now they realize they have to store their data in different ways and they have to log who accesses every type of data and, you know, they can't, you know, data has to be encrypted. And then it just causes a whole bunch of problems for people who sort of tack on healthcare as an afterthought. So I'd say we basically built for healthcare from the beginning, which has made it be pretty smooth because we knew exactly what we were getting into and could plan for it before we got too big or before there was, you know, any technical debt or of requirements that I won't be able to go over all right now. But, you know, some of the general ideas are that, you know, all patient data needs to be encrypted, both, you know, at rest, for example, when it's, you know, sitting in an S3 bucket, and also in transit, you know, when it's like, you know, being shuttled between services or, you know, being returned as a response from an API endpoint.
+
+73
+00:52:08.000 --> 00:53:10.000
+And additionally, you know, there needs to be access logging on any patient data. And so, and you need to make sure that people only access data on what's called the need to know basis. So basically ensuring that we're treating the patient data with the utmost respect and privacy, and that it's always encrypted so that, you know, even though we have several layers of defense, even if any of those were compromised, the data would be encrypted still. Awesome. Thank you. All right. So I have one more silly question before we transition into sort of like a little bit more about Acasa itself is that you were talking about the automations for going into these UIs and sort of like you're searching the same as a lot of other people you weren't thinking about. And so the one I was thinking of here, I guess it was a silly and you feel free not to answer.
+
+74
+00:53:10.000 --> 00:53:52.000
+It's just like this feels like all those people writing the online like poker bots and like aim bots and she like I'm looking for pixels on screen and scraping the screen. It feels like the APIs I would use for Windows or whatever, or Linux to kind of get that information. If I write those search queries into Google, I feel like I'm going to end up in a specific use that has nothing to do with medical records. Yeah, it's super interesting. It's a very interesting question that you ask. And I think a lot of those, you know, like in my past in college and whatnot, I'd written scrapers and things like that. And how you see a lot of robotic process automation done is basically people, you know,
+
+75
+00:53:52.000 --> 00:54:37.000
+hardcoding pixel coordinates on the screen, you know, they treat the screen as an axis, as a grid, excuse me. And then they say, okay, my button is that this X, Y coordinate on the screen, and they hard code that into the code. Or sometimes they'll, you know, slightly more advanced users will will sort of take a screenshot and then crop out the specific, you know, logo or button that they're looking for. And then they'll use something like OpenCV to tell me, you know, find me this image on the screen, and then they'll use something like OpenCV to tell me, you know, find me this image on the screen, and then they'll get the pixel coordinates and interact with it. And Acosta's model is a little bit different, where it's more about actually training a
+
+76
+00:54:37.000 --> 00:55:25.000
+computer vision algorithm to understand what's on the screen and be able to effectively generate a DOM telling us which elements are on the screen. And then we also have more domain specific algorithms. So for example, if we end up on, you go to the doctor's office and they ask for your insurance card and they scan it into the system that gives them, you know, JPEPEG or a PNG, but no structured data that they can index and search. But we have algorithms, for example, part of our computer vision algorithm can read these scanned images of insurance cards and extract all the structured information as well. So yeah, it's an interesting question you ask, which is basically, you know, how this space started is a lot of what you mentioned, you know, how this space started is a lot of what you
+
+77
+00:55:25.000 --> 00:56:15.000
+mentioned, you know, people building bots for poker or something like that. But over time, we've kind of evolved. And I think especially with modern machine learning approaches, that helps us take a different approach to it. Awesome. You turned a silly question into a serious answer. That's applause worthy. Awesome. So tell us a bit about, I mean, we kind of heard a bit of the story of Akasa and what you guys are doing and how you're doing it. Are you guys like, for, are you mostly in office? Are you doing a little bit of remote work? Are you guys hiring? Like what's kind of the state of Akasa these days? Yeah, absolutely. Acasa is doing really well and growing very fast. So I think we're up to about 250 full-time employees now, which I joined the company
+
+78
+00:56:15.000 --> 00:56:43.000
+almost three years ago. So October 2019, I think we were about five or 10 people back then. So it's been tremendous growth. Company is fully remote friendly. So, you know, I'd say by virtue of where you find software engineers, a lot of software engineers still happen to live in the Bay Area. But, you know, on my team, we have people all over the country and we're a remote company at this point.
+
+79
+00:56:43.000 --> 00:57:11.000
+And absolutely, we're hiring for all sorts of engineering and product roles. So specifically, right now, we're hiring full stack engineers, as well as data engineers and front end engineers. So hiring across the board, basically. Nice. Yeah. And we'll have the link in the show notes to the career page. I mean, go check it out. And do you guys do internships for summer interns? We do. We've
+
+80
+00:57:11.000 --> 00:57:50.000
+done some machine learning internships, and we've also done a couple of software engineering internships. Nice. I think an internship at a startup might be particularly interesting rather than a startup at a big company. I feel like there's like a big compare and contrast there. But I feel like that could be really interesting. Yeah, I will say when I was in college, I interned at two startups, and I found it to be a really interesting experience. Because first of all, the stuff you build actually gets used in production, just because, you know, a lot of startups are started for resources. And so if they have someone, they'll put you on something that's useful and that they really need to get done,
+
+81
+00:57:50.000 --> 00:58:10.000
+which I thought was pretty cool. And also you get to see the inner workings of the company a little bit more when it's smaller. You get to see how things work and how projects get planned. Whereas probably at a bigger company, you'll learn a ton as well and work on great technology. But a lot of that, you know, vision or design is already
+
+82
+00:58:10.000 --> 00:58:49.000
+done for you before you before you come in. Yeah, that was well said. All right. Well, awesome. Thank you so much for joining the show today, Sanjay. I think there's a great like, we interweaved the kind of narratives together, but I feel it was a great exploration of of kind of this space and the domain and the sort of this balance between general purpose solutions and like specific things. I really enjoyed our conversation today. Thank you so much for coming on the show. Thank you so much for having me. All right. And to everyone listening, thank you again for hanging with us for another episode. We're getting close to the end of the year and it's been another awesome time. I think this is
+
+83
+00:58:49.000 --> 00:58:54.000
+episode 149. So I don't know, 150 is next. That sounds like a nice ending in zero numbers. So maybe we'll have to think of special music to play in the beginning or something. I'll get Jason to record us something. All right. We'll see y'all next time see y'all later music by eric barnmeller programming throwdown is distributed under a creative commons attribution share alike 2.0 license. You're free to share, copy, distribute, transmit the work, to remix, adapt the work, but you must provide attribution to Patrick and I and share alike in kind. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

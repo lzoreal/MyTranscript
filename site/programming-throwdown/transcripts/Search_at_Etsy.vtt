@@ -1,0 +1,517 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:57.000
+programming throwdown episode 94 search at etsy take it away jason hey everybody we have a pretty awesome episode here we have an interview episode with Liang Ji, who's Director of Engineering, Data Science, and Machine Learning at Etsy. And Liang Ji's going to tell us all about kind of how search works when you type a search query into that box, what actually happens under the hood. Liang Ji, why don't you talk about, like introduce yourself and talk about kind of what led you to the path that took you to where you are now? Yeah, sure. First of all, thank you for having me here. So I'm Liangji Hong. I'm a director of engineering, data science, and machine learning here at Etsy.
+
+2
+00:00:57.000 --> 00:01:39.000
+So I'm managing the organization of applying machine learning to a lot of different products here at Etsy. So currently we have a mix of data scientists and machine learning engineers here at Etsy working on problems like search, which is kind of a major topic we are going to talk about today, as well as other domains like recommendations, advertising as well. We have engineers present in both our headquarter, New York City office, as well as San Francisco office, and we are hiring and growing teams there as well.
+
+3
+00:01:39.000 --> 00:02:28.000
+Before coming to Etsy in 2016, I worked in Yahoo Research in California. So I first joined as a research scientist and later as a senior research scientist and later promoted to managing a group of researchers focusing on personalization recommendation, as well as some of the mobile search innovations back then. So that is a path that lead me to figuring out how to best fulfill this, providing the most relevant result to users, and then find Etsy is a place that I can grow the team and grow my career. Yeah, so that's pretty much of that. Cool. That's quite a move.
+
+4
+00:02:28.000 --> 00:02:58.000
+I mean, that's probably the furthest move you can make, right? From Northern California to New York. I guess you could technically go from, I guess, Miami to Alaska or something, but that's still a pretty far move. Yeah, that's in the end, yeah. Cool. That's awesome. So kind of, you know, for someone who doesn't have a background in machine learning or in search and relevance,
+
+5
+00:02:58.000 --> 00:03:24.000
+what actually happens when someone types in, you know, new shoes in Etsy and hits enter? Like what actually happens behind the scenes? someone types in new shoes in Etsy and hits enter? What actually happens behind the scenes? Yeah, that's a great question. So a lot of things happen back in the scene and within that, I would say 100 milliseconds, we need to figure out how to present
+
+6
+00:03:24.000 --> 00:03:56.000
+the best result for you. So I would vaguely, on a very high level, divide that into three phases. One is that we need to understand what is the user intent or what do you really mean to type a query like wedding dress or new shoes. So that is the first one, what we call query understanding, or user intent understanding. So then with that understood, we need to go to our inventory.
+
+7
+00:03:56.000 --> 00:05:02.000
+We have more than 60 million items in our inventory so then we need to figure out how we can quickly boil down to you know around 1,000 items that seems promising from that inventory through search index after that you, we have roughly 1,000-ish candidates, and then we apply a sophisticated machinery model to re-rack that according to many things. For instance, how likely you are going to click on that, how likely you are going to buy that, and so forth, and mixing a lot of signals to get the best result, let's say the best top 48 result, which is the first page. So then we apply additional kind of business rules or ideas, say, hey, you know, there
+
+8
+00:05:02.000 --> 00:05:35.000
+are certain things are free shipping, or there's certain things are in some promotion. So then we would like to pop them up further up. So then we'll apply that. So then we present the final result to the users. So everything I just described should happen within 100-ish kind of millisecond and really provide us a very speedy result to users. Yeah, that's amazing. So going through that kind of line by line,
+
+9
+00:05:35.000 --> 00:06:07.000
+so what do you mean by intent? So what are the different intents that someone has on something like Etsy? Yeah, that's also a great question. So intent or core understanding, basically, we want to understand what are you really looking for. And, you know, like the users would like to use search for the things they have specific idea in mind. Oh, I want to buy a gift card for my mother.
+
+10
+00:06:07.000 --> 00:07:05.000
+I want to purchase certain things for my wedding. All the way to a very strong shopping intent or shopping ideas such that we can help them quickly on their purchase path or they are in some kind of discovery mode where they don't know exactly what they are looking for, but they have some vague ideas. So in that scenario, how we could help them in discovery mode as well. So shopping intent is a way we kind of categorize like how strong, how weak your intent or your ideas are and so forth. We provide a different kind of mechanisms to surface different items and so forth.
+
+11
+00:07:05.000 --> 00:07:32.000
+Yeah, that makes sense. I think there's a huge difference between searching for something specific like iPhone 16 gigabyte versus putting something in like funny. If you put in funny, you don't really want something with funny in the title. I mean, that's not the requirement. Right. How do you know that? So in other words, how can you tell, like what sort of happens maybe in advance?
+
+12
+00:07:32.000 --> 00:08:25.000
+Like what sort of processing can you do to figure out, okay, these words correspond to something very specific, and these other words are just abstractions or generalities. Yeah, that's probably the core of the challenge of e-commerce search in general. I mean, Etsy is definitely specifically one such example. So comparing to generic search, like generic web search, specifically like Google, Bing, or in the past, Yahoo, where I worked in the past. E-commerce search, there is a tremendous of ambiguity and also personalization in terms of that. There is no kind of a standard ground truth of relevance, so to speak.
+
+13
+00:08:25.000 --> 00:08:51.000
+So a lot of things we are trying to figure out is what the people are looking for and what kind of thing they would like to buy now, what kind of thing they would like to buy in six months down the line. And how do we define relevance, quote unquote relevance on top of that so that is definitely you know one of the challenges that we are facing and
+
+14
+00:08:51.000 --> 00:09:33.000
+where I think you know in my opinion we're at the very early stage FC is part of that but I think in general in the e-commerce search if you try things in numbers and others you can easily see easily see the search experience is not there yet. We are not at the stage where we can easily figure out all these intents in the current technology framework. Yeah, that makes sense. I mean, my guess is there would be just a very wide distribution over something like funny. So if someone puts in iPhone 16 gigabyte, and I guess I'm using Amazon as an example here,
+
+15
+00:09:33.000 --> 00:10:07.000
+they're going to look for exactly that iPhone, they're going to buy it, and the precision is going to be pretty high. But if someone puts funny, there's probably a huge distribution of of of content that people will will visit based on that search and from that you can kind of guess that okay funny is one of these things that isn't tied to any particular product yeah so this is a great example right so like that would uh really differentiate uh you versus Amazon to some degree because for Amazon,
+
+16
+00:10:07.000 --> 00:10:23.000
+iPhone 64 gigabyte or iPhone 11 Pro is kind of a standardized kind of commodity if you wish. So there is a standard answer to that and to some degree there is one source of truth
+
+17
+00:10:23.000 --> 00:10:56.000
+of a wide range of the things Amazon is offering. At the Harvard, we are the global marketplace for unique goods. So there's a lot of things we can quantify as funny. There's a lot of things we can quantify as could be appropriate for a gift for your mother. So there is no standard answer. So it's at least very hard to say there is a standard answer.
+
+18
+00:10:56.000 --> 00:11:46.000
+So we heavily rely on user data, user behavior, and figure out what is a good thing you might be looking for and what is a thing that you feel you don't have interest in for the moment. So that is one of the challenges we have versus Amazon's kind of commodity e-commerce search. Yeah, that makes sense. So in this case, you've figured out the intent. Let's say the person has some specific shopping intent and they've put in a couple of keywords, but it's not something so specific. We can just take them right to that iPhone. It's something like, you know, heart pendant for mom or something like that. And then you said the next step is you take your inventory of I think 17
+
+19
+00:11:46.000 --> 00:12:38.000
+million and you narrow it down to a thousand candidates. How does that actually work and what is that process like? Yeah, so we take the item and we, you know, sorry, we take the query, right? So then we translate to some intent, and then we match those things in our search index. In a very, very naive way, you can think, at least we match with query, okay, funny, or we figured, okay, funny, which during period of time of, let's say, Christmas time period. So then we also send Christmas funny into the backend. So then we match things related to Christmas and related to funny.
+
+20
+00:12:38.000 --> 00:13:26.000
+So basically we have an inverted index that we could match these terms or these kind of intent or categories and then we have some very rudimentary scores that basically representing how likely or how you know how popular or how you know how interested these items are so that we sort them and we pick the top, let's say 1,000. Then we return to the second phase. Got it. So could you describe, for folks who have never taken, say, a database class, we have plenty of thousands of people listening who are high school students or just starting college. What is an inverted index and how does that let you go through all 17 million of these items in less
+
+21
+00:13:26.000 --> 00:13:53.000
+than 100 milliseconds? Yeah, that's a great question. So inverted index, basically you can think that is like, you know, you have the keys as you know, very naive, simplistic terms, right? So like funny is one term, Christmas is another term. So we build these keys and then we associate each key
+
+22
+00:13:53.000 --> 00:14:27.000
+with a list of product listings. In our case, like each listing, each item is one, each item ID is one such kind of value. So then we say, hey, funding term, item ID 260, 40, and blah, blah, and so forth. These two million items have a campaign term funding. So then we associate these items with that key.
+
+23
+00:14:27.000 --> 00:15:05.000
+And then we apply certain mechanism to sort that. We say, hey, you know, for this funny term, for all the items, you know, there are certain items seems more important than the others. So then we build this key value kind of pair of associations. and we build for all the terms, all the intents, all the categories. So then you can imagine it's a huge kind of a key value kind of a, you know, mapping. And then when we do the retrieval, we basically, you know, go to the keys and say, okay, how many keys we're going to hit?
+
+24
+00:15:05.000 --> 00:15:42.000
+And, you know, then we get back the top items for each key, then we blend them, right, we mix them together. And then we say, hey, you know, we want to apply this popularity or interest score, and then we rank them. So that's basically the very, very high level describing how the inverted index works. Got it. Got it. So the idea is like for every, so someone types in, you know, funny shoes for mom, and funny shoes and mom, they all are in this database with a set of documents that are
+
+25
+00:15:42.000 --> 00:16:17.000
+more or less relevant to each of those words. And then what you could do is you can take the union of all of these documents and then combine the scores in some way where you can kind of crush it down into one score. So if there was a document that had funny shoes and mom in it, then you could add up all those scores or in some way you could combine the scores if there's a document that only had mom in it maybe you wouldn't it wouldn't score as highly because it didn't have the other ones yeah to some degree yes that's a pretty much on a
+
+26
+00:16:17.000 --> 00:17:00.000
+very high level with what happens cool that makes sense is there any sort of are you doing any work with embeddings or anything like that to handle, like, for example, someone types shoes and maybe there's this product, but it's boots, but then you could use some sort of mathematical embedding, some vector space where shoes and boots are really close together. Yeah, this is an area that we are actively investigating. And earlier this year, we published a paper regarding, like, we apply, you know, embedding techniques and building the similarity,
+
+27
+00:17:00.000 --> 00:17:28.000
+you know, trying to understand the similarities between items. And exactly like you say, say, there are certain things, you don't know exactly the keywords, but they more or less correspond to the same concepts or same kind of intent. So then we utilize embedding techniques to smooth out the items such that even though you don't have exactly matching, we still
+
+28
+00:17:28.000 --> 00:17:54.000
+get items that are possibly relevant to the query. And so this is one area that we also keep a very active eye on how to utilize this further in our search stats. Cool. That makes sense. So then these thousand items, I guess now you have the resources to say, let's do a lot more work with these thousand items
+
+29
+00:17:54.000 --> 00:18:22.000
+that we couldn't do with the 17 million. And that's where, as you said, all of this sort of business logic comes in. So you have these sort of hypothetical, you have these models that generate hypotheticals like will the person i believe you said like will the person buy it will they click on it um but then how do you sort of take you know there's this thing is highly multi-modal right so someone can do all these different things um they might spend a lot of time looking at
+
+30
+00:18:22.000 --> 00:19:01.000
+something and they might spend a little bit of time but then buy it. How do you, at the end of the day, sort when there's so many different things that have value? Yeah, that's a great question. And also it's another core of the challenges of e-commerce search or e-commerce in general. So I think, you know, this question has two layers. You know, one is short-term and long-term. The other is long-term. So short-term-wise, we have at least, you know, for Etsy,
+
+31
+00:19:01.000 --> 00:20:08.000
+we have a business goal and we're business metrics we would like to drive for a lot of our products, including search, which is called generalized merchandise value, GMV, and also for revenue for advertising as well. So we basically use that as a north star to kind of guide us like what kind of a model we need to build, what kind of, in your knowledge of what sorting mechanism we need to apply. And we also use that as a guidance for us to derive, you know, machine learning pipelines and evaluation kind of a framework. So you can think that, you know, how to sort, how to way, let's say, clicks a little bit more, favorite a little bit more. How to way that you don't click anything, you know, you spend how much time on the site. All these are the parameters.
+
+32
+00:20:08.000 --> 00:20:43.000
+And we are seeking, I mean, ideally, the optimal parameter setting such that we optimize this, you know, our North Star metric, which is GMV, or GM, you know, generalized merchandise value. And then we launch A-B testing, right? So we're launching, like, you know, generalized merchandise value. And then we launched A-B testing, right? So we're launching A-B testing and we measure the model of real traffic, of real users, and then we see, oh, this model indeed outperformed the control,
+
+33
+00:20:43.000 --> 00:21:22.000
+which is maybe using the older version of the model or maybe sometimes not using the model at all. And then there's a real difference from the A-B testing, say, hey, within these two weeks of time we do the A-B testing, let's say there's $1 million or $2 million, these are real dollars, the difference between the control environment. So then we could conclude, say, hey, we are, whatever this premise set up, we kind of figure out through some of the candidates that are really doing good in terms of our non-star metric.
+
+34
+00:21:22.000 --> 00:21:55.000
+So this is a short-term kind of thing we are doing. And we apply this across the board for search for our recommendations and so forth. But then of course there's one more challenge because you could say, sure, this sounds reasonable, but there are customers come to Etsy, they just want to do discovery, they may not purchase anything within these two weeks of period time. So are they still contributing to the business goal? How do we evaluate? Yeah, I was actually just thinking that.
+
+35
+00:21:55.000 --> 00:22:16.000
+If you do a two-week experiment, everyone who comes to Etsy at least once every two weeks will be represented. But of the people who come, if someone comes once every four weeks, there's a 50-50 chance they won't even be in the data set. Right, right. So that is one of the challenges, which is, okay, so we need to figure out the long-term value.
+
+36
+00:22:16.000 --> 00:22:54.000
+Long-term meaning like longer than A-B testing time period. So what's the value of that? That's usually we call long-term customer value, LTV in some sense, that we need to assess and investigate what is the impact of our algorithms with LTV. Sometimes longer than two weeks or sometimes six months, or even sometimes we want to understand for one year, very long term, what is the value and how can we even optimize our model towards long term value.
+
+37
+00:22:54.000 --> 00:23:19.000
+So that is more larger challenges and more working progress, I would say. But in the very high level, we figure out for the short term in terms of launching experiments, in terms of guiding machinery models, utilizing GMOV as a target. Yeah, that makes sense. That makes sense. Yeah, I think that the long-term value stuff
+
+38
+00:23:19.000 --> 00:23:59.000
+is fascinating because it almost has to be counterfactual. In other words, either that or you need to have experiments that run for an extremely long time to really see, okay, I took this, I made this change, and it affected the long-term value in this way. You either have to wait a long time, or you have to do some really clever analysis. Yeah, that's a great point. And in fact, we're thinking about that. So A, we are indeed running some of the longer experiments to measure the impact of a lot
+
+39
+00:23:59.000 --> 00:24:58.000
+of the things we roll out, especially aggregated. We roll out one thing this week and another thing next week and each of them have a big test, but do they aggregate, add up to the overall impact and so forth. So we are doing a lot of long-term experiments. But of course we need analysis as well because certain things we cannot really run experiments for. So for instance running for years, running for multiple corners, or there are certain things, there are business requirements, etc. We couldn't be able to run experiments. So then sure we need to do a lot of counterfactual, you know, preservation studies to style type of investigation to measure the impact. Cool. Yes, it's really fascinating. So
+
+40
+00:24:58.000 --> 00:25:48.000
+now we do the ranking, and then I guess at that point, the ranking, yeah, the ranked list of items goes back to whoever requested it. So I guess this would be a web request that would go to, it would probably go to some other server, I guess, that would handle the front-end traffic. Yeah, so like, you know, so we can sort of conceptualize this as a front-end, as a PHP layer or iOS or Android or apps, sending that thing to a backend server. And then, within this backend server, we synthesize and combine a result from the inverted index I just mentioned.
+
+41
+00:25:48.000 --> 00:26:36.000
+And then we apply all this ML algorithm to optimize GMV if we wish. So then we also apply additional business rules, as I mentioned, like, hey, we want to maybe promote free shipping you know items we want to promote other sort of items that are kind of let's say marketing campaigns want to show so then those results would return to the front-end layer like PHP or you know or iOS and certain things, then they will rent those IP results in whatever the format they need to rent. Got it. We just had Andy and Dave from the Pragmatic Programmer on the show on the past episode.
+
+42
+00:26:36.000 --> 00:27:03.000
+And one of the things they were suggesting for engineers is they're saying, if you only know one language or if your whole job is just one language, learn another language. That was one of their big suggestions. And it sounds like from what you've described that even if we take away the app and the website design, that even this backend process involves many different languages and technologies.
+
+43
+00:27:03.000 --> 00:27:43.000
+Absolutely. So there is a variety of things we're using here at Etsy. I mean similar to some other tech companies as well. So we have offline you know processing which where we you know generating ideas, validating ideas, and trying to write imaginary algorithms and so on and so forth. So there we utilize Hadoop-style technologies, including Spark. We are also on Google Cloud, so we are also heavily utilizing a lot of offerings from
+
+44
+00:27:43.000 --> 00:28:24.000
+Google as well. And then we have the servers, right? So server environment index and whatever this backend server I mentioned. There we use Java, we use Scala and other languages as well to write efficient code such that things can return within one or like a millisecond. And then other times when we do data analysis, for example, as we talk about counter-factual analysis, we have data scientists use RStudio and Python to do a lot of other data processing
+
+45
+00:28:24.000 --> 00:29:08.000
+as well. So there is a variety of tools and languages that the teams are using to get it productive. Cool. What is the skill that you feel is most lacking? It doesn't have to be a language, but for folks out there who are in college, what is something that the universities aren't teaching per se, or something where you find it's something that people should pay more attention to? Right, that's a very good topic. I think in general, currently a lot of universities and by
+
+46
+00:29:08.000 --> 00:29:56.000
+the way like you know I occasionally talk to university here at New York City like a Columbia University in your university they are offering you know bachelor bachelor program or master level program in data science and machine learning. So I have a lot of contacts and interactions with faculty, with prospective students and so forth. I think currently a lot of these programs, a lot of these degrees offering, I think, on the skill level, in terms of languages or in terms of tools, are really kind of getting up to speed. So if you want to know, let's say, Python, if you want to know, let's say, NumPy, SciPy,
+
+47
+00:29:56.000 --> 00:30:46.000
+or some of the TensorFlow, all these tools, okay, you can get training and programs easily with a sufficient understanding of those tools. I think one of the challenges for the moment is that applying machine learning, applying AI to a lot of product domains requires a deep understanding of that product domain, like a business use case, as well as you're looking into everything from an end-to-end perspective. So we just talk about, okay, query coming, I need to understand the query, I need to understand how to get the things from the index. I even need to understand what inverted indexes are.
+
+48
+00:30:46.000 --> 00:31:17.000
+And then I need to understand why we need to rank things according to GMV, not according to, let's say, the cliff rate or some other things. So understanding that holistic business kind of scenario and also start to develop ideas, to develop intuitions into that, I think we still require tremendous training and really get hands-on into those problems and work on those things.
+
+49
+00:31:17.000 --> 00:32:04.000
+So roughly speaking, we have a couple of master level know master level and phd even phd level uh really good uh you know graduates join our teams in the past you know two years uh roughly speaking they you know they get up to speed after you know at least the six to ten mile if not even longer really being able to like you know get productive in the field so that's i I think the most lacking in terms of education piece is where this gap or where the students could get more hands-on in a lot of real-world problems, but at the same time studying those tools. Yeah, I totally, totally agree.
+
+50
+00:32:04.000 --> 00:32:46.000
+I think the reasoning is always the part that seems to be left off the table. Like, for example, you see so many of these machine learning boot camps. And what they'll do is they'll, you know, give you a set of images, and they'll walk you through in TensorFlow, how to say whether this is a cat or a dog. But then what you end up with is this model that predicts probability of cat, probability of dog. But you don't actually do anything with it. So for example, I mean, this is a bit of a contrived example. But if you mislabeled in one direction, like you said,
+
+51
+00:32:46.000 --> 00:33:25.000
+it was a cat and it was a dog. Let's say hypothetically, nobody really cared that much. But if you mislabeled in the other direction, you know, people just stopped using Etsy. Well, then that massively changes, you know, the decisions that you should make based on those probabilities. So even if you think it's a 1% chance it's a dog, if you say dog and you're wrong and that has huge ramifications, then even 99% isn't good enough. On the flip side, if someone is, let's say, in discovery mode, maybe you want to show
+
+52
+00:33:25.000 --> 00:34:00.000
+things that you're not confident about, almost on purpose, because you want to learn more. And so, yeah, actually doing things with the machine learning models and reacting to what happens, that's the part that I feel is completely left out. Yeah, absolutely, I think I agree with you. I think here at Etsy, we use machine learning and machine learning are not a code block technologies. We know that they have real-world impact. So recommendations, set results are really
+
+53
+00:34:00.000 --> 00:34:40.000
+presented to millions and millions of our customers, and they are using those results to determine what gifts they are going to buy for their parents, what things they get for their adversaries and so forth. So the battery recommendation result definitely would drive those users away and also have a very real business impact. Those things are not just 1% or 2% numbers in terms of accuracy or precision. We're constantly looking into
+
+54
+00:34:40.000 --> 00:35:00.000
+how are we really evaluating our results, not just talking about the accuracy level, but actually are people satisfied? Are people really returned to Etsy because we provide more relevant results and so forth? Yeah, that makes sense. So diving into the machine learning, so there's that part you mentioned
+
+55
+00:35:00.000 --> 00:35:56.000
+where you've narrowed it down to about 1,000 candidates and you want to know, let's say, thousand candidates and you want to know let's say the probability someone's going to let's say click on one of these candidates like how do you actually know that so I mean kind of what what goes into the model how's the model you know created yeah so that's a you know that's definitely challenge, or one of the many challenges. So in a nutshell, we can think we need to formulate in a machine learning kind of concept of a supervised learning problem. By supervised, we mean that we have a target or a metric, then we want to use that target or metric to guide our model training or guide our model learning
+
+56
+00:35:56.000 --> 00:36:39.000
+process such that we optimize, in our case maximize certain things. Now in our case the target I just mentioned earlier, we can think that is a form of GMOV or how much money you can, very simplistic way you can think that is how much money we are going to gain. That is our target. And then we say we form attributes or features for each of our items. So then we gather information like, oh, in the past, how many people are clicking on this thing?
+
+57
+00:36:39.000 --> 00:37:23.000
+In the past, how many people are purchasing this thing? And how, you know, these people are from which region and what is the context which what time of day or what week of the month is this a Christmas season or not right so there's a lot of a lot of information from historically how good or how bad this item is performing, from text information that this item has, like title, description, reviews, and so on and so forth, from many other data sources as much as possible we could together, and we form what we call these attributes and features.
+
+58
+00:37:23.000 --> 00:38:00.000
+We are gathering literally millions and millions of these attributes. And then after gathering these attributes, and then we have our target, like, you know, the GMV or the money, then we give these, you know, two sides of the problem, right? So features or attributes. That's one side. Another side is target to generic machine learning algorithms, things like logistic regression, decision trees,
+
+59
+00:38:00.000 --> 00:38:51.000
+deep learning models, and so on and so forth. And let the model try to figure out what is the best you know the mechanism such that we can associate with we can associate you know features with the target then we learn that long get the model arm those are learning algorithms so this is this is a very high level how we figure out, you know, to rank things, to optimize our business metric. Cool. That makes sense. What about how do you sort of capture somebody's, you know, style? Like, for example, if I like blue shirts or let's say I don't like shirts with buttons, which is actually kind of true. I almost never try to wear things with buttons because I feel like I'll become a product manager if I wear too many shirts with buttons.
+
+60
+00:38:51.000 --> 00:39:38.000
+How do you sort of capture, there's so many different contexts, so many different aspects to someone's style, and the information you have is kind of what they've looked at how can you sort of compose all of that to to figure out someone's style so next time someone types in blue shirt they get the the polo right so hey we need to understand right for each item what styles or what kind of styles each item is belong to. So that is step one. So there we have machine learning experts from my team
+
+61
+00:39:38.000 --> 00:40:12.000
+and we also partner with domain experts inside Etsy. So then we come up with 43 styles to categorize all the listings, all the items here at Etsy. So then we develop basically machine learning classifiers that we can classify one of our 60 million items into those 43 styles. So then each listing you could think belong to this space of styles.
+
+62
+00:40:12.000 --> 00:40:49.000
+And this might be 80% to mid-central modern and another thing belong to another styles. So we first get this information. Then we need to understand user preference. So as a user comes to the site, depending on their past behaviors, what is the preference distribution over these styles? Each user would have a distribution over styles.
+
+63
+00:40:49.000 --> 00:41:15.000
+So after these two steps, right, so we get the style category for each item. We get a style profile preferences for each user. Wait, can you dive into a little bit on that second part? I'm not totally clear on how do you know. Do you ask the users like a survey? Well, in our current way, we basically look at what kind of styles,
+
+64
+00:41:15.000 --> 00:41:28.000
+things you click, you purchase, you search. Oh, I see. Oh, that makes sense. Yeah. Then we aggregate that, right? We build a model on top of that. We do the profiling, and then we get the user preference over that.
+
+65
+00:41:28.000 --> 00:42:01.000
+And then the third step, which is basically matching your profile versus this database of all the styles, all the items with styles. So then we match that, right? So then we get, let's say, oh, these are top 100 scenes matching your you know pasta style kind of behaviors in the past then we you know further apply you know all the you know mechanics that I mentioned okay but within this 100 right which one you know you would like to purchase you know most
+
+66
+00:42:01.000 --> 00:42:41.000
+and so on so forth so then we you know apply those subtle things again so that's basically the very high level of process how to apply style cool yeah that totally makes sense and then that that has to somehow make its way back into that that reverse index so that you can you can index on the styles yes exactly right so like all these are additional information we get to help us understand user behaviors. Because user behavior is very, very complex. There might be certain users who always stick to their styles.
+
+67
+00:42:41.000 --> 00:43:28.000
+But there are certain users, they buy gifts for their friends. They may not look for things for themselves so oh that's true yeah so there are a lot of variations so like how to understand users and how to understand like all the behaviors uh is very complex yeah that's really fascinating you know i mean it's funny uh netflix i don't know how this came to my mind but netflix is very explicit it says hey who's watching the netflix right now and so if my son is watching uh he knows to switch over to his name but but for something like this it's it's there's still that multi-modality but you just it's it's not explicit so you there's etsy doesn't pop up and say hey are you shopping for yourself? You have to kind of figure that out based on what the person is doing.
+
+68
+00:43:28.000 --> 00:44:23.000
+Yeah right, so hypothetically we would love to have customers telling us what mission they are on and how we could help. But we're in a much more implicit way. So we have to figure out from user how they interact with the site and a lot of contextual information we get and trying to guess or trying to best guess what is your intent and how to do that. So it's a very, very big challenge. Yeah, this sounds like an enormous effort. I mean, I don't know if you feel to be really rough with these numbers, but roughly, how many people are involved in this effort, and what's the growth trajectory been like, and how are you expecting this team to grow?
+
+69
+00:44:23.000 --> 00:44:47.000
+It seems like it's a huge effort. Yeah, that's also a great question. So when I joined Etsy in 2016, we had roughly five folks working in machine learning kind of space. Five very busy people. So we grew from there. space. There's just five very busy people. Yeah, very, very busy. So we grew from there.
+
+70
+00:44:47.000 --> 00:45:45.000
+So right now, we're in between 30 and 40, and of course, we're going to grow. But having said that, I want to emphasize is that, A, we probably are not going to do something like big companies where solving problems is basically scaling up teams, so hiring hundreds and hundreds of machine learning engineers, data scientists, every single problem. So we probably are not on that trajectory, which also opened up the door where we could look at things holistically and come up with better technical solutions. So, for instance, we are the single team trying to figure out how to provide the best result for search desktop, search mobile, search in-app.
+
+71
+00:45:45.000 --> 00:46:06.000
+I do know that in some of the other companies, these are different teams. Now, in our case, we are the same team. So we have the opportunity to provide a model, a framework, such that could work the best in three different contexts, but without like saying I was saying, scaling up the team, right?
+
+72
+00:46:06.000 --> 00:46:31.000
+So each individual could work on more technical challenge problems, similar to our recommendation problems. Like we have more than 50 pages and modules require recommendations, right? But we do not have that number of people. Versus some companies, each team working on one page, one module, we have the opportunity to work out a framework such as,
+
+73
+00:46:31.000 --> 00:46:57.000
+you know, let's say one model or one type of model could power multiple modules and power multiple pages. So that's where we would like to really use technology, use innovations to scale up the opportunity to really meet the needs. Yeah, that makes sense. I think another part of it, which you mentioned earlier, is that you're using the Google Cloud
+
+74
+00:46:57.000 --> 00:47:31.000
+and it's similar, I believe Netflix uses AWS. A lot of the companies are relying on cloud services. And I think from the purpose of someone who's looking for a career, it really encourages people, again, to just try and be polymaths. So if you have to build the entire cluster from the ground up, and on day one you're trying to write a distributed file system, then you need, as you said, just a huge army of people.
+
+75
+00:47:31.000 --> 00:48:01.000
+And you could be the distributed file system person who's writing C message 0MQ code all day. But at Etsy, if you have 30 people handling all of search, then every one of those people, each one of those people needs to be a true polymath. And that's something where, again, just learning a lot of languages, learning a lot of technologies, and probably trying to build one of these systems. I mean, if you're running on the cloud,
+
+76
+00:48:01.000 --> 00:48:30.000
+then anybody out there listening could also build something like this on the cloud and kind of play around with it. Yeah, absolutely. Cool. So what is next? Like, I know, I mean, there's, you know, AI, machine learning, obviously still hot topics. I don't know if we're at, I really don't think we're at peak machine learning, although it's really, really high up there. We might be peak big data,
+
+77
+00:48:30.000 --> 00:48:49.000
+but there's still a lot of ground to cover on machine learning. What is Etsy doing in the future? What are some really cool search ideas that we should see coming out? Yeah, so I think I agree with you. I think we are, as I mentioned earlier, in multiple fronts,
+
+78
+00:48:49.000 --> 00:49:07.000
+we are in a very early stage. Not only us, I also believe ML or AI for e-commerce are also in a very early stage. So we definitely need to keep investing in search,
+
+79
+00:49:07.000 --> 00:49:41.000
+like searching in a narrow kind of context, meaning like we discussed primarily in today's program, where your type of keywords, let's say we want to provide the most relevant or most promising results, we would like to buy quickly. So that's kind of a narrow sense of the search. So we definitely need to keep doing that and providing better service on that. But I also want to highlight that there is also an equivalent, more or less equivalent
+
+80
+00:49:41.000 --> 00:50:21.000
+amount of effort we are seeking is discovered. So we briefly talk about that a little bit. It's like, okay, I don't know what to look after, and I don't even have a query in my head. But I like to come to Etsy and browse a little bit and go from page to page. How can I discover my needs? So such kind of thing. Can you dive into that a little bit from then you know go from page to page how can i you know discover my needs right so like you know such kind of thing can you dive into that a little bit from the ui experience like what what does that is that just when people go to etsy.com without a without a query yeah we we definitely have a lot of people come to etsy.com without a query we have a home page
+
+81
+00:50:21.000 --> 00:51:08.000
+we you know there's a lot of modules and help you. So, hey, these are the things that might be interesting. These are the things from the shop you purchased in the past, and so forth and so forth. There's a lot of mechanisms we help you to discover new things. And there are a lot of other pages, other than the search page, serving the functionality of discovery and trying to speed up that process. Yeah, if you have time, it would be really interesting to dive into that. How do you sort of handle that where there's no – because now you still have that 17 million. Was it 17 or 70 million?
+
+82
+00:51:08.000 --> 00:51:39.000
+60, sorry, 60. So you have that 60 million sized inventory and now you don't have any query. How are you able to still meet that SLA and get results quickly? Right. That's another, like I mentioned, almost another half of our effort, which is what we call discovery or slash recommendation. So basically you can think recommendation is kind of the process without query.
+
+83
+00:51:39.000 --> 00:52:11.000
+A lot of other companies and apps are doing the so-called queryless, kind of a search queryless push or recommendation. So there we heavily utilize your past behaviors. So they say, hey, you purchased the things from this shop, and it seems like there are similar things from the same shop. Are you interested? And also, you purchase things in this style, and there are other things,
+
+84
+00:52:11.000 --> 00:52:53.000
+seems from the same style, also from similar kind of categories, are you interested? So we harvest heavily on your past behaviors to give you a recommendation, to guess what you are looking for without even asking, without you providing a query. We also provide a recommendation when you do the browsing. You go to the listing page, and then on the listing page, there are modules showing other similar listings. Like sometimes it's similar from the same shop, meaning like same shop might offer other things you would like to buy.
+
+85
+00:52:53.000 --> 00:53:17.000
+Or like, you know, visually similar, right? So, okay, so you are interested in this painting with a bear. And, you know, there are other paintings with a bear there. So how about you browse that a bit? So we utilize that quite a bit and then trying to do the recommendation for them. That makes sense. Yeah, I mean, bears are awesome.
+
+86
+00:53:17.000 --> 00:53:56.000
+So what about, how do you prevent, so let's say someone puts in bear, or let's say, let's take this to the back. Let's say someone makes a bear or let's say let's take a step back let's say someone makes a bear i don't know coffee mug on etsy right and so um well maybe something more esoteric than let's say hypothetically there aren't any bear content there isn't any bear content on etsy someone makes the first bear mug um someone types bear and they find that bear mug. And then that person kind of becomes the source of truth for bear. And then they end up with a lot of clicks.
+
+87
+00:53:56.000 --> 00:54:41.000
+And then because they have a lot of clicks, they're the number one result. And then because they're number one result, they have a lot of clicks. And there's this sort of like winner-take-all phenomena where now if I try to make my own bear mug, I can't compete with these people who have already been on the site for a long time yeah that's a really really great question so Etsy is a two-sided marketplace right so we have buyers we have sellers we constantly look into how to optimize. A lot of things we talk about today are primarily from a buyer perspective, but we do care and care very much about our sellers, right? So like whoever are entrepreneurs and, you know, these folks are making goods and then, you know, creating
+
+88
+00:54:41.000 --> 00:55:12.000
+things, you know, and offering for the buyers. Growing that audience is also very, very important and retaining that audience is also very, very important. This is not an easy problem. So in a lot of scenarios, yes, there might be a phenomenon of winner takes all because the things you are selling are good, you're performing very well, and there's a reason your things are
+
+89
+00:55:12.000 --> 00:55:45.000
+performing very well, and the system kind of remembers that and is trying to promote the same type of thing. But we also are very cautious of this kind of winner-takes-all kind of phenomenon and trying to help boost new servers or new items. In recommendations, we call it a cold start, because we don't have data. But we cannot assume they are bad or they are not performing. It's just mal-reg. We haven't shown that before.
+
+90
+00:55:45.000 --> 00:56:33.000
+So we are constantly testing different algorithms, ideas to combat this co-start and trying to promote new centers and new items to accommodate this situation. But this is not an easy problem. How we serve the buyers in the most relevant way, at the same time keep a very viable marketplace such that everybody or let's say a lot of folks in the server side have a share. That's definitely one of the strategies. Yeah, it seems as if there's... It's very empirical, right? I mean, it's almost impossible to come up with some kind of closed form
+
+91
+00:56:33.000 --> 00:57:03.000
+that will tell you how to trade off learning more about some new item versus showing the best thing you've ever seen. It seems like that's always going to come down to some sort of empirical analysis. Yeah, that's true. That's true. We also have other channels, right? So like sellers, if they are willing, they can participate in our promoted listing program.
+
+92
+00:57:03.000 --> 00:57:50.000
+It's like an outside advertising program where they could spend some budget to significantly boost their listings within our system. We do offer such opportunities and in those scenarios, we also utilize machine learning in various places to determine how to best show your thing. So a lot of servers, in fact, are utilizing our program to show their things and to boost their things through their reach and through, of course, using some budget. So yeah, we're definitely looking into various other channels to accommodate the issue.
+
+93
+00:57:50.000 --> 00:58:30.000
+Yeah, that makes sense. It gets into some really deep economic analysis that they would have to do and I'm sure you would help them with. It's like, if I show this advertisement to my product with the expected value of my campaign or my lifetime on Etsy Go Up, if so, then you'd spend the money on the advertisement to sort of build the brand. And it becomes this sort of short-term, long-term thing again. Yeah, yeah, that's true. Cool. So what about, you know, one thing I've noticed is there's a ton of companies getting on board with open source and with academia.
+
+94
+00:58:30.000 --> 00:59:14.000
+I think even some companies are usually like pretty closed doors. They're starting to publish papers and do open source. What is Etsy's sort of, how do they feel about the whole open source thing and information sharing and sort of what do you folks do there and why do you do it? Yeah, this is a good question. So if you look at GitHub, XE has, you know, repositories on GitHub and, you know, publicly available with a wide range of repositories there. And we have blog posts constantly publishing some of the interesting things,
+
+95
+00:59:14.000 --> 00:59:59.000
+learnings, and experiences that our engineering teams, including my teams, are having here at ETSI. And in terms of my team specifically, we go to a lot of different conferences, meetups, conferences including academic conferences, industry conferences, and we do talks and we sometimes publish papers. We do presentations, and we have a very open and collaborative attitude, I would say, towards the open source community, towards the tech
+
+96
+00:59:59.000 --> 01:00:53.000
+companies in general to be part of that, to contribute and also facilitating a lot of things. I think, you know, in terms of reasons, there are two major reasons I think are very important. One is, like I mentioned, right, so machine learning, AI for e-commerce, I think it's a very early stage. The more people in general, you know, are interested in that, the better solutions in terms of technology, in terms of the solutions we are building can build on larger communities. Recommendation kind of system, community only exists after Netflix competition, almost like 10 years ago. And also people get excited about deep learning and so forth, well because AlphaGo kind of
+
+97
+01:00:53.000 --> 01:01:48.000
+a related thing published from DeepMind from Google. So there is a larger impact of getting, evolving a community and being able to talk about technical solutions and getting excited about that. So that is one. Second is, of course, the hiring and getting talents are super, super critical for us to work on those exciting problems. When we go out and talk to candidates, they value we are part of the larger community and they also value that we could talk about a lot of things like today we discussed. Now if we say hey everything is just a priority, we can't talk, then it's very unlikely we can really stir the interest from our candidates.
+
+98
+01:01:48.000 --> 01:02:15.000
+So by really being open enough and playing a big role or trying to play some bigger role in this community would help us to establish reputation and would help us to attract the top talent. Yeah, that makes sense. I think I saw something recently that said one of the best things someone can do from their career is to build sort of a personal brand.
+
+99
+01:02:15.000 --> 01:02:56.000
+And when you look at academics, they could go into university and become a professor and they'll have extremely strong personal brand. They'll teach the courses under their own name. They'll write papers under their own name. And so if industries such as Etsy keep everything closed off, then someone will say, well, you know, why would I not go into academia where I can represent myself? So yeah, I think it's hugely important. Speaking of hiring folks from academia, what sort of positions do you have?
+
+100
+01:02:56.000 --> 01:03:23.000
+Where are the offices where there are search folks? And are you guys hiring? What kind of roles? Yeah, yeah. So like I mentioned a little bit earlier, we are growing and we are hiring data scientists and machine learning engineers both here at New York City office as well as our San Francisco office. So
+
+101
+01:03:23.000 --> 01:04:10.000
+we have constant openings in these two offices. And in general, like, at C Engineering, we're hiring in these two offices as well as Toronto office and we have Dublin office as well. So, like, we are growing in these couple of different locations. In terms of roles, we are generally hiring folks with machine learning background, and we're vaguely divided into two types of roles. One is called data scientists, and the other is called machine learning engineers. Basically, we are looking for folks with a lot of modeling background,
+
+102
+01:04:10.000 --> 01:04:32.000
+really interested in pushing the last couple of miles of our model performance and thinking about the new methodologies, thinking about the new ideas as a data scientist, and we would like somebody with a very strong system level engineering design
+
+103
+01:04:32.000 --> 01:04:50.000
+as well as pretty much equally understanding of machine learning to help us build offline pipelines, serving systems, as we mentioned as backends, as we mentioned, as backends, as machinery engineers. So these are the two,
+
+104
+01:04:50.000 --> 01:05:03.000
+on a very high level, two kind of roles that we're hiring in Brooklyn, New York City office, and San Francisco office. Cool. So one question we get a lot is from people who
+
+105
+01:05:03.000 --> 01:05:39.000
+they want to know how to best get one of these jobs, right? So they might have got a degree in, let's say, petroleum engineering, and so they're coming to programming for the first time. They might even have a very strong mathematical background, but maybe not a programming background. And the questions we get are, you know, should I go back and get another four-year degree? Should I do the, you know, Coursera or Udacity or these other MOOCs and get sort of some of these nano degrees?
+
+106
+01:05:39.000 --> 01:06:17.000
+Should I jump into one of these in-person boot camps? You know, what's your feeling there? I mean, obviously, for one of these in-person boot camps you know what's your feeling there i mean obviously for some of these uh um very mathematically oriented roles um you know having a let's say a phd in math and computer science would be preferred but um what are sort of like you know other ways uh that people can sort of get those skills? Yeah, that's a great question. I think some part of this also echoes, you know, a little bit earlier discussion on the, you know,
+
+107
+01:06:17.000 --> 01:07:17.000
+some of the master programs and bachelor programs. So in general, I would say there is no well answer to everybody. So one thing I will mention that we have, you know, currently in our teams, we have a very diverse background. Like, you know, these 30-ish people, half of the folks have PhD degrees, half of the folks have master degrees. And if we look at their backgrounds, we have folks, of course, from computer science, but we also have folks from electrical engineering, operational research, statistics, economics, physics. We have actually a pretty wide diversity in terms of backgrounds and where their degrees are coming from. So that's why I would say there is no one short answer. And from interviews, we are actually interviewing a pretty wide net because we would like to
+
+108
+01:07:17.000 --> 01:08:15.000
+be inclusive in trying to find the best people, not just looking at your resume, like one line of education. So we actually interviewed like, you know, political science, you know, nuclear, you know, physics, you name it, like astrophysics, like a lot of, you know, different kind of education background. So the current situation is like we talked about earlier, it's hard to say, oh, the best shot is just go back to your master program or just do this 12-week intense training because after that, each person still differs because of their individual's kind of experience. So I would say in general, if we really want to give some advice to individuals, we tend to say just look at your own experience and
+
+109
+01:08:15.000 --> 01:08:41.000
+then we can think about where you are in three to five years and really start to build or start to think about the path to that. So like, hey, I'm just a sub-engineer without a machine learning background, but I'm really interested in that. Okay, so if my goal is to grow into a hardcore machine learning engineer in three to five years, here are the steps I might take.
+
+110
+01:08:41.000 --> 01:09:30.000
+Or I say that I have zero even coding background, but I'm strong in math, I have a math degree. I want to be this kind of person to do some applied research. Okay, so in the three to five years time frame, what are the steps I could take? So I think that's that, you know, fortunately or unfortunately, currently has to be kind of personalized. So then each person can take their own path. Yeah, that totally makes sense. Cool. What is, you know, if someone interviews, like, what is that experience like? Yeah. interviews like what what is that experience like yeah so we have a kind of a standardized
+
+111
+01:09:30.000 --> 01:10:22.000
+interview process uh which like you know very very similar to you know most of the typical kind of tech companies so we have two rounds of phone interviews. The first one is to test whether you have some basic coding background. Not necessarily solving coding puzzles, but like, hey, do you understand data structure? Do you understand formal brand? Many, many kind of basic ideas. The second phone interview, we tend to look at whether you understand machine learning basics, right? Because believe it or not, in the current hype of AI and machine learning, there's a
+
+112
+01:10:22.000 --> 01:10:46.000
+huge amount of people who sort who understand deep learning, but they don't understand logistic questions. They don't know what supervised learning is. They don't understand linear regression. So we go to the basics, and we're asking textbook level concepts. Okay, do you understand this? So that is our second phone screen. After two rounds of phone screens,
+
+113
+01:10:46.000 --> 01:11:18.000
+we bring people on site, right? So in the on-site interview, interviews, we have a couple of slots. We have again coding, you know, whiteboard-ish coding kind of slot basically, typical coding questions. And then we have so-called applied machine learning kind of a slot. So basically we present you a real-world problem, kind of abstract a little bit from AXS's real-world business. And then we say, okay, here's a scenario.
+
+114
+01:11:18.000 --> 01:11:54.000
+Imagine that you work with a product manager and this is the things that the product manager come up. You as a new member in data science team want to figure out what is the solution, how do you present the solution, so how do you think about this problem? So then we in that 60 minutes kind of a slot, the candidate would walk through a solution with our data scientists in the team. So we have two such sessions. Then we also have a system design slot. So basically we look at, okay, great,
+
+115
+01:11:54.000 --> 01:12:18.000
+so you have this idea, right? But how can we get the result back within 100 milliseconds? So like which process you need to do online, which process you need to do online, which process you need to do offline, like you need to cache things somewhere, like where do you store those things, and so forth. Like can you draw a very simple system diagram to talk about the things you just mentioned.
+
+116
+01:12:18.000 --> 01:12:40.000
+So we have one such session as well. So then, this is our kind of a typical unsigned kind of interview process. So then we have two rounds of full screen and a couple of slots outside interviews. Very cool. Yeah, I think just to recap some of
+
+117
+01:12:40.000 --> 01:13:22.000
+the things we said earlier, trying to actually build these things by yourself, I think is one of the best ways to get prepared for an interview like this. Now, of course, not all of us have a site with 60 million items in it or anything like that. I mean, it could be just a bunch of synthetic data. But all of these are problems that people could experience in simulation right now. So someone could create a set of 60 million set of random vectors and then try to find the nearest neighbor and realize that they need to build some data structures and things like that.
+
+118
+01:13:22.000 --> 01:13:56.000
+Obviously, the kind of courses and things you can find Obviously the kind of courses and things you can find on the internet will help as well. But yeah it sounds like you know getting some hands-on experience is something that could really help people. Yeah that's actually you know one thing I actually mentioned to some candidates when we talk because you know I just said you know ask a very similar questions we you we started this program, which is like, can you imagine a process where you have to type the keyword to Amazon, to Etsy,
+
+119
+01:13:56.000 --> 01:14:29.000
+how do we get the result back? That's like a mind exercise, like a thought exercise. How do you do that? How do you break down the system? How do you talk about each component? And several companies will say, wow, yeah, I never thought about that. We never really tried to reason along that. So any fact, you could do that thought exercise to a lot of things. So imagine how to do that for the scale of Amazon or do recommendation in the scale of Netflix or Google search.
+
+120
+01:14:29.000 --> 01:15:05.000
+So how do you propose a system or how do you think about that? I think building some cases and exercise, some thought exercise, and also like you mentioned, generating some synthetic data, playing around are really good steps to get some intuitions into these moments. Yeah, absolutely. Totally agree. So the Etsy blog, there's an Etsy machine learning blog, correct? We do not have a separate one for the moment.
+
+121
+01:15:05.000 --> 01:15:17.000
+It's part of the engineering blog? Yes. Got it. Okay, cool. I'll search that up and put a link in the show notes. Cool. And you're on Twitter.
+
+122
+01:15:17.000 --> 01:15:34.000
+It's Hong Liang Ji on Twitter, right? And we'll put a link to that also in the notes. Okay. Cool. This was super, super interesting. I think, you know, this is one of those things that, you know, Google is probably one of the first things that people do when they get a computer today.
+
+123
+01:15:34.000 --> 01:16:14.000
+I mean, when I got my first computer, I didn't have Internet. But, you know, today that's probably one of the first things people do is search, right? And so it just seems kind of, for many people, just magical that they type things into Etsy and get results. It just, it seems like there might even be, I mean, there's probably people who think that there's some human in the loop, just because it is one of these things that is just so incredibly remarkable how, how, how it can search through so much content so quickly. And I think you did an amazing job of kind of breaking it down into those components. You know,
+
+124
+01:16:14.000 --> 01:16:46.000
+talking about like the sublinear ranking of the reverse indexing and all of that. And hope, I really hope that people and believe that people at the end of this have kind of now a holistic understanding and and now if they want to deep dive into any of these topics like uh you know if they want to find out like what it actually is a reverse index how can i code one myself um they have all of the right terminology and they have the right mental model to really dive deep on these topics.
+
+125
+01:16:46.000 --> 01:17:09.000
+So I really appreciate you coming on and explaining a lot of this to people. And it's been really exciting. I've learned a lot about Etsy and their processes and how the whole thing is organized. Yeah, yeah, sure. So absolutely. So I also feel this is a really, really great opportunity for us to explain
+
+126
+01:17:09.000 --> 01:17:18.000
+how, you know, Etsy search works and also lay out the challenges that we have and talking about, like, you know, a lot of interesting things we're working on
+
+127
+01:17:18.000 --> 01:17:40.000
+and how we could to move forward. So, you know, I also appreciate the opportunity to chat with you two. one one last question are there internship opportunities or is it only full-time yes we do have interns so last couple of years we have interns coming here working on projects and you know people
+
+128
+01:17:40.000 --> 01:18:00.000
+get excited about that so we are hiring interns. Actually, just go to our career page. So we are hiring interns in the same location, New York City and as well as San Francisco office for data science interns. Cool. So folks out there, if you're
+
+129
+01:18:00.000 --> 01:18:05.000
+in university, this is an amazing opportunity. Definitely check it out. And thank you again, L langji for for coming on the show thank you yeah thank you thank you the intro music is axo by biner pilot. Programming Throwdown is distributed under a Creative Commons Attribution Sharealike 2.0 license. You're free to share, copy, distribute, transmit the work, to remix, adapt the work, but you must provide attribution to Patrick and I and sharealike in kind. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

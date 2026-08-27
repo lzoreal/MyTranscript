@@ -1,0 +1,601 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:42.000
+programming throwdown episode 95 web rtc with sean dubois take it away jason hey everybody we have uh sean here on the show and we're going to be talking a lot about WebRTC, which is something many of you might have never even heard of, but it's really eye-opening. It's kind of a shocking thing to find out. It's kind of opening Pandora's box. And so how are you doing, Sean? Would you like to sort of introduce yourself? Great.
+
+2
+00:00:42.000 --> 00:01:03.000
+Yeah, thanks for having me on. So I am Sean. I work on the Pyon project, which is a Go implementation of WebRTC, which is sort of like a nebulous thing. So I guess we'll spend the next hour unpacking. But yeah, so I work in like the WebRTC space. I've sort of gone through a bunch of different weird things.
+
+3
+00:01:03.000 --> 00:01:30.000
+I started out in the VoIP and phone industry, found my way working on PHP, and then sort of ended up here. And it's been a fun ride. Cool. So you worked on the PHP interpreter itself or writing PHP? Yeah. So I was hired at Etsy. And originally I started out doing JavaScript and LAMP development. And they gave me an opportunity to write C and work on PHP itself. So I added, I think, visibility operators
+
+4
+00:01:30.000 --> 00:01:52.000
+to class constants, and I ported a bunch of extensions from PHP to PHP 7, like the ones written in C. Whoa, that's amazing. So how do you get started doing something like that? Because it seems like languages themselves are just enormous projects. And it seems very difficult to amend a language.
+
+5
+00:01:52.000 --> 00:02:11.000
+How do you get started in that? How do you get your changes approved? How does all that work? So I got really, really lucky. The company Etsy, they're the ones that really kick-started my career. That was the first job in the industry. So I got really lucky with the mentorship they provided. And I think the easiest thing to do is jump in
+
+6
+00:02:11.000 --> 00:02:35.000
+and make little changes that are supported by unit tests. It's so easy to get things approved by open-source maintainers. If you can jump in and make a change and the build's green, it's very likely they're going to accept it. So that's how I got lucky. I just went in, and I think the first one was IG binary or something. It was like a compression format. And the nice thing is if I can port it from PHP 5 to 7
+
+7
+00:02:35.000 --> 00:03:02.000
+and all the test paths, it just got merged, which made it really easy. Wow, that's awesome. And then is the documentation auto-generated or you have to write that as well? Oh, so the lucky thing is that there was no documentation changes since we were just moving versions of the language. So just like API change and little things like they went from a bunch of heap allocations to stack allocations because of the way the PHP VM was changing. So it made it really easy.
+
+8
+00:03:02.000 --> 00:03:29.000
+Wow, very cool. Yeah, yeah, I think people will love to pick your brain on that. At the end of the show, we'll give away for people to reach out to you. Yeah, so that's fascinating. So coming back to WebRTC, so basically what is WebRTC? And at a high level, what does it do for people? At a high level, I think the first thing that people will jump in is they'll build a project and they'll think,
+
+9
+00:03:29.000 --> 00:03:54.000
+oh, I want to get my webcam from one browser to another. And you'll get that going and it'll be great and you'll be excited and you'll see it. But what I like to think about it as is think about how do I get something from computer A to computer B without any servers in the middle, sort of that promise of like peer-to-peer. So instead of paying all these server costs of sending media or data to a server and then back to their client, you just have these two computers
+
+10
+00:03:54.000 --> 00:04:42.000
+talk directly to each other. And then it really expands way out beyond just conferencing. You have to think about all these different products that we're seeing coming out. So the ones that really excite me is Google Stadia is using WebRTC, which is they're using it to do the game streaming, which is really cool. So they're sending video frames from a remote server down to you. So instead of running a video game locally, you're running it in a super powerful computer out in a data center somewhere you've got things like mixer.com that are doing super low latency game streaming so instead of um you know it's actually fast enough that people are mutating the game state by pressing buttons in their browser and that's how fast it is it feels real time so it's just that promise to have low latency
+
+11
+00:04:42.000 --> 00:05:07.000
+communication between two people directly instead of using a server. Yeah, that totally makes sense. So a lot of people listening might not know kind of what happens. So let's take, let's say, Google Hangouts. So Google Hangouts is client server. When you call somebody, the data goes kind of to Google server and then from Google server to somebody else. And that seems intuitive. Most people can understand that there's
+
+12
+00:05:07.000 --> 00:05:42.000
+some huge data center somewhere, probably like in the heartland or some rural area, and electrons, or in this case, particles of light, I guess, if you have optic, are traveling from your computer um over to that data center and over to that other person's computer and it kind of makes sense for both you to be connected to google right but how does that translate to something like this where um you know you're on wi-fi in your house someone's on wi-fi in their house in a totally different state
+
+13
+00:05:42.000 --> 00:06:04.000
+like how does that connection so starting with sort of the physical layer, what actually happens there? Yeah, so I guess the bare essentials for making a WebRTC connection start is how do you bootstrap that communication? Because me and you, if we're both inside our home networks, there's no way we can really talk to each other. I could give you my IP and you could give me my IP,
+
+14
+00:06:04.000 --> 00:06:34.000
+but there's no way we can talk to each other. We both have, you know, private IPs. You know, if you've done any stuff, you'll see like the 192.168. So if you're starting at that level, how do we talk to each other? So usually how something like Google Hangouts works is first we bootstrap the call where I'll give you the minimum amount of information about me and I send it to Google. Google relays it to you, and then you send me the minimum information about you. So you send me, these are the video codecs I support, these are my IPs, and then we establish,
+
+15
+00:06:34.000 --> 00:07:06.000
+that allows us to move on to the next step where we establish connectivity. And I think this is the really fun part, and the part that sort of was mind-bending for me is there is this idea that of NAT traversal. So if I send a UDP packet out on port 5000, and then you send a UDP packet back to me on the same port 5000 that I sent out on, the router will actually maintain this hole called a NAT hole punch and allow us to communicate. So all of a sudden, if we're in completely different networks,
+
+16
+00:07:06.000 --> 00:07:29.000
+because we've established who we are via that bootstrap message, we now can communicate directly. And there's a whole bunch of other protocols after that, but there's this initial bootstrapping that we've done where we've exchanged enough information to know what each other's public IPs are, and we've exchanged enough information to know what video codecs we support. We can now start hitting each other with video packets even though
+
+17
+00:07:29.000 --> 00:07:58.000
+there's no server in the middle it's just each of us sending to each other's public IPs and our router is passing it through to a computer inside the NAT without any overhead of server in the middle. Yeah totally so just to sort of unpack. So right now you send a letter to someone, you know, a physical snail mail letter. And on the front of that letter, that needs to have everything that the mail service needs, both your mail service
+
+18
+00:07:58.000 --> 00:08:33.000
+and the destination mail service needs to get that letter. So you write the person's house number, their address, you know, the country, if appropriate. You write all of that information and it's all right there on the front of the envelope. But the issue is, is, you know, on the on the Internet, there aren't that many IP addresses. And so there's many people who have like exactly the same address so what happens the way that works is is there's an envelope that says go to this neighborhood and then the person opens that envelope and there's
+
+19
+00:08:33.000 --> 00:09:04.000
+another envelope inside of that one that says okay this is the house i want and so even though there's so the way we would handle that in in you know in regular mail is you have the country the state and the zip code. But imagine just having those as sort of like these recursive envelopes. So you'd open the U.S. envelope, and then it says, okay, you have the Florida envelope. You open that, and then you say, okay, in Florida, I need this address, right? And that sort of de-dupes it.
+
+20
+00:09:04.000 --> 00:09:32.000
+Yeah, and it's even the way I would think about it also so if you have let's say you have two neighborhoods and each of those neighborhoods have po boxes that's the only way you can communicate and those po boxes don't actually correlate to anyone inside the neighborhood but it's almost like if you if i send something outbound on a po box the mailman can assume that anything coming inbound to the same PO box is mine. So it's almost like this temporary association of a mailbox to a person. Yep. Yep.
+
+21
+00:09:32.000 --> 00:09:51.000
+Yeah. So, I mean, this is how otherwise nothing would work, right? So, you know, you go to Google and say, you know, Google, you know, send me the google.com front page. I need to make a search, right? And Google replies and says, okay, here it is. If that reply couldn't get to you, nothing on the internet would work.
+
+22
+00:09:51.000 --> 00:10:33.000
+So when you tell Google, hey, please send me the front page, all of the machines along the way keep track of your request. So all of them say, hey, this person, again know again in this state and this zip code in this neighborhood wanted google uh you know right now on this on this particular port and they sort of hold they reserve that that kind of area for you and then when google responds all of them kind of know where to route that and so as you said the trick is um there's there's this trick where you can actually use the same port to talk to two different machines. So you can talk to Google and say, hey, send me something back. And actually,
+
+23
+00:10:33.000 --> 00:10:57.000
+if Yahoo kind of knows you're doing that, Yahoo could send something on the same port, and it will come to you as if it's coming from Google. I mean, you'll know it's from Yahoo because you can get the source IP address, but it will follow the same route as the Google packet and it can get to you. Now, if you don't have this trick where other people are replying, then people can't reach you
+
+24
+00:10:57.000 --> 00:11:19.000
+because as you said, people don't know at any given time who's in which house. And even if they did, the routers aren't going to let them figure that out. If I just right now send a packet to Sean's house, even if I know all the IP addresses on the way and say, hey, send this packet to Sean's printer, his router is not going to let that happen.
+
+25
+00:11:19.000 --> 00:11:38.000
+But as soon as he starts communicating to me, whatever port that he talked to me on is now available for me and for other people to send data through. Yeah, and I think, and that also opens up other interesting possibilities because you have this one hole that anyone can send stuff into you
+
+26
+00:11:38.000 --> 00:12:07.000
+and you start talking about things like torrents where you have this one hole and you'll be receiving data from thousands of peers through one hole that you've punched in your router. And the thing I also love is that all of these topics also apply to TCP. Even though we think of TCP as one stream of data, below the layers, it's a stateless connection where we're sending data over to a remote server,
+
+27
+00:12:07.000 --> 00:12:42.000
+and that remote server is replying back to us. It's not a stream of data. It's the operating system and everything abstracts it away from us, but there's packet loss. You have to determine if the return data is coming from the proper IP and port so that it can simulate and feel a stream So there's all this magic that takes place behind the behind the scenes Yeah, and someone might say well, why would why would the routers trust that? Situation like if I send something to Google and I say hey, you know reply on port 3000 and then Yahoo replies
+
+28
+00:12:42.000 --> 00:13:26.000
+Why don't I just block that and say hey you know i wanted google to reply and there are routers that do that in fact if you're on your cell connection that's how your cell tower works your cell tower will keep track of the destination and only allow people to come back packets to come back from that destination and so that's why for example you couldn't at least to my knowledge you can't run things like web rtc on a cell connection um if both people are on a cell connection because this trick doesn't work anymore yeah so one of the so what ends up having it and you'll what people end up using is something called a turn server and it's really all it is, is the idea that, okay, so my, let's say that your ISP doesn't
+
+29
+00:13:26.000 --> 00:13:51.000
+allow you to, doesn't support UDP traffic at all, or they don't support NAT hole punching. What you do is you establish a TCP connection up to a server in a data center that's public to both of you. So let's say a public IP, you connect up to it and say, I would like to speak to this person. And then that other person connects up to the turn server, and that turn server acts as a relay where it will allow that other person
+
+30
+00:13:51.000 --> 00:14:16.000
+to send communication to you through that turn server, and then that turn server will send it back to you. So that's the way that most people have to fall back to. And the statistics I've seen, Appear.in published this really great graph about all their calls, and I think 17% about all their calls. I think 17% of all their users were using turn servers.
+
+31
+00:14:16.000 --> 00:14:38.000
+Yeah, so if you're working at, let's say, an IT firm, for example, or any of these sort of big areas that have very kind of locked down VPNs, and most office spaces will have what's called a symmetric NAT, which means symmetric because if you send a message to Google, you're only allowed to get back something from Google. That's the symmetry part of it. And yeah, in this case,
+
+32
+00:14:38.000 --> 00:15:00.000
+if one office is calling another office, then they'll have to use a turn server. Yeah, which I think is really unfortunate. And working on Pyon, a lot of companies I've run into is it's really just someone flipped a setting in a router or a firewall somewhere. How many people fall back to turn just because of accidents
+
+33
+00:15:00.000 --> 00:15:32.000
+or using old networking hardware and stuff like that? I'm very excited for a future where which probably never will come where we all have you know publicly addressable ipv6 and we're all everything's be a peer-to-peer so someday yeah i mean i was thinking that as well i have a feeling that that you know even when we go ipv6 they'll definitely, it'll be again more like the post office where every packet will say exactly where it needs to be. But I have a feeling they'll still be
+
+34
+00:15:32.000 --> 00:15:49.000
+network managers that will enforce rules all the way down the chain. Yeah. And I think for me, the one thing I would love to solve is all the troubleshooting that goes into it. If you go to set up, you know, you want to build some WebRTC service right now.
+
+35
+00:15:49.000 --> 00:16:13.000
+I feel people are really in the dark on this. There's not a lot of education around it. There's not a lot of tooling. And that's the next place I would love to see Pyon going is like, yes, we built a WebRTC implementation. And that's great. We're allowing people to do a lot of interesting things. But the amount of frustration and questions that still exist i'm not happy about i think that stuff can be a lot better there yep that totally makes sense actually one thing that that we didn't
+
+36
+00:16:13.000 --> 00:16:54.000
+mention that we should probably say pretty early is that web rdc isn't isn't just for websites um you know it's a it's a protocol for sending information. And definitely the easiest way to use it is in the browser. But the whole thesis of Pyon is that you can use this protocol in anything, in a desktop app, in a server thread, you know, whatever you want. Yeah, so some of the other ones I've seen, someone wrote something to share their terminal between two peers, and it's all just a command line application. So you start up a little process, and you say,
+
+37
+00:16:54.000 --> 00:17:26.000
+I think it's called WebTTY. So you start up WebTTY, and then you get this little bootstrap message, and you share it with the other computer. And then you both share your terminals back and forth with one acting as the host and one acting as the receiver. And I ended up using this in like a lockdown data center. So I'll have two hosts that are in the same NAT. And then it allows me to just share my terminal back and forth for debugging stuff, which is which has been super helpful. Wow, that's cool. Yeah, and so I really like that one.
+
+38
+00:17:26.000 --> 00:18:03.000
+And then also, I just had someone come in and talk about doing a game engine using WebRTC for the multiplayer, because the nice thing, we can talk about this later, is with the data channels, you get to make the choice if the packets will be delivered in order and if the packets can be lossy. So you can say, like, only send the latest game state to the other person. So you constantly blast them with information. But then if something doesn't arrive on time, you just drop it. So the WebRTC, it's really amazing the amount of flexibility. And it's tough when you've been doing it for so long.
+
+39
+00:18:03.000 --> 00:18:39.000
+You forget the parts that are exciting or the parts that are new. You like talking about the stuff that's fun for you, but you forget about the whole breadth of everything. Yeah. I mean, I think that most people probably think that, for example, if you start a call, that it's going through a server. So if you use, I don't know, it's a good example, if you start a call, that it's going through a server. So if you use, I don't know, it's a good example, like Zoom or Skype or one of these things, that there's just a suite of servers and they're sort of bouncing all the information. And again, that can happen. That's the fallback.
+
+40
+00:18:39.000 --> 00:19:10.000
+And so the turn servers enable that. But as you said, the vast majority of people are just talking straight computer to computer, which is really cool. Yeah. And I think it really comes down to two things. If you're running a business, the cost of having to do that, because if you're doing computer to computer, you have to process, you have to encrypt, you have to and then you have to do all the networking. So you're paying all the CPU costs and you're spending all these networking costs. I think it would be really hard for someone like Google to say, I'm going to provide Hangouts as a service
+
+41
+00:19:10.000 --> 00:19:43.000
+and then pay who knows how much money to make all these calls work. So yeah, it's definitely an amazing piece of technology. I'm actually surprised, and maybe it's there, I just don't know about it yet, but it seems like for Netflix, if a new show comes out a lot of people try to get that show at the watch that show at the same time it seems like that's something they should they should be doing yeah the one that i loved is web torrent is is torrents via web rtc so that they you can um either you know
+
+42
+00:19:43.000 --> 00:20:18.000
+you can seed and you can download via your browser. And when you go to their website, I think it downloads Sintel. And it's amazing to watch how you download a real, you know, video that you can watch live via thousands of other peers. And it works just amazingly well. It really does feel like the future of content distribution to share it among a lot of peers. Yeah, that's fascinating. So for that to work, I guess the torrent servers, so there has to be other people with that website open right then and there, correct?
+
+43
+00:20:18.000 --> 00:20:37.000
+Yeah, so they do have some headless boxes that are seeding. Like there's a WebRTC client that, no, it's not done and go, but they have one that's in JavaScript and it sits there and it acts as a seed box. But yeah, everyone who's connected, they connect over WebSocket to bootstrap and find the peers.
+
+44
+00:20:37.000 --> 00:20:59.000
+And then once you're bootstrapped, then all the actual data transfer occurs via WebRTC. Got it, I see. So there's just, it's one of these statistical things. It's such a popular site. There are always enough people there to make it work. I think there's a fair amount of clients that support the WebTorrent as well.
+
+45
+00:20:59.000 --> 00:21:21.000
+I forget, there's the Java-based one with the frog logo. Oh, um, oh, it's been so long since I used, um, but I know what you're talking about. Yeah. So, so they have WebTorrent support. So like the WebTorrent team has done an amazing job of like pushing forward this protocol and reaching out to people. Um, but yeah, there's a few, a few clients that don't, so they don't need to have their
+
+46
+00:21:21.000 --> 00:22:07.000
+browser open that they're sharing the torrent as well. And so WebTorrent is, you said a javascript implementation and pion is a go implementation correct yeah yeah so there's so i know of there's a few clients but i know that there's like one of the struggles is using having the javascript implementation uses a full you have to run a full instance of chromium and they don't render it. They just, they run a headless Chromium to seed, but that's pretty expensive. So we've been trying to work on getting a Go implementation of it because it would be very, very lightweight compared to that. Yep. Yep. I think that that's the, that gets back to your point about how sort of confusing it is. I know I looked into using WebRTC a while back for a C++ application,
+
+47
+00:22:07.000 --> 00:22:58.000
+and the instructions were pretty wild. It was build all of Chrome, link Chrome into your project, call these functions that are undocumented. It was just very odd, and I ended up having to bail on that project. Yeah, I think it's definitely been difficult. The tooling hasn't been out there. And the libraries themselves have been more targeted at large corporations or people that really know WebRTC already. Like if you go to WebRTC.org, I think there's an assumption that you already know how to use it. And we've seen like this new wave of WebRTC projects crop up. And so just in the last two years, we have a Python implementation called AIO RTC. We have a C++ implementation that was written from scratch that's super easy to use called RAW RTC.
+
+48
+00:22:58.000 --> 00:23:39.000
+And then we have Pyon. And then we have the GStreamer implementation. So there's a lot of new ones that are popping up recently. It's sort of seeing like a revitalization i mean it makes sense i think um you know one thing i did recently is is i signed up for the microsoft azure trial and actually in a future show we'll do a whole show on this the the public cloud services um but but it's actually it's it gets pretty expensive i mean even to just have one machine. Now, in my case, I was trying to use a pretty heavy machine to do some machine learning work.
+
+49
+00:23:39.000 --> 00:24:10.000
+But I think it was, if I had that machine running all day for a month, it was $1,000, which is nuts. I think it came down to, I think, $1 an hour or maybe $0.50 an hour. I don't quite remember how it breaks down. Someone will fact check me on that, but, um, but yeah, it's, it's not cheap. Right. And so, and so, and the, and the costs right now are, they're not with the public cloud, they're not capital costs. They're sort of operating costs. So, so you're going to, you're going to have to, your small company is going to have to reach into its pocketbook and, and come up with a thousand dollars every month um and so i think that that could be part of the reason why um why why this
+
+50
+00:24:10.000 --> 00:24:49.000
+technology is so popular i think part of it too is um just a real uh you know urge for for for people and for companies to decentralize a bit um that's really exciting too yeah and the other going back to the running servers and i think a big one i've seen is also the operational costs that you you know you can spin up a thousand servers and you can manage them wonderfully via kubernetes or you can manage them wonderfully and have each be an own vm that's managed via something um but there's just there's always going to be issues you always have you know someone will say oh this random service is acting weird can you kick it reboot it and you
+
+51
+00:24:49.000 --> 00:25:40.000
+have to design all these things like it's so nice when you're just running one server to handle that that signaling bootstrapping and then everything just works yeah that totally makes sense yeah i think i mean although to be fair you're going to have now the end user saying hey i can't i can't reach this person but is there any case where turn will fail i guess for turn to fail you have to like the whole internet i mean i mean just making a connection would have to not work right so it seems pretty rare so you can so turn has to run soN can run over TLS, TCP, and you can run it on 443. So if the only case I can think of is if who you're connecting via doesn't allow TLS traffic, they only allow plain text HTTP, and then they do actual deep packet inspection.
+
+52
+00:25:40.000 --> 00:26:47.000
+So they look at the contents of the packets and say, like, is this actual HTTP or not? Then it could fail. So I could see there are some cases where like super restrictive like healthcare or government where webrtc they're they're inspecting every packet and it absolutely won't work um in the real world i i think it's a safe bet yeah that makes sense so um yeah let's let's try to maybe give people a recap of this because it's definitely a lot to graph. So correct me if I'm wrong here, but I think so the first step is, again, going to that envelope metaphor is you need to know the outermost envelope because you need to send that to somebody so that they can get a way to reach you. get a way to reach you and so that's that's what stun is doing right yes and so and so the the stun servers and because that's a pretty cheap process there's a bunch of these public stun servers i know google maintains one um i think mozilla maintains one and so there's it's just a set of servers out on the internet that you can reach from almost any machine,
+
+53
+00:26:47.000 --> 00:27:06.000
+and they will just tell you what your public IP address is. Yeah, and then they tell you what your public IP address is, and then they establish that hole in your NAT. So they can say, this is your public IP address, and this is the port, and if anyone sends into this IP port combination, it'll end up on your local machine. So, yeah, question about that.
+
+54
+00:27:06.000 --> 00:27:26.000
+And I just thought of this now, so this could make no sense, but is there a way to detect if you have a symmetric NAT by on the same source port, you reach two stun servers and they tell you two different answers? Is that some way to tell in advance that this is not going to work out?
+
+55
+00:27:26.000 --> 00:27:40.000
+So someone wrote a command line application that's able to detect your NAT type. And I'm trying to think of how it works. I do believe it's possible, but I forget off the top of my head. I'm sorry. Yeah, so no, it's fine. But I think that would work.
+
+56
+00:27:40.000 --> 00:28:38.000
+And yeah, so again, someone on the show, I'm sure will write in and say why this doesn't work. But yeah, so you say, okay, on port 3000, I want to reach Google's stun server. And I also want to reach your Yahoo stun server. And Google's one comes back and says, Oh, I opened this port for you, port 1000. And then the Yahoo one comes back and says, Oh, I opened, you know, your router opened port 2000. That's sort of a sign that like, okay, your router is not letting Yahoo use the Google one. Yeah, and it's a sign that like every outbound packet is going to have a different source. So it's how the other side, since the other side depends on the source port being the same every time it was the other nat is just going to throw away each packet right yep that's right and so how does this relate to upnp and the nat pnp and those things yeah yeah so the so i saw someone bring this up and i'm actually not
+
+57
+00:28:38.000 --> 00:29:07.000
+familiar with i've never written a upnp application but the way it was explained to me is that most routers just ended up disabling it. It had a bunch of promise in the early 2000s, but it just had issues where people assumed if I have UPnP enabled, that malware is going to turn it on. And just to explain what UPnP is, so what we've been talking about is stun servers, where you reach out, you talk to someone,
+
+58
+00:29:07.000 --> 00:29:32.000
+and then it opens up a hole in your NAT temporarily where anyone can contact an inner computer via an outer IP address. What UPnP was is that an inner computer can connect to the router and say, okay, I want port 6000, and then your computer can open up holes in your NAT however it wants with whatever rules it wants and which is cool and all like that's the best way to establish peer-to-peer connectivity
+
+59
+00:29:32.000 --> 00:30:19.000
+because you don't have to depend on a stun server you can just communicate back and forth but people ended up disabling it and those and I saw people talk a little bit about it but why it is why isn't it in WebRc and no one has given enough attention to even talk about it in the iatf or anything like that yep yeah that makes sense yeah i think i mean there's a lot of issues so yeah you you hit the nail on the head it's basically a way to instead of instead of doing this process and and and getting this route backwards you just make the route forwards you know you just you just say okay anyone who wants to talk to my router on port 8000 is really talking to me and you just do that up front and then and then anytime you send anything it comes back on that
+
+60
+00:30:19.000 --> 00:30:57.000
+um but yeah i mean the if you have two rout, right away you're dead in the water, right? So, I mean, if you're part of an apartment complex and you have your Wi-Fi and it's connected to their Wi-Fi, then you can't actually change their UPnP settings. So, yeah, it's all the people who would have that kind of control would already be supported by stun yeah and I think the nice thing about stun is it's such a standard it's such a minimal standard and then it's not something that you have to deal with each router manufacturer like if WebRTC if we had to have you know
+
+61
+00:30:57.000 --> 00:31:18.000
+UPnP library and have all these if def to work with each hardware manufacturer that does something wrong I could see that sort of blowing out of proportion eventually. Yep, yep, totally makes sense. So we talked about how it hinges on this sort of trick with people replying back. And so when you talk about it, it sounds definitely cool,
+
+62
+00:31:18.000 --> 00:31:46.000
+like hacking and using the system, not the way it's designed. Is this like a wild west? Is there any security here? Can people trust WebRTC to do anything secure? Yes. So WebRTC itself, once you've established the connectivity, the first thing it does is it starts a TLS handshake. Basically, there's TLS via UDP,
+
+63
+00:31:46.000 --> 00:32:11.000
+which is called DTLS or Datagram. So you might have to explain TLS for folks. Yeah. So the TLS is, it works off this concept of Diffie-Hellman. And the idea is that if I can choose a private number and you can choose a private number, we are able to exchange our public numbers and via a rule of powers, I believe,
+
+64
+00:32:11.000 --> 00:32:59.000
+that we can figure out each other's private numbers without someone who's snooping in the middle being able to figure out. And TLS, if you've ever seen the green lock up in the corner of your browser or you know that it's HTTPS is basically HTTPS just means that you're running over over TLS. And so WebRTC, when it first when it's able to establish connectivity, it establishes that green lock. And this is all just built in the protocol. So you can never talk to another WebRTC peer unless the first thing they do is speak TLS as well. Yeah, that totally makes sense. And so, yeah, if somebody else tries to, even though they can reach your computer and they could send you as many packets as they want, you know it's coming from them because they
+
+65
+00:32:59.000 --> 00:33:39.000
+won't be able to sign their packets correctly. Yeah. would be able to sign their packets correctly yeah and so the um so once you what you do is you um once you establish this tls connection you have enough crypto state and you encrypt your packets and you add an off tag to the end and so if i receive information from someone that's encrypted i can if what i do is first I check the tail of the packet and I'll have this off tag and that off tag will tell me is this actually valid and then if that off tag is valid then actually decrypt it and that's like the two main concepts there is is something authenticated and then it's something
+
+66
+00:33:39.000 --> 00:33:58.000
+actually encrypted. So yeah so everything via WebRTC it's it's always encrypted by default and it's sort of and that's and that's a nice thing via WebRTC it's always encrypted by default and it's sort of and that's a nice thing about WebRTC if you're coming from VoIP or coming from other industries is basically we just WebRTC just took a bunch of existing protocols the one that we're talking about getting across networks is called
+
+67
+00:33:58.000 --> 00:34:25.000
+ICE the one we're talking about is DTLS and SRTP and then later we'll probably talk about like the data channels which is SCTP, is they took all of these things that already worked, that people were already building products out of, and just wrapped it up into one package and made it easy to use. So actually one thing, so I guess a precursor to the security part is the identity part, right? So if everyone's talking to each other, how does anybody know who anyone else
+
+68
+00:34:25.000 --> 00:35:01.000
+is? So when you have that initial bootstrap message, you share a fingerprint of the certificate that you're going to share via DTLS. So if you look at that initial bootstrap message, you'll see SHA-256, then you'll see this long value. And what that does is after the DTLS handshake is over, each side exports the message that happened. They export the certificate that was shared and they confirm, okay, the certificate that we agreed upon, was it actually the one that they shared via that bootstrap message? So if you, let's say that someone tried to man in the middle you
+
+69
+00:35:01.000 --> 00:35:25.000
+and they connected with a different WebRTC instance, they couldn't generate that same fingerprint. And so after you connected and after you did the DTLS, you both would export your fingerprints and it would fail. And it would say, like, I've been attacked. Hang up. Got it. So the idea is it starts, as you said, with that number, and each person picks their own number, and the the the
+
+70
+00:35:25.000 --> 00:35:59.000
+the range of numbers is very very large so the odds that two people pick the same number impossibly low um and then that number kind of becomes your identity and then once the connection is established then you could say um you could say hey i'm john smith right and then you run into all the identity issues there, right? I mean, we could have a perfectly valid connection where it's definitely this computer in this location, this computer in that location, and the person says, you know, I'm the president of Japan,
+
+71
+00:35:59.000 --> 00:36:25.000
+and if you believe them, well, that's on you, right? Yeah. And I think when I was, so when I wrote the Go implementation of Dls something that came super handy and i'll share the link so we can have it later is um someone wrote something called the illustrated tls connection which was super helpful because you have all you just have all of these all this cryptographic information being exchanged and i didn't really know what was going on and um it's a super helpful thing where you can look at
+
+72
+00:36:25.000 --> 00:36:50.000
+each packet and see it actually shares a bunch of different information. You generate local random data and then they generate random data. You exchange the amount of ciphers that you support. There's a bunch of different cipher types and stuff like that. There's a lot of things. It's a super interesting thing that I think you could dive into for hours if you if you like talking about that stuff. But we should we should share that like this is something that taught me a lot.
+
+73
+00:36:50.000 --> 00:37:32.000
+And then I bought a book. It was like some like intro level textbook on cryptography so I could learn this stuff. I wonder if there's some way. Is there some way to pick to make part of that number uh you know specific like in other words i wonder if there's some way to embed your let's say twitter handle into that into the secret key in some way where people uh could could attach it to some other identity um i feel like that would probably break the encryption but no that's a super yeah so once you figure out the other party's number and i but i think that's pretty much what a certificate is already is instead of instead of it being you know your
+
+74
+00:37:32.000 --> 00:37:54.000
+twitter handle it's this long random thing that's generated and i guess but no i see no reason why that couldn't work at all because really the number you know the number could just be uh ascii of your Twitter handle. And I think something like that could easily work. But again, I'm not a cryptographer. I'm sure that if someone's listening to this and is going to wince in pain at my misunderstanding.
+
+75
+00:37:54.000 --> 00:38:12.000
+Same here. But yeah, I guess the issue is, at the end of the day, is identity, right? It doesn't matter how secure the connection is. At some point, someone's going to say they have this identity, again, they're the president of Japan, and at some point you have to trust that that is true.
+
+76
+00:38:12.000 --> 00:38:33.000
+The thing that this gives you is continuity. So if you know someone's the president of Japan and they reach out to you over WebRTC a week later with the same signature, then you know you're still talking to the same person. Yeah, and then also it's this ability to
+
+77
+00:38:33.000 --> 00:38:57.000
+yeah, no, I think it just comes down to identity and it comes down to how do you establish identity without having some kind of central authority? Because with WebRTC, you don't have the ability to go and, because when you do a website, you know, you buy your certificate from VeriSign. And then so someone downloads the certificate and say, okay, I got the certificate
+
+78
+00:38:57.000 --> 00:39:38.000
+from google.com. Let me see who sold it to google.com. Can I them with webrtc all of these certificates are generated by the browser so all it so via that bootstrapping message it says okay i'm going to be talking to this other browser with this fingerprint but at the end of the day there's no next person to go to like you have to say okay i got the certificate they claimed they were sending me that's it so yeah if somebody has a you know let's say that they have a desktop and they have a phone, how did they have a, you know, a coherent identity across devices? I don't think they, I don't think you can. Like, I think every time you start up a new WebRTC connection, it could be, there's no
+
+79
+00:39:38.000 --> 00:40:10.000
+way on the other side can I tell, is it the same person or not? Got it. That makes sense. So if you wanted something like that, I mean mean if you wanted to build a product like that let's say you wanted to make a forum over over our over web rtc you'd probably need some type of like central server just to manage the identities otherwise everyone uh every every single every single web browser frame would be a different person oh so the one thing you can do is the web rtc by default generates a new certificate for every connection what you can do
+
+80
+00:40:10.000 --> 00:40:45.000
+is the constructor of the rtc peer connection you can pass in a certificate but um so you could have like a you could have for every connection use the same certificate if you wanted. But it makes sense. Yeah. But by default, no one does. Like most people do, they establish identity by having like a central server. They'll say like, okay, I'm going to have you spin up a WebRTC connection. And then they throw in a database somewhere and say, okay, this person is who they claim to be. Yeah, that makes sense. I mean, if you had the same certificate,
+
+81
+00:40:45.000 --> 00:41:03.000
+to synchronize the certificates, you'd need a central service. So you'd need Dropbox or something. So if you have that restriction, you might as well have a server that, as you said, just collects a lot of certificates and says, this is all Bob Smith. Yeah.
+
+82
+00:41:03.000 --> 00:41:18.000
+Cool. This is awesome. So what are some exotic things that people have built with WebRTC that really kind of made you say, wow, I didn't think that, I hadn't thought about that. So I think the ones that are really interesting to me recently
+
+83
+00:41:18.000 --> 00:41:52.000
+is the game streaming story. So like Stadi is, how do I get content from one machine to another in sub-second time? So this is game streaming the game streaming story so like study is how do i get content from one machine to another in sub second time so this is game streaming this is um sharing your desktop and other stuff like that and then the other so there's kind of that area how do i share content from a to b the other one is i'm seeing a lot more of these embedded devices communication. So, WebRTC has something built into it called MDNS. And if you sit down on your Apple computer
+
+84
+00:41:52.000 --> 00:42:12.000
+and you click on My Network Places, you'll see other computers in that network. And the way that works is via multicast. So, it'll send out a little UDP message, and it will send out a query. And it'll say, okay, I'm new to your network. Everyone else who's here, respond to me. And then all of those computers respond directly to you.
+
+85
+00:42:12.000 --> 00:42:36.000
+It's a way for you to ping everyone. And so I saw— So can you dive in a little bit on—because I don't actually know this. Like, what is Multicast? Like, how does that actually work? What does that do? So what you do is you subscribe to a multicast group. So in Go, the API is as simple as you subscribe to a group and then you read from a group or you write to a group.
+
+86
+00:42:36.000 --> 00:43:21.000
+So when I start up, I subscribe to 2240099. And it's just one of those groups. And you can have as many as you want on different IP addresses that you want. And so once you're subscribed to a group, if anyone writes that group, everyone gets the message. And what's cool about this is you don't have to know other people's IP addresses ahead of time. Like basically you're saying, okay, if anyone in this network writes to this multicast group, I'll receive it. So it's great for if you want to broadcast a message from one-to-many or many-to-many. And so this is one-to-many but over the whole internet, like anyone who's using WebRTC?
+
+87
+00:43:21.000 --> 00:43:38.000
+Oh, no. Unfortunately, it's only in the same LAN. Oh, God. Oh, I see. in the same LAN. Oh, God. Oh, I see. So what's happening is your switch or your router or whatever just has a list of all the people connected to it. And then when you send something to it in a certain way, it gives this to everybody else.
+
+88
+00:43:38.000 --> 00:44:21.000
+Yeah, exactly. And so this is cool because you don't have to have a central server anymore. If you have two laptops that are in the same network, they can both hit the multicast and then find each other without anyone having to broker in the middle of them. How does that play with the stun idea? Because now both these computers will try to reach some Google server and it's almost like the packet has to go out and then come back. So when WebRTC starts up, that first part of establishing connectivity, you make a list of, okay, here is my private IP, here is my stun IP, and here is my turn IP.
+
+89
+00:44:21.000 --> 00:44:42.000
+And you establish connectivity over all of them. But then ICE evaluates which is actually the best to use. So each of them have an associated cost. So I would say direct connectivity is like a cost of zero. So if you can have something with a cost of zero, WebRTC is going to prefer that. And let's say you have multiple public IP addresses, you could compare each of them and see which is the best one to use,
+
+90
+00:44:42.000 --> 00:45:24.000
+like which has the lowest latency, which has the least packet loss, and stuff like that. So ICE allows you to make intelligent decisions over which is actually the best pathway between my two peers. Oh, wow. That's interesting. So is it occasionally, does it keep that up to date? So in other words, does ICE say, okay, every okay every you know 10th packet i'm going to send it on three different channels and uh almost like a like a trace around in a machine gun right i'm going to take every 10th packet i'm going to send it on all these different ways and then on the other end uh what you know i know that this is every 10th packet i'm going to get
+
+91
+00:45:24.000 --> 00:45:58.000
+you know 10 different times and i'm going to get 10 different times, and I'm going to measure which one was the fastest. Yeah, so WebRTC, they have this concept of renegotiation. So the person that started the call chooses which peer you're going to communicate over. You send to the other side, I select or I nominate this IP address, like my source IP address to your destination IP address. And at any time, you can re-nominate and choose a new pair of local and remote candidates. And so, yeah, so like you said, like a tracer round, at any time, it could switch which pairs.
+
+92
+00:45:58.000 --> 00:46:32.000
+And where we see this a lot is where people move between mobile and either like they're on their cell phone and they move between mobile or they move over to their provider via 4G. So if you're on a WebRTC call and you go from inside your house to outside, it'll actually switch because all of a sudden the IP address you're on isn't valid anymore. And so it'll re-nominate on the fly. Wow, that's a real statistical challenge, right? Yeah. And I think that's the fun thing.
+
+93
+00:46:32.000 --> 00:46:56.000
+That's why I love WebRTC. And I encourage more people to get into it because you have networking challenges, you have video compression and video coding challenges, you have cryptography challenges. This is, for me the most fun place you can be right now yeah that's awesome and you know i feel as if um i i think we're going to get this sort of cambrian explosion here right i mean like there could be a forum
+
+94
+00:46:56.000 --> 00:47:23.000
+over web rtc actually i saw something um i think it was called zero net or maybe it was zero rpc but it was something where you run a server on your computer. I'm assuming it's a WebRTC server. And then you actually point your browser to localhost and there's a whole list full of websites you can visit. And when you go to any of these websites, it's getting all of it from other peers. I love that.
+
+95
+00:47:23.000 --> 00:48:04.000
+And then the two big ones for me are IPFS. So instead of using the internet via what we're traditionally used to, it's distributed so that each person will host whatever content they're interested in sharing. And you can do all that via WebRTC. And then Tor has their Snowflake project where you can do censorship circumvention via WebRTC. So if another person out in the world can't access a website, they'll go to you and request that you access it for them. And they'll make that request via WebRTC, which opens up a bunch of interesting things. Yeah, so tell people what IPFS is.
+
+96
+00:48:04.000 --> 00:48:51.000
+Actually, I don't know the acronym but oh the internet protocol file system okay i believe i believe but i'll probably mess it up as well but um it's the uh it's the idea that instead of um well i guess the the classical problem let's say you go to a website and it's like some niche website that's hosted by someone and you love their content. And then you go later and it's gone because the Internet isn't decentralized. When that content's gone, it's gone forever. But with IPFS, the idea is that the Internet should now be like a cloud of peers. So if you visit a website, you should download it and store it locally. And then when someone else goes to visit that website, if it's gone, they would instead of downloading it from the original person, they would download it from you.
+
+97
+00:48:51.000 --> 00:49:19.000
+Oh, I see. Yeah. So that's like my really reduced ad nausea, like reduced greatly. It's an amazing project. They've built all these, like they've solved these really technologically challenging problems and as a group um i've talked to them a few times and they're such a nice like supportive group they've been they use pion and like during the whole process they were super nice and they explained like what they needed and what needed to be better i couldn't say enough nice things
+
+98
+00:49:19.000 --> 00:49:53.000
+about them but that's but that's the gist of it and i would just go to ipfs.io and they have a great marketing site to explain like what they're trying to do cool that's awesome soist of it. And I would just go to ipfs.io, and they have a great marketing site to explain what they're trying to do. Cool. That's awesome. So it's a file system over the web. You can create content, and then I guess if people ask for your content, initially you'll be the one giving it to them. But as it gets more and more popular, there's a sort of network effect, and eventually other people will be helping you. Yeah, and it greatly reduces bandwidth costs. It makes it easier to scale because if, let's say, that someone downloads it,
+
+99
+00:49:53.000 --> 00:50:18.000
+you have one server that's on the East Coast, but it's really popular in Japan. People shouldn't have to be connecting over the entire world to download your website. They should just be sharing it among their peers in the same region. Yeah, we should have the podcast on IPFS. There should be a podcasting app on that. Yeah. And I think it just opens up all these new possibilities,
+
+100
+00:50:18.000 --> 00:50:45.000
+especially when you're talking peer-to-peer, like having conferencing, having games. It opens up so many cool things. Is there any case where the latency would be worse than going through a server? Or is that sort of like a triangle inequality type thing? I think that's tough to answer because at a protocol level, I don't think there's any reason why either
+
+101
+00:50:45.000 --> 00:51:11.000
+should be faster or slower, but I think it just depends on what servers, if you're doing client server, what servers you have available and like how close they are. And if you're doing a peer to peer, like what's the quality of the peers you're working with and stuff like that. Got it. Yeah, that makes sense. Either way, I guess you could always measure. If you're measuring high latency you can try to adapt your application to that yeah and I think there's also a lot of other problems that go into
+
+102
+00:51:11.000 --> 00:51:31.000
+play so if you can you might have super low latency but a lot of packet loss so you might have a lot of jitter and stuff like that there's a lot of problems that go into it and that's what's the fun part of when you get into the video area is choosing what video frames are the most important in those scenarios like
+
+103
+00:51:31.000 --> 00:52:20.000
+do you if you have a lot of packet loss maybe it doesn't make sense to encode the video in a certain way and stuff like that yeah that totally makes sense yeah i mean if you have as you said high packet loss maybe you send a smaller like a cut out of the of your just your face or something yeah and then and you see that where um what they have is that they have a concept of this jitter buffer and if you have a lot a lot of packet loss what you'll actually do is you'll introduce latency into the call. So you say, okay, I'm going to add 400 milliseconds of artificial latency, and I'm going to give that other side that extra 400 milliseconds to resend the data that was lost on the first transmission. Okay, that makes sense.
+
+104
+00:52:20.000 --> 00:53:15.000
+Yeah. And that's all these extra problems that come with doing this peer to peer UDP stuff is because UDP packets, there isn't guaranteed delivery at the actual protocol level, you have to make all these decisions. But at the same time, I think this flexibility is really important, because maybe you really want the lowest latency possible, but you don't. But because but you're okay with a little packet lawsuit like you're okay with maybe a little green spots here and there but you want something to be absolutely 200 milliseconds all the time yeah that makes sense i'm sure too you could always um you know if you if you put incremental counters on the packets and then have some retried mechanism i mean well basically you could implement tcp over udp you could just re-implement the TCP part. Yeah, and that's basically what you do is with video packets, they have a sequence number on them. And so for each packet you send, there's packet one, packet two, packet three.
+
+105
+00:53:15.000 --> 00:53:34.000
+And then you can detect, oh, I lost packet two. And you send a NAC to the other side and just say, I didn't get packet two, please resend. God, does WebRTC handle that for you or is that something you would build? It handles it all for you. You could just say, I need reliable order transmission and it just makes it happen.
+
+106
+00:53:34.000 --> 00:53:59.000
+Yeah, exactly. It also gives you the flexibility to say, I need reliable up to this percent of loss because it really depends on what you're doing. If you're doing a security camera um maybe that maybe having it be perfectly reliable isn't that important but you know having a three seconds delay like could be a life or death situation you know if you're like watching stuff but at the same time let's say you're doing you want you know
+
+107
+00:53:59.000 --> 00:54:36.000
+beautiful things for you know people to watch watch your broadcast of you driving a drone. Like, you don't want, you know, your beautiful HD scenery to be broken up with little blocks. You can say, okay, I'm accepting of 10 seconds of latency, but I want zero packet loss. Yeah, that makes sense. And for something like data, where you have a very specific protocol that you've implemented on top of this, and you're expecting to get this magic packet header every time that you won't tolerate any loss. Yeah. And then with data, um, and it also comes down, there's a bunch of trade-offs there. People talk about like, if you're,
+
+108
+00:54:36.000 --> 00:54:58.000
+if you're playing a first person shooter, I don't care about where my, where my player was three seconds ago. So, so if a packet arrives late, like if I only accept the latest sequence number, and so it allows you to only update where the player was at its latest state because you don't want them jumping back and forth if they have packet loss or latency.
+
+109
+00:54:58.000 --> 00:55:32.000
+Yeah, that makes sense. So let's just focus on the reliable ordered case to keep it simple. So most people would have experience doing some basic networking. So I open a TCP connection. I can send some JSON. That person can get the JSON and decode it and deserialize it and do some interesting things. If they wanted to do that with WebRTC, how does that work? How would they be able to do that?
+
+110
+00:55:32.000 --> 00:56:04.000
+So WebRTC, what you're limited by is that everything is set in datagrams. So with TCP, we're used to that stream of data. I make a post, and this will stay open until everything is transmitted. But you don't have that same luxury with WebRTC. Everything is sent in blocks. So you say, okay, I'm going to send a message, and this message will contain just this amount of information. So I'll send, and those are usually limited to like 1,500 bytes.
+
+111
+00:56:04.000 --> 00:56:21.000
+And so if you're sending JSON, what you'll actually have to do is you'll have to chunk your JSON into multiple blocks across those 1,500. So you'll have to do the length of your stuff divided by 1,500, and then you send the first block, the second block, the third block,
+
+112
+00:56:21.000 --> 00:56:56.000
+and then you have to combine them at the end, and then you decode them. So I think that's really the biggest difference that you'll see, is that stuff is split into datagrams. And the reason they have to be split into datagrams is everything has to run over UDP to get the NAT hole punching everything we talked about earlier. Yep. Yeah. I mean, even TCP, for people who don't know, you might think you're sending one byte at a time or, let's say, one entire file at a time, but under the hood, TCP is doing the same thing. Yeah, but I think that's the magic of WebRTC
+
+113
+00:56:56.000 --> 00:57:19.000
+is let's just peel everything back one layer and give people the flexibility to build their things because I know that there's times where I've had information that's better expressed as datagrams, but I was stuck communicating over TCP. So every time I sent something, I had to put the length of the packet, then write the body of the packet, then the length of the packet, then the body of the packet.
+
+114
+00:57:19.000 --> 00:57:36.000
+So it's a trade-off either way. Yeah, that totally makes sense. And then you have to rely on TCP to sort of do the right thing there. And that's why you have to, there's this thing in TCP called Nagel's algorithm, and sometimes you have to turn it off. Yeah, it's like anytime you encapsulate something,
+
+115
+00:57:36.000 --> 00:58:02.000
+some complexity, that might work for a lot of cases, but then when it doesn't work, it's very difficult because now you have to unpack what that person the assumptions that person made yeah no and the one the big one that i hear a lot of people complaining about is the headline blocking so let's say you're sending live information via tcp um if some of the information at the very beginning of the beginning of the
+
+116
+00:58:02.000 --> 00:58:42.000
+stream is slow it'll block things going back so what's the what's the point you know if i'm sending a live broadcast you don't want to see what happened two seconds ago but because tcp says everything must come in order you're blocking the entire thing just so i can send you two seconds ago which you don't even care about anymore yep yep absolutely cool so let's let's talk about, you know, how did you sort of get into, you know, this, like, how did you get passionate about WebRTC? And how did you get into, you know, programming in general? And what's sort of, what's been sort of your trajectory? Yeah, so I, when I started, when I graduated high school, and I went into the field right away.
+
+117
+00:58:42.000 --> 00:59:11.000
+And I worked at a small phone company in my hometown, which I had a lot of fun doing. I worked with Asterisk. And I was doing a lot of PHP and a little bit of C and stuff like that. And really what the big break for me was, and I didn't go to college. The big break for me was going to this thing called the Recurse Center, which is in New York. And I went. And for three months, they said go and go and do whatever you find interesting and learn and the idea is at the end of the program that you're in
+
+118
+00:59:11.000 --> 00:59:48.000
+this system forever and you're able to reach out to employers and able to help you and help and grow you to be a better match for employers and when I went there I'd only written php and I wrote an http server in C. And then I also got to work on Firefox a little bit, which was a lot of fun. Wow, cool. Yeah. So and I think that's, that was a big one for me is just figuring out like, how I never really learned how to learn. I think this is like the biggest thing that if I had to impart one lesson upon myself, when I i was 16 would be go figure out
+
+119
+00:59:48.000 --> 01:00:32.000
+how to learn on your own because like computer being in the tech industry like you're going to have to learn forever and find a way to make it fun and find a way to be passionate about it yeah i was watching an interview with peter norvig, who's at least he used to be the director of Google Research. I think he's still at Google in some capacity. But he was saying something I found really interesting, which is there was this new technology that they wanted to use at Google. And they wanted to use it for this specific project. And he started kind of going through and reading the manual and understanding all the different operations.
+
+120
+01:00:32.000 --> 01:01:04.000
+I mean, it's equivalent of like going to php.com and just reading every single page of the API. And he got about 10% of the way through and his colleague said, oh, yeah, I'm done. You know, like I finished the thing we set out to do. And he said that was like a really different, it's a modality, it's like a paradigm shift from I think, you know, in the past when, let's say the 90s or even earlier when, you know, the first step was write your own compiler or the first step was, you know,
+
+121
+01:01:04.000 --> 01:01:22.000
+write your own file or the first step was write your own file system or file handler. That was sort of the mentality is to understand things fully. And now things have become, there's just so much content out there that it's really about, can I get what this is talking about quickly?
+
+122
+01:01:22.000 --> 01:02:09.000
+And can I figure out it's going to solve my problem? And what's the minimum that i need to do to you know plug this in reliably and and move on yeah and i and i think for what come what has really come in handy for me is if you deep dive on a couple of those core concepts you find that they they sort of, they, like, they last you forever. So a big one is debugging. So if you can figure out how to, how to use GDB, how to use address sanitizer, and how to, how to use that, all of a sudden, everywhere you go, that concept applies over and over again. Yep. Yep. It's totally true. So I know, and that's really how my career has been. I went from, I worked a job where I wrote Common Lisp. I worked a job where I wrote PHP and C.
+
+123
+01:02:09.000 --> 01:02:44.000
+I worked a job where I did C++ and JavaScript. Now I'm doing Go and WebRTC. So all over the place. But it's really like once you learn those fundamentals and you learn how to those concepts that apply everywhere, you get to jump in and do really anything. And what got me into WebRTC is I worked at a company that was doing that was in the video space. And then out of that, like afterwards, after I left that, I was like, I really enjoyed it. I wanted to continue being in that area. So I started working on Pyon. And
+
+124
+01:02:44.000 --> 01:03:34.000
+it wasn't really going anywhere like it was a fun little project i didn't have any big ideas for it but what really inspired me was the community that came on so a big one a big person i want to thank is uh mckeldee backer like he jumped on and he said like i he saw a lot of potential with this can be a library that can go and empower other things like WebTorrent, IPFS. And all that positivity and support that he brought is what really encouraged me. And what I really encourage other people to go and find, like, that's why open source and free software is so great. Because at the end of the day, with your job, projects change, things get canceled. But the nice thing about open source is this is something you go home and work on and build something that you're proud of that is completely decoupled from all of that.
+
+125
+01:03:34.000 --> 01:04:23.000
+And that's why I find a lot of joy in it and what's really encouraged me to keep doing it. Yeah, that makes sense i mean one thing that that i'm sure you get a lot is people saying you just went to work you programmed for 10 hours and now you're going to come home and keep doing it again like how do you answer that i think for me it's the sense of community and it's the sense of success that comes with pion and that's why i look forward to coming home and doing it so much because no matter if i had a bad day at work, if I come home, stuff can be going well with Pion. And I think this is like, it's the same with thing like diversify your investments, diversify your time as well. I make sure that I go and exercise three times a week. I make sure to work on Pion. I make sure to go to work. And also like, you know,
+
+126
+01:04:23.000 --> 01:04:41.000
+I'm married. We go and do things a lot. We go and travel. It's like don't invest all your time into one thing because when that one thing is going wrong, like if work is stressful, it's going to tear down your entire life. That's why I encourage people to do a bunch of different things because you'll notice that it will last you a lot longer.
+
+127
+01:04:41.000 --> 01:05:12.000
+Yeah, that makes sense. I mean, it's really inspiring. Yeah, I think along those lines one issue that i see is a lot of folks um it's very hard to see the stepwise changes in the future right um i think i've i don't know if i've mentioned this on the show but um uh they did this study it was like a social psychologist. They asked a bunch of 20-year-olds, would you like the same genre of music when you're 30? And they asked a bunch of 30-year-olds,
+
+128
+01:05:12.000 --> 01:05:39.000
+would you like the same genre? Do you like the same genre now as you did when you were 20? And the answers were completely different. So a lot of the 20-year-olds felt like they would like the same genre. If they're into, let's say, country or rock or something, they'd still like metal when they're 30 and almost all the 30 year olds said nope you know i changed my style and uh and they repeated this 10 years later just to make sure that maybe the music in the 90s was really good or something they repeated it 10 years later
+
+129
+01:05:39.000 --> 01:06:07.000
+uh you had same people and everything it all showed that people just grossly underestimate these sort of stepwise changes. And so you see a lot of folks who, they say, oh, I'm going to work 50 hours a week. I'm going to work 60, 70. I'm going to work 80 hours a week. And, you know, people, you have to do what you have to do, but never forget those sort of big stepwise changes that can kind of come out of
+
+130
+01:06:07.000 --> 01:06:53.000
+nowhere and the way to get those big stepwise changes you said is to is to diversify a lot of your interests and to build a brand for yourself um that can't be sort of shadowed behind a company right just like a personal brand that that that is something you enjoy yeah and i think it and for a lot of people it just depends on what your goals and what your passions are in life like i don't think there's any reason that you know programming can just be a job that you go and do and i know a lot of people that do that and they're very happy um but for me i've always felt this the happiest i've been is when is getting that positive feedback from other people. Like when they tell me, I used your open source project and I was able to build my cool thing.
+
+131
+01:06:53.000 --> 01:07:30.000
+So you figure out, diversify and then figure out, by doing all these different things, figure out what makes you happy and what lines up that you can work on a lot. And it doesn't even really feel like work yep yep that makes sense oh so how did um how did you overcome some of the adversity and we talked about this a couple of shows ago when we interviewed the pragmatic programmer authors like some of the adversity around uh oh you didn't go to college um you know so your resume you know we're not even going to look at it. How did you sort of deal with that? It sounds like this program that you were in helped a lot
+
+132
+01:07:30.000 --> 01:07:56.000
+to get the ball rolling, right? Yeah, so I really credit it to that. Once I went there, they were able to get me into Etsy via the recruiting program. And I give big credit to Etsy as well. They take a big risk on all of these young programmers and say, yeah, you didn't go to college. You don't have a lot of industry experience, but we would love to give you a chance. And they've hired a lot of people
+
+133
+01:07:56.000 --> 01:08:33.000
+out of this program. I think for me, another big thing is I really didn't have a traditional career path. Like I worked a lot of, a lot of like different jobs, interesting jobs. And what always got into me is what always got me in was what I had prior knowledge of before. So the job after I went to, um, after I was at Etsy, I got hired because I knew C. And then when I was at that job, I learned, I built, worked on Chromium a little bit. Like I was working at a company that was doing stuff with that. And so the next job I was like, okay, I've worked on Chromium and that, and that got
+
+134
+01:08:33.000 --> 01:08:59.000
+me in the door. So it's all about, um, like learning those little things and getting you in the door. And most of the time it's not even really relevant. It's, but the person making the decision, you know, they want to see those one little key words. They want to know, oh, you have relevant experience. We'd love to have you. But that relevant experience usually isn't that important. But it's just all about convincing the person that's making that decision. Yeah, that makes sense.
+
+135
+01:08:59.000 --> 01:09:35.000
+I think there's a bit of a self-fulfilling prophecy, right? But yeah, I think your original point, too, is totally valid. A big part of it is optimism. So, I mean, you made some changes to Chromium. In my case, I've done, let's say, a bit of area in Bayesian statistics. If there's someone looking for a Bayesian statistician, I would probably say I know it. Now, do I actually know it probably not I mean if they really grilled me in an interview I'd probably get hammered but go in with a high degree of optimism especially if you've been
+
+136
+01:09:35.000 --> 01:10:21.000
+listening to this show for eight years you've come across a lot of different programming languages and so you know again I'm not saying people should lie on the resume and say they have 20 years of experience or anything like that but it's but i'm saying that uh uh you know people i think if you go in with optimism with an open mind and and you know with a wide breadth of knowledge i think that can go really far yeah and i don't think that and also when people put out these high requirements i don't think they're doing it on purpose, but people also over, overvalue their own knowledge. So when they say I need an expert C++ programmer, they assume they are an expert C++ programmer. The reality is they don't actually know as much as they think they do. And I don't, it's, it's easy
+
+137
+01:10:21.000 --> 01:10:57.000
+to look at, look at the industry and be like, oh, it's evil because they want all this experience or they want all of this. But I don't think anyone really knows what they're doing. Everyone's sort of just bumbling through. They're trying to find their big project. They're trying to, you know, help their self-esteem by learning programming languages and stuff like that. And like, you know, you just, you have a lot of people that um you know everyone's got their own problem like it's easy to say you know the person at work who's grumpy you know they're they're a mean guy but they've they've probably got things going on behind the scenes you don't know about and it's the same with hiring you know at the end of the day some non-technical is
+
+138
+01:10:57.000 --> 01:11:42.000
+probably writing off these requirements and it's a big mess you it's like the i you know fake it till you make it kind of thing i'm still doing that so nice yeah I think uh yeah it's a huge point you know one of the interesting thing we we talked about not show is they actually I posited the question of what would be the the the perfect interview not like a single interview but it's a perfect way to interview and they suggested uh just have the person come on the team for a day um i thought that was really interesting i mean obviously like my mind leapt to all the ways that could go wrong uh you know like nda issues um a person could just flake out i mean all these things but but but uh there is something really powerful about that and it cuts through all of the
+
+139
+01:11:42.000 --> 01:12:12.000
+garbage like like you know can you solve this this problem that has this trick that they taught in grad school that you have to just you know recurse regurgitate verbatim right yeah no i would i would love to do that the nice thing about open source that makes it really easy if you're running an open source project and you that's that you get paid on for if someone contributes then you can invite them to come on and be like, hey, you've been working on this. You know what you're doing. We'd love to have you. And that's what's really happened with me.
+
+140
+01:12:12.000 --> 01:12:45.000
+It's because I've been involved with open source for six, seven years now. All these Chromium doing C with PHP, like all my jobs have now come out of my open source contributions. Not directly, but just because I can say, go look what I've done. This will prove it for you. Yeah, that's amazing. That's really, really inspiring. I really hope that people who listen to this, you know, we get a ton of questions about, should I do this boot camp? You know, should I go to go back to college and start start a whole new four year degree? And I think this is you
+
+141
+01:12:45.000 --> 01:13:31.000
+know this is actually a completely different avenue where it's you didn't go into this program um trying to learn C you went into the program it's ultimately I think about um about building connections right so it's it's it's you know here's access to some open source projects i'm assuming they gave you uh like some direction as far as what could be better in these projects and then here's some folks to talk to you and that's i think it's really powerful yeah no and i in i yeah just being it's really just being taught how to learn and being taught how to go help people so they they kind of taught us, okay, you know, show up, talk to the maintainers, offer to help, get involved. And that's the same way I am with
+
+142
+01:13:31.000 --> 01:14:05.000
+Pyon now. Like the part of it that makes me the most proud is that we're sitting at like 80 some contributors. And a lot of those are little small over the wall patches. But I love it because I hope that out of that people find the same enthusiasm and find the same opportunities that I've been afforded by, you know, projects before me. And I think that's probably the best part. But it's just figuring out how to be involved and just be optimistic about it. Just go in. Complaining or being in a bad mood doesn't change anything. You know, I see in open source a lot of people like to complain like oh this project stinks
+
+143
+01:14:05.000 --> 01:14:38.000
+because it has this bug blah blah blah and my answer is go fix it go you know yeah you're complaining doesn't change anything about it like you've maybe you've made yourself feel better maybe you've you know you've earned yourself some nerd cred because you can talk bad about a project to your friends but the end of the day nothing changed the world goes on so that's that's what i encourage people just get involved have a little bit of positive impact and the day, nothing changed. The world goes on. So that's what I encourage people. Just get involved, have a little bit of positive impact, and the day will go by a lot faster. Yeah, that totally makes sense. I think, yeah, I really appreciate you kind of opening up and explaining that.
+
+144
+01:14:38.000 --> 01:15:08.000
+I think that's just super inspiring to the audience. So we should have a way for them to reach you. So I think what's the best way for people to get started on pion and then also what's a good way to to reach you if people have any questions about the project or anything else so the i think the best way to start is you should check out our project on github so just github.com slash pion you can see the weber t project and all the other libraries that went into building it we also have a twitter account slash pion, you can see the WebRTC project and all the other libraries that went into building it. We also have a Twitter account, underscore pion,
+
+145
+01:15:08.000 --> 01:15:24.000
+and then we also have a Slack channel. So if you go to pion dot ly slash slack, or you can just go to the GitHub, and it's on every readme, we have a link to it. We have a community about 350 people that are just talking general WebRTC stuff that interests
+
+146
+01:15:24.000 --> 01:16:03.000
+them. They're sharing their products. They're sharing things they built that don't use Pyon at all, but I don't really care. I just love building this little supportive community that's interested in these things. So any of those places, I'm always happy to talk. And it doesn't have to be about Pyon. If you have career questions, WebRTC questions, I'm happy that if we can make a little positive impact on everyone. Cool. This was totally awesome. I really appreciate you if we can make a little positive impact on everyone. Cool. This was totally awesome. I really appreciate you, Sean, coming on and explaining that to us. I think we dove really deep. I think we did a good job in giving people more questions than answers because WebRTC, as you might understand now, is very complex, but it's also extraordinarily
+
+147
+01:16:03.000 --> 01:16:46.000
+powerful. And I do think that there is sort of this, you see this curve over and over again, where something is like almost just too hard to use. And that's the time when you want to get in, like you want to get in when it's too hard for 99% of people to use it. You know, like, like, like search engines, social networks, these things now are easy to use and so building your own is really hard right you want to build the thing that's that's hard to develop in so that you could be the first one of the pioneers yeah no i and i i encourage people if you're wanting to get involved in open source or you want to get involved like come work on pion i'd love to have you and it's an. You never know what it can turn into. So yeah, this is the time to be involved.
+
+148
+01:16:46.000 --> 01:17:10.000
+Cool. Thank you so much. And thank you so much for having me. Yeah. Everyone out there, if you have any questions, you can reach out to Sean. You can check out the GitHub page. And this, actually, this will be, so no, next show will be the last show we do before the end of the year show where we do the raffle. If you're not subscribed on Patreon,
+
+149
+01:17:10.000 --> 01:17:24.000
+now would be a good time. As we've said in past years, we don't care if you subscribe in December just to try to snipe the raffle. That's totally fine. But you do want to subscribe because I'm going to draw the names probably beginning of December
+
+150
+01:17:24.000 --> 01:17:29.000
+and that will get thrown into our r to draw the names probably beginning of December. And that will get thrown into our raffle for the end of the year giveaway. Have a good one, guys. The intro music is Axo by Binar Pilot. Programming Throwdown is distributed under a Creative Commons Attribution Sharealike 2.0 license. You're free to share, copy, distribute, transmit the work, to remix, adapt the work, but you must provide attribution to Patrick and I and sharealike in kind. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

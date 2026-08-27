@@ -1,0 +1,473 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:07.000
+Hey everybody. So, you know, when you get to your house, you know, or the place where you live, you have your key, you kind of turn it in the lock, and you get in. And if someone else has a different key, or if they don't show up with a key, they can't get into your house. And this seems pretty straightforward, right? And also, you know, if you give your key to somebody else, they can get into your house, right? So authentication sort of in the real world makes a ton of sense, right? But authentication over the internet where you're sending this information to all these different computers so it could get to its destination, that seems pretty wild. And it seems pretty unclear like how that can actually work and how that can be safe. And so
+
+2
+00:01:07.000 --> 00:01:49.000
+it's a really interesting topic. I'm really fascinated by it. And we have an expert. We have Abyad Mizrahi on the show, who's the CTO of Front Egg, to kind of dive really deep into this and talk about authentication, how it actually works. So thank you so much for coming on the show, Abyad. Yeah, thank thank you guys. Thank you for having me. Cool. So yeah, before we kind of really dive deep on the technical stuff, it'd be really great to hear, you know, kind of your background and, you know, your kind of experiences and what kind of path you took to get you where you are now working on Front Egg, which is a kind of platform that handles authentication and a bunch of other things.
+
+3
+00:01:49.000 --> 00:02:19.000
+But what's kind of your background in computer science? Yeah, sure. So I've been coding professionally for the last 20 years. I've been working on really exciting projects. And with the era of everything moving to the web, like I shifted my expertise. I started coding, like, as I said, professionally when I was 20, just out of the army in Israel.
+
+4
+00:02:19.000 --> 00:03:15.000
+Started walking my way up with C++ and.NET, which was really hot these days. But around, I would say, five to eight years where everything shifted around the web and products started evolving, we saw a lot of the flows really becoming the same. So I was working on a few really interesting projects, both developer, R&D leader, architect, R&D manager. Actually, the last two years before founding Frontec with my co-founder, Sagi, we met at Checkpoint, which is one of the Israeli largest cybersecurity companies. And we had a privilege of leading a platform for SaaS application, basically founding a platform for SaaS application and leading it.
+
+5
+00:03:15.000 --> 00:03:47.000
+And then when it hit us that all the things that we had to develop up until that point are pretty repetitive. So we will touch on authentication in a bit, but you develop authentication, the same flows all over again, the same multi-factor, the same security policies, the same user management invite, the same session timeouts, okay? And that's only like the tip of the iceberg because you have to develop everything
+
+6
+00:03:47.000 --> 00:04:07.000
+in a self-serve mode. And basically, everything is being very repetitive in today's world. And this is pretty much the reason that around two years ago, before the COVID hit us, we founded FrontEdge, which our mission is basically to fight this repetitive,
+
+7
+00:04:07.000 --> 00:04:37.000
+to give back the power to developers to focus on what really matters and to provide our expertise around everything that is very much like it's the core of the product, but it's actually not the core of the product. It's something that you must have, but it actually, it's not the reason that you founded a company for. So this is a front end. We can elaborate later on what exactly we're doing, if that makes sense. Yeah, that totally makes sense.
+
+8
+00:04:37.000 --> 00:05:36.000
+Yeah, I think it's a really good point. I mean, very few people want to dedicate a ton of time and energy really perfecting their login, right? The login is ultimately to identify and secure, you know, people's identity and information so that then you can provide them some kind of service, right? Which is, that's the part that most companies are really interested in. But then they feel really compelled to pay a lot of attention to it because if someone can compromise it, I mean, we saw this with Target and we saw this with even I think able to get authenticated as basically anybody you want and then taking all the data. You don't hear as much about SQL injection and these kind of attacks.
+
+9
+00:05:36.000 --> 00:06:52.000
+I mean, most of the attacks that, and I'm not a cybersecurity expert by any means, but most of the attacks that at least I see in the news are things where the authentication system has been compromised. You know, I think that that it's something extremely, extremely important, but also something that's not central to sort of the core mission of many companies. And so it seems like a great thing to build, you know, kind of a service around. And also, there's so many different intricacies to it. There's, you know, social login, there's login through a phone number, there's email and password somebody out, right? All of that stuff is just adds so much complexity to the developer experience. So you, you touch, you touch the exact point of why this is not as simple as, as you may think. So I had the privilege of, you know, managing a lot of very talented R&D developers over the years. And when you ask, developers can be a little bit of show-offs.
+
+10
+00:06:52.000 --> 00:07:27.000
+And when you ask them, okay, we want to build a new product. Obviously, a new product always starts with the sign-up and the login. They say, yeah, this is very easy. We do email. We do a password. we give them a reset password link and yeah, and we can close it. I would say it would take me around the week. But then when you dig in a little bit deeper, you start considering how do I send the passwords over? Where do I keep them? How do I keep them?
+
+11
+00:07:27.000 --> 00:07:44.000
+How do I maintain these tokens? How do I maintain these email templates? Okay. What kind of MFA method should I choose? Do we go with TOTPs? Do we go with SMS? Do we go with emails? Like in Checkpoint, one of the things the security research team did
+
+12
+00:07:44.000 --> 00:08:19.000
+was proving that sms is like hijackable in no time and then you okay so maybe sms is not a better so let's let's dive in and start identifying which which mfa method should we use now today that with the rise of FIDO keys. FIDO is like the new thing to adopt. And then which kind of SSO would you choose? How do you handle our flow? How do you handle SAML flows? How do you handle OpenID Connect flows? How do you audit all of this
+
+13
+00:08:19.000 --> 00:08:58.000
+for the compliance and regulations? How do you handle multi-tenancy? How do you handle multi-tenancy? How do you handle security policies? And then it becomes like this project that, you know, it started with the developers saying, yeah, it's going to take me a week. And then you find yourself three months later in a tech debt that you started and then you don't know when it's going to be finished. And then, yeah, this is the reason I think that, like, authentication has become a little bit of, you know, there are great companies out there that are doing that.
+
+14
+00:08:58.000 --> 00:09:44.000
+And it's become a little bit of commodity because, like, the simple stuff is simple to solve. And today a lot of companies are are working around authentication there are nice open sources around it and and you you really need to know your way when you're choosing these tools to see what exactly is the different which method do you want to go with and and to provide a perfect user experience for your customers? Because today, the user experience is as important as the security aspect of the product. Yeah, that makes sense. I think it was LinkedIn posted that basically every step someone has to take to create a LinkedIn account,
+
+15
+00:09:44.000 --> 00:10:23.000
+every single step churns something like 10 or 20% of the people. Now, like maybe, you know, at least for the first step, maybe a lot of those are bots, right? But I mean, at some point you get to like, yeah, where a lot of real people say, oh, well, if I have to give my phone number and I have to give it again, and then they have to text me and I have to answer the text. Like the more of these steps you have, the fewer people are going to be on your platform. But at the same time, you know, you need to have a platform that's secure. Otherwise, then once it's compromised, it's very hard to build the brand back. Yeah, we should we should unpack a lot of this. So well, I definitely want to put a bookmark in
+
+16
+00:10:23.000 --> 00:10:56.000
+MFA and multi-factor authentication. We should talk about that. But first let's just talk about when someone types a password on the internet, how does that password get to the server without somebody just seeing it along the way and then just having your login information? You know, like how does that work? How do you basically give your keys to 100 other computers without someone just being able to get into your house? Yeah. So if we're touching on that, so there are several ways to, let's talk about the RESTful
+
+17
+00:10:56.000 --> 00:11:31.000
+flow. So there are two main methods to send data to the server. So it's either query param, or if you are doing a post, it's through a post body. So the query param, not the good way to go with. Basically, two reasons here. Like URLs are going and there have been transients along the way and they have been cached, which is really, really bad. Yeah. Just to give a bit more background here. So the query param is when you type a URL into
+
+18
+00:11:31.000 --> 00:12:19.000
+your browser, sometimes you'll see this, you'll see like question mark, item equals 13 or question mark foo equals bar, right? And what that is, is actually it's sending, in addition to the URL, like google.com, anything after that question mark, it goes to the same URL, but it's like extra data. So you could say, mywebsite.com slash login, question mark, a whole bunch of things, A equals B, C equals D, E equals F. I think they're separated by commas or something. And then it'll still go to the login endpoint, but it'll get all of those things, those query parameters. The problem is everyone on the way can just see all of those in plain text. Yeah, that's one problem. And the second
+
+19
+00:12:19.000 --> 00:12:54.000
+problem is that the browsers are maintaining our history. So that means that every URL that you are pushing basically is being saved on histories, especially if you are typing that on the browser bar. So that means it's automatically saved on the cache of the browser. And that's really bad. So I would say that there are two major points that you want to pay attention to when you're sending passwords through the internet.
+
+20
+00:12:54.000 --> 00:13:37.000
+So first of all, I would recommend always using post body. Okay. Posts normally are not cached. This is good. So always use a post body and always make sure that when you are sending data to your endpoint, it's an HTTPS SSL with a legitimate certificate. Because that means that you are less prompt for men in the middle of text with SSL certificates. So if you have to send passwords through the internet, Passbody and SSL is mandatory.
+
+21
+00:13:37.000 --> 00:14:10.000
+Yeah, I'm going to take a crack at this and then you definitely fill in the gaps here because I'm sure I'm going to mess this up. But I think the way SSL works is the browser itself has some type of key or something like that from a bunch of registrars. And so when you download the browser, you get sort of ways to encrypt data. And then when you go to an HTTPS site, the browser encrypts the data
+
+22
+00:14:10.000 --> 00:14:32.000
+and sends it to the server. And then the server is able to, using these same services like Let's Encrypt or these other ones, it's able to decrypt that data. And I think it has something to do with the fact that you downloaded the browser and the browser has some special information. That's what allows you to encrypt something without having to
+
+23
+00:14:32.000 --> 00:15:08.000
+basically ask for permission over the internet, which there's sort of a chicken and an egg there, right? And so the HTTPS kind of gets around that through the browser. Did I get that right? Yeah, that's correct. So the browser is responsible for the encryption and the endpoint, which is basically the server, is responsible for the SSL termination, which basically means get an encrypted data, decrypt it, make sure that it's valid, and basically handle it. Yeah, so it's kind of like someone, you know, to use the key analogy, it's kind of like, you
+
+24
+00:15:08.000 --> 00:15:52.000
+know, you let someone into your house. This is the browser that you downloaded. You let someone into your house. They give you like a special encryption tool. Right. And then now if you want to send a key to somebody through the mail or something like that you would somehow like the letter the envelope you know needs that tool to open and so you know you might give a letter to the postman who gives it to someone else who gives it to someone else but none of them have that tool that that person came into your house and gave you and so they can't open that letter even even though they have it. And so then eventually it gets to the server. The server can also talk to that person who went into
+
+25
+00:15:52.000 --> 00:16:37.000
+your house and gave you the tool and the server can decrypt it. And so in this way, even though you're going over the internet and so many people are seeing your password, they're seeing an encrypted version of it that they can't untangle. That's 100% correct. in Dota, makes it much more trustable, even along with we'll touch base a little bit on the way that we are handling authentication and what are the methods, do we use session based, do we use JWTs but like jumping
+
+26
+00:16:37.000 --> 00:17:03.000
+a few minutes before that when we are signing authentication keys, normally that's the way that we are doing it. We're signing with some private key that only the server has. And we are giving the public key to everyone just so they can verify the authenticity of this server. Cool. That makes sense. Yeah. So let's unpack some more of this.
+
+27
+00:17:03.000 --> 00:17:33.000
+So you talked about M know, we talked about, you talked about MFA, multi-factor authentication. What is that all about? Yeah. So passwords are easily hackable. Okay. So most of us do not get our browsers advisors on breach passwords. So we are using the same password for all of the websites. So if password, and then basically that means
+
+28
+00:17:33.000 --> 00:17:53.000
+that we are trusting the server or the endpoint or the service that we're using to maintain our password security. Most of them do, okay? But some of them, you just mentioned SQL injection. Some of them do not store our password securely. And storing it securely means at least
+
+29
+00:17:53.000 --> 00:18:40.000
+hashing and salting them on the database. So they are not easily, I would say, reversely engineered. So if the service that we're using and we send our password to didn't maintain it properly, that means that it's easily hackable. And once one service is hacked, that means that if we reuse the same password all over again on the other services, for example, our banking account, our LinkedIn account, our banking account, our LinkedIn account, our Facebook account, our Twitter account, et cetera, et cetera, that means that the attacker can potentially go and hack all the other accounts by a very simple operation,
+
+30
+00:18:40.000 --> 00:19:18.000
+by going on a rich passwords database and going and trying. So this is where MFA comes into place, where basically there is another level of authentication that you have to prove that you are actually the originator of the request by proving another, we call it, position on the authenticity. So, for example, I tried, I onboarded MFA on my account, and let's say that my password was breached. So we have an attacker, on the other hand,
+
+31
+00:19:18.000 --> 00:20:07.000
+who is trying to log in to my bank, okay? So he has my email, and he has my password, and he types it in and they are correct but now he is facing another level of challenge we have to to prove that a code which is being sent let's say you take the easy but not secure way of sms so now he has to type an SMS number that is sent to my phone. Okay. So first of all, I got this SMS. I immediately know that someone is trying to log in to my account and I'm probably going to change my password after that. But that blocks the attacker from actually logging into my account because I have another level of authentication that needs to prove that basically
+
+32
+00:20:07.000 --> 00:20:58.000
+who is trying to login is actually me. So that we have several methods of multi-factor authentication. I mentioned the TOTP, which is one of the most popular today before before the videos came into place, TOTP basically means use of either Google Authenticator or Microsoft Authenticator. There are tons of authenticator apps available for download from any app store. And the idea is that you are being assigned with a number, six digits number for 30 seconds. It's based on a seed. And the idea is that it's based on the same seed that is running on the server, okay, based on times.
+
+33
+00:20:58.000 --> 00:21:35.000
+And right after the authentication, you have to type in another number. A number that is available only from your authenticator application. So that's a TOTP. There are several other methods such as SMS, which is the same. You're sending an SMS to the phone number that you signed up with. You just mentioned that phone numbers are not information that we likely want to share with the services that we're using. We feel more comfortable by installing an app on our device
+
+34
+00:21:35.000 --> 00:22:14.000
+and not sharing the phone number with the services. This is why SMS is not that popular. And it's easily hackable so just like just go into your favorite search engine and search for sms hijacking and sms mfa yeah i think the uh the one i remember i'm sure there's a ton of them but the one i remember was when Jack Dorsey, who is the CEO of Twitter, correct me, feel free to look up the article. But I think what happened is somebody called Verizon and said that they needed to transfer a number.
+
+35
+00:22:14.000 --> 00:22:50.000
+And they were actually able to, with very little proof, transfer Jack Dorsey's personal cell phone to their cell phone. So they had Jack Dorsey's phone number. And so I'm assuming they started just getting calls. People were trying to call the CEO of Twitter. We're now calling this random person. And what they did with that is they kicked into the MFA. They tried to log in as Jack. And then when they couldn't, they said, oh, I forgot my password. Send me a text with a reset link. And so Twitter did did that they clicked the link they changed the password and now they have the ceo of twitter's you know twitter account
+
+36
+00:22:50.000 --> 00:23:30.000
+and um and so they posted all these things i don't remember where they posted i'm sure it was terrible or i think they asked for bitcoin or something i don't remember but but uh but yeah so you can see how that's a massive massive problem and so with sms you're relying on the phone company being able to secure your phone number. And it hasn't been that good about that. Yeah, exactly. But, you know, when we are discussing MFA and when we are discussing security and authentication and authorization, there is a constant tension between product and security. Right. constant tension between product and security, right?
+
+37
+00:23:30.000 --> 00:24:15.000
+So the security guys want everything to be as secure as possible. No one can log in. No one can sign up without verifying their email address. MFA, yeah, they must use Google Authenticator, et cetera, et cetera. But, you know, sometimes product defines by the security level. Because I'll give you an example with my mother, which is a very technologist person, but I couldn't get her to install an Authenticator app on her phone. She feels much more easy with SMS, although I explained several times that SMS is not good for her. But even the bank account
+
+38
+00:24:15.000 --> 00:24:55.000
+requires her SMS because they say, well, with the type of people that are going into the bank, you cannot expect everyone to know what an authenticator app is. So you have to do some compromises in order, you know, for the product to be usable. So, you know, that's always the tension with MFA. MFA is just the beginning of it. You know, session timeouts is just the beginning of it. Session timeouts is just another sample of it. There's always a tension between product guys and security guys. And the truth is probably somewhere in the middle. Now it's more towards the security.
+
+39
+00:24:55.000 --> 00:25:20.000
+Today with PLGs, for example, I just mentioned it. With PLGs, you're not required to verify your email anymore. You sign up, you type in your password. I can sign up as Jason, okay, with your email. You'll get an email, but I'll be able to log in because I typed in my password. Obviously, after three days, if I didn't verify my account, my account will be deleted by,
+
+40
+00:25:20.000 --> 00:26:06.000
+but that's, you just mentioned with the LinkedIn research, there is constant tension on providing like the best user experience. And sometimes security is just another hustle on the way. So this is something that we are constantly facing from the product side and from the security side. Yeah. You know, actually it just hit me, you know, when you, when you're saying it, yeah. So, you know, I have an email that's totally available. Anyone can get, can get access to it. And so because of that and, and, and, and show, you know, I, I tend to get a lot of strange emails and yeah, I have gotten emails that were kind of effectively from, from products I've never used, but, but, you know, they, they, they sounded like they knew me. And yeah, I think what's going
+
+41
+00:26:06.000 --> 00:26:53.000
+on there is, yeah, people are using my email and then logging into some type of product, and then they're able to do things while they're unverified. Of course, I never verify. That would be crazy. But I get the email asking me to verify. And then, yeah, it's a really good point. I never really connected all the dots. But yeah, until you're verified, you know, many products will let you do things, but, but maybe not everything. And, and, and there's very good reason for that because yeah, there's definitely people who have used my email address and I guess done as much as they could, uh, unverified before, um, uh, before maybe their maybe their accounts finally get banned or I don't know what happens? Yeah, I think there is a main reason why email verification today with the PLG world,
+
+42
+00:26:53.000 --> 00:27:39.000
+email verification is not that popular. So first of all, yeah, we've seen it ourselves. There was a drop of conversions when we requested people to verify their email address. Okay? And there are tons of researchers about it. But even if we do ask them to verify their email, with so many services around, you know, temp email and that kind of stuff. You never know who the user really is because everyone can go on the internet, type in 10-minute email, temp email address. They can set up an email address for one day. Okay.
+
+43
+00:27:39.000 --> 00:28:26.000
+They can work with that email address for one day and experiment any product. So it's not that it's on the contrary of security, but you know, email verification is not that mandatory in the PLG world. Yeah. Yeah. That makes sense. I guess it only becomes an issue if then I wanted to use that service and someone else is already using it with my email address. And I guess at that point, I'd have to call in or something like that. So this is exactly where single sign-on step is into the play. Because let's say that someone is using your, I don't know, your Gmail address or any other Outlook address. So this is where they will never be able to log in with your credential through SSO because you are the only
+
+44
+00:28:26.000 --> 00:29:29.000
+one that can log in through the address on SSO. Yeah. Can you dive into that? I actually don't know what SSO is. I've heard the name, but I don't know much about it. Can you dive into that? Yeah, sure. So SSO stands for single sign-on and there are several methods of single sign-on. And there are several methods of single sign-on where OAuth is by far the most popular one. We refer to a social initiated login, and that goes all the way to much more complex protocols like another subset of OAuth, which is OpenID Connect. And obviously, SAML, which is, we call it the enterprise single sign-on. And the idea of single sign-on stands for you have one identity, okay? And that can be your Google identity, your Microsoft identity, your GitHub identity, or your Okta identity, okay, as an enterprise organization.
+
+45
+00:29:29.000 --> 00:30:25.000
+And on each product that you are using or on each service that you are using, you should be able to log in with the same identity. And that's good for several reasons. So first of all, the first reason is that you have one password to remember one mfa to set up okay and all the other services are basically relying on the same identity provider so it stands for you have one identity provider if you are doing login with google google is your identity provider if you are doing login with Microsoft, Microsoft is the identity provider. And basically, you can see every application, what scopes it is using for your service, etc.
+
+46
+00:30:25.000 --> 00:31:02.000
+And so that's from the identity standpoint. for protocols like SAML and organizational single sign-on, the IT administrator of the account can basically, once you decide to leave the organization, so it's very popular in the B2B applications, once you leave the organization, the IT administrator of the organization needs to delete you from one repository, and that's the identity provider repository whether it's gsuit or azure ad or octa they delete you once and then you lose basically access to all of the other products you logged into as the employee of this
+
+47
+00:31:02.000 --> 00:31:37.000
+organization that's basically the whole idea around single sign-on and enterprise single sign-on, which basically gives the power back to the IT administrator and to the identity provider to maintain all of the authentication flows. Got it. Okay. I think I get it. So the idea is, effectively, from a developer standpoint, it's kind of a handoff type thing where someone types in a password. I don't know if you do it on the client side or on the server side, but you get someone's...
+
+48
+00:31:37.000 --> 00:32:06.000
+Actually, you probably don't get someone's password, but you somehow are able to show somebody content from Google and Google asks them for the password. And then Google tells you, yeah, this person is good to go. And then you trust that Google has done the right thing. And so once Google tells you this person is logged in and they are this email address, then they're in at that point. Correct. So the way it actually works is that you are
+
+49
+00:32:06.000 --> 00:32:40.000
+clicking, so we can dive into that. You click on the login with, let's say Google, for example, you click on the login with Google button on the application that you're trying to go into. Then you are being redirected to the Google authentication, you're being taken out of the application. Okay. So you've been redirected with the client ID of the application, which asked for this identity, but you are being redirected to Google. You type your password in Google. Okay.
+
+50
+00:32:40.000 --> 00:33:15.000
+Not in the application. The application has no idea what is your password. It knows only your email. And then basically once you are redirected back to the application, the application is doing some kind of token exchange with Google to get your actual identity. And that would be the email and most most of the times your entire profile and then basically that means that you are logged in to this application using google okay so that means
+
+51
+00:33:15.000 --> 00:34:06.000
+still the application is the one that generates the authentication token for you but the identity provider that is being responsible to providing the multi-factor authentication for you, or the identity provider that is being responsible for the password maintenance is Google, not the application. Today's sponsor for Programming Throwdown is SignalWire. SignalWire is a pretty awesome company that allows developers to use multiple languages to call their APIs and deliver low latency video and audio technology. So imagine if you're building an application or a website and you want to host an interactive event like a charity event that they supported for the American Cancer Society where they're able to have multiple rooms, people interacting in the rooms,
+
+52
+00:34:06.000 --> 00:34:29.000
+like a video conference call, but like way more tailored to your specifications and so much more flexibility and the APIs that enable you to do that. They're already being used by large TV studios, film companies, Fortune 500. These are all things that are definitely been battle tested. And today we are happy to have them as a sponsor of Programming Throwdown.
+
+53
+00:34:29.000 --> 00:35:16.000
+Yeah, SignalWire provides expert support from the real OGs of software-defined telecom. These are the original geeks of that technology. SignalWire is a complete unified platform for integrating video as well as voice and messaging capabilities into any app. You could try it today at SignalWire.com and use code THROWDOWN for $25 in developer credit. So you go to SignalWire.com and use the code THROWDOWN at SignalWire.com today to receive $25 in developer credit. Now back to our episode. Got it. Okay. That makes sense. Yeah. And I think people are starting to, at least I'm starting to understand now why you need session tokens, which is something we should talk about. You talked about session timeout. And so all of this
+
+54
+00:35:16.000 --> 00:36:07.000
+that we're talking about, there's a lot of steps to this, a lot of complexity. There's reaching out to Google and coming back. And so you don't want to do this every single time someone wants to access anything on your website. And so that's where the session token comes in. So you basically, and please fill in the gap here, but I think basically the way it works is once you've all agreed on something, then you can create this token, which is good enough. Once you have this session token, that's all you need to be authenticated. And so in that sense, it's kind of vulnerable, right? If I can go to your computer and get on your browser and start copying the session tokens out of there, then I can be you, right? And so because it's insecure, it has a timeout. So maybe it only lasts for a day. So at most, I can masquerade.
+
+55
+00:36:07.000 --> 00:36:36.000
+If I stole your laptop or something, at most, I can masquerade as you for a day. As long as I stole the laptop, that's different. If I somehow just stole the browser cookies from your laptop, then I could masquerade as you for a day. But eventually, that session token will expire. And so you'll have to go through this process again of authenticating. And at that point, then you wouldn't be able to be as that person. Is that kind of how the session stuff works?
+
+56
+00:36:36.000 --> 00:37:26.000
+Yeah, so that's correct. So the most, there's the OWASP top 10, which is the best security practices for, you can take the best security practices from there of how to maintain the best security for your website. And XSS, I don't remember the exact number, but I believe it's number three. We can check it out. But XSS, you know, can be easy,
+
+57
+00:37:26.000 --> 00:38:38.000
+but normally what you can do with XSS, what you want to do with XSS, and XSS stands for cross-site scripting, you want to hijack your victim's access token. why you know whenever whenever i speak with someone about how to maintain access tokens how to how to create like the most secure authentication mechanism around it xss always comes into play as you don't want to play around xss so i've seen a lot of developers and they are usually the same developers that say, yeah, I can do it in a week that would keep the access tokens on the local storage. And that's like rule number one of do's and don't do's. That's the rule number one in the don't do's. Yeah, because that means that every attacker which gets access to your application can just hijack your local storage, gets the access token, and then, yeah, totally, he can be you. So usually there are several guidelines around it. But the idea is to have stored the access tokens in memory for the application. So the less likely to be stolen and stole the so normally JWTs are made of access tokens and
+
+58
+00:38:38.000 --> 00:39:22.000
+refresh tokens. So normally for web application or for modern web application, what we recommend is storing the refresh tokens as HTTP only cookies. So HTTP only cookies are cookies that cannot be accessible to any JavaScript, which makes it very hard for the attacker to get them because the browser protects them and do not give access to potential attackers. And then protecting through a course, which is course original protection to the other part of the refresh tokens. That usually makes up a legitimate protection
+
+59
+00:39:22.000 --> 00:39:48.000
+for any web application. And that means that your access token is likely to be safe on the application. And yeah, I did mention JWTs. JWTs is one of the most common ways of maintaining tokens today. So up until a few years ago, we used what we just called session tokens.
+
+60
+00:39:48.000 --> 00:40:52.000
+So there is a central token repository, which was a single point of failure, and everyone needed to basically talk with in order to validate token. But today, with the rise of microservices and the asymmetric encryptions, the world has shifted around to JSON web tokens, which is the JWTs, which basically means that you get a JSON, which is normally the user data. You sign it using a private key and you give the public key to any microservice around it. And then basically you take off the responsibility from this central token repository and you provide the services with the way of validating the request. And that basically, you know, same as ours, pretty much changed the world of integration between companies, because once you can shift the same authorization header and the same JWT token between different
+
+61
+00:40:52.000 --> 00:41:38.000
+services, you can shift it between different applications that can verify the same JWT token without any specific integration, okay, just by using a public key. And that's the, I think that's really changed the world of how we are doing, you know, integrations between applications and teams by simply sharing public keys. And that's a major change in the authentication world. Yeah, that makes sense what is the difference between a session token and a refresh token like why does the session token exist why not just have one token so the idea is that you know you wanna you wanna maintain
+
+62
+00:41:38.000 --> 00:42:14.000
+the session tokens as short as possible and the refresh tokens as long as possible because session tokens basically give you or give the attacker access to your account they can do actions on behalf of the victims and that's why you want to keep an extra level of basically extra level of protection by just having the access tokens as short one. I don't know. You said a day. I think it's too much. An hour or something. I just made that up.
+
+63
+00:42:14.000 --> 00:42:43.000
+Don't take that as technical advice, please. No, no, no, no, no. But keeping them as short as possible and the refresh tokens are the one that are being used all the time to maintain the session active. And, you know, with the method I just, you know, we just discussed, the access tokens live in memory. You're not saving them on any local storage or something like that.
+
+64
+00:42:43.000 --> 00:43:04.000
+That means that once you hit a page refresh, your session is gone. So the token is gone. So you have to refresh it in order to keep the session alive. And you don't want the user to re-authenticate every time he's doing a page refresh. And the refresh token takes care of the session longevity.
+
+65
+00:43:04.000 --> 00:43:33.000
+Okay. So that's the general idea of refresh tokens. I guess the thing I don't understand is how is the refresh token more secure? Like what's to stop someone from just stealing the refresh token instead of stealing the session token? So there are two reasons here. First of all, on the website, okay, on the single page application side, what we normally suggest is having the refresh token as part of an HTTP only cookie. Okay,
+
+66
+00:43:33.000 --> 00:44:10.000
+so HTTP only cookie cannot be stolen through an XSS. Okay, they are usually protected. And if you add the course mechanism, so you're protected with course as well. So they cannot be stolen. And on the backend side for our flows, okay? So refresh tokens basically are being stored on the backend side, which is less likely to be stolen from any Redis or a local database around there. Oh, I think I get it. So I'm going to say it a little differently.
+
+67
+00:44:10.000 --> 00:44:46.000
+Tell me if I understand it. I'm paraphrasing or if I don't understand it. So the refresh token, you kind of pass that around once when you log in. And then after that, the server is the only person who has it. And so the attacker would have to grab it right when you're logging in which is hard to do and so and so now the server has the refresh token not you and so and so that now it can't be stolen did i get that right or no yeah that's part of it so first of all this the the server stores it and yeah, you get it only when you get the access token.
+
+68
+00:44:46.000 --> 00:45:11.000
+So you get a pair. You get the access token and the refresh token. And the only way to get a new access token is by using the refresh token, which is being stored down there in the server. And if you're working on a browser side, so if you chose to put the refresh token as part of your application, as an HTTP- only cookie or something like that, it cannot be stolen as well because if you're using the best practices around course,
+
+69
+00:45:11.000 --> 00:45:54.000
+because it will only be sent to your endpoint for the refresh token purposes. So I guess if you have the refresh token as an HTTP only cookie, then is the session token like adding any value or is it just like a legacy thing at that point? No, no, no. Obviously you don't want to refresh the token on every action. Okay. So as I just mentioned, usually the refresh token will be sent only to the refresh endpoint. Okay. And you'll get a new access token. The old access token will be invalidated and the new access token will be generated. And as I mentioned, the access token
+
+70
+00:45:54.000 --> 00:46:24.000
+should be used around your, I don't know, tens of microservices, around tens of different services that you are using and sometimes with different applications that you are using. And the idea is that access tokens are signed. So every microservice can basically validate them. And yeah, the idea of access tokens is here to stay because they provide an easy way for microservices
+
+71
+00:46:24.000 --> 00:47:02.000
+to validate them with the lack of API getaways or something like that. Now I get it. So basically, if you didn't have access tokens, you would have to go to Google every single request. You would show up with a refresh token every time someone visited any part of your page. You have to go back to Google and say, hey, is this person legit? Is this person legit? And so that route, it's just too expensive to keep doing that. And so the session token saves you from having to keep going to the SSO provider all the time. And you can define how long that duration is. And then once that expires, then you go back to Google or whoever
+
+72
+00:47:02.000 --> 00:47:21.000
+and say, hey, I need another one of these tokens. That's correct. Cool. Wow. Yeah, I think we covered a ton of really, really good information here. So we covered encryption. We covered tokens. We covered login. Yeah, I think this has been really, really great.
+
+73
+00:47:21.000 --> 00:48:08.000
+A lot of these questions, honestly, are just come straight from the heart. I mean, they're things I've always wondered and you have amazing answers. So thank you so much. Actually, I'm a little bit exhausted questions here. I mean, I actually feel like I have a 360 view. And one of the things too, is I think I'm now in a state of conscious ignorance as opposed to unconscious ignorance, where I realize that there's absolutely no circumstance by which I'm going to build my own authentication if I ever made a product. Yeah. I mean, it's like, you know, this world is going much more deeper than we just covered. And it's amazing that, you know, attackers are getting smarter every day. The authentications and mechanism needs to keep up with that.
+
+74
+00:48:08.000 --> 00:49:06.000
+So this is why we keep talking about federations and SSOs and multifactor and different types of multifactor. And how do you recover your MFA device? How do you store these recovery codes you know there are so many stuff around this that you kind of you know when i just started i i was a bit lost on the stuff that we had to cover in order to make like you know a decent solution and that's that's so many stuff, like I'm talking about five, six years ago, so many stuff to take care of. And yeah, that's the reason that I would never, you know, now with Frontenac, it's easy. But like, even on my next journey, I would never build this stuff alone again. Although it's kind of fun, because that's what we do now.
+
+75
+00:49:06.000 --> 00:49:19.000
+Yeah, yeah. I think, you know, yeah, I guess there is a caveat. Yeah, I mean, if the next project I work on was an authentication project, that'd be totally different. And so I think it's fascinating. But I also think that, yeah,
+
+76
+00:49:19.000 --> 00:50:02.000
+if your goal is to, I don't know, build a taxi app or something like that, definitely don't say I can have authentication done in a week, unless you're using a third-party library, then maybe you can get it done in a week. So actually, let's dive a little bit into that. So tell us a bit about Front Egg and how it helps with authentication and other sort of services that kind of services that y'all provide and how that works sure so as i mentioned front egg is a two years old startup and when we founded the company the idea was to allow developers to basically reuse services such as authentication some other stuff that we are doing so they don't
+
+77
+00:50:02.000 --> 00:50:32.000
+have to deal with these kind of questions that we just discussed for the past hour. And, you know, authentication today is pretty much a commodity. There are tons of great companies that are doing it. And still I see some questions around how to do it, what should I need to do. And I see a lot of developers that are trying to do it on themselves and then they are failing because of that but still i mean because it's nice it's
+
+78
+00:50:32.000 --> 00:51:07.000
+now a commodity there are tons of different services and you know companies today they want to focus on the go-to market they want to get get to market faster. And that's why they are trying to build, when you think about build versus buy, authentication is the first one to basically buy. What we took is a different approach because, yeah, authentication is very important. But when you talk about B2B companies, it's a bit different because authentication is good is very important, but when you talk about B2B companies,
+
+79
+00:51:07.000 --> 00:51:40.000
+it's a bit different because authentication is good and you want to make sure that your users are safe, but there are tons of requirements from the end user side, from the companies that you are selling to, in terms of different experiences that you want to have with the product and mostly around self-servveness that brings it to more than just authentication. For example, we have one customer that wants MFA multifactor to be forced on all his accounts and all his users, and the other one doesn't want it.
+
+80
+00:51:40.000 --> 00:52:09.000
+And one organization requires that kind of password policy and the other one wants a different kind of password policy. And one organization requires social SSO and the other one requires Okta. And the third one requires OpenID Connect. And then you have so many stuff to go and work around it. So what we took upon ourselves is to provide and to enable developers to integrate such
+
+81
+00:52:09.000 --> 00:52:26.000
+security features around authentication enterprises, so social SSO, MFA, the entire user management capabilities, password complexity, and all of this. And we try to keep it to as much as five lines of code.
+
+82
+00:52:26.000 --> 00:52:46.000
+And I swear it's five lines of code. You can check our website. Yeah, you can check our websites later. The React integration is five lines of code. With Angular, we had to write a little bit more, but that's okay. And the idea is that we think about the end user, okay? So all of the authentication libraries,
+
+83
+00:52:46.000 --> 00:53:02.000
+companies nowadays, they think about the infrastructure. We took upon ourselves to think about the end users, okay? And to provide the end users of the great companies that we are serving with a great self-service approach
+
+84
+00:53:02.000 --> 00:53:37.000
+to enable them to, you know, basically use all of these features and to customize them to their needs. For example, we provide user management admin portal where the end user, for example, the organization that our company, like our customer sells to, can invite users, provide them with roles, onboard this SSO, see audit logs, onboard machine-to-machine tokens, et cetera, et cetera, because we had so many times about the pain that was involved in implementing SSO
+
+85
+00:53:37.000 --> 00:54:07.000
+and onboarding SSO and inviting a user and build the perfect profile and build the perfect MFA onboarding dialogues and build the perfect password complexity dialogue. So we give this extra layer of, we call it the full stack APIs, where basically it all starts with the login, but the login is only the start. It comes with a perfect admin portal on top of that to serve basically the end
+
+86
+00:54:07.000 --> 00:54:52.000
+users of the companies that we are serving. And that's basically what's special about Frontend. Yeah, that makes a lot of sense. I was thinking about, about a week ago, I remember thinking about, you know, there was a SQL injection attack that hit some website a while back, and they ended up downloading their entire database. So hackers ended up downloading. So just a really quick thing on SQL injection attack, the way it works is, is, you know, SQL is code, but when you make a SQL query, you know, you typically pass it's interpreted. So you pass your code as a string over to the SQL server, and that server executes that code and then passes you back the result. And because it's a string, there's nothing
+
+87
+00:54:52.000 --> 00:55:41.000
+to stop you from just using basic string operations, like things we all learned in high school, like take this string, add it to that string. But the problem is those strings, when they're being constructed, if there's user input that's deciding the content of that string, then someone can end up basically adding a string. Like maybe they make their username, you know, something that closes a comment or something that tells SQL that everything that just happened was a comment. And my actual username is, you know, delete the database or something like that. And if you just pass that straight to the server, you lose everything. So there was a SQL injection attack where someone was able to download the entire contents of the database. And that is where auditing would be really important, right? So I
+
+88
+00:55:41.000 --> 00:56:21.000
+mean, also, you know, having not making that error is important but but even if you if have a developer who makes that error you're going to see you know 40 gigabytes of egress or hopefully a lot less than you're going to see a high velocity a lot of egress when someone makes a single query for the entire database and you can catch that and you know downloading 40 gigabytes doesn't happen that quickly so you could catch that and And, you know, downloading 40 gigabytes doesn't happen that quickly. So you could catch that and hopefully, you know, maybe the person only gets 10% of the database, right? And so having audit logs is really, really important. And it's another thing, there's an even stronger incentive not to do it, right? So like, it's like people don't want to concern
+
+89
+00:56:21.000 --> 00:57:05.000
+themselves with login, they really don't want to concern themselves with auditing the login. Like it's it's another layer that is even further away from, you know, building the social media website you want to build. Right. And so, yeah, I think I think adding auditing is a really nice add on. Yeah. You know, you know what we say about auditing. So when when we use audit logs, when something really goes wrong, that's when we use audit logs because normally, I mean, it just sits there, but when something happened, you start going over the audit logs to see who changed what, how the heck, I mean, someone is being able to log in and touch this configuration. And who changed this configuration?
+
+90
+00:57:05.000 --> 00:57:54.000
+We saw it a lot over the previous years with Checkpoint where everything had to be audited for who changed to allow any traffic through the firewall. And yeah, audits for login are pretty necessities, but that's only the start because you want to make sure that you audit any change of configuration that is being made because that's a critical necessity as well, especially for cybersecurity companies, especially for highly regulated companies. Okay, audit logs is like the essence of the business and you want to make sure that you are 100% compliant with all of these changes because when something goes wrong,
+
+91
+00:57:54.000 --> 00:58:27.000
+you better have this information in hand. Yeah, yeah, totally makes sense. And yeah, as soon as you have an audit log or really a log of any form, then you can start doing monitoring, either manual monitoring, automated monitoring. And you want to have that stuff early. It's much harder to build it in later. Totally, totally. Out of this position in Frontec, I had a privilege of talking with a lot of CDOs,
+
+92
+00:58:27.000 --> 00:59:36.000
+VPRNDs, you know, in multiple roles. And even talking with several CISOs. And, you know, the CISO's perspective is always the one that fascinates me the most because I've met some CISOs that told me, I rather sometimes pick, you know, in larger companies with CISOs, with acting CISOs, they have to review the product, which is not the best one, but it's covering, you know, my checklist, because then I can sleep well at night. And we see a lot of companies, you know, facing these, because it's like, it's like a kind of a struggle, because on one hand, you want to make sure that you develop the product, because product product is God and the product is what that's going to bring you into these meetings. But on the other hand, if you don't develop these necessities, so you won't pass the CISA certification. So, you know, in startups,
+
+93
+00:59:36.000 --> 00:59:56.000
+you don't know what to focus on. That's a real struggle for a lot of companies I talk with. Yeah, that makes sense. What's the relationship between... Actually, wait, before I ask that question, another question. How does this work on mobile? So, you know, we talked a lot about web and with web, it's easy because you can send the person to Google. But if you're an app,
+
+94
+00:59:56.000 --> 01:00:21.000
+you know, how can a person then just be typing their password to Google while it's in the middle of an app? Or how does FrontEdge handle that? So what I always say is that ours is an hour. So there are several, today with the Electron apps, you hardly see any difference between web application and Electron application. So you get pretty much the same experience.
+
+95
+01:00:21.000 --> 01:00:58.000
+Front Egg handles it through, we are web native, but for the mobile applications we handle it through a rich set of REST APIs that basically take care of this AWAP and access tokens and refresh tokens. And that's the idea. MFA is a different issue in mobile application because we get it from different place but yeah it's it's not like it's different world got it yeah that makes sense and so the the other the other thing was um there's now like uh something i'm seeing becoming more
+
+96
+01:00:58.000 --> 01:01:52.000
+popular this this idea of this like headless cms which is basically, as I understand it, it's kind of a layer that sits in between the application backend and the database. And so it'll do things like generate thumbnails for all your images. It has a UI for adding more content manually. And so it also handles a lot of user data. And so how does Frontend relate to this headless CMS phenomenon? Is it compatible with that? Is it sort of a take on that? Or is there a relationship there at all? Yeah, I have to say that I didn't cover so much of headless CMS. There's no good answer because I have to dig deeper into it we currently do not cover it you know for the sake of this recording so i think this one can be cropped sure sure
+
+97
+01:01:52.000 --> 01:02:50.000
+that makes sense yeah yeah i also i'm just learning about it and so uh yeah today there is the rise of jamstack yeah right yeah yeah So Jamstack goes a little bit with the headless. This is what I read about. Jamstack is more for the web, but I've seen some headless CMS using Jamstack. We still didn't go into this world. So, you know. Yeah, that makes sense. So what about Front Egg as a company? You know, what is a day like at Front Egg? What's something you do that's kind of unique that really kind of makes working at Front Egg different than working at another startup or another big company or something like that? And then also, after talking about that, it'd be good to see, are you guys hiring and is it sort of interns, full-time? So what does that whole thing look like? Yeah, sure.
+
+98
+01:02:50.000 --> 01:03:39.000
+So I have to say that this team in front of, you know, the second family here, looking at these two years and thinking about the team that we built, it's amazing. And the company is really growing. We are around 25 employees, 22 of them in Israel, in Tel Aviv. Great teams splitting up to full-stack teams with amazing collaboration between the teams. We have a very lively WhatsApp and Slack channels where everyone is giving it to the CTO for choosing JavaScript as the preferred language. And we have guys that... Okay, I have to interject here. Why not TypeScript? Yeah, yeah.
+
+99
+01:03:39.000 --> 01:04:15.000
+Obviously, we are using TypeScript. Everything is... Oh, okay. Everything is TypeScriptcript but we have several dot net and java gurus are sticking up to the cto why did you choose typescript and let's do let's do stuff in java and then we have the the javascript guys were saying yeah i'm gonna know javascript is the best and then yeah most of the jokes goes around it. And it's really like a great atmosphere and funny atmosphere to work in. And like a great feeling of one team who wants to change the life of developers,
+
+100
+01:04:15.000 --> 01:04:54.000
+building this generic stuff and providing the great service for developers. And yeah, we are hiring. We are hiring several full-stack developers full-time in Tel Aviv. We are looking for products as well and product marketing. So yeah, that's usually a day in Frontag, which concludes usually on Thursday with a bunch of ice cream and whiskeys to conclude the week. Oh, nice. Yeah, I love having an outlet for for funny memes i remember we i used to work on on map produce a long time ago i used to i was at
+
+101
+01:04:54.000 --> 01:05:34.000
+google and i was working on map produce and um you know we would write everything in you know c and c plus plus and at one point somebody put this picture up in the office of someone it was one of these kind of america's got or Britain's Got Talent type shows. And it was somebody who could shoot a bow and arrow and hit a bullseye with their foot. And that's kind of what coding in C++ really felt like. And yeah, I think maybe in Java, it would be the same thing, except much longer. Like you would have to have a bow factory and a foot factory and then a you know bullseye factory and yeah so whenever whenever something doesn't go well it would never happen in java i say yeah
+
+102
+01:05:34.000 --> 01:05:59.000
+yeah it would and then when something didn't work in java well because we have sdks in java as well so when something new yeah it would never happen in JavaScript or in TypeScript. And then, yeah, all the offices like around it. So it's pretty funny. Cool. That's awesome. And so, so there are, you said you're looking for like, you know, product marketing and these type of roles. I just to recap, so are there internship or is it full-time only or both?
+
+103
+01:05:59.000 --> 01:06:26.000
+Or what's the deal there? So we are currently looking for full-time. We have a lot of our shoulders on our shoulders and we want to get as much done as possible. So we are currently looking for full-times, both on the R&D for full-stack development. Our main stack is Node.js TypeScript and React TypeScript for the front end. We have several because we are a developer platform,
+
+104
+01:06:26.000 --> 01:06:53.000
+so we have several Angular, Vue, Python, you know, a bunch of SDKs, but the main like 90%, 85% would be around React and JavaScript. And on the product marketing and product roles, it's like moving these ideas forward and support R&D and the entire company for building up this great platform. Yeah, that makes sense.
+
+105
+01:06:53.000 --> 01:07:52.000
+One thing we didn't cover, I want to go back to just to wrap this up, to conclude it, is what are your offerings, product offerings? And so just to give a bit of background here, we have two kind of main sort of factions of listeners, right? There's folks who are in either high school or college or their post-college or, but they are, you know, just getting into the industry. They're becoming professional developers. And so what do you have for them? Let's say hobbyists. And then also what do you have for them, let's say hobbyists, and then also what do you have for enterprise customers and how would people get started in either of those roles? Yeah. So first of all, because we believe in product-led growth, we believe in bottom-up. So that means that we have a very generous premium plan and a very active Slack community.
+
+106
+01:07:52.000 --> 01:08:22.000
+So basically what you get from Frontag is out of the box, fully customizable login box and admin portal, which covers basically everything you need around authentication and single sign-on. And that includes all the social logins, login with Google, login with GitHub, profile management, et cetera, et cetera, SSOs. And basically for the enterprise customers, we have an offering which is based on audit logs and a fully customizable organization splits. So that means that if you are integrating FrontEd,
+
+107
+01:08:22.000 --> 01:08:50.000
+basically you provide your customers with an ability to define their own security policies without you needing to do it for them. That's the PLG motion that we strongly believe in and the self-servience that we strongly believe in, providing your end users with the ability to customize and control everything on their own, on the audit log side, on customized security policy side, onboarding MFA, onboarding enterprise SSO,
+
+108
+01:08:50.000 --> 01:09:30.000
+such as Okta and that kind of stuff. And even in Jari, so most of our offering is as a service. We have dedicated deployments, which are available on our enterprise plan as well, which can be covered as hand charts or Docker Compose. So that depends, like most of our, you know, we call it a garage-based startups will start with either our freemium plan or with our startup program, and then they will evolve to what we call a plan which is more sophisticated, which includes the audit logs and all the other advanced capabilities as well.
+
+109
+01:09:30.000 --> 01:10:22.000
+Cool. It makes sense. So if you're listening to this and you're building your first web app or you are prototyping something and you want to send it to a friend and it's a web or a mobile app or even an electron desktop app you know you can you can use front egg it's uh totally free to use you know uh to to get started with but then you know let's say your app really takes off you hit the front page of new york times or something and now all of a sudden everyone's hitting your site and you really need to start keeping track you have attackers that are attacking your site then you can upgrade to the premium plan without having to rewrite the whole API or anything like that and get all those extra features that become really important as you scale. That's correct. Yeah. And usually we don't limit anything to get started. Everything is open and
+
+110
+01:10:22.000 --> 01:10:41.000
+then we just, we make sure that you have everything that you need before we start like talking about commercial side of business, yeah. Cool, yeah, that's awesome. Yeah, that parallels a lot of the, you know, the folks that we've talked to. I think it's a really, really good business model. You know, I think the magic there,
+
+111
+01:10:41.000 --> 01:11:16.000
+we talked about this in prior shows, but this always fascinates me. So I'll bring it up again is the magic is kind of figuring out where to draw the line. I think for this particular product, you know, drawing the line at the audit logs and all of that, I think is very, very natural. And it fits nicely because at the end of the day, like it's a, it's a, you're providing a valuable service and at some point you need to charge it. And I think, yeah, I think that's the right place to be because by that time somebody has gotten you know so much value out of it that that i think that they would be happy to you know contribute back yeah i agree most of the time it
+
+112
+01:11:16.000 --> 01:11:44.000
+would be around the audit logs and the enterprise sso which means that you're probably selling to enterprises but yeah i mean you know we are talking with so many founders and around, you know, the third or the fourth year of your business, you're probably after 10 different versions of pricing if you're really good at it. So, you know, the pricing is the one thing that, you know, for me as an engineer,
+
+113
+01:11:44.000 --> 01:12:02.000
+it's so hard to get it right. And there are so many experts and there are so many advisors, especially for a sophisticated platform like ours. So, yeah. Yeah, that makes sense. Cool. So, yeah, we covered a lot of really good. We covered technical. We covered product.
+
+114
+01:12:02.000 --> 01:12:44.000
+We covered FrontEnd as a company. I definitely encourage folks to check it out. The strongest encouragement from both of us is to not build your own login. Don't do it. I actually, I'm guilty of this. Many, many years ago, I made a trivia app. Actually, if people have gone through the archives, if they're new listeners, you've probably seen this episode where I talked about it. And yeah, I actually just passed the token as a query parameter. And when I was sending the app to somebody, the website to somebody to try out, all of a sudden they were me. And like I sent it to someone to try out and all of a sudden my score started going up and I couldn't really figure it out. And so thankfully, you know, it wasn't, I wasn't, you know, making a bank app or anything
+
+115
+01:12:44.000 --> 01:13:10.000
+like that. But yeah, I mean, I totally flubbed that. And you really don't want to be playing around with people's passwords. People did, you know, put in passwords to my trivia app that, you know, that they've used in their bank. And, you know, I didn't leak the password or anything. But still, I mean, when I kind of realized what was going on, it made me very nervous thinking about passwords. So don't make the same mistake. You know, it sounds like Front Egg is a really awesome service. I'm going
+
+116
+01:13:10.000 --> 01:13:49.000
+to check it out. I actually have, I'm always kicking around new projects. So I have one thinking about now I'm going to try Front Egg with it and we'll see how it goes. But thank you so much, Aviad, for coming on the show. We learned a ton. I love episodes like this. I personally learned a lot. And I'm like this. I personally learned a lot and I'm sure listeners learned a lot too. And folks can feel free to go to the show notes where we have an entire transcript of the show. Our producers will transcribe the entire show, which is awesome. So if there's any keywords, anything you didn't understand, you can go through that and then kind of Google anything that wasn't totally clear. But, but I think Avi, I did it. You did an amazing job of really
+
+117
+01:13:49.000 --> 01:14:48.000
+breaking it down for us. And thank you again for coming on the show. Thanks, Jason, for having me. Thank you guys. Cool. And thanks to all the listeners. Yeah, we've been doing two shows a month for a few months, as you may have noticed, if you're a Patreon subscriber, you know, I sent a special thank you to you to all of you folks for continuing to support us. Yeah, definitely. We'll post Aviad's Twitter and other stuff in the show notes. So if you want to reach out to him directly, we'll provide a way to do that. We'll also have links to Front Egg, so you can check that out. And everyone have a great couple of weeks and we'll see you later on in the month music by eric barn dollar programming throwdown is distributed under a Creative Commons Attribution Share Alike 2.0 license.
+
+118
+01:14:48.000 --> 01:14:53.000
+You're free to share, copy, distribute, transmit the work, to remix, adapt the work, but you must provide an attribution to Patrick and I and share alike in kind. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

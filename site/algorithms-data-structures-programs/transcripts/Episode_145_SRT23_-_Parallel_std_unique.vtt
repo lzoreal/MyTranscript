@@ -1,0 +1,225 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:56.000
+Right up there with those fundamental operations is this Adjacent Transform. Let's play a game, folks. What's the name in the Q language for Adjacent Transform in C++ and MapAdjacent in Haskell? It's five letters and starts with the letter P. Welcome to ADSP, the podcast, episode 145, recorded on June 21st, 2023. My name is Connor, and today with my co-host Bryce, we record live from the roads of Italy during the Slovenia 2023 road trip on the way to Venice. In today's episode, we chat about how to parallelize the algorithm stood unique. Now we can switch to, because we didn't talk about this on the pod.
+
+2
+00:00:56.000 --> 00:01:49.000
+What was it? A couple of days ago when we were chatting in the car and we were talking about some algorithm stuff and I asked Bryce. And so now I'll put it to the listener. If you're washing dishes, if you're on a run, if you're on a walk, or if you're just sitting on the couch or sitting in a chair in the backyard enjoying the sunshine, think about this. stood unique algorithm which is an algorithm for removing duplicate values that are next to each other and this is similar to an algorithm called deduplicate or distinct that we chatted about a little bit but the difference is is that one removes all duplicates so the easiest way to do this if you don't care about performance or order, is, you know, in Python, you can just take your list of values and then convert it into a set.
+
+3
+00:01:49.000 --> 00:02:33.000
+And that's a property of a set, is that there's no duplicate values. So, std unique, similar to deduplicate, but you're only getting rid of adjacent values. So the question is, we were talking about the parallel implementation of this in thrust, but you can sort of think of this, you can sort of think of this sequentially as well. And the, the question is what algorithms, two algorithms are used to implement unique. There are two other standard algorithms and we'll, we'll let you think for a sec while Bryce adds some commentary because he already knows the answer. Don't really remember. I do remember talking through this.
+
+4
+00:02:33.000 --> 00:02:56.000
+I think I said... Ah, no, it's not remove if. It's not remove if. Ah, right. Okay, one of them is probably copy if. Copy if is correct. Yes, that's the second thing. And then how do you figure out which things you're removing?
+
+5
+00:02:56.000 --> 00:03:29.000
+Adjacent transform or is it just adjacent difference? In Thrust, it is adjacent difference. And if you actually look at the implementation on GitHub, it actually doesn't explicitly mention adjacent difference. You see something called, I believe it's called head flags. And that is a specialization of adjacent difference where you are using the not equal to, or is it equal to? So it's got, just to clarify, in this implementation in Thrust,
+
+6
+00:03:29.000 --> 00:04:17.000
+it has ON temporary storage to store the flags that indicate whether or not you're removing a particular element? Yes, that is correct. And sorry, and just to clarify, it's, uh, head, head flags and tail flags are two specializations that just sort of shift where the, the Booleans, the trues and falses go, either sort of, does it go with the first adjacent element or with the second adjacent element? So that's why they're called head and tail flags and the flags to indicate where they're the same basically so you want to do it adjacent difference with equal to no not equal to so i was right actually initially because whenever you have a different
+
+7
+00:04:17.000 --> 00:05:14.000
+value that's when you want to perform a copy but whenever they're equal to each other, you want to ignore them. Um, so I will again ask the typical question that I, uh, that I, I almost always feel like I ask whenever you ask me, whenever we, we, we talk about how an algorithm is implemented, why can't we do this one pass? Um, and I do admit it's a little bit trickier to do it one pass um because doing it like you could imagine doing it a single pass with some sort of like adjacent view um but the problem is that it's you don't just need to see like those two elements like if there's a run of elements let's say that you got like i elements, all of which have the same value, when you parallelize that and split it up into multiple different chunks,
+
+8
+00:05:14.000 --> 00:05:55.000
+it's possible that one thread could have the start of that run of equal elements, and another thread could have the end of that run of equal elements. Another thread could have the end of that run of equal elements. And so it's not simply sufficient to just look at the two elements next to each other. You sort of need some information propagated from neighboring chunks. But I still wonder whether there's a way to do this in a single pass. What are your thoughts? So we should be clear here. We're talking about in parallel.
+
+9
+00:05:55.000 --> 00:06:39.000
+Sequentially, it is very easy to do this in a left-to-right single pass fashion where you basically just look at two elements at a time, and whenever they're not equal to each other you just perform a copy um and you can also do it uh in place definitely sequentially in parallel though i don't really see how you can do it i think it you it's necessary to materialize that that uh head flags because... I'm not so convinced that it necessarily is. This may just be another example of where you need a reduction that guarantees ordering,
+
+10
+00:06:39.000 --> 00:07:00.000
+a parallel reduction that guarantees ordering, which we've talked about extensively before on this podcast. I mean, you could probably do it, but you're going to end up with a different implementation in that. If you're chunking things up and doing a unique on each one of the chunks, you would then need to basically do an extra,
+
+11
+00:07:00.000 --> 00:07:34.000
+so it would kind of be like the scan behavior. Not in that you need to keep state. You wouldn't need to, but you would perform uh unique on each chunk and then merge that back together but then still have to perform uh unique on that merged chunks result because if you split a chunk in the midst of a contiguous sequence of equal elements you're going to end up with two elements in a row, basically. And so you need to remove those. So, I mean, I'm not sure if that, I don't think. I'm actually, I'm looking at the, in Thrust, the Cub special.
+
+12
+00:07:34.000 --> 00:07:54.000
+Oh, no, no, no. Okay, I'm looking at, yeah. Hmm. You got a listener who has no idea what you're talking about. I was looking at the Cub. I was looking at how we implement this in, I was looking at the, how we implement this in thrust. And, uh, no, Connor is correct. We do seem to do it in two passes right now, which is, I think, unfortunate.
+
+13
+00:07:54.000 --> 00:08:06.000
+Listen, folks, we're headed past a speed camera. I'm happy to report we're not speeding. You know why? That's because the speed limit's 130, baby! Woo-hoo-hoo! We love it. We're going 126. We should, we should clarify this isn't
+
+14
+00:08:06.000 --> 00:08:22.000
+kilometers per hour, not miles per hour for our American audience. Yep. That's the only time, basically, we're under the speed limit is when the speed limit is 130. Or when we're in a kid's school zone, because we've got to protect the children.
+
+15
+00:08:22.000 --> 00:08:38.000
+Yes, yes, of course. What is that reduction that we've talked about before? Is it a... It's an associative-only reduce. Yes. So a reduce that supports non-commutative operations. Correct.
+
+16
+00:08:38.000 --> 00:09:15.000
+So this non-commutative reduce, could you do it with that? No, this has nothing to do with reductions, right? You can do it with that no this has nothing to do with reductions right like um you can do it in your quote-unquote single pass thing and i think really more you're right it's not it's not it's not really a reduction i need per se more it's it's uh it's not about really doing this in a single pass what we're trying to do is not materialize this uh flags that looks at yes yes temporary storage so i think i think we should clear it clean up our be a little bit more precise about what we're talking about here and you can do that with that strategy of like chunking
+
+17
+00:09:15.000 --> 00:09:42.000
+and basically doing uh you uniques on each of your chunks but then like i said when you merge those back together you're going to end up still having to do another unique to get rid of the potential duplicate values that are at the edges of the chunks, which, like I said, I'm not sure if that's going to end up being more performing because you're basically doing things... I mean, I don't know. A lot of algorithms still do a lot of extra work.
+
+18
+00:09:42.000 --> 00:10:11.000
+I wonder if you can do it in a single pass with a scan. I mean, even if you did do it with a scan, that's, and I know you could, because you're getting rid of stuff, right? Yeah, yeah, the problem is you need, the scan doesn't give you the ability to eliminate stuff. You need something that can, hmm. And the thing is, too, is if you... This game doesn't give you the ability to eliminate stuff. You need something that can... And the thing is, too, is if you're doing unique on each one of the chunks, you're doing basically like a bunch of copy-ifs,
+
+19
+00:10:11.000 --> 00:10:45.000
+which is going to be super expensive. You're doing copy-ifs on each of the chunks, and then you're doing a copy-if for the final stood unique. I just think probably the implementation that is there right now is the best one. I'm not convinced. Here's the follow-up though is that uh the reason i kind of brought this up was that i love i love listen folks let me tell you what i love i love the fact that there are all these different specializations of adjacent uh difference and now adjacent transform i think it's really like the fact that adjacent difference and now adjacent transform. I think it's really like the fact that adjacent
+
+20
+00:10:45.000 --> 00:11:36.000
+difference has such a bad name is really, it's really, really unfortunate because it is such, I think, an important algorithm. It's only an adjacent difference really is an adjacent transform, but this zip tail type of transform, what's called map adjacent and Haskell and zip with next, I think in in kotlin there's a bunch of different languages that call this different stuff it's such an important pattern and deserves like i think it deserves to be up there with you know we've got reduces and folds we've got scans we've got maps we've got filters right up there with those fundamental operations is this adjacent transform so much so that in the language queue that we talked about several episodes ago when we were solving that skyline problem, Q has an adjacent difference function called, do you know what it's called, Bryce?
+
+21
+00:11:36.000 --> 00:12:08.000
+I do not. Five letters and starts with a P. Let's play a game, folks. What's the name in the Q language for adjacent transform in C++ and map adjacent in Haskell? It's five letters and starts with the letter P. I got no clue. I'm still trying to come up with another solution to this problem from before. Choosa, we'll play hangman. You've got, we're going to give you three lives.
+
+22
+00:12:08.000 --> 00:12:33.000
+And, uh, if you guess, we'll give you five lives. Guess a letter. Uh, A. Incorrect. Down to four lives. Uh, D. Bryce guessed D, incorrect, down to three lives. Uh, E.
+
+23
+00:12:33.000 --> 00:12:52.000
+Bryce guessed E, incorrect, down to two lives. Uh, Y. I'm going to let you have another guess because that's a terrible guess, Bryce. Uh, I don't know. I don't know. I think you should just tell me. The Wheel of Fortune fans are very upset. I'll give you a letter. It's R. And that is P-R
+
+24
+00:12:52.000 --> 00:13:15.000
+blank blank R. This is the name of the adjacent transform algorithm, Bryce. Think about what... Prior? Woo! You got it correct, folks. The name of the adjacent transform algorithm is Prior.
+
+25
+00:13:15.000 --> 00:14:01.000
+Note that in C++, our adjacent transform algorithm takes a template argument for the number of adjacent elements you want to look at, whereas Prior is fixed to two. There's no way to customize that, so it only looks at two elements at a time, similar to how adjacent difference works. And in Q, there are actually two specializations of prior because they're so frequently used, and those are deltas and differ. So deltas is basically prior with subtraction as the default binary operation, but it's commuted subtraction. So you're similar to how it works in adjacent difference. You're subtracting, if you're looking at sort of two elements at a time and you look at one on the left and one on the right, you're subtracting the one on the left from the one on the right.
+
+26
+00:14:01.000 --> 00:14:47.000
+So if you have an increasing sequence of one, two, 3, 4, 5, you'll get back the values 1, 1, 1, 1, 1. Technically five ones because you copy the first value to be the first value of the output sequence, which I think is broken and we fixed in C++23. So that's deltas, which is basically the default behavior of adjacent difference if you don't specify a custom binary operation. And the second specialization of prior is differ, which is the prior or adjacent difference algorithm with the not equal to binary operation. So it's giving you a mask of basically where elements change. And this is a very useful algorithm because there's another function in Q called cut. And when you combine differ with algorithm because there's another function in Q called cut. And when you combine differ with cut,
+
+27
+00:14:47.000 --> 00:15:10.000
+you can basically get that chunking mechanism where it'll split your vector up into sublists and throw it in a table. We love that, folks. So I just, my whole little monologue here that I wanted to get on the pod, seeing as we got to find things technical to talk about while we're on the road in the Slovenia 2023 podcast is that adjacent transform it's just such a useful algorithm and it's such
+
+28
+00:15:10.000 --> 00:15:37.000
+a shame that in C++ we called it adjacent difference because it completely obfuscates how useful and powerful it is and uh and yeah now you know we've got prior and Q two specializations deltas and differ we love it it. Over to you, Bryce. All right. I've been listening to you the last five minutes. I've been designing this algorithm in my head. You're the worst co-host, Bryce. Okay.
+
+29
+00:15:37.000 --> 00:15:59.000
+So one of the key properties that you get with a scan is that… Can you hook me up with a cookie? I can hook you up with a scan is that... Can you hook me up with a cookie? I can hook you up with a cookie. One of the key properties you get with a scan... Do you want me to open it up or are you able to... Okay. One of the key properties you get with a scan is that every element of the output
+
+30
+00:15:59.000 --> 00:16:31.000
+gets to include information from all of the preceding elements. So when I think about the output of a unique operation, I think that this is a property that you need, right? That if a unique operation is removing some elements, or another way to think about it is that it's sort of like shifting everything over. Like if you have two elements that are the same,
+
+31
+00:16:31.000 --> 00:17:06.000
+you shift over the right element and then like you add an empty element at the end. And so figuring out how much you have to shift over like the last element is going to depend on how much prior elements were shifted over so you need some information from all prior operations so it seems to me like this is something that can be done with a scan and let's let's uh let's think about this as we would like a mathematical proof so let's start off with just the first two elements. So we have the first two elements.
+
+32
+00:17:06.000 --> 00:17:33.000
+We're going to look at those first two elements. And if they're equal, then, well, actually, the first two may be a little bit boring because the first element has no one that is, so like for the absolute first element in the sequence, you're always going to retain a unique because there's no element preceding it. But for the second element, you're going to look at the first element and the second element.
+
+33
+00:17:33.000 --> 00:18:07.000
+And if that second element is equal to the first one, then you need to omit it from the output. I guess, hmm... Can I ask a question? Yeah. What are you trying to do after the scan to get it in unique? Are you trying to store the index at which you need to copy this to afterwards? Are you trying to store a Boolean that says we don't need to keep this? Like, what are you trying to do with the scan?
+
+34
+00:18:07.000 --> 00:18:22.000
+I'm trying to do the entire thing with the scan. There's no way you can. There's no way. Why not? Scan gives you N, like, you have N inputs, N outputs. That is, like, fundamentally in a separate category than unique.
+
+35
+00:18:22.000 --> 00:18:41.000
+Um, not if I propagate the information about, like, how many I've moved over to the left, and then, like, at the end, I just fill it in with, like, tombstone values. It's still not... It's still... You still can't do it. It's impossible. Like, because of the...
+
+36
+00:18:41.000 --> 00:19:08.000
+Like, the semantics of the left to right, which is the associativeness of the scan operation, there's no way you can go backwards. When you get to the end of the array, there's a potential that you need to copy the very last value to be in the second spot. And there's no way to do that with a scan. Well, yeah, and so I was... Which is why I was asking, like, what are you doing after the scan? Because I'm not following what you're trying to build up to. Oh, so, so, okay.
+
+37
+00:19:08.000 --> 00:19:40.000
+So one thought that I had was that like some degree you may be right in that you may, you may need to do a scan over the reversed sequence. Um, because it may be the case that you don't need to know, um, like, like, like for the, to know what the value of that second element might be I need to know what the value is of all the rest of the sequence I think this is a fool's errand I don't think it's and also too
+
+38
+00:19:40.000 --> 00:20:13.000
+you're making the mistake although maybe this is just you're doing this as a mental exercise but unique I think that it is And also, too, you're making the mistake, although maybe this is just you're doing this as a mental exercise, but unique is... I think that it is... I simply think that it is incorrect that the only way to implement this in parallel requires ON temporary storage. I don't see any reason that you would need to do that. I think that you can simply chunk this up and propagate the information between the different chunks, and I don't think that you need to do two passes either.
+
+39
+00:20:13.000 --> 00:20:32.000
+Well, so we've talked about that solution. Yes, but yours required two passes still. But a scan inherently requires two passes anyways. But also, too, the thing I was going to say... Well, no, no, no. We now have a single pass scan implementation. Yeah, yeah. Anyways, I don't think scan is going to work.
+
+40
+00:20:32.000 --> 00:21:04.000
+The thing that I was going to mention, though, is that unique is in the category of algorithms that, or category of problems where you only need a fixed amount of information to the left. You don't need the entire state up until then. And this is, we've talked about this, I don't know, three or four times, although people probably forget. And this is another reason why adjacent transform is such an important algorithm is that anytime you don't need the entire state that depends on everything up until this point
+
+41
+00:21:04.000 --> 00:21:26.000
+and it's a fixed window, you don't want to reach for scan. You want to reach for a JSON transform. But why? It's not a fixed window here. It's just to the left. All you need to know is the value of the element to the left of the current element. And if it's the same, then that's when you don't have it. To make, yes, but really if you if
+
+42
+00:21:26.000 --> 00:21:59.000
+the question that you're trying to figure out is where where do i put this value in like the output sequence like that requires more information you said that's not what you were doing though you said you were trying to implement this all in a single pass with a scan to do this in a single pass with a scan. To do this in a single pass, you need to figure that out. And then do something afterwards. Why? You're saying you need to figure out where it's going to go in the final sequence, but figuring out where it goes is not enough. You have to do something. You have to do something.
+
+43
+00:21:59.000 --> 00:22:26.000
+Right, but if I figure out where it goes, then I can just put it there in the output. Let's just assume. It's going to require a full pass of the data in order to get that like you can't do it as you go like otherwise or if you do that essentially you've just implemented the sequential scan which is what the sequential scan does it basically has two iterators the one where you're copying to and the iterator pointing to the current element and it's just doing that comparison with the last element anytime uh they are not, you found a new value,
+
+44
+00:22:26.000 --> 00:22:47.000
+and then you copy it back, you increment the first iterator, and then you go on. But that's the sequential. Well, but we can assume random access iterators here, so we don't need to actually keep that stateful iterator. We can just keep an index into the iterator. An index is the exact same thing as an iterator for the purposes of copying to a certain place.
+
+45
+00:22:47.000 --> 00:23:12.000
+But anyway, it sounds like you want a parallel version of that style of implementation. I have no idea how you would do that. I don't think it's possible. It may not be. It may not be. It just seems wrong to me that we would need temporary storage for this. Doesn't seem wrong to me, folks.
+
+46
+00:23:12.000 --> 00:23:32.000
+Let us know. Email us. We don't have an email. Let us know in the GitHub discussion at the top of the show notes. And, you know, maybe I've definitely been wrong before. Yeah. That's an interesting question. Interesting ad on the back of that truck.
+
+47
+00:23:32.000 --> 00:24:06.000
+Oh, yeah. Yeah, there's been a lot of that. Would you like to describe the ad? Nope, I would not. All right. If you meet us at a conference and we're at some kind of social night and there are beverages involved feel free to ask us what was and that's that's how we'll know you're a real deep deep uh hard fan of adsp is that you're referencing you know episode 146 or whatever this is and you'll be like what was on the back of that uh italian uh
+
+48
+00:24:06.000 --> 00:24:31.000
+moving truck and uh and we'll let you know and by that point we'll have stickers too so uh we'll we'll give you a sticker while we're at it all right well i think we're gonna take a little bit of a pause mostly taking a break because my hand is getting tired from holding the microphone up. Oh, goodness, man. Next time, you got to do some work. You got to do some curls or something. Yeah. Here. You know what?
+
+49
+00:24:31.000 --> 00:24:46.000
+You know what, folks? Bryce is tired. No, no, this is not a good way. What do you mean? I'm holding the mic now. And what are we talking about now? We're at episode 147. I think we should take a break anyways, because I'm
+
+50
+00:24:46.000 --> 00:25:02.000
+going to... I'm not going to be able to get this unique question off my mind. I need a few minutes to ruminate on it. Alright, folks. There's a chance. There's a chance this is the last time we record. And if it is the last time we record...
+
+51
+00:25:02.000 --> 00:25:16.000
+No, because we're going to record for tonight in Venice. Why? Because we've got to record at the end of the road trip. Yeah, like, what are we going to do, in our hotel room? Probably, yeah. That's so weird. We're definitely going to do it. Listen, folks, this is my goodbye.
+
+52
+00:25:16.000 --> 00:25:38.000
+We're going to apparently record again, but my goodbye from the road of the Slovenia 2023 road trip. I honestly, I'm a little bit surprised that it even happened, because I'll be honest, it was a joke. I mean, we did title an episode, Ljubljana, here we come. But if you had actually asked me at the time, what are the odds that that's going to happen, I would have put it below 50%,
+
+53
+00:25:38.000 --> 00:25:57.000
+because taking a podcast on the road is, you know, it's novel, especially in the tech space. We're breaking, you know, it's novel, especially in the tech space. We're breaking, you know, we're setting whole new standards. But we made it happen. The stars aligned. All right. Well, we're signing off for now. We will talk to you later.
+
+54
+00:25:57.000 --> 00:26:14.000
+And spoiler, we do have at least two or three more episodes, which we recorded in Venice. So stay tuned next week to hear those. Be sure to check the show notes either in your podcast app or at ADSPthepodcast.com for links to any of the things we mentioned in today's episode, as well as a GitHub discussion
+
+55
+00:26:14.000 --> 00:26:26.000
+where you can leave questions, comments, or thoughts. Thanks for listening. We hope you enjoyed and have a great day. Low quality, high quantity. That is the tagline of our podcast. That's not the tagline.
+
+56
+00:26:26.000 --> 00:26:31.000
+Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

@@ -1,0 +1,665 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:58.000
+Hey everybody! Down, episode 152, The Future Database with Sam Lambert. Take it away, Jason. Hey, everybody. This is a super awesome episode. I'm really looking forward to this. I actually found out about PlanetScale, which we'll talk about later on from Googling on the internet, you know, how to get a self-managed database. I burn myself too many times with trying to maintain my own database. And another thing I always tell folks is the class I kind of most regret not taking is databases. As people who've listened to the show for a while,
+
+2
+00:00:58.000 --> 00:01:27.000
+show veterans know, I elected to take all the theory classes. I took linear algebra. I took all these things. And I didn't take networking or databases or operating systems or any of these classes that probably would have been extremely useful. And I feel like I learned most of them on the way. But the one that I really learned way too late in life was databases. So we are going to talk about, you know, kind of the next evolution of databases.
+
+3
+00:01:27.000 --> 00:02:13.000
+And, you know, kind of along the way, we'll dive into kind of the whole history of how people stored things. And we'll dive into a lot of that and how we can continue to make that better and more painless for engineers. So we're really excited that we have Sam Lambert on the show. He's the CEO of PlanetScale, and he's here to chat with us about the future of DBs. So thanks for coming on the show, Sam. Thank you very much for having me. Cool. So maybe just to kind of kick things off here, what is one of your greatest database horror stories? Everyone talks about the intern that deletes the prod database and stuff like that do you have any any story from your experience of uh you know crazy
+
+4
+00:02:13.000 --> 00:02:45.000
+database mishap you know something you couldn't even roll back or something wild that you could share with the audience out there i have so many all right let's do it this is partly why i'm doing what i've got two actually actually. I'll tell you. One inspired a product feature that we have, and we don't need to go into too much about what PlanSkill does right now, but one was in my second day at GitHub. I took GitHub offline for about an hour while making a database page, and it was the worst feeling of my life, and I honestly expected to get fired that day.
+
+5
+00:02:45.000 --> 00:03:22.000
+It was a very common issue that a lot of our customers face well did face until plants go and and it was real passionate for me to fix this for our users but what happened was we were around github was a rails app very large rails app with a you know a lot of users and lots going on and one of our developers had been waiting for me to join. I was the first database engineer that actually joined the company. And they had a load of schema changes that they wanted to make. And they said, you know, we've stopped using this model. You know, I want to get rid of a load of these columns and nothing's accessing these columns. So I went ahead and ran PT online schema change in those days was the kind of way to run an online database
+
+6
+00:03:22.000 --> 00:04:01.000
+migration. And kind of, it went through, it took and kind of it went through it took about half an hour to to do it uh and then the column dropped and the website went offline and what happened is the model hadn't been fully cleaned up and there was tables that were still you sorry there was queries that were still using that column and every single site on the every page on the site just completely broke and it was a horrible feeling. And with our audience, you know, people noticed extremely quickly because your application needs to pull from planets from GitHub to, to build or to go onto the cloud or whatever. So everyone would notice, right? Like in fact, in our load graphs, you could see the crontics of the entire
+
+7
+00:04:01.000 --> 00:04:26.000
+world. So on the hour we had a huge spike and you would see these spikes throughout the entire world. So on the hour, we had a huge spike. And you would see these spikes throughout the entire stack. If you look to the load balancers, if you look to the application, if you look to the database, every graph had exactly the same spike. So the hour was the biggest, half an hour, second biggest, 15 minutes, down to five, down to one. And it was people's applications, you know, they had a grant and they were just building the app whenever to deploy it or whatever, or just to build it and build an artifact.
+
+8
+00:04:26.000 --> 00:04:51.000
+And so that was one of those. The other, the funniest, and I can only be funny because of how crazy it was, was I was out at dinner. I was in Berlin with some GitHubbers, and I got paged websites off MySQL down. So I ran, like it wasn't far from where we were staying, so I ran back to this Airbnb, jumped on the computer, got on the box. And it said, MySQL, like clean shutdown or like shutdown initiated or whatever.
+
+9
+00:04:51.000 --> 00:05:20.000
+And I was like, someone has logged on and shut down our main MySQL server. And I was like, whoa, what's going on here? This is crazy. Obviously, no one had done that. There was a really weird issue. So there was another Percona tool called PTStalk. And what that did was it would say something happened in the database, like a load spike or whatever. It would try and grab as many metrics from the database as possible, like what queries were running, the NODB metrics, just so that you could debug a bit when things
+
+10
+00:05:20.000 --> 00:05:51.000
+went wrong. It was just a really good way of capturing a snapshot of what was going on in the system. It was also quite heavy. We used to run pretty sort of stacked database machines, really big servers. So a lot of memory and scanning buffer pools that are that size is very, very slow and was actually slowing the database server down. So earlier that day, I'd gone into Puppet to just disable PTStalk, which, you know, next time Puppet ran, it would just go to the database servers and shut down PT-Stalk. Great. So it did that on the first
+
+11
+00:05:51.000 --> 00:06:42.000
+Puppet run. That was fine. Then we had this incident. What happened is there was a bug in PT-Stalk that it hadn't cleaned up its PID file. And so when Puppet went to disable it it found the pid file and went to kill again to shut down pdstalk what happened is a thread of mysql had assumed that that number and mysql forwarded on the sig term to the master process and processes it as a shutdown request and just gracefully shut oh the entire database uh-huh so it was the weirdest issue i bet like it just should not have happened it was like two bugs piled on top of each other and then just a mysql shutdown and it was very like annoying at the time but then we all were able to laugh because like i mean how do you see those things coming yeah what are the chances of
+
+12
+00:06:42.000 --> 00:07:35.000
+that yeah exactly exactly you just got to kind of roll with it that is wild so you said you joined github and then within a couple of days you broke the site and you thought you were going to get fired this is something that that uh you know a lot of people wonder about this so i'm assuming you didn't get fired because you have a second github story but what actually happened like did you get called into the boss's office like what was the day after like everyone there were great engineers that understand that these things kind of happen like we looked at it made sure the problem couldn't happen again and went back to it okay i mean we didn't have a very blame-based culture because what's the point if you're looking for blame you're never going to find the real problems right it's only systemic problems like if you assume and this was the case in both the circumstances is you know you assume best intention and you assume that
+
+13
+00:07:35.000 --> 00:08:23.000
+the person does the right thing with the information presented to them so the developer was presented with the information they thought they'd moved, cleaned up the code base, and they had no other reason to believe they hadn't. So they made the next step with best intentions and with the information they have, which was to ask me to remove those columns. I probably should have checked, but at that time I didn't. I kind of just went forward with my knowledge, which was like, believe that this thing is done i'm going to go and do this and i went and did it and so when you look back at this you could if you just go for blame you miss what could actually stop this happening in the future which is like process right like that so after that yeah we wrote i wrote a checker that makes sure that no queries have happened
+
+14
+00:08:23.000 --> 00:09:03.000
+in that amount of time since we the model cleanup. So we knew, then we were going to cause kind of an outage if we still remove those columns. And that's how we actually improved. And throughout my career, I've always encouraged people to do that kind of postmortem. Because if you're just going for blame, you very like, I've never seen an outage where, the post-mortem someone was presented with the right information and then deliberately did the wrong thing like people just don't really do that there's a lot of interesting safety science around airplane crashes and how just giving pilots a checklist to follow in a very stressful situation improved airline safely
+
+15
+00:09:03.000 --> 00:09:48.000
+safety massively because it's that same insight of like, people are just going to do what they think is the best with the information they can gather at the time and gathering information in a high stress environment is very difficult. Yeah, that makes sense. Yeah, I kind of have a downstream story of something like that, where I was making changes to TensorFlow. this was maybe six or eight months ago i was forking tensorflow you know for a bunch of reasons and adding a whole bunch of you know kind of proprietary you know kind of operators and things in the tensorflow and um i i accidentally put in the command to push my branch to the open source TensorFlow.
+
+16
+00:09:48.000 --> 00:10:25.000
+And I got this message pop up and it says, hey, you know, you are not pushing to the internal TensorFlow. You're pushing to the open source TensorFlow. Are you sure you want to do this? And you could press and it was, you know, no by default, which is super smart. And so, you know, I just press no, and we moved on. And that, you know, later on, but a month after that event, someone was in our company, all hands talking about how they, you know, push something to TensorFlow and, and having a laugh about it. But you know, that, that error, you know, failure review board, or like the
+
+17
+00:10:25.000 --> 00:11:14.000
+contingency of that error was to implement this extra check, which, you know, saved me from doing it and a whole bunch of other people too. And so you're right, I think, instead of wasting time, like trying to blame, it's really an opportunity to fix, you know, a whole category of errors. You can understand a lot more. Yeah, totally. Very totally very cool so yeah let's uh let's dive into into you for a bit so the audience can kind of get to know uh more about you and your experience with uh with databases that kind of led to planet scale so kind of walk us through like you know what was your first time using a database you know what's kind of your kind of history with that? And at what point did you say to yourself, now's the time to go and start PlanSkill? My first kind of interaction was with databases.
+
+18
+00:11:14.000 --> 00:11:54.000
+I was at this company that was an e-commerce store provider. It was like more of a boutique. They did it for very fat, like fashion companies. And it was way before shopify and the likes and it was so it was a house rolled e-commerce framework and they had an incredible design team and they would produce beautiful e-commerce websites right and like really big brands would come to gain e-commerce sites and this was where or when would this be probably 2006 ish so it was a long time ago and it was php and my sequel which is still the majority of the internet and at that time was
+
+19
+00:11:54.000 --> 00:12:38.000
+definitely the majority of the internet but i was a sysadmin i was there to just keep websites up put websites into production we had very basic tooling for doing this because it was, you know, back then. And MySQL was the database. And so I had to administrate database service with PHP, my admin and things like that. And that was my kind of first introduction to MySQL. And after I left that company, I went to an electric vehicle company that's now not in business anymore, but they were an early electric vehicle company doing commercial electric vehicles so they were building these big electric trucks and like frito-lay and people these companies doing these local area deliveries were using these electric trucks they were very fun electric vehicles regard like regardless of their size still accelerate very
+
+20
+00:12:38.000 --> 00:13:15.000
+very quickly and it is very fun to floor a seven ton truck that's got a massive that's amazing electric engine so we got to do that as well that was very very enjoyable but they had this huge telemetry system and they were actually selling the data to the department of energy because they were fascinated by the usage patterns of these this very new emerging technology so we built this device that went on the box and listened to the can bus so on in every car there is a kind of a network called the can network which all of the devices in the car communicate on and kind of you know diagnostics are sent around the vehicle you know things that you know if you're getting a
+
+21
+00:13:15.000 --> 00:13:39.000
+warning light or whatever and we would listen to all of it and it would generate thousands of messages a second we had a sim card and we would stream this up to our data centers and we would gain all this data in real time. And we stored all that data in a massive MySQL warehouse, like just huge volumes of data coming in and having to be stored. And that is when I really got exposure to the internals of MySQL
+
+22
+00:13:39.000 --> 00:13:59.000
+because we were running it in such an extreme fashion. We would hit performance issues or bugs. And that's when I really got into databases and learned how fascinating they are and what a challenge they are. And that's where I kind of moved my career from just being like a general sysadmin to specializing in databases.
+
+23
+00:13:59.000 --> 00:14:34.000
+And it was really great fun. And I eventually made my way to GitHub where I did the same. But I've had this observation throughout my whole career the databases are too difficult they solve a really hard problem for you and then pass on a whole other ton of really hard problems for you to solve like what what are some examples well i mean look look at how difficult it is just to get a schema change into production in a normal fashion like i've got a horror story about that everyone has horror so every day you see you know someone fills out a contact us report on our website and they're
+
+24
+00:14:34.000 --> 00:15:17.000
+having problems with schema changes or a schema change took them down in production and it's like a really hard thing to do so when we built planet, that's one of the first problems we looked to solve, making schema changes fully online and easy enough to deploy as if you were deploying code. And people love it. And we're very productive using the platform. We get more schema changes done than I've ever seen any other company, like multiple a day. Developers just push them. The normal process in every other company, and it's a process I've set up because the database is so fragile, it has to be babysat, is you'd open a ticket, the DBAs would look at it, they'd test it, they'd run it on a staging environment, and you're waiting days. And how often do you like waiting days to get the feedback of getting something in production?
+
+25
+00:15:17.000 --> 00:15:55.000
+Yeah, never. Yeah, no, you just don't. It just ruins your time. GitHub had this magical culture, an incredible culture focused on shipping you had to ship something in your first day you know when you hit t on a github issue and you get that really fast uh not issue sorry on a github repo and you get a super fast search yeah yep that was someone's first day project when they joined the company they ship that by the evening. Wow. The go-to file thing, right? That was our culture was that it was all about shipping and user impact and getting the value of what we're building out there in front of people. So I had this challenge of like looking
+
+26
+00:15:55.000 --> 00:16:30.000
+after my SQL databases and having an internal audience that wants to ship really, really quickly. It led me to build a lot of tooling and learn a lot. And so PlanetScale, this is reflected in our product values, which is, we want to give you an extremely stable database. And the back end of our database has run some of the largest websites in the world and continues to do so. But we want you to manipulate and ship as fast as possible. And that's a really hard challenge. There's loads of like baby databases, toy databases out there that are like, we're the best for DX and whatever. It's like, but yeah, that's great.
+
+27
+00:16:30.000 --> 00:16:45.000
+I mean, yeah, you can build against this thing super fast. There's no schema. Really good. Good for you. You can, you know, ship super quickly. And then you pay that debt down terribly. When you lose data, you ruin a customer's experience. All of those things, right? Like that trade, traditionally, it's been an either or
+
+28
+00:16:45.000 --> 00:17:30.000
+you want a super fast easy to use database that is just unable to do what databases do at scale or you have a database that scales and is robust with data and it's painfully hard to use and really hard to be productive with plant scale bridges that gap and that's something that really excites me yeah that makes sense yeah this is a problem that I've also seen a lot with databases. I think it's because you can't do anything atomically. Because the database is the engine for a massive data set, you can't say, well, I'm going to push this PR, and this PR is going to update the code so that my column now says foobar instead of foo, and also update the database schema to say foobar at the same time.
+
+29
+00:17:30.000 --> 00:18:16.000
+You can't do atomic things like that traditionally because you have a zillion bytes of data that all are expecting column foo. You also have open transactions if there's an open transaction that remembers that column not being foo do you right right club of that transaction or do you club of the ones afterwards it's a very hard problem that's one of the reasons that online schema changes are quite difficult in databases because of that issue we you know one very pop common my sql issue was that you would have a open transaction so it has a lock on the definition of the schema. Because if you change that during a transaction, you're going to mess the transaction up and transactions have to guarantee repeatable reads throughout the
+
+30
+00:18:16.000 --> 00:18:39.000
+transaction. So if you change the schema and you could break the running transactions, so that transaction has a lock to prevent that. But the transaction that's trying to do the schema change goes and grabs a load of other locks and waits for the lock on the table. But while it holds the other locks, it's then destroying other transactions that are trying to come in.
+
+31
+00:18:39.000 --> 00:19:10.000
+So you get this pileup of long running transactions that then break your website. So there's all of these really tough issues about doing this. And luckily, like we're moving forward, tech is going forward, things are getting better. And this is getting close to a solved issue. But it's not easy. And I think the hardest thing, and the thing I like the least about building a database product is you have to just push loads of trade-offs back to the user. And there's no way of being too magic,
+
+32
+00:19:10.000 --> 00:19:44.000
+because if you are too magic, you're going to let people down and you're going to paint, let people paint themselves into really awkward situations. And so you have to pass over a lot of choice and then you have to educate people and that's difficult and it's, it's not simple. Yep. Yep. Yeah. That makes sense. I think it'd be really good for the audience to explain kind you have to educate people and that's difficult and it's it's not simple yep yep yeah that makes sense um i think it'd be really good for the audience to explain kind of what a transaction is and uh yeah maybe do you want to take a crack at that i'm sure i'll miss something but yeah well between two of us we could fumble our way through it let's talk about the i think it would be easy to frame it and why you would want to use one and then we'll talk about why it would be achieved
+
+33
+00:19:44.000 --> 00:20:15.000
+i think that's the easier way of of doing it so the reason you'd want a database transaction would be in the following scenarios let's pretend you're a bank and you store your data in my sequel which a lot of banks do because of transactions and because of the durability of the database imagine i wanted to move my money from my bank account to your bank account. I have got to go and delete the data from like, like decrease the balance in my account and increase the balance in your account. And as we know,
+
+34
+00:20:15.000 --> 00:20:35.000
+computers crash. If a computer crashes midway through that process, after it's deleted from mine and hasn't quite put the insert into your account, the data, the money disappears and has not gone anywhere right it's just gone so yeah the delete the the kind of update has happened on my table or on my row and has not yet happened on yours and we crash
+
+35
+00:20:35.000 --> 00:21:14.000
+all that's happened is my balance has gone down so an ideal way is that we stage them both to happen and they don't happen unless they all happen. Unless the data gets into your account and out of mine, neither actually completes. That is why we have transactions. You do this inside a transaction. So you would begin a transaction that tells the database, I'm going to do a series of commands and I want all of them to happen or none at all. And then you would issue those commands. So you'd begin this transaction. You would then remove the balance from mine. You'd insert it into yours. And then you would
+
+36
+00:21:14.000 --> 00:22:20.000
+close the transaction. If all of those operations are able to complete, they all happen. If one fails, they roll back and none of them happens that is probably the simplest explanation that you then you can peel the onion a little deeper and go into why you need repeatable reason all these things but that is the simplest i can explain yeah is there ever a case where it's not possible to roll back like i'm thinking uh let's say like is there some kind of i guess to further your analogy it'd be some kind of double spending thing where, let me think about this, like to roll back, you'd have to put money back in your account. Is there something that could have changed externally to make that not happen? I guess I'm wondering, like, can transactions somehow, like still not fully protect you like can the rollback fail well if you have a you have a missing if you if you have a locking problem potentially so oh i forgot to talk about locks here we go this is why this is why it's very for a monday morning we're going
+
+37
+00:22:20.000 --> 00:23:09.000
+deep but we should right so yeah when when the thing the database should do for you when you remove the data from my row is lock it to say there's something going on here don't do anything else and that stops another transaction coming in and say i'm doing it again it stops me removing even more from my balance, and then making the transaction fail. So it locks that row at that same time. So when you remove the balance from me, it locks the row to say, no, there's something going on right now. No other transactions can go and add or remove balance from me. And that stops that happen. That means you can enable that rollback. If you didn't allow that to happen, if you didn't lock the row, you could have another transaction, remove all my balance, and then I don't have any balance to transfer to you.
+
+38
+00:23:09.000 --> 00:23:45.000
+And then we have another problem. Yeah, yeah, that makes sense. Yeah, or you could, I think maybe, like, if for some reason, people had a limit on how much money they could put in their account, then you could imagine, like, let's say you're right at that limit. Let's say the limit is $10,000. You have $10,000 in your account. Then you could imagine like, let's say you're right at that limit. Let's say the limit is $10,000. You have $10,000 in your account. You elect to pay somebody $1,000. So it debits $1,000. Now you have $9,000. Another transaction puts in $1,000. So now you're at $10,000 again. Then that first one needs to roll back and give you some money back from a failed transaction,
+
+39
+00:23:45.000 --> 00:24:06.000
+which would put you at $11,000, which violates some rule. So you end up in really bizarre things like that, I think. Yes. And the key point is it wouldn't be putting money back. Because of the lock. Yes, because of the lock. The removal just wouldn't happen until the insert happened as well. Yeah, that makes sense.
+
+40
+00:24:06.000 --> 00:24:35.000
+So yeah, what ends up happening, what I've seen a lot in code is where somebody, there's a column in a database and someone tries to sort of rename the column or put a note or something that basically says, don't use this column. Like this is our busted, you know, our old column. You know, it's an integer and we decided we really need a double here. And so we're just going to make a new column and then slowly get everyone over to the new column. And then when you finally feel like
+
+41
+00:24:35.000 --> 00:25:03.000
+no one's using the old column, which is also really hard because there could be things deployed using old code that aren't, you know, updating every day. So you can have old code running somewhere in your company. But if you could somehow, I guess, looking at the database logs, say, okay, no one's accessed this column in 90 days. So I'm confident enough now I can finally delete this column. And so it's like something that you wanted to just do overnight, some atomic
+
+42
+00:25:03.000 --> 00:25:47.000
+change is actually going to take 90 days and that's even for the most trivial thing this really tough like you even get scenarios where people's deployment infrastructure just doesn't work as well and there's always like one pod or something that's got an old version of the code that's asking it it's really really tough we we get around this by allowing you to like push these things online but it might still break something that makes sense so you know one thing that we should cover a little bit um before we come back to my sql is is all the different types of databases right there's sort of um these sort of common column column lure column lure how do you say that columnar column you're i always get i'm so bad with some
+
+43
+00:25:47.000 --> 00:26:20.000
+of these words like yeah i could never say that right patrick you have to give it a shot i feel like this is a word that you can get right column there yeah that might be the closest i don't know but anyways so that's that's those ones that look like you know if you've opened up excel or something you have this sort of sheet you know and you can put little titles in the first row of all the columns. That's kind of view of a table. That's the sort of canonical database. But then there's, you know, there's key value. There's these document stores like Mongo.
+
+44
+00:26:20.000 --> 00:26:51.000
+And I'm totally drawing a blank on some of the alternatives to Mongo. But, you know, what you're feeling about all of this, I mean, is there a new application is presented in front of you. Do you have like a process that you go through and you try and say, OK, this is the right sort of way of storing this data? Like my initial feeling on this is I used to spend a lot of time on this, and now I've just decided I can do everything in MySQL, or at least in that format. But I was wondering what your take was on that.
+
+45
+00:26:51.000 --> 00:27:18.000
+I mean, it's so funny you say that, because that's kind of the curve, right? Like best tool for the job. It's good to try and find the best tool for the job. However, it should really be the tool that mostly fits your use case that you can operate really, really well. Because if you're familiar and you can operate these things and kind of get it done, you're likely going to have a better experience in the long run. And there's this kind of funny progression that companies go through.
+
+46
+00:27:18.000 --> 00:27:37.000
+It's like, you know, maybe MySQL is good in the beginning. And then they move to Mongo. And then they always end up back at MySQL. The truth is, at massive scale, you usually end up back at MySQL. So there's loads of graph databases out there, right, that do storing graphs. Great. The largest graph database in the world is at Facebook, Tau,
+
+47
+00:27:37.000 --> 00:28:09.000
+and that runs on MySQL. Because they have a massive MySQL deployment, they are incredibly good at operating mysql and at the end of the day if you can build a layer on top to store graph data that is way better to the to operate than a brand new graph database is still figuring things out right like if you've got your operations down on a specific database then that's the way to do it. And even key value, we removed loads of Redis at GitHub and replaced it with MySQL because MySQL is faster
+
+48
+00:28:09.000 --> 00:28:25.000
+because it turns out multiple threads are quite good for performance. And so it's a really nuanced conversation. Like Mongo is great for some use cases. There's other data stores that are great for other things. It's just how you apply these things and trying to go for an over
+
+49
+00:28:25.000 --> 00:29:03.000
+specialized stack all the time like i speak to some people it's like we've got seven databases that we operate it's like wow you don't have seven teams of database experts you've got the one people mostly know the semi-abandoned ones that cause outages all the time and it's a real mess i mean it's a do you really want the bells and whistles features of everything it's like you don't buy a new car when you move house you either rent one or you just kind of make it work you just pile everything you can into your prius and then just go right and that's often the right way to do it you can't over specializing in your tech stack leads to horrific maintenance problems and that's why
+
+50
+00:29:03.000 --> 00:29:33.000
+every big tech company unifies in some way with a form of platform. And it'd be best for most companies to probably do the same. Yep, yep, totally agree. Yeah, I know that at one point, the Tao team looked at a document store and what they found was the P50 was a little bit better, which, you know, at Facebook means a lot of money, right? If you can get a little bit better, you can save, you know, millions of dollars,
+
+51
+00:29:33.000 --> 00:30:06.000
+the equivalent of like one hour of Facebook's Delta on the stock exchange, you know, you could save billions of dollars, but the P99 brought down the whole thing. So basically, MySQL, at least the way that it was implemented and used there, was a little bit slower on average. Each transaction was a little bit slower. But when things went wrong, it gave you a lot more lead time and it could just handle things at the limit that we just didn't see from any other product. Yeah.
+
+52
+00:30:06.000 --> 00:30:26.000
+Too many people evaluate the database from the point of view of querying it, which is, of course, very important. That's the thing your application is going to do a lot. But how does it fail over? How does it replicate data? How does it handle crashes? Those things really matter.
+
+53
+00:30:26.000 --> 00:31:27.000
+Because when you drop a customer's data the customer very quickly stops caring how easy to use the database was for your developers in fact they don't give a damn they just want a reliable service that is up so with our back end has experienced failovers hundreds of thousands of times at other companies that are not us and was built at massive companies with scale problems and extremely smart engineers that's what you want to leverage i promise you if you're listening to this and you think no i still want the really fancy features i can handle the rest ask yourself that at two in the morning when you have when you cannot recover your your only top customers data or whatever you all the regrets come back and too many people are bitten by this in the in the database world it just businesses have gone bust very successful companies have gone bust because they did not have an ability to recover their data and i have never seen my sql
+
+54
+00:31:27.000 --> 00:32:26.000
+lose data in a crash ever unless the operating system is lying to it yeah and and that's uh you know also the developer experience and and sort of the ubiquity of of of my sql and postgres these other other tools is is unprecedented I had this really dumb idea where actually, okay, it wasn't dumb, it was it was, I wanted to, to push myself. And so I thought, I'll use a graph database for something that was not a really heavy hitter in terms of performance, but this would be opportunity for me to learn about graph databases. And it's kind of like, it was kind of like using, you know, OS nine, you know, or like you get error code negative 13. And you have to go look up what that is. And it's like, oh, you know, they're the this, you know, C++ isn't supported, because they just targeted, you know, Python and, and, and JavaScript. So, so now I have to use the rest API
+
+55
+00:32:26.000 --> 00:33:09.000
+and I'm trying to make rest calls and C plus plus. And finally, I was like, this is even as, you know, a learning opportunity, this is just not productive. So it's like, okay, I did the same thing in my SQL in like two hours. And I'm not saying there's no room for innovation. I'm not saying people should not be disregarding all of those things to try new things and try and use ways to store and and query data but it's a long evolution the postgres json columns is a really good one really good story like so this was when postgres was a lot less operable. It was, you know, the origins of Postgres, it's an academic project, basically.
+
+56
+00:33:09.000 --> 00:33:30.000
+Oh, I didn't know that. Yeah, like, I don't know it fully, but I think that's what it came out of. I think it was, please, I'm sorry if you're listening to this and this is incredibly wrong and you're driving your car and getting really mad. I believe it came from an academic project which was more focused on teaching people SQL and was very was very good at like an implementation of pure sql and took a very long time for postgres
+
+57
+00:33:30.000 --> 00:34:01.000
+to gain some of the operational uh the necessary operational primitives like replication and you know it's still not great and so they they ship json columns which is like brilliant very useful the developer community went crazy for it immediately and they were like my sql doesn't They shipped JSON columns, which is like brilliant, very useful. The developer community went crazy for it immediately. And they were like, MySQL doesn't have this. MySQL sucks. And so the Facebook team, again, Facebook, looked at that and thought, I like that idea. We would like JSON columns too. So they started working on it and they shipped it at the scale of Facebook.
+
+58
+00:34:01.000 --> 00:34:34.000
+So what, 3 billion daily active users or whatever? And it worked great. When they shipped in Postgres, it was really not production ready. People had horrendous problems. And the wisdom was don't use this in production. Two years later, they were both production ready. One had been delined by Facebook and run at Postgres scale. The other had let users down for two years and finally got good. So the timeline was exactly the same, right? But it was the order in which these were shipped and tested and the robustness of the implementation was what was really different about the two databases. And that
+
+59
+00:34:34.000 --> 00:34:59.000
+talks about it philosophically. You can get all these hyper cool features are amazing, like awesome. And you know, there's famous document stores out there that were amazingly revolutionary. And then there's a million stories about how they lose the data. You can get this stuff if you want it. But you have to just be careful because the downside of this newness is not good. You don't want a new database. Databases take a minimum of a decade to mature. Yep, yep.
+
+60
+00:34:59.000 --> 00:35:35.000
+That makes sense. Yeah, the other document store I was thinking of was, I think, Orbit. Orbit DB. But yeah, totally right. And there are a number of really good plugins. sense yeah the other documents where i was thinking it was i think orbit orbit db but yeah totally right and there are a number of really good plugins so for example if you want to do vector search you know there's vector search plugins there's gis you know if you want to do spatial there's a postgres gis there's a spatial plugin for that you know one thing that when i was um trying to pick a database for the first time at the time what they were saying was basically postgres is is truly open source mysql like at
+
+61
+00:35:35.000 --> 00:36:14.000
+some point they'll come bothering you for money or something like that i mean that might be really dated but what's the deal with with mys my sequel is it completely free to use is there some gotcha there no it's never happened people saw the purchase of well they saw oracle buying it and they thought oh my goodness this is the end for it my oracle have been good stewards they know how databases work inner db was built out had a lot of origins with oracle they're very good at databases, and they've kept it going. They're good stewards. I mean, there's commercial interest. When I was at Facebook, the whole Oracle PM team used to...
+
+62
+00:36:14.000 --> 00:36:47.000
+No, not at Facebook. Sorry, I was at Facebook. When I was at GitHub, they would show up and listen to their customers. They have some of, most of, the largest websites in the world as a user base, and users that are not paying them any money, but they still go there to make it better. And MySQL gets patches and input from all of these large companies running at scale, so it gets better and better. So it's a healthy, good open source project with some branding issues. Okay. That makes sense. Yeah. I mean, you're right.
+
+63
+00:36:47.000 --> 00:37:11.000
+This was around the time, I mean, this is probably like 10 or 15 years ago and there's always this kind of drama. This was around the time when, you know, Android, we weren't sure if Android could keep using Java and all of that. But, you know, I mean, looking back on it now, I mean, yeah, everyone could use Java. Everyone could use MySQL. There's really no issue. It was a lot of, it's kind of a scare for nothing, really.
+
+64
+00:37:11.000 --> 00:37:37.000
+Correct. Yeah. It's great that these things are open source and that people can use them and they get contributions from folks that have got great ideas and great skills. Yeah, totally. So you were, did you go straight from GitHub to PlanetScale or was there something in between? I had a tour of duty at Facebook for a little while, which was really fun to see that level of scale. I just wanted to have incredible respect
+
+65
+00:37:37.000 --> 00:38:22.000
+for the Facebook engineering team. And I think it's the best at scale engineering team that's out there. They have so many phenomenally talented people and are also led by incredibly talented people. You have VPs that have 10,000 people in their org and they can talk to you about the intricate technical details of what their teams are working on. And it was just an incredible experience to be there and witness that. Yeah, totally. Yeah, I could totally double click on that. Okay, so from Facebook, when you're at Facebook, at some point, the spark ignited and you said, I'm going to, you know, quit my day job and start PlanetScale. What was that like?
+
+66
+00:38:22.000 --> 00:39:01.000
+How did you take that leap of faith? And what were those kind of moments like? So there's some nuance there, actually. I joined PlanetScale as the chief product officer. I didn't actually start the company. Oh, okay. Got it. I'll tell you the story actually of PlanetScale. So the founders left YouTube where they built Vitesse, which is our backend technology that PlanetScale is powered by. So Vitesse is a layer on top of MySQL. It's an orchestration and sharding scheme for MySQL that allows you to take MySQL to giant scale. So YouTube was growing, scaling, and building, and they needed a database that worked. Obviously, MySQL was the choice,
+
+67
+00:39:01.000 --> 00:39:45.000
+and they needed some sort of layer to shard MySQL on top. So they built Vitesse. Vitesse was built on Borg, the predecessors to Kubernetes. So it was an environment of pure impermanence. You don't get your disks back. You don't get to go and recover a server. It's gone. So they had to build an incredibly resilient system for orchestrating MySQL. And that's really hard, like really hard to run state on stateless computers, like they just fail. And they achieved it. And they built this incredible technology. And we started using it at GitHub, because of course, GitHub was a MySQL shop. We started using it. And we were just so impressed, like it just does what it's supposed to do. So yeah, could you dive into that? So sharding is, is I guess, like's supposed to do so yeah could you dive into that so sharding
+
+68
+00:39:45.000 --> 00:40:40.000
+is is i guess like a way to do multi-node yeah like what what exactly does that mean what goes into that so horizontal scalability is really hard with databases you can vertically scale and we did that year for years at github we would basically buy the kind of best Dell server that they had from that generation and beef up these machines. Eventually that just becomes impossible. You also become very right bound. So in MySQL's kind of terminology, you have a leader and a follower. So you write to the leader and the followers all get the update. And so followers are just a great way of scaling reads. You can just put loads of them out there. The read traffic hits it, but you're writing to a single place. And that is where you start to see big bottlenecks. If you're writing a lot of data or you just store
+
+69
+00:40:40.000 --> 00:41:24.000
+more data than can live on a single machine. And those replicas, the replicas of the primary just have to be an identical copy. They can't have a subset, usually. I mean, the Canbit, it's a lot of messing around. They just have to be a copy. So they all have to be the same type of machine. And once you have more data than fits reasonably on that machine, or more connections, or more writes, you're in trouble. Your database cluster is now oversaturated and you have real issues. How do you keep it so that if someone reads something from a follower, how does the follower know that the data is fresh? How do they know that the leader has a better version of it? So you do get some level of replication delay. There's always some. I mean,
+
+70
+00:41:24.000 --> 00:41:34.000
+normally it's very small, but then this is another scale problem, right? If rights pile up, the replicas don't get them in time. You, you, and you have your application reading its own rights.
+
+71
+00:41:34.000 --> 00:41:58.000
+So it does a right. And then a read from the replica and it's not there. Then you get a failure or you get an inconsistency issue. So you can ask the, ask the replica how, um, how up to date it is essentially but again this is another problem another scaling problem is that like replication delay happens and it starts to get annoying and then so at github we had we built this kind of api that tells you which replicas are delayed so
+
+72
+00:41:58.000 --> 00:42:38.000
+excuse me query the right one or you know it's just's very tricky. Sharding comes in when it gives you the ability to split tables or databases across multiple machines horizontally. So imagine, let's just take the example of a big table. Every app has one of these tables, notifications, statuses, timeline, whatever, right? There's always just one giant table that you just put loads of data in. You probably only need the recent data from it, but whatever. When that table gets too big for a single machine or a cluster of machines,
+
+73
+00:42:38.000 --> 00:43:27.000
+you then want to start sharding, which means you split the table data into chunks and distribute them across multiple clusters of leaders and followers. So you could have instead of one leader and five replicas, you could have five leaders with a replica each and you've distributed that workload across more servers and more leaders. So you get more write throughput, and you kind of can keep scaling horizontally. Now orchestrating that is a lot harder, right? How do you tell the query where to go? Well, you don't even tell the query, how do you route the query to the right place, aggregate them, joins, all of these things are really tough. So as the engineer, do you have to provide a sharding function?
+
+74
+00:43:27.000 --> 00:43:49.000
+So not every, like as the person designing the scheme, yes, you have to explain how you need your data sharded. That can be very simple or quite complicated based on your needs. But someone has to make that decision and they make it at the beginning. You can reshard and change. You can change the sharding scheme, but you kind of pick it up front. It's not too difficult to do.
+
+75
+00:43:49.000 --> 00:44:05.000
+And then with Vitesse or PlanetScale, it's then transparent to the application. The app doesn't care. Got it. Okay, that makes sense. So the YouTube app had like one connection string. It thought it was talking to one database. It was actually talking to 70 000 servers
+
+76
+00:44:05.000 --> 00:44:49.000
+across 70 000 nodes across 20 data centers and the data was aggregated back for it so very powerful exceptionally powerful and it sharding comes with so many benefits we've done a benchmark that's on our blog where we do a million queries per second sustained and there's a graph and this is the really impressive part is how it's linear. If you double the amount of shards, you get double the amount of throughput. That is very hard to do as a database. I don't know of anyone else who's really achieved it. That level of predictability is incredibly difficult. And so sharding gives you these really, really nice dynamics. And it gives you isolated failure as well. If you've got 50 shards and the leader fails in one of those shards
+
+77
+00:44:49.000 --> 00:45:24.000
+and has a couple of seconds failover, only one 50th of your user base experiences a blip instead of all of them all at once. So there's so many benefits of kind of breaking the problem down into these smaller chunks, it and it has a lot of you know lots of benefits yeah that makes sense i guess this comes back i'm still trying to wrap my head around the sharding function because i'm thinking if it's not done in a in a healthy way then every query is going to need to read from every shard but to your point if you
+
+78
+00:45:24.000 --> 00:45:44.000
+shard but if you put you could probably put certain tables in certain shards. So if you're reading from a table, then you don't need to read from every shard for any one table. But yeah, I think it seems like it really depends on how you set up that database and then looking at saying like, okay, here are my most expensive queries.
+
+79
+00:45:44.000 --> 00:46:18.000
+And they're expensive because they're accessing every shard and then realizing okay the usage pattern isn't what I thought let me do this really expensive re-shard operation once yeah you do have so if you get the wrong sharding key you may have to re-shard some often we have to help users design a sharding scheme that works for their queries it's much better off if you locate data. So it's not as hard as it sounds because say it's users, you just locate the user's data together and you can shard multiple tables into the same cluster, right? So you do your joins and whatever within the cluster.
+
+80
+00:46:18.000 --> 00:46:44.000
+If you design it poorly, you may have to aggregate across all shards, which isn't always slow. Not always, but it can be. But then there's other ways as well of materializing. Another thing that Vitesse does extremely well is it allows you to materialize a table elsewhere. So what that means is, imagine you've got this beautiful sharding scheme, 99% of queries just amazing.
+
+81
+00:46:44.000 --> 00:47:26.000
+They go to the local shard,'s fantastic this is one query there's one dashboard that needs to count up every like a user has done on the platform for tests can you tell the test you want to materialize where the result set of that query will be into another table and it can do that on the fly so then you issue that gnarly query against the perfect materialization for that query and it works super fast. So you can get around that. It's not as difficult as it seems. Again, the building of that, that is some really hard tech. That is some really hard engineering to get that right, but it has been done. And that is a code path that's like eight years old it's been used by billions of
+
+82
+00:47:26.000 --> 00:48:14.000
+users around the world as these large companies use for tests so there's there's other ways of getting around it yeah that makes sense well that reminds me of a product that i've been using recently which i'm i'm really uh a big fan of called dbt where you uh yeah and please correct the record on this i'm going to try my best as just a user of this to explain it but the idea is you have queries and instead of just running the query interactively you check this query into source control and it creates this destination table. And so you have two modes for dbt. You can either say, like run this query, you know, periodically or on a trigger or something like that.
+
+83
+00:48:14.000 --> 00:48:33.000
+Or you run this query, let's say periodically and generate this output table. So for example, I have this expensive query. I don't want to run the query every time a user hits F5 on their keyboard. So I'm going to run it once per hour and then it's going to create this table. And then now when I go to the website and hit F5,
+
+84
+00:48:33.000 --> 00:49:02.000
+it's just querying the results of that query instead of having to actually execute the query. And then they have this other mode, I guess it's like ephemeral or ghost mode or something where you query a table, the table doesn something where, you know, you query a table, the table doesn't actually exist. But when you query the table, it goes and executes that that query. And that's more of like an aliasing thing where it doesn't save you any compute, but it's just easier for you to read the query than if it was some like massive nested thing.
+
+85
+00:49:02.000 --> 00:49:23.000
+And I think dbt has been really, really impressive. I'd never even heard of it until a few months ago, but I've been a big fan. Yeah, that is exceptionally cool. Now, I don't know if you tell your users this, but we're recording this a little bit ahead of time and PlanetScale has a big launch next week. And so hello from the past for anyone that we're talking to.
+
+86
+00:49:23.000 --> 00:49:52.000
+Yeah, that's right. If you're listening to this, this is maybe a month or two later. So we're a month behind reality. And, you know, if we keep shipping, maybe I'll be able to say hello to you from the future one day if we keep up with the base magic. But for now, we are bound by the known constraints of time and the universe. And what that means is next week, we're shipping a new product. And there's lots of people. We're showing it and demoing it to people right now.
+
+87
+00:49:52.000 --> 00:50:26.000
+And they're getting very, very excited. We've been tweeting their quotes. And they're very, very, very hyped by this. And it's in the realm of what you've just described. So what we're calling it is PlanetScale Boost. And what Boost does is allows you to choose a query that is accessing your database. You go into our insights panel and you say, oh, look at this query. It takes five seconds to execute. You would press a button to boost that query. And what happens when you boost that query is that we tell Vitesse the explain plan, the execution plan of that query is that we tell Vitesse the explain plan,
+
+88
+00:50:26.000 --> 00:51:26.000
+the execution plan of that query. And we ask Vitesse to materialize that query in memory all of the time. And we stream any updates, deletes, or inserts to the result set of that query. We stream it into memory. So you get an up-to-date real-time version of that query in memory forever. So we see people, and with the customers we've been testing it with, get thousands of percent improvements in their queries by just materializing in memory. And this replaces caching logic. This replaces invalidation logic. It replaces running Redis. It replaces all of that stack and just gives you blazing fast in memory queries with the same consistency as a database read replica. Wow, that is super cool.
+
+89
+00:51:26.000 --> 00:51:46.000
+Yeah, that makes a ton of sense. This reminds me a little bit of, what was that? Scuba, right? Scuba was this thing that would load into memory. And I think some Facebook folks left Facebook and started an open source version of Scuba. I don't remember the name of it, but yeah. Scuba is is amazing metrics store
+
+90
+00:51:46.000 --> 00:52:16.000
+for the facebook users and i think it uses similar technology but this has never been applied to a database product before like the the simplicity of just saying make this query really fast all the time and here's the amount of memory i want to allocate to do that it's mind-blowing. So we always knew it would be possible. So if you think about what's amazing about Vitesse, and you think about resharding, you just talked about resharding, right?
+
+91
+00:52:16.000 --> 00:52:39.000
+When you have lots of disparate shards with copies of the data, how you stream data consistently between those shards is extremely important. If you screw that up, you really mess your database up. And if you want to reshard, for example, you may have 256 nodes, 256 shards, sorry, there's more than a node in each shard, and you want to reshard it, you have to fan that data back in and fan it back out in a new sharding scheme.
+
+92
+00:52:39.000 --> 00:52:58.000
+And that's like a really hard thing to do. Machines die, you need to restart from the right place, network hiccups, all of this stuff that just makes that like quite a hard problem. That's a solved really hard thing to do. Machines die, you need to restart from the right place, network hiccups, all of this stuff that just makes that like quite a hard problem. That's a solved problem in Fertess. So that's called V replication. And we built this on top of V replication to say, you know what, you're not materializing to a table,
+
+93
+00:52:58.000 --> 00:53:25.000
+you're not materializing to a node, you're materializing to an in-memory store and keeping that up to date. So when I first saw this when like when i first saw it actually working when the team built it i just burst out laughing because there was no other response than this is actual magic or it's just yeah so so we're ahead of time in the sense that we're a week before it launching but i cannot wait to see people's reactions when they just take that really
+
+94
+00:53:25.000 --> 00:53:56.000
+horrible query that they use as newsfeed, which is really slow, and they've tried to refactor it, and it doesn't get any better, or they've broken it down into four queries and joined it in memory, and it's flaky and buggy. For them just to choose that query and boost it, and then it's in memory forever, and they've solved their problems, is going to be really awesome, And I just cannot wait for people to experience it. Yeah, I mean, it reminds me a lot of things that we had to do at Facebook. There was this ML model that was very expensive.
+
+95
+00:53:56.000 --> 00:54:31.000
+And what we ended up doing to make the latency was we actually executed it for every single user and then put it all into this in-memory key value store internally called Laser, which is very similar like Redis or these other ones. And that sounds kind of crazy, right? Because every day we're running this model a zillion times and the vast majority of those people won't even be on the site tomorrow. So it's just wasted. But it did guarantee the SLA that we needed to guarantee. So that's what we did.
+
+96
+00:54:31.000 --> 00:55:00.000
+It's probably still in production. Yeah. And so what you're describing basically automates that. I mean, we had to write a bunch of PRs to do that. You know, it's like if we could have just clicked a button, that'd be awesome. Yeah, right. do that you know like if we could have just clicked a button that'd be awesome yeah right and and that that is why it's so like there's companies that have achieved that level of like caching or speed but they have they put like a 20 person team of MIT grads on it to get it done not everyone has that yeah what's the connection here so I kind of interrupted you with questions
+
+97
+00:55:00.000 --> 00:55:39.000
+but you're talking about some folks at YouTube started the test, which was either maybe a company or a product at some point that became planet scale, I guess. And then that, and then you joined. So yeah. Yeah. So it was that, it was that YouTube, they had the same realization. This is incredible technology. Like they saw that Facebook had built their own MySQL sharding. They saw that Yahoo had built their own MySQL sharding. They saw that Etsy had built their own, like everyone had sharding they saw that edsy had built their own like everyone had done this it's just like an inevitability if your company is growing massively you should just sit there and internalize the fact you'll be running on my sharded mysql one day because yeah it just happens it comes for all of us like you you can stop lying to yourself that
+
+98
+00:55:39.000 --> 00:56:21.000
+you'll get postgres to run to that scale no one's ever ever done it. Right? Like, one day, maybe, but you can't, like, we're talking at a different scale, we're talking about hundreds of 1000s of servers, as some of these companies run, like, you know, there's public cloud level, like there's clusters at these large companies that are public cloud size, and they have one use at that company. Right? MySQL is there doing that. And at a lot of places you can't fake it just because people like gis or whatever right like i know that's a dig but like when people say when i ask people why do you here's a rant but why do you like postgres oh it's like extensions it's like none of that is going to work and i know you might not have scale so fine i'm wrong you're
+
+99
+00:56:21.000 --> 00:56:51.000
+right okay it works for you today but if you have like if you want to like succeed and you're building massively i had a founder come and talk to me last week and they were like you know we're scaling like really really quickly do you have any advice for us and one of the things i said was internalize the fact you're going to run on some sharded database and it's probably going to be my sequel right and they were like yeah yeah, that's what everyone's already told us. And that's kind of how it is. So anyway, they knew this and they built a really awesome solution for this. On a
+
+100
+00:56:51.000 --> 00:57:08.000
+containerized system, Kubernetes then gets open sourced. If you look back at the history of the test, and Google has documentation on this, and it's also intertwined with the history of Go, the test is one of the oldest Go applications. Certainly one of the largest. It was certainly like one of the largest. It was built on version 0.1.
+
+101
+00:57:08.000 --> 00:57:53.000
+So our CTO gets credit in the Go docs for giving some of the most awesome feedback on Go because he was crazy enough in a wonderful way to say, why not build a massive sharding system to run YouTube and choose a language that like is completely brand new? Well, he went and did it. And then... uh rob pike's eternally grateful i'm sure i mean like i they genuinely were right they they they built so they built this amazing thing they then donated it to the cncf and then they started planet scale as a company to kind of commercialize it i and my team at github had then experienced Vitesse and so had Slack, so had Roblox, so had all these companies just started using it. Suddenly this tier of hyperscale
+
+102
+00:57:53.000 --> 00:58:34.000
+companies were like, this is good. We should all try and use the same technology and contribute to it. And so it got even better and even mature, more mature, very, very quickly. And we know, and there's one website that's out there that's doing 32 million queries a second, serving billions of users using this technology. And when you can harness the downstream effects of that and say, oh yeah, they have taken this to an extreme scale and all of the kinks have been worked out, it's just so powerful. So we started using it at github we all loved it and i contacted the founders and said this is amazing i would like to invest in your company and they came to the github office and they had this clarity of what they wanted to
+
+103
+00:58:34.000 --> 00:59:01.000
+do and they and they had the product so they started building it and kind of getting into people's hands and now this is where Vitesse isn't as optimized. If you want to put a seven or eight person team and train them up on Vitesse and get them to run it in production, it will be absolutely fantastic for you. And if you are Slack, if you are JD.com or whoever, like that's really good and really beneficial.
+
+104
+00:59:01.000 --> 00:59:34.000
+And the cost trade-off, considering that if you're at one of these hyperscale companies your database infrastructure probably costs you a couple of hundred million a year hiring up a few like hiring a couple of people to manage this really awesome open source project is a great trade-off rather than building it yourself so a lot of people do this and at github we did the same thing we thought it was awesome the database team at github was phenomenal and i trusted them so i reached out the founders i asked to invest and then i became an advisor in the company and the thing that i was seeing was that just presenting vites as is
+
+105
+00:59:34.000 --> 01:00:21.000
+even as a cloud host was not enough to get it into people's hands and i had been at github for eight years and i'd what and i'd built user products, user-facing products, and GitHub Actions was the last thing that I worked on before I left GitHub. And I had this such passion for building products for developers because developers are amazing, creative, wonderful, and unreasonable. And if you can, in the most wonderful way, you can't bullshit them. You can't just like wave a brand on top of something, right? like this is the issue that we're seeing now is there's an explosion of database companies and they're just building great uis with like a jank back end and people are like oh this ui is amazing i'm going to use this and it's like cool that's like that's not going anywhere like you like this is like you're in
+
+106
+01:00:21.000 --> 01:01:03.000
+trouble with that right um so that's a kind of an issue but i thought to myself if we can get this incredibly powerful tech that is almost an inevitability when you get to scale but actually make it the best thing to use on day one this is going to be a like a game-changing company and so i said to the founders i would love to come and join you on this mission bring me on and we'll build this product so i joined a bunch of people from github came to like the guy that like one of the earliest engineers i'm sorry not engineers designers jason who has been designing developer tools for decades came and you can this is you can see why why plant scale is so beautiful like these people that understand developers
+
+107
+01:01:03.000 --> 01:01:23.000
+and built this product that has endured in the eyes of developers for so long. Like GitHub has got 80 million developers using it and they're happy and they enjoy it. So we took that as a design inspiration with the same people and said, how do we take this incredibly powerful tech and put it into everyone's hands
+
+108
+01:01:23.000 --> 01:01:55.000
+so that you're not reasoning about the same things Facebook has to reason about. You're just using a database that feels like MySQL. We came up with database branching and the way that you should, we thought, why can't you just branch your database, use it for whatever environment, whether it's 10 minutes of testing, whether it's a four month long feature development product, why isn't there just an environment there that feels like production? And then when you want to change the schema, why can't you deploy it fully online like you're deploying code? We asked ourselves all these questions and took it on as a design problem and started building.
+
+109
+01:01:55.000 --> 01:02:32.000
+Yeah, this is actually, I wanted to ask you a little bit about the branching. So I've never seen anything like that. Actually, let me step back a little bit. So I, the way I found out about PlanetScale was I was doing a side project and I typed in, I can't remember exactly the query, so paraphrase this, but basically I looked up, you know, free hosted SQL database, something like that. And I just wanted something really lightweight. I knew I wasn't going to have a lot of usage on day one. And so PlanetScale came up and I started using it. It's really fun.
+
+110
+01:02:32.000 --> 01:03:09.000
+Now is probably a good time to talk about there's a free tier. I'm still on the free tier at this side project, which I haven't had time to get back to. But completely free and it's still up and running. It's been really nice but uh the branching thing i never quite understood like if i make a branch of a database i start messing with the schema what happens to the data because the data shared between the branches does each branch have like start with no data like Like how exactly does that work? Every branch is isolated. It's a different Vitesse cluster.
+
+111
+01:03:09.000 --> 01:03:24.000
+By default, it just gets the schema. If you want the data, you can have that too. And it will add data to the branch. This is a beginning of a journey, right? There's a lot more that will get a lot better about this in the future. But the idea is that you should be able to connect your application to a branch
+
+112
+01:03:24.000 --> 01:04:09.000
+and it's isolated. Doases are scary. When we do user experience testing, when we interview people, the word fear comes up a ridiculous amount. People are terrified of their databases. So you have to really explain to a developer. That's why it's branching, right? Because they understand, we all understand if it's a Git branch and I push to a Git branch, I'm not pushing this into production. It's separate. So we wanted branches to be a playground where you get the power of the database that you use in production. And because the more complex these systems get, the better cloud tools get,
+
+113
+01:04:09.000 --> 01:04:30.000
+the more abstract from, oh, it can run on your laptop, it is. It's unfortunate, but at the same time, it can be magical. Like at Facebook, in my second week, I pushed to Facebook.com. I can't build Facebook.com on my laptop. That would be crazy. It's millions of machines. So you get a dev server, right? That is a slice.
+
+114
+01:04:30.000 --> 01:04:47.000
+It's a powerful machine that is a slice of production. And then it takes your changes off to production through all the testing and whatever. That's awesome. That's the kind of the way we should go. If you look at Codespaces and all of these tools that allow cloud development, we're getting towards that world where everything's cloud native.
+
+115
+01:04:47.000 --> 01:05:09.000
+You can't simulate it on your laptop anymore. And so that's why we wanted branching in the cloud. And it gives you this isolated environment to play and make schema changes without breaking anything. And then when you want to get that schema change into production, you deploy it on plant scale through a deploy request, which is like a pull request that will then,
+
+116
+01:05:09.000 --> 01:05:58.000
+no matter what you ran on your branch, it doesn't matter if you ran 500 different schema changes, all we do is look at the end state of the database and say, we will get that into production for you in the quickest, easiest way without any locking or blocking. So your application will experience no downtime. It will just deploy. And that is extremely powerful. So we have really large users that tell us, and we have case studies where they say, yeah, I mean, schema changes have gone down from two weeks to two hours. No one's scared of the database anymore. They just roll it into prod. And that was so important to us initially, to give people incredibly powerful technologies, and the isolation, a lack of foot guns to move extremely fast while using them. Yeah, that makes sense. So So then I guess, you know, when you make a branch,
+
+117
+01:05:58.000 --> 01:06:36.000
+you should also have some kind of a program that will seed seed that branch with some seed data so that when you point your dev website to the branch, it's not just empty. So you create some program that either copies some data out of master or out of the main branch or just seeds it with some synthetic data. Yeah. What we found was a lot of people already have those seed scripts. And so it's kind of easy for them to just like run them. People use actions to do this. This is all configurable on our command line.
+
+118
+01:06:36.000 --> 01:07:15.000
+You can create branches, do whatever from there. So people often have like, okay, give me an environment. It like creates a branch, it puts the data in, they test it and it goes away when it's done like that sort of stuff is all very possible or you tell us which backup you wanted to like add to a branch and it just happens again branching is a powerful primitive for many things when you restore a backup you can choose to restore over your main branch which you shouldn't really do and there's not many people that need to completely roll their database back. So instead, you add a load of backups to different branches and sift through the ones you need and just restore the data that way. So it's just a really powerful
+
+119
+01:07:15.000 --> 01:07:57.000
+way of giving people really cheap, easy environments and getting rid of staging. If you've got complex infrastructure, staging is just a second production that breaks every day and ruins the developers like daily lives yep yep yeah totally true i read a really interesting article about foreign keys like as the tests and plan scale don't support foreign keys so you can't do like cascaded deletes and stuff like that kind of like tell the audience you know i mean the article did a pretty good job but kind of walk the audience through that. Because I remember when I first learned about MySQL, I thought foreign keys were amazing. I thought, oh, I could have a credit card for a person. And when I delete the person, the credit card gets deleted.
+
+120
+01:07:57.000 --> 01:08:25.000
+And so you kind of walk people through like the dangers of foreign keys and or maybe just on the technical side. What's the limit there? So we allow you to have foreign keys in the sense that you can have relationships, you can have joins, you can have all the things you need in a relation database. The thing we don't have right now, and it's something we know about, we're working on is foreign key constraints. As they are implemented right now, they are unscalable and do not work with online schema changes. So it was, you know, we want people to default in things that are going to work for them
+
+121
+01:08:25.000 --> 01:08:48.000
+in the long run. And foreign key constraints at this moment are not a scalable pattern. So what does that mean, actually? Because I didn't know the difference. What's a foreign key constraint versus a foreign key? A foreign key constraint is when the database will automatically do that cascading for you. Okay, got it. If you use an ORM, the ORM can handle it. Like dependent delete in Rails does exactly what you're talking about
+
+122
+01:08:48.000 --> 01:09:11.000
+and isn't relying on the database to do it. Oh, I see what you're saying. Okay, okay. Now I think, let me see if I can paraphrase this. So if you have a foreign key constraint, like the one I gave is cascade delete, then you just need to issue a delete command to database and database will effectively turn it into a transaction where it'll guarantee that it'll delete all of these
+
+123
+01:09:11.000 --> 01:09:44.000
+dependencies. But you're saying you can do the same thing just at one level up in the abstraction and say, I'm going to create a transaction that deletes JSON and deletes all of JSON's credit cards and then closes the transaction. I have basically the same constraint now, just one layer up. Correct. And a lot of people rely on this for their database to do it or to check that the relationship is there the other side, for example. This is a functionality we do not support right now. Now, there's a chance you will in the future,
+
+124
+01:09:44.000 --> 01:10:14.000
+but it also makes online schema changes not possible while you have those because the way online schema changes work is you create a copy of the table you migrate the data into your schema do the schema change and you migrate the data in and then swapping those tables in place breaks the constraints that are already there so you'd have to remove the constraints and we add them and it's tricky right so we don't love that you can't have it. But it's very much within our philosophy to say, let's inform users and give them things primitives to use
+
+125
+01:10:14.000 --> 01:10:50.000
+that will serve them well in the long run and maybe has a little bit of an upfront kind of extra complexity or at least cost. But in the long run, you pay pay it down like it's the same with these no sql document stores they would tell developers you don't have to think about a schema thinking about schema is a waste of your time and then like you throw a load of documents in and now you just have the most horrifically like badly laid out data that is really hard to scale and use and you have to do like horrible hacky things to get around it like actually thinking about a schema up front is a good thing because it lays things out
+
+126
+01:10:50.000 --> 01:11:37.000
+and it means that you have structure to your data and keeps it a little bit neater and if it's easy to modify the schema then you get the upside without really any of the downsides yeah that makes sense actually Actually, this gets to another kind of question, which is, you know, my background is as a sort of developer, someone who has very limited use of knowledge of databases. And so I tended to be kind of dismissive of stored procedures. I kind of felt like stored procedures just seem like an anti pattern, seem like code that really, you know, logic that really belongs somewhere else. I was wondering what your take is on this. Like when are stored procedures useful? Like when should
+
+127
+01:11:37.000 --> 01:12:26.000
+people be using them versus just putting that logic in their application code? I have run my SQL at scale across many companies and never have seen the never have store procedures been worth it yeah okay we're on the same page okay i guess there's not a bunch of a debate there yeah every time i've seen it it's been a project that for a hundred other reasons has not been engineered correctly that just seems to be the pattern i've found yeah yeah it's just there's just some some real abuse happens to databases and it's never really a good idea and there's like some shortcuts but not many if you can you just have to try and keep it sensible the worst the customers that are in the worst pain that require the most help are the ones that for us that have gone they've got too clever with
+
+128
+01:12:26.000 --> 01:12:50.000
+what they're working with now and it's really really hard to get like you're only you losing at that point in the in the in the pitch deck that we made when i joined the company i had this graph that goes up and it's a graph of innovation and and kind of velocity for your company goes up like when you draw when you start a startup and there's like three of you, you're shipping code all day and you're talking to those first users and they're like, why don't you do this? And you're like, cool.
+
+129
+01:12:50.000 --> 01:13:01.000
+And you do it in two minutes and they're like, wow, you're amazing. That's awesome, right? Like look at GitHub, just rocket ship growth from the first week. They just put something out there. Chris's early tweets of just like, I'm going to set up a Git server.
+
+130
+01:13:01.000 --> 01:13:16.000
+Oh, that was very difficult. Don't like that. I'm going to, I'm sure other people have these problems. Let me build this thing. And then everyone's like, yeah, I love it. And it goes really quick. And then on this graph, there's a plateau of the middle years of your company, which is where you have to hire tons more engineers.
+
+131
+01:13:16.000 --> 01:13:38.000
+You have to start paying down all the bad decisions you made in the early days. And like, you're losing at this point, Your company is losing its potential maximum valuation while you solve database problems because your users do not care. We all use those products. It's like, oh my God, this is amazing. They're building stuff for all the time. They're building my dream product.
+
+132
+01:13:38.000 --> 01:14:12.000
+And then they go quiet and they stop shipping. Some part of their stack has stopped scaling. That's what's happened. And they're just spending all of their roadmap time bailing themselves out and then people are looking for other products or other ankle biter kind of startups are starting and exploiting the fact that you're now slow and old and and they're doing like that's really tough that this was the vision for planet scale was that you don't have that middle year plateau where you inevitably replace that Heroku Postgres database that was super easy to set up and get going on
+
+133
+01:14:12.000 --> 01:15:23.000
+day one and now just fundamentally just doesn't work anymore. Yeah, I think there's a lot of parallels between this and our interview with Guillermo Rauch from from next js where um and i was telling him the the story that i'll rehash now where when i start and again i'm also not a front-end guy either so when i started with next js it just kept giving me errors like it just wouldn't let me do things and i was like what the heck you know this is so annoying um but then once i once i found how to do what I wanted to do in that pattern, it took like half of my website and that and a hundred other things that you know would be things that i would eventually have to tackle if this got that that popular right and they were just done right and so i think that's one of those cases where um you know when you use an opinionated framework it'll keep you from making a lot of these mistakes the stored procedure thing i was
+
+134
+01:15:23.000 --> 01:15:41.000
+thinking of this was a really long time ago. I mean, this was in the 90s, but basically we didn't have, I was basically the first application developer. We had a database administrator and then we had a couple of people who also didn't really know what they were doing on the app dev side.
+
+135
+01:15:41.000 --> 01:16:37.000
+And so, you know, because the DBA was strong, you know, he did a lot of the logic and stored procedures to limit the complexity on the app side but then you it just didn't really work and so then now you have to play catch up so it's like okay now i have to instead of starting from you know a foundation now i have to start from from nothing because we had been walking on the crutches of stored procedures so yeah it's really hard to refactor and get out of how big was that engineering team that was maybe five or six people it was pretty small and one of them was a dedicated dba yeah exactly yeah crazy all dbas are there to do mainly is to mitigate downside right like dbas are there to stop outages it's a very hard job by the way like saints that do this work it's extremely hard
+
+136
+01:16:37.000 --> 01:17:19.000
+having like a fifth of your engineering team be assigned to just so something doesn't break it's insane to me that this is why we do what we do because it just shouldn't be that way. Like it's wild. The databases are so unapproachable, but essential that you have to spend a fifth of your engineering team on just stopping it going wrong. Like the value to a product of the database working well is very clear but no one there's not many like features that are solely enabled by the the database in in a sense that like you need them to build the features but it's not like this is a really rad feature that we're exposing to you
+
+137
+01:17:19.000 --> 01:17:39.000
+because it's a feature of the database like that's not true you abstract over the database every time so they'd have something dedicated just to make sure it doesn't do the really bad thing that they predictably always do. It's wild. It's just an insane sink on innovation. And it's still, we're not there yet where I think people are still okay with this or they're not okay with this.
+
+138
+01:17:39.000 --> 01:18:15.000
+And they don't understand that there's a better world. They are, you know, you talk to companies that they, they do not realize how deep in the mud they are because they're their database choice yep yep imagine if you had uh i'm the i'm the electrical administrator and when the electricity doesn't flow the right way you call me up like we would just never get anything done you know i stare at the green light and if it goes red i do something oh man really really cool so let's talk about plant scale as a company for for a moment so
+
+139
+01:18:15.000 --> 01:18:52.000
+you know what is roughly the size of plant scale and and where is it located is there like a headquarters is it kind of like uh you know one of these companies telling everyone to come back in the office is on the other side where where it's completely you know like globally uh distributed so what is plant scale like plant scales around 80 people and we're based on the internet all right with it's an extremely remote culture. We don't have an office. We're distributed around the globe. Partly that was because, you know, a lot of people came from GitHub,
+
+140
+01:18:52.000 --> 01:19:21.000
+which GitHub was that way and was probably an early pioneer of that culture. It's just the best place to do work, really. A home, isn't it? I think now. Yeah, it's the most available conference room. That's for sure. Exactly. You're right. I love that. I've never heard that before. That's fantastic. You know, I loved going to the GitHub office. It's an amazing office, kind of legendary in terms of how beautiful and wonderful and they put loads of time into it. Didn't seem like a,
+
+141
+01:19:21.000 --> 01:20:06.000
+no office has ever felt like a place to me where you just sit down and really get the work done right like facebook was an in-office culture and it worked well but they had to push it if that makes sense it was like yeah it was in a way that it was impossible to be effective if you weren't in the office right or one of the offices because your team was located around you and look i love everyone that works at plan scale if i could click my fingers and get us all into one really expensive building in soma i'd probably do that right like if i could because it would be really cool to see everyone every day and it would be really great for bonding it's just not an option i have right the person who's built like the team that are building Booster are over in Europe right now.
+
+142
+01:20:06.000 --> 01:20:19.000
+One's in Spain. One's in the Netherlands. A few over in New York. Like I want the best people. We've hired like some of the best engineers that work to GitHub. They're not moving. They don't want to. They have their life.
+
+143
+01:20:19.000 --> 01:20:47.000
+So I just don't have a choice, right? So we work with how we work with it. We manage. It's nice to be asynchronous it's great to like you know i work long and strange hours and i would feel really stuck if i had to be in an office to have any effect for of the work i do so i love it you can get a lot done in slack yeah it has downsides you can't just tap someone on the shoulder and whiteboard something out which is something that's very very powerful so you have to make up for that. I'm not one of those remote
+
+144
+01:20:47.000 --> 01:21:34.000
+people that pretend the remote is like the solve for everyone and that everyone should be remote. Like, I just don't believe that. I think it has incredible upsides, some quite severe downsides. And so is the in-office culture as well. Yeah, really well put. Yeah, I remember one time where I walked into Facebook in the morning. I took the bus, which sounds like maybe you lived in the city. I don't know if you worked in the city office, but I had this huge bus commute that took forever. I lived more rural and got in the office. And just, you know, there's certain days like this where you feel really in the zone. And, uh, I remember, um, just being there the whole day and, you know, running a different people and, and, uh, you know, being able to eat all your meals there. So you can
+
+145
+01:21:34.000 --> 01:22:13.000
+really focus. And then, um, you know, worked like crazy hours, got some product out and then, you know, spent like two or three days at home where I was like, just kind of recovering from, from that kind of like crazy blitz. And so I can't like, likewise, I can't really say, you know, there's pros and cons to everything. I can't really find anything specific about working remote or working in the office. I mean, clearly like having the accessible food is really nice. Not being able to get a conference room is really annoying. But there's just not really any way to fix either of those things. So it's like it's just going to be two different environments.
+
+146
+01:22:13.000 --> 01:22:58.000
+And we're just going to make the best of both of them. You can build some great energy in an office culture, right? Like you can feel excitement when there's things to be excited about. Like you just kind of we are incredibly social creatures we pick up on social cues that you don't you're not even aware of right like presenting on a zoom i'm telling you a zoom all hands with 80 people looking at you it feels not so great but when i presented in personal hands at github you can hear people's like you see their nods of approval you can hear their kind of like subtle gestures of approval or like the like when people clap or they get excited or you just feel the energy it's way more energy in person yeah yeah i'm not gonna just like
+
+147
+01:22:58.000 --> 01:24:10.000
+pretend that's not real right it's not the same at the same time what you have to do to get that is not always what companies are willing to do. And yeah, like it was awesome at Facebook, right? Like, you know, you'd walk past, say, like the two of the best network engineers in the world arguing on a whiteboard and you listen, you get like, that doesn't happen in a remote company you may hop on a zoom and get it done but it's still not the same it's it's it's different and junior folks early career folks struggle a bit more in a remote environment like when you've gotten people that are new and they're learning the craft you can see when they're getting stuck they kind of sit near their manager and they're looking a bit disengaged or a bit worried and you know they seem stressed like it's easier to check in on people yeah i've seen in remote cultures early career folks getting really stuck and they feel the barrier of scheduling a zoom call is a bit more too more it's too much formality compared to just saying oh can we just walk to the kitchen for a quick coffee and i just got a couple of questions for you like that's such yep lower barrier than than jumping on a zoom so it's again it's just all ups and downs
+
+148
+01:24:10.000 --> 01:24:37.000
+and trade-offs and there's some really weird and bad takes on the internet about how you don't need offices or remote is terrible and you can't ever build a company remotely. Both takes a complete role. Yep. Yep. Yeah, I totally agree. So PlantScale is remote, totally distributed. And so are you hiring at the moment? We have a few roles open. Yeah.
+
+149
+01:24:37.000 --> 01:25:15.000
+We've got folks in customer success. We've got folks in sales. If you like computers and databases and want to work with some of the biggest companies in the world with their tech stacks and their most important part of the tech stack the database it's a really fun company to be you can get super nosy cool yeah that's awesome and what sort of uh so you know in general um you know not just hiring but in general like on the engineering side what sort of i'm trying to figure out how does someone engineering side, what sort of, I'm trying to figure out, how does someone get into, like, what sort of skillset are you looking for? Because, you know, my guess is you're not necessarily looking for people who are good at using
+
+150
+01:25:15.000 --> 01:25:51.000
+a database. You're looking at people who have that, but are also really good at the insides of it. And so what is that most closest to like what's the skill set there you know there's really varied skill sets in in the plant skill engineering team you have the people that build our query parser right and they are working on really deep computer science that i just struggle to understand like you know this i'll go and look at what they're planning and it's all math notation. It's like, I don't understand any of this really. Like the complexity is there. It can be really tough.
+
+151
+01:25:51.000 --> 01:26:15.000
+So they're working on the core of the test, but they're not really called upon to build the UI because it's a completely different skill set, right? So the folks that build the UI, like our designers, they code, they hand it off to some of our services team that are fantastic javascript engineers our api and app is um a rails app with next.js up front for the
+
+152
+01:26:15.000 --> 01:26:57.000
+for the actual user interface but the things that talk to our cli then we have our middleware that schedules all this stuff to happen in the back end That's all written in Go. So Go backend engineering skills, understanding how to build services at scale that are reliable. It's a big varying skill set and people usually are specialists. We don't really have many people that are jumping around the stack doing it all. People have, we have hired such incredibly tenured and smart people that everyone gains respect for them mastering their craft and trust them to do the things that work extremely well for them.
+
+153
+01:26:57.000 --> 01:27:29.000
+And we don't do anything by half measures. Like I said, our product designers have been building products for decades and have built famous and loved products. No database company has the ratio of designers because they just think they're wrong about what they're delivering to their users. They think they're there just to provide the backend. We just can't accept that. So we have to have great people doing all of it. Yeah, that makes a ton of sense. Yeah, I noticed that to use PlanetScale,
+
+154
+01:27:29.000 --> 01:27:49.000
+at least today in November, I had to use, I mean, to administer it, I used the MySQL workbench and you have to do kind of some finagling to get to the right branch and everything. But I think there's a huge opportunity there. Anytime I'm using a desktop app that takes more than three seconds to load,
+
+155
+01:27:49.000 --> 01:28:06.000
+there's an opportunity there. So I'm really looking forward to seeing what comes up in the future. So before we head out, I wanted to talk about the book that you recommended. This is something that's a programming throwdown kind of mainstay. We always ask folks, what are books they recommended.
+
+156
+01:28:06.000 --> 01:28:40.000
+You recommended Amp It Up. So kind of talk us through Amp It Up and what's it about and how did it affect you and inspire you? It really resonated with me, this style of leadership and management that Slutman talks about. You know, we have one value at PlanetScale, everyday matters. We're going to add more, but I don't believe in just like, you know, you've seen company values rolled out where it's like 10 things that it's like no one could ever. Yeah, that's right. Yeah. Empathy. Cool. Yeah. Empathy is great. You should definitely have empathy,
+
+157
+01:28:40.000 --> 01:29:00.000
+but no company is going to disagree that you shouldn't have empathy. So why is it a product value? Why is it a company value? The company values should, people should look at it and go, oh, I completely firmly agree there and I would love to work at that place. Or, oh, I really disagree with doing it that way so I don't want to work there. They should be very divisive. If they're just a hand wavy thing that everyone's going to agree with,
+
+158
+01:29:00.000 --> 01:29:29.000
+useless value, not worth it. And so I read this book and I thought, this aligns with my values. i believe that you should work extremely hard and push for outsized results and so does everyone at plan scale they work so hard we don't burn ourselves out we we you know we take time in fact this this friday that just passed is one of our first fridays we all take one friday off a month together so we can all have like real. It's like impossible to take real vacation in the modern world with no notifications and you get phoned. Right.
+
+159
+01:29:29.000 --> 01:29:39.000
+Right. So we have to give everyone a day off together to like really get them to chill. And that's great. It's funny though. People start creeping back onto work by Sunday. Cause I think they get lonely or bored, but they get antsy.
+
+160
+01:29:39.000 --> 01:30:05.000
+I do certainly. But this is, you know, that's the thing is that it just felt right to me that this spirit of, of kind of aggressive motivation towards the goals that the company has. And, you know, we believe in that, which we want to run as small a company as possible with as good and the best people we can possibly find. And that takes running a really disciplined culture, giving, you can't
+
+161
+01:30:05.000 --> 01:30:46.000
+hire amazing people and give them no autonomy. At the same time, if you have a highly autonomous culture with no accountability, you go, you go wildly off the rails. And so just a lot of the principles in that book really resonated with me. And I read it, you know, only recently, we've been running Planets Gal the way we run it for a while. And it just, and I had never really seen that style reflected in book form. And to read it you know i had a lot of respect and also it's from someone that has built an incredible company i mean i i can't really read business books of advice from folks that haven't done something that i find impressive and and i do very much find frank's work very impressive very cool just for context
+
+162
+01:30:46.000 --> 01:31:48.000
+so the person who wrote this book is the ceo is it former or current ceo of of uh of snowflake yeah it's awesome and has made many i think this is his third billion dollar company that he's created wow wow amazing cool yeah i'll have to check this out. This is right up my alley. I've been trying to read more on the product management side and trying to exercise that part of my brain. So this is personally, I think, super relevant. I'm excited to give this a read. I'm going to add it to to my Audible, which is a great segue to our shameless plug for Audible. If you're listening to this and you don't have an Audible account grab one um patrick and i've had them for a zillion years and i'm still uh you know active member reading a ton of books on there and you can also catch us on on patreon and support the show that way so either way we really appreciate folks folks supporting the show. And beyond supporting the show, even better is when folks write in.
+
+163
+01:31:48.000 --> 01:32:14.000
+And a lot of our interviews and a lot of other topics have been because folks have written in and suggested things to us. So we really appreciate that. So, yes, Sam, this was amazing having you on the show. You really were able to dive deep on databases, explain a bunch of different concepts to folks. I love some of the things that we covered around transactions and sharding and then moving on to PlanetScale
+
+164
+01:32:14.000 --> 01:32:35.000
+and how we're able to do kind of a more coding-like environment with branches and PRs and merging and all of that, but in the database world. I encourage all the folks out there to check out PlanetScale. It is totally free. I've had the same PlanetScale database for probably like 12 months now, and it hasn't given me any trouble, and they haven't asked me for a cent.
+
+165
+01:32:35.000 --> 01:33:12.000
+So maybe if my website gets popular enough, I'll hit some threshold. And if it does get that popular, I'd be more than happy to contribute. But up until now, it's been in the free tier, which is extremely generous. So folks out there, check it out. If you've never used a database before, there's an opportunity to use it for free without having to spin up a server or install a whole bunch of packages and deal with all of that. It's super accessible, definitely the easiest setup I've ever experienced. So check out PlanetScale. We'll put links in the show notes. And once again, Sam,
+
+166
+01:33:12.000 --> 01:33:17.000
+thanks so much for coming on to the show. Thank you so much for having me. I really, really enjoyed this time. Very, very enjoyable. Thank you. Sure. All right, everyone. I'll catch you all later. Music by Eric Farndaller. Programming Throwdown is distributed under a Creative Commons Attribution Sharealike 2.0 license. You're free to share, copy, distribute, transmit the work, to remix, adapt the work, but you must provide an attribution to Patrick and I and sharealike in kind. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

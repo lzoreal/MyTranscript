@@ -1,0 +1,733 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:26.000
+programming throwdown episode 96 continuous integration with rob zuber take it away jason hey everybody i'm here with rob zuber cto of circle ci and we're going to be talking all about Take it away, Jason. tell us before we jump into continuous integration and testing and all that tell us sort of what kind of led you down this road what sort of your background and and how did you end up CTO of CircleCI? Yeah I'll try to make that a short story I've been in the industry quite a while so a few different points that I would make along the trail. So I grew up in Toronto. I went to school at a college called Queen's University and studied engineering physics, graduated, went into manufacturing of all things, was working on computers stuff. And then some friends of mine started a company in the late 90s, you know,-com boom, and they said, hey, we need more people.
+
+2
+00:01:26.000 --> 00:02:13.000
+Literally, nobody really – that wasn't a known thing at the time. And so anybody they knew that they thought they could convince to come and work for nothing, they were interested in. So that was basically – that's how I got into software. I just showed up, and they were totally tolerant of my ignorance because I just needed to learn some things and they just needed you know they needed people um and I give you I've heard crazy stories about the dot-com era I mean did they give you like a Porsche on your first day or something like that I think that's dot-com California uh dot-com dot-com Toronto was much more reserved we were like one of two startups in the city or something like that. And in fact, so my back company was eventually acquired by a company down here in the Bay Area,
+
+3
+00:02:13.000 --> 00:02:44.000
+which is why I ended up moving. So now I live in the Bay Area. I've been here since 2000 when we were acquired. But I actually, I didn't really start out doing software as a result. I was more, at the time I ran a team that we called Systems Engineering. I think four iterations later, we'd call that SRE, something along those lines. I spent a lot of time at data centers. I think most people don't know what a data center is anymore because they just let AWS and Google do that for them. Yeah, actually, I'd love to hear a description of a data center. I've actually never been in one.
+
+4
+00:02:44.000 --> 00:03:27.000
+I mean, it's just like this ephemeral thing to me well ironic given that i have i'm getting over a cold right now the one thing i can tell you about a data center is i've never gone into one and not gotten sick really because i would always find myself standing next to well two things would happen one um it was usually under some kind of great stress like all-nighters whatever whatever because we were trying to roll something out or do some huge migration and deploy a new data center uh i would you know we'd fly down to usually somewhere in virginia you know kind of like us east one is in virginia i think that's probably built of all the old data centers that we used to use yeah and uh and you'd spend days straight in a cage full of computers that are really hot
+
+5
+00:03:27.000 --> 00:03:55.000
+and so on one side you know you have all this heat pouring out at you and on the other side the air conditioning is coming in trying to cool or like i mean this is like forced air cooling systems and your body at least for me my body was always just like what are you doing to me right now i haven't slept i haven't eaten't eaten. And on one side, I'm freezing cold. And on the other side, I'm boiling hot and invariably, and it's like recycled air and all this stuff. Yeah, so someone explained this to me. There's a gentleman that I work with and he said,
+
+6
+00:03:55.000 --> 00:04:18.000
+and correct me if I'm getting this messed up, but the individual machines, so the data center, you know, they don't just buy, they don't go to Best Buy to buy machines. I mean, it's like they have so many that they're all custom and the machines don't have fans. And that's because they design the entire data center is basically one giant fan. It's just errors moving across the machines. And so they don't need their own fans.
+
+7
+00:04:18.000 --> 00:05:08.000
+Yeah. Well, again, I also am someone who just buys machines from, you know, AWS and Google and whatever now. So a lot has changed like we we were buying sort of one u2u a u is a rack unit but like like thin pizza box type machines at the time um and they would have had individual cooling okay now now you tend to buy more blades and that's been a thing for a long time so you buy a chassis and each each actual computer is just like a card that you slot in. And then it has something in it called a backplane or I think it's a midplane backplane. Doesn't matter. And they slot into that to get power and cooling and stuff like that. And also now I think a lot of data centers use liquid cooling even. So there's, you know, because you get, this is the one thing I might remember from my engineering physics degree, but like you get better thermal transfer right through
+
+8
+00:05:08.000 --> 00:05:35.000
+like solid contact than just air blowing over. Um, so if they can cool the chassis and then whatever, like transfer that in, of course, uh, I don't know if you've ever seen a heat sink on top of a chip, but those are designed for air cooling, right? You can't like blow over the heat sink, but, but, um, so I don't know exactly all the details of how this stuff is built. They've done a lot to cool. I mean, power, I was actually looking at this because we run a lot of compute at CircleCI.
+
+9
+00:05:35.000 --> 00:06:01.000
+We'll get to that later. And so we've actually looked at, you know, like, are we at the point where we need to own some of our own hardware? And we do for some very small specific cases. And as I started to look at how do you even do data centers these days, you know, there are some that where the model is just you pay for power. Because, you know, providing power and providing cooling is what really matters in there. Like, they don't care how much space you're using.
+
+10
+00:06:01.000 --> 00:06:19.000
+They care how much power you're drawing, right? Because, like, that's where the real sort of expense is going. Yeah, that makes sense. It's usually out way out in the middle of nowhere, like IOR or something. So yeah, space is not an issue. Right, exactly, exactly. So yeah, I did a lot of that at the time.
+
+11
+00:06:19.000 --> 00:07:10.000
+I was doing, you know, I was kind of a DBA and like focusing on actually build systems. Interestingly enough, first thing I did when I showed up was write a build script and figure out how we're going to get our code into production as quickly as possible, even in 98 or whatever year that was. So we were acquired and moved to San Francisco, did a bunch of different things at the acquiring company, including some product management, some sort of like prototyping and like strategy work and things like that. Honestly, some sales type stuff like going to visit customers and help close big deals by helping them understand our technology. And only sort of, I think, 07, I finally left there and went to a company actually as a CTO. And ironically, at that point, really spent my days writing software.
+
+12
+00:07:10.000 --> 00:07:34.000
+Because at a tiny company, that's what you do as a CTO, right? Like you're a CTO in name, but you're kind of a team lead. And you're just, you know, the most senior engineer working on building the product. Yeah, that makes sense. It was like a 10 person company, right? So was that sort of a kind of a shock? Because you had probably done less and less coding over time. As you say, you've been doing sales and you've been trying to sort of run that larger company.
+
+13
+00:07:34.000 --> 00:07:56.000
+And then now you end up as CTO of, let's say, I don't know, a three, five-person company. And so you have to get back on the saddle, right? Was it sort of hard to ride that bike again? Well, what's interesting is honestly, like I have a pretty unusual career path. I would say that was when I first started writing software. Oh, that's true, okay. So I basically, up until that point,
+
+14
+00:07:56.000 --> 00:08:34.000
+I had done a bunch of sort of like prototyping and things like that, but like sitting down and writing production software every day as my job, that was the first time that i really did that because i was always this jack of all trades pulling things together you know building a prototype and then flying to a customer and selling it for crazy amounts of money and then handing it off to an engineering team to say okay make this real uh which is that's good living by the way if you could do that yeah that that sounds really awesome i mean it sounds also like a huge responsibility you had a similar issue where um one of the sales
+
+15
+00:08:34.000 --> 00:09:06.000
+engineers we had this system and it was an embedded system um so think of like a robot right and and and the they wanted to do some more complicated AI in this robot. And the sales engineer said, oh, it's fine. We can just run it at 30 hertz instead of 60 hertz. And so that's just ridiculous. It's like the entire robot, all the sensors, everything had been designed to run at 60 hertz. But he's like, oh, don't worry about it. It's sort of like we'll fix it in post. And all of us engineers, when we heard that,
+
+16
+00:09:06.000 --> 00:09:24.000
+we're like, what are we going to do? I mean, and so you have this situation where you could potentially build a prototype. You really have to know, like, what's actually possible, you know, in the back end, right? You have to have a good relationship with your eng team. Yes, exactly. And I feel like I'm making it sound a little worse than it was
+
+17
+00:09:24.000 --> 00:09:45.000
+because I did have that relationship with the engine team. Yes, exactly. And I feel like I'm making it sound a little worse than it was because I did have that relationship with the engineering team. Like I knew our code base is really, really well. When I built prototypes, I built them using our production code, like modifying our production code to do certain things, just did them very quickly and said, look, I know this isn't what we would wanna ship to a customer, but we were able to get the business.
+
+18
+00:09:45.000 --> 00:10:15.000
+It was sort of like what you would now call an MVP, maybe, versus a pro. Yeah, right. Although, well, you could go either way, because honestly, you wanted to throw a chunk of it out and do it well. But interestingly, in so doing, because I was deep in our real code and there were some engineers there, the likes of, like the capability of which I probably haven't seen um since or have seen rarely since i learned a lot just by working with their code by really being deep in sort of how they had built systems and spending the time
+
+19
+00:10:15.000 --> 00:10:43.000
+and and it was kind of a weird because um i couldn't get a lot of their time i couldn't say hey come sit with me and explain to me how this works. So I just studied. It was like reading very large volumes of code as a means to understand how good code could be structured. But it definitely influenced the way that I thought about software for a long time after that. Yeah, that makes sense. It was primarily C, which I don't do a lot of anymore.
+
+20
+00:10:43.000 --> 00:10:59.000
+Yeah, right. So yeah, so then I went in and did this, took this role as a CTO. It didn't really work out that well. I was there a couple years. The company, you know, couldn't really find traction. And then I started a couple of my own things, did some consulting.
+
+21
+00:10:59.000 --> 00:11:39.000
+And then 2011, I started a business with two other guys, a guy by the name of Jonathan Ehrlich and another gentleman, Jim Rose. And we worked on that business for a couple of years, I think 2011 to kind of late 2013. We built a marketplace. It was a cool experience. We raised some money, we built out a team, but things changed in the market. Um, it, it didn't work out. We then tried to find some, uh, some mobile first cause now it's late 2013. We tried some mobile first approaches to the problem we were trying to solve. And then we just,
+
+22
+00:11:39.000 --> 00:12:08.000
+once we had the pieces and some mobile expertise, we just started spinning out mobile apps. Like maybe people will like this, Maybe they'll like this. Totally unrelated to each other. And then we said, wow, building iOS apps is really hard. Like the tooling is not very good. People don't really understand how to test in this world. I would say Rails developers were just starting to make the shift into iOS because it was becoming a thing. And the shock of a bunch of Rails developers
+
+23
+00:12:08.000 --> 00:12:27.000
+who were like test-driven development, you skeleton out specs immediately, showing up in iOS and just saying, has anyone ever written a test? And then if you actually look at, I don't know what it's like now because I haven't done iOS development in a while, but if you look at the 2013, 2014 tooling, it's all written
+
+24
+00:12:27.000 --> 00:12:50.000
+in Ruby. All of the test frameworks, all of the drivers, because it was this shift of people who were coming to that world and they just went, what is happening here? And so they weren't about to write a bunch of desktop tooling in Objective-C because that just seemed like a lot of work. So they created all these frameworks in Ruby. And you can kind of see that history. Wow.
+
+25
+00:12:50.000 --> 00:13:30.000
+It's like a little archaeology for you. Yeah. So 2011, you started as CTO, right, of the first. And so now it's 2017. This is 2013, 14. Oh, 13, 14. Okay the for the um the the ios era right yeah and so so that's so that's three years and so what is you know i think that a lot of people out there would have would have given up you know like like would have said okay though this this didn't work out maybe they would have given up even much sooner. Right. And you persevered, which is, uh, you know, which is to your credit,
+
+26
+00:13:30.000 --> 00:15:05.000
+right? So what sort of, you know, kind of what was keeping you going on, on that track, you know, even two, three, four years, a couple of things we, um, so in that company, we got through a seed round and an A round. So we had money to run. We had investors who believed in to try to build and grow. And Facebook around that time, if you go back and look at where they were headed, made a big shift away from platform and into mobile themselves, actually. And that really took away, like, they changed algorithms about how things went into the feed. There was a ticker for a while there, and then it was gone. And so the avenues, which if I'm honest, we were basically spamming to drive growth, sort of dried up and our ability to try to get the flywheel going and get to scale disappeared. So we wound down a chunk of the company. We gave some money back to investors. But honestly, at that point, the thing that kept us going is people. Right. Like for me anyway. So by the time we got to the point as we head into 2014, where we by the time we got into the beginning of 2014, there were basically three of us, myself, Jim, who I had mentioned, and then one other engineer who had been one of our early engineers.
+
+27
+00:15:05.000 --> 00:16:05.000
+And we had realized, hey, this tooling is really hard to build these mobile apps. And so we decided to build a CICD platform for iOS and for mobile. Yeah, I think it's like if you have the talented folks and you have camaraderie, you trust each other, you're willing to, you know talented folks and you have camaraderie you trust each other you're willing to you know sacrifice i mean i saw a situation where somebody they actually had in my opinion a successful startup but that person got i don't know really what the phrase is not quite cold feet isn't the right word but they ended up kind of bailing and joining uh you know kind of a big company um and and that kind of put the startup in a bad position right so in your case if you have a good core group of people um even if as you said the the the market changed in a way that you couldn't control and so that that initial idea you just couldn't save it no No amount of talent could save it.
+
+28
+00:16:05.000 --> 00:17:06.000
+But now you could potentially even have stronger camaraderie than you did going into it because you built something together that you could be proud of even if you weren't able to pull it off in the marketplace, the broader marketplace, right? And so that kind of led to this realization that there's this there's this other market here that we could tackle. Yeah, absolutely. And I would say from some experiences prior to that, both when I was working in larger organizations, when I joined a startup in other startups, my understanding of the value of the people versus the idea, the business, you know, whatever else, um, had just grown and grown. And so recognizing that I was working with, with a couple of folks, uh, who we worked really, really well together. Um, that was of huge value. I was willing to take that and go sort out what it was we were going to do over, you know, go work at some large organization or whatever.
+
+29
+00:17:06.000 --> 00:17:31.000
+I mean, you fast forward to today. So Jim, from that story, we built Distiller. We got acquired into CircleCI with that iOS CI CD capability. And Jim is the CEO of CircleCI and I'm the CTO. So we continue to work together since we started in the beginning of 2011. Right. And that's so finding that honestly is huge. And as I look at, you know, to your point of other startups where where people kind of fall
+
+30
+00:17:31.000 --> 00:18:08.000
+out, there's a lot of startups that have great ideas and are having success. But the tension between the founders, between high level people, you know, breaks things apart. And so finding great working relationships is is huge. And so sticking with that when you find it, I would say is a big part of it to the question of what kept us going. It was that just like, Hey, we really like working together. We know that we're able to solve big problems. Let's just pick a big problem and go solve it. Yeah, that totally makes sense. I think for folks out there who are, you know, maybe they're not necessarily starting a company, but maybe they're doing some side projects. I a great piece of advice that's actually something we've never said
+
+31
+00:18:08.000 --> 00:18:58.000
+uh on the show before is to grab a buddy like get get someone else and uh maybe if that person has a different cool idea you both implement both of them right at least that way you have another pair of eyes and and uh you can kind of go on the journey with someone else. Yeah, totally. And I mean, that journey, like as someone who's done both ends of the spectrum, I guess I would just say it can be pretty challenging. There's a lot of great press given to the huge organizations that succeed, these overnight successes that are honestly 10 years into their process or whatever. Yeah, right. There are some pretty dark times in there. And if you if you want to get through them and you want to get through them effectively, like having people around you who, you know, support you and you work well together and all those things, that's a that's
+
+32
+00:18:58.000 --> 00:19:22.000
+a huge difference. I can't even imagine trying to go it alone, honestly. Yeah, that totally makes sense. And so you saw this need to... Yeah, I mean, I remember early iOS development and Android development, and basically they provided this emulator, and even that wasn't very good. It was very slow. And they were basically like, look, if you want to test this,
+
+33
+00:19:22.000 --> 00:20:05.000
+run it on a device until it stops working. That was kind of their philosophy and you saw you kind of had it had uh with your experience you kind of said no no i think i think people are not gonna not gonna put up with that there's there's gotta be something better yeah exactly i mean we we in the process again of trying to build some some apps ourselves we just thought this is this doesn't seem right you know that that people don't have this capability um and we had been we had been using ci and cd uh for like the business before was actually a rails app and so we were ci cd centric we were using that as a core part of our process and building um and as we switched to mobile we just thought,
+
+34
+00:20:05.000 --> 00:20:51.000
+well, this doesn't seem like a great environment. And especially, I actually don't know what it's like now, but at the time we would spend two, three weeks getting a build approved through the app store and out into the hands of customers, right? So when you do that, and then there's a problem, like you finding out because the second customer that tries to use it runs into an issue and then spending another three weeks trying to get the patch out or whatever i mean there's there was a expedite process but we still take time yep you know we now i'm back in pretty much cloud world where you know if there's a an issue we just patch it and release the patch and it rolls out immediately. And, you know, almost doesn't matter. Um, but in that, in that space, in the space of, uh, you know,
+
+35
+00:20:51.000 --> 00:21:19.000
+it's going to take me two weeks to get the fix out, being really confident in your delivery is even higher amount of value for you. Yep. Yep. That's right. And a lot of these apps, there's, there's so much competition in the app store and there's so many people doing SEO on the App Store that if your app has a bug in it, someone else will realize your app has an issue, probably write a similar app. I mean, depending on how much lock-in you have, but write a similar app
+
+36
+00:21:19.000 --> 00:22:06.000
+and just take away your entire business. I mean, I've seen it happen a lot in the in the games space where um you know it's just it's just there's you can't patent a game there's and there's not much intellectual property there unless it's some trademark like a movie or something and so yeah i mean it's just one mistake you can get wiped out um and it's and it's the it's the ecosystem that did at least didn't have very good testing. So it's kind of like, it's almost the opposite of what you described earlier where the market sort of closed. This was a case where you were coming in with a lot of experience and a market that was just exploding. And mobile is still getting bigger. I mean, there's a huge expansion in India and in other countries on mobile.
+
+37
+00:22:06.000 --> 00:22:59.000
+Yeah, yeah. And I would say we continue to see that. I mean, so mobile has been exploding, but also now within CircleCI. So we did that for four months, five months, basically, before we joined CircleCI because we saw this is a bigger thing than just mobile. But now having been at CircleCI over five years, I continue to see this space of investing in developers, enabling them to be really successful, delivering quickly, getting their ideas into the market. And this whole you know software is eating the world how can we enable our software teams to really drive competitive differentiation for us um you know we're just watching that blow up right and so we're in the middle of that which is a very cool place to be
+
+38
+00:22:59.000 --> 00:23:37.000
+yeah but it's and and having been through you, having been around in the kind of early 2000s where everyone said, wow, software development is really expensive. Let's go find the cheapest possible people to build software. Let's manage it like a cost center to go 180 degrees to software is how we're going to differentiate as a company, how do we invest as much as possible to build the best possible software with the greatest people is, I will say as a software developer, very rewarding to watch as a cycle in the market. Yeah, definitely. So this is one of these,
+
+39
+00:23:37.000 --> 00:24:13.000
+or I guess many products have this where your target audience, so there are going to be people who already do a ton of TDD, a ton of test-driven development. And in a sense, now you're dealing with this incumbent. So maybe they have some homegrown thing, whatever they're using, right? Then you have all the way on the other end of the spectrum where, I mean, I still know of folks who don't write any tests, you know who are who are you know have some pretty significant responsibility right so so if someone comes to you and says um you know like i'm doing
+
+40
+00:24:13.000 --> 00:25:13.000
+this fpga on this robot or i'm doing something very specific uh like why should i write tests right so so what what would be kind of your response to that? Well, I mean, that's an interesting question, I think, about testing in general and then in then in the specific cases. I have a I guess a long history with testing. I mean, actually, when I all the way back to when I started out and did systems engineering and stuff like that, I also ran a QA team. And we thought about testing very differently back then, right? It was sort of, we'll just, we'll write the code and then we'll give it to some other team and they'll click on buttons and sort of, you know, move through all of the capabilities. And then eventually we'll ship and it was, you know, is the bug count converging as we get closer to our release day? I mean, it was a very, very different time. Yeah, I remember those times a little bit yeah and and ultimately um for me it's about coming from those
+
+41
+00:25:13.000 --> 00:25:51.000
+days like if you look at the that's a long arc of evolution and software development but um it's really about feedback loops right number one so as an like we've, we've tried to reduce all of the stages, right? We've gone from, you know, waterfall to agile so that we're working in shorter increments and then all the way to the point where we're testing small bits and then we're putting small bits out in front of customers. And what, what I value in that is that I still have the context loaded in my head, right? So in the absolute ideal, maybe we'll come back to this later, continuous deployment, right?
+
+42
+00:25:51.000 --> 00:26:15.000
+My customers are seeing something that I just wrote, which is great. It's fulfilling because I just wrote it and I'm delivering value to the business. But also, if something goes wrong with it, I just wrote it, right? When I have those moments where I write something and I put it in production and something goes wrong or whatever because there's different data, things that I didn't account for, my
+
+43
+00:26:15.000 --> 00:26:46.000
+reaction I find usually under those circumstances is, oh, right, of course. Of course I didn't think of that thing and now I know exactly where to go to fix it. And if I deploy that code six months from now, and someone says, hey, this thing is happening in production, we'll just be like, is that something I did? Is it something someone else did? I don't know. Let's go spend three days sort of trying to figure out where the bug might be. We'll do some git blame for six months and try to figure out where this happened. Yeah, bisect thousands and thousands of commits. Exactly, exactly.
+
+44
+00:26:46.000 --> 00:27:02.000
+And so I think of testing, one key point behind testing is just pulling that in even more, right? So I'm writing code and I'm not a zealot when it comes to test-driven development. I'm going to write a test for everything. There's absolutely cases where I say, oh, okay, this is,
+
+45
+00:27:02.000 --> 00:27:41.000
+I totally understand what this needs to do. I think it's going to be a little tricky to get it right. I'm going to write a test and then I'm just going to iterate on this thing until I get it right. There are other times where the testing is awkward or weird and it just feels like I'm cementing my idea before I get there. I mean, there's lots of arguments on both sides of that, but either way, the ability to just validate as I'm working that my ideas are correct i think is is one um yeah that makes sense really good reason to test um yeah in a way it's a it's a it's a customer before the customer right so yeah and i would say with that it's a customer in two different ways so
+
+46
+00:27:41.000 --> 00:28:19.000
+one i'm getting that feedback right away so again it, it's totally fresh. If I write a bug and I catch it immediately, it's not even annoying. It's just like, oh, okay, yeah, that happened. I will fix it and I move on as opposed to again, the day or week or month later. But also you become the first consumer of your API, right? Or your design as you're writing tests for it. So you say, okay, I need to test this thing and here's how I would pass data into it and here's how I would get data out of it. And this feels really clunky. Maybe my design isn't actually that good, right?
+
+47
+00:28:19.000 --> 00:29:01.000
+Maybe I'll think a little bit differently about how I'm structuring my code and kind of being that first consumer of it. think a little bit differently totally makes sense how i'm structuring my code and the kind of being that first consumer of it um i think that's really evident when you're building a library or an api or something like that like an actual published api but all all software to some degree as you're building up layers is an api to the next layer right so um, or an API for the next layer, if you will. And so having that point of reflection, I think is really valuable. But like, I just, it's interesting, because having done it for so long, I mean, all the way up to continuous integration, continuous deployment, I struggled
+
+48
+00:29:01.000 --> 00:29:56.000
+to project myself back into the world where I, you know tests or I didn't have continuous integration, continuous deployment, and even imagine what that was like. Because I was talking to someone recently where we were talking about going, this is a really good example, going back and working on something that I haven't touched in a while. And having the suite of tests that basically says, if I change this in a breaking way, or I break something else by trying to fix whatever it is that I'm trying to fix right now, that'll be really clear, right? If you go back to a code base that doesn't have any tests around it, and you think, okay, now I need to understand every single facet of how this code interacts, so that I know that if i make this change it's going to be safe that's a really uncomfortable situation yeah right yep and so if someone uh if for everyone out there who's had that experience that's how that's how everyone who looks at your code
+
+49
+00:29:56.000 --> 00:30:31.000
+sees right right so so so if you come to your code a year later and you have that agoraphobia and you just say oh i'll forget it i just it's done i just need to delete this because i don't know what i'm doing that everyone who comes and visits your github page that's what how they're gonna feel too yeah yeah it's absolutely true like i think we we think of the consumers or the readers of our code often in terms of other people and and forget about us in a week or a month. Like I might be the maintainer of this code, but I have a lot of other things going on, right?
+
+50
+00:30:31.000 --> 00:30:47.000
+I'm going to go work on a different project in a different part of the code base and then come back and say, what was it I was trying to do here? I mean, there's lots of outside of tests. There's, you know, naming and structure and good abstractions and clear boundaries and commenting. There's a million other ways to make that better.
+
+51
+00:30:47.000 --> 00:31:14.000
+Yep. And the tests help with that. I think, you know, maybe your first test can only be, you know, test domain. And it just runs your whole program. And then you find that, okay, I need to wait three hours to know if my test passed or not. Maybe I need to factorize this down. And, oh, now I factorized it down, but now I need a simulated clock because I was using the system clock and it only worked when I ran the whole thing. And so eventually when you're done with that exercise, you'll have much
+
+52
+00:31:14.000 --> 00:31:57.000
+better quality code. Right. And I think that the small increments, I mean, to your point, coming from the other way, having the units, right? Talking about unit testing as kind of a lowest level um breaking those apart being able to reason about the work they do and then composing them together into higher levels of um whatever output or or uh abstraction higher levels of abstraction is is a very good design practice right and so using tests as a validation that you're doing that effectively i think is is nice um i i use this expression and i think it actually just comes from my manufacturing days i don't know if people actually talk in this way but um so when i was manufacturing we were building
+
+53
+00:31:57.000 --> 00:32:24.000
+circuit boards basically and we helped our customers with what we called design for testability and so we would relay out the circuit boards in a way that the probes that came, I mean, we basically had electrical unit testing, right? You could put probes on the board and test a sub circuit of the overall circuit to say it's working effectively. All the solder joints are good, like that sort of thing. Yep. Yep. And you can, it's easy to think about in that physical sense,
+
+54
+00:32:24.000 --> 00:33:49.000
+or at least it is for me, because I was there that, you know, you need to be able to fit a probe and you need to be able to break up this part of the circuit in a way that allows you to not have, you know, electrical bleed into other parts and stuff like that. And, and I think that really carries into how we build software. And I think if you design in a way that's more testable, you actually design better software. I mean, there are weird edge cases for sure. But when you think about isolating out business logic from inputs and outputs, right? have, you know, some patterns that talk about this, like ports and adapters or hexagonal architecture, these sorts of things. The core is meant to be pure business logic. And that is a much more testable unit than if the core knows about the database and about the web server and the format of data coming in, right? So if you push serialization and deserialization out to the boundaries and focus the entire core of your application, your system, whatever it is, to business logic, then you can just hand it, you know, manufactured data instead of, OK, I got to write all this stuff into a database and then send this thing over the wire, you know, through the web. And then it becomes this really complex way to
+
+55
+00:33:49.000 --> 00:34:21.000
+try to build out your tests. And you end up back in that place where you basically run main and check the output at the end and say, I don't know, did I get the right result? Right? Yeah. Yeah, exactly. Yeah. I mean, I think, you know, now there's the hot swapping feature. So people are doing web development. And I think that that's the hot swapping feature. So for people doing web development, and I think that that could be a crutch that people could lean on a little too much, say, okay, Firefox is going to be my testing tool, right? And then the issue there is now you're limited by your own time,
+
+56
+00:34:21.000 --> 00:34:56.000
+whereas what you want to do is use the computer's time and and so you could run a thousand tests on the computer and even if they do take a long time you know you could go and do something else um yeah while it's off doing that honestly if you're testing units and functions and stuff like that they will not take a long time computers it turns out are really fast yeah yeah they're very good at doing things in parallel. Computers have a lot going for them that we as humans don't, right? And honestly, it's tedious as a human, right? Especially if I'm a software developer and what I like doing is writing software.
+
+57
+00:34:56.000 --> 00:35:32.000
+Why would I not want to write more software to do the thing that I find really tedious? And just repeatability, right? Like you can say, oh, I'm going to test this case in this case in this case in this case but if you ask me to just say does login work i'm going to put in my username and password i'm going to log in and say yep i logged in therefore it's good but i didn't put the broken password or like the weird spaces or you know the the um disabled user, like all of the conditions that end up being real conditions in your software. It's just hard to reason about those, right?
+
+58
+00:35:32.000 --> 00:35:56.000
+And then to go through them all. So for me, it's this repeatability, confidence, all of that and feedback, fast feedback to allow me to just keep going and build the things I'm trying to build. Hey guys, I'm going to interrupt you for a second because we actually have some sponsor information to talk about. We have partnered up with educative.io to talk about an awesome set of classes that
+
+59
+00:35:56.000 --> 00:36:31.000
+they offer for learning all kinds of topics in programming, everything from beginner things to more advanced things like embedded programming. I know, Jason, you looked at some machine learning ones. Yeah, the machine learning course was awesome. They have all sorts of things related to programming, and it's a pretty cool setup. A lot of times you are needing to do your education in a place that may be noisy or loud. And so what Educative has done is they actually, all of their courses are text-based and in interactive notebooks. So you read the material
+
+60
+00:36:31.000 --> 00:37:13.000
+and you can do it pretty much anywhere because you don't need to put on headphones or anything that would distract you from the rest of your environment. So you're pretty much just reading, but better than a textbook, it's interactive. And so you can actually complete the examples and work on the projects as you're going through. Yeah, if you're like a kinesthetic learner and you're the type of person that needs to sort of do things to really absorb stuff, this is perfect. Because you actually have to go through and run the examples yourself and make changes and improvements. Yeah, I wouldn't have known the word kinesthetic. So thanks to Jason for giving it the technical name, keeping it real here. So yeah, they actually were pointing out
+
+61
+00:37:13.000 --> 00:37:52.000
+that Jason and I are no longer students, unfortunately, but a lot of you guys are. And we've mentioned in the past before the GitHub student developer pack, which is something you can sign up for as a student and includes all sorts of things from a ton of great companies. And Educative is one of those companies. And so if you're a student, check them out through that package. And if you're not, they have actually agreed to give us a discount code for all of our listeners. If you go to educative.io slash programming throwdown, I said that pretty fast, but we have it in the show notes as well. Yep, I'll put it in the notes. Yeah, you can get 20% off of any course. So Jason, so you said you did the machine learning
+
+62
+00:37:52.000 --> 00:38:33.000
+course. Tell us a little bit about what was it like doing that course? Yeah, I thought this was slick. So basically, they kind of walk you through the basics of doing some data science, handling some data frames, and they walk you through training a model. Again, the part I really love is the interactive part. So if you've ever seen Mathematica Notebook, we have Steve Wolfram on the show, so hopefully some of you folks checked that out. Or if you've ever played with iPython Notebook or Jupyter or any of these technologies, you kind of know what it's like to kind of get that instant feedback. It's actually really gratifying. And this is similar where it shows some formula.
+
+63
+00:38:33.000 --> 00:39:09.000
+You can go in and tweak it. You can see sort of how you can break it, how you can make it better. And it kind of gets you in that sort of test, retest kind of mindset, which is super exciting. They also have a set of from scratch courses that i briefly looked at and these are awesome they basically take you from almost zero knowledge all the way to you know kind of writing your first programs and being a developer right so i mean i remember when i started um you know when i was in grade school. And without knowing basic things like LS, right? Or find or just things like that,
+
+64
+00:39:09.000 --> 00:39:25.000
+it's actually really hard to get started. You start saying, okay, I have these two files. I need to merge them. Let me write a C program, right? And so what this does, it kind of walks you through. It says, okay, let's wipe this light clean and start from scratch. Here's a list
+
+65
+00:39:25.000 --> 00:40:09.000
+of kind of really good utilities and it gets you up to speed really quickly yeah they have a variety of languages javascript java c++ rust scala they're kind of all over the place and covering a wide variety of things so it's not just limited to a lot of the tutorials today seem to be python and i know jason's a big python guy i'm not so uh it always feels a little bit the tutorials today seem to be Python. And I know Jason's a big Python guy. I'm not. So it always feels a little bit sad when I go to click on some interesting programming topic, and they're kind of doing it in Python, just because sometimes it's a little hard for me, at least to kind of apply that to the work that I do. And I, you know, once you kind of are well established and know something, you can poke around at internet tutorials and pick up a gem or two. But having a curated course that goes, you know, through a sort of well
+
+66
+00:40:09.000 --> 00:40:38.000
+thought through syllabus and teaches you stuff in an order that makes sense is enormously helpful for actually learning the material and not just pretending like you're learning the material. And so I really appreciate that about being able to have actual courses. Yeah, totally. So the URL one more time is educative.io slash programming throwdown. It's case insensitive. You can type it however you like it. We'll also give a link in the show notes that you can check out. All right.
+
+67
+00:40:38.000 --> 00:41:33.000
+Well, I think it's time to go back to the interview. Thank you to Educative sponsor for today's episode. So what is the point then of continuous integration? What, you know, someone might say, well, I can just run my tests before I get push. Yeah, so I think it's easier to reason about continuous integration as you think about larger and larger teams, because it really is that point of integration. Right. And so I know for some of your audience, probably working in a large team on of the code base or maybe change a piece of code, a class, a function, whatever that they don't realize is being used somewhere else.
+
+68
+00:41:33.000 --> 00:42:26.000
+And so learning about those conflicts after long periods of work, and it's interesting, our definitions of long periods of work have changed over the time that I've been in software, but I've seen projects where entirely different teams fork something, work on it for six months, and then try to merge their changes back together. I mean, there goes another six months. Yeah, that's right. And so merging them together, you know, daily, less than daily, just saying, oh, okay, we made this change, let's merge it in, gives you the opportunity to identify any conflicts as they start to arise. They usually tend to be quite small. But what you're doing is effectively taking those two sets of changes, bringing them together, which is a system or is a view of the code base that neither of those individuals had, right? Bringing those two sets of changes together and then running the set of tests
+
+69
+00:42:26.000 --> 00:43:14.000
+on that right and then assuming that all works you know or i guess whatever it's happening on branches but then giving you the opportunity to bring them together um and then you know continuing to build on that right so people are taking making small changes to the code base uh and bringing them together and then that in git probably master but your default branch whatever it might be called trunk um is constantly in a state where you know it to be good right in an ideal world you get to what we would call continuous delivery which is i always have a known good code base, right? I haven't made changes that will cause problems. And so at any given time, I could deploy it, right? So continuous delivery,
+
+70
+00:43:14.000 --> 00:43:57.000
+you might be adding the packaging, right? Maybe I take that merge together code and build in today's world, probably a Docker image or something that would be the thing that i'm going to deploy or a jar file or a gem or whatever i'm working yeah um and and then what we do is internally and many of our customers do with our product is continuous deployment which is okay i have a known good asset or artifact why is it not in production already i mean it's got new capability. Let's put it in a production environment and have users have access to that, right? Yeah, that makes sense. Can you do like, I guess you could do like a nine to five continuous deployment and then turn it off on the weekend or something like that.
+
+71
+00:43:57.000 --> 00:44:42.000
+Yeah, it's an interesting question. I mean, we don't do that um we actually i mean our team is globally distributed so that's true yeah so we work much more than than those hours uh just because of where we are um but uh i think ultimately with like my history with continuous deployment the first time when we started this marketplace in 2011, we talked about doing it. And I was like, that sounds crazy. Deploying is always a disaster. Why would I want to do more of that? But really, it's about deploying. Deploying is a problem because you have three months worth of changes or two weeks worth of changes, whatever that might be. And so there's a lot of risk.
+
+72
+00:44:42.000 --> 00:45:10.000
+There's a lot of change and change is risk in your software environment. Ideally, you've done a great job with your testing and continuous integration. But now I'm pushing that out. I don't know which change caused the problem. But as you break those chunks down smaller and smaller, the risk is getting broken down into smaller and smaller bits. Right. So absolutely one, you know, one line of code could take down your entire production site. But if you push a one line change and production goes down,
+
+73
+00:45:10.000 --> 00:45:25.000
+you're not going to spend a lot of time thinking about what the cause was, right? You're just going to push the next one. You're going to fix it and repush it or you're going to roll it back and you're done. So you get to this state where basically we don't even think about deploying it's just
+
+74
+00:45:25.000 --> 00:45:59.000
+happening right and people are moving on to other things and so the the kind of fear or stress of the deployment has gone away yeah that's a that's a really good point there's this other part of this too which is uh i don't remember where i read this but but um i think it was in some game development blog but basically if let's say there's an issue with your login page, and that's one of 100 bugs that you have. Even if people can get past the login page, it's just my inconvenience. If you give this to a group of people,
+
+75
+00:45:59.000 --> 00:46:42.000
+whether it's testers or your final audience, 99.9% of them will report that bug on the login page they'll say oh yeah i couldn't have an email address with an underscore in it or whatever it is and none of those people that find that bug will report the next bug because they just feel like oh i'm done you know i did my due diligence now there's two three four bugs whatever i'll just i'll either live with it or i'll move on and so you only ever get the login bugs there's this huge perception bias and so as you said you get it smaller and smaller you'll catch you'll catch more and more things yeah that's really interesting i mean i think that the other thing that that speaks to for me is i do believe you know even with great continuous
+
+76
+00:46:42.000 --> 00:47:03.000
+integration um with with strong test automation automation and good coverage and all these things, there's no eliminating risk. So ultimately, you will ship bugs into production. That will happen. It's like everybody makes mistakes. It's a thing. Every intern does it at least once. That's right. That's right.
+
+77
+00:47:03.000 --> 00:47:43.000
+Probably more. Yeah. does it at least once that's right that's right probably more um and and so then you know you can't be relying on your users though to report all of the issues that they find right and especially if they're they say well i reported bugs before this is annoying so um having really great uh visibility into what's happening in your production environment. We use something called Rollbar. There's others like it, which is an unhandled exception service, I guess, basically. So when an exception is thrown in our code, something unexpected happens and we aren't catching it, right? Meaning no developer thought, oh, this is a condition that can occur and we know what to do.
+
+78
+00:47:43.000 --> 00:48:34.000
+Then it reaches a top level gets posted to another service we get notified and then we can say oh it's like a user is seeing a 500 error or whatever on our site because and then we can trace back here's the stack trace here are the like here are the parameters that were being passed at the time this is the user or this is the organization they're in, or whatever kind of information we might have, right, right, in order to immediately say, oh, there's been a spike in this kind of error, or this is a new error, something must have gone wrong. And we can go track that down without, without the user having to do anything. Right. And then we apply that to, you know, metrics that seem out of line, like this rate has spiked for whatever reason, or we're seeing this new log line that we've never seen before.
+
+79
+00:48:34.000 --> 00:49:36.000
+You know, what's up with that? And having that kind of visibility or observability on your platform is super valuable because of that effect like expecting that users are going to report issues that they see is just it's great if they do but it's not going to happen for everything you know to your point that happens in production yeah it totally makes sense yeah so um yeah i think i think um another really nice thing about CI that's integrated with things like GitHub is that you can guarantee that the person who wants to merge in this code has run all the tests. So, I mean, you see this all the time with people who don't have CI set up where um someone says hey i have this pull request that adds this new feature uh the the i've done i've made this mistake myself i mean i say sure the feature sounds pretty cool and then the next version doesn't work and and i'm totally not
+
+80
+00:49:36.000 --> 00:50:15.000
+expecting that because it was contributed code that that uh that that you know i didn't have in my mental model and ci kind of inoculates you from that right exactly so so there's an expectation you know when you when you put up the pr i mean first of all there's a check that basically says this can't be merged because we you know circle ci or your ci platform hasn't returned a positive status on that right so you can depending on the tools you use you can make these sort of things mandatory like it's impossible to merge uh a pr that doesn't have a set of tests that have passed uh like the whole sorry the whole test suite having passed not just the ones that were
+
+81
+00:50:15.000 --> 00:50:55.000
+associated with that the other um we can um you know plug in things like code coverage to that and say if the coverage has gone down significantly we actually have gone back and forth on that because code coverage is it's it's a whole other topic yeah i mean it's very context sensitive right i mean if you're writing a device driver or something might be very difficult yeah yeah yeah and then you can get these minor little oddities that change it to be down and then you know you can't merge but really you just added some whatever yeah yeah um but those sorts of things to really say okay now and and getting to the role of the code reviewer which is a bit different in every organization but being able to get the code reviewer to a place
+
+82
+00:50:55.000 --> 00:51:43.000
+where they're really looking for you know large-scale intent do i understand what you've done and therefore this feels like something that will be good for us if you're going back to future me and future other people, you know, is it maintainable? Does it seem like there are tests that execute the kinds of conditions that I think need to be executed to really, you know, validate what you've done? And really be thinking high level versus, I mean, as a code reviewer, if I'm expected to figure out if the logic is all correct, meaning like I'm going to read through and parse all of the context that you had in your head or try to reverse engineer what you had in your head and establish with the following set of inputs, will I get the outputs I expected? That's a really hard job to ask a
+
+83
+00:51:43.000 --> 00:52:37.000
+code reviewer to do. As a reviewer, I want to look at your tests, going back to why you would have tests, and say, these tests make sense as testing the input. And since you've obviously run them, then I know the output is correct given these inputs. So I have confidence in the correctness of your code. And now I'm looking at, is this long-term maintainable does it structurally make sense is it in the right place in the code base does this feature make sense or does it feel like the right implementation of the product requirement those sorts of things that is where a human's intelligence can be more more useful yeah yeah totally makes sense so um okay cool so So, okay, cool. So I think we've motivated continuous integration for folks out there. Just one thing, continuous integration doesn't have to be for big teams or anything like that.
+
+84
+00:52:37.000 --> 00:53:17.000
+If you look at over the past, like over the shows, I've pointed people every now and then to projects I've worked on. All of them have CircleCI integration. And some of them i worked on by myself they didn't really turn out to anything but that's always kind of where you start is with that so that you can go back and um remember remember future you is basically a different person and so you're always going to have multiple um perspectives on anything write, even if you're doing it by yourself. Yeah, absolutely. And I think earlier I was talking about larger teams just to give the context of how did this come to be. But it's funny.
+
+85
+00:53:17.000 --> 00:53:52.000
+I mentioned sort of not being able to imagine a world without it. And similarly, you know, the first thing I do when I sit down to write something is like, OK, what's my testing strategy? Even for this silly little pet project or whatever, what's my testing strategy going to be? You know, what tools are available to me, depending on the language or whatever? And then how am I going to attach CI to this? Yeah. And great thing i think you were saying this before we jumped on but um you know with circle ci or others like us you can get some some free build capacity for your small hobby projects and things
+
+86
+00:53:52.000 --> 00:54:36.000
+like that so this stuff is easy to come by uh you know in our case you don't have to do anything you basically click a button add your project you're good to go um and and then it's yeah it's great you come back in six months and say oh oh, yeah, I wanted to add this tweak or this capability. And you can jump right back in, do a little bit of work and know that you didn't break something while you were in there because, you know, you didn't have to load the whole thing back up into your head. You have that confidence with it. So, yeah, now I kind of never do anything without without that yeah same here and you know the thing too is i've gotten better at writing tests when i started out i had this you know when i started my career i had this misconception that when you wrote the tests
+
+87
+00:54:36.000 --> 00:55:00.000
+more often than not you would that bugs were because of some flawed assumption and when you wrote the test you'd write it with the flawed assumption and you would give yourself a green light. And I'm not saying that doesn't happen, but as you get better at writing tests, that happens very rarely. So for example, let's say you're writing a sort function.
+
+88
+00:55:00.000 --> 00:55:53.000
+So you're expecting data to be distributed in a certain way where you want to write your own sort function that's going to be better than the generic sort, right? So, you know, in your test, if you have some numbers and then you know what they are sorted and you make that your test, yeah, you can maybe fall into this trap, right? Or maybe you didn't think about three-digit numbers, like your whole trick was that it was on two digit. Right. But but another way to write this test would be to just generate oodles of numbers, sort them with your sort, sort them with some other sort, whatever is built into C++ or whatever it is, and then make sure they're the same. And you can do that 10,000 times. And if you write a test in that way, you're much more likely to catch even a flawed assumption. And so it turns out as you get better writing tests, you've more often than not,
+
+89
+00:55:53.000 --> 00:56:11.000
+now when I write a test, it breaks. You know, the first time I run it. Yeah, that totally makes sense. I mean, I think that there's some trivial things we do where honestly, you just get good at saying this is trivial. I'm calling one function. Yeah. And that function is a system library. I'm just going to assume that it's going to give me the right result. Right.
+
+90
+00:56:11.000 --> 00:56:42.000
+Yeah. And I think you kind of get stuck writing a bunch of those. And then you think, oh, my gosh, it's so painful. So like everything, there's an ROI question. Right. And if I'm trying to start adding tests, I'm going to say, what's the most critical piece of functionality where the code changes regularly, and I'm going to start building up tests around that, right? Or I have to go refactor this thing, or there's a bug here. That's a big place. Because if there's a bug, it's obviously not tested, right? So I write the test that demonstrates the bug.
+
+91
+00:56:42.000 --> 00:57:21.000
+This is the place that I most commonly do effectively test-driven development. I write a test that demonstrates the bug and proves that it's there and then fix it. And if it doesn't fix the test, then I didn't fix the bug, right? So it's a great way to take on those. And if there's a bug, then obviously that logic was harder to reason about, right? Or someone just made a typo or something but i mean it got out so put that test in there and now that you will never have aggression on that bug because now it won't pass the test right yeah so um yeah and there's some interesting just what you were talking about there reminded me of a couple things one some some investment has been made in generative
+
+92
+00:57:21.000 --> 00:58:00.000
+testing uh some some frameworks have this where you can just say, these are my inputs. And sort of this is the transformation that I would expect for the output or whatever. And have those inputs just be generated randomly. I have a mixed relationship or mixed feelings about that because I want my testing to be deterministic. Yeah, that makes sense. So what I will do is if it generates specific cases that fail, I will memorialize those in actual, like, always run this test, right? Always run these inputs. And then maybe at the end say, and generate some random stuff,
+
+93
+00:58:00.000 --> 00:58:45.000
+and we'll see if that finds anything else. But again, if I find those, like, I would hate for it to pass the next time because those particular values didn't get generated right that doesn't feel right to me yeah um yeah we had this issue with with you know i do a bunch of machine learning work and in the beginning we didn't set the random seed and the theory behind that was it should it should be robust you know it should work with any random seed um and that was sort of our our um it's almost like became like a principle thing like hey if it if it didn't pass all the time then we need to work on it and it was just we just gave up we should forget it because because you know it's just so hard to write something when you're dealing in the realm of sort of statistics to that that works a hundred percent of the time and if it
+
+94
+00:58:45.000 --> 00:59:51.000
+doesn't if you're doing good ci and it only works even 99.9 of the time your ci will will still yell at you and so we finally said no forget it let's fix the random seed and then we can run the test maybe a hundred times in parallel right right yeah huh that, that's actually really interesting. So the other thing that I was thinking about there, when you're talking about running your sort function and running it against the original, is you can actually apply that less so in testing, but to larger scale system design and it's a it's a really cool pattern that that i we've deployed in a couple places and i've seen other people deploy but um where you're you're trying to replace a system and so you slowly run things through both right and make sure and and i guess this happens at very small levels in things like um in like just in time compilers and stuff like that where you compare two different compile paths and make sure that you got the right result um but uh being able to run
+
+95
+00:59:51.000 --> 01:00:37.000
+totally different systems uh and then say okay do i consistently get the result that i got in the old system now i feel like this one is is for primetime, right? Like we've deployed things in production that were just either big enough, complex enough, important enough in terms of the business that we would run them in the background and just look at the output and, you know, not tell customers that we were running because it didn't matter to them. And then say, okay, yeah, we're consistently getting the same value out of this new system. So maybe it's like faster or a different type of deployment, whatever it might be. But now we have real production level confidence that all the bizarre combinations and permutations
+
+96
+01:00:37.000 --> 01:01:27.000
+that we see every day are going to turn out right because we've run it against the known good version. Yeah yeah that makes sense it totally makes sense so so okay so for folks out there who you know it's okay running tests on your machine seems relatively straightforward so let's say you um you're doing something in python you've already installed python you've installed a whole bunch of dependencies for python and so that that system that's running your code can also run the test it seems pretty reasonable once you go to the cloud i think that's where i think a lot of folks will get lost like like how do i get that machine out there or maybe thousands of machines out there to have this same setup as as my desktop so that i can run the same
+
+97
+01:01:27.000 --> 01:02:10.000
+tests like how does how does circle ci kind of work at a high level for folks who've never used it yeah well there's there's actually a really great um sidebar in there around using ci in general uh which is the you know eliminating effectively the, I don't know, worked on my machine bug, right? Because you're not deploying your laptop into production. So it is like your environment needs to be able to be replicated with exactly the right dependencies and all the right versions in order to be able to support the application as you built it and tested it right so ci in addition to validating your code validates that you've
+
+98
+01:02:10.000 --> 01:03:00.000
+effectively uh established that memorialize that whatever word you want to use and so if you look at many frameworks like you mentioned python um i'm trying to it depends on which package management system you use but there's requirements.txt, right, which basically lists versions and you can capture and fix the versions that you have in your environment. And so what you would do is spin up a CI environment. I'll go into the details of that in one second. Spin up a CI environment and say, you know um pip install or whatever it is yeah that's right from from requirements.txt and you'll replicate that exact environment right so um in order to speed that up we do things like allowing you to cache your dependencies once you've created that
+
+99
+01:03:00.000 --> 01:03:23.000
+uh so you can load them back in instead of, because dependency resolution takes some time. You're doing it in every instance of every build that's being run, then you just, you burn a lot of time on that. And we spend a lot of time trying to make your build as fast as possible. But effectively it's that because the default, I'm trying not to go into the entire system of CircleCI, there's a lot to it,
+
+100
+01:03:23.000 --> 01:03:47.000
+but the default environment that your builds will run in is a Docker container or a set of Docker containers that you can compose together. And so you can actually build an image that's just like what you would use in production, either with those dependencies already installed or just make sure it's exactly the right version of Python, the same thing that you're using in development and plan to use in production
+
+101
+01:03:47.000 --> 01:04:29.000
+again pass the requirements.txt or gem file you know whatever it might be depending on the tools you're using um and then quickly re-establish that environment and then execute the tests in that environment um and then we throw it away so um other than what you can pass in and out through caches you're basically getting a clean environment all the time so you don't have that um i'm trying to keep using the python example so you know dot pyc file right where you like deleted the code but the compiled version is still cached there and so your code doesn't break until it gets into production yeah yeah because it was clean and doesn't have that file anymore and everything blows up yeah or you have you know
+
+102
+01:04:29.000 --> 01:04:56.000
+10 000 python libraries on your computer and you have no idea which ones this code base is actually using well yeah i mean you deploy it on let's say circle ci and it's the tests are all gonna fail and they're gonna fail because package XYZ is missing, and you realize, oh, okay, I need that one. I don't need all 10,000 that are on my machine, but I definitely need that one. And you could kind of, at worst case, you could kind of golden line search, you know,
+
+103
+01:04:56.000 --> 01:05:54.000
+and just eventually get all the packages that you need in there. But yeah, starting with a clean environment is a good way to guarantee that when you to guarantee that when someone else takes your code, that it works, or at least that you know that they have the bare essentials that's needed. virtual and for um yeah i'm trying to think of like the ruby version that we see is but um those sorts of things to say like this is my project these are the dependencies for this project only use those because it helps me find those problems faster yeah but the real problems like everyone has been through that experience of deploying something even if they have a very simple environment you know it's a single web server you put up your little flask app or whatever it might be, and it doesn't work. And then you sit there, you know, scrolling through syslog or wherever this stuff is ending up,
+
+104
+01:05:54.000 --> 01:06:38.000
+trying to figure out what it was that you didn't do. And you're remoted into the machine. So you have this tiny terminal window, and I'm always too lazy to make it bigger, because I think I know the answer. So it's like, I'm looking at window and and uh trying to run vim through it and you know it's like it's like just this is just painful yeah anything you can do on your machine to not have to do that is a good thing yeah exactly and so trying to get you that that very similar environment in circle ci to vet those things, your dependencies, your versions, all of those other things that we don't, when we think about testing, we certainly, this is what we've been talking about the whole time. So me, myself included, we think about testing the code,
+
+105
+01:06:38.000 --> 01:07:18.000
+right? Did I write the right logic in here? But also I want to make sure that my system is complete, right? And that i have all those pieces um and that's another thing that i'm going to like again the dependencies or whatever that i'm going to capture in a ci environment before i you know find out in production that i i don't know i mean even the version of the database that i'm using this is something that people do all the time honestly right yeah i use my mac os like homebrew or nix or whatever to install my sql but it's the latest instead of the one that we actually use in production and they fixed the bug or added a keyword or something and then i learned that so you know running your tests like
+
+106
+01:07:18.000 --> 01:07:36.000
+like saying in your um in your circle ci config i want to use to use MySQL 5.6.2 or whatever is actually in production, same thing, you're going to realize, oh, you know what? I wrote something that's not compatible with the one that we use in production. I'd rather find that out now than when I've deployed.
+
+107
+01:07:36.000 --> 01:08:01.000
+Yeah, that makes sense. And so to give people some, so people might not know what a Docker image is. I'm going to try my best. It's kind of a hard thing for me to wrap my head around but but basically imagine someone gave you um just a completely clean os so you started from scratch on you it could be windows linux whatever it is and then they said uh okay you know get your app up and running well you didn't you know you
+
+108
+01:08:01.000 --> 01:08:46.000
+didn't install the dependencies you do all of this setup, you'd start install MySQL, you'd start it, maybe create the database. So there's some, some, some skeleton, some schema there, right? They say, okay, now I'm ready to run my app. Right? So what Docker does is it, it gives you the ability to create an image, which is basically a snapshot after you've done all that setup and then within that and then you can create a container which is an instance of that image so in other words I have the image which says okay here is the the blank slate with everything that I need and and in the case let's say circle CI I might want to run a hundred tests but I don't want the 99th test to be influenced by the 98th test.
+
+109
+01:08:46.000 --> 01:09:30.000
+So I could just create 100 containers based on that image and each container could run a test. Right, exactly. So I think that's a pretty good summary. So how do you do this i mean i mean so like it's just it must be just can you give us some like fermi estimation or some some like idea of the scale it must be absolutely astonishing the number of docker images docker containers like just absolutely because you know anyone can can run circle ci uh on their project for free. And so you must have just thousands and thousands of people.
+
+110
+01:09:30.000 --> 01:09:51.000
+We do. One of the things that makes Docker great for this, and so sorry to actually answer your question before I move on to why Docker is great for this, we're running thousands of instances, like the largest machines that we can get from various cloud providers. And then within those, we're slicing them up
+
+111
+01:09:51.000 --> 01:10:35.000
+into many, many Docker containers, right? So as you said, like instances of Docker images. And, but what makes Docker great for this in terms of like shuttling things around is a Docker image is comprised of layers. the entire operating system, right? The layer of the original Ubuntu image and you modified it with the package, you know, the dependencies, whatever you installed. And that when you save that, it creates a layer on top
+
+112
+01:10:35.000 --> 01:10:54.000
+and somebody else modifies it differently and they get their own layer, but we can reuse the underlying layer. It's not that we do anything. I mean, this is part of the Docker technology. And so we only have to move around a lot of these small layers and bits, right? Got it.
+
+113
+01:10:54.000 --> 01:11:30.000
+So we can cache and reuse common things. Like a lot of our customers use the same MySQL instance, right? Or the same MySQL version from the same image. And so that image will be on most of our hosts already, which makes things faster to start up and means we don't have to move as many things around the network. It's just the customizations of, you know, in people's specific images that they move around. In fact, we provide what we call convenience images, which are optimized for our environment. So we'll take databases and we'll tune how they're accessing the file system and stuff like that to be as
+
+114
+01:11:30.000 --> 01:12:11.000
+fast as possible in a CI environment. Because honestly, if the system crashes, it's not like you're trying to recover the data in your test, right? So reducing things like F-Sync and stuff like that to minimize overhead and allow your tests to run faster is something we spend a lot of time on because we want our customers to be able to get their job done as quickly as possible. And so because we provide these highly tuned images, more of our customers will use them, which means we also get the benefit of having that stuff, you know, pushed out to all the machines that are running. And so we move less stuff around the network and people's builds run even faster
+
+115
+01:12:11.000 --> 01:12:22.000
+because they're accessing stuff that we've already pulled down for them. That makes sense. So you have on the order of thousands of the largest instances. This would be, I guess, machines is maybe like 64 cores or something like that
+
+116
+01:12:22.000 --> 01:12:40.000
+and oodles of RAM. I don't even know, terabyte of RAM or something like that. And oodles of RAM. I don't even know. Terabyte of RAM or something. Maybe a half or less. Half terabyte of RAM. Yeah. It depends on the cloud provider and whatever. And so, and then one of those can handle like some number of Docker images.
+
+117
+01:12:40.000 --> 01:13:30.000
+That actually seems, so there's a remarkable efficiency. You know, there's definitely an economy of scale here because i would have thought that that would have been like at least 10 times as many instances yeah i mean we we pack things in right and so um we when when a customer builds uh like any particularly complex um base, customer is generally going to build out what we call a workflow, which is comprised of multiple jobs. And the jobs can be run in parallel or in series, we basically give you the ability to define a graph, right? These are the dependencies, and this is when these can run. And those actual jobs tend to be quite short. And so we're constantly, I mean, we actually use an off-the-shelf job scheduler called Nomad, which is built by HashiCorp.
+
+118
+01:13:30.000 --> 01:14:17.000
+But it is looking in this giant pool of available resource and saying, where can I pack these in? And they're on and off machines often in seconds right so if you thought about just trying to run the volume that we run and imagined it all sort of like running in parallel or whatever yes the you know the orders of magnitude bigger but because they run in short cycles and they i mean we were able to pack them in wherever we have space um which is why we use the largest machines we can get because then you can pack it much more efficiently right if i've got like a 2x and a 4x and a 1x kind of thing then i can pack those into one machine but if you know if i have much smaller machines i'm like oh i don't
+
+119
+01:14:17.000 --> 01:15:05.000
+have one of those available right now i gotta wait you know whatever so um we basically just make this giant blob of compute for lack of a better word and that gets partitioned up to to push all these jobs through so yeah yeah and then it cycles over the course of the of days obviously like our our highest load is still midday pacific time sort of um we have customers all over the globe, but not quite as much load as we have when Silicon Valley is doing its thing, I would say. So we scale up and down that entire system. We rotate out old boxes so we can get patches and things in place. There's a lot happening behind the scenes that you probably wouldn't think about. But that's
+
+120
+01:15:05.000 --> 01:15:53.000
+what makes giving this to someone like us valuable, right? Because that's work that you would do for your own CI system if you were trying to run your own CI system. Because we don't have to have all the excess capacity for those spikes of builds that you might have as one of our customers, because one of our other customers just stopped building and we put it into that same space right yeah that makes sense and as you said i think that the if you if you're doing this yourself you're either going to spend a ton of money and you're going to have a whole bunch of wasted resources or you're going to inevitably fall behind so so at at 4 59 p.m when everyone's trying to catch the shuttle uh you're going to end up falling you know three hours behind on your ci and then now uh you know at at 8 p.m everyone
+
+121
+01:15:53.000 --> 01:16:34.000
+has to scramble to find out how a bug got introduced you know when the system finally catches up right and yeah that circle ci kind of ameliorates all of that by saying we're you know handling the scalability for you so you can still get the results right away yeah i think that i mean whatever the time might be in your particular company that time exists right whether there's a 2 p.m cut off or you know whatever it might be um and it's like a pretty it's pretty 101 queuing theory kind of problem, right? Like if to us at such a large scale, the arrival rates look pretty consistent, right? Yep. But within the microcosm of a company,
+
+122
+01:16:34.000 --> 01:17:18.000
+I mean, think month to month also, right? Like there are the entire kind of e-commerce sector doesn't ship a lot of code starting maybe mid-November because they're getting ready for holiday season and it's not time to introduce new stuff like it's locked and all we need to do now is sort of make sure we have enough capacity online and not break anything right as we head into the most important sales cycle of the year and so you know they're using not a lot of capacity and then but as the you know in, as everyone's trying to get everything available for that, they're using a ton of capacity. And so, you know, it happens in the course of the day, the course of weeks, the course of months and over the cycle of the year.
+
+123
+01:17:18.000 --> 01:17:35.000
+I mean, we see these really large kind of differences across different sectors and stuff, but it levels out for us because we just have such a big cross section of all these companies. Yeah, that totally makes sense. Totally makes sense. Yeah. My guess is yeah, but there,
+
+124
+01:17:35.000 --> 01:17:49.000
+yeah, even then there's different, different products, especially different. Once you go to different regions of the world, different products coming out at different times, different deadlines. And so you can amortize, you know, all of so that so that um right you don't get these huge spikes
+
+125
+01:17:49.000 --> 01:18:35.000
+um yeah it levels out i mean we we do regardless of all of that we have you know we have huge customers who show up with huge you know workloads at a given time or whatever so we spend a lot of time um optimizing how fast we can get capacity online online so that if we ever get caught with a big spike and it's starting to wait, we bring machines on really quickly. We optimize the startup time of every machine, all that kind of stuff, so that we can just add that capacity. And we also keep a free buffer pool, however you would think about pools, right? Sure. a free buffer pool you know however you would think about pools right sure um but but yeah definitely like the the smoothing that happens at larger and larger scales is a is a great advantage for us so one thing i'm sure a lot of people are asking we talked so many times about how it's
+
+126
+01:18:35.000 --> 01:19:24.000
+it's free and it is free and if you're doing anything uh any type of project i highly recommend using it i wish i used it on my phd i don't think circle ci was around when i was doing my phd but uh um learned a lot of lessons the hard way so definitely jump in there but then the obvious question is how do you make money right if everything is free and so where what's sort of the pricing and and what is like like how uh how does this how does circle ci work as sort of a business yeah so we actually um making money is not a problem for us i guess is the short answer to that but sure but uh you know so we we uh have a usage-based pricing model which is actually a change for us over the course of the company it used to be you bought a certain amount of capacity uh sort of think about how you buy
+
+127
+01:19:24.000 --> 01:19:53.000
+bandwidth for your house you know it's like whether you're using or not you have this much capacity and if you hit the limit of that capacity then you wait um and that was simple and people understood it it was good from that perspective and you have predictability um but you know as we've grown and as our customers have grown you know suddenly they say, well, we have hundreds of engineers working. We can't make people wait. How do we manage that? So we shifted to a usage-based pricing model.
+
+128
+01:19:53.000 --> 01:20:31.000
+And so for free, we basically give you a limited number of minutes per month sort of thing if you're a free project or a small user. We do more for open source projects as a means of giving back to that community we use lots of open source we try to contribute back to the code but also want to support the open source community um so we give them more capacity got it that explains why because i i have several projects i've never hit any limit um and i think it is as you said they're all open source projects yeah and i mean I mean, the majority of those, honestly, like the majority of open source projects just don't build that much. Yeah, that's true, too. It's like a little library.
+
+129
+01:20:31.000 --> 01:21:06.000
+Someone comes along and gets a patch. But then we have open source projects. So PyTorch actually builds on CircleCI and is a very large open source project. A lot of contributors. It's running a lot, and we can't just give that kind of capacity away for free. Yep, that makes sense. But then in the middle, but we have a lot of commercial customers, right? We have customers whose entire engineering org of a thousand engineers or whatever um it's
+
+130
+01:21:06.000 --> 01:21:49.000
+built on circle ci all day every day and so they're they're well over the free limit uh so how does that work so they um i guess i guess the code is still safe in a sense so so so those folks um it's not through github or maybe it's still through github but it's a private oh i see but it's a private repository and so so their uh their docker image goes to you but it doesn't no one else can see it and then you run their tests and then yeah right exactly i mean we have isolation between all these parts of the system that i was describing and we wipe everything out in between builds and and isolate networks and i mean we do a lot of things ah that makes sense to build a multi-tenancy system where we can have this kind of packing
+
+131
+01:21:49.000 --> 01:22:30.000
+and get the efficiency uh without the without the security risks right so um so yeah they there it'll be their private github account um and you know all of their users have GitHub users within their GitHub org. And then we're pulling from that, pulling the code down, finding the images that they want to use. Same process, but we do that for very, very large organizations. I mean, we have a broad spectrum of organizations from kind of the two, three people in a garage or where you know we work i guess is probably where they are now but yeah that's right maybe i don't know what's going
+
+132
+01:22:30.000 --> 01:23:07.000
+to happen at we work but we'll see so that that landscape has changed it was the garage was the joke when i although i've never actually worked out of a garage but no um so so you've got two three people but if they're building constantly then they're you know they're starting to move into the paid plan but their usage will be low. Yep, makes sense. Again, we have public companies using our platform, and so really, really large engineering teams, many, many different teams within the engineering organization doing mobile. We have Linux and Windows and iOS or macOS. So they can be doing a multitude of things.
+
+133
+01:23:07.000 --> 01:23:23.000
+And that's just all coming out of that same capacity pool in terms of their credits, right? So they basically sign up for credits and then use them to support your usage. Got it. If someone isn't using GitHub, can they still use CircleCI? What does that look like?
+
+134
+01:23:23.000 --> 01:23:39.000
+Yeah, so We have support for Bitbucket and we're adding some others at the moment. GitHub has been, certainly for cloud-based version control, has been the dominant player for a long time, but the market is shifting.
+
+135
+01:23:39.000 --> 01:24:05.000
+Yeah, right. We had seen people going to Bitbucket for a while. We see people moving to GitLab or starting out on GitLab. So yeah, we basically support multiple. So yeah, I think the challenge with GitLab is you can host your own GitLab. And so, yeah, how would that work? So someone's hosting their own GitLab.
+
+136
+01:24:05.000 --> 01:24:23.000
+Can they still use the CircleCI plugins? Like, is that a thing? Yeah, so, well, there's a couple things. One, we do actually have a behind-the-firewall solution, or we call it server. So you can take CircleCI and run it yourself. Of course, you lose some of the things I was talking about. Yeah, that makes sense.
+
+137
+01:24:23.000 --> 01:24:54.000
+Everything that we do to manage the scale and different types of compute types and those sorts of things. But for large organizations that have dedicated teams to run this kind of thing and maybe they have their source control behind the firewall also and want to work in that way. So we do that for GitHub Enterprise. And then for GitLab, which we're working on now, it will be sort of a, I don't really know how to describe,
+
+138
+01:24:54.000 --> 01:25:44.000
+but basically a conduit back to our cloud from the server side. Yeah, that makes sense. If you have GitLab installed. And that, I mean, ultimately our customers tend to be coming to us looking for not just great CI, like in terms of the developer experience and how you do config and all those sorts of things, but also us managing it. Because that's another big step in the value that we can provide and work that we can take on so that they can focus on, you know, building their product. Yeah, that makes sense. So, um, yeah, this is amazing. Yeah. So just to, to wrap up the, the, the CircleCI a little bit, then I want to jump to some other questions. Um, everyone should use CircleCI. So everyone out there, try it out. Uh, hopefully
+
+139
+01:25:44.000 --> 01:26:26.000
+you're using GitHub or, or GitLab or Bitbucket. One of these source, try it out. Hopefully you're using GitHub or GitLab or Bitbucket or one of these source control for your personal project. But if you're in high school, if you're in college, check this out. It's going to be really useful. I've gotten to the point in some projects where it was a good idea, but without any tests, it just got too hard. I mean, at one point I was making this video game. This was in high school and it was a good idea but without any tests it just got too hard i mean at one point i was making this video game this was in high school and it was a hockey game you know i'm also from toronto so so a big hockey fan and i was making this hockey and there was a bug and i had to play the hockey game to the third period to see the bug and i did this like four times and i couldn't figure out the bug it took about an hour or
+
+140
+01:26:26.000 --> 01:26:55.000
+maybe 20 minutes each time so I should forget it and I stopped working on the project right and you know don't don't be like me don't pay yourself in a corner that way uh if you if you already have projects like that you can save them you can rescue them with good tests um I actually wanted to ask you about what is the sort of interview process like so first of all are you hiring software engineers, data scientists, those kind of folks
+
+141
+01:26:55.000 --> 01:27:30.000
+yeah absolutely both so we have a large my engineering organization is about 90 people and continuing to grow. So we're always looking for people in various roles within engineering. And then data science sits outside of my team. Although within my organization, we have some folks working on data from a product perspective. So as you're using CircleCI, right, understanding how fast are my builds running?
+
+142
+01:27:30.000 --> 01:28:10.000
+What are the trends? Are there specific, you know, flaky tests or are there tests that are constantly failing that maybe we need to go work on? Like providing that kind of insight to our customers. So we have folks working on that. But then from a data science and analytics perspective, it's all we also do work around, you know, our business, how our business is functioning. And then from a product perspective, you know, how are people using this? Are they getting what they need? What can we do? You know, how can we change the way that our application works to provide them, you know, better, a better experience that will help them do what they're trying to do better. Right. So we, we, we take advantage of, um, of the data that we have. I
+
+143
+01:28:10.000 --> 01:28:53.000
+mean, we've been running this system for eight plus years. We've hundreds of thousands of projects building every day. I mean, we have a lot of data is basically what I would say. Um, so yeah, we're, we're constantly looking for help across that whole spectrum. Yeah, so what's an interview like? So someone shows up straight out of college, shows up to CircleCI headquarters. What's the day going to look like for them? Well, interestingly, to start on that, we are actually distributed fairly globally in terms of our engineering team. So we tend to do a lot of interviewing remotely. We spend time talking to each other on video.
+
+144
+01:28:53.000 --> 01:29:41.000
+And the process, effectively, there's a screen of some kind like any other. You submit your application or give us your resume and tell us a little bit about why you're interested in working with us. And then you would probably meet a hiring manager who would ask you some high-level questions about your focus, things that you've done. And then we do a coding challenge. This is an interesting thing, I think, in the industry that we've all gone around in different directions on but ours is a it's a homework assignment effectively or take home and we try to get you to time box it to two hours and you know you spend some time working on that problem and the goal is that you can then come have a conversation with us about what you did
+
+145
+01:29:41.000 --> 01:29:58.000
+because we've we've tried in the past doing live coding, you know, like I'll sit here and stare at you on video while you type. Yeah, right. That's painful. It's brutal. It's the process that I went through as we joined CircleCI because they wanted to vet us as engineers.
+
+146
+01:29:58.000 --> 01:30:29.000
+And I was like, I swear I know how to write software, but I cannot in this moment remember how to write code because there's someone staring at me. And it's just very, it's not how software gets written. And the editor doesn't, doesn't give you any flexibility, right? I mean, it's like trying to run on concrete, you know what I mean? There's no tab completion. There's nothing. Yeah. Oh, well, well in this case we would, uh, we would screen share. So you would use your, oh, that's actually good, which is, which is a more, you know, more comfortable situation. It's certainly better than trying to write code on a whiteboard, I think.
+
+147
+01:30:29.000 --> 01:31:08.000
+Yeah. Right. And, you know, it's, I will say one of the places that I always do test-driven development is in a coding interview because someone will say, this is what I expected. I'll be like, okay, so if this test passes, then I have done the right thing. You know, it's a great way to, to validate that you, your understanding of requirements. But anyway, we don't do that anymore. But we do ask you to take home, you know, to take this thing that has some written code and you're going to work on it. And then come back and have a conversation. You know, what did you think of it? How did you make these decisions? What would you do next? Those sorts of things. Because it's a much more comfortable environment. You've taken some time to think about it how did you make these decisions what would you do next those sorts of things um because it's it's a much more comfortable environment you've taken some time to think
+
+148
+01:31:08.000 --> 01:31:56.000
+about it and honestly most engineers that i know like to have some time to reflect on things uh and sort of digest them right it's in the moment uh it's not often the best for for software developers like in the moment it's kind of like quick banter about stuff especially when you're an expert the person asking the question has asked it a hundred times and then it can be so hard to be positive when the person's just kind of like yep yep yeah because they've just been through it so many times right and it's easy to feel like wow everyone at this company knows bubble sorts so well like so i'm so intimidated right but the reality is they've asked that question a thousand times right and so yeah interviewing is a big challenge so yeah i actually love this idea
+
+149
+01:31:56.000 --> 01:32:16.000
+of of sort of this homework assignment and then you can have just like a more socratic discussion right right exactly like you've had some time to think about it. This is like, this is the, it's closer to the real world. Like tell me what your experience was. And then we sort of talk through it and ask some specific questions. Maybe ask some questions about choices you made or like whether you, and whatever.
+
+150
+01:32:16.000 --> 01:32:55.000
+So I'm not gonna give you too much detail because we still use the same process. Oh, sure, sure. Yeah, yeah, no spoilers. And then we have another sort of more higher level system design level or system design oriented um discussion and in that case we sort of talk you through what we're looking for and you would talk to us about how you would design the system in certain ways to meet those uh those requirements um and then uh and then we do a more product oriented conversation which is usually more um based
+
+151
+01:32:55.000 --> 01:33:53.000
+off of your experience uh and so this is interesting because you're talking about kind of new grads and we we adapted a little bit for that but um even i mean you just talked about building a game in high school like like new grads from college. I'll say these days because I'm that old guy. Like I did not I had not built a game by the time I graduated from college. Like I basically knew a tiny little bit about software development. Right. So, you a product management group, if you've had that experience, or how you think about the customer and break down the problem and stuff like that. A little bit outside of the CS fundamentals perspective and more into real work as a software engineer. As a software engineer, as much as we like to ask questions about, well, we don't ask a lot of questions about bubble sort but like we don't all spend our days writing bubble sort over and over right like we're trying to solve customer problems we're trying to help them you know have a great
+
+152
+01:33:53.000 --> 01:34:38.000
+experience on our platform and we're trying to prioritize with a limited number like a limited team uh all of the things that we could go pursue and really drive maximum value for the business and for the customer. And so that's a big part of what we do every day. And so really having a conversation about that and kind of understanding how people think about those sorts of scenarios, how they think about breaking down work and validating things. And of course, we live in this iterative, agile world, you know, kind of experiences with that. Yeah, that makes sense. And people could do a lot of this in college. You know, I think that if you work on a team, so if you have a senior design project, you're going to you're going to have to coordinate and you're going to deal with a lot of these issues.
+
+153
+01:34:38.000 --> 01:35:27.000
+And and yeah, I think one piece of advice we give a lot of folks is just build stuff. You know, as you build things, you're going to realize we talked about tests, but you realize a lot of different. You'll have to sort of plan your time. You'll have things that other people want from the thing you built that you might not be able to fulfill. Right. So you have to prioritize that. And these are all really good experiences that anyone could have right now um yeah so you said you're distributed so that means that if someone is in i don't know london they stay in london like like how does that whole thing work is there a lot of communication on slack like what's a distributed company like yeah so um we have specific uh countries at this point where we're incorporated or have
+
+154
+01:35:27.000 --> 01:35:58.000
+entities and so um that includes japan uk uh ireland germany canada and the u.s um and and yes so most of the people outside of um outside of san francisco so our headquarters is in san francisco but there's actually a very small portion of the engineering team in san francisco Outside of San Francisco. So our headquarters is in San Francisco, but there's actually a very small portion of the engineering team in San Francisco, like marketing, finance, revenue. We have a bunch of people in San Francisco. So mostly people are working from home
+
+155
+01:35:58.000 --> 01:36:36.000
+kind of in these different areas. We do have an office in Toronto, actually. Oh, cool. And Zoom. We use a lot of zoom a lot of slack um we uh we try to organize ourselves in a way that the time zones are not too challenging but it depends you know different teams have different yeah that is a very hard problem right i mean because you have in your case you mentioned japan and then you have london that's what 12 hours or something right yeah um yeah so there's well actually that that kind of ends up being eight eight how does it work uh yeah sort of like tokyo to san francisco is about eight hours
+
+156
+01:36:36.000 --> 01:37:31.000
+oh okay san francisco to london or dublin is about eight hours yeah so if you try to make a meeting with people in three places right somebody has a terrible time. We try not to have, you know, one team that spans, you know, all three. I think we have one that's, that's got, you know, too many time zones right now. It always happens, but we, you know, we try to organize ourselves. And as we, as we continue to grow, it becomes easier to say, you know what, we'll just build this whole team in Europe or we'll build this whole team in West Coast. West Coast North America plus Tokyo or something like that, right? When you're smaller and you just have one expert or two experts in this thing and they happen to be in different time zones, you're like, well, you're on the same team now. So it can be a challenge but yeah a lot of we we try to um do as much async as we can it can be challenging
+
+157
+01:37:31.000 --> 01:38:09.000
+it can create some overhead but it's also it creates some positives right like i think there's things that we end up doing when we're all co-located um that we would break the habit as we're distributed like documenting things effectively. Oh, that's a good point. Our decisions are, you know, where it sort of forces practices that are actually good practices, even if you're all together. And actually, my favorite thing to call out, that's a great practice. And, you know, people say, how do you know that people are getting, you know, are doing their job, right, In a distributed team. And when, when someone asked me that, it makes me think that when you're
+
+158
+01:38:09.000 --> 01:38:51.000
+centrally located, asking me that question, your approach to, are you doing your job is, are you in your seat from nine to five? Right. But I can't tell if anyone's in their seat, like you might be at home or you might be in a coffee shop or you might actually be in another country right now. It's hard for me to know. what am i going to measure what am i going to think about and i honestly i'm like there are a couple layers of management between me and sort of individual engineers or whatever but um we talk about results like are we are we having the impact that we said we were going to have as a team over the course of this period and if we did that then we're probably doing our jobs effectively and if we didn't most likely some other thing is causing problems right but if it
+
+159
+01:38:51.000 --> 01:39:50.000
+becomes clear that someone is just not producing then you know a manager is going to have a conversation with that person and say hey like what's up seems like maybe you're having some challenges do you not have the you know do you not have the information you need do you know do you not do you need someone to pair with you like there's a lot of things that could be going wrong we know we don't jump straight to like this person or whatever but um i think in when we're co-located we we have this crutch of like people are here and they seem busy so probably yeah that's fascinating you know i think i think um yeah there's this sort of dual problem, which is, um, which is if you're not co-located, someone might not work a lot of hours and, and, and they might not be around, you know, actually working a lot, but then they could get their job done. So potentially, maybe there's somebody, especially if you're paying salary, there's someone who, for whatever reason,
+
+160
+01:39:50.000 --> 01:40:27.000
+they're getting some unit of work done, but they're not taking that much time. But actually, that's not a big deal. The big deal is the reverse, where someone's spending a ton of time, and they're actually not getting that much done. And so I think that to your point, the crutch actually can end really badly where somebody is just always in the office. And often this is because they've sort of misscoped the problem. So they haven't managed up very well. And there's this problem that's actually extremely difficult. But because of the way it's been communicated,
+
+161
+01:40:27.000 --> 01:40:53.000
+it sounds like it should be pretty easy. And then this person spends an extraordinary amount of time and then still doesn't perform well. Versus if you're remote, you know that the time isn't being watched. And so if you're not meeting the, you know that the time isn't being watched. And so if you're not meeting the, if you aren't completing this work package,
+
+162
+01:40:53.000 --> 01:41:13.000
+you're going to pretty early on go and tell your boss, hey, this is actually really hard. And I'm spending a ton of time on this. I'm not getting it done. If you have the crutch, you might just assume your boss is seeing you there. And most companies don't. At the end of the day, what's going to matter is, is that work package done?
+
+163
+01:41:13.000 --> 01:41:49.000
+Right, right. Or, well, I mean, we also spend a lot of time trying to translate that into impact, right? Because there's kind of two things that happen there. One, I've taken on a thing that felt like it would be easy. It's actually really hard. And that can be challenging remote because if you're not comfortable raising your hand, then you're even less comfortable like shouting into Slack or whatever. Hey, I don't know what I'm doing. Can someone please help me? Which you should totally be comfortable doing that. But you know, people struggle with that. And the other though, is you take on work, which actually turns out to be hard,
+
+164
+01:41:49.000 --> 01:42:47.000
+assuming because you've made this connection at some point, you know, with your product team or whatever, this work is going to drive this impact. And if it turns out as you get through it, the work is not driving the impact the way that you expected, where impact would be, you know, more users signing up, people having a better time on the platform, they're engaging with something, whatever, you should stop. You should at least stop and have a conversation and say, hey, we set out to do this thinking it was going to do this for our users or drive this value for the business. And it doesn't seem to be doing that. So, you know, let's not just keep charging down this path. Let's make sure we're checking in at least and saying, hey, did we misread something? Are we just too early? You know, is the signal delayed? How do we feel? Should we continue to invest or should we should we take on something else? you're trying to deliver and you surface those conversations then um it's it's a easier to make
+
+165
+01:42:47.000 --> 01:43:22.000
+sure that you know that folks are all engaged and they're succeeding and whatever um and b it's just better for your business yeah yeah that makes sense so i have this theory and the theory might might not hold water but let's let's assume it doesn't go from there i have this theory that once you hit 200 engineers, that you inevitably end up with warring factions, and you can't stop it. You just hit some critical mass, and what happens is there ends up being this sort of fragmented identity.
+
+166
+01:43:22.000 --> 01:44:06.000
+So, for example, you hit this large enough org, and now the researchers and the engineers aren't getting along. Maybe the engineers who are doing more on the research side and the more applied engineers have split up. And it's not obviously in the org chart. I mean, the leaders don't necessarily want that to happen. But it's an organic thing that once you get to this size, it seems hard to have a common identity you don't really see the existential threat um or the existential uh yeah i guess threat for lack of a better word and the internal threat starts to sort of reach parity right um and so circle ci is that i think you said 90 engineers so you're halfway there so but but you could kind of forecast like like how do you deal
+
+167
+01:44:06.000 --> 01:44:52.000
+with this where you know maybe maybe a team says you know has a really strong team identity but then that team always seems to be battling with other teams right um how do you sort of you know balance that against sort of another team that maybe doesn't have a strong identity and then they can't really execute and retain talent right that's how do you sort of strike that balance yeah it's a really interesting question i mean i think you kind of i'm going to take your lead on something you said in there which is the the existential threat being replaced by an internal threat, right? And I think threats are not the, your greatest hope of alignment is clear top level vision.
+
+168
+01:44:52.000 --> 01:45:31.000
+And I'm not saying that we're amazing at this. Like this is something that I'm constantly spending my time thinking about and trying to help be clearer about. And when people in multiple teams all see the same direction and buy into that direction, I think that does a lot to tamp down that kind of, I'll call it infighting or whatever you're describing. In that when you get to this place where you feel like your reason for being is your team as opposed to the company, then that's where that starts, right? So you think, okay, I, you know, we really want to do this thing and that's important
+
+169
+01:45:31.000 --> 01:46:38.000
+to us and therefore we're going to do it and we're going to do it, you know, to the detriment of this other team or whatever. Whereas when you feel like we're really driving towards this bigger goal together, then you look at this other team and say, hey, you know, we kind of need a thing. You need a thing. Like, how can we work together to figure out the best outcome for all of us, right? And I think that there's a couple things in there. The top level vision, direction, people being aligned around that is really, really critical. But then that has to happen down through layers of management, right? So, I mean, at some point, though, to your point of the org chart, at some point, those two teams fall under the same person. Right. And it might be all the way up at the CEO, but quite likely it's, you know, a manager, like an engineering manager or a director or something like that. Right. And that person should have clarity about their mission. Right. OK, if this is the mission of the company, this is our mission. Right. This is what we're doing that supports that. And being able to connect those dots is really important for people. Right. Like feeling like I work on a thing day to
+
+170
+01:46:38.000 --> 01:47:07.000
+day and I don't know why it's related. And we see this. We see this. But I don't know why it's related to the overall goal of the company is really bad. That's not a fun feeling, right? When you talk about retaining talent, feeling like you don't know what the value that you bring, or you don't know, yeah, you don't know the value that you bring to the company. It's not a fun feeling, right? So being able to connect that and then being driven by, honestly, a smaller mission that aligns with the bigger mission that's easier to connect to your day-to-day work. Right.
+
+171
+01:47:07.000 --> 01:47:45.000
+So, um, for example, like I talk about, I talked a bunch about, um, how much we care about the speed of, of builds running. Right. And so ultimately our customers are happier when their stuff runs well, runs quickly on our system, and they can get their job done, right? And so we get more customers as a company, we're more successful. But if I work on a team that, you know, provisions hardware, not that the team provisions hardware, but builds tools that scales our fleets up and down, then I can directly connect, you know, my ability to make sure there's capacity
+
+172
+01:47:45.000 --> 01:48:31.000
+online, countered against the money that we spend with customers happiness, right. And so I see impact on the, you know, the top level kind of company and customer based on how I'm able to do my job really effectively. And so rallying around that, I mean, it's kind of a contrived example, but rallying around that allows me and probably a few other teams around me, right? Maybe I need some people who know more about our operational deployments. Maybe I need some people who've built some upstream code or whatever. Like when we see that shared goal, then we can work on it together instead of being about like my team, right? Yeah, that makes sense. So what about when you have sort of things that are more zero sum?
+
+173
+01:48:31.000 --> 01:49:25.000
+So for example, there's a team that's trying to reduce the compute, you know, reduce the bottom line, right? So it's not take such a hit on compute. There's another team is trying to make people happier by giving them quicker builds. But that that costs money. And so I guess that's one of those things where I guess the you we probably have like another hour and a half on organizational design or whatever, but that's like, it's a really interesting problem where like, I wouldn't want to end up in a situation where one team is responsible for cost and another is responsible for like that customer happiness, but rather those are themes that we understand at a top level and then down through
+
+174
+01:49:25.000 --> 01:50:17.000
+the org. And then my team, let's say in this case, I'm describing as responsible for job allocation and job execution, right? And so I don't worry about user interfaces and how config gets written and other stuff, but I worry about once we know something needs to get run we're going to get it run as quickly as possible and i am optimizing performance and cost against each other right yeah that makes sense i i own a domain or whatever and i know these are big parameters for the company and so i can reason about how to balance these things you know if someone else that totally makes sense and i own job allocation like we're gonna have a really sad time like yeah that's right it's like someone was i was joking about this earlier but like this classic comic of you know two people digging ditches behind each other and they're like yeah that's another hole right like just
+
+175
+01:50:17.000 --> 01:50:44.000
+basically making each other's lives miserable and running in place um and so so it's one of the things that you try to think about in structuring both goals and teams is being able to align that big picture without partitioning them in that way. Yeah, that totally makes sense. Yeah, I think if you can take those zero-sum situations, like machines versus people's happiness, and basically break them down
+
+176
+01:50:44.000 --> 01:51:22.000
+so that every team has the zero sum then uh then yeah they're not they're not in this position yeah that's that's a really great answer i appreciate it that's something that i was kind of kind of been mulling about so it's great to get your get your take on it um cool so how can people reach you if people want to apply to circleCI? How can they do that? What are the best ways to reach out? So we, I mean, circleci.com slash, you know, everything that we have currently open. To reach me, I'm on Twitter at Zub, with Z-0-0-B.
+
+177
+01:51:22.000 --> 01:51:35.000
+Oh, nice. I don't know how to spell it. Yeah, cool. I've been dragging that around for a while. Oh, nice. I have to spell it. Yeah, cool. I've been dragging that around for a while. That's awesome. Yeah. Or, I don't know. I mean, I'm usually out there somewhere.
+
+178
+01:51:35.000 --> 01:51:54.000
+Cool. Some conference or something like that. Oh, yeah. It's not that hard to track down. LinkedIn, I guess, if people are interested. Cool. Although, Twitter is probably easier if you don't know me because I i don't yeah they could just necessarily respond to everything on linkedin yeah totally makes sense so circleci.com slash jobs and um oh i didn't ask this but you have internships or just full-time
+
+179
+01:51:54.000 --> 01:52:14.000
+uh currently just full-time okay um it's something that we are trying to figure out how we can do better um it is one of the challenges of remote. We do have, like I said, we have an office in San Francisco and one in Toronto, but they're not particularly large. And so for internships, we always want to make sure that someone's going to have a great experience,
+
+180
+01:52:14.000 --> 01:52:30.000
+have a lot of support around them. Yeah, that makes sense. And so like, hey, be our intern, but just sit in your living room and like ping people on Slack. It's not the experience I would sign up for. Yep, yep. Personally. So we're the experience I would sign up for personally. So we're trying to figure out how to get there.
+
+181
+01:52:30.000 --> 01:52:48.000
+Yeah, totally. Doing that at the moment. Cool. Well, Rob, thank you so much for coming on the show. I would ask for if you had student discounts, but it's totally free for students. Unless your project reaches PyTorch level popularity, in which case you should reach out to some venture capitalists or something like that.
+
+182
+01:52:48.000 --> 01:53:00.000
+Yeah, right. That's what you're supposed to do to discount. Yeah, exactly. So thank you so much for coming on the show. And if folks have questions, they know how to reach you. And I really appreciate it. Awesome. Thanks for having me.
+
+183
+01:53:00.000 --> 01:53:05.000
+It was tons of fun. The intro music is Axo by Binar Pilot. Programming Throwdown is distributed under a Creative Commons Attribution Sharealike 2.0 license. You're free to share, copy, distribute, transmit the work, to remix, adapt the work, but you must provide attribution to Patrick and I and sharealike in kind. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

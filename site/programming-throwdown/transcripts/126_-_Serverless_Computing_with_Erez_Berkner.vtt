@@ -1,0 +1,517 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:09.000
+Hey everybody. So, you know, a lot of projects that we're doing, you know, either in the spare time or even for your full time, you know, a lot of them require a lot of maintenance. And the maintenance and the overhead can actually really kill your project. It can drain your energy, suck away all the ambition that you had. And so I think, you know, it's really important to make things really fluid and really seamless, especially in the beginning, but even later on. So you're not kind of bogged down with old bugs from things you built a while ago. And so the biggest kind of maintenance headaches are maintaining, you know, as we talked about in the last episode, you know, maintaining your own database, you know, maintaining, you know, your own
+
+2
+00:01:09.000 --> 00:02:01.000
+installation of all these libraries and these programs. And, you know, you have a cluster and then you have to add a new machine to the cluster. And all of that kind of really can suck kind of the fun out of a side project, or it can make even your day job kind of really difficult. So one of the ways that we've really taken this problem away from developers and made it just really beautiful, the developer experience is through serverless computing. We're going to really dive into what that means and how that works and kind of explain all of that. And I'm super happy that we have Erez Berkner here, who is a CEO of Lumigo, to here kind of really explain serverless computing and how to write these things, how to monitor them, how to test them, and how to build kind of really nice microarchitectures that you can rely on for a long time.
+
+3
+00:02:01.000 --> 00:02:40.000
+So thanks for coming on the show, Erez. Hey, Justin. Hey, Patrick. Great to be here. Thank you for having me. Cool, cool. So before we dive all into serverless stuff, it's always good to kind of ask folks, you know, how are you doing with this COVID situation? And how has that affected Lumigo? And, you know, are you in the office? How has it changed your perspective on software development and running the company? I think I'm looking at this of the main concept of COVID, especially people working from
+
+4
+00:02:40.000 --> 00:03:15.000
+home in two different aspects. One is on our business and the services we provide. And that didn't change drastically on the one hand side, just because when you go serverless and you go to the cloud, you can in the modern environment connect work from home, work from office, work from anywhere in the world seamlessly. There's literally nothing there in the office that requires you to go within that network, within that perimeter. So that sense, the cloud and more specifically,
+
+5
+00:03:15.000 --> 00:03:55.000
+serverless really got our customers really ready for working from home, working remotely. So it's really, really like easy transition that factor on the other front we see covet pushes organization to try many new things for reducing cost for being more efficient and that's a interesting drive that we're seeing in some organization toward let's try out things that can take us to go five weeks better just because we need to be more efficient now in days where business is changing.
+
+6
+00:03:55.000 --> 00:04:31.000
+So you cannot attribute that completely to COVID, but you see a drastic adoption in the last couple of years in really modern technology, people are there to try more things out, especially when it's around cost saving. And that's one point probably of Sarah that we'll talk about. So that's on the business, on our company, we are working completely flexible with people that come into the office, working from home. Currently, it's completely open to people they feel comfortable with. That makes sense.
+
+7
+00:04:31.000 --> 00:05:18.000
+Yeah. My neighbor actually is in Marcom, in marketing and communications. And his job was massively affected compared to mine in the sense that he was going to a lot of events and he was meeting with clients and, you know, all of that became virtual. And that was a really big paradigm shift. And I think they're still trying to figure out how to do things like CES virtually, like how to do that well, where you could serendipitously bump into somebody when it's a virtual conference, right? And so there's no physical space. And so, yeah, I feel like that is really where we're going to have to see just massive shift in how people go around working. So I think, yeah, like visiting
+
+8
+00:05:18.000 --> 00:05:59.000
+clients, I would imagine is really difficult right now. It's probably the biggest change. For sure. And I think that, you know, I think that this is impacting us as Lumigo a bit less because we are very much self-serve, developer-led company. So we didn't really visit our customers prior to COVID. Our customers didn't want us to visit them. They just wanted to do their thing. So yeah, so it was always really like easy, hey, connect, try, get value, move on. That's kind of the type I think that we're seeing that... And me as a developer, I love,
+
+9
+00:05:59.000 --> 00:06:27.000
+I don't want to spend time with a specific meeting in the office about a specific tool. If it works, I want to use it and I want to continue. So on that sense, I think the type of companies that are more come for a meeting in the office and meet everybody and start a big POC, that would really change their sales motion. I think a bit less on more than modern self-serve, bottom-up developer-led companies. Yeah, that makes sense. Totally makes sense. Cool. modern, self-serve, bottom-up, developer-led companies. Yeah, that makes sense. Totally makes sense.
+
+10
+00:06:27.000 --> 00:07:25.000
+Cool. So why don't you kind of give us some background about what kind of path led you to start Lumigo and kind of where that journey all started? Yeah, so I'll start by saying that I'm a developer by heart, but I started 20 years ago, approximately. My first role was at a company called Checkpoint, a cybersecurity company. And as time went by, I got more and more into the cloud business and the cloud security product and learned more about what cloud has to offer that was you know 2010 all the way to 2015 and 2016 is where you know i started to see from you know from within checkpoint this new paradigm of development emerging emerges mostly around event-driven architecture where you want
+
+11
+00:07:25.000 --> 00:08:11.000
+to have you know decouple more and more of the services about micro services and 2016 is where I got to know serverless very much from customers that you know we're ahead of the curve and in understanding that serverless is is allowing them to move much faster in development, in cost saving, and how do we do serverless, and specifically with Check Point, how do we secure serverless? And got to try and to play and later on to build with serverless. And honestly, I got really, really excited. I got excited and I got I fell in love with the concept of it's so easy to get started to get product to the market
+
+12
+00:08:11.000 --> 00:08:59.000
+and I decided that this is one of the main point that we want to I want to understand better and I learned that there are a lot of organizations, a lot of developers out there that are architects that think the same, that really believe that this is the right approach. I think you mentioned at the beginning, Jason, don't build it and don't do it yourself, but consume one more of it. You gave the example of databases. And it really makes sense. And then at the same time, I started hearing about the challenges in those environments. What is hindering the adoption? Why don't we go serverless? It makes sense. It's so, it's really, it's fun. And you get things done really fast, but we cannot do it because. And
+
+13
+00:08:59.000 --> 00:09:24.000
+then you hear about monitoring and about debugging and the tools that are there are not sufficient. The ecosystem is not mature enough. And that's really where myself and Aviad Mor, who is my co-founder and CTO, who were with me in this whole journey that I just described, set out to help the community adopt serverless and remove the barriers. And that's how we started Lumigo
+
+14
+00:09:24.000 --> 00:09:40.000
+and went into observability monitoring, debugging spaces of serverless. Got it. And so I see, so you're at Checkpoint. And so Checkpoint was, you started building serverless or you were just working with other people who had serverless? Somehow you got a kind of a lot of exposure
+
+15
+00:09:40.000 --> 00:09:59.000
+to it at Checkpoint. Yeah, it was actually from two ways. One was from Checkpoint customers. I was heading the cloud security business of Checkpoint. And customers came and said, okay, Checkpoint, you're a security vendor. You invented the firewall. How do we secure serverless?
+
+16
+00:09:59.000 --> 00:10:50.000
+That was interesting. This is where the initial hit was. And later on, my development teams also had serverless and used you know the first time i heard serverless i honestly didn't know what to think because i thought well it's not running you know on your house machine it's not running on this laptop so so it has to run somewhere on a server and so it didn't really you know the name actually really beguiles what it really is and so so how would you describe serverless to somebody? You know, it's funny because there is a known poster
+
+17
+00:10:50.000 --> 00:11:12.000
+in the serverless community saying, you know, there are servers in serverless. Yeah, right. So absolutely. So there are servers, it's just not your server. Maybe that's a bit more accurate. It's somebody else who's in charge of those servers. I'll give you my, you know, serverless is very dynamic.
+
+18
+00:11:12.000 --> 00:12:08.000
+And I really want to say it's even kind of like used as a marketing term in many senses today. Because it evolved over time and some people have different definitions. But I want to keep this very, very simple in the way I define serverless. And I define serverless, or the main thing that I see as serverless providing organizations is the fact that you don't need to care about servers. So you get the example of a database where you need to deploy, have a physical or virtual server. And on top of that, deploy an operating system and application and maintain it and patch it and concern about high availability and scaling. And all of this stuff, if you think about it, most of this is commodity. And probably me as a company,
+
+19
+00:12:08.000 --> 00:12:46.000
+that's not my business. I'm not doing that best in the world. And if I could offload that to somebody else, because it's commodity, it's generic, I could focus on what makes my business unique and what makes my business logic and service unique. And this is really much the evolution of the cloud. You took your on-premise, don't buy physical servers, rent them from the cloud provider because they can do it better than you. You're not the expert in running servers. Same goes to operating system and running the application and databases over there. So you're not the expert in that.
+
+20
+00:12:46.000 --> 00:13:26.000
+So if you are in that mindset, that's really the next evolutionary step. And my definition of serverless is you don't use, maintain, deploy, patch servers. You consume the service. So if you think about it, my why definition is everything today that is as a service is classified as a serverless. And maybe the most known are function as a service, or lambdas, Azure functions, Google Cloud functions, which you can just write a couple of lines of code, upload them to the cloud, and they run.
+
+21
+00:13:26.000 --> 00:14:13.000
+You don't know where, you don't know on which server, you don't know if you need more firepower, you get it automatically. You don't need to care about autoscaling or all these other big words that people have nightmares about. Yeah, autoscaling is a huge mess. We have an issue right now where there's spot instances, where a spot instance means you get this machine, but Amazon or whoever can take it away at any moment. And so you get it, you can do as much work as you can really quickly, and then they take it away. But they're really, really cheap, dirt cheap. And then there's reserved instances where Amazon says, we're going to guarantee you 99, a million nines availability on this machine. And so you want to save money, but you also want
+
+22
+00:14:13.000 --> 00:14:36.000
+your things to run. And so we've been struggling with auto-scaling so much. Anything that keeps you from having to deal with that, I can tell you firsthand is a huge benefit. Jason, it's not just you. I just want to say. Yeah, all right, good. So, yeah, so, you know, it's functional as a service, it's databases as a service, you know, DynamoDB,
+
+23
+00:14:36.000 --> 00:14:53.000
+Snowflake, it's Kafka as a service, like Q, and even Payment as a service, Stripe, PayPal with APIs. All of these are what I define as serverless because you don't maintain a server, you consume them via API, they auto scale without you worrying about.
+
+24
+00:14:53.000 --> 00:15:17.000
+And today a serverless architecture basically allows you to use all these Lego pieces and connect them together and you have an application running within days if you have the right construct. And this is really the big promise of serverless. Cool. Yeah, that is a great, great explanation. Yeah, I mean, I'm sure a lot of folks out there
+
+25
+00:15:17.000 --> 00:15:43.000
+have had to deal with compatibility issues. You know, like, you know, you install Python or Python comes with, you know, Debian or Ubuntu. But it's like, oh, no, you need Python 3 to run this program. So it's like, OK, now I have to go download Python 3. And then and then, you know, maybe a year later or a few months later, you want to try this other program. It's like, oh, this other program requires Python 3.8. But the last one doesn't work on 3.8.
+
+26
+00:15:43.000 --> 00:16:13.000
+And now you have incompatibilities. And it just becomes a huge mess, right? And so you're using things like virtual env and Python or Docker, which is more general, you know, you containerize these things so that you could have, you know, Python 3.7 and Python 3.8 running at the same time. And you don't have to worry about them stepping on each other or keeping separate directories for everything and sandboxing everything yourself. And then to your point, once you have these sandboxes, these packages, why even run them on your machine?
+
+27
+00:16:13.000 --> 00:16:44.000
+You can run them anywhere. Exactly. And why scale them? What's actually happening in serverless is, as you mentioned, there are servers, but Microsoft, Amazon, Google, they're actually the one that's monitoring this automatically. And when they identify there is higher demand, they will allocate additional servers or reduce the servers really precisely to what you need. It's not a server that comes spinning up. It's a specific function within the server.
+
+28
+00:16:44.000 --> 00:17:50.000
+So you can get really granular to what you need. And that's the other point of, you know, you get what you need, you pay for what you need in service and binary. Yeah, that makes sense. So some of the things are, you know, I would say somewhat intuitive. So for example, MySQL, you know, Amazon has RDS, you know, they'll handle MySQL for you. But, you know, at that level of granularity, you're still allocating individual machines. It's just that Amazon is handling the MySQL installation and updates and all of that. But you still have to go and ask Amazon, I want this machine, I want that machine. And it's running MySQL, which is not your code, right? So Lambda, I think, is another level of complexity for folks. I think it's really, you know, it's hard to wrap your head around. You know, I have this Python file on my machine that's running on an installation on my machine, on a Westworld machine. And somehow I have to sort of teleport this into the cloud and how do i do that with dependencies and everything else and so
+
+29
+00:17:50.000 --> 00:18:30.000
+yeah if you could just kind of explain a little bit like you know now lambda does other things too i think it does javascript it does you know i think anything you can run in docker and so how do people sort of like take what they're doing that runs, works on their laptop and sort of teleport that to Lambda? Like, how do they do that efficiently? That's a great question. I want to start by saying it's not there's no magic over here. Usually the process of taking something just from my laptop or my existing application and moving it to serverless requires a different line of thought because serverless is really about microservices. You know, we talked about the Lego pieces.
+
+30
+00:18:30.000 --> 00:19:17.000
+So you can no longer have a VM that has a database and, you know, some cache and some code and all of that in the same VM or it's breaking down to DynamoDB and Redis and Lambda, and it forces you to adopt microservices. Some call it nanoservices today just because of the number of services. So if you have a big monolith, moving to microservices and serverless requires work, requires mindset shift. Once you get there, you map. Which is very healthy, I would say, in an architectural view. You decouple the different business logic and the point that you have.
+
+31
+00:19:17.000 --> 00:19:40.000
+And then you say, okay, this is my storage and my data access. And this is where I'll put it. And it will be DynamoDB. We'll front it by a Lambda that will actually do the data crunching or transformation that is needed. And we'll add, you know, queues in the middle just to make sure there are no dependencies, and we decouple that.
+
+32
+00:19:40.000 --> 00:20:01.000
+And at the end of the day, you'll take all of this, you'll upload that to the cloud, and you fire a request request and it will run. But I think that to your question, if you have just like, you know, 100 lines of code, taking them from the laptop to a Lambda, for example, it's super simple. It's literally like 20 minutes to get this hiring.
+
+33
+00:20:01.000 --> 00:20:31.000
+You put the code out there in AWS console and you hit run. If you're talking about a monolith, that requires more decoupling. Yeah, that makes sense. So what do you think have been sort of the, like, what are some interesting stories or interesting challenges you've faced or seen other companies face when they go to serverless, especially companies that have already built something that might be like a monolith architecture. What are some really interesting challenges you found? Yeah, so I think, you know, I think in general,
+
+34
+00:20:31.000 --> 00:21:12.000
+and that's a problem of, I think, everybody today. Everybody want to do, you know, microservices, serverless Kubernetes, you choose it, but everybody's talking about that. In reality, getting out of the monolith is really hard extremely hard not because of the architectural pain because they're you know there's always something more important more critical and it takes time it's refactoring so we see a lot a lot of new projects you know they have they say okay we have the legacy. Legacy will continue and we'll break it bit by bit. And that's one approach, by the way. Let's take this part
+
+35
+00:21:12.000 --> 00:21:45.000
+and tear it off and make this serverless and this part and gradually doing that. But we see a lot of new projects that are born to microservice, born to serverless, and a lot of startups starting up as serverless. So that would be the most common use case today. Yeah, that makes sense. Totally makes sense. Yeah, I think one of the challenges in terms of the paradigm is that you don't have something that's available 24-7, right?
+
+36
+00:21:45.000 --> 00:22:20.000
+In other words, you don't have a machine in the cloud that can just sit there idle, but it's ready at any moment. And so you really have to think in terms of signals and events and triggers, and you have to think in this way. I mean, personally, like one of the challenges I saw in the beginning was there was something that I wanted every day around midnight to do this really big computation. And like lambdas are designed to do kind of relatively small things. They're not designed to wake up every day and do something that takes two hours.
+
+37
+00:22:20.000 --> 00:23:07.000
+Right. And so what I ended up having to do was to wake up, you know, at midnight, decide what I want to do, which you can do pretty quickly and then create a bunch of messages. They have this thing in Amazon called SQS, like a queuing system, you know, queue up a bunch of these messages of all these little work package descriptions and then like a whole bunch of lambdas will just start picking things off of that queue until it's empty and you know any one item on the queue could be done in a in a minute or two and so that actually required a really big refactoring because i used to just say okay it's midnight you know wake up like you used to have a cron uh you know something in cron tab that just wakes up this Python
+
+38
+00:23:07.000 --> 00:23:39.000
+program. And then, you know, Patrick and I used to work together at Lockheed and, you know, I write research code, Patrick writes real code, right? So my research code would spin up and it's just one giant Python file and it would run for, you know, two hours and something and it would stop. And so, you know, and so that ended up being a really big change. But when I was done with that change, I was so much happier with the result because the two hour thing, you know, would crash sometimes. And if it crashed at one point nine hours, that's super frustrating.
+
+39
+00:23:39.000 --> 00:24:27.000
+Right. And so this, you know, you farm this out to a bunch of lambdas. And even if, you know, what would be the last item in my database, if that would actually crash, it actually doesn't matter because I had factorized it down. And the other, you know, 1.9 hours that that work is committed, and I just have to debug the part that failed. So this is similar to what we were talking about with Guillermo on Next.js. Some of these things can seem kind of opinionated. It's like, oh, why can my Lambda only run in five minutes, whatever the time that is. But actually, when you follow those sort of rules, which seem really rigid at first, what you end up with is actually something that's way more beautiful than when you started. And people who have made their entire life work
+
+40
+00:24:27.000 --> 00:24:47.000
+on creating a beautiful developer experience, they made those rules with that in mind. And so usually if you follow them, you end up with something a lot nicer. I completely agree. And I think the others, and we actually, I'll give an example of one of our customers that actually did pretty much the same.
+
+41
+00:24:47.000 --> 00:25:31.000
+He had like a huge task, several hours, that was rendering of images. And he decided to go serverless and he broke this into exactly the same model, by the way. You know, small messages that you can digest. But the side effect, I'm not sure it was a side effect, actually, but what happened, he was able also to create parallelization of the execution. So he all of a sudden could run 500 lambdas at the same concurrent time. So he could get the job done in a matter of minutes compared to hours just because we broke it in smaller pieces. So that's another, I think, something that you get out of modeling this and decoupling
+
+42
+00:25:31.000 --> 00:26:21.000
+and building it in microservices or a different mindset. Yeah, that makes sense. So yeah, so a lot of people will probably want to know, if you run something on your desktop, you can just create a log file. And so, you know, you can have a log file for every day. And every time you run this job, you get a log file. Now you've, you've sort of exploded this into all of these lambdas. And so you have to be really diligent and, and, and careful about how you do the logging so that you can recover. Especially, you might have 99% success, but that 1% is a crash that you would have seen. Now you have to sort of go digging in the haystack to find it.
+
+43
+00:26:21.000 --> 00:27:16.000
+And so what's been your experience with sort of being able to instrument things like Lambdas? Yeah, I think you're touching one of the most painful points when it comes, in general, to distributed services and microservices. Usually, you can just go to a server, a monolith server, open the log file, and understand what happened in a sequential way. That breaks when you're working in distributed environment microservices, especially when you have thousands or millions of events and requests every minute. And this is where a concept called distributed tracing comes in. And the concept is fairly simple. The concept is we want to mark every one of our logs in a, let's say, unique identifier that identifies which requests this log belongs to.
+
+44
+00:27:16.000 --> 00:28:31.000
+So if I have a request going across 20 services, I want all of them to be colored green, which means this is request 555567. And then I can take it to, let's say, an elastic and search for that request ID. And boom, I have all of the story of that request end-to-end. That's critical for anyone who wants to go microservices with more than just a couple of requests per second. Because if you don't do that, you really are not able to find the logs. You just have many, many logs, millions of logs, and you can't understand where is one transaction starting and when is it ending. Yeah, just to kind of explain that with an example. So we've talked about batch jobs and breaking that up. But the majority of serverless is going to be, you know, a response to something like a web request or something like that. So imagine you send a file to them, some JPEG file, then they need to do a bunch of pre-processing on that file.
+
+45
+00:28:31.000 --> 00:29:02.000
+Maybe they'll look for faces of your family so that you can find them later. And there's all this work that has to happen. And so there's many different steps there. Some of it is image processing. Some of it is storing things in a database, storing the image in some kind of data store. And so any one of those steps could fail. And also any one of those steps could fail and it's not their fault. So in other words, imagine the system that accepts my image somehow has an issue with
+
+46
+00:29:02.000 --> 00:29:45.000
+casing and converts the file name to uppercase. And we're using the file name to key on things and then sends the wrong key to my Lambda. So then my Lambda goes to grab the image. It's not there and it crashes, but it wasn't the Lambda's fault per se. It was just that the system that sent the Lambda that image, you know, had an error in it. Right. And so, and as you said, there's millions of these happening. And let's assume they're not all failing in this way, just a small percentage. So, having that unique ID that just follows this request through all these different systems allows you to say, oh, at the very end, when I went to store, you know, there's this face in this image.
+
+47
+00:29:45.000 --> 00:30:16.000
+When I went to store that, it crashed. But that actually happened because on the browser, I let someone upload a WebP file. And actually, we don't support that. And so I actually need to fix something on the client side because of a bug I found way down in the pipe at the end of the pipeline. And so, yeah, having that having that if you don't have that ID, it's almost impossible side because of a bug I found way down at the end of the pipeline. And so, yeah, if you don't have that ID, it's almost impossible to connect all those dots. Absolutely. So, yeah, I think this is a core
+
+48
+00:30:16.000 --> 00:30:47.000
+concept of logging, monitoring, debugging of serverless and microservices. And it forces you to have monitoring, debugging of serverless and microservices. And it forces you to plan. So, if you are architecting this entire process, like you mentioned, you need the different development teams to know that for every service that you're using, they need to remember to get a request ID from the service calling them
+
+49
+00:30:47.000 --> 00:31:09.000
+and to pass that request ID downstream to the next service, to the next user, and get this within their logs. And that's a way to handle, to your question, to handle logs and logging in general in those environments, in a serverless and microservice environment. But that's also the challenge,
+
+50
+00:31:09.000 --> 00:31:50.000
+because getting this process, procedure in place across different teams and organizations is really, really hard to get people to remember to do that, to get them to do that for new services, to chase after them. And this is where some companies, bigger companies like Netflix, like Airbnb, Google, of course, and others are basically doing that internally on their own. And they have the processes and tools and instrumentation that help them do that. And in some cases, there are other companies that are providing that service automatically, so that's taking the burden off the actual developers doing that.
+
+51
+00:31:50.000 --> 00:32:47.000
+Or there are some open framework, open tools that allow you to do that yourself and not inventing the word. That makes sense. What about just logging more broadly? So, you know, people know right now, if they write a Python program, they type print, you know, hello world, and they see hello world on the screen, right services all log to the same product, logging product, which is called CloudWatch. CloudWatch, let's say if you output something to the console from a hollow load from the Lambda, you will get that and you'll be able to see that. I think the main thing is that you're getting a lot of things into there,
+
+52
+00:32:47.000 --> 00:33:08.000
+but it exists. It's just like you're not logging into a server to check the log file on a server or SSHing into a server. You go to a, as a service, logging system called CloudWatch where they are getting all the logs from everywhere, all the services aggregated and allow you to watch them. Got it. Got it.
+
+53
+00:33:08.000 --> 00:33:26.000
+Okay. That makes sense. Cool. And so, yeah, I see your point. So now it almost becomes like, and I think you mentioned Elastic earlier. Yeah. It's almost like you need a search engine for your logs because you're doing things at such an extraordinary scale that it becomes very difficult to like,
+
+54
+00:33:26.000 --> 00:33:42.000
+you can't just read all of it. Exactly. You need a search engine and you need a way to search by, like you need the request IDs or the trace IDs that we talked about to know what to search for. So exactly. God, I see. Oh, now it makes sense. So basically you say, okay, in Elastic or MySQL
+
+55
+00:33:42.000 --> 00:34:15.000
+or one of these things, you say, you know, give me all of the logs from this request ID, you know, let's say sorted by time. And now you see a whole window of this request ID that might span many different lambdas and machines and operating systems and everything. And maybe even the browser, if you're pulling, if you're dumping logs from a browser to the server. And so you can see this whole history, like, OK, on this machine, this happened. On this machine, this happened. Over here, on this service, this happened. And then here's a crash.
+
+56
+00:34:15.000 --> 00:34:43.000
+And I can kind of watch all of it. Exactly. On this non-machine, but exactly. Yeah, and all of that is on a separate serverless thing. So actually, what about crashes? So if something crashes in any of these things, like in a Lambda, what actually happens? That's a great question. So this is where things get, I would say, kind of like Twilight Zone.
+
+57
+00:34:43.000 --> 00:35:05.000
+Because I think, as you mentioned at the beginning, there are servers, and basically Lambdas are running on top of, in the case of Amazon, on top of AWS container, where you don't have access to, you don't see it, which is running on a virtual machine, on EC2, and that's software, and that EC2 can crash, that EC2 can run out of memory,
+
+58
+00:35:05.000 --> 00:35:28.000
+that containers can crash. And that's really the infrastructure of the Lambda. So first of all, it happens. I want to say very clearly, nothing is bulletproof. So it happens to any cloud provider. In some cases at the beginning, three, four, five years ago, the request execution of the Lambda actually disappeared all of a sudden,
+
+59
+00:35:28.000 --> 00:36:00.000
+which was very frustrating because you couldn't even track what was going on. You didn't know there was a crash. It just disappeared. This got better, and now you got more indication that there was a problem. It's not solved yet. But again, these are the places where tooling allows you to understand what happens. So monitoring tool Lumigo is one of them, but others are allowing you to identify such cases and they let you know there was a crash over here
+
+60
+00:36:00.000 --> 00:36:16.000
+with this Lambda, even though maybe the cloud provider couldn't get it to report because everything crashed over there. But since this is an external vendor, external service, seeing, you know, like starts and doesn't see end, can identify this never ended
+
+61
+00:36:16.000 --> 00:36:42.000
+and there was a crash. And I'll talk about that. Oh, interesting. So that, got it. Okay, so if like your Python program throws an exception, and so this is like a relatively benign crash, then in this case, I guess CloudWatch, you might be able to see in CloudWatch, you know, that Python failed or something like that. But you're saying, you know, it could get even more gnarly where something crashes,
+
+62
+00:36:42.000 --> 00:37:31.000
+you know, your program might've been fine, but something crashes environmentally. And, and that is, yeah, that, that sounds really difficult to debug. And so, so you're saying something, uh, some monitoring tool can say, well, you know, I'm following this request and I'm watching out for this request and, you know, I didn't see a crash, you know, on our end or anything like that i just saw this request disappear and so you know maybe we need to rerun it or there's all sorts of different mitigation strategies but at least you have visibility into that you can say okay i'm sure you know it's been three hours you know i'm sure something unhealthy has happened with this request yeah and to your point since lambda today only only runs 15 minutes, then you can know that after 15 minutes, worst case. Yeah, that makes sense. Totally makes sense.
+
+63
+00:37:31.000 --> 00:38:06.000
+And so what about like, I know for doing mobile development, there's things like Bugsnag, Rollbar. There's these things that can package up exceptions and send them to a server really quickly before the machine dies, right? Or before your app dies. And so is there something like that for Lambda? Something where I can get all of the crashes in some kind of dashboard? Yeah, so I want to say that I think your point is very valid.
+
+64
+00:38:06.000 --> 00:39:06.000
+Those needs don't go away when you go serverless. You still need very detailed information and fast about every exception. The main thing is that you need to get the context. One service out of 100 failing, what does that mean to my application? You have to have the connectivity, the distributed tracing. So you need basically both. It's not that distributed tracing solves that and you don't need Rollbar or Centpure or others anymore. You need everything. So this is why things are getting more and more interesting and complex. And yet there are the modern tools that are out there dealing with serverless monitoring and serverless distributed tracing will do both. of health exceptions of the application, like you mentioned, and also of the infrastructure,
+
+65
+00:39:06.000 --> 00:39:22.000
+you know, with different, you know, timeouts and things that are really common in those environments. And number three will allow you, like you mentioned in Rollbar, to drill down into a specific exception and get all the details that you need in order to understand the root cause,
+
+66
+00:39:22.000 --> 00:39:43.000
+you know, and go upstream, understand what happened and fix that. So this is really what the industry is experiencing in terms of what's changing in the realm of a monitoring. We see that kind of like coming together of the different domains and just starting to see modern tools that encapsulate all of those. Cool, that makes sense.
+
+67
+00:39:43.000 --> 00:40:07.000
+So we could jump into, I think we should end on monitoring and security. But before we do that, we could put a bookmark in that for the moment. Let's jump into securing Lambdas. So I know that there's VPCs, there's virtual private, what's the C for? Connection or network? No, cloud. Oh, cloud. Okay.
+
+68
+00:40:07.000 --> 00:40:40.000
+But there's these virtual private clouds where you have your own protected address space. And so people can't just call your Lambda with arbitrary inputs and all of that. So from a networking perspective, I can see that as obviously being super important, but also pretty comprehensive. So what other things do people need to do to keep Lambda secure so that they're not leaking really important information or allowing intruders to call their functions
+
+69
+00:40:40.000 --> 00:41:17.000
+and DOS attack them and stuff like that? Right. So I think the main concept with microservices in general and Lambda specifically is to be very aware and to have a well-defined roles for every service, for every microservice. So my service is doing, let's say your example, my service is allowing a picture to be uploaded to the website. That's what my microservice does.
+
+70
+00:41:17.000 --> 00:41:52.000
+It's one out of 50 that allow my application to run. And if that's my sole definition of the microservice, and it's not allowed to do anything else, it should be very strict, then I can also apply very strict security policy to that microservice. Because there's no reason for that microservice, let's say, to access some remote server. And there's no reason for that microservice to start sending information. So by having microservice environments, and specifically with Lambdas, for example,
+
+71
+00:41:52.000 --> 00:42:32.000
+by having a very clear task of what that Lambda does, you can define through security groups, through IAM roles, which are different security definition, very granular, least privileged security concept or rules for that service. And then when this is, like you get the example with a container, when it's very clear and kind of packaged with a security, then I don't really care if that resides within a VPC or outside of VPC has access to the world or not because the security is very very tight and goes along with that service
+
+72
+00:42:32.000 --> 00:43:30.000
+so that's a concept of security for microservices that is very very popular. Oh that makes sense, I didn't think about that but yeah that makes a ton of sense so basically you have these different identity roles and so for example the the the queue which queues up images to be um scanned for faces you know that queue might require it to add or remove from that queue might require a role like you know that the the scan faces. And so most of the system, most of these microservices, you know, they don't have that permission. And so, you know, yeah, this, you know, you hear so much about, you know, people, they hack into. And actually, I think, Patrick, I think we have lined up in the future, someone who actually is a, uh, I think a white hat hacker. I think that's the term, like someone who hacks things, but for,
+
+73
+00:43:30.000 --> 00:43:56.000
+uh, to, to cause good, um, to, to kind of help, you know, secure things. But so Patrick, I have no background in hacking, um, or anything like that, but, but, you know, you hear stories of, you know, they come in, they hack and then they get everything. It's like, oh, they downloaded your entire source code repository and your, repository and they select star your whole database or MySQL dumped your whole database. And they have everything. And they ransomed all your machines. So you have to pay them Bitcoin to get them back.
+
+74
+00:43:56.000 --> 00:44:30.000
+And so serverless seems like, we talked about how you have all these sort of complexities because of the distributed nature of it. But it's also, it can even be sort of self-healing where, you know, if you start getting a lot of errors saying, hey, so-and-so service is trying to access all of these things and they're getting blocked, you'd have some count of how many access control violations. If you see that go through the roof, you know right away that you need to lock everything down.
+
+75
+00:44:30.000 --> 00:45:00.000
+And so it seems like if you go serverless, you're inherently just much more protected from some of these massive attacks like you hear. There was the one on Target last year. And so you could avoid a lot of that. Yeah, I think that you need to be aware of that and think about that in order to be really protected. And I'll explain why. Because one of the promises of serverless is you don't need to deal with scaling. You know, we got you covered, say AWS, Microsoft, Google.
+
+76
+00:45:00.000 --> 00:45:29.000
+And this is great, right? Because during the night, nobody accesses my site. So no point for me to pay for a server. And during the day or during Black Friday, my sales fix goes like 500x of what I do. And I don't want to keep servers up and running all the time. So it's really, really adjusted. But at the same time, attacks and Black Fridays can look very similar.
+
+77
+00:45:29.000 --> 00:45:58.000
+And the cloud provider will allow you to grow. So sometimes we have the notion of serverless environment that there's a concept in security called the denial of service, where you try to attack a server and try to take him down by flooding him with requests until he cannot serve legitimate users. In serverless, that usually doesn't happen because you'll get more and more firepower from the cloud provider.
+
+78
+00:45:58.000 --> 00:46:28.000
+It will just cost you more. So some call this denial of wallet instead of denial of service. I was thinking denial of credit score, yeah. Yeah, that might also be very good. But my point is that you can adjust with it. You can handle this. You can decide where are my limits, and it's very easy to define the limits, you probably need to have, again, monitoring of your costs to raise a flag
+
+79
+00:46:28.000 --> 00:46:48.000
+when you go high wire and, hey, something wrong here and get a pay to duty about that. The only thing is this is not out of the box, but out of the box, you need to have this mindset, like you mentioned, in order to be aware that I need to think about that and implement something. Yeah, that makes sense. That's a really good call out.
+
+80
+00:46:48.000 --> 00:47:11.000
+Cool. Yeah, we touched on a lot of really, really good things here. So let's dive into Lumigo here. So we talked about how to monitor. We talked about the breadcrumbs and the request ID. And so what does Lumigo do to make a lot of this kind of easier for folks? So I think, you know, when we started Lumigo,
+
+81
+00:47:11.000 --> 00:47:36.000
+this is exactly what we had in front of us. Like seeing all of this, everything, all of our talk actually is complex. It's complex to implement, especially if you're not an expert in this. And honestly, most people have so much to do that they shouldn't be dealing with that. They shouldn't be dealing with their business logic,
+
+82
+00:47:36.000 --> 00:48:17.000
+exactly like what the serverless concept is about. So we built Lumigo with that mindset of allowing the team, the developers, to get that offloaded to us. So with Lumigo, we allow you to have this breadcrumbs or end-to-end view of every transaction. And we developed the technology to do that without any code changes on your side, without any change to the data, and without deploying agents. Which sounds really weird, because how do we do that?
+
+83
+00:48:17.000 --> 00:48:56.000
+That's kind of like the first thing that the developers asked me. Yeah, definitely. Yeah, so it's a lot of algorithm, deterministic algorithm, that we developed over the last three or four years. Yeah, definitely. if you don't want to add a request ID along the way. And this is the core deep technology of Flumigo. So we managed to do that for you without touching code or data. And that's a magic. And we do it to all the main services today.
+
+84
+00:48:56.000 --> 00:49:38.000
+Can you double click on that? Cause I'm trying to wrap my head around it. So, okay. So I say, I want to upload a photo. So your user ABCD says you want to upload a photo. The request comes in. The photo gets uploaded to some S3, you know, signed URL or something. And then now, you know, we kick off a bunch of serverless. We put a bunch of things onto a queue saying, you know, crop this photo 10 different ways, you know, look for faces in the photo, right? And so I feel like if you don't put, and so those serverless functions, because of the encapsulation we want from we talked about earlier, they don't necessarily even have the user ID who wanted to upload the photo in them. They just get a request, here's a photo.
+
+85
+00:49:38.000 --> 00:49:59.000
+And so I feel like, yeah, if you don't put the request ID, it seems almost impossible to connect the dots, right? Yeah, you're absolutely right. So first of all, that's the magic. And let me now take the charm of the magic and explain how we do that. Okay. But don't tell anyone. All right, yeah, no one's listening.
+
+86
+00:49:59.000 --> 00:50:41.000
+Just kidding. The main concept is, and by the way, just before I hit that, think of that. Let's zoom in on what you mentioned, writing the image to S3, and that triggers some Lambda to start working. Even if you want to get a request ID across, you can't because that's a file. Where do you put a request ID to go across s3 but it's a yeah right it's a big problem regardless even if you you know you want to do that in a service environment that's really really yeah just to yeah just to explain that real quick so so you know the way things work when you upload things like photos and videos from your phone it doesn't
+
+87
+00:50:41.000 --> 00:51:15.000
+go through a server you know so the server that's serving you this website or whatever, they're not actually taking your entire video and moving it into S3 for you. They're giving you this, what they call a signed URL. And so they're basically giving you permission to directly upload something to Amazon. And then the Lambda, that's something we didn't cover, but Lambdas are triggered. And so the trigger can be based off a message that's sent by something else,
+
+88
+00:51:15.000 --> 00:51:46.000
+or they can also be triggered off changes to your S3 or changes to your environment. They can be triggered off a change to your database. And so, as Erez was saying, this Lambda fired because it saw a file in S3 and it has no idea how that file got there. Exactly. And even if you want getting a request ID across, it's not your API, it's not your server, you cannot implement that. And the way we do it,
+
+89
+00:51:46.000 --> 00:52:28.000
+we have a lot of cybersecurity expertise and backgrounds, and we found a way to identify that the request, the file that was written has some attribute as part of it. There are metadata of the file. There are metadata of the request. There are actual data points going in. And all of this exists also and available for the Lambda that get triggered from the fact that that file was written to S3. So that information is available from both sides of S3
+
+90
+00:52:28.000 --> 00:52:53.000
+for someone, you know, some platform like Lumigo. And through algorithms that we developed, we were able to infer, just by looking on the existing data, metadata, and other signals, that this is the same request. So we infer that. We kind of build this, call it virtual request ID that doesn't exist anywhere,
+
+91
+00:52:53.000 --> 00:53:11.000
+but we know that it's the same request and it's 100% deterministic. So that's, you know, it's very, very technical. Sorry for that, but that's a really... No, that's super cool. Yeah, I mean, I think like one, you know, it's very, very technical. So sorry for that, but that's a really good. No, that's super cool. Yeah. Yeah. I mean, I mean, I think like one, you know, simple way to think about it.
+
+92
+00:53:11.000 --> 00:53:38.000
+I'm sure this is not, I'm sure what you're doing is more complicated than this, but you can imagine the system that gave that person permission to, you know, write to that, to that file. So that request, if we have that information, then maybe that request has a user ID in it or something like that, or at least we can remember that request. And then when we see the file show up, we can sort of connect the dots that way.
+
+93
+00:53:38.000 --> 00:53:55.000
+But yeah, to your point, I mean, to do it in a way that, it's one thing if you're building the program, but to do it for somebody else and you don't know what program they're running, that I think is really challenging. So that's pretty wild that it's able to do that. Yeah. And that's, you know, it took us a lot of time.
+
+94
+00:53:55.000 --> 00:54:39.000
+It took us almost three, more than three years to build and cover all the services. And I think that's, you know, one core of what Omegle does. So basically, simplifying this, after five minutes, no code changes, no deployment, no agents, you have a full view of your, let's call it AWS architecture and request end to end. Every request, you click on it, all of a sudden you see dozens of services align and you see the request story from one end to the other end. And that's one core. The other is what you mentioned is about identifying issues.
+
+95
+00:54:39.000 --> 00:55:13.000
+So we know to alert when things go wrong. So it's application issues, it's infrastructure issues, you mentioned the crashes that are elusive in the infrastructure, out of memory latencies, so many things that you need to care about in serverless and microservice environment, we got this out of the box. So you get alerts, you click on that, you dive to see the request end-to-end, you see the actual data passing across because we record the data. And by having this as a developer,
+
+96
+00:55:13.000 --> 00:55:57.000
+usually it will take you minutes to figure out what the root cause and plan effects. Very cool. So, okay, so there's no agent, which is really interesting. So I guess the way that the integration here with Lumigo must be through some kind of like cloud formation or Terraform or something like that, where we create a role for Lumigo and then Lumigo goes in and adds some services of their own? How does someone actually get it set up? Yeah, so I think you got it. The main point is a cloud formation including an IMO. So basically when you onboard, Lumeco is a self-serve platform.
+
+97
+00:55:57.000 --> 00:56:24.000
+You can go to it and click start an account. And it's literally four clicks to be fully connected. Again, no deployment that you need to do. But what happens in those four clicks is, number one, exactly what you said. You click and allow Lumigo to get information from the cloud, your logs, configuration, things like that. That's an IML wrapped in a cloud formation,
+
+98
+00:56:24.000 --> 00:56:46.000
+exactly like you mentioned. The second point is that Lumigo, you decide which of the Lambdas and services you want Lumigo to observe and to monitor. And on those services, we have an integration specifically with AWS that is called Lambda Layer. And this allows us through code libraries
+
+99
+00:56:46.000 --> 00:57:13.000
+to listen to the requests going in and out of every service. And through that, allow us to do the magic of connecting the dot, identifying, allow you to see what data passes. So those two concepts are what's really building the technology, allowing us to show you all of that. Ah, cool. That makes sense. And so what about on databases? Can Lumigo connect the dots between Lambda
+
+100
+00:57:13.000 --> 00:57:32.000
+and DynamoDB requests? Yeah, that's actually a pretty popular one. So think of a Lambda trying to write, writing a record to a DynamoDB, and this can also trigger another Lambda to do something else. Right. So it's exactly the same
+
+101
+00:57:32.000 --> 00:57:50.000
+as S3 concept. It happens to be very complicated in terms of DynamoDB but it's the same way as we figured S3, we figured DynamoDB out and we figured all of the main AWS services. So DynamoDB, S3, we figured DynamoDB out, and we figured all of the main AWS services. So DynamoDB, S3, Kinesis, API Gateway, Step Functions,
+
+102
+00:57:50.000 --> 00:58:15.000
+SQS, SNS, you know, everything that everybody uses, we are able to do that, again, automatically without the code changes or data changes. Cool. This is awesome. Yeah, I'm totally going to check this out. Yeah, I have some internal projects i can try this out and report back actually this this dive into something really interesting so what's what's the sort of um you know we have a lot of folks who are you know students college
+
+103
+00:58:15.000 --> 00:59:01.000
+students high school students who are just getting started in the field who are changing careers and so you know for people who are hobbyists what are the sort of opportunities in Lomigo like what's the pricing like and all of that yeah so first and foremost you know we built Lomigo initially for the community so we have a very um generous community tier which is absolutely free and it's you know it's hosted by Lomigo So you don't need to deploy anything. But if you're a student, if you have a private project, or even if you want to run this within your company and your volumes are low, less than 150,000 requests per month,
+
+104
+00:59:01.000 --> 00:59:26.000
+you should just connect and run it. It's for free. And we have many, many, many such companies and users. And that's a great way for us to contribute to the community and get connected with the community. And again, we don't think twice about whether to use this. Some use it for actually live debugging of their production.
+
+105
+00:59:26.000 --> 01:00:06.000
+Many students, for example, use it as part of their development process. So if I want to develop something during the development, I want to run a test. And if you run it and just go to Lumigo and try to understand, was it successful? Did it fail? How did it evolve across the different services. And this really, really gets you to debug your dev environment much faster. So very easy to start for free. Very cool. Yeah, that's awesome. And so the free tier, is it for like a month or is it unlimited? It's just free as long as you don't exceed the quota. Exactly.
+
+106
+01:00:06.000 --> 01:00:23.000
+It's not limited in time. Oh, very cool. Cool. Yeah, I'll definitely check this out. I will check this out. I will report back on Twitter and let people know how this goes. Yeah, I have a number of side projects that are really hard to debug
+
+107
+01:00:23.000 --> 01:00:56.000
+that are running on Lambda. This would be really, really cool. So let's talk about Lumigo, the company, a little bit. How long has Lumigo been around, and how many folks are at Lumigo right now? Yeah, so we've been around for three and a half years. And we're around, not around, we're 30-ish people now. Most of us are developers based in Tel Aviv in Israel.
+
+108
+01:00:56.000 --> 01:01:42.000
+And yeah, that's us. Cool. And so are you looking for interns or full-time folks? And if so, where geographically are you looking and all of that? Yeah, so we're growing and we're looking for people who want to join. Mostly we're looking for full-time employees. We have the development and product team based in Tel Aviv. And we're always looking for additional people. We're now opening an office, or for now, a virtual office in the U.S.
+
+109
+01:01:42.000 --> 01:02:06.000
+And we're going to have our sales organization finally starting to grow sales organization there. Cool. Yeah. Yeah. It's an exciting stage. And beyond that, I am always looking for, I would call it serverless enthusiasts, people that really dig into serverless,
+
+110
+01:02:06.000 --> 01:02:33.000
+that love what it is, the community, that want to be our representative within the community, help the community, speak in sessions, in conferences, they create blogs. This is a lot of our work is toward the community. We have a lot of insights to contribute that to the community. So I'm always on the lookout for either people that want to do this, freelancers
+
+111
+01:02:33.000 --> 01:02:52.000
+or full-time, but if you love serverless and you're doing something interesting, that's something that I would love to hear about. Cool. Yeah, I mean, this is something that comes up in a recurring way and so it's really good just to you know for people who are listening maybe this is their first episode they've
+
+112
+01:02:52.000 --> 01:03:59.000
+heard um but really for everybody you know if you want to get into this industry you know build lots of cool stuff i mean that is i think the the, the, you know, um, eternal advice, right. Is, is, you know, um, you know, if you want to decide which programming language you want to learn first, we'll build something and, and then kind of, uh, you know, Google around like, okay, other people have built similar things. What language should they use? Kind of always start from a goal. And so if, if, if you're interested in, um, you know, doing monitoring and serverless, and if this stuff really fascinates you and sort of being sort of this phantom of the opera, but instead of a million different organs or keyboards, you have a million different lambdas, and you've sort of mastered this craft, then you start building stuff. Especially with Lambda, the AWS is a very generous free tier. Lomigo is a very generous free tier. There is nothing stopping anyone out there from building something. And you could build a website that could scale to handle a million people a month without having to do a whole bunch
+
+113
+01:03:59.000 --> 01:04:43.000
+of extra work. You could build something that just you and your parents like, and then if it goes viral tomorrow, it just, it still works. As opposed to like half of these hacker news articles where, where, you know, they go viral and it kills the site. You know, your site won't do that if you build it on serverless. So, so definitely, you know, folks out there, you know, check this technology out. I think's awesome so um so what is what is uh something unique about lumigo the company so you know is there something that uh you know is there like a uh retreat that you all do that's that's really unique or is there is there something you know maybe the way the desks are lined up or the way the company was founded some some kind of cool
+
+114
+01:04:43.000 --> 01:05:29.000
+tidbit about the company. That's a great question. I don't know if that's as cool as you hope for, but I think that what makes Lumigo, at least today, different is that almost anyone in Lumigo, in almost any service, any department, is active or former developer. And that goes also to departments which usually are not related to engineering. That's just because that's the core community, that's the people that we interact with. So that's really interesting, I would say, profiles that you see in Lumigo, the same
+
+115
+01:05:29.000 --> 01:05:45.000
+background of people. But maybe a developer decided he wants to try sales or try marketing or try product. And that's I think what Lumigo is still a bit different. I'm not sure we can maintain that as
+
+116
+01:05:45.000 --> 01:06:02.000
+we have 100 or 200 employees, but we're still very, very much differentiated. Cool. That's awesome. Yeah, it totally resonates. I think that I love companies like this that are there to really support
+
+117
+01:06:02.000 --> 01:06:47.000
+developers because you really feel like you're helping your really support developers because you know you really feel like you're kind of helping your own you're sort of like dogfooding uh something you're building something that you would want to have yourself which is really cool exactly great yeah thank you so much i mean i think we did an awesome job covering serverless if folks out there have any uh questions or if they want to you know get on this free trial or if they want to ping you about something that you talked about and kind of follow up, what are good ways to reach Lumingo and also good ways to reach you? you can just you know go to our website and click on start and you know it's super easy you don't need to talk to anyone and you know
+
+118
+01:06:47.000 --> 01:06:55.000
+five minutes to connect and that's free for the free tier so you can just go and do that if you want to ask deeper questions on
+
+119
+01:06:55.000 --> 01:07:05.000
+serverless on Lumigo or in general on this domain please please ping me I really really enjoy talking to more and more people
+
+120
+01:07:05.000 --> 01:07:43.000
+in our community, and we love to help where we can because we have a lot of serverless expertise in Lumigo. We have what's called Serverless Heroes by AWS within the company, and we actually manage to help from time to time to, not just to our customers and users. So feel free to approach with any question. The best way to reach me would be through either LinkedIn or Twitter. Sending a direct message would probably be the easiest.
+
+121
+01:07:43.000 --> 01:08:15.000
+Cool. Yeah. And we'll post in the show notes, you know, the website and also your contact information and all of that. So check out the show notes for all the details. We'll also post to where you could get on the trial and everything. Cool. Thank you again, Erez. This is a amazing episode. We covered a ton of really good topics here. I guess just the last bit of takeaway from my end, and then I'll hand it over to you, is definitely start with serverless. It can feel overwhelming because you don't have
+
+122
+01:08:15.000 --> 01:08:52.000
+just a console right there. You don't see the logs right there. But I can tell you as someone who's built a lot of different things, it's so much easier to maintain. And in fact, the things that I've built on the cloud are still there. And a lot of the hobbies that I've built on my desktop, even the desktop doesn't exist anymore. It's just in a trash heap somewhere because it's 20 years old or something. So hardware fails, serverless stuff seems to last a long time. And operating systems change, but your serverless function is containerized. You don't have to worry about that. So check it out. Definitely, definitely good to learn.
+
+123
+01:08:52.000 --> 01:09:19.000
+You know, you could be a beginner, you could be intermediate. One thing I tend to be, you know, I have a reputation for being extremely frugal. And one of the reasons I didn't get into serverless was because I didn't want to pay even like 17 cents a month or something like that. That is ridiculous. So don't be like me. Don't do that. Spend the like $1 a month or $10 a month or, you know, to have something, you know, have the peace of mind, have something that runs in the cloud.
+
+124
+01:09:19.000 --> 01:10:00.000
+You know, they handle so much for you. And for things like Lumico that are free, I mean, it's a no-brainer. Try this out. You will have trouble debugging. I mean, I can speak from experience. When you're passing a lot of this information around, it makes debugging a challenge. But it's a challenge you're going to have to learn if you're going to get a career in this industry. Well, maybe, you know, I know Patrick does a lot of embedded stuff, so he might scoff at that. But, you know, if you're building a website or building one of these big services, you know, that's a skill you're going to need to learn anyways. And so definitely try this out. And Erez, I'd love to head off to you. What are your sort of closing
+
+125
+01:10:00.000 --> 01:10:20.000
+thoughts? Yeah, I really, I want to echo what you mentioned. Starting with serverless, first of all, it's fun. So go try it because it's fun. It's fun seeing how fast you can build things. There are great, great workshops out there. You can take a two-hour,
+
+126
+01:10:20.000 --> 01:10:41.000
+three-hour workshop that really takes you step-by-step. And all of a sudden, you have an application that orders taxes or something, and it only took two hours. And that's simple. And that's straightforward. And then you basically, a lot of people fall in love at this stage and then start to investigate what they can do more.
+
+127
+01:10:41.000 --> 01:11:00.000
+But start small. Try it out. Actually, when it slumbers, I think you have 1 million invocation for free from AWS. So it's, you know, even Jason, even you can try it without the 70%. So, yes, I think that's what I want to echo. Definitely go and try it.
+
+128
+01:11:00.000 --> 01:11:27.000
+Cool. Thank you again for coming on the show, Erz. We really appreciate it. Thank you very much, Jason and Pratik it was a pleasure music by Eric Barndaller programming throwdown is distributed under a Creative Commons Attribution Share Alike
+
+129
+01:11:27.000 --> 01:11:32.000
+2.0 license. You're free to share, copy, distribute, transmit the work, to remix, adapt the work, but you must provide an attribution to Patrick and I, and share alike in kind. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

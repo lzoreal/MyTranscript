@@ -1,0 +1,229 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:35.000
+Reduce in Cub is two passes. Reduce in Cub is two passes. Yeah. Because instead of communicating between threads, it's more efficient to have all of the thread blocks reduce locally right into an array and then do a second pass that reduces that final array. So in CUDA on NVIDIA GPUs, you tend to have hundreds of thousands of threads, you know, many, many inputs,
+
+2
+00:00:35.000 --> 00:01:50.000
+and you tend to have maybe thousands of blocks. Welcome to ADSP The Podcast, episode 174, recorded on March 6, 2024. My name is Connor, and today with my co-host Bryce, we continue part two of our discussion of parallel chunk buy. Okay, Connor, I'm going to show you a function signature you've got if we've got a function chunk by it takes a range an output iterator and a predicate and what it does is it chunks up the input according to the predicate. So it creates chunks of elements for which the predicate returns true. And whenever there's an element for which the predicate returns false, then that's the start of a new chunk. And then it assigns these subranges, it assigns it into the output iterator.
+
+3
+00:01:50.000 --> 00:02:08.000
+How do you implement this chunk by algorithm in parallel? I mean, chunk by does nothing, so there's nothing to implement. Perfect. Done. Woo, folks! You missed the prompt. I'd missed the prom? The prompt.
+
+4
+00:02:08.000 --> 00:02:23.000
+The prompt? Yes. I was going to say, why did I miss prom? It doesn't have anything to do with this. You've missed the prompt. I mean, chunk. This is not a view. This is an algorithm called chunk by where it needs to produce an output sequence of
+
+5
+00:02:23.000 --> 00:02:48.000
+sub ranges. I mean, even if this isn't a view, I literally would, like, unless if you're calling, you know, two vector after the view thing, which is where my head's at right now, literally, I wouldn't change the shape of the data. I would create a second thing called flags. You know, whether you even want to materialize that or not,
+
+6
+00:02:48.000 --> 00:03:01.000
+you could just do it with a transform iterator, zip iterator trick. You can't do this one lazily. I'm not saying you're doing it lazily, but like until you need to print it, you don't actually need to do anything. And it doesn't need to be a scan. It's just literally... How are you implementing this in parallel? What do you mean? A transform iterator?
+
+7
+00:03:01.000 --> 00:03:22.000
+That already is parallelizable. Okay. Describe your implementation again. All right. So if I need to, like, to me, I'm, like, stuck in view land because, like, chunk by by itself, like, you rarely ever want that. But if literally what you want to do in parallel is write to a screen and you've got a million elements and you want to chunk by a binary predicate,
+
+8
+00:03:22.000 --> 00:03:50.000
+which is what chunk by does, and you want, like, the bracket and and the left bracket right bracket indicating where your chunks are i literally wouldn't change the data at all all it would be is a printing mechanism and i would create a transform iterator composed with a zip iterator that gives you two elements at a time and your transform iterator is going to take that binary predicate and then you're basically just going to like however you do printing in parallel to the screen and anytime what is this printing
+
+9
+00:03:50.000 --> 00:04:13.000
+like my point is the output that I want is a vector of sub ranges not printing I want you to produce a vector of sub ranges well if that's the case then it's a bit more complicated. I mean, I feel like it's, why would you want that?
+
+10
+00:04:13.000 --> 00:04:37.000
+Okay, but that's not the prompt. But I think in general, you're always going to, there's always an operation after chunk by, whether it's a permutation of the elements in each chunk or a reduction. But the... So materialize... Answering this question answers how you would implement this in parallel when you're composing it with other operations. It answers a way to do that.
+
+11
+00:04:37.000 --> 00:05:03.000
+With my way where you just have a lazy basically mask that determines where your stuff is. I don't see how you could do this lazily like that in parallel. Like what does reduced by key do? That comes by. It's a scan. It's all scans, buddy. Reduced by key is a scan. Yeah.
+
+12
+00:05:03.000 --> 00:05:35.000
+Well, I don't think that's the only way to implement that. Okay, well, you let me be the parallel programming expert. I let you be the programming languages expert. Stay in your corner, buddy. Doing that via scan versus like a bunch of different reductions that then the results just get copied. I mean, I think that's, well, no, for reduced by key. Like a scan by key, obviously, inclusive scan by key, obviously that's a scan, but a reduced by key, if you're telling me that's implemented with a scan, maybe that is the best way to do it.
+
+13
+00:05:35.000 --> 00:05:54.000
+I'm just saying that sounds suspicious. Because you, yeah, you have to do it. I'm pretty sure. But anyways, you're getting us off topic. We can check that in a moment. How do you implement? Stop questioning the utility of the thing and just trust me and answer how do you implement chunk by.
+
+14
+00:05:54.000 --> 00:06:20.000
+All right, so if you actually want to materialize a vector of vectors, which for the record sounds like a bad idea to me. Sounds like a bad idea to me, folks. It's a vector of subranges. If you actually want to do that, and you're starting off with a single vector on your device, you're going to end up... It's the same thing that you want to do for copy of, basically.
+
+15
+00:06:20.000 --> 00:07:04.000
+Yeah, I mean, there's two different ways in my head. You can create that mask and then do the plus scans and do a bunch of copy ifs based on those indices. Or you can calculate the indices of where the starts of your new chunks are and perform copy ifs to each of your new vectors within your vector. So there's two different ways to do it. I don't actually know which one's best. So one of them, yes, is very similar to the first one that I described. Okay, so what I've got here is how I've done it, which is three passes just like a copy of.
+
+16
+00:07:04.000 --> 00:07:51.000
+The first pass, we build up a vector of flags, one for each element-ish. Now, chunk by takes a predicate that's applied to every two adjacent elements, so it's not just a straight transform. So we do a essentially an adjacent transform to build up the flags. And then we've got a vector of flags where there's one flag for every input element and the flag is true if the chunk by predicate returned true for that particular element. And then we're going to introduce a struct. We're going to call it interval.
+
+17
+00:07:51.000 --> 00:08:24.000
+And this struct is going to be the thing that we're going to scan. And an interval has four different components. One has the flag, which is just the flag from the transform. It's just a bool. It also has an integer, which is the index. And this is the same index from the copy if, where this is the index of what is the current location that...
+
+18
+00:08:24.000 --> 00:08:41.000
+It's a plus scan on your flags, Vic. Yes, it's a plus scan on your flags, Vic. Yes, it's a plus scan on your flags, Vic. But then we also have an int start. And this is the start of whatever the current chunk is. And then we also have an int end.
+
+19
+00:08:41.000 --> 00:09:17.000
+An end is just a count of... An int end. An end is just a count of, like for every element, we just count once. You follow so far? Maybe. Keep going. Okay. And then we're going to do a scan of the flags array. And we convert a flag to an interval as follows.
+
+20
+00:09:17.000 --> 00:09:48.000
+The flag parameter of the interval is just whatever the Boolean flag is, and then zero for the index, zero for the start, and one for the end. Because remember, the end is just the count of how many elements we have. So the way that you take a representation of a particular element, like any arbitrary element, and turn it into an interval is you compute the predicate for it, and that's the flag member of the interval and then index is zero, start is zero
+
+21
+00:09:48.000 --> 00:10:09.000
+and then end is one because you've got one element that you're dealing with. Follow so far? Maybe, keep going. Okay. And then our reduction operator for our, sorry, our scan operator, it takes a left and a right both of which are intervals
+
+22
+00:10:09.000 --> 00:11:08.000
+and it combines them together and it always takes the flag from the right interval just because of the the nature of how this scan is applied from left to right, it's always going to be representing the element on the right when we combine things. So the newly returned interval from this sum function will have the flag of the right one. And if the flag of the right interval is true, then the index is the left index plus the right index. Because, and that's, yeah. I won't explain that any further. But if the flag on the right is not true, then it's the left index plus the right index plus one.
+
+23
+00:11:08.000 --> 00:12:01.000
+Because if it's not true, then we've started a new group and we need to increment the index. Then for the start field, which represents the beginning of the current chunk that we're working on. If the flag is true, then we are continuing the current chunk. And so we add, they'll start from the left and they'll start from the right. But if the flag is false, then we're at the start of a new chunk. Well, where do we start a new chunk? Well, we're starting a new chunk at this element. So what is the position of this element? The position of this element is the end of the left,
+
+24
+00:12:01.000 --> 00:12:50.000
+is the count of how many elements we've gone to thus far. And fortunately, we have that count. And then the end, which is, again, the count of how many elements. It's just like if you were going to do a stood count. End is always just the end on the left plus the end on the right. And so you do that scan with that operator. And then you do a gather if. Or I'll describe it in terms of a 4-H. and so the 4h is it's a little bit tricky because you end up needing to have that flag parameter
+
+25
+00:12:50.000 --> 00:13:11.000
+in the interval thing but I also have to keep the original flags around because I end up overwriting the flags in there and there's maybe a slightly more elegant way to structure this but the 4h functor if the flag is false then that means that we're
+
+26
+00:13:11.000 --> 00:13:44.000
+at the end read an element that represents the end of a chunk and so we need to write that chunk to the output iterator. And we know what index we're going to write it to in the output iterator because that's a part of this interval data structure. But do you understand how this algorithm works? This is the same style of algorithm. It's the same implementation that we have for copy if. We did three fundamental things.
+
+27
+00:13:44.000 --> 00:15:05.000
+First of all, we computed the flags. Second, we did a scan that scanned the flags and computed some indices into the original input. And third, we did some gathering operation, which used those indices and those flags to write to the output in the correct positions with the correct values. This is how we implement stream compaction. And my argument is that this implementation strategy, the thing that we do for copy if, we would do the same thing for chunk by. It's the same parallel algorithm. Flag building, scan, gather. And that is why I say to you that I am thinking of these grouping operations as removing operations because they're going to be implemented in parallel in the same exact way. So I have three comments and I'm not even sure
+
+28
+00:15:05.000 --> 00:15:14.000
+if I remember all three of them so I might forget the third one while you do that I'm going to go look at reduced by key but continue alright my first comment I mean Bryce kind of needs to hear these
+
+29
+00:15:14.000 --> 00:15:31.000
+but he needs to refute them if they're wrong I didn't fully understand so I think the actually the first comment is yes I agree that they all share the same flags plus scan on flags gather if style.
+
+30
+00:15:31.000 --> 00:15:59.000
+That's my first comment. So I agree with you there. My second comment is I'm not sure I fully understood the struct across blocks or chunks, but I don't think that's important. I understand what the purpose of them was. I was thinking in my head, what if there's a bunch of chunks within a single block? Is that a problem? But my guess is that it comprehensively covers all the cases, whether a chunk is longer than a block and straddles both the left and right side of it, whether it's split by a block
+
+31
+00:15:59.000 --> 00:16:17.000
+or there's a bunch of them inside a bunch of chunks inside a block. I'm guessing your struck covers all those situations, correct? Right. It doesn't cover them explicitly. It's just by property of the scan. Yes. So as long as I didn't fully understand that, but my guess is that it works for that, so we're good to go there.
+
+32
+00:16:17.000 --> 00:16:56.000
+My third and final comment, and this is the most important one, is that although I made my first comment about agreeing with the structure, I think I still morally take issue with referring to that flags plus scan and then gather if as dropping because I can see why you're saying that because— How about compacting or combining? Those are less objectionable. Hang on. Can you at least see how some could view chunk by, which applies a predicate?
+
+33
+00:16:56.000 --> 00:17:23.000
+Think about what chunk by does. Chunk by, it says, okay, I'm going to start at the beginning of the sequence, and I'm going to apply this predicate and start accumulating elements until I hit one that's false, and then I'm going to pop out a chunk. Well, I mean, specifically, it's a binary predicate that's applied to adjacent elements. But could you see that as an operation that combines things together? Yes, but it doesn't drop anything.
+
+34
+00:17:23.000 --> 00:17:58.000
+The moral issue that I have is with saying that it drops stuff which is right but in a world where we have to do our work distribution a priori we end up we end up where we distribute a certain number of work items to each thread and then as we do this combining operation, some of the threads have to bow out. It's like back to that example of the word count where we had 20 threads but four words. Some of the threads have to choose not to participate and that's what I mean by dropping.
+
+35
+00:17:58.000 --> 00:18:40.000
+Well, so I still take issue with it because if an execution strategy necessitates some kind of dropping, the execution strategy has nothing to do with the algorithm from a semantic point of view. But if you think about the algorithm differently, then that can lead you to an execution strategy that you might not have thought of. I'm not disagreeing with that. But from a semantic point of view of what Chunk Buy does, it doesn't drop. Just because an execution strategy does. I choose to think of it as dropping. I'm not saying that you're wrong for thinking about it. But you're trying to convince me to think about it that way.
+
+36
+00:18:40.000 --> 00:19:06.000
+I'm not saying that you should think about it that way in general. What are you saying? I'm saying that if you're implementing it in parallel, that's a good mindset to have. Also, let's talk about reduce by key. I did confirm it is implemented by a scan. And in fact, interestingly, it's a by key scan. So it is very similar to these algorithms. It's a by key scan so it is very similar
+
+37
+00:19:06.000 --> 00:19:28.000
+to these algorithms it's a by key scan? that's even worse than implemented by a scan well how else would you do you do the scan to compute the groups you could do a reduce by key with a
+
+38
+00:19:28.000 --> 00:19:44.000
+reduction. With the same little struct that you're building up with little pieces of information that like when your chunks, because that's basically a reduce by key, is exactly what we're talking about. It's a chunk by followed by a transform where the operation that your transform is
+
+39
+00:19:44.000 --> 00:20:18.000
+applying is a reduction. That's exactly what this is. And in the case where you know that that operation is a reduction, a.k.a. a reduce by key, then you know that you definitely don't need to do any scanning stuff. You can have some object that, sure, it's got some internal vector that might be growing over time as you are, you know. You'd have to turn it, basically each of your elements into one of these structs. And then at the end of the day, you're going to end up with a vector of these structs where the only thing you care about is the reduced element. But you definitely don't need to do it by with a scan or a scan by key.
+
+40
+00:20:18.000 --> 00:20:55.000
+Maybe that is actually the best implementation. Lord knows I'm not a CUDA ninja when it comes to implementing this stuff. So I don't actually know, you know, what is best. knows I'm not a CUDA ninja when it comes to implementing this stuff, so I don't actually know, you know, what is best. But I'm saying that, like, when I think about, you know, how to implement a copy if it matched up with what we have in Thrust. But when I think about how to implement a reduce by key, I definitely don't think of scan, and I definitely don't think of scan by key. I see how you can definitely implement them in terms of those, but like a scan by key, my guess is what they do is they do the scan and then they just do a copy if where they're copying the last element of each of the scans correct um
+
+41
+00:20:55.000 --> 00:21:23.000
+i would expect to see like i would expect to see a gather if or a copy if where yeah there's a there's a gather if in the scan yeah and the gather if is just looking into the final index of each scan, which means that you've materialized a whole scan, a whole like, you know, chunks worth of data only. It's like, it's basically when we talk about the missing reduction where we're doing the associative only reduce, but the only way to do that currently because we don't have that reduction, it's missing.
+
+42
+00:21:23.000 --> 00:22:17.000
+We have to basically do an inclusive scan and then just take the last element that's what we're doing here for every single chunk bryce is thinking he's he's not ignoring me he's just staring up at the ceiling yeah i just remember what reduce actually looks like but let's look at scan by key because you mentioned how skate well now scan by key actually does the um does the the flags thing to scan by key and reduce by key look end up looking very similar and and cub today that's good i'm trying to think about whether there's a better way to do reduce by key is there a reason that it has to be a scan oh you know why probably is a scan because the reduce by key that I'm talking about, my version, you know what it needs? It needs the missing reduce. Building up one of those structs that you combine across blocks requires the associative only reduce.
+
+43
+00:22:17.000 --> 00:22:41.000
+Yeah, but our reduce just happens to work that way. Okay, never mind. I forgot about that. So let's look at what does reduce do. Reduce. It'd be funny if it was a scan too. No, it's not. So it's got a block reduce,
+
+44
+00:22:41.000 --> 00:23:28.000
+but then, so in Cobb, a block reduce is something that just does a reduction within a set of blocks, but then you get to combine a block reduce but then so in cub a block reduce is something that just does a reduction within a set of blocks but then you get to combine a block reduce with some sort of global thing to um make it a device wide so the way that the way that scan works in in cub is there's this magical tile prefix thingy that wraps your operator. So you still call block scan in Cub, but you pass it in this magical wrapped version of your operator. And that wrapped version of the operator does all of the communication between the different blocks. So it's very clever because if you only want to do a block-wide scan,
+
+45
+00:23:28.000 --> 00:23:57.000
+you can use the block-wide scan primitive for it. But if you want to do a scan that communicates with other blocks, you don't have to use a different primitive. You just use that same primitive and you just plug in this operator that when it gets invoked, it will go and do the communication. And if you're interested in learning more about how that particular scan algorithm is implemented... Attend Thinking Parallel at ACCU 2024 in April. Think Parallel. Think Parallel. Ooh, is Think Parallel? Think Parallel is a better title,
+
+46
+00:23:57.000 --> 00:24:22.000
+yeah. Think Parallel. Yeah. At ACCU 2024. I think in parallel is actually, I don't hate that title. What did a friend, Joao, who was a guest on Arraycast, when he listened to that episode, he was like, IBM's motto is think. Apple's motto is think different. NVIDIA's motto is think parallel, or should be. And then I was like, and then I said, yeah, we could keep going. And Netflix is don't think.
+
+47
+00:24:22.000 --> 00:25:01.000
+So where is the – OpenAI is We Can Think For You. Where is the communication here? So there's no – interesting. All right. Somewhere here there's got to be an atomic or somewhere there has to be some form of communication. For those that like to follow along, Bryce is at agent underscore reduce dot C-U-H in the C-C-C-L slash cub slash cub slash agent repository on the NVIDIA C-C-C-L GitHub repo.
+
+48
+00:25:01.000 --> 00:25:17.000
+We'll leave a permalink to the file in the show notes. Consentile. Transform op. We've also, we're going to wind this down in the next five minutes here because we've been recording for an hour and a half.
+
+49
+00:25:17.000 --> 00:25:31.000
+This has a transform op that's built into it. That's clever. So we're calling reduce. Hang on. You hold on to this for a second. Testing, testing. Some things just happened.
+
+50
+00:25:31.000 --> 00:26:16.000
+That was Bryce dropping his keyboard. I remember the answer. Reduce in Cub is two passes. Reduce in Cub is two passes. Reduce in Cub is two passes. Yeah. Because it's more, instead of communicating between threads, it's more efficient to have all of the thread blocks reduce locally right into an array, and then do a second pass that reduces that final array.
+
+51
+00:26:16.000 --> 00:26:59.000
+So in CUDA on NVIDIA GPUs, you tend to have hundreds of thousands of threads, you know, many, many inputs. And you tend to have maybe thousands of blocks, you know, let's say, oh, 1,000 blocks for, like, you know, a good chunky run. Maybe if you have a smaller problem size, you might have a lot fewer blocks. And you have, like, up to hundreds of what we call SMs, which are the things that execute blocks. And you can have, I think like modern chips maybe have like 80 SMs. But each SM can have multiple blocks active at a time. I can't remember how many.
+
+52
+00:26:59.000 --> 00:28:42.000
+It could be 16. So you could have a couple hundred blocks operating at the same time. So if you do a two-pass reduction, your first pass reduces whatever, regardless of input size, which could be millions, billions, trillions, down to order of magnitude of how many blocks you've launched, which is a few thousand. And then you do a second pass, and it could even be a serial pass, but the way that we do it in Cub is we do a second pass, which is we launch a single block to reduce those values from the, to reduce the aggregate sums from each one of the first passes blocks into a single result. And this approach requires no communication between blocks. So it's embarrassingly parallel across blocks. And this is why reduce by key has to can't, I think, do a two-pass approach like that because you have to handle the ends of each one of the reduced by key groups.
+
+53
+00:28:42.000 --> 00:29:20.000
+Right? by key groups right like what if what if one of the blocks in the first pass spans two groups or three groups or four groups yeah i mean that's covered by like i said the same way where we had the whole missing reduction episode and we were doing the maximum consecutive ones where you had to build that struct that like carried information? But we could build a... So the thing that we use to communicate between blocks in a scan is called decoupled lookback. And if you want to learn more about that, come to my Think Parallel talk.
+
+54
+00:29:20.000 --> 00:29:41.000
+But there's no reason that we couldn't use... I think the two-pass reduce would still work. You just... Maybe it would. You just need to be smart about... It's similar. We've talked about... But even if it doesn't,
+
+55
+00:29:41.000 --> 00:30:25.000
+you could do it in one pass with a decoupled look back reduce that's that's probably slower we don't even have that right that's probably slower i thought yeah but the the piece the all of the pieces are there you can actually the communication thing which is like called like tile prefix callback up or something like that in cub that thing is not i think specific to scan um there's certainly there's a version of it for reduced by key um the it is weird that it does the scan. I wonder if the scan. Look at that.
+
+56
+00:30:25.000 --> 00:31:00.000
+Bryce is coming over to the dark side. I wonder if the scan is necessary because of the keys. Because we usually. We usually do a scan anytime we have keys, but why? And now, Bryce is right around the corner. Let's go back to the two pass reduced by key. I'm not convinced that works.
+
+57
+00:31:00.000 --> 00:31:05.000
+Be sure to check these show notes either in your podcast app or at ADSPthepodcast.com for links to anything we mentioned in today's episode as well as a link to a get up discussion where you can leave thoughts comments and questions thanks for listening we hope you enjoyed and have a great day low quality high quantity that is the tagline of our podcast it's not the tagline our tagline is chaos with sprinkles of information There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

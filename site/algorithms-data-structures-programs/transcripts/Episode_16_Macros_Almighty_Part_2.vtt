@@ -1,0 +1,145 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:34.000
+When you just said that about like, I'm not sure why, I just, I love putting myself together a macro sandwich and just taking a big bite. Remember, with great power comes great responsibility. welcome to adsp the podcast episode 16 recorded on february 20th 2021 my name is connor and today with my co-host bryce we wrap up part two of our two-part discussion on macros. Oh man, my head hurts. And then, so, so then the other, the other like more advanced stuff that you get into with, with the preprocessor is dealing with commas and removing or adding parentheses. One of the things I was showing my co-worker how to do is he was writing a macro where it was basically a macro that was an abstraction around something like an if statement. And he wanted to be able to pass arbitrary blocks of C++ code as the second and third argument of this macro. And he was like, but, you know, if there's a comma in there, then everything breaks.
+
+2
+00:01:34.000 --> 00:02:11.000
+Because then if there's a comma, it'll treat that, you know, that argument as being multiple arguments. And that'll be a problem. And so I told him, okay, that's fine. Just always put parentheses around that second and third argument to protect the commas. And then there's a trick that you can use to always strip leading and trailing parentheses from an argument. So that way, if I wanted to write something that has some commas in it as a single argument,
+
+3
+00:02:11.000 --> 00:03:17.000
+I just put parentheses around it, making it into one of these sort of pseudo data structures. And then later I can just remove out all the parentheses to get the original argument that the user intended. This is a fairly common pattern throughout Boost libraries that do advanced macro stuff. So as much as this is sort of saddening me and confusing me, that's useful because I did not know that. And I'm currently, every once in a while, I live stream porting an old C code base that is the implementation of the J language, which is the predecessor or successor, I should say, to APL. And it originally had 10,000 macros in it. And it isn't even C. So that's the thing is seeing this now, the Boost preprocessor library, has me thinking that there is C and there's also C++.
+
+4
+00:03:17.000 --> 00:04:20.000
+And then within those two languages, you can build your own, like, macro DSL. Because it's not really like, I'm not really porting C to C++. I'm porting this C macro DSL, where they don't use for loops, they use a do macro. They have a macro for everything, like their functions are macros their you know ifs and uh you know for loops are macros and a ton of their macros use this uh parentheses trick where it has like a it's a 10 argument macro and every single one has parentheses around it uh which i always thought was odd but clearly you just explained why so my question is is like it's like why like is this is this kind of stuff not possible with a hygienic macro system or a language that supports that or like clearly someone's gone to the trouble of doing this and it's if people are utilizing it it's not just like a fun pet
+
+5
+00:04:20.000 --> 00:05:26.000
+project it probably is possible with other systems but i'll tell you the reason why people go to macros um and it's that it's it's both the advantage and the downside of it that um macros are purely textual um there is no um knowledge of you, C++ semantics. It's just purely textual. And that makes it very powerful. Like if there's something that you just can't do in the C++ language, like just this very simple model of, hey, we're pasting together strings, basically. That's all that we're doing. We're pasting together strings. That can be very powerful. And like sometimes there's something that just the syntax of C++ prevents you from doing something or prevents you from abstracting around something that macros could let you do.
+
+6
+00:05:26.000 --> 00:06:34.000
+And in particular, it can be very useful if you're dealing with things like language extensions, or non-portability, or extensions that only some compilers support, or compiler bugs. then it can become very useful to use macros because, you know, again, it's just this purely simple textual model that is completely ignorant of the underlying language. So yeah, I hear you saying that. But like, on one hand, it's simple, like textual text replacement is simple. Yet in the process of using a simple thing, you've now created a DSL, which you need to go and learn. Oh, yeah, yeah. Which is the thing about, like, when I am working through the J source code. We've managed to already delete like I think 7,500 of the 10,000 macros, but we're still left I think with like 2,000 or 3,000. And you have to go and learn.
+
+7
+00:06:34.000 --> 00:07:06.000
+And that's the thing is they're not even well documented. They're not well named in the famous style of APL and J languages. Like a lot of them are one and two characters. Like GA, I inferred stood for get array. So it's for constructing an array type. And then there's a bunch of like variants of GA, there's GA zero, G ATS, GA, etc, etc, which is very similar to what, you know, not not exactly with the tag zero tag one. But yeah, there's a trade-off because you don't have like standard macros. It's just, it's all custom.
+
+8
+00:07:06.000 --> 00:07:40.000
+But I guess that is an argument that I hear when it's, you know, insert programming language plus, you know, the standard algorithms that come with it. And people are like, well, you know, I could just use a for loop and I don't need to go learn everything. Whereas if I go learn the algorithms, like sure, maybe that gets me something, but I have to go and learn them. So there's some, there's some echoing of me saying, oh, you have to go and learn all the macros. But I just, what is your defense to, or maybe there is no defense, and you're just saying like, this is, it has a use. And yes, it's easy to shoot yourself in the foot. Because, like,
+
+9
+00:07:40.000 --> 00:08:29.000
+the most egregious uses of macros that I've come across in multiple different code bases are when you're looking at a local function that has a macro and you see some variable name and it all fits on one screen and like you can't see the variable and you're like oh is this using globals okay that's not great practice you search for the global it's not a global and then if you've seen the problem before you go oh no don't tell me this macro is doing this, where the macro declares the local variable off screen. And so, like, you have context that is, like, important for reasoning about local functions or local code. And then you have to step into the macro and find out that, oh, we're actually declaring that variable X in the macro. And so it's not just that you need to know the macros.
+
+10
+00:08:29.000 --> 00:09:09.000
+You need to understand the implementations of them in certain uses. And that just for me is the level of obfuscation and increased difficulty in reasoning about that code is way, way, way too, way past the line that I want. Yeah, it's also, they're also basically impossible to debug. You know, if you get an error, and that can make them very brittle. Like, it's hard for macros to give you good errors. And in many ways, it makes it very similar to type-based template metaprogramming in C++,
+
+11
+00:09:09.000 --> 00:09:39.000
+where it was very powerful. They're actually very similar. They're both very powerful. They're both very functional. And they both have no facility to give you good diagnostics, which can make them very hard to debug. I mean, I would say don't use macros if there's some other solution that works just as well, or even that works 90% as well.
+
+12
+00:09:39.000 --> 00:10:51.000
+The places where I use macros, it tends to be one if I need to abstract over non-portability. So if there is some extension or something that one compiler has that another one doesn't, using a macro to hide that I think is very powerful, sometimes unavoidable. And if I'm going to do that, I'll, you know, I'll try to make the macro as clean as possible. If I have to pick between having if-deft code versus using a macro, I'll use the macro. And let me explain what I mean by that. One way to deal with non-portability is to say, okay, I'm going to write one version of the code with an if def, and then I'm going to write another version of the code that doesn't use this extension that's in the else of the if def. And I like to avoid that as much as possible because I think it either leads to duplicated code, which is a maintenance burden.
+
+13
+00:10:51.000 --> 00:11:53.000
+You've duplicated the entire thing. Or you've made the ifdef very constrained and you've done it in such a way that it becomes very hard to actually like read what the code means. So if instead of having two versions of the code, I can have one version of the code in one macro abstraction, I'd prefer the macro abstraction. The other place where I have used macros and where macros have historically been used is to deal with or to minimize repetitive code. It's actually very much the same thing. It's that like, you know, instead of writing, you know, 20 versions of this function, each of which are slightly different, I'll just write a macro that parameterizes the difference. And again, it's, you know, having less repetition in your code, I think can be good. It
+
+14
+00:11:53.000 --> 00:12:27.000
+might make, you know, using that macro might make it a little bit more confusing. But it means that if I need to update all 20 of those definitions, I can just do it in one place, you know? Yeah, I think, I mean, I think, yeah, in my career, I've written, I want to say one macro that went into production. And that was the use case where I had a single line that was repeated with like a couple just textual differences that was using the double hash. And so I had a single line macro above like three functions that all fit on the same screen
+
+15
+00:12:27.000 --> 00:12:54.000
+that like drastically simplified the repetition. But like the thing was, is like the macro was right there. You could see the entire contents of the macro. And I still felt bad about it, but I mean, it did make locally the code, I think, easier to reason about because it was less noisy but yeah i mean i have real mixed feelings because of i feel like a lot of these sort of
+
+16
+00:12:54.000 --> 00:13:40.000
+arguments you can make against like c++ in general like oh you know very powerful but very easy to shoot yourself in the foot however c++ comes with an ecosystem of like static analyzers and compilers that have differing levels of warnings that you can enable and all of that leads you in the right direction whereas my guess is that for c++ macro DSLs, like there is none of that. Which means that you... Yeah, maybe. I would say macros were a lot more important to the language in the pre-C++11 era. There were a lot of gaps that macros had to fill.
+
+17
+00:13:40.000 --> 00:15:07.000
+So there's another preprocessor trick, I would argue the most advanced trick, which is file iteration. So this is sort of the way that you can do stateful macros. So the basic idea is you have some header that does not have include guards. And essentially, it's intended that the header will be included multiple times. In each different time, it will be included with a different, you know, with a variable, some iteration variable that is defined in a different way. You know, something like what I'm showing you right now. And so, like, you know, you write this iteration header where it uses this, you know, some macro like n, and then every time that the header gets included, it has an increasing value of n. And it can become a very powerful tool for avoiding repetition. One of the major problems that we had pre C++11 was we didn't have any variadic
+
+18
+00:15:07.000 --> 00:16:16.000
+template parameters. And so to make something like tuple work before C++11, you just had to pick a number of arguments to support. And you'd have to, you know, you'd create a tuple where it has, you know, it has 10 template parameters, each one is defaulted, and then you have, you know, a specialization for each number of parameters that have been provided. You know, this is how things like tuples and any other variadic structures worked pre C++11. And it was very repetitive to write that code by hand. If the only way that you could write variadic templates was to manually unroll things, to manually unroll up to the limit that you wanted to support um uh that would that could be very error prone and a huge pain for um uh uh for
+
+19
+00:16:16.000 --> 00:17:03.000
+maintenance and so you know using the pre-processor to make that a little bit simpler was a common technique there's even so my my old my old boss and mentor, Hartmut Kaiser, he wrote Boost Wave, which is Boost's C++ preprocessor. And I once asked him, why'd you write your own preprocessor? And he said, you know, I wrote it to embarrass all the vendors because I wrote it in a period of time when nobody had a conformant implementation of the C++ preprocessor. And so I wrote one to show them that it could be done and to embarrass them. I'm not sure whether any vendors were ever aware of
+
+20
+00:17:03.000 --> 00:18:07.000
+this. Maybe Hartmut was joking, but that's the story I was told. And one of the features that BoostWave supported was it could do partial pre-processing. So you could tell it, hey, just expand this set of macros or just expand these headers. And that could be very useful if you wanted to write some of this preprocessor code and then you wanted to expand some of it out so that you would avoid some of the compilation time costs, but you didn't want to, you know, pre-process everything. I think we used it in HPX. I think it was used in Boost Phoenix at some point, which was a metaprogramming library in the pre-C++11 era. Yeah. So there's two things we should start to wrap up seeing as we're way past our 30-minute goal.
+
+21
+00:18:07.000 --> 00:19:06.000
+But, you know, I knew we were going to talk about the C++ preprocessor slash macros today. And in the back of my head, I was thinking, you know, the title of our podcast is Algorithms plus Data Structures equals Programs. You know, we talk about whatever we want, but I just felt just felt that this is going to be a little bit outside the scope. No, sirree. We, if you take a look at the link, it'll definitely be in the show notes. We've got all your algorithms and all your data structures, just, if, if, if they can be called that, if they can be called that. If a random collection of parentheses and text can be called data structures, then indeed we have data structures. Yeah, we didn't even talk about some of the craziest stuff. I wanted to show you all of this nonsense for how you detect whether there's a comma in a certain set of variadic arguments,
+
+22
+00:19:06.000 --> 00:19:34.000
+and then all this craziness for how you detect whether a variadic is empty. But that would take another hour, and I fear I might break your mind if we were to do that. Well, you never know. We might split this into part one and part two, and then we'll give our listeners just a break, give them a chance to go check out the Boost preprocessor website. But so, final question.
+
+23
+00:19:34.000 --> 00:20:31.000
+Putting your ISO C++ Library Evolution Working Group hat on, I do believe one of the goals of the standards c++ standards committee is to eradicate all of the use cases of uh the defined macro and then to eventually i know it's like a it's a what do they call it a long-term goal um is to remove it uh and i if i recall i think your stance i don't want to put words in your mouth i think your stance is that that'll never be possible right um so do you want to comment on it being an overarching goal slash whether or not you feel that is actually possible i think that it is it will never happen because i i think there will always be a use case for a textual macro system like this.
+
+24
+00:20:31.000 --> 00:21:21.000
+There's always going to be a use case for doing some sort of simple textual generation of C++ code. And if we eliminated the C++ preprocessor, people would just go, you know, they would go write Perl scripts or Bash scripts to do it, right? They would just go do it with some other tool. And one of the big benefits of the C++ preprocessor, and one of the reasons why it's often used for these things is because it's like a core part of the language. So Fortran doesn't... So you can write Fortran where it expands, where it has macros, it uses the C++ preprocessor,
+
+25
+00:21:21.000 --> 00:22:08.000
+but that's not like the default Fortran mode. And in fact, I'm not even sure whether it's officially supported by the Fortran language. But I'll tell you this, it's definitely a thing that every Fortran compiler supports, where usually it's with a different file extension. So if you just do like, if you just compile a.f90 file, it won't support C++ style macros. But if it's a.fpp file, that will be Fortran with the preprocessor running. And that just like signals to me that even if we were going to get rid of the preprocessor, I'm sure that there would still be a mode and that there would still be use cases
+
+26
+00:22:08.000 --> 00:22:48.000
+where people would want C++ with the preprocessor as opposed to C++ without the preprocessor. I would argue that maybe the mistake that C++ made was it picked the wrong default. Maybe we should have gone the route of Fortran where by default there was no preprocessor. And if you needed the preprocessor, it was something that you explicitly opted into. I mean, that's a familiar story in C++. But yeah, of us getting the defaults wrong. But I would really argue that I don't think that we'll ever fully eliminate the use case for it, even with something like const eval, even with something like hygienic macros,
+
+27
+00:22:48.000 --> 00:23:40.000
+even with some sort of lazy evaluation mechanism, even with reflection, which static reflection will address a lot of the use cases, as will just the expansion of what constexpr can do means that there's a lot of things that you used to have to do in macros that today you can do in just the native language. I think a lot of that will reduce what the use cases for macros have been historically, but I think that there will continue to be uses and that we'll find that there will be new uses. And again, a lot of language features have been, or a lot of facilities that are now important to C++ were first prototyped with macros. You know, Boost had a library that emulated move semantics
+
+28
+00:23:40.000 --> 00:24:13.000
+and relied on macros. The same can be said for a bunch of other C++11 facilities. So I don't, or concept is another good one. A lot of, before we had concepts in language, a lot of libraries used some macro-based concept framework. I think that 10 years from now, we'll be using macros perhaps in slightly different ways than we're using them today. Maybe to prototype, you know,
+
+29
+00:24:13.000 --> 00:24:55.000
+whatever the new hotness is 10 years from now, whatever the next upcoming C++ feature is, but I don't think they're going away. How do, I mean, i'm not a compiler hacker yet uh so i guess i can't i can't speak to this but like i i feel like just because a language feature is prototyped using macros isn't like other languages don't have textual replacement macros yet they still manage to iterate and i would feel like that's just because they work on the compiler like they just make the change in the compiler or the interpreter like uh that's it's not an unfair point but but i would argue that a lot of i would
+
+30
+00:24:55.000 --> 00:25:39.000
+argue that a lot of the the most powerful languages in the world do have um some sort of uh macro system like a lot of lisp style languages and a lot of them have textual mechanisms too. Some languages don't, but there's a lot of very powerful languages out there, a lot of functional languages that do have facilities very similar to this. Yeah. Well, you've definitely taught me at least one thing and um maybe one of these days well i'll probably i'll wait till i i give a talk that summarizes all the all the crazy stuff that i've i've had to port in the existing code base but like just in the
+
+31
+00:25:39.000 --> 00:26:36.000
+last live stream that i did we i went from you know, a C function with variables declared at the top and then this do macro for loop. And so like, I got rid of the macro, looked at the for loop, and then was like, oh, that's just a stood mismatch. And then replaced, replaced the for loop with an algorithm. And so, yeah, I just, my feeling is that a lot of these cases we're getting tools or the tools already exist um to like use something that's not a macro that's better but no you may be right you may be right i mean maybe that's just because i haven't fallen down this macro rabbit hole um that clearly you have i don't know why i derive great joy and uh in writing these little macro facilities but i really do um i it actually that just made me think of it's a quote that is not
+
+32
+00:26:36.000 --> 00:27:11.000
+you don't want to be associated with like some people program to be happy and uh some people are happy by being clever something like that where like, that's not a quote you want. Like, the quote that that came from was a Ruby talk, and the person that was making the comment was just saying that, you know, in Ruby land, we really want to generate nice code that's pleasant to read, and, like, your programmer happiness is, like, an important thing. Unfortunately, what makes some people happy is to write incredibly clever code and then a comment that says look how clever
+
+33
+00:27:11.000 --> 00:27:38.000
+and uh when you just said that about like i'm not sure why i just i love putting myself together a macro sandwich and uh just taking a big bite sounded a little bit like that, but I will have to spend more time, spend more time with these macros. And we're going to have to come back and revisit this topic. Maybe we'll get it. One of the reasons why I might like it is because doing stuff in macros,
+
+34
+00:27:38.000 --> 00:28:12.000
+like doing even very simple things in macros can often be like challenging to do. Making something like incrementing an integer work, that's not something that it supports natively, but there's that trick that I showed you that you can do to implement it. And I think I just like, I enjoy making those simple things work because the thing that I'm looking to implement is not something that's very complex.
+
+35
+00:28:12.000 --> 00:29:12.000
+It's very simple. It's very clean. And there's not a lot of complexity or baggage there. Whereas typically I'm writing concurrent software where the thing you're trying to implement is very complex. There's a lot of tradeoffs. There's a lot of performance issues and guarantees and expectations to worry about. And, you know, if I'm just having to write a macro that does, you One is with great power comes great responsibility from Spider-Man. And then I'm going to play the song. I've got the power and somehow splice your voice into it.
+
+36
+00:29:12.000 --> 00:29:17.000
+Talking about the power of macros. I like it. I like it. Thanks for listening. Have a great day and we'll see you in the next episode. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

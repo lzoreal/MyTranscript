@@ -1,0 +1,481 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:47.000
+episode 54 programming for the gpu take it away patrick we're here today with mark harris from nvidia mark why don't you go ahead and introduce yourself. Tell us a little bit about what you do with NVIDIA. Okay. Yeah, so my title at NVIDIA is Chief Technologist for GPU Computing Software. And my role is kind of twofold. One is inward facing and one is outward facing. So my inward facing role is to help define our software strategy for computing
+
+2
+00:00:47.000 --> 00:01:23.000
+at NVIDIA. And so that's for things like CUDA programming, which we'll talk about more hopefully. And the other aspect is the external facing role, which is a little bit of evangelism, giving talks at conferences such as the GPU Technology Conference. And I also run a blog called Parallel for All, which is on NVIDIA. Hopefully you guys can drop a link after the show recording. And on that blog, it's a developer blog written by developers for developers. And it's a deeply technical blog about parallel programming
+
+3
+00:01:23.000 --> 00:01:39.000
+and GPU programming. So can you maybe just give us a little bit of background what NVIDIA is, what they do as a company? I mean I think most people have heard of them but they just think of, well I guess people don't go to Best Buy anymore but you go to Amazon or Newegg or whatever the
+
+4
+00:01:39.000 --> 00:01:55.000
+international equivalent is. I still go to Best Buy. Sorry Best Buy. Okay. Yeah anyways kind of tell us who NVIDIA is, what they do, and why CUDA is a thing. Okay, so, well, what is NVIDIA? NVIDIA is a
+
+5
+00:01:55.000 --> 00:02:21.000
+visual computing company. And what that means is that we focus on building solutions for all aspects of visual computing. We call ourselves the inventors of the GPU. That's the graphics processing unit. I think NVIDIA coined that term back in 1999 with the first GeForce product.
+
+6
+00:02:21.000 --> 00:03:12.000
+And most consumers would be familiar with, especially gamers, would be familiar with our GeForce GPUs, which are graphics cards for making your game's graphics look amazing and run really fast. But GPUs are used in a variety of computations, and so we have four kind of focused business areas, and those are gaming, professional visualization, data center, and automotive. And visual computing or parallel computing are really important in all four of those. And it turns out that GPUs are very useful and good at accelerating those computations so the obvious ones are gaming because the GPU was designed for computer graphics
+
+7
+00:03:12.000 --> 00:03:53.000
+and also professional visualization but the area I work in is data center and parallel computing so you know GPUs it turns out are great at parallel computing because graphics is parallel. And, I mean, I don't know how much detail you want me to go into about the history of that. Well, maybe, I mean, a simple way of saying it is that with graphics, you're trying to do two things. You're trying to figure out where a bunch of triangles are in space. And then you're also trying to draw sort of a bunch of triangles are in space, and then you're also trying to draw sort of a bunch of pixels on the screen, and in both cases they're kind of embarrassingly parallel.
+
+8
+00:03:53.000 --> 00:04:40.000
+Like you have many triangles and they can all be discovered, located independently, and you have many pixels that can all be processed more or less independently. And so that makes the GPU kind of ideal for doing a lot of these things in parallel, right? Absolutely. Yeah, so you have millions of pixels to shade in every frame, and you're running 60 frames a second or whatever. And triangles, I guess modern games probably have um hundreds of thousands to millions of triangles per per frame too so you're getting to the point of having you know pixel size or sub pixel triangles um and yeah so so back in the day
+
+9
+00:04:40.000 --> 00:05:30.000
+back when i was in grad school um and actually way before that, people kind of recognized this with graphics hardware. And they started hacking around on using graphics APIs and GPUs to do computing that the GPUs weren't really necessarily designed for. And so this is something that I focused on in grad school, and I called it GPGPU, which stands for General Purpose Computation on GPUs. And since then, that's become something that isn't just grad students mucking around with graphics APIs. And back in 2006 or 2007, NVIDIA launched CUDA,
+
+10
+00:05:30.000 --> 00:05:50.000
+which is a set of extensions to C and C++ that allow you to program GPUs for parallel computing in a traditional programming language rather than using a graphics API. Yeah, I mean, before... Oh, go ahead, Patrick. Yeah, so I kind of recall vaguely that time when people first started kind of doing the GP, GPU stuff.
+
+11
+00:05:50.000 --> 00:06:29.000
+And, I mean, you might be able to fill me in where I'm misremembering or incorrect, Mark, but at first you were writing in a language which was essentially a shader for the GPU, so you kind of had to still frame whatever problem you were doing in terms of trying to tell the graphics what to do. Then CUDA came out. What was that process like and what did NVIDIA really see that made them say, hey, there's something here? Yeah, it's interesting. So my personal story for this was that I was an intern at NVIDIA in 2001. And that's when I sort of learned.
+
+12
+00:06:29.000 --> 00:06:42.000
+My PhD was on cloud simulation and rendering. So this was before people were talking about the cloud. So I was rendering clouds, right? Like pictures of clouds. Like balls of moisture. Okay. Yeah, exactly. In the sky.
+
+13
+00:06:42.000 --> 00:07:26.000
+And I had gotten this. At NVIDIA, I learned from some of the engineers there about some of the things they'd done with shaders. Like one of the guys wrote some shallow water equation solvers in DirectX and the Game of Life. He had the Game of Life running in pixel shaders. And this was before, I think they called it Shader Model 2.0 or something like that. So there was no floating point on these GPUs at that point. So you had to kind of hack everything in fixed point. You had basically 10-bit precision in the pixel shaders. And that was fun. But I basically got the idea
+
+14
+00:07:26.000 --> 00:07:52.000
+and I learned that NVIDIA was going to be coming out with GPUs with floating point pixel shaders in the near future and so I went back to grad school and I thought well what if I did all of the simulation of the clouds on the GPU in addition to the rendering and so I basically started doing fluid simulation on the GPU. And, but I didn't know, and a bunch of other grad students, you know,
+
+15
+00:07:52.000 --> 00:08:18.000
+and researchers were doing stuff in similar areas. There was ray tracing going on in shaders. There was FFTs even. And so I kind of started. I went on, like, I was also into the GPGP stuff very early. And there was a thing you could download that would do edge detection. So instead of rendering the teapot, it would actually render the edges. And it was so hard.
+
+16
+00:08:18.000 --> 00:09:06.000
+I mean, this was pre-CUDA. It was so hard. I mean, it took, like, a week to figure out figure out like how to get it to compile and then, oh, you don't have the right GPU. You have to go out and buy another one. And it was just, it was, it could have made it so much easier. Right. So I think that, I mean, while I was back in grad school and not at NVIDIA before I came on full time, obviously people at NVIDIA really saw this opportunity. And I believe that it was Jensen, our CEO, ultimately, who was convinced. And then by the time I got back in 2003, there was already an effort to build NV50, which became G80, which was the first CUDA-capable GPU. And there was, you know, it's the first GPU with a dedicated computing mode with byte
+
+17
+00:09:06.000 --> 00:10:09.000
+addressable memory instead of just pixel shaders, random access memory from the shader units. And in terms of, you're right, it was hard. And it was kind of fun. And it was, if you felt like, you know, a hacker, getting this stuff to work, but when you got something to work, it kind of had this feeling of magic, right? that really needs way more precision than I have in these fixed point pixel shaders, actually works. And it felt like magic, which is really not a sustainable feeling in software development. Right. So what NVIDIA did was to build hardware that was dedicated to computing as well as graphics. And then build software on top of that. And so we saw early on from talking to potential customers
+
+18
+00:10:09.000 --> 00:10:52.000
+that we would have to build something using languages that they're familiar with. And when we went around to customers and we were talking to people in areas ranging from defense to oil and gas to fluid simulation like Cadence and Affluent, I guess, was the company at the time. I think it's Ansys now. And they all said, well, it's got to either be, some said it's got to be Fortran, some said it's got to be C or C++. So we decided, we were kind of afraid of Fortran at the time, so we were like, well, we've got to build something that's based on C, and that became CUDA. So it's basically C with some extensions,
+
+19
+00:10:52.000 --> 00:11:14.000
+and it took away that magic feeling. You know, it did, when you wrote a program, it did what you thought it should do, rather than, oh, maybe if I hack this this way, it'll work, and then it does. And did those first CUDA-capable GPUs, I mean, did they get widespread adoption? Did NVIDIA's investment in putting in the extra work
+
+20
+00:11:14.000 --> 00:11:54.000
+to build a compiler toolchain and all that, did that really kind of pay off, or did it take a while? Well, it certainly paid off, but it also took a while. There was a lot of initial interest, and adoption started immediately. People were using CUDA 1.0. I still talk to customers who are like, yeah, I've been using CUDA since it first came out, or the beta, or whatever, and starting to build real software with it right away. But to really call it successful and actually see real applications that people could go and buy or download that accelerate with GPUs
+
+21
+00:11:54.000 --> 00:12:36.000
+probably took a couple of years. And now, you know, it's the point. I wouldn't say CUDA is mainstream, but, but it's definitely something that, um, that real, uh, products and, um, labs and researchers and all of these things all use. So just for, for people's clarity, I mean, if you're playing a video game, I don't know what the cool kids play these days. Um, and it. And it's running some amazing graphics. Is it the case that there's also CUDA programs doing general processing in the same pipeline? Or is it typically that you run some specific scientific application that would use it?
+
+22
+00:12:36.000 --> 00:13:31.000
+So early on, we made efforts to get CUDA into some games. And there are some ways that CUDA is used in games. So for example, NVIDIA has a physics simulation library for games called PhysX. And it uses CUDA for cloth simulation, particle simulation, rigid body simulation, things like that. But most games that are doing computing, and a lot of games do do general purpose computing, they use compute shaders within the graphics API. So after CUDA came out, DirectX and OpenGL both introduced their own flavors of compute shaders that basically are able to do similar things to CUDA programs programs but within the graphics API so that you don't have to be juggling two different APIs.
+
+23
+00:13:31.000 --> 00:14:20.000
+But they have largely the same programming model within the kernel. A kernel is what we call a parallel region of your program. Within the kernel, whether it's in the graphics API compute shader language or in CUDA C++, the programming model is basically the same with a few minor differences. So that may be a perfect transition to kind of go into like, what is that? Obviously, it's an audio-only thing, but kind of describe to us, what is the programming model for writing these programs? Yeah, sure. but like kind of describe to us like what is the programming model for writing these programs yeah sure so if you want to write a program for a gpu you want to take advantage of all of the parallelism so gpus have now thousands of parallel cores um and if you can think of these if you if
+
+24
+00:14:20.000 --> 00:15:09.000
+you're coming from a graphics background you can think of these as pixel shader cores, but really they're unified cores that do everything from transforming vertices for the vertex shader to shading pixels to just running compute instructions. And so you're basically writing, the way you can think about it is you look in your program for parallel or regions that have parallelism. And what that means is you have loops, typically in a program, where the iterations of the loop are not dependent on each other. So they could be run at the same time. So you can think of flattening out that loop and then running each iteration at the same time, or many of the iterations at the same time on separate processors. And so that's what Coodle lets you do.
+
+25
+00:15:09.000 --> 00:15:38.000
+And basically you write a program where, or you write a kernel program where within that function the whole kernel is being executed by many threads simultaneously. So basically the code is single thread code, but it's run in parallel across many threads. And you have... You kind of hinted at this, but when someone buys a computer, they buy a quad core computer or they buy an i7 that has six cores, right?
+
+26
+00:15:38.000 --> 00:15:59.000
+And you're saying the GPU has a thousand cores. So it sounds... I mean, just in a very naive way, you could say, well, why not use the GPU for everything? It has 1,000 cores. My CPU has four cores, right? So why would I ever use the CPU? Well, I will say that the GPU is becoming increasingly important.
+
+27
+00:15:59.000 --> 00:16:24.000
+But in fact, I was just looking at a – I saw a die shot of a Broadwell CPU, and it's half GPU, the die is. Oh. Like literally, literally. The actual cores – well, this was a Broadwell, not a Xeon. A Xeon is not half GPU, but just a regular core like i5 or something like that. And with four cores.
+
+28
+00:16:24.000 --> 00:17:07.000
+So the four cores take up maybe know maybe a quarter of the diary or something like that but um so why not use a gpu for everything um well the cores are different as you're hinting at um uh we call them cuda cores but um you know that's a sort of a marketing name but um really they are um individual processing elements that process instructions, but they use a parallel execution model that's called SIMT. You may have heard of SIMD. SIMD stands for single instruction, multiple data. And what that means is that you have a single instruction, but executed by um on multiple data elements simultaneously
+
+29
+00:17:07.000 --> 00:17:46.000
+and so you can think of that as having multiple threads that well no you can think of that as having a vector of data elements and you apply the same um instruction to all the elements in that vector simultaneously yeah like extra alus that'd be sse yeah that SSE, that's right, or AVX. And that's where you basically have a bunch of ALUs. SIMT was an NVIDIA coin term, but it's been used more broadly since then, I think. It stands for single instruction, multiple thread. So now instead of just having a vector of data elements, you actually have multiple threads that execute
+
+30
+00:17:46.000 --> 00:18:24.000
+the same instruction. And the difference, the important difference here is that each of these threads has its own program counter, which means that they can branch to different instructions separately. Whereas with SIMD, the branch has to be wrapped around the whole vector effectively. So if you need to make a decision, it has to be at the granularity of your vector size. If you need to make a decision in CUDA or in SIMD, then it can happen at a single thread granularity. Of course, there's a cost to that because the hardware, although we have all these little cores, they do share instruction fetch
+
+31
+00:18:24.000 --> 00:18:57.000
+and decode logic. And so you may end up with overhead of replays or predication of your instructions. I'm getting pretty technical here. No, it's great. That's kind of the difference between GPU cores and vector units or SSE units. But where the real difference is in terms of your original question is that the cores are very lightweight cores on a GPU, and they don't have very good single-thread performance.
+
+32
+00:18:57.000 --> 00:19:19.000
+They really get their performance in aggregate, right, from running many threads in parallel, usually doing the same thing, possibly branching and diverging some,, usually doing the same thing, possibly branching and diverging some, but usually doing the same thing. And CPU cores, on the other hand, they have a lot of things like branch prediction and big caches.
+
+33
+00:19:19.000 --> 00:19:36.000
+They're optimized for latency, in other words. They're optimized to reduce latency, which means that if you only have one thing to do, you can do it really fast. On a GPU, if you only have one thing to do, you're leaving 999 cores idle. Ah, gotcha. Right.
+
+34
+00:19:36.000 --> 00:20:11.000
+So the way we talk about it is that GPUs are optimized for throughput. CPUs are optimized for latency. There's a bit of gray area there because CPUs have AVX and they can do things in parallel too. It's just that the scale of parallelism is lower on a CPU versus a GPU. And we're optimized for throughput, which means instead of trying to reduce latency, we try to hide it. So we always talk about latency hiding. GPUs are really good at hiding latency by executing other work while we're waiting.
+
+35
+00:20:11.000 --> 00:20:41.000
+So if there's a memory access that we have to wait for data to come into the cache from off-chip, then we do work in other groups of threads, possibly even the same instruction in other groups of threads. But we have other instructions to issue to hide that latency. So does that carry over to the graphics world as well? Like maybe one part of the screen... It comes from the graphics world. Okay. So one part of the screen, the triangles have all been positioned and you say, okay, this
+
+36
+00:20:41.000 --> 00:21:16.000
+part of the screen is good to go. Let's start rendering pixels. Meanwhile, the next frame of triangles is already trying to get pushed to the screen at the same time. Is that the kind of pipelining you're talking about? Yeah, there is pipelining involved, but it's also just about having – so if you think about your pixels, you have some large triangle, possibly, that has hundreds of pixels it covers, and they're all shaded with the same pixel shader. So that pixel shader has to go and compute. It has to fetch from textures.
+
+37
+00:21:16.000 --> 00:21:59.000
+It has to blend the colors that it gets. It can do arbitrary computation now. But those pixels are grouped together into groups um in the hardware and in kudo we we refer to those as warps it's a term that comes from weaving actually but um because you had parallel threads and weaving um and so those warps uh so each warp is a group of 32 threads or 32 pixels and and while one warp is waiting on a texture fetch, for example, or a memory load, then we can switch to instructions from another warp within what we call the multiprocessor.
+
+38
+00:21:59.000 --> 00:22:16.000
+And so the multiprocessor can issue instructions from multiple warps simultaneously, or while one warp is waiting. Oh, I see. It's similar to pipelining. It's actually more similar to hyperthreading. Yep, that makes sense. So for people who don't know, you can probably explain it better than I could,
+
+39
+00:22:16.000 --> 00:22:43.000
+but I think a loose definition of hyperthreading is you have on your CPU, you have your floating point unit, you have something that know, on your CPU, you have your floating point unit, you have something that does integer arithmetic, you have many of these little mini modules, and you could sort of fake out having two or more threads if one of them needs the floating point unit and the other one needs the arithmetic unit at the same time.
+
+40
+00:22:43.000 --> 00:23:16.000
+And it's as if you're executing them both in parallel. Right. And on the CPU, I believe what hyperthreading requires ultimately is duplicating resources like the register file, right? And on the CPU, the register file is relatively small, at least on x86 CPUs. Well, the visible registers are fairly small. But on a GPU, the register file is quite big. It's almost like a small cache, except that it's a register file.
+
+41
+00:23:16.000 --> 00:23:57.000
+So it's directly accessible by instructions. And so we actually have, you know, on the GPU, the cores that I talked about are grouped together into things called multiprocessors. So, for example, a multiprocessor on Pascal, the latest architecture we just announced, has like 64 CUDA cores. And it has, I think, 128 kilobyte or 256 kilobyte register file on that SM. Wow. So there's a lot of registers. When you talk about having a multiprocessor, you said each core needs to be at a similar instruction, basically,
+
+42
+00:23:57.000 --> 00:24:46.000
+that you want to be executing the same thing as much as possible. I think this is really interesting because really understanding how your program gets executed helps you design really good software, or at least in the efficiency case. And what is it that's actually different that causes you not to be able to get off that far? So you have the multiprocessor, you have all these cores in it, and what is it that actually, like you said, you duplicate some things, not other things. What is it actually that is preventing you from being able to have code running very different parts of the program um so what's prevent uh what's preventing you having code well um but each core each thread basically doesn't isn't being run on a full-blown core that has a separate you know instruction fetch and decode and issue.
+
+43
+00:24:46.000 --> 00:25:02.000
+So that logic is shared across basically 32 cores. And so we group threads into groups of 32. And that's what we call a warp. And I'm not sure if I'm answering your question. Yeah, no, that's kind of what I was saying.
+
+44
+00:25:02.000 --> 00:25:15.000
+It's so that the instructions are fetched in a batch and that you want all of the I was saying. It's so that the instructions are fetched in a batch and that you want all of the cores in the multiverse to execute that same thing. So if they get too far off, they need some instructions that another processor doesn't yet need or whatever, right? And then you get out of sync
+
+45
+00:25:15.000 --> 00:25:58.000
+and you'd have to add extra hardware to handle that, which would get you closer and closer to a CPU core. Yeah, exactly. Yeah, that's right. And so when you write code for a GPU, you want to be aware of kind of the branchiness of that code, right? So if you have a loop where you're processing a lot of data, but each iteration of the loop, you're checking conditions and it's really data dependent, if every iteration is completely data dependent what it does, then performance may potentially suffer. But if you can kind of do some work ahead of time to maybe reorder your data, sorting
+
+46
+00:25:58.000 --> 00:26:33.000
+or something like that, or binning, so that threads that are contiguous in terms of their thread ID or whatever are accessing memory that's contiguous and also making decisions that are contiguous, then you're going to get much better performance. Sorry, go ahead. No, I was just going to try to give an example. So you're telling me like if you had even numbers, you do operation A, and an odd numbered indexes of the array you do operation b then instead of running linearly through the array you would want to maybe like process all the even numbers first and then all the odd numbers as
+
+47
+00:26:33.000 --> 00:27:07.000
+opposed to even odd even odd yeah i would just use my um use arithmetic on the indices in that case instead of um saying if even do this, if odd, do that, right? And so that threads, you know, just space out what your threads are doing rather than which threads are doing it. So how does somebody, if you have all of these threads all doing, well, I guess doing the same thing, but on different pieces of data, how do you debug this? I mean, I imagine you don't step through the debugger like you do with GDB and go line by line.
+
+48
+00:27:07.000 --> 00:27:29.000
+That would probably be bad. Well, it's a great question. How do you debug GP programs? And we do have tools. We have very good tools now, in fact. It's gotten a lot better. The CUDA 1.0 days, we did introduce CUDA 1.0 with a debugger and a profiler but they were very basic
+
+49
+00:27:29.000 --> 00:27:46.000
+so you can step through the instructions and people do and when you're really trying to figure out a difficult bug just like on a CPU it really helps to have a debugger that lets you step in and inspect memory locations
+
+50
+00:27:46.000 --> 00:28:24.000
+and variable values and things like that. And so you can do that, but there are a couple different modes that you can step, right? So we have a couple of tools. One is on the Linux side, we have what's called CUDA GDB, which is basically a modified GDB that supports programming or debugging CUDA programs. On Windows we have something called Visual Studio Edition, which is a plugin for Visual Studio that gives you debugging
+
+51
+00:28:24.000 --> 00:29:15.000
+and profiling inside the IDE for GPU programs. And that Insight also has graphics profiling and debugging features. There's also an Eclipse plug-in called, or an Eclipse IDE called Insight Eclipse Edition for Linux and Mac that kind of wraps the CUDA GDB stuff as well as the profiler. Anyway, so if you're stepping through a program running on the GPU, I talked about warps. One way to step through is to actually look at one thread and step each, you know, instruction for that or each line of code for that thread. Another way to do it is to step a warp or to step all the threads in what's called a thread block, which is a CUDA construct. And there's different reasons
+
+52
+00:29:15.000 --> 00:29:51.000
+you might want to do that. You might want to actually look at the values held in variables for a number of threads at once, and you can do that in the debugger. So you're kind of doing parallel debugging. Or you might want to just focus on one thread to try to understand the logic a bit better. And so you can, in Insight, Visual Studio Edition at least, I'm not sure about the CUDA GDB, probably also there too, you can toggle which way you want the debugger to step. I mean, the hardware is always going to run things a warp at a time. But it looks to you, or only focus in on the values of a single thread, if you want.
+
+53
+00:29:51.000 --> 00:30:14.000
+Oh, I see. That makes sense. So I guess if you're doing this, you're looking at one warp, and then the other ones are just kind of frozen. Or I guess they could be running. It doesn't matter, because they're not dependent on each other. Yeah, well, if you're debugging, if you're hitting a breakpoint, you need to freeze the program. And so that actually requires hardware,
+
+54
+00:30:14.000 --> 00:30:45.000
+and it's something that we've gradually improved. It used to be that you couldn't have a display attached to the GPU you were debugging. And if you think about it, the GPU has modes. It has graphics mode and compute mode. And if you freeze it in compute mode, then it can't service the display, which means you're running Windows and suddenly Windows freezes. So you had to have a separate GPU in order to debug previously. Now we can do single GPU debugging,
+
+55
+00:30:45.000 --> 00:31:21.000
+and with Pascal, which we just announced at GTC in March, we have compute preemption, which basically allows you to, you know, just as it sounds, just with traditional preemption, you know, you basically can store the state of the program and kick it out and switch to something else, some other application. And so that allows the debugger to step through programs and hit breakpoints while making sure the operating system is interactive on a single GPU system.
+
+56
+00:31:21.000 --> 00:32:00.000
+So one of the things you, I mean, obviously you're talking from the perspective of nvidia and cuda but i mean people will know and you mentioned before looking at the die shot of some of the broad wall chips or whatever having gpus on the same die as a cpu what are you know obviously there's probably some advantages some disadvantages you kind of speak to like what the difference is between a processor integrated with a GPU versus a discrete GPU? Sure. So, yeah, I mean, the majority of the products that NVIDIA sells, the GPUs that we sell are discrete GPUs.
+
+57
+00:32:00.000 --> 00:32:41.000
+In other words, they're on a board that plugs into, like, a PCI Express socket. And they're separate from the CPU. And so, well, just a little bit on that. When you're programming a program that uses the GPU, for example, in CUDA, you're writing a heterogeneous program. The program still needs to use the CPU, right? So most programs have at least control from the CPU, if not significant computation there also. And so you have to take care of the GPU and the CPU have separate memory, and so there are transfers that have to happen between the GPU and the CPU. And I can come back to that later.
+
+58
+00:32:41.000 --> 00:33:31.000
+In fact, we should come back. Remind me to talk about unified memory. But there are also processors that are integrated, as you mentioned. So NVIDIA has a line of processors called Tegra, which are a system on a chip. There's also, as I mentioned, Broadwell core CPUs have their Iris graphics on board. So they have a GPU integrated with the cpu on die so these are kind of similar in some ways the system on a chip approach is a bit broader that are the tegra basically has a few arm cores and then it has a gpu and it has also has a bunch of other, you know, all the things that you need to build a whole small system. And so Tegra is used in things for, like, laptops,
+
+59
+00:33:31.000 --> 00:34:08.000
+sorry, not laptops, tablet computers, like the Google Pixel C, I think, has Tegra in it. And it's also used in something we call Jetson, which is an embedded development kit, which is aimed at people who are developing things like robots, drones, other embedded systems. And so to your question, you know, what's the difference between these and the trade-offs? Well, if you have a certain die size, if you can dedicate it all to GPU, obviously you're going to have a more powerful GPU, but if you have to split it half between GPU and CPU
+
+60
+00:34:08.000 --> 00:34:29.000
+or GPU and CPU and other stuff, then the amount of computational capability of each of those things goes down. So it's a balancing act, right? What do you want to do? If you want to do high-end supercomputing, you know, NVIDIA Tesla GPUs are used in supercomputers like Titan at Oak Ridge National Labs.
+
+61
+00:34:29.000 --> 00:34:55.000
+If you want to do that, then the system on a chip approach probably isn't the right way for you because you need the most powerful GPU with the highest memory bandwidth and the highest computational throughput, right? If you want to build a robot where you need CPUs and GPUs and sensors and data inputs and all this kind of stuff, then an integrated
+
+62
+00:34:55.000 --> 00:35:32.000
+processor that's really low power obviously makes a lot of sense. So we build things for the whole spectrum from very low power embedded to places where we need power efficiency, but the actual total system power is not as much of an issue. Does that, I mean, am I going the right way? Yeah, that makes sense. And then what is it, so you talked about, you know, kind of transferring out over, let's say, PCI Express and that obviously passes certain data size, that makes great sense, as you said, in supercomputing. But then if you talk about how does, as a programmer,
+
+63
+00:35:32.000 --> 00:35:50.000
+is there a way to kind of guide someone and say, hey, you could do this on the CPU or you could take the time to transmit to the GPU and then transmit it back and how they kind of build that threshold in their mind about which one to do or is there even a way to write a single program and then at runtime or at compile time,
+
+64
+00:35:50.000 --> 00:36:10.000
+it determines, hey, based on this code size, we're going to execute this in one versus the other. Yeah, okay, there's a lot in that. I'm sorry. That's all right. So I'll go back to what I was talking about. If you're on a system with a GPU and a CPU that are separate and they have separate memories,
+
+65
+00:36:10.000 --> 00:36:42.000
+up until CUDA 6, which we launched a couple years ago, you always had to explicitly manage all memory. And so as you were talking about, you would have to create, let's say the data comes from a file. So your CPU loads that data from file into CPU memory. You then have to allocate GPU memory for that data and do an explicit memcopy between the CPU memory and the GPU memory. So CUDA has an API for that, CUDA memcopy.
+
+66
+00:36:42.000 --> 00:37:11.000
+It works just like memcopy, except it allows you to copy from the CPU to the GPU or the other direction, or from GPU memory pointer to another pointer. And there's a cost to that because PCI Express has a certain bandwidth. So given the data size, the bandwidth of PCI Express, you can estimate how long that's going to take. And so if you have a huge amount of data and a small amount of computation,
+
+67
+00:37:11.000 --> 00:37:57.000
+and you're only going to do a small amount of computation on the GPU before you need to do something on the CPU, like, I don't know, send it on the network or write it back to disk or whatever, then the overhead of transferring it might be higher than the computation cost that actually, you know, of performing the task on the GPU. And so there are trade-offs, as you hinted at. You need to decide whether it's worthwhile on the current hardware to transfer data to the GPU for processing. And there are many applications where it's obviously beneficial. But there are some applications where that tradeoff is trickier. And so there's a lot of things you can do,
+
+68
+00:37:57.000 --> 00:38:17.000
+like trying to overlap the communication with computation via pipelining. We have facilities in CUDA for streaming so basically you can associate computations and copies with separate streams of API commands so that if they're independent they can be overlapped. So what you could do is you could chunk your data up so that you
+
+69
+00:38:17.000 --> 00:39:07.000
+transfer a little bit of it, you start processing on it and then you do another transfer on a separate stream simultaneously, things like that. But yeah, there is a bit of a balancing act there it and then you start it and you do another transfer on a separate stream simultaneously things like that um but yeah there is a bit of a balancing act there and and it's it depends on the application sometimes it's trickier than others um that makes sense and so i think if you have tegra right then then you're sharing some memory so then you know i guess a copy doesn't happen there something else must happen or something uh yeah so on tegra you have one memory so you know it's shared between all the processors in the integra so um so you know you can um allocate a pointer and then just share it between CPU and GPU code.
+
+70
+00:39:07.000 --> 00:39:35.000
+There's a couple of things. There's a couple of gotchas on current Tegra's, I believe, like on the TK one. I'm not sure if it's true on the Tegra K one. I don't know about the Tegra X one. The caches were not coherent between the CPU and GPU. And so sometimes what seems like it should be free actually has a cost because of having to invalidate caches. That makes sense.
+
+71
+00:39:35.000 --> 00:40:17.000
+So there's a wide variety of people who want to leverage a GPU. There's people like Patrick who builds robots and underwater submarines in his garage um and there are people no that's not true but that's a good idea and there are people like me who know nothing about uh c i tried to write a c program once uh for a company that patrick and i worked for and and they kicked me off the project almost immediately. I had no idea what I was doing. And so I'm more of like a MATLAB or Python person. And so how does sort of the CUDA ecosystem
+
+72
+00:40:17.000 --> 00:40:35.000
+sort of cater to all of these different people who have different backgrounds? Apparently they don't do Fortran, so those people are SOL, but for everybody else... Sorry, that last part you broke up. Oh, I said that. You told us earlier that it doesn't support Fortran, so the Fortran people are
+
+73
+00:40:35.000 --> 00:41:01.000
+SOL. No, they're not. Oh, they're not. Okay. That's a great question. You said the word ecosystem, and we do talk about ecosystem at NVIDIA a lot in terms of CUDA. And I know a lot of companies do that. But whenever you're building a platform, you care about the ecosystem. And so you're right, there are a lot of programmers and there are many programming languages. And we would like to enable them all.
+
+74
+00:41:01.000 --> 00:41:31.000
+Or anybody that has parallel programs or a lot of data to process, anybody who needs high bandwidth and throughput, we would like them to be using GPUs. And so we try to enable as many ways of programming GPUs as possible to cater to those different needs. And so when we talk about the CUDA platform, we talk about three ways of programming. There's directives, which are basically hints to the compiler
+
+75
+00:41:31.000 --> 00:42:12.000
+that you can add to loops in C or Fortran that allow the compiler to try to automatically parallelize those loops. And if you've heard of OpenMP, OpenMP is a compiler directives standard, which enables you to specify, oh, this loop is parallel, please, you know, parallelize it for me. And that started on CPUs. There's work ongoing in OpenMP to support accelerators like GPUs, and we're involved in that. There's also another standard called OpenACC which is another way to program and it supports, there's compilers for Fortran as well
+
+76
+00:42:12.000 --> 00:42:41.000
+as C and C++ for OpenACC as well. So the second way is with libraries. If you have a fairly standard computation or if you use an industry standard library for those computations, there's a good chance that there's already a drop-in replacement that targets GPUs. So, for example, there's a popular linear algebra library
+
+77
+00:42:41.000 --> 00:43:31.000
+or it's actually just an interface standard that many libraries implement called BLAS. It stands for basic linear algebra subroutines. And there's a KUBLAS that NVIDIA provides. There's KUFFT, which does fast Fourier transforms. If you use FFTW on the CPU, for example, or MKL on Intel processors, you know, you can drop in QFFT and accelerate those on the GPU. And then there's a number of other more kind of domain-specific libraries. There's libraries of solvers, QSolver, QSparparse is for sparse linear algebra and basically a whole bunch there's one that's getting a lot of
+
+78
+00:43:31.000 --> 00:43:47.000
+interest now called CooDNN which we can talk about more which is for deep learning, deep neural networks so that's the second way is libraries and the third way is with programming languages so I've talked a lot about CUDA and what I really meant by that was CUDA C++ or CUDA C,
+
+79
+00:43:47.000 --> 00:44:19.000
+which basically is using NVIDIA's compiler, MVCC, to compile C or C++ with extensions for parallelism. But there's also CUDA Fortran, which was created by a company called PGI, the Portland Group, which is now owned by NVIDIA. But they started CUDA Fortran when they were an independent company. And CUDA Fortran basically takes that CUDA programming model that I talked about and introduces it to Fortran with extensions.
+
+80
+00:44:19.000 --> 00:44:39.000
+Cool. There's even CUDA Python. Go ahead. No, no, keep going. So Cuda Python was made by this company, Continuum Analytics, in Austin. And they make a product called Conda, Anaconda. Yep. Anaconda is awesome.
+
+81
+00:44:39.000 --> 00:45:06.000
+It's a Python, basically, package manager. It's kind of like using apt-get in Linux or RubyGems if you're a Ruby programmer. And it lets you basically manage packages. But they also have made a bunch of their own Python packages, one of which is called Numba, which is an open source compiler for Python. And you might say, but wait, Python's not compiled. It's interpreted.
+
+82
+00:45:06.000 --> 00:45:46.000
+Well, what they've done is they've allowed you to put a little annotation on a function. You basically put at JIT in front of a function, and then it uses LLVM to JIT compile that, so it'll run faster on your CPU. And they also have a CUDA JIT and a number of syntax things to expose the CUDA programming model in Python. Cool. Yeah, a couple other resources. I've used Theano, which is pretty good. It's a Python-based, kind of like a MATLAB-like environment.
+
+83
+00:45:46.000 --> 00:46:12.000
+Right. But it runs on the GPU. And then there's also TensorFlow, which is a new one that I've only done the little test app. So I haven't played much with TensorFlow. But it also gives you this MATLAB-like environment. But under the hood, it's all running on the GPU. And I think they're both using Kublaz,, I believe, and KUDI and that. Absolutely. Yes, definitely, they are.
+
+84
+00:46:12.000 --> 00:46:47.000
+Yeah, so these, I mean, you guys talked about these in the Scientific Python podcast that I listened to, and they are tensor libraries, and they're MATLAB-like, but,like, but really they're being driven by deep neural networks work. And that's where we focus with kudnn, but also kublas, the linear algebra. So a lot of the computations on these tensors are basically just matrix vector multiplies or matrix matrix multiplies, things like that. And that's where GPUs really excel.
+
+85
+00:46:47.000 --> 00:47:09.000
+If you want to get peak performance on GPU, then just do large matrix matrix multiplies, right? So, yeah, so I guess the last thing I want to say about the ecosystem is that we wanted to enable all these things. And so we've worked in a few areas. One is the directives I talked about. One is in building libraries where it makes sense,
+
+86
+00:47:09.000 --> 00:47:47.000
+where there is demand. And then the other is the compiler. We wanted to enable other compiler writers and developers to build compilers that could target GPUs. And so we started using LLVM, which I don't know if you guys have talked about LLVM on this show, but it's an open source compiler tool chain. And it basically has become really popular and is being used in the back ends of a lot of different compilers for various languages.
+
+87
+00:47:47.000 --> 00:48:12.000
+And by allowing, basically what we provided is some extensions to LLVM. Actually, they're not even extensions. Because LLVM is extensible, we're able to do it all entirely within that. So our extensions are actually a subset of LLVM rather than a superset. But basically some annotations that allow you
+
+88
+00:48:12.000 --> 00:48:42.000
+in the low-level intermediate representation of LLVM to express the parallelism, just as you would in CUDA kernels. And that enables LLVM compilers, or LLVM-based compilers to target GPUs. And so we have a library called NVVM that will generate assembly code for the GPU from this extended LLVM IR. And we also open-sourced a version of this, and it's included in LLVM.
+
+89
+00:48:42.000 --> 00:49:11.000
+And so that has enabled a number of developers, such as Continuum Analytics, such as PGI, such as others, even Google, to target GPUs much easier and to build tools, language tools for them. Cool. So if you're a student just starting out and you want to kind of get something up and running that's really cool like you want to you know in a day or in a week you want to go from you know
+
+90
+00:49:11.000 --> 00:50:05.000
+you know intro to cuda to having something kind of really cool that you could show your friends what would you recommend like is there a cool demo that you recommend or a site that has a cool, like, for Ruby, there's the Rails for Zombies, where you end up with this, like, Twitter-like website that you could show off. Is there something like that for CUDA? Yeah, so we should do a CUDA for Zombies or something like that. What I would recommend for people who specifically want to learn CUDA programming, CUDA C++, is check out, there's a Udacity course. It's actually almost a couple years old now, but it would still be relevant. And I think it's called Programming Massively Parallel Programming or something like that. I'm sure it's I'll look it up for you while you keep talking. Parallel programming or something like that. I'm sure to parallel programming.
+
+91
+00:50:05.000 --> 00:50:29.000
+Yeah, look it up. The instructors are Dave and – that might be it. The instructors are Dave Lubke, who heads up graphics research at NVIDIA, and John Owen and Steve Davis. Cool. Yeah, well, definitely. Yeah, that would be awesome. We actually talked to some guys.
+
+92
+00:50:29.000 --> 00:50:47.000
+And a lot of Udacity courses. It's a great kind of... We talked to some folks at Udacity, and there's a show on Udacity for people who don't know what that is, but it's a great platform for learning almost anything technical. And now they're getting into other areas, too.
+
+93
+00:50:47.000 --> 00:51:20.000
+So there's an Udacity course on CUDA that all of you should check out. Yeah. Yeah, yeah, definitely. Cool. And, you know, if you don't want to, if you're not a C programmer, for example, if you want to use GPUs if you're not a c programmer for example if you want to use gpus but you're not a c programmer um you guys already mentioned the the tools some of the tools that are available for python so um theano and tensorflow so i would say for python programmers they should check those out and there's a number of tutorials for those theano has a bit of a learning curve i
+
+94
+00:51:20.000 --> 00:51:44.000
+think but um yeah i would definitely agree. Yeah, Theano is difficult. TensorFlow, there's a lot of awesome documentation. I haven't played with it enough yet, but it looks very solid. Okay. And then Numba is the other one. But one thing I also want to mention is the SDK. So the compute SDK,
+
+95
+00:51:44.000 --> 00:52:32.000
+I think we're calling it compute works SDK because we have a whole bunch of other works SDKs at NVIDIA, includes the CUDA toolkit. And the CUDA toolkit has a whole bunch of samples, like tons of samples. And they're nicely grouped into categories including you know one of the categories is called simple you know so so you can look at people like me yeah so in board it's not necessarily because they're you know they're easy but because they do simple things but you know so you can you start with those and there's there's cooler demos too in there if you want to do something fun there's there's um in the simulation category there's one that that i co-wrote with um with a guy called larson island that's uh n body um which
+
+96
+00:52:32.000 --> 00:52:56.000
+gets used to demonstrate gpus a lot basically it's um simulating gravitational interactions of of stars effectively um so uh it basically does this all pairs computation of gravity between the stars and it runs really fast on GPUs and you can get really cool visuals out of it it's got an OpenGL renderer that sounds awesome yeah it's fun to play with
+
+97
+00:52:56.000 --> 00:53:19.000
+and then there's another one that's fun to play with I think it's called Particles that a former colleague of mine wrote and it is a really cool demo with all these balls in a box, and you can just bash them around and they collide, you know, so they don't pass through each other. And that's all done using CUDA. And then there's one, I think there's a smoke particles one
+
+98
+00:53:19.000 --> 00:53:52.000
+that does smoke simulation. Actually, I'm not sure. It's just doing particle simulation but it's rendering it to look like smoke with light scattering and stuff so cool um so yeah yeah so so what is tell us kind of what a day at nvidia is like uh and i know in your case here jason before we transition to that because everybody out there is probably thinking this because I still am, you wanted us to remind you to talk about unified memory. Oh, yeah, we should do that before we do. Right.
+
+99
+00:53:52.000 --> 00:54:22.000
+So I should have talked about that when I was talking about the heterogeneous processors. Yeah, that was my fault. I didn't want to cut anyone off. is a feature of the CUDA programming model that we introduced in CUDA 6 a couple years ago and that we're, with the Pascal architecture, we're enhancing it a lot. So the idea is, I mentioned that you have to explicitly transfer data from the GPU to the CPU. And it would be nice if that weren't the case.
+
+100
+00:54:22.000 --> 00:54:58.000
+It would be nice if you could just allocate data and then the GPU and the CPU could use it. And then behind the scenes, maybe, it would get migrated on demand to the processor that needs it. And that's what unified memory is. So unified memory in CUDA 6 was basically software, which does page migration between the GPU and the CPU. So if you're familiar with virtual memory, you have pages, and when the CPU needs to access data that's in a page that possibly is not in memory, it's on disk, then it does a page fault.
+
+101
+00:54:58.000 --> 00:55:18.000
+It faults on that memory, and then a fault handler runs, and it actually loads the data into memory, and then the CPU can proceed with accessing it. Well, before Pascal, GPUs didn't have the ability to page fault. But we kind of, you know, looking forward to GPUs that did, we built unified memory
+
+102
+00:55:18.000 --> 00:55:57.000
+so that you can still access memory from both the CPU and the GPU and it gets migrated at the page level automatically. With Pascal, because we can page fault, that means that you can just allocate data with CUDA malloc managed, it's called, and then when the CPU touches a page, that page will get faulted back to the CPU. When the GPU touches a page, it'll get faulted to the GPU. And while that may sound expensive, often those page faults are hideable. As I was talking about latency hiding, you just hide that with other work.
+
+103
+00:55:57.000 --> 00:56:53.000
+And it enables other things once you have hardware support the the pascal gpus have the ability to access a 49-bit virtual address which is one bit larger than the cpu virtual address space which means that the gpu can access all its own memory as well as all the cpu memory and all the memory of any other gpu in the system it has enough virtual address space for that. And so that means you can have a single virtual memory space and the hardware just takes care of migrating the pages when, where they're needed. And with operating system support, that means that you can potentially support accessing memory, even if it's just allocated with the system allocator, in other words, malloc in C or new in C++, you can just allocate memory with malloc or new, pass that pointer to the GPU and access it,
+
+104
+00:56:53.000 --> 00:57:20.000
+pass that pointer to another GPU and access it, use it on the CPU, et cetera, even accessing more memory than the physical memory because the operating system handles virtual memory and paging out to disk and things like that. So it's a big step for heterogeneous in terms of making it easier but also enabling you to process data sizes that you possibly couldn't before because they wouldn't fit in GPU memory.
+
+105
+00:57:20.000 --> 00:57:52.000
+Gotcha. What I heard was magic. Yeah, right. It's like the magic eraser in Photoshop. It just works. But like what I just, it kind of ties into the whole LLVM thing where, you know, someone might just annotate a for loop and you want to send that to the GPU and you want that process to be as painless as possible. You don't want to have to inject a bunch of copy to the GPU commands into their code. Absolutely. It absolutely ties into that. I think you're referring to the directives like OpenACC.
+
+106
+00:57:52.000 --> 00:58:08.000
+Right. And the PGI guys actually added a mode to the OpenACC compiler about a year ago that will automatically use unified memory behind the scenes. So in OpenACC, what you normally do is you have to, first you annotate your loop.
+
+107
+00:58:08.000 --> 00:58:37.000
+You say, oh, this loop is parallel. But then you find, oh, it's slower because the compiler doesn't know which data it needs, and so it just copies all the data over for that loop. And even if some of it's read-only, for example, from the GPU, or it's not accessed on the GPU. And so you can go deeper in OpenACC and use these data directives to annotate, oh, well, copy this now,
+
+108
+00:58:37.000 --> 00:58:59.000
+or put a read-only copy on the GPU, things like that. But with unified memory, you shouldn't have to do that. I mean, you always know more about your program than the compiler does. So you can always help with performance by adding more information like that. But that becomes an optimization rather than a requirement, right?
+
+109
+00:58:59.000 --> 00:59:34.000
+And yeah, so unified memory really ties into the kind of automatic offloading approach. Gotcha. That makes sense. That makes sense. So I know you work remotely, but sort of in general, what is sort of day-to-day like? We have a lot of people who are in high school, in college, a lot of listeners who are in college, and they want to know a lot about industry and what it's like to work in different industries. So what's sort of a typical day like at NVIDIA?
+
+110
+00:59:34.000 --> 01:00:04.000
+Typical day at NVIDIA, well, I get out of bed, I sit down at my desk. So I'm probably not the best person to ask about the typical day at NVIDIA because I work remotely. Actually, maybe that's true. Maybe let's do this a little different. We ask this question to everyone we interview. But here, actually, let's ask what's it like to work remotely? Because that's something a lot of people probably aren't familiar with, actually. So working remotely is good, I think, for me.
+
+111
+01:00:04.000 --> 01:00:41.000
+Because, well, it allows me to live where I want. I don't know if we mentioned on the recording, I live in Australia. My family is originally from the U.S., but I now have an Australian family. And at least for now, we're living here, and I live in a beautiful place up in the mountains, which I couldn't do in Silicon Valley or certainly couldn't afford to. So there's a downside. I mean, I'm remote. There's the obvious time zone issue.
+
+112
+01:00:41.000 --> 01:01:11.000
+The downside of being remote is that you don't get to go into the office and work with your team directly every day. So if I were to give advice to young people starting out, because I think you were aiming towards that, go work in the office, go to the headquarters if you're going to a big company. Unless you're working for a company that's distributed and that's the culture, and then you just have meetups and travel to meet each other now and then, then you really want to experience the company culture. And I did that at first. I actually worked in the UK.
+
+113
+01:01:11.000 --> 01:01:34.000
+I'd already been an intern in the home office, but I worked in the UK for a while in an office. And it makes a difference in terms of building your team and getting to know people. So if you work remotely, you really have to work to overcome the barriers of being remote and make sure people know you're there. So I have a lot of one-on-one meetings on the phone with people
+
+114
+01:01:34.000 --> 01:02:10.000
+just so I'm staying in touch and staying in the loop and so I can do my work. Yeah, that makes sense. And then I travel. I go to the U. the US several times a year. But the time zone benefit, I guess, is that I get up in the morning and it's afternoon in California. And I have all my meetings early in the day, which is kind of a pain. They say you shouldn't start with meetings, but I have no choice. But after I'm done with my meetings, my whole afternoon is free to just focus on work. Whereas if you're in an
+
+115
+01:02:10.000 --> 01:02:51.000
+office and you're involved in a lot of different things that you end up getting called into tons of meetings and it gets hard to get large blocks of time. And so I think it's important for, especially in engineering, to have large blocks of time because you really do have to have time to think and work. Yeah, definitely. Yeah. I mean, I agree that it's for people just starting out, I wouldn't recommend being remote. But as in your case, once you know the team, there's a lot of companies that have a work from home day. Maybe on Wednesdays, everyone works from home or something like that. And in that case, it's okay.
+
+116
+01:02:51.000 --> 01:03:28.000
+You kind of work around that. Or even if you've been with a certain team for four, five, six years and then you move off site, you've built those relationships and you have those bonds. And then working from home can give you a lot of benefit. Thank you, Mark, so much for coming on the show. This is fascinating. Thank you. Yeah, all of us have benefited greatly from the work that you and other people at NVIDIA have done, both in ways for us to relax, play video games, and also in our day-to-day work,
+
+117
+01:03:28.000 --> 01:04:14.000
+making it so we can accelerate our programs. And as a person who does a lot of AI stuff, it's gone from things taking months to things taking hours, and that's just amazing. And I know Patrick's done a lot of um sort of high performance computing and things like that himself so yeah cool cool thanks a lot and uh yeah we'll send the link to uh your blog your blog is parallel for all um so uh people listening go to uh um programmingthrowdown.com we'll have a link to that um and uh thank you again and we'll uh we'll wrap it up and uh thank you guys in the audience for uh
+
+118
+01:04:14.000 --> 01:04:39.000
+for uh supporting us on patreon and the reviews and the comments feedback on social media all of that um yeah we really appreciate all of that. As you can tell, we've changed the format when we do interviews. People probably know this by now because we've done a few of them at this point. We'll do a programming language show next month.
+
+119
+01:04:39.000 --> 01:05:00.000
+But we've just had some absolutely amazing people like Mark reach out to us. So we definitely wanted to do this interview. And I hope you guys appreciate it. The intro music is Axo by Binar Pilot. Programming Throwdown is distributed under a Creative Commons Attribution Sharealike 2.0 license.
+
+120
+01:05:00.000 --> 01:05:05.000
+You're free to share, copy, distribute, transmit the work, to remix and adapt the work, but you must provide attribution to Patrick and I and share alike in kind. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.

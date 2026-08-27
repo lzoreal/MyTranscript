@@ -1,0 +1,273 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:55.000
+So I was commenting earlier that I've noticed a trend that it seems that at every conference you are the person assigned to be my handler. I'm not assigned. I've just decided that that's the best way to give you a check. Because in your own words you need like princess treatment. welcome to adsp the podcast episode 207 recorded on october 11th 2024 my name is connor and today with my co-host bryce we record live from c++ under the c for the final time in this episode we chat with multiple attendees and speakers from the conference, including Mateusz, Imbal, Floris, Bob, and Jonathan. The subject of your talk has been brought up,
+
+2
+00:00:55.000 --> 00:01:28.000
+and I have some fun things to mention about your talk that you should give a brief overview of what your talk is about. All right, the title was a bit cryptic. It was called Arrays, Fusion, and CPUs versus GPUs as I yank the cord out of my headphones. It covered a simple problem, which basically boils down to a map reduce. And I covered it, I don't know, six different ways, eight different ways in C++, a bunch of just through the for loop to algorithms to views,
+
+3
+00:01:28.000 --> 00:01:59.000
+and then I did a range V3 one, I did a flux one, I did three different GPU ones, CUPEI, MVC++, and Thrust with MVCC. I also showed Rust and Swift, and then had some benchmarks at the end that the conclusion was flux was the fastest, and GPUs are really good after a certain point. And yeah, Bryce has got some updates from people that know about stuff. Well, and what was the, when you showed us that benchmark graph, what was the major takeaway that
+
+4
+00:01:59.000 --> 00:02:39.000
+you wanted us to see? Oh yeah, the major takeaway is that regardless of language, almost 100% of the time when you have a fusion, meaning that you are iterating a single time over your sequence or your data or you're generated, in this case it was an IOTA sequence, that is the fastest. Whether you're in Rust or C++ or Python versus any kind of, and this is one of my quants, if you will, with array languages, not just the array languages I like, APL, BQN, et cetera, but also with libraries like NumPy and Kupy, that any time you do a simple operation of plus one to an array, you're immediately,
+
+5
+00:02:39.000 --> 00:02:58.000
+one, iterating across that data again, but then two, a lot of the time doing some separate allocation, which is, I know that there are, like I think technically in WeWa, for simple things, they are able to detect that you don't have multiple references to the same sequence, and they will do an in-place mutation. But in general speaking, when you do a plus one to a numpy array,
+
+6
+00:02:58.000 --> 00:03:13.000
+you end up with a new array. They're not doing that in place. And so it just ends up being not very performant, and that's the main takeaway. Well, one of the things that Connor pointed out during his talk was that KubePy by default does not do fusion
+
+7
+00:03:13.000 --> 00:03:36.000
+and the results that we saw for KubePy were not as good as I would have liked because recently I've been working on Python stuff at NVIDIA. My new mandate is to make Python super fast, super feature complete. And yeah, so after Connor's talk, I made some calls.
+
+8
+00:03:36.000 --> 00:03:55.000
+I phoned up headquarters. I got our best people. I was like, hey, what's the deal? How do we do Fusion in KooPi? What are the options if you want to fuse together NumPy operations? I just asked that as a general question, aside from GPU stuff, but then also specifically in KooPi.
+
+9
+00:03:55.000 --> 00:04:13.000
+And it turns out there is a way to do this sort of fusion in KooPi. There's a decorator called KooPiFuse, but it is a little bit limited. And we did try it by we. I mean, the colleague I contacted. We, not me at all. Some other person.
+
+10
+00:04:13.000 --> 00:04:36.000
+We did try it. We meaning not Bryce. The individual that he contacted on Slack went and tried it. So it's not a we, it's a he. Yes. And he tried it and did not see much of a performance difference we think that there may have been uh uh you know some sort of bug in the lowering he i i'm getting a slack message every like two to three minutes he's running benchmarks he's investigating i'm sure
+
+11
+00:04:36.000 --> 00:05:17.000
+by the time this podcast is done recording there will be there will be either we'll know the reason or there will be commits landed that'll fix it. But my other colleague mentioned some other options for fusing NumPy array operations in Python. So first of all, he mentioned that Numba, which is a Python JIT compiler, has a parallel accelerator, which you might be able to use for this. Although he says, I don't recommend it. And there's also another thing which, oh, I'm going to have to check whether that's an internal only thing or not, because it's some sort of Envy research thing. But it sounds like it could be cool. But anyways, it sounds like there may be some options out there
+
+12
+00:05:17.000 --> 00:06:17.000
+for fusing together NumPy array operations into faster code. And of course, the sort of the most common way is that you can write NumPy Ufunks or universal functions, which is like a function that operates on either scalars or lower order vectors. And then you can apply it to NumPy arrays and it will use NumPy arrays, and it will use NumPy broadcasting rules to apply that function element-wise. And that is sort of the most common pattern for doing this. Now, of course, that pattern, I think, is not what you or I would like to see, because what we would like to see is to be able to compose together array operations, not to have to write a scalar function that gets applied. Yes. Anything that involves me hand-rolling some code that can manually replicate what I did is neat, but not interesting because I didn't highlight it in the talk, but all of the code
+
+13
+00:06:17.000 --> 00:06:38.000
+is a basically translation of generated code. And so anything that involves like hooking into some bespoke thing that I can hand roll for this one thing does not scale for my purposes. And Bryce now has a response. There's another major reason why something like ufunks, like
+
+14
+00:06:38.000 --> 00:06:58.000
+in numpy.vectorize, is not something that we like. And that is because of parallelism. Let's say that you want to write a map reduce with NumPy. Well, how do you do it without having a temporary array? You literally asked me this the other day on Slack. And then I was like, you don't. It's not a thing.
+
+15
+00:06:58.000 --> 00:07:21.000
+And one of the reasons why it's not a thing is because typically the folks who are using NumPy historically aren't thinking parallel. You're just writing in Python. You're not thinking about how do I go and run this on my GPU. And in that case, okay, I need to do, like, you know, a transform, reduce. I don't want a temporary. Well, then I can write a ufunc that does the reduction within it.
+
+16
+00:07:21.000 --> 00:07:59.000
+And that's not something that we would even consider as an option because when you do that reduction in single thread, yeah, it's pretty straightforward. You just have an accumulator variable. But when you're doing that reduction or a scan or something similar to that in parallel, you need some sort of parallel algorithm primitive to do it because otherwise you're going to have to write the parallel reduction yourself and you're not going to do a better job than the high-performance algorithm. And so we've talked about this before, where the thinking in terms of array operations and array programming languages are particularly well-suited to parallelism.
+
+17
+00:07:59.000 --> 00:08:28.000
+I agree with everything that was just said. I have an obligation that Connor and I failed to fulfill, which is that we should have put a mention in our slide deck to go to NVIDIA's partner's booth at the conference, which is this company MDCS.ai. We were asked to put a slide in, but we had some issues accessing the slide template. But anyways, they've got a booth here,
+
+18
+00:08:28.000 --> 00:09:02.000
+which probably is not applicable to people listening to the podcast. However, you can go to MDCS.ai, and they have free learning sessions on various NVIDIA content, AI things, maybe some CUDA things. Anyways, you can go check it out. if Connor lets this get into the podcast, which we don't usually do sponsored stuff, so we'll probably cut it. But I do feel a little guilty that we did not do what we were supposed to do. Anyways, Inval, say something.
+
+19
+00:09:02.000 --> 00:09:30.000
+Oh, Connor, I felt so bad that we didn't put this into our slides that I put a plug in for the thing. Listen, folks, I don't feel bad. Here's why. I have abandoned Windows because I'm tired of getting automatic installations. And it's just, I'll shut down my computer when I want to shut down my computer. And if that's in two years, that's what's going to happen. And so now I'm on Linux.
+
+20
+00:09:30.000 --> 00:09:46.000
+I'll wrap this story up because it's a bit of a long one. And that means I no longer have access to PowerPoint. Don't tell me about Wine. I don't want to have to download some third-party software in order to run Microsoft as a local client. I don't want a virtual machine. They have Microsoft 365. Similar to Google Slides,
+
+21
+00:09:46.000 --> 00:10:04.000
+you can run and display a PowerPoint from the browser. However, NVIDIA's templates for PowerPoint do not work if you are running Microsoft 365 from a Linux OS. And you know what? And the slide that we were asked to put in is using the templates,
+
+22
+00:10:04.000 --> 00:10:30.000
+and I couldn't use the templates. I actually tried to use the template for this talk because it's a kind of an NVIDIA-esque talk. We're talking about GPUs. And so you know what? I'm happy to put the slide in in the future if the great folks at NVIDIA in marketing, in HR, figure out how I can use the template from Linux. You can't tell me as an engineer that I am not able to use the template. And like literally, I've asked the LLMs. You know what they said?
+
+23
+00:10:30.000 --> 00:10:47.000
+You have to download it locally. And then it's like gives me six options of like, you can use Wine, you can use a virtual box, you can use a virtual VM or whatever. And I'm like, I'm not doing that. I'm not doing that, folks. So I just use a plain black. Also, I shouldn't have done black with the Dracula theme.
+
+24
+00:10:47.000 --> 00:11:07.000
+The one piece of feedback, I mean a couple pieces of feedback, but the one that I'll mention, because it was a great conference for first-time organizers. Bryce would have liked some desserts. That's not the one piece of feedback. Although he did get some desserts at the end of the day. But it was the light wash in the second room was pretty bad. I don't think it affected visibility too much,
+
+25
+00:11:07.000 --> 00:11:40.000
+but definitely there was a couple times I'm 10 feet from the screen and I couldn't see the Rust logo that was there. So I don't know if this is intentional or not, but I am a little bit of a princess, and I have noticed that now at almost every conference I seem to have the same volunteer assigned to me and i don't mean i don't mean that like at the same conference multiple years i mean every conference florist bob seems to be the person assigned to handle me and and this is
+
+26
+00:11:40.000 --> 00:12:20.000
+good because i i've given a lot of talks in a lot of different environments, and I've learned some do's and don'ts. One, I never accept having my slides presented from somebody else's laptop or having somebody else change my slides before I present. Because I was at a conference in Japan, and they wanted our slides so they could translate them, and my boss gave a talk before me and he gets up there and he's using their slide deck and i can see he looks confused because they not only translated his slides but they deleted half of his slide notes and the other half of the slide notes were now in japanese and he just found out about it and i was like you know what i'm gonna insist they use
+
+27
+00:12:20.000 --> 00:12:50.000
+my laptop but the other thing i've learned over the years because there was one con one talk at cpp con back in the day where i used a questionable syntax highlighting scheme and this is the reason i no longer use syntax highlighting to my slides and it used a dark blue and nobody could read any of my code uh and so i have since learned like you got to be careful with the lighting you got to always like double check before and fortunately i was in a different room than connor where they had shades that you could fortunately, I was in a different room than Connor, where they had shades that you could be close. That was the problem. The room Connor was in, there was no...
+
+28
+00:12:50.000 --> 00:13:14.000
+And it was a little tough to read Connor's slides, but Connor's talk was so good that it was worth suffering through. I'm sure they'll fix it for next time. I mean, it's not the first conference I've been to where light wash... I mean, CPP North, the first two years, had LightWash problems as well. Italian C++... I'm not just calling out conferences that have had LightWash problems. Admittedly, it wasn't the Italian C++ folks.
+
+29
+00:13:14.000 --> 00:13:47.000
+They were holding it at a university, and the university classroom roof was broken. So they did have things that could close. They were just broken. So it's not on them. But more concretely, for speakers, first-time speakers, even experienced speakers, I got a bullet list of four things that you should do in your pre-talk checklist. Number one, you got to go up and you got to check the projector and the lighting. You got to go put your slides up. Know what slides are going to demonstrate problems so like a code heavy
+
+30
+00:13:47.000 --> 00:14:26.000
+slide with a lot of like colors figure out what slide of yours has the smallest text and then go and look from the middle of the room and make sure the text isn't too small the colors in the projector are going to be different so that's number one is check check how your slides look and the lighting of the room. Bullet point number two is the microphone. Before, you know, a couple, not five minutes before the talk, figure out what type of microphone they're going to give you. Are they going to give you a lav mic that's going to clip on to your clothing? If you are, are you wearing clothing where that's going to work or that's going to be problematic?
+
+31
+00:14:26.000 --> 00:14:49.000
+Are they going to give you an over-the-ear mic? Me, I'm susceptible to knock those over-the-ear mics over, so I prefer to not have those. Are you going to be given a handheld mic? In which case, if you have a handheld mic, is that going to be an issue for you? Is that something you've got to prepare for? Because what if you need to use your clicker, on the other hand? That's the next thing, which is that you want to check on your clicker. And those were three things.
+
+32
+00:14:49.000 --> 00:15:09.000
+I had a fourth. I don't know what the fourth was. I don't know what the fourth was. I think maybe the lighting was one and then how your slides show on the projector was probably another. So check the room lighting, check how your slides show on the projector. And part of room lighting is make sure to get comfortable with the lighting in the room.
+
+33
+00:15:09.000 --> 00:15:44.000
+Some venues will have very bright lights on you and that can be intimidating. In other venues where the room's really big, like just being on stage, you might feel a little intimidated. If you go up first and just get a feel for it, You're going to feel better. So lighting, projector, slide clicker, and microphone. Those are the four things you should check before you give your talk. I have nothing to say because I don't do any of that stuff. Oh, and make sure to have water. I mean, water is key. I mean, half that stuff you can't fix.
+
+34
+00:15:44.000 --> 00:16:05.000
+Bryce needs the mic because he needs to talk to Matush, the physical units guy. Over to Bryce. This is going to be a good tie-in for something that was recorded earlier. Matush, how are you doing? Good. Units, C++ 26 or 29? 29, hopefully. Not 26.
+
+35
+00:16:05.000 --> 00:16:29.000
+Not 26? Not 26. Not 26? Not 26, not for the units. Okay, everybody's happy. Everybody's in agreement. For the record, I am very less stressed now because I was worried you'd be hoping for 26. But I just want to give people to be aware. Bryce was catching me when I was getting off my talk with a headache
+
+36
+00:16:29.000 --> 00:17:05.000
+because I didn't have enough coffee. But anyway, thank you. I'm very happy with that. But in order to make it 29, we have to start working right now in the committee because this is quite a big subject. So please don't delay this in the committee for too long we will see you in Poland oh my mother says hi why are you having the mic back to me should we go get Flores Bob he's right he was Flores Lob! Alright. Jonathan is
+
+37
+00:17:05.000 --> 00:17:22.000
+bringing over Mr. Floris Bob. Now Bryce is physically coercing Floris Bob to be on the podcast. So I was commenting earlier that I've noticed a trend that it seems that at every conference you are the person
+
+38
+00:17:22.000 --> 00:17:48.000
+assigned to be my handler. I'm not assigned. I've just decided that that's the best way to give you a check. Because in your own words, you need princess treatment. All right, we're here with Flores Bob, a.k.a. Flobo. This is fantastic. I'd ask you to introduce yourself, but I would actually personally just like to hear you comment more about what it's like working with Bryce
+
+39
+00:17:48.000 --> 00:18:04.000
+on such a personal level because that was great, I'd love to hear more it's really simple make sure there's no light in the room like none at all because he refuses to have any backup like Connor but you know
+
+40
+00:18:04.000 --> 00:18:25.000
+Bryce is able to enforce people to make the room dark, whereas no one was able to read Connor's code today. So, you know, he demands a certain level of respect. I don't think the mic picked that up, but Bryce said, everything has to be just right. But over to the princess. I'm going to start telling conferences if they want me to come speak that Floris Pop has to be brought to the princess. I'm going to start telling conferences if they want me to come speak that Floris Bob
+
+41
+00:18:25.000 --> 00:18:52.000
+has to be brought to the conference. You can negotiate my fee as well, right? Yes, and I'll negotiate his fee. So, in more exciting news, thanks to Floris Bob, I was not aware that Breda... Would you say that's a decent pronunciation? Breda. Breda. All right, Breda.
+
+42
+00:18:52.000 --> 00:19:29.000
+I think what I was saying... Is only 10 kilometers from the border of Belgium. And thanks to this knowledge that I've acquired, I will be running to and from Belgium tomorrow to add a country to my list of countries visited. And I found out, because last night we were walking around, it was myself, Phil Nash, Jason Turner, Matheus, who you just heard from, Mr. Physical Units. Peter Bindel joined us later, so when we bumped into you, he wasn't there.
+
+43
+00:19:29.000 --> 00:19:51.000
+And I feel like I'm missing someone, but maybe not. Because I think we had six. No, we had five people, so I think that was everyone. Then you were six, then Peter was seven. And we were just walking, trying to find a place to eat, and we randomly bump into you. And we first met, I want to say, it was at the Cologne potential. It was one of the committee meetings where we first met at.
+
+44
+00:19:51.000 --> 00:20:08.000
+Maybe it was the Belfast back in... I just went to the Cologne meetup. It's the Cologne one. So it was Cologne 2019. Was that the last time we met? I feel like we met at a conference in between then at some point. Do you recall? CPP on C last year?
+
+45
+00:20:08.000 --> 00:20:24.000
+Yeah, I think CPP on C 2023. Anyway, so we've bumped into each other a couple times. And then randomly, we're going to dinner, and we'd run into you. And it turns out you live here. So tell us what it's like. A conference has come to town, and it's now in your backyard. What was the conference like? You helped volunteer.
+
+46
+00:20:24.000 --> 00:20:46.000
+You had to deal with Bryce. I apologize about that. How was the conference from an individual that lives in the city? It's a conference now in your backyard. I mean, any conference in your backyard is perfect. I just cycled for 15 minutes this morning instead of flying and dealing with jet lag and all that stuff. Yeah, it was great. Honestly, for a first-time conference, I yeah it was great honestly for a first time conference i think it
+
+47
+00:20:46.000 --> 00:21:30.000
+was 270 people today everything ran smoothly yeah it's really impressive i'm just hoping it's going to be like a two-day conference next year i i would imagine i mean i i'm trying to think bryce how many first time conferences have you been to how many first like uh how many inaugural editions of a conference i've've been to CPP North. I think they were roughly 200 people. Well, I was at the first C++ Now, the rebranded ones, not the original BoostCons. That's a smaller conference, though. I was at the first CPPCon because I was one of the organizers. How many people were at the first CPP? I think it was 400 to 500, maybe a little more than that.
+
+48
+00:21:30.000 --> 00:21:49.000
+I remember there was a concern that we were going to only have like 200 and 300 and lose a lot of money, but I think it was 400 to 500. I was at the first CPP North. Not at the first CPP on Sea, I don't think. First one of this. I was at the first CPP on Sea, I don't think. First one of this. I was at the first PyCon Netherlands.
+
+49
+00:21:49.000 --> 00:22:12.000
+I don't know. I don't know about any others. The point being, though, is... So it sounds like probably after CPPCon, this is the largest turnout for an inaugural C++ conference, I think. How many people were here? 270, 275, something like that. How many was C++ conference, I think. How many people were here? 270, 275, something like that. How many was CPP North, though? CPP North was definitely less than 275.
+
+50
+00:22:12.000 --> 00:22:30.000
+I think it was, if you include speakers, it was 200 plus or minus. I can't remember the exact number. I was also at the first Core C++, and Enball probably knows how many people were at the first Core C++. I was actually another organizer at that conference. I think it was around 450. Yeah, I think it was a lot, yeah. In 2019.
+
+51
+00:22:30.000 --> 00:22:51.000
+Yeah. I was there just to talk. The point being, though, is if it's number three, CppCon and Core Cpp are two kind of mainstay C++ conferences now that I know CppCon attendees are above a thousand and Core Cpp. I know past editions have I think been upwards of like 800 or something like that. 600. So
+
+52
+00:22:51.000 --> 00:23:13.000
+the point being is that I think the future is bright for C++ under the sea. And I was talking to Jason about this yesterday is that it seems like, like I was thinking, like there's not really like what is the closest C++ conference geographically is it meeting c++ i don't actually know if c++ on c you're meeting c++ meeting c++ the c++ on c
+
+53
+00:23:13.000 --> 00:23:52.000
+the point being is that like there are a ton of companies here that were represented on imc asml i mean we heard about glass and carpets there's a ton of companies and uh it sounds like this is kind of like not not an untapped market, but just like there was a meetup, a ton of interest. And without like a ton of marketing or fanfare, a dual track, single day conference, it's done really, really well. I would imagine that this is going to grow out to be more similar to like a meeting C++ or a C++ on C over the next couple of years. Yeah. there's, I think, a couple factors here. One, the Netherlands has a lot of tech, and there's a lot of industrial tech, too,
+
+54
+00:23:52.000 --> 00:24:20.000
+like manufacturing, and a lot of that is in C++, like ASML, all the various companies that manufacture lenses and mirrors and machines and whatnot. But also, geographically, this is a really good location. Relatively easy to get to from the UK. Another big tech hub by both train and by flight. And it's EU, so it's very easy for anyone in the EU to get to.
+
+55
+00:24:20.000 --> 00:24:53.000
+Folks from, you know, like France, another big tech hub. Germany, another big tech hub. Germany, another big tech hub, all pretty close, well-situated. And also, if you're coming from the U.S., this is not as long of a flight by a couple hours as going to Mini C++. This is a little bit closer. So, yeah, all in all, I'm not surprised to see this.
+
+56
+00:24:53.000 --> 00:25:18.000
+I also wonder if the decision by the organizers to have some sort of targeted tracks, like they had a GPU and accelerated computing track, I wonder if that sort of attracted more of an audience to have more specific themes for some of their content. I mean, yeah, and speaking of it being in the EU, when you mentioned, oh, it's runnable, I was like, do I need to bring my passport on the run in order to enter Belgium? And your response was... It's Europe.
+
+57
+00:25:18.000 --> 00:25:35.000
+To which I was like, I know. I know we're in Europe, thank you, but do I need my passport? Completely missing the fact that in Canada, if, if I want to go to America, I definitely need to bring my passport. I don't need to run with my passport tomorrow, folks. And, I mean, we'll find out. Tune in in a couple weeks.
+
+58
+00:25:35.000 --> 00:26:02.000
+Maybe I will get into Belgium and they won't let me back in. I don't know. We're trusting force, Bob, here. Tune in. We'll find out what happens. Well, okay, but to be fair, there are, if you force, Bob, here. Tune in. We'll find out what happens. Well, okay. But to be fair, if you're going between two different EU countries in a car, in some cases you've got to have a special sticker. In some cases, if you're renting a car, you have to have a special permission. And sometimes on trains, too, if it's an international train,
+
+59
+00:26:02.000 --> 00:26:25.000
+you either have to buy a different type of ticket, and in some cases you have to have your passport. So it's not like in the U.S., like if you're driving between two states, you never need to worry about that, like on a rental car or something like that. So his question is not completely unreasonable. I'll let Jonathan. We've got two people from Europe here that have opinions. So technically you need a form of ID every time you cross an EU border
+
+60
+00:26:25.000 --> 00:26:50.000
+because there could be border checks. Of course, the German would know all the rules. And of course, what do you have to add? I mean, that's very true. Like Germany recently reintroduced border checks. But if you're just going like 500 meters into Belgium, I think you'll be okay. On second thought, I'm not going to make my comment.
+
+61
+00:26:50.000 --> 00:27:19.000
+I don't know. Is that it? Is that a wrap? I mean, this thing was supposed to be over 28 minutes ago. What is our plan for the rest of the night? I assume we're going to have to eat food. Yes, I'm starving, even though I did have that sausage that was... I'm pretty sure... I believe my girlfriend has abandoned me for the evening to go eat at some Michelin star restaurant, which she said was going to be her plan yesterday. So yeah, I think I'm on my own for getting food. All right. Well, it was nice chatting with you,
+
+62
+00:27:19.000 --> 00:27:42.000
+Bryce. I guess we'll say goodbye now. I mean, do we need to talk? We were supposed to talk to Jeroen. J-E-R-O-E-N. We met him earlier today. All right. I mean, but if he's still here... He is the individual that commented on Reddit that our podcast was chaos with sprinkles of information. But I do not see him visually.
+
+63
+00:27:42.000 --> 00:27:58.000
+He might be around somewhere. Do we have anything we want to talk about? I wanted to talk to you about algorithms for counting crimes. But I do not see him visually. He might be around somewhere. Do we have anything we want to talk about? I wanted to talk to you about algorithms for counting primes. But I think both of those are more extended discussions. Yeah. You need to calculate primes. Just go to the J language.
+
+64
+00:27:58.000 --> 00:28:14.000
+P colon, folks. P colon. We'll do. We can do. We can talk about those at a future time. We should go get food because... Connor did not have lunch. And Connor, like, I'm here, oh wait, Connor, how much did you run this morning? It was a light morning.
+
+65
+00:28:14.000 --> 00:28:35.000
+It was 10K. Okay. Yeah. Connor's running a little bit of a calorie deficit right now. And the only option here is to fill it with beer. So I think we have to go get him food. Yeah, I am, I am a tiny bit hungry right now i was actually i thought about leaving your keynote in ball to go see if there was a vending machine because that's how hungry darcy mcdonald's at 50 meters i mean uh i
+
+66
+00:28:35.000 --> 00:29:06.000
+said i thought about leaving but i didn't um i don't think we're going to be going to mcdonald's right now all right i think that's it for c plus plus the Sea. That's one more country and one more conference added to where the great folks of ADS Be The Podcast have recorded. And, yeah, we're going to be going probably into town, probably the same place roughly we went yesterday. We have to find somewhere suitable for Bryce's palate and his princess requirements. Will we be successful?
+
+67
+00:29:06.000 --> 00:29:32.000
+Hey, my actual princess is already spending all the money on food tonight. We know that your actual princess is you talking in the third person. We know that for sure. Anyways, till next time, folks. Be sure to check these show notes either in your podcast app or at ADSP the podcast dot com for links to anything we mentioned in today's episode as well as a link to a github discussion where you can leave thoughts comments and questions thanks for listening we hope you enjoyed and have a great day
+
+68
+00:29:32.000 --> 00:29:37.000
+low quality high quantity that is the tagline of our podcast it's not the tagline our tagline is chaos with sprinkles of information There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
