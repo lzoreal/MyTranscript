@@ -23,40 +23,44 @@ RSS-first + PodScripts 搜索
 标题匹配增强：
 
 - exact_match=false
-- RSS 搜索标题会先进行 episode 标题规范化
+- 搜索阶段优先使用 RSS 原始标题
+- 搜索失败后自动尝试多个标题变体
+- RSS 搜索标题不会强制 lower()
+- 本地候选匹配仍然使用 normalize_episode_title()
 - 支持 Episode / Ep / Bonus 前缀
 - 支持 episode number，例如：
+
     409. Title
     #409 Title
     Episode 409: Title
     Ep 409 - Title
+
 - 支持 Part N，例如：
+
     Title (Part 6)
     Title [Part 6]
     Title - Part 6
     Title: Part 6
     Title Part 6
+
 - 支持 curly apostrophe
 - 支持 & / and
 - 支持大小写差异
 - 支持标点差异
 
-本版本重点修复：
+本版本重点：
 
+- PodScripts 搜索阶段不再使用 lower()
+- 搜索阶段使用多级标题 fallback
+- 本地匹配阶段使用 canonical normalization
+- PodScripts 搜索结果统一评分
+- 不依赖搜索结果的大小写
 - PodScripts 搜索页面：
   不再使用正则解析 HTML
-  避免把 "0 comments" 当成 episode 标题
-
 - PodScripts transcript：
   使用 lxml DOM + 文本节点解析
-  不依赖固定 HTML 标签结构
-
-- 标题匹配：
-  RSS 标题和 PodScripts 标题都会进行核心标题规范化
-
 - VTT 文件名：
   使用 safe_filename()
-  不需要 urllib.parse.quote()
 """
 
 import os
@@ -66,6 +70,7 @@ import json
 import time
 import urllib.parse
 import html as html_module
+
 import requests
 
 from datetime import datetime, timezone
@@ -149,7 +154,6 @@ def display_name(podcast):
             "Podcast",
         ),
     )
-
     return f"{base} (Unofficial)"
 
 
@@ -158,7 +162,6 @@ def safe_filename(title):
     将标题转换成安全文件名。
 
     不保留空格、冒号、括号、问号等特殊字符。
-
     因此生成 VTT URL 时不需要再次 quote。
     """
 
@@ -186,7 +189,6 @@ def safe_filename(title):
 
 
 def load_podcasts():
-
     if not PODCASTS_FILE.exists():
         print(f"找不到 {PODCASTS_FILE}")
         sys.exit(1)
@@ -205,11 +207,8 @@ def load_podcasts():
 
 
 def load_progress():
-
     if PROGRESS_FILE.exists():
-
         try:
-
             with open(
                 PROGRESS_FILE,
                 "r",
@@ -231,14 +230,12 @@ def load_progress():
             return data
 
         except Exception as e:
-
             print(f"   读取 progress.json 失败: {e}")
 
     return {"podcasts": {}}
 
 
 def save_progress(progress):
-
     tmp_file = Path(str(PROGRESS_FILE) + ".tmp")
 
     with open(
@@ -246,7 +243,6 @@ def save_progress(progress):
         "w",
         encoding="utf-8",
     ) as f:
-
         json.dump(
             progress,
             f,
@@ -261,14 +257,12 @@ def get_podcast_progress(
     progress,
     slug,
 ):
-
     podcasts = progress.setdefault(
         "podcasts",
         {},
     )
 
     if slug not in podcasts:
-
         podcasts[slug] = {
             "processed": {},
             "total_processed": 0,
@@ -292,11 +286,8 @@ def fetch_html(
     url,
     retries=3,
 ):
-
     for attempt in range(retries):
-
         try:
-
             response = requests.get(
                 url,
                 headers=HEADERS,
@@ -308,11 +299,9 @@ def fetch_html(
             return response.text
 
         except requests.exceptions.HTTPError as e:
-
             status = e.response.status_code if e.response is not None else None
 
             if status == 429:
-
                 sleep_time = 10 + 5 * attempt
 
                 print(f"      429 限流，" f"等待 {sleep_time}s...")
@@ -320,13 +309,11 @@ def fetch_html(
                 time.sleep(sleep_time)
 
             else:
-
                 print(f"      HTTP {status} 错误 " f"(重试 {attempt + 1}/{retries})")
 
                 time.sleep(3**attempt)
 
         except Exception as e:
-
             print(f"      请求失败: {e} " f"(重试 {attempt + 1}/{retries})")
 
             time.sleep(3**attempt)
@@ -340,9 +327,7 @@ def fetch_html(
 
 
 def fetch_rss(feed_url):
-
     try:
-
         response = requests.get(
             feed_url,
             headers=RSS_HEADERS,
@@ -356,14 +341,12 @@ def fetch_rss(feed_url):
         return root
 
     except Exception as e:
-
         print(f"   获取 RSS 失败: {e}")
 
         return None
 
 
 def get_enclosure(item):
-
     enclosure = item.find("enclosure")
 
     if enclosure is not None:
@@ -380,7 +363,6 @@ def get_enclosure(item):
 def get_episode_audio_url_from_item(
     item,
 ):
-
     enclosure = get_enclosure(item)
 
     if enclosure is None:
@@ -397,7 +379,6 @@ def get_episode_audio_url_from_item(
 def get_episode_audio_url(
     item,
 ):
-
     return get_episode_audio_url_from_item(item)
 
 
@@ -409,7 +390,6 @@ def get_episode_audio_url(
 def clean_podscripts_url(
     href,
 ):
-
     if not href:
         return None
 
@@ -450,7 +430,13 @@ def clean_podscripts_url(
 
 def normalize_episode_title(text):
     """
-    用于 episode 匹配的核心标题规范化。
+    用于 episode 本地匹配的核心标题规范化。
+
+    注意：
+
+    这个函数只用于“本地候选匹配”。
+
+    不应该直接把它的结果拿去搜索 PodScripts。
 
     例如：
 
@@ -468,7 +454,10 @@ def normalize_episode_title(text):
     if not text:
         return ""
 
+    # --------------------------------------------------------
     # HTML entity
+    # --------------------------------------------------------
+
     text = html_module.unescape(text)
 
     # --------------------------------------------------------
@@ -543,25 +532,30 @@ def normalize_episode_title(text):
     # --------------------------------------------------------
 
     text = re.sub(
-        r"^\s*#?\s*\d{1,5}\s*[\.\-:#]\s*",
+        r"^\s*#?\s*\d{1,5}\s*[.\-:#]\s*",
         "",
         text,
     )
 
-    # 某些站点可能使用：
-    #
+    # --------------------------------------------------------
     # #409 Title
-    #
-    # 上面的正则可以处理 #409 + 标点。
-    #
-    # 这里再处理：
-    #
-    # #409 Title
-    #
+    # --------------------------------------------------------
+
     text = re.sub(
         r"^\s*#\s*\d{1,5}\s+",
         "",
         text,
+    )
+
+    # --------------------------------------------------------
+    # 去掉 Episode 409 / Ep 409
+    # --------------------------------------------------------
+
+    text = re.sub(
+        r"^\s*(?:episode|ep)\s+\d+\s*[:.#\-]?\s*",
+        "",
+        text,
+        flags=re.IGNORECASE,
     )
 
     # --------------------------------------------------------
@@ -579,7 +573,7 @@ def normalize_episode_title(text):
         r"""
         \s*
         (?:
-            [\(\[\{]\s*part\s+\d+\s*[\)\]\}]
+            [(\[\{]\s*part\s+\d+\s*[)\]\}]
             |
             [-:]\s*part\s+\d+
             |
@@ -590,17 +584,6 @@ def normalize_episode_title(text):
         "",
         text,
         flags=re.IGNORECASE | re.VERBOSE,
-    )
-
-    # --------------------------------------------------------
-    # 去掉常见的 Episode / Ep 前缀残留
-    # --------------------------------------------------------
-
-    text = re.sub(
-        r"^\s*(?:episode|ep)\s+\d+\s*[:.#\-]?\s*",
-        "",
-        text,
-        flags=re.IGNORECASE,
     )
 
     # --------------------------------------------------------
@@ -640,13 +623,196 @@ def normalize_title(
     return normalize_episode_title(text)
 
 
+# ============================================================
+# 搜索标题变体
+# ============================================================
+
+
+def build_search_variants(title):
+    """
+    构造 PodScripts 搜索用的标题变体。
+
+    非常重要：
+
+    这里不能直接使用 normalize_episode_title()。
+
+    因为 normalize_episode_title() 会：
+
+        lower()
+
+    而 PodScripts 搜索阶段可能对大小写、
+    特殊字符、搜索词结构存在自己的处理方式。
+
+    因此搜索阶段尽量保留原始标题。
+
+    搜索优先级：
+
+    1. RSS 原始标题
+    2. 去掉 Part N
+    3. 去掉 Episode / Ep + number
+    4. 同时去掉 Part N + Episode number
+    """
+
+    if not title:
+        return []
+
+    original = html_module.unescape(title).strip()
+
+    if not original:
+        return []
+
+    variants = []
+
+    def add_variant(value):
+        if not value:
+            return
+
+        value = html_module.unescape(value).strip()
+
+        if not value:
+            return
+
+        if value not in variants:
+            variants.append(value)
+
+    # --------------------------------------------------------
+    # 1. 原始标题
+    # --------------------------------------------------------
+
+    add_variant(original)
+
+    # --------------------------------------------------------
+    # 2. 去掉 Part N
+    #
+    # 注意：
+    # 保留大小写。
+    # --------------------------------------------------------
+
+    without_part = re.sub(
+        r"""
+        \s*
+        (?:
+            [(\[\{]\s*part\s+\d+\s*[)\]\}]
+            |
+            [-:]\s*part\s+\d+
+            |
+            \bpart\s+\d+\b
+        )
+        \s*$
+        """,
+        "",
+        original,
+        flags=re.IGNORECASE | re.VERBOSE,
+    ).strip()
+
+    add_variant(without_part)
+
+    # --------------------------------------------------------
+    # 3. 去掉 Episode / Ep + number
+    #
+    # 例如：
+    #
+    # Episode 409: Title
+    # Ep 409 - Title
+    # --------------------------------------------------------
+
+    without_episode_prefix = re.sub(
+        r"^\s*(?:episode|ep)\s+\d+\s*[:.#\-]?\s*",
+        "",
+        original,
+        flags=re.IGNORECASE,
+    ).strip()
+
+    add_variant(without_episode_prefix)
+
+    # --------------------------------------------------------
+    # 4. 去掉普通 episode number
+    #
+    # 409. Title
+    # 409 - Title
+    # 409: Title
+    # #409 Title
+    # --------------------------------------------------------
+
+    without_number = re.sub(
+        r"^\s*#?\s*\d{1,5}\s*[.\-:#]\s*",
+        "",
+        original,
+    ).strip()
+
+    add_variant(without_number)
+
+    without_hash_number = re.sub(
+        r"^\s*#\s*\d{1,5}\s+",
+        "",
+        original,
+    ).strip()
+
+    add_variant(without_hash_number)
+
+    # --------------------------------------------------------
+    # 5. 同时去掉 episode number + Part N
+    # --------------------------------------------------------
+
+    combined = without_number
+
+    combined = re.sub(
+        r"""
+        \s*
+        (?:
+            [(\[\{]\s*part\s+\d+\s*[)\]\}]
+            |
+            [-:]\s*part\s+\d+
+            |
+            \bpart\s+\d+\b
+        )
+        \s*$
+        """,
+        "",
+        combined,
+        flags=re.IGNORECASE | re.VERBOSE,
+    ).strip()
+
+    add_variant(combined)
+
+    # --------------------------------------------------------
+    # 6. Episode N + 去掉 Part N
+    # --------------------------------------------------------
+
+    combined_episode = without_episode_prefix
+
+    combined_episode = re.sub(
+        r"""
+        \s*
+        (?:
+            [(\[\{]\s*part\s+\d+\s*[)\]\}]
+            |
+            [-:]\s*part\s+\d+
+            |
+            \bpart\s+\d+\b
+        )
+        \s*$
+        """,
+        "",
+        combined_episode,
+        flags=re.IGNORECASE | re.VERBOSE,
+    ).strip()
+
+    add_variant(combined_episode)
+
+    return variants
+
+
+# ============================================================
+# 标题相似度
+# ============================================================
+
+
 def title_similarity(
     title1,
     title2,
 ):
-
     a = normalize_episode_title(title1)
-
     b = normalize_episode_title(title2)
 
     if not a or not b:
@@ -685,14 +851,12 @@ def title_similarity(
     # --------------------------------------------------------
 
     tokens_a = set(a.split())
-
     tokens_b = set(b.split())
 
     if not tokens_a or not tokens_b:
         return 0.0
 
     intersection = tokens_a & tokens_b
-
     union = tokens_a | tokens_b
 
     if not union:
@@ -720,7 +884,6 @@ def title_similarity(
 def looks_like_bad_link_title(
     title,
 ):
-
     if not title:
         return True
 
@@ -761,78 +924,26 @@ def looks_like_bad_link_title(
 
 
 # ============================================================
-# PodScripts 搜索
+# PodScripts 搜索页面解析
 # ============================================================
 
 
-def search_podscripts(
-    title,
-    podscripts_id,
+def parse_podscripts_search_results(
+    html_text,
 ):
-
-    if not podscripts_id:
-        return None
-
-    # --------------------------------------------------------
-    # 重要：
-    #
-    # 不直接使用 RSS 原始标题搜索。
-    #
-    # 例如：
-    #
-    # The Nazis in Power: Hitler's War on the Jews (Part 6)
-    #
-    # 会变成：
-    #
-    # the nazis in power hitlers war on the jews
-    #
-    # 这样可以匹配：
-    #
-    # 409. The Nazis in Power: Hitler's War on the Jews
-    # --------------------------------------------------------
-
-    search_title = normalize_episode_title(title)
-
-    if not search_title:
-        search_title = title
-
-    encoded = urllib.parse.quote_plus(search_title)
-
-    # --------------------------------------------------------
-    # exact_match=false
-    #
-    # 这是本次修改的核心之一。
-    # --------------------------------------------------------
-
-    url = (
-        "https://podscripts.co/"
-        "podkeywordsearch/"
-        "?search_type=episode"
-        f"&keywordsToSearch={encoded}"
-        "&exact_match=false"
-        "&slv=single"
-        f"&podSelectedId={podscripts_id}"
-    )
-
-    print(f"      搜索: {search_title[:70]}...")
-
-    if search_title != title:
-        print(f"      原标题: {title[:70]}...")
-
-    html_text = fetch_html(url)
+    """
+    从 PodScripts 搜索页面中提取 episode candidates。
+    """
 
     if not html_text:
-        return None
+        return []
 
     try:
-
         doc = lxml_html.fromstring(html_text)
 
     except Exception as e:
-
         print(f"      搜索页面 HTML 解析失败: {e}")
-
-        return None
+        return []
 
     candidates = []
     seen_urls = set()
@@ -904,7 +1015,6 @@ def search_podscripts(
             text = " ".join(node.itertext()).strip()
 
             if text and not looks_like_bad_link_title(text):
-
                 result_title = text
                 break
 
@@ -961,8 +1071,6 @@ def search_podscripts(
 
         seen_urls.add(clean_url)
 
-        print(f"         DEBUG标题: {result_title}")
-
         candidates.append(
             {
                 "title": result_title,
@@ -970,9 +1078,189 @@ def search_podscripts(
             }
         )
 
-    print(f"      搜索结果: {len(candidates)}")
+    return candidates
 
-    if not candidates:
+
+# ============================================================
+# PodScripts 单次搜索
+# ============================================================
+
+
+def search_podscripts_once(
+    search_title,
+    podscripts_id,
+):
+    """
+    使用指定标题向 PodScripts 搜索一次。
+
+    注意：
+
+    search_title 保留原始大小写。
+
+    exact_match=false 保留。
+    """
+
+    if not search_title:
+        return []
+
+    encoded = urllib.parse.quote_plus(search_title)
+
+    url = (
+        "https://podscripts.co/"
+        "podkeywordsearch/"
+        "?search_type=episode"
+        f"&keywordsToSearch={encoded}"
+        "&exact_match=false"
+        "&slv=single"
+        f"&podSelectedId={podscripts_id}"
+    )
+
+    print(f"      搜索: {search_title[:100]}...")
+
+    html_text = fetch_html(url)
+
+    if not html_text:
+        return []
+
+    print(f"      搜索页面 HTML 长度: " f"{len(html_text)}")
+
+    return parse_podscripts_search_results(html_text)
+
+
+# ============================================================
+# PodScripts 搜索
+# ============================================================
+
+
+def search_podscripts(
+    title,
+    podscripts_id,
+):
+    """
+    多级 PodScripts 搜索。
+
+    搜索策略：
+
+    1. 原始 RSS 标题
+    2. 去掉 Part N
+    3. 去掉 Episode number
+    4. 去掉 #number
+    5. Episode number + Part N 都去掉
+
+    搜索阶段：
+
+        不 lower()
+
+    匹配阶段：
+
+        normalize_episode_title()
+
+    最终把所有候选合并后评分。
+    """
+
+    if not podscripts_id:
+        return None
+
+    search_variants = build_search_variants(title)
+
+    if not search_variants:
+        return None
+
+    print(f"      搜索变体数量: " f"{len(search_variants)}")
+
+    for index, variant in enumerate(
+        search_variants,
+        1,
+    ):
+        print(
+            f"      搜索变体 [{index}/" f"{len(search_variants)}]: " f"{variant[:100]}"
+        )
+
+    # --------------------------------------------------------
+    # 搜索所有变体
+    # --------------------------------------------------------
+
+    all_candidates = []
+
+    seen_urls = set()
+
+    for index, search_title in enumerate(
+        search_variants,
+        1,
+    ):
+
+        candidates = search_podscripts_once(
+            search_title,
+            podscripts_id,
+        )
+
+        print(f"      本次搜索得到: " f"{len(candidates)} 个候选")
+
+        for candidate in candidates:
+
+            url = candidate["url"]
+
+            if url in seen_urls:
+                continue
+
+            seen_urls.add(url)
+
+            candidate = dict(candidate)
+
+            candidate["search_variant"] = search_title
+
+            candidate["search_index"] = index
+
+            all_candidates.append(candidate)
+
+        # ----------------------------------------------------
+        # 如果已经找到完全匹配，
+        # 可以提前停止继续搜索。
+        #
+        # 注意：
+        #
+        # 这里的“完全匹配”是经过 normalize 后的，
+        # 因此不受大小写影响。
+        # ----------------------------------------------------
+
+        exact_candidates = []
+
+        for candidate in candidates:
+
+            score = title_similarity(
+                title,
+                candidate["title"],
+            )
+
+            if score >= 1.0:
+                exact_candidates.append(candidate)
+
+        if exact_candidates:
+
+            best_exact = exact_candidates[0]
+
+            print("      找到规范化后的完全匹配，" "停止后续搜索")
+
+            print(f"      匹配成功 (1.000): " f"{best_exact['title']}")
+
+            return best_exact["url"]
+
+        # ----------------------------------------------------
+        # 不同搜索之间增加请求间隔。
+        #
+        # 最后一个不需要等待。
+        # ----------------------------------------------------
+
+        if index < len(search_variants):
+            time.sleep(PODSEARCH_DELAY)
+
+    # --------------------------------------------------------
+    # 没有任何候选
+    # --------------------------------------------------------
+
+    print(f"      所有搜索结果合计: " f"{len(all_candidates)}")
+
+    if not all_candidates:
 
         print("      没有找到 episode 候选")
 
@@ -984,7 +1272,7 @@ def search_podscripts(
 
     scored = []
 
-    for candidate in candidates:
+    for candidate in all_candidates:
 
         score = title_similarity(
             title,
@@ -1004,21 +1292,24 @@ def search_podscripts(
     )
 
     # --------------------------------------------------------
-    # 显示前 10 个候选
+    # 显示前 15 个候选
     # --------------------------------------------------------
 
-    for score, candidate in scored[:10]:
+    print("      最佳候选:")
 
-        print(f"         候选 {score:.3f}: " f"{candidate['title']}")
+    for score, candidate in scored[:15]:
+
+        print(
+            f"         "
+            f"{score:.3f} | "
+            f"搜索[{candidate['search_index']}] | "
+            f"{candidate['title']}"
+        )
 
     best_score, best = scored[0]
 
     # --------------------------------------------------------
     # 保持原来的 0.55 阈值
-    #
-    # 不通过简单降低阈值来解决标题差异。
-    # 标题规范化之后，真正匹配的标题通常会得到
-    # 1.0 或非常高的分数。
     # --------------------------------------------------------
 
     if best_score < 0.55:
@@ -1045,7 +1336,6 @@ TIME_PATTERN = re.compile(
 def clean_transcript_text(
     text,
 ):
-
     if not text:
         return ""
 
@@ -1068,7 +1358,6 @@ def clean_transcript_text(
 def parse_timestamp(
     match,
 ):
-
     h = int(match.group("h"))
 
     m = int(match.group("m"))
@@ -1086,7 +1375,6 @@ def parse_timestamp(
 def parse_transcript(
     html_text,
 ):
-
     if not html_text:
         return []
 
@@ -1096,25 +1384,14 @@ def parse_transcript(
     # 方法 1：
     #
     # DOM 文本节点解析
-    #
-    # 实际页面类似：
-    #
-    # Transcript
-    #
-    # Starting point is 00:00:04
-    # I'm Jenna Fisher...
-    #
-    # Starting point is 00:00:28
-    # I'm so thrilled...
     # --------------------------------------------------------
 
     try:
-
         doc = lxml_html.fromstring(html_text)
 
     except Exception as e:
 
-        print(f"         [调试] HTML DOM 解析失败: {e}")
+        print(f"         [调试] " f"HTML DOM 解析失败: {e}")
 
         doc = None
 
@@ -1129,10 +1406,7 @@ def parse_transcript(
         text_nodes = doc.xpath("//text()")
 
         # ----------------------------------------------------
-        # 把 DOM 文本节点拼接成连续文本
-        #
-        # 这里不能简单用 ''.join，
-        # 否则不同节点之间的文字可能粘在一起。
+        # 把 DOM 文本节点转换成 chunks
         # ----------------------------------------------------
 
         chunks = []
@@ -1170,13 +1444,7 @@ def parse_transcript(
                 chunks.append(value)
 
         # ----------------------------------------------------
-        # 不直接全部拼成一个字符串。
-        #
-        # 每个 chunk 中可能有：
-        #
-        # Starting point is 00:00:04 ...
-        #
-        # 所以分别扫描。
+        # 分别扫描 chunks
         # ----------------------------------------------------
 
         for chunk in chunks:
@@ -1220,7 +1488,7 @@ def parse_transcript(
 
     if not cues:
 
-        print("         [调试] DOM 文本节点未找到 cues，" "启动 fallback...")
+        print("         [调试] " "DOM 文本节点未找到 cues，" "启动 fallback...")
 
         try:
 
@@ -1287,7 +1555,7 @@ def parse_transcript(
 
         except Exception as e:
 
-            print(f"         [调试] fallback 失败: {e}")
+            print(f"         [调试] " f"fallback 失败: {e}")
 
     # --------------------------------------------------------
     # 去重
@@ -1362,8 +1630,9 @@ def parse_transcript(
 # ============================================================
 
 
-def time_to_seconds(ts):
-
+def time_to_seconds(
+    ts,
+):
     h, m, s = ts.split(":")
 
     return int(h) * 3600 + int(m) * 60 + int(s)
@@ -1372,7 +1641,6 @@ def time_to_seconds(ts):
 def seconds_to_vtt(
     sec,
 ):
-
     sec = max(
         0,
         float(sec),
@@ -1404,7 +1672,6 @@ def cues_to_vtt(
     cues,
     offset_seconds=0,
 ):
-
     lines = [
         "WEBVTT",
         "",
@@ -1468,7 +1735,6 @@ def is_episode_processed(
     info,
     slug,
 ):
-
     if not info:
         return False
 
@@ -1497,7 +1763,6 @@ def process_podcast(
     podcast,
     progress,
 ):
-
     slug = podcast["slug"]
 
     pc_prog = get_podcast_progress(
@@ -1602,13 +1867,11 @@ def process_podcast(
             #
             # 防止 progress 有记录，
             # 但文件后来被删除。
-            #
 
             if is_episode_processed(
                 info,
                 slug,
             ):
-
                 continue
 
         pending.append(entry)
@@ -1649,8 +1912,6 @@ def process_podcast(
             podscripts_id,
         )
 
-        time.sleep(PODSEARCH_DELAY)
-
         if not ep_url:
 
             print("      搜索无结果")
@@ -1665,6 +1926,8 @@ def process_podcast(
 
             changed = True
 
+            # 搜索失败后进入下一个 episode
+            # 不需要额外重复等待
             continue
 
         print(f"      页面: {ep_url}")
@@ -1772,9 +2035,6 @@ def process_podcast(
 
         # ----------------------------------------------------
         # 每成功一个 episode 就保存一次 progress
-        #
-        # GitHub Actions 被中断时，
-        # 不至于丢掉整个 batch。
         # ----------------------------------------------------
 
         save_progress(progress)
@@ -1814,7 +2074,6 @@ def ensure_namespace(
     prefix,
     uri,
 ):
-
     nsmap = dict(root.nsmap)
 
     if nsmap.get(prefix) == uri:
@@ -1845,7 +2104,6 @@ def ensure_namespace(
 def deepcopy_element(
     element,
 ):
-
     return etree.fromstring(etree.tostring(element))
 
 
@@ -1859,7 +2117,6 @@ def generate_podcast_feed(
     podcast,
     base_url,
 ):
-
     slug = podcast["slug"]
 
     source_feed_url = podcast["feed_url"]
@@ -1979,6 +2236,7 @@ def generate_podcast_feed(
     kept_items = []
 
     removed = 0
+
     added_transcripts = 0
 
     # --------------------------------------------------------
@@ -2018,14 +2276,6 @@ def generate_podcast_feed(
 
         # ----------------------------------------------------
         # VTT URL
-        #
-        # safe_filename() 已经保证：
-        #
-        # 空格 -> _
-        # : -> _
-        # ? -> _
-        #
-        # 因此这里不要再 quote。
         # ----------------------------------------------------
 
         vtt_url = f"{base_url}/" f"{slug}/transcripts/" f"{info['vtt_filename']}"
@@ -2139,7 +2389,6 @@ def generate_podcast_index(
     podcast,
     base_url,
 ):
-
     slug = podcast["slug"]
 
     name = display_name(podcast)
@@ -2198,7 +2447,6 @@ code {{
 </style>
 </head>
 <body>
-
 <h1>🎙️ {html_module.escape(name)}</h1>
 
 <p>
@@ -2252,7 +2500,6 @@ def generate_master_index(
     podcasts,
     base_url,
 ):
-
     items = ""
 
     for podcast in podcasts:
@@ -2395,7 +2642,10 @@ def main():
 
     progress = load_progress()
 
+    # --------------------------------------------------------
     # 确保 site
+    # --------------------------------------------------------
+
     SITE_DIR.mkdir(
         parents=True,
         exist_ok=True,
@@ -2432,6 +2682,7 @@ def main():
 
             # 一个 podcast 出错，
             # 不影响后面的 podcast。
+
             continue
 
         # 每个 podcast 完成后保存
