@@ -20,6 +20,27 @@ RSS-first + PodScripts 搜索
 9. 通用支持不同播客托管平台
 10. progress.json 记录处理状态
 
+标题匹配增强：
+
+- exact_match=false
+- RSS 搜索标题会先进行 episode 标题规范化
+- 支持 Episode / Ep / Bonus 前缀
+- 支持 episode number，例如：
+    409. Title
+    #409 Title
+    Episode 409: Title
+    Ep 409 - Title
+- 支持 Part N，例如：
+    Title (Part 6)
+    Title [Part 6]
+    Title - Part 6
+    Title: Part 6
+    Title Part 6
+- 支持 curly apostrophe
+- 支持 & / and
+- 支持大小写差异
+- 支持标点差异
+
 本版本重点修复：
 
 - PodScripts 搜索页面：
@@ -31,14 +52,7 @@ RSS-first + PodScripts 搜索
   不依赖固定 HTML 标签结构
 
 - 标题匹配：
-  支持：
-    Bonus:
-    Episode:
-    Ep:
-    标点差异
-    curly apostrophe
-    & / and
-    大小写差异
+  RSS 标题和 PodScripts 标题都会进行核心标题规范化
 
 - VTT 文件名：
   使用 safe_filename()
@@ -52,7 +66,6 @@ import json
 import time
 import urllib.parse
 import html as html_module
-
 import requests
 
 from datetime import datetime, timezone
@@ -115,9 +128,7 @@ EPISODE_DELAY = 5
 # ============================================================
 
 PODCAST_NS = "https://podcastindex.org/namespace/1.0"
-
 ATOM_NS = "http://www.w3.org/2005/Atom"
-
 ITUNES_NS = "http://www.itunes.com/dtds/podcast-1.0.dtd"
 
 
@@ -131,7 +142,6 @@ def now_iso():
 
 
 def display_name(podcast):
-
     base = podcast.get(
         "name",
         podcast.get(
@@ -178,9 +188,7 @@ def safe_filename(title):
 def load_podcasts():
 
     if not PODCASTS_FILE.exists():
-
         print(f"找不到 {PODCASTS_FILE}")
-
         sys.exit(1)
 
     with open(
@@ -188,7 +196,6 @@ def load_podcasts():
         "r",
         encoding="utf-8",
     ) as f:
-
         return json.load(f)
 
 
@@ -208,7 +215,6 @@ def load_progress():
                 "r",
                 encoding="utf-8",
             ) as f:
-
                 data = json.load(f)
 
             if not isinstance(
@@ -315,15 +321,13 @@ def fetch_html(
 
             else:
 
-                print(
-                    f"      HTTP {status} 错误 " f"(重试 " f"{attempt + 1}/{retries})"
-                )
+                print(f"      HTTP {status} 错误 " f"(重试 {attempt + 1}/{retries})")
 
                 time.sleep(3**attempt)
 
         except Exception as e:
 
-            print(f"      请求失败: {e} " f"(重试 " f"{attempt + 1}/{retries})")
+            print(f"      请求失败: {e} " f"(重试 {attempt + 1}/{retries})")
 
             time.sleep(3**attempt)
 
@@ -444,18 +448,33 @@ def clean_podscripts_url(
 # ============================================================
 
 
-def normalize_title(
-    text,
-):
+def normalize_episode_title(text):
+    """
+    用于 episode 匹配的核心标题规范化。
+
+    例如：
+
+    RSS:
+        The Nazis in Power: Hitler's War on the Jews (Part 6)
+
+    PodScripts:
+        409. The Nazis in Power: Hitler's War on the Jews
+
+    最终都会变成：
+
+        the nazis in power hitlers war on the jews
+    """
 
     if not text:
         return ""
 
+    # HTML entity
     text = html_module.unescape(text)
 
-    text = text.lower()
+    # --------------------------------------------------------
+    # Unicode apostrophe / quotation
+    # --------------------------------------------------------
 
-    # curly apostrophe
     text = text.replace(
         "\u2018",
         "'",
@@ -476,7 +495,10 @@ def normalize_title(
         '"',
     )
 
-    # dash
+    # --------------------------------------------------------
+    # Unicode dash
+    # --------------------------------------------------------
+
     text = text.replace(
         "\u2013",
         "-",
@@ -487,21 +509,104 @@ def normalize_title(
         "-",
     )
 
+    # --------------------------------------------------------
     # & -> and
+    # --------------------------------------------------------
+
     text = text.replace(
         "&",
         " and ",
     )
 
-    # 常见标题前缀
+    # --------------------------------------------------------
+    # 去掉常见前缀
+    #
+    # Bonus:
+    # Episode:
+    # Ep:
+    # --------------------------------------------------------
+
     text = re.sub(
-        r"^\s*" r"(bonus|episode|ep)" r"\s*[:#.\-]?\s*",
+        r"^\s*(?:bonus|episode|ep)\s*[:.#\-]?\s*",
         "",
         text,
         flags=re.IGNORECASE,
     )
 
-    # 只保留文字数字
+    # --------------------------------------------------------
+    # 去掉 episode number
+    #
+    # 409. Title
+    # 409 - Title
+    # 409: Title
+    # #409 Title
+    # --------------------------------------------------------
+
+    text = re.sub(
+        r"^\s*#?\s*\d{1,5}\s*[\.\-:#]\s*",
+        "",
+        text,
+    )
+
+    # 某些站点可能使用：
+    #
+    # #409 Title
+    #
+    # 上面的正则可以处理 #409 + 标点。
+    #
+    # 这里再处理：
+    #
+    # #409 Title
+    #
+    text = re.sub(
+        r"^\s*#\s*\d{1,5}\s+",
+        "",
+        text,
+    )
+
+    # --------------------------------------------------------
+    # 去掉 Part N
+    #
+    # Title (Part 6)
+    # Title [Part 6]
+    # Title {Part 6}
+    # Title - Part 6
+    # Title : Part 6
+    # Title Part 6
+    # --------------------------------------------------------
+
+    text = re.sub(
+        r"""
+        \s*
+        (?:
+            [\(\[\{]\s*part\s+\d+\s*[\)\]\}]
+            |
+            [-:]\s*part\s+\d+
+            |
+            \bpart\s+\d+\b
+        )
+        \s*$
+        """,
+        "",
+        text,
+        flags=re.IGNORECASE | re.VERBOSE,
+    )
+
+    # --------------------------------------------------------
+    # 去掉常见的 Episode / Ep 前缀残留
+    # --------------------------------------------------------
+
+    text = re.sub(
+        r"^\s*(?:episode|ep)\s+\d+\s*[:.#\-]?\s*",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    # --------------------------------------------------------
+    # 只保留文字和数字
+    # --------------------------------------------------------
+
     text = re.sub(
         r"[^\w\s]",
         " ",
@@ -509,13 +614,30 @@ def normalize_title(
         flags=re.UNICODE,
     )
 
+    # --------------------------------------------------------
+    # 合并空白
+    # --------------------------------------------------------
+
     text = re.sub(
         r"\s+",
         " ",
         text,
     )
 
-    return text.strip()
+    return text.strip().lower()
+
+
+def normalize_title(
+    text,
+):
+    """
+    保留原来的 normalize_title API。
+
+    实际 episode 匹配统一使用
+    normalize_episode_title()。
+    """
+
+    return normalize_episode_title(text)
 
 
 def title_similarity(
@@ -523,18 +645,24 @@ def title_similarity(
     title2,
 ):
 
-    a = normalize_title(title1)
+    a = normalize_episode_title(title1)
 
-    b = normalize_title(title2)
+    b = normalize_episode_title(title2)
 
     if not a or not b:
         return 0.0
 
+    # --------------------------------------------------------
     # 完全相同
+    # --------------------------------------------------------
+
     if a == b:
         return 1.0
 
+    # --------------------------------------------------------
     # 包含关系
+    # --------------------------------------------------------
+
     if a in b or b in a:
 
         shorter = min(
@@ -551,6 +679,10 @@ def title_similarity(
             return 0.0
 
         return 0.90 + 0.10 * shorter / longer
+
+    # --------------------------------------------------------
+    # Token similarity
+    # --------------------------------------------------------
 
     tokens_a = set(a.split())
 
@@ -592,7 +724,7 @@ def looks_like_bad_link_title(
     if not title:
         return True
 
-    normalized = normalize_title(title)
+    normalized = normalize_episode_title(title)
 
     bad_titles = {
         "",
@@ -637,22 +769,55 @@ def search_podscripts(
     title,
     podscripts_id,
 ):
+
     if not podscripts_id:
         return None
 
-    encoded = urllib.parse.quote_plus(title)
+    # --------------------------------------------------------
+    # 重要：
+    #
+    # 不直接使用 RSS 原始标题搜索。
+    #
+    # 例如：
+    #
+    # The Nazis in Power: Hitler's War on the Jews (Part 6)
+    #
+    # 会变成：
+    #
+    # the nazis in power hitlers war on the jews
+    #
+    # 这样可以匹配：
+    #
+    # 409. The Nazis in Power: Hitler's War on the Jews
+    # --------------------------------------------------------
+
+    search_title = normalize_episode_title(title)
+
+    if not search_title:
+        search_title = title
+
+    encoded = urllib.parse.quote_plus(search_title)
+
+    # --------------------------------------------------------
+    # exact_match=false
+    #
+    # 这是本次修改的核心之一。
+    # --------------------------------------------------------
 
     url = (
         "https://podscripts.co/"
         "podkeywordsearch/"
-        f"?search_type=episode"
+        "?search_type=episode"
         f"&keywordsToSearch={encoded}"
-        f"&exact_match=true"
-        f"&slv=single"
+        "&exact_match=false"
+        "&slv=single"
         f"&podSelectedId={podscripts_id}"
     )
 
-    print(f"      搜索: {title[:70]}...")
+    print(f"      搜索: {search_title[:70]}...")
+
+    if search_title != title:
+        print(f"      原标题: {title[:70]}...")
 
     html_text = fetch_html(url)
 
@@ -660,10 +825,13 @@ def search_podscripts(
         return None
 
     try:
+
         doc = lxml_html.fromstring(html_text)
 
     except Exception as e:
+
         print(f"      搜索页面 HTML 解析失败: {e}")
+
         return None
 
     candidates = []
@@ -671,8 +839,6 @@ def search_podscripts(
 
     # --------------------------------------------------------
     # PodScripts 搜索结果解析
-    #
-    # 注意：
     #
     # 搜索结果中的 episode link:
     #
@@ -717,6 +883,7 @@ def search_podscripts(
         #
         # /podcasts/{podcast}/{episode}
         #
+
         if len(parts) < 3:
             continue
 
@@ -726,19 +893,26 @@ def search_podscripts(
 
         result_title = ""
 
-        # 方法1:
+        # ----------------------------------------------------
+        # 方法1：
+        #
         # 当前节点内部寻找标题标签
+        # ----------------------------------------------------
 
         for node in link.xpath(".//h1|.//h2|.//h3|.//strong"):
 
             text = " ".join(node.itertext()).strip()
 
             if text and not looks_like_bad_link_title(text):
+
                 result_title = text
                 break
 
-        # 方法2:
+        # ----------------------------------------------------
+        # 方法2：
+        #
         # 查找父节点附近标题
+        # ----------------------------------------------------
 
         if not result_title:
 
@@ -765,10 +939,16 @@ def search_podscripts(
                 if possible:
 
                     # 标题通常最长
-                    result_title = max(possible, key=len)
+                    result_title = max(
+                        possible,
+                        key=len,
+                    )
 
-        # 方法3:
+        # ----------------------------------------------------
+        # 方法3：
+        #
         # fallback
+        # ----------------------------------------------------
 
         if not result_title:
 
@@ -806,17 +986,40 @@ def search_podscripts(
 
     for candidate in candidates:
 
-        score = title_similarity(title, candidate["title"])
+        score = title_similarity(
+            title,
+            candidate["title"],
+        )
 
-        scored.append((score, candidate))
+        scored.append(
+            (
+                score,
+                candidate,
+            )
+        )
 
-    scored.sort(key=lambda x: x[0], reverse=True)
+    scored.sort(
+        key=lambda x: x[0],
+        reverse=True,
+    )
+
+    # --------------------------------------------------------
+    # 显示前 10 个候选
+    # --------------------------------------------------------
 
     for score, candidate in scored[:10]:
 
         print(f"         候选 {score:.3f}: " f"{candidate['title']}")
 
     best_score, best = scored[0]
+
+    # --------------------------------------------------------
+    # 保持原来的 0.55 阈值
+    #
+    # 不通过简单降低阈值来解决标题差异。
+    # 标题规范化之后，真正匹配的标题通常会得到
+    # 1.0 或非常高的分数。
+    # --------------------------------------------------------
 
     if best_score < 0.55:
 
@@ -885,7 +1088,6 @@ def parse_transcript(
 ):
 
     if not html_text:
-
         return []
 
     print(f"         [调试] HTML长度: " f"{len(html_text)}")
@@ -894,8 +1096,6 @@ def parse_transcript(
     # 方法 1：
     #
     # DOM 文本节点解析
-    #
-    # 这是当前 PodScripts 页面最重要的解析方式。
     #
     # 实际页面类似：
     #
@@ -906,7 +1106,6 @@ def parse_transcript(
     #
     # Starting point is 00:00:28
     # I'm so thrilled...
-    #
     # --------------------------------------------------------
 
     try:
@@ -1033,7 +1232,6 @@ def parse_transcript(
                 parent = bad.getparent()
 
                 if parent is not None:
-
                     parent.remove(bad)
 
             visible_text = " ".join(doc.itertext())
@@ -1046,8 +1244,6 @@ def parse_transcript(
             )
 
             # ------------------------------------------------
-            # 重要：
-            #
             # Starting point is 前面可能没有换行，
             # 所以直接正则寻找。
             # ------------------------------------------------
@@ -1081,6 +1277,7 @@ def parse_transcript(
                 text = clean_transcript_text(text)
 
                 if text:
+
                     cues.append(
                         {
                             "start_seconds": start,
@@ -1411,6 +1608,7 @@ def process_podcast(
                 info,
                 slug,
             ):
+
                 continue
 
         pending.append(entry)
@@ -1620,7 +1818,6 @@ def ensure_namespace(
     nsmap = dict(root.nsmap)
 
     if nsmap.get(prefix) == uri:
-
         return root
 
     nsmap[prefix] = uri
@@ -1782,7 +1979,6 @@ def generate_podcast_feed(
     kept_items = []
 
     removed = 0
-
     added_transcripts = 0
 
     # --------------------------------------------------------
@@ -1839,7 +2035,7 @@ def generate_podcast_feed(
         # ----------------------------------------------------
 
         existing_transcripts = item.xpath(
-            "./*[local-name()='transcript'" f" and namespace-uri()=" f"'{PODCAST_NS}']"
+            "./*[local-name()='transcript' " f"and namespace-uri()='{PODCAST_NS}']"
         )
 
         transcript_exists = False
@@ -1973,9 +2169,7 @@ def generate_podcast_index(
 <meta charset="utf-8">
 <meta name="viewport"
       content="width=device-width, initial-scale=1">
-
 <title>{html_module.escape(name)} - Transcripts</title>
-
 <style>
 body {{
     font-family:
@@ -1988,25 +2182,21 @@ body {{
     line-height: 1.6;
     color: #333;
 }}
-
 a {{
     color: #0366d6;
 }}
-
 code {{
     background: #f4f4f4;
     padding: 2px 6px;
     border-radius: 4px;
     word-break: break-all;
 }}
-
 .stat {{
     color: #666;
     font-size: 0.9rem;
 }}
 </style>
 </head>
-
 <body>
 
 <h1>🎙️ {html_module.escape(name)}</h1>
@@ -2102,9 +2292,9 @@ def generate_master_index(
             f"{html_module.escape(name)}"
             "</a> — "
             f"已处理 {total} 集 "
-            f'(<a href="{base_url}/{slug}/feed.xml">'
+            f'<a href="{base_url}/{slug}/feed.xml">'
             "Feed"
-            "</a>)"
+            "</a>"
             "</li>\n"
         )
 
@@ -2114,9 +2304,7 @@ def generate_master_index(
 <meta charset="utf-8">
 <meta name="viewport"
       content="width=device-width, initial-scale=1">
-
 <title>Podcast Transcripts Hub (Unofficial)</title>
-
 <style>
 body {{
     font-family:
@@ -2129,18 +2317,14 @@ body {{
     line-height: 1.6;
     color: #333;
 }}
-
 a {{
     color: #0366d6;
 }}
-
 li {{
     margin: 8px 0;
 }}
 </style>
-
 </head>
-
 <body>
 
 <h1>🎙️ Podcast Transcripts Hub</h1>
@@ -2193,7 +2377,7 @@ def main():
                 1,
             )
 
-            base_url = f"https://" f"{owner}.github.io/" f"{repo}"
+            base_url = f"https://{owner}.github.io/" f"{repo}"
 
     if not base_url:
 
@@ -2365,5 +2549,4 @@ def main():
 # ============================================================
 
 if __name__ == "__main__":
-
     main()
