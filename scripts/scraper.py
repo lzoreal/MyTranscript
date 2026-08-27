@@ -800,6 +800,15 @@ def build_search_variants(title):
 
     add_variant(combined_episode)
 
+    if ":" in original:
+        before, after = original.split(":", 1)
+
+    before = before.strip()
+    after = after.strip()
+
+    add_variant(before)
+    add_variant(after)
+
     return variants
 
 
@@ -1143,19 +1152,45 @@ def search_podscripts(
 
     1. 原始 RSS 标题
     2. 去掉 Part N
-    3. 去掉 Episode number
-    4. 去掉 #number
-    5. Episode number + Part N 都去掉
+    3. 去掉 Episode / Ep + number
+    4. 去掉普通 episode number
+    5. 去掉 #number
+    6. episode number + Part N 都去掉
+
+    搜索采用逐级 fallback：
+
+        variant 1
+            ↓
+        当前 variant 候选评分
+            ↓
+        达到阈值 -> 立即返回
+            ↓
+        未达到阈值
+            ↓
+        variant 2
+            ↓
+        ...
+
+    不再把所有 variant 的搜索结果合并后统一评分。
+
+    注意：
 
     搜索阶段：
-
         不 lower()
 
     匹配阶段：
-
         normalize_episode_title()
 
-    最终把所有候选合并后评分。
+    因此：
+
+        RSS:
+            Episode 409: The Nazis in Power: Hitler's War on the Jews (Part 6)
+
+        PodScripts:
+            409. The Nazis in Power: Hitler's War on the Jews
+
+    仍然可以通过 normalize_episode_title()
+    得到可靠匹配。
     """
 
     if not podscripts_id:
@@ -1166,162 +1201,174 @@ def search_podscripts(
     if not search_variants:
         return None
 
-    print(f"      搜索变体数量: " f"{len(search_variants)}")
+    print(
+        f"      搜索变体数量: "
+        f"{len(search_variants)}"
+    )
 
     for index, variant in enumerate(
         search_variants,
         1,
     ):
         print(
-            f"      搜索变体 [{index}/" f"{len(search_variants)}]: " f"{variant[:100]}"
+            f"      搜索变体 [{index}/"
+            f"{len(search_variants)}]: "
+            f"{variant[:100]}"
         )
 
-    # --------------------------------------------------------
-    # 搜索所有变体
-    # --------------------------------------------------------
-
-    all_candidates = []
-
-    seen_urls = set()
+    # ========================================================
+    # 逐级 fallback
+    # ========================================================
 
     for index, search_title in enumerate(
         search_variants,
         1,
     ):
+        print(
+            f"\n      开始搜索变体 "
+            f"[{index}/{len(search_variants)}]"
+        )
+
+        # ----------------------------------------------------
+        # 搜索当前 variant
+        # ----------------------------------------------------
 
         candidates = search_podscripts_once(
             search_title,
             podscripts_id,
         )
 
-        print(f"      本次搜索得到: " f"{len(candidates)} 个候选")
-
-        for candidate in candidates:
-
-            url = candidate["url"]
-
-            if url in seen_urls:
-                continue
-
-            seen_urls.add(url)
-
-            candidate = dict(candidate)
-
-            candidate["search_variant"] = search_title
-
-            candidate["search_index"] = index
-
-            all_candidates.append(candidate)
+        print(
+            f"      本次搜索得到: "
+            f"{len(candidates)} 个候选"
+        )
 
         # ----------------------------------------------------
-        # 如果已经找到完全匹配，
-        # 可以提前停止继续搜索。
-        #
-        # 注意：
-        #
-        # 这里的“完全匹配”是经过 normalize 后的，
-        # 因此不受大小写影响。
+        # 当前 variant 没有结果
         # ----------------------------------------------------
 
-        exact_candidates = []
+        if not candidates:
+            print(
+                "      当前变体没有候选，"
+                "继续下一个变体"
+            )
+
+            if index < len(search_variants):
+                time.sleep(PODSEARCH_DELAY)
+
+            continue
+
+        # ----------------------------------------------------
+        # 当前 variant 候选评分
+        # ----------------------------------------------------
+
+        scored = []
 
         for candidate in candidates:
-
             score = title_similarity(
                 title,
                 candidate["title"],
             )
 
-            if score >= 1.0:
-                exact_candidates.append(candidate)
+            scored.append(
+                (
+                    score,
+                    candidate,
+                )
+            )
 
-        if exact_candidates:
-
-            best_exact = exact_candidates[0]
-
-            print("      找到规范化后的完全匹配，" "停止后续搜索")
-
-            print(f"      匹配成功 (1.000): " f"{best_exact['title']}")
-
-            return best_exact["url"]
+        scored.sort(
+            key=lambda x: x[0],
+            reverse=True,
+        )
 
         # ----------------------------------------------------
-        # 不同搜索之间增加请求间隔。
+        # 显示当前 variant 的最佳候选
+        # ----------------------------------------------------
+
+        print(
+            "      当前变体最佳候选:"
+        )
+
+        for score, candidate in scored[:10]:
+            print(
+                f"         "
+                f"{score:.3f} | "
+                f"{candidate['title']}"
+            )
+
+        best_score, best = scored[0]
+
+        # ----------------------------------------------------
+        # 完全匹配
         #
-        # 最后一个不需要等待。
+        # normalize 后 == 1.0
+        #
+        # 直接返回
+        # ----------------------------------------------------
+
+        if best_score >= 1.0:
+            print(
+                "      找到规范化后的完全匹配，"
+                "立即返回"
+            )
+
+            print(
+                f"      匹配成功 "
+                f"({best_score:.3f}): "
+                f"{best['title']}"
+            )
+
+            return best["url"]
+
+        # ----------------------------------------------------
+        # 可靠匹配
+        #
+        # 当前使用原来的 0.55 阈值
+        # ----------------------------------------------------
+
+        if best_score >= 0.55:
+            print(
+                f"      当前变体找到可靠匹配 "
+                f"({best_score:.3f})"
+            )
+
+            print(
+                f"      匹配成功: "
+                f"{best['title']}"
+            )
+
+            return best["url"]
+
+        # ----------------------------------------------------
+        # 当前 variant 不可靠
+        # ----------------------------------------------------
+
+        print(
+            f"      当前变体没有可靠匹配 "
+            f"(最高 {best_score:.3f} < 0.55)"
+        )
+
+        # ----------------------------------------------------
+        # 继续下一个 variant
         # ----------------------------------------------------
 
         if index < len(search_variants):
+            print(
+                "      继续尝试下一个标题变体..."
+            )
+
             time.sleep(PODSEARCH_DELAY)
 
-    # --------------------------------------------------------
-    # 没有任何候选
-    # --------------------------------------------------------
+    # ========================================================
+    # 所有 variant 都失败
+    # ========================================================
 
-    print(f"      所有搜索结果合计: " f"{len(all_candidates)}")
-
-    if not all_candidates:
-
-        print("      没有找到 episode 候选")
-
-        return None
-
-    # --------------------------------------------------------
-    # 标题匹配
-    # --------------------------------------------------------
-
-    scored = []
-
-    for candidate in all_candidates:
-
-        score = title_similarity(
-            title,
-            candidate["title"],
-        )
-
-        scored.append(
-            (
-                score,
-                candidate,
-            )
-        )
-
-    scored.sort(
-        key=lambda x: x[0],
-        reverse=True,
+    print(
+        "      所有标题变体均未找到可靠匹配"
     )
 
-    # --------------------------------------------------------
-    # 显示前 15 个候选
-    # --------------------------------------------------------
-
-    print("      最佳候选:")
-
-    for score, candidate in scored[:15]:
-
-        print(
-            f"         "
-            f"{score:.3f} | "
-            f"搜索[{candidate['search_index']}] | "
-            f"{candidate['title']}"
-        )
-
-    best_score, best = scored[0]
-
-    # --------------------------------------------------------
-    # 保持原来的 0.55 阈值
-    # --------------------------------------------------------
-
-    if best_score < 0.55:
-
-        print(f"      没有可靠匹配 " f"(最高 {best_score:.3f})")
-
-        return None
-
-    print(f"      匹配成功 " f"({best_score:.3f}): " f"{best['title']}")
-
-    return best["url"]
-
+    return None
 
 # ============================================================
 # Transcript 页面 DOM 工具
