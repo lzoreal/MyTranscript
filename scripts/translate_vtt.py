@@ -44,8 +44,8 @@ MAX_BATCH_CHARS = _positive_int_env("MAX_BATCH_CHARS", "30000")
 # Batches at or below 30 cues use Gemini's structured JSON response, which is
 # substantially less prone to dropped or reordered lines than delimiter text.
 MAX_BATCH_BLOCKS = _positive_int_env("MAX_BATCH_BLOCKS", "30")
-RETRY_COUNT = 5
-RETRY_BASE = 20
+RETRY_COUNT = 3
+RETRY_BASE = 10
 # A 504 generally reflects temporary service-side pressure. Pause requests
 # before retrying instead of repeatedly splitting and resubmitting the content.
 DEADLINE_COOLDOWN_SECONDS = _positive_int_env("DEADLINE_COOLDOWN_SECONDS", "2")
