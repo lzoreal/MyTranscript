@@ -1,0 +1,376 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:58.000
+The idea is we wanted real first-class support for generic programming, the discipline, in C++. And generic programming, I learned about it in college and I thought it was amazing because it's this idea that you can write an algorithm or a data structure in its most abstract form, right? This beautiful thing that looks like it's looks like it's in a textbook, and yet it compiles down to efficient code for any data type that it works with. And C++ is pretty good at making a lot of that possible. Welcome to ADSP, the podcast episode 180, recorded on April 29th, 2024. My name is Connor, and today with my co-host Bryce, we interview Doug Greger from Apple in this multi-episode series.
+我们的想法是，我们希望在 C++ 中为泛型编程这一学科提供真正的、一流的支持。我在大学时接触过泛型编程，觉得它非常了不起，因为它让你能够以最抽象的形式编写算法或数据结构，对吧？这是一种美妙的东西，看起来就像教科书里的内容，但它却能为它所处理的任何数据类型编译成高效的代码。C++ 在实现这一点上做得相当不错。欢迎收听 ADSP 播客第 180 期，录制于 2024 年 4 月 29 日。我是 Connor，今天我和我的联合主持人 Bryce 将在这一系列多集节目中采访来自 Apple 的 Doug Greger。
+
+2
+00:00:58.000 --> 00:01:43.000
+We start off by talking about the history of C++ OX concepts. Very excited to introduce our guest for today and probably over the next couple episodes because we usually split these things up into, you know, two or three. Our guest is Doug Greger, who I actually don't remember what episode we casually mentioned that probably one of Doug's friends or coworkers listens to this episode. And we put like a call out into the wild that we wanted to have Doug on. Sure enough, I'm not sure. We'll let Doug mention if he wants to, you know, name that individual that ended up reaching out to him. And if you don't know, Doug has worked at Apple.
+我们首先讨论了 C++0x Concepts（概念）的历史。非常高兴能介绍我们今天的嘉宾，他可能也会出现在接下来的几期节目中，因为我们通常会把这些内容分成两三部分。我们的嘉宾是 Doug Greger，其实我不记得我们在哪一期节目中随口提到过，Doug 的朋友或同事可能在听这期节目。我们向外界发出了邀请，希望 Doug 能来参加。当然，我不确定，如果 Doug 想提的话，我们会让他说出那位最终联系他的人的名字。如果你不知道的话，Doug 一直在 Apple 工作。
+
+3
+00:01:43.000 --> 00:02:13.000
+I looked it up, and correct me if I'm wrong, for 15 plus years. So a counterexample to the folks that like to jump around from company to company. And while he's worked at Apple, I don't actually know what you did necessarily before working on Swift, but you are one of the main individuals. I don't know if there's like a top N that you fit into, but definitely you were probably in that top N for your work on the Swift language. And before Swift, I know that you were massively involved in the C++ community. I'm not sure how much of that tied in with your work at Apple.
+我查了一下，如果我没记错的话，他已经在那里工作了 15 年以上。所以，对于那些喜欢在不同公司之间跳槽的人来说，他是一个反例。虽然他在 Apple 工作，但我其实并不一定知道你在从事 Swift 工作之前做了什么，但你是主要负责人之一。我不知道你是否属于前 N 名，但你在 Swift 语言方面的工作绝对可能让你跻身前 N 名。在 Swift 之前，我知道你深度参与了 C++ 社区。我不确定这与你在 Apple 的工作有多少关联。
+
+4
+00:02:13.000 --> 00:02:52.000
+And my guess is that you went to a bunch of C++ nows. I could be wrong about that. And hopefully one of the topics we will get to today is talking about the original C++ OX concepts, or I guess concepts light is what we ended up getting, but there was this original OG concept proposal that ended up not making it, and then out of that proposal came the concepts that we have today. And I think, if my memory serves correctly, that is how your name came up, is we were talking about concepts as they are today. And we made a reference back to that we, at one point, we had the hope of sort of a better
+我猜你参加过很多次 C++ Now 大会。我可能记错了。希望我们今天能讨论的话题之一是最初的 C++0x Concepts，或者我想我们最终得到的是“概念精简版”（concepts light），但当时有一个最初的 OG 概念提案最终没能实现，然后从那个提案中诞生了我们今天所拥有的概念。如果我的记忆没错的话，这就是你名字出现的原因，当时我们正在讨论现在的概念。我们回顾了这一点，即我们曾经希望有一种更好的
+
+5
+00:02:52.000 --> 00:03:29.000
+concepts. And I think most of the C++ community has kind of acknowledged at this point that the original proposal did give, you know, the future concepts more than what we have today. At the time, maybe that wasn't clear there was a lot of discussion and i think i think doug was involved in those discussions so we were gonna we're gonna get a first-hand account of what what happened a decade ago and uh yeah i think maybe i'll leave it there i'll throw it over to you doug if you want to fill in or bryce is going to add something you also you know greg dimension but doug uh was uh uh been heavily involved in the lvm community and in clang prior to being Mr. Swift.
+概念。我想 C++ 社区的大多数人现在都已经承认，最初的提案确实比我们今天拥有的概念提供了更多东西。当时可能还不清楚，有很多讨论，我想 Doug 也参与了这些讨论。所以我们将获得关于十年前发生的事情的第一手资料，嗯，我想我还是留到这里吧，如果 Doug 你想补充，或者 Bryce 要补充什么，我就交给你了。你还知道，Greg 提到了，但 Doug 在成为“Swift 先生”之前，一直深度参与 LLVM 社区和 Clang 的工作。
+
+6
+00:03:29.000 --> 00:04:08.000
+Yeah. But yeah, I think when we were talking about concepts in the previous episode, and this has come up a few times in the podcast, where I've said effectively that I would like a refund on the concepts that we've gotten because almost none of the things that we were hoping to get out of concepts have materialized like the one the one that i think is just a real egregious um uh crime is that like a large part of the selling point of concepts is that oh we're going to get better diagnostics better messages which is like if anything it's worse um i feel in in many cases um and uh to the point that um i feel like i i tell people
+是的。但我觉得，当我们在上一期节目中讨论概念时，这种情况在播客中出现过几次，我实际上说过，我想要退还我们得到的这些概念，因为我们希望从概念中得到的东西几乎没有实现。我认为一个非常严重的罪行是，概念的一个主要卖点是“哦，我们将获得更好的诊断信息，更好的消息”，如果说有什么不同的话，那就是在很多情况下它反而更糟了……以至于我觉得我告诉人们
+
+7
+00:04:08.000 --> 00:05:07.000
+only use concepts when you need to um use them to like disambiguate like overloads like use it as like a proper form of svine um and otherwise like be very careful about where you use it like maybe use it in some of your interfaces but don't put it everywhere because then the diagnostics will be awful. And yeah, so I feel like we could have done better. And I think it will be interesting to hear about the saga of how we got to where we are. Well, it's great to be here. I think the saga of how we are should start with what we were actually trying to build in C++ OX concepts, because the idea here wasn't better error messages, although that was one small piece of the expected outcome. The idea is we wanted real, first-class support for generic programming, the discipline in C++.
+只有在需要时才使用概念，比如用它来消除重载歧义，把它当作一种适当的 SFINAE 形式，否则在何处使用它要非常小心。也许可以在一些接口中使用它，但不要到处都用，因为那样诊断信息会变得非常糟糕。是的，所以我认为我们本可以做得更好。听听我们是如何走到今天这一步的传奇故事会很有趣。好吧，很高兴来到这里。我认为我们走到今天这一步的传奇故事应该从我们实际上试图在 C++0x Concepts 中构建什么开始，因为这里的想法并不是更好的错误消息，尽管那是预期结果的一小部分。我们的想法是，我们希望在 C++ 中为泛型编程这一学科提供真正的、一流的支持。
+
+8
+00:05:07.000 --> 00:05:51.000
+And generic programming, I learned about it in college and I thought it was amazing because it's this idea that you can write an algorithm or a data structure in its most abstract form, right? This beautiful thing that looks like it's in a textbook, and yet it compiles down to efficient code for any data type that it works with. And C++ was pretty good at making a lot of that possible. So the template system, especially with Svina and with overloading, you could get an expression of generic programming that worked, but it took a ton of effort. You had to be a wizard with C++ templates to sort of make it happen. And the idea behind the C++ concepts
+泛型编程，我在大学里学过，我觉得它很神奇，因为它是一个想法，你可以以最抽象的形式编写算法或数据结构，对吧？这种美妙的东西看起来就像在教科书里一样，但它却能为它所处理的任何数据类型编译成高效的代码。C++ 在实现这一点上做得相当不错。所以模板系统，特别是结合 SFINAE 和重载，你可以实现一种有效的泛型编程表达，但这需要大量的努力。你必须成为 C++ 模板方面的专家才能实现它。而 C++ Concepts 背后的想法是
+
+9
+00:05:51.000 --> 00:06:35.000
+effort was you shouldn't have to be a template wizard. It should just be easy to figure out what your concepts are, write your generic algorithms in a manner that's always going to work. So, so yeah that was the initial goal and did this come from because i know uh in the elements of programming concepts uh are used even though they didn't exist and i think that was one of the things that have been it's been talked about for a long it's like uh you know when alexander stepanov was was writing his you know first initial drafts like in the comments of his implementation, like were the concepts, but just he didn't have a way to, he didn't have concepts then. And then fast forward, you know, till C++20 and a version of concepts got in.
+你不必成为模板专家。弄清楚你的概念应该很容易，以一种总是有效的方式编写你的泛型算法。所以，是的，这就是最初的目标。这是否源于——因为我知道在《Elements of Programming》中，即使概念当时不存在，也使用了概念，我想这是人们谈论了很久的事情之一，就像 Alexander Stepanov 在编写他最初的草稿时，在他的实现注释中，就有概念，只是他当时没有办法，他当时没有概念。然后快进到 C++20，概念的一个版本被引入了。
+
+10
+00:06:35.000 --> 00:07:00.000
+But this is an idea that's existed for like two plus decades, maybe even more. I'm not sure actually where the genesis of it comes from. Much more than that. So like the first paper on generic programming was from 1989. And it was actually Alexander Stepanov and Professor Dave Musser, who I met. I got to meet in college. He's got me interested in generic programming. And they actually used Ada in their paper, which is fun.
+但这已经是一个存在了二十多年甚至更久的想法了。我其实不确定它的起源到底在哪里。远不止于此。所以关于泛型编程的第一篇论文是在 1989 年。实际上是 Alexander Stepanov 和 Dave Musser 教授，我在大学里见过他。他让我对泛型编程产生了兴趣。而且他们在论文中实际上使用了 Ada 语言，这很有趣。
+
+11
+00:07:00.000 --> 00:07:57.000
+This was before they discovered that C++ was the closest thing to express their ideas. But the idea of concepts, Dave Musser was working on it in his own little proof programming language called Tekton to get the ideas developed. 2003 when there is this first paper on, hey, let's bring concepts into the C++ language as part of C++ OX. And the paper is interesting. It actually lists, I counted them, 14 design aims for this feature called concepts, which is a lot. But it's interesting because it covers all the bullet points we talked about. So it should make it easier to program with generic programming. It should have this thing called concepts to abstract over types. It talked about, you know, when you call a generic algorithm,
+这是在他们发现 C++ 是表达他们想法的最接近的语言之前。但关于概念的想法，Dave Musser 正在他自己的名为 Tekton 的小型证明编程语言中研究它，以发展这些想法。2003 年，出现了第一篇关于“嘿，让我们把概念引入 C++ 语言作为 C++0x 的一部分”的论文。这篇论文很有趣。我数了一下，它实际上列出了这个名为“概念”的功能的 14 个设计目标，这很多。但它很有趣，因为它涵盖了我们讨论过的所有要点。所以它应该让泛型编程更容易。它应该有这种叫做“概念”的东西来抽象类型。它谈到了，你知道，当你调用一个泛型算法时，
+
+12
+00:07:57.000 --> 00:08:28.000
+we should check all the requirements there and give you nice error messages if you got it wrong. And if it passes that, well, the definition should have been separately type checked. So you wouldn't get one of these instantiation time failures. It talked about performance. It even talked about separate compilation of templates, which is a tall order, even beyond concepts. But it really did lay out the ideas for what this feature could and should do. And the ideas for what this feature could and should do. And the ideas were great.
+我们应该检查那里的所有要求，如果你弄错了，会给你很好的错误消息。如果它通过了检查，那么定义应该已经被单独类型检查过了。这样你就不会遇到这种实例化时的失败。它谈到了性能。它甚至谈到了模板的单独编译，这是一个很高的要求，甚至超出了概念本身。但它确实为这个功能可以做什么以及应该做什么奠定了基础。而关于这个功能可以做什么以及应该做什么的想法，这些想法非常棒。
+
+13
+00:08:28.000 --> 00:09:08.000
+Some colleagues and I at Indiana University, when I was there, thought the idea of putting generic programming into Swift was great, but we had different views on exactly how it should be done. And so we wrote a separate proposal for C++ OX concepts in early 2005 that laid out this model based on a research language that we were working on that had full support for expressing concepts and separate type checking of templates using concepts. And when you were at Indiana, you were there with Andrew Lumsdain, right?
+我和我在印第安纳大学的一些同事当时认为，将泛型编程引入 Swift 的想法很棒，但我们对具体应该如何做有不同的看法。因此，我们在 2005 年初为 C++0x Concepts 写了一份单独的提案，基于我们正在研究的一种研究语言提出了这个模型，该语言完全支持表达概念，并使用概念对模板进行单独的类型检查。当你还在印第安纳大学时，你是和 Andrew Lumsdain 在一起，对吧？
+
+14
+00:09:08.000 --> 00:09:37.000
+Right. So Andrew Lumsdain ran the Open Systems Laboratory. One of the legendary C++ university shops of the good old days. Absolutely. Lots of generic programming, high-performance computing. The Boost Graph Library came from those folks. Lots of paper on formalizing the notions of generic programming support for programming languages. It's a really fun place to be. And so, yeah, we worked on the concept effort from there.
+是的。所以 Andrew Lumsdain 经营着开放系统实验室。那是美好旧时光里传奇的 C++ 大学实验室之一。绝对是。大量的泛型编程，高性能计算。Boost 图书馆就是出自那些人之手。有很多关于形式化编程语言泛型编程支持概念的论文。那是一个非常有趣的地方。所以，是的，我们从那里开始了概念的工作。
+
+15
+00:09:37.000 --> 00:10:38.000
+It's interesting that you say 1989 has been the first paper because, well, that's a good time ago, a couple of years, not that many years, but a couple of years before I was born. I almost feel like it's surprising that it's not older. It feels like I wouldn't have been shocked if you'd told me, oh, there was somebody in the 60s wrote this paper and that was the foundations for generic programming. But is it really that new? Or is there some older computer science lore and theory in which the idea of generic programming originally comes from? There's certainly older lore and theory. And there are languages that had abstraction mechanisms that could be used for generic programming. I think of that paper as the one where Stepanov and Musser really laid out the process of generic programming. So, you know, when I think about generic programming, what is the idea? The core
+你说 1989 年是第一篇论文，这很有趣，因为，嗯，那是很久以前的事了，几年，虽然没那么多年，但比我出生早几年。我几乎觉得令人惊讶的是它不是更古老。我觉得如果你告诉我，哦，60 年代有人写了这篇论文，那是泛型编程的基础，我一点也不会感到震惊。但它真的那么新吗？还是有一些更古老的计算机科学传说和理论，泛型编程的想法最初源于此？当然有更古老的传说和理论。有些语言具有可用于泛型编程的抽象机制。我认为那篇论文是 Stepanov 和 Musser 真正阐述泛型编程过程的论文。所以，你知道，当我想到泛型编程时，核心想法是什么？核心
+
+16
+00:10:38.000 --> 00:11:09.000
+idea is this thing, we call it lifting, where you take an algorithm or data structure that's really concrete, you know, it's all concrete types all the way down and it works. And now you want to make it more abstract. So it's more reusable. And so you sort of lift away concrete requirements to discover the true requirements behind, you know, the algorithm. And you keep going up until the point where you have to make this compromise and say, well, I can make it more general, but I lose some efficiency guarantee.
+想法是这个东西，我们称之为“提升”（lifting），你拿一个非常具体的算法或数据结构，你知道，它从头到尾都是具体类型，而且它能工作。现在你想让它更抽象。这样它就更可重用。所以你把具体的约束提升掉，以发现算法背后的真正要求。你一直往上走，直到你不得不做出妥协，说，好吧，我可以让它更通用，但我会失去一些效率保证。
+
+17
+00:11:09.000 --> 00:12:04.000
+And then it's a good place to stop. And so, I think of the beginning of generic programming as we know it as when that process was defined, which is this paper. And it's exactly what the programming language should support if you're going to do generic programming well. Can you maybe tell us a little bit about the concepts model that y'all came up with at Indiana? Yeah, sure. So the model we came up with had three parts. And really, that model translated directly into the C++ OX model. So I can describe them both. I'll use the C++ OX terms because it's easier for folks. But essentially, there's only three pieces to it. So the first part is concepts. So this is a way of describing in the language that there are certain types that have these capabilities, right? You can use the plus
+然后这是一个很好的停止点。所以，我认为我们所知的泛型编程的开始就是这个过程被定义的时候，也就是这篇论文。如果你要做好泛型编程，这正是编程语言应该支持的。你能给我们讲讲你们在印第安纳提出的概念模型吗？好的，当然。我们提出的模型有三个部分。实际上，那个模型直接转化为了 C++0x 模型。所以我可以描述它们两者。我将使用 C++0x 的术语，因为这对大家来说更容易。但本质上，它只有三个部分。第一部分是概念。所以这是一种在语言中描述某些类型具有这些能力的方式，对吧？你可以使用加号
+
+18
+00:12:04.000 --> 00:12:37.000
+operator on them. There's a nested type, named value type, whatever these capabilities, right? You can use the plus operator on them. There's a nested type, named value type, whatever they are, right? And if you know C++20 concepts, the idea here is the same, even though the syntax was very different back in the C++OX days. The second major piece is constraints on templates. So the idea here is you have a template and essentially the template, as you write it, can do nothing with any of its template arguments because there's no constraints. You haven't said that they can do anything, therefore they can do nothing. So to actually implement behavior, you need to add a constraint to your template to say, well,
+运算符。有一个嵌套类型，命名为 value type，无论这些能力是什么，对吧？如果你了解 C++20 的概念，这里的想法是一样的，尽管在 C++0x 时代语法非常不同。第二个主要部分是模板的约束。这里的想法是，你有一个模板，本质上，你编写的模板对它的任何模板参数都无能为力，因为没有约束。你没有说它们可以做任何事情，因此它们什么也做不了。所以要真正实现行为，你需要给你的模板添加一个约束，说，好吧，
+
+19
+00:12:37.000 --> 00:13:25.000
+I need this type T to be equatable, meaning it has an equal equal operator. And now I can use the equal equal operator in the body of that template. The foundational thing here is the separate type checking. If you don't have a constraint that gives you access to some particular operation and tells you what the types involved in that operation are, you cannot write it in a template. Now, the flip side of that is once you've satisfied the compiler, you know your template is good. So I talked about lifting. Imagine you start with just a simple algorithm that's just summing all of the elements in an array of doubles. Super easy. Now make it an array of Ts for some template argument T. But what do you need? Compiler won't tell you. We will know, well, okay, we need a plus operator that takes two Ts,
+我需要这个类型 T 是可相等的（equatable），意味着它有一个相等运算符。现在我可以在该模板的主体中使用相等运算符。这里的基础是单独的类型检查。如果你没有一个约束来让你访问某个特定的操作，并告诉你该操作涉及的类型是什么，你就不能在模板中编写它。现在，反过来说，一旦你满足了编译器，你就知道你的模板是好的。所以我谈到了提升。想象一下，你从一个简单的算法开始，只是对数组中的所有 double 元素求和。超级简单。现在把它变成某个模板参数 T 的 T 数组。但你需要什么？编译器不会告诉你。我们会知道，好吧，我们需要一个接受两个 T 的加号运算符，
+
+20
+00:13:25.000 --> 00:14:21.000
+it returns a T, whatever. But you just have to know that. In the C++ OX model, the compiler will tell you, well, you can't add two Ts, please go add a concept requirement. And you add that, and then you get to the next error, which is maybe, well, you don't have a zero value, you can't turn zero into your Ts. So you add a concept constraint for that. And once you finish with this process, you know your function is good. So if you go and try to call it with something like, I don't know, some type that doesn't have a plus operator, you will get a nice error message that says, well, this type U that you gave me doesn't actually meet the constraints of this template. So the final piece we called concept maps. Now these are really interesting. So what concept maps do is they establish a mapping between types and concepts. These don't exist in the C++20 concepts model,
+它返回一个 T，等等。但你必须知道这一点。在 C++0x 模型中，编译器会告诉你，好吧，你不能把两个 T 相加，请去添加一个概念要求。你添加了它，然后你遇到了下一个错误，可能是，好吧，你没有零值，你不能把零变成你的 T。所以你为此添加了一个概念约束。一旦你完成了这个过程，你就知道你的函数是好的。所以如果你尝试用类似的东西调用它，我不知道，某种没有加号运算符的类型，你会得到一个很好的错误消息，说，好吧，你给我的这个类型 U 实际上并不满足这个模板的约束。所以最后一部分我们称之为“概念映射”（concept maps）。这些非常有趣。所以概念映射的作用是，它们在类型和概念之间建立映射。这些在 C++20 概念模型中不存在，
+
+21
+00:14:21.000 --> 00:15:05.000
+but they're really powerful. And so the basic idea is you might have a type and this type has a completely reasonable interface to do what you want to do with some other generic library from some other place. You want to use them together. What do you do? If you're lucky, you might be able to add some free functions at namespace scope and adapt things or add some operators. If you're unlucky, that template was written with member functions or some kind of syntax that you can't just go and add, right? So you start writing wrappers. With concept maps, you're basically saying, here's how this type over here meets the requirements of this concept over here. And you could actually put in the body of that concept map extra declarations that were
+但它们非常强大。所以基本想法是，你可能有一个类型，这个类型有一个完全合理的接口来做你想做的事情，配合来自其他地方的其他泛型库。你想把它们一起使用。你该怎么办？如果你幸运的话，你也许可以在命名空间范围内添加一些自由函数来适配事物，或者添加一些运算符。如果你不走运，那个模板是用成员函数编写的，或者某种你不能直接去添加的语法，对吧？所以你开始编写包装器。有了概念映射，你基本上是在说，这个类型在这里是如何满足这里这个概念的要求的。而且你实际上可以在那个概念映射的主体中放入额外的声明，这些声明
+
+22
+00:15:05.000 --> 00:16:00.000
+only used and definitions for the purpose of establishing that mapping. So there's useful things and cool things you can do with this. So for example, is a array of double values a container? I think it is, right? We've defined it such that we can make it a container in C++. Now, there was a time when the begin and end functions were always member functions, and you would have written them as member functions. That, in C++20 concepts, precludes you from using a built-in array as a container, because you can't add member functions to a built-in array. Concept maps let you do this sort of thing. So with a concept map, you could say, well, any array of Ts is a container.
+仅用于建立该映射的目的。所以你可以用它做一些有用的和很酷的事情。例如，double 值的数组是一个容器吗？我认为是，对吧？我们定义了它，以便我们可以在 C++ 中使它成为一个容器。现在，曾经有一段时间，begin 和 end 函数总是成员函数，你会把它们写成成员函数。在 C++20 概念中，这排除了你使用内置数组作为容器的可能性，因为你不能给内置数组添加成员函数。概念映射让你做这种事情。所以有了概念映射，你可以说，好吧，任何 T 的数组都是一个容器。
+
+23
+00:16:00.000 --> 00:16:40.000
+Here's what the begin and the end functions look like. Here's the value type you need to express what the type of that container is. And you could build this mapping sort of as a third party. The important part is this also fit the notion of separate type checking. So again, here's a question. When is a vector equatable? Like you have a stood vector of something. When is it equatable? It's not always equatable. If you had a vector of things you can't compare, then you can't compare the vector because it's an element-wise comparison. Do you mean like when it's equatable with another vector?
+这就是 begin 和 end 函数的样子。这是你需要表达该容器类型是什么的 value type。你可以作为第三方构建这种映射。重要的是，这也符合单独类型检查的概念。所以，这里又有一个问题。vector 什么时候是可相等的？比如你有一个 std::vector。它什么时候是可相等的？它并不总是可相等的。如果你有一个你无法比较的东西的 vector，那么你就不能比较这个 vector，因为它是逐元素的比较。你是说当它与另一个 vector 可相等时吗？
+
+24
+00:16:40.000 --> 00:17:16.000
+Yeah. When can you take two vectors of the same type and compare them? Oh, okay. Well, yeah, it's a property of whether the two things are equatable, like whether the element types are equatable. Right. So this is a conditional notion. And so the way you would express this in a C++ OX concept map is to say, you know, vector of T is equatable, but that requires that T itself be equatable. And you could express this notion
+是的。你什么时候可以拿两个相同类型的 vector 并比较它们？哦，好吧。嗯，是的，这是关于这两者是否可相等的一个属性，比如元素类型是否可相等。对。所以这是一个条件概念。所以你在 C++0x 概念映射中表达这一点的方式是说，你知道，T 的 vector 是可相等的，但这要求 T 本身是可相等的。你可以表达这种
+
+25
+00:17:16.000 --> 00:17:36.000
+of this sort of conditional modeling of the behavior, and it would be fully type checked. So had you tried to forget, had you forgotten to write that requires T, behavior, and it would be fully type checked. So had you tried to forget, had you forgotten to write that requires t, equatable t, on your concept map for vector, you would have gotten a compiler error that said, nope, there's no equal equal that works.
+这种行为的条件建模，并且它将被完全类型检查。所以如果你尝试忘记，如果你忘记写那个 requires T，equatable T，在你的 vector 概念映射上，你会得到一个编译器错误，说，不，没有能工作的相等运算符。
+
+26
+00:17:36.000 --> 00:17:58.000
+Gotcha. Now, how does this differ from the model that we end up having? Right. So the concepts are fairly similar with a giant asterisk there on the syntax side. Yeah, yeah. Maybe you can comment a little bit on that about how is the syntax different for the OX concepts.
+明白了。现在，这与我们最终拥有的模型有何不同？对。所以概念在两者之间相当相似，语法方面有一个巨大的星号。是的，是的。也许你可以评论一下 C++0x 概念的语法有什么不同。
+
+27
+00:17:58.000 --> 00:18:33.000
+Sure. So the syntactic difference is that in C++ 20 concepts, what we have today, you essentially write sort of how you would use a type, right? So if I have a type T, I say, well, okay, you can write X plus Y and it's convertible to a T. In C++ OX concepts, it used this approach that was referred to as pseudosignatures. Basically, you write a declaration. So you would write in the concept T operator plus that takes T comma T.
+当然。所以语法上的区别在于，在 C++20 概念中，也就是我们今天拥有的，你基本上写的是你如何使用一个类型，对吧？所以如果我有一个类型 T，我说，好吧，你可以写 X 加 Y，并且它可以转换为 T。在 C++0x 概念中，它使用了一种被称为“伪签名”（pseudosignatures）的方法。基本上，你写一个声明。所以你会在概念 T 中写 operator+，它接受 T 逗号 T。
+
+28
+00:18:33.000 --> 00:18:59.000
+Yeah. And while the syntax differences are maybe not the most significant thing, I personally found pseudosignatures far easier to reason about than writing this C++20 concepts thing where you're writing these usage patterns. And I think that they're just far more expressive. And I back this up with, if you look at pre-C++11 code that has concepts written in comments, they were almost always written
+是的。虽然语法差异可能不是最重要的事情，但我个人发现伪签名比编写这种 C++20 概念（你正在编写这些使用模式）更容易推理。而且我认为它们更具表现力。我对此的支持是，如果你看 C++11 之前的代码，其中有注释形式的概念，它们几乎总是以
+
+29
+00:18:59.000 --> 00:19:31.000
+in sort of pseudo-signature form. That like, hey, you need a struct that kind of looks like this sort of thing with like a, you know, here's the things that needs to have it inside of it. And that's just always, you know, that's always what made more sense to me. Um, yeah. That's been my, my view was that the benefit is the, of the, there's two benefits I would say to pseudo signatures. one is technical when you have them it makes it easier to do the mapping into what you need to do separate type
+某种伪签名形式编写的。就像，嘿，你需要一个看起来像这样的结构，里面有它需要有的东西。这对我来说总是更有意义。嗯，是的。这就是我的观点，我认为伪签名的好处有两个。一个是技术上的，当你拥有它们时，它使映射到你需要做的事情变得更容易，以进行单独的类型
+
+30
+00:19:31.000 --> 00:20:11.000
+checking to like type check the definitions of templates because you have a signature you can use right right that's helpful but the other part is more what you're saying which is you know what do you want to do with the concept usually? Sometimes you want to use it to write an algorithm against. And in that sense, a pseudosignature is just like looking at a type and writing against the type. Like we know how to look at a declaration and figure out how to call it. So I think that's easier. And it's much easier when you're saying, oh, I need to create a type or make my type match the requirements of this concept. I'll just copy and paste the definition into my type and do some replacements to make it work. And I find that a lot easier.
+检查，比如对模板的定义进行类型检查，因为你有一个可以使用的签名，对吧，这很有帮助。但另一部分更多是你所说的，你知道，你通常想用概念做什么？有时你想用它来编写算法。从这个意义上说，伪签名就像看着一个类型并针对该类型编写代码。就像我们知道如何查看一个声明并弄清楚如何调用它一样。所以我认为这更容易。而且当你想要创建一个类型或使你的类型匹配这个概念的要求时，这要容易得多。我只需要把定义复制并粘贴到我的类型中，做一些替换让它工作。我觉得这容易多了。
+
+31
+00:20:11.000 --> 00:20:46.000
+Certainly, that's what we did in Swift, and it has been much easier. And it feels more like C++. I feel like every time I read a concept declaration, a C++20 concept declaration, it's like a different language, and it's hard to parse what exactly the requirements are. Whereas the pseudosignature, it's like, it looks like C++. It's like almost like a little pseudocode. Like I can understand what it wants of me. I think so too. I mean, to be fair, there was history for usage patterns. So the standard template library for concepts used usage patterns. So there was a history of doing it that way. I always found it awkward,
+当然，我们在 Swift 中就是这样做的，而且容易多了。而且它感觉更像 C++。我觉得每次我阅读概念声明，C++20 概念声明，它就像一种不同的语言，很难解析具体的要求是什么。而伪签名，它看起来像 C++。它几乎就像一点伪代码。就像我可以理解它对我有什么要求。我也这么认为。公平地说，使用模式是有历史的。所以概念的标准模板库使用了使用模式。所以有那样做的历史。我一直觉得它很尴尬，
+
+32
+00:20:46.000 --> 00:21:03.000
+which is why we ended up with pseudonym. And I thought that elements of programming also did the usage patterns thing. I could be wrong about that, but I thought that that was partially where it came from. It could be, although most of this predates the actual publishing of elements of programming. Oh, okay.
+这就是为什么我们最终使用了伪签名。我以为《Elements of Programming》也做了使用模式的事情。我可能记错了，但我以为那是它部分来源的地方。可能是，尽管大部分内容早于《Elements of Programming》的实际出版。哦，好吧。
+
+33
+00:21:03.000 --> 00:21:38.000
+We're still back in 2005, 2006. So, yeah, back to the how does the C++ OX concepts differ from the C++ 20 concepts? Right. So, we talked about concepts as being the same notion between the two kinds of concept features with differences in syntax. The constrained templates, again, the notion is the same. You have the requires clause that you can put on templates to add constraints in terms of concepts. That notion is the same. The massive difference is that C++ OX concepts check the template
+我们还在 2005 年、2006 年。所以，回到 C++0x 概念与 C++20 概念有何不同。对。所以，我们谈到概念作为两种概念功能之间的相同概念，只是语法上有差异。约束模板，同样，概念是一样的。你有可以放在模板上的 requires 子句，以根据概念添加约束。那个概念是一样的。巨大的区别在于 C++0x 概念在你编写模板定义时就对其进行了检查。而 C++20 概念只在你使用模板时才进行检查。所以它们检查你给模板的模板参数是否确实满足了写下的约束。但 C++20 概念中没有任何东西检查你编写的模板定义是否只使用了其 requires 子句中声明的操作。所以它就像一个合同，但合同只有一方真正遵守。所以这是非常根本的。Connor，你看上去很怀疑。不，不，不。我只是，我的大脑把我所说的映射到了
+
+34
+00:21:38.000 --> 00:22:18.000
+definition at the point that you wrote it. Whereas C++ 20 concepts only do a check when you're using a template. So they check that the template arguments you've given to the template actually meet the constraints that were written down. But nothing checks in C++20 concepts that the template definition you wrote is only using the operations that are stated in its requires clause. So it's like a contract, but only one side of the contract is actually held to it. So this is really fundamental. Connor, you look skeptical. No, no, no. I just, my brain mapped what Doug was saying
+我在 2020 年的一次演讲中实际描述这一点的方式，我想。所以那是很久以前的事了，但我记得在某种程度上深入挖掘了 Swift 协议、Rust 特征、Haskell 类型类、D 类型约束和 C++ 概念之间的区别。我想我对演讲的愿景比最终的结果要宏大得多，因为我试图在语言中包含太多东西。当我完成时，比如两个基本例子，我的 60 分钟就结束了，这你知道，贪多嚼不烂。但我确实记得有一次有一张幻灯片，也许这是一个小问题，但我一直很好奇，它把这些不同的语言设施归为一类，在某些情况下基本上是一对一的，即使功能不同。
+
+35
+00:22:18.000 --> 00:23:10.000
+to how I actually described this in a talk that I gave in 2020, I think. So it was a while ago, but I remember at kind of surface level digging into the differences between Swift protocols and Rust traits and Haskell type classes and D type constraints and C++ concepts. And I think my vision for the talk was a lot more grander than it ended up being because I got, I tried to include too much in the languages. And by the time I was done, like two basic examples, my 60 minutes was up, which is, you know, biting off more than you can chew. But I do recall at one point having a slide that, and maybe this is a small question, but I've always been curious about it that kind of grouped the these different language facilities that in some cases are basically kind of like one to one, even if the features are different.
+但是，你知道，在所有情况下，表面上代表同样的东西。但我有两个名字。一个是“约束”（constraining），另一个是“同意”（consenting），这我认为是 Doug 在这里用不同的词描述的。在某些模型中，如果你不添加任何约束，你基本上对函数什么也做不了。随着你添加约束，添加事物的能力，做其他事情的能力，你基本上增加了你可以用这个函数做的操作和事情的数量。而在另一个模型中，你从世界开始。你可以做所有事情
+
+36
+00:23:10.000 --> 00:23:45.000
+But, you know, in all cases, superficially represent the same thing. But they I had these these two names. One was kind of constraining and the other one was consenting, which is what I think Doug is describing here in different words. And that in certain models, if you don't add any constraints, you basically can't do anything with the function. And as you add constraints, the ability to add things, the ability to do other things, you basically grow the number of operations and things that you can do with this function. Whereas in the other model, you start with the world. You can do everything
+直到你给它加上约束，你基本上是在限制你可以做什么和不能做什么。所以，我想你刚才说你觉得这两个模型基本上是截然相反的，一个是你从零开始并添加约束，另一个是你随着时间的推移进行限制，这导致了一个小问题，就是我第一次听到“约束”这个词，我对那个词的语义依恋就像当你有一个像手铐一样的约束时，你现在限制了你可以做的事情。而实际上在这个意义上，类型约束，我想，因为取决于语言
+
+37
+00:23:45.000 --> 00:24:21.000
+and until you put constraints on it you basically are restricting what you can and cannot do and like these and what so i i think you just said earlier that you were like the two models are like basically diametrically opposed like one you're starting with nothing and adding constraints and the other one you're kind of just like restricting over time, which leads to the small question is what the first time I ever heard constraint, like my semantic attachment to that word is kind of when you have a constraint like cuffs on your hands, you are now limiting what you can do. Whereas really in this sense, type constraints, I guess, because depending on the language
+功能，它们做其中之一。但正如你在 C++0x 概念中使用它时，约束实际上是使你能够做某事。就像当你约束函数上的类型时，你现在使它能够执行加法运算符。所以我一直很困惑为什么“约束”这个词在我心中意味着相反的意思。或者我想这可能是你从哪里开始的问题。如果你从除了基本上像恒等函数之外什么都做不了开始
+
+38
+00:24:21.000 --> 00:24:49.000
+feature, they do one or the other. But as you were using it in C++ OX concepts, the constraint is really enabling you to do something. Like when you constrain the type on a function, you are now enabling it to do the addition operator. So I've always been confused on why the word constraint in my mind kind of means the opposite. Or I guess it's maybe like where you're starting from. Like if you start off from not being able to do anything other than basically like the identity function
+那么你可以增加它，总之，我不知道我说的有没有道理，但没有，我跟随你，就像如果你从整个世界开始，如果你能做所有事情，那么像约束这样的想法就是限制你可以做的事情。这有道理。而如果你从一个你什么都做不了的世界开始，那么它更像是一种能力，你知道，就像说它现在，现在你可以做一件事了。这取决于你在想谁，你采取的视角。如果你采取的是实现模板的人的视角，你知道，没有约束意味着你不能做某事。
+
+39
+00:24:49.000 --> 00:25:29.000
+then you you can increase it's it's anyways i don't know if what i'm saying is making sense but no i i i follow you like if you if you start off with the entire world if you can do everything then you know a constraint like like the idea of a constraint is limiting what you can do everything, then, you know, a constraint, like, like the idea of a constraint is limiting what you can do. It makes sense. Whereas if you start off with a world where you can do nothing and then it's more like a capability, you know, it's like saying it's, it's now, now you can do a thing. It depends on who you're thinking, like the perspective you're taking. If you're taking the perspective of the person that's implementing the template, it's, you know, not having a constraint means you can't do something.
+如果你在想使用模板的人，添加的每个约束都会让你在可以传递给模板的内容上选择更少。这就是为什么 C++ 合同在 C++ 世界中具有非常明确的含义是不幸的，因为将其视为接口合同非常有价值。因为它说，这是一个被承诺的事情。模板的实现，模板的定义，承诺只使用 requires 子句中的那些东西。而模板的用户承诺至少提供需求子句中指定的内容。如果双方都坚持那个特定的接口约束，那么实例化就会成功。
+
+40
+00:25:29.000 --> 00:26:23.000
+If you're thinking of the person that's using the template, each constraint that's added gives you fewer choices for what you can pass into the template. This is why it's unfortunate that C++ contracts has a very definitive meaning in the C++ world, because thinking about this as an interface contract is really valuable. Because it's saying, this is a thing that is promised. And the implementation of the template, the definition of the template, promises to only use those things that are in the requires clause. And the user of the template promises to provide at least what is specified in the requirements clause. And if both sides maintain, stick to that particular interface constraints, then the instantiation will succeed.
+你不会得到失败。对。所以我认为 C++20 概念确实有那种 requires 子句应该是这个接口合同的概念，但它只在试图调用模板的客户端上强制执行。它没有在实现模板的人身上强制执行。他们只需要小心。对，对。
+
+41
+00:26:23.000 --> 00:26:47.000
+You won't get a failure. Right. So I would say C++20 concepts actually do have that notion that the requires clause is supposed to be this interface contract, but it's only enforced on the client that's trying to call the template. It's not enforced on the person implementing the template. They just have to be careful. Right, right.
+这似乎没那么有用。或者也许“没那么有用”是错误的描述。你从你的工具和编译器那里得到的更少。对。所以这就是我认为没有单独类型检查属性的地方，双方都被保持在 requires 子句中的那个集合中。当你拥有那个时，那就是你获得该功能的语言集成带来的很多好处的时候。因为你可以去编写你的泛型算法，你可以发现需求。所以很久以前，在我们完成最初的印第安纳概念提案后，我在 GCC 中做了一个实现，一个原型。
+
+42
+00:26:47.000 --> 00:27:30.000
+That seems less useful. Or maybe not less useful is the wrong description. You're getting less from your tools and your compiler. Right. So this is where I think without, so the property of separate type checking is both sides are being kept to that set in the requires clause. When you have that, that's when you get a lot of the benefits of language integration for this feature. Because you can go and write your generic algorithm and you could discover the requirements. So a very long time ago, after we did the initial Indiana proposal for concepts, I did an implementation, a prototype in GCC.
+它被称为 Concept GCC。我在委员会会议上做了演示。我们完全做了这个提升练习，从一个具体的算法开始，然后把它提升为一个完全通用的算法。它可能是通过对 double 数组求和来构建累加。在此过程中，你发现了迭代器概念，你发现了处理零值所需的数值概念等等。每一步，你说，哦，我想在这里泛化，处理 T 的数组，或者用任意容器替换数组。编译器会告诉你，嘿，我想在这里泛化，处理 T 的数组，或者用任意
+
+43
+00:27:30.000 --> 00:28:05.000
+It was called Concept GCC. And I did a demo of it at the committee meeting. And we did exactly this lifting exercise of starting from a concrete algorithm and then lifting it up to be a fully generic algorithm. It was probably building accumulate out of summing an array of doubles. And along the way, you discover the iterator concepts and you discover the numeric concept that you need to deal with the zero value and so on. And every step of the way, you say, ooh, I want to generalize here and work on an array of Ts or replace the array with an arbitrary container. The compiler would tell you, hey, I want to generalize here and work on an array of Ts or replace the array with an arbitrary
+容器替换数组，编译器会告诉你，嘿，你没有这个操作，请去别处添加它。所以你会构建概念，并有这个很好的反馈循环来帮助你发现什么是表达我的算法的正确抽象。C++0x 概念模型是否更容易诊断当你给一个受约束的算法提供东西而你缺少某种操作时？当然。所以它是如何，因为这是一个，对于 C++20 概念模型，这是一个常见的问题，比如，你知道，你传入了一些迭代器，它以某种微妙的方式缺少了许多迭代器操作中的一个，而不是得到一个清晰的“这个东西缺失了”，你得到一个消息，说它未能满足这个概念，这是这个概念的细化，这是这个概念的细化，这是这个概念的细化，然后你必须一直沿着链条往下走。对我来说，这在诊断方面不是很好。
+
+44
+00:28:05.000 --> 00:29:09.000
+container, the compiler would tell you, hey, you don't have this operation, please go add it somewhere. And so you'd build the concept and have this nice feedback loop to help you discover what are the right abstractions to express my algorithm. And does the concepts OX model make it easier to diagnose when you give something to a constrained algorithm and you're missing some operation. For sure. So how does it, because this is a, with the C++20 concepts model, this is a common problem where like, you know, you've passed in some iterator and it's missing like some, one of the many iterator operations in some subtle way and instead of getting like a clear like this thing is missing you get a uh a message that's like it failed to satisfy this concept which is a refinement of this concept which is refining this concept which is refining this concept and then you have to like go all the way down the chain. And that, to me, is not very good on the diagnosis side.
+而不是仅仅说，嘿，你需要有这个。在 C++0x 概念模型中，我们是否有更好的方法来诊断提供者端或调用算法的人端的失败？很有趣。我们有。所以 Concept GCC 原型在错误消息的诊断方面相当不错。奇怪的是，我认为编译器在 C++20 概念方面可以做得比现在好得多。所以我认为 C++0x 概念的某些方面使事情变得更容易。所以我们确实有概念映射的概念。所以当你写一个概念映射说，嘿，这个类型满足这个概念的要求时，我们会直接告诉你它
+
+45
+00:29:09.000 --> 00:29:54.000
+Instead of just being like, hey, you need to have this. In the OX concepts model, did we have a better way of diagnosing a failure on the provider side or the person who calls the algorithm side? It's interesting. We did. So the concept GCC prototype was pretty good at diagnostics of error messages. The thing that's strange is I think compilers could be doing a whole lot better with C++20 concepts than they are. And so I think there's some aspects of C++OX concepts that made things easier. So we did have the notion of a concept map. So when you wrote a concept map that said, hey, this type meets the requirements of this concept, we would tell you right there if it
+是否工作。所以它更本地化。你可以在 C++20 中用 static_assert 做类似的事情，但你是基于给定的类型进行静态断言，你不是说这个模板类型的所有实例化都以这种方式工作，所以你没有得到我所做的那种反馈。我确实认为设计中有些东西使 C++0x 概念更容易，实际上是回到伪签名，因为伪签名，你检查每个伪签名说，好的，我需要一个接受两个 T 并返回 T 的加号运算符，去尝试做那个，作为建立概念映射的一部分，如果它不在那里，我可以指出你需要这个加号运算符。
+
+46
+00:29:54.000 --> 00:30:36.000
+worked or not. So it's much more localized. You can do something similar in C++ 20 with a static assert, but you're static asserting based on a given type you're not saying all instantiations of this template type work this way and so you don't get quite the feedback i do think there is something in the design that made c plus plus ox concepts a little easier and it's actually getting back to pseudo signatures because of the pseudo signature you check for for each of the pseudo signature say okay i need a plus plus or plus operator that takes two t's and returns a t go try to do that right as part of establishing the concept map and if it's not there i can point to here's this plus operator you need
+是否有效。所以它更加本地化。你可以在 C++ 20 中使用 static assert 做类似的事情，但你是基于给定的类型进行静态断言，而不是说这个模板类型的所有实例化都以这种方式工作，因此你无法获得我所说的那种反馈。我认为在设计上确实有一些东西让 C++ 0x 的概念变得更容易一些，这实际上是回归到了伪签名，因为对于伪签名，你会检查每一个伪签名，说好的，我需要一个接受两个 T 并返回一个 T 的加法运算符，在建立概念映射的过程中去尝试做这件事，如果它不存在，我可以指出这里就是你需要添加的加法运算符。
+
+47
+00:30:36.000 --> 00:31:26.000
+something that looks like this right right um and we did go as far as to say if your type looked like it met all the syntactic requirements of the concept, but it didn't have a concept map to say it, concept GCC would say, hey, I think you're just missing this concept map definition. Here's what you should write in your code to try to guide you along. Was it ever onerous to have to write these concepts maps? That like in the C++20 model model you don't have to write like things either satisfy the concept or they don't and isn't that isn't that better great question so it was certainly a major point of contention and concern the fact that you need to write concept maps c++ ox concepts did have a notion of an auto concept which is one where if you met all the syntactic
+看起来像这样，对吧？嗯，我们甚至会说，如果你的类型看起来符合概念的所有语法要求，但没有概念映射（concept map）来声明它，GCC 概念编译器会说：嘿，我想你只是缺少了这个概念映射定义。这是你应该在代码中编写的内容，以尝试引导你完成。编写这些概念映射是否曾经很繁琐？就像在 C++20 模型中，你不需要编写它们，要么满足概念，要么不满足，难道这不更好吗？这是一个很好的问题。这确实是一个主要的争论点和担忧，即你需要编写概念映射。C++0x 概念确实有一个自动概念（auto concept）的概念，即如果你满足了所有的语法
+
+48
+00:31:26.000 --> 00:32:03.000
+requirements, the compiler would just automatically create the concept maps for you. And in fact, most of the concepts that we'd specified for the standard library were auto concepts because it met the backward compatibility constraints that the committee had for our design. And so it's a little interesting because it worried people a lot for backward compatibility reasons. And it worried people a lot because people might have to learn about this concept map feature and concepts before they were ready. And so there's a lot of concern about that. I feel like that concern was well overblown. We've seen
+要求，编译器就会自动为你创建概念映射。事实上，我们为标准库指定的大多数概念都是自动概念，因为这符合委员会对我们设计所要求的向后兼容性约束。所以这有点意思，因为它出于向后兼容性的原因让人们非常担心。而且它让人们非常担心，因为人们可能不得不在准备好之前就学习这个概念映射特性和概念。所以对此有很多担忧。我觉得这种担忧被严重夸大了。我们已经看到
+
+49
+00:32:03.000 --> 00:32:34.000
+a lot of other languages that require something like concept maps. Like Swift requires you to explicitly say, you know, my type conforms to this protocol. And it is not a concern for beginners. It's really easy for people to pick up. And they actually, most of them come back and say, actually, I like it being explicit because I know this happens and I know it's checked. So is the benefit of the concept map that that explicitness that you get the check? I would say so, yes. So I guess there's maybe two benefits. So one is that you get the check.
+很多其他语言都要求类似概念映射的东西。比如 Swift 要求你明确说明，你知道，我的类型符合这个协议。这对初学者来说不是问题。人们很容易上手。而且实际上，他们中的大多数人回来后会说，其实我喜欢这种显式的方式，因为我知道这发生了，而且我知道它经过了检查。那么概念映射的好处就是这种显式性，即你得到了检查吗？我会说是的。所以我猜也许有两个好处。一个是你可以得到检查。
+
+50
+00:32:34.000 --> 00:33:08.000
+And the other is that there's an implicit meaning behind these, which is in addition to meeting the syntax requirements of the concept, I also have the right semantics. Right. So this happens with c++ 20 concepts as well right like what is the difference between an input iterator and a forward iterator yeah it's kind of nothing except the semantics of what happens if you start over iterating a second time or like what's the difference between like a range and a view or like you know a range that happens to be movable in a view um Yeah, where you have these semantic requirements on views
+另一个是这些背后有隐含的意义，也就是说，除了满足概念的语法要求外，我还拥有正确的语义。没错。所以 C++20 概念也会发生这种情况，对吧？比如输入迭代器（input iterator）和前向迭代器（forward iterator）之间有什么区别？是的，除了如果你再次开始迭代时会发生什么的语义之外，几乎没有什么区别。或者像范围（range）和视图（view）之间有什么区别，或者像一个恰好是可移动的范围和一个视图之间有什么区别？嗯，是的，你对视图有这些语义要求，
+
+51
+00:33:08.000 --> 00:33:48.000
+that you don't necessarily have on ranges. It's interesting. I feel like one of the major themes throughout the evolution of C++ has been this struggle between more implicit ways of doing things that maybe have foot guns and more explicit ways of doing things that maybe have foot guns and more explicit ways of doing things that uh people worry maybe too too verbose um in fact this is this famously happened with c++ 20 concepts where the reason that we have this uh the abbreviated uh concept syntax um we have you know if you if you want to use a concept in a parameter list without
+而你对范围不一定有这些要求。这很有趣。我觉得 C++ 演进过程中的一个主要主题一直是这种斗争：在更隐式但可能存在陷阱的方法，与更显式但可能存在陷阱的方法之间，以及人们担心可能过于冗长的更显式方法之间。事实上，这在 C++20 概念中非常有名，我们之所以有这种缩写的概念语法，是因为如果你想在参数列表中使用一个概念，而不需要
+
+52
+00:33:48.000 --> 00:34:35.000
+putting it, without having a template, you know, open brace, close brace list before, you have to put concept name auto, you know, name of the parameter. And the auto is there to make it very clear that this thing is a concept and that you've now turned this function into a template. And that was a major source of contention because there was someone on the committee who felt like we had to have that because otherwise you could just be reading code and you'd just see like thing, you know, like parameter, like thing that looks like a type and then the name of the parameter. And then you wouldn't know that that was a concept and that that made this thing into a template. And there's just multiple cases of, I feel like almost all of C++'s woes are either from making the wrong decisions about
+在前面放一个模板、左大括号、右大括号列表，你必须放概念名称 auto，你知道，参数的名称。而 auto 的存在是为了非常清楚地表明这是一个概念，并且你现在已经把这个函数变成了一个模板。这是一个主要的争论来源，因为委员会里有人觉得我们必须有那个，否则你可能只是在阅读代码，你只会看到像东西，你知道，像参数，像看起来像类型的东西，然后是参数的名称。然后你不会知道那是一个概念，并且那使得这个东西变成了一个模板。我觉得几乎所有 C++ 的苦难要么源于在
+
+53
+00:34:35.000 --> 00:35:11.000
+implicit or explicit or picking the wrong defaults about things. That certainly does happen. And I think there is this notion of when something is new, it's always a little bit scary. There's always something to learn. And you're worried that it's going to sneak up on you. So you want to make it more explicit. Yeah. And so sometimes we make these decisions more out of fear, I guess, of being surprised than thinking about where we want people to be after they've gotten over the hump. I think this happened with C++ OX concepts a little bit.
+隐式或显式方面做出了错误的决定，要么是在事情上选择了错误的默认值。这确实发生了。而且我认为有一种观念，当某样东西是新的时，它总是有点可怕。总是有东西要学。而且你担心它会悄悄地找上你。所以你想让它更显式。是的。所以有时我们做出这些决定更多是出于恐惧，我猜，害怕被惊讶，而不是考虑在他们克服困难后我们希望他们处于什么位置。我认为这在 C++0x 概念中发生过一点。
+
+54
+00:35:11.000 --> 00:35:36.000
+People were worried, like, oh, no, you might encounter this concept map and you won't know what it is. You have to go learn it. On the other hand, if you do that system, once people learn concept maps, well, now they can really do generic programming and get all the benefits of this feature that we built rather than hiding it. So there is a balance here, right? You don't want to keep throwing complexity at users all the time and have things changing underneath them all the time.
+人们很担心，比如，哦不，你可能会遇到这个概念映射，而你不知道它是什么。你必须去学习它。另一方面，如果你做了那个系统，一旦人们学会了概念映射，好吧，现在他们真的可以进行泛型编程，并获得我们构建的这个特性的所有好处，而不是隐藏它。所以这里有一个平衡，对吧？你不想一直向用户抛出复杂性，也不想让事情一直在他们脚下改变。
+
+55
+00:35:36.000 --> 00:36:29.000
+But you need to aim for where you want them to be a couple years from now, not where they are today. Connor, you look either troubled or thoughtful i mean uh both i'm just i'm uh i'm surprised to hear that like the main it sounds like correct me if i'm wrong that one of or if not one of the main problem with getting this through the committee and standardizing it was this worry about the complexity of concept maps. And that is very surprising for someone who is a massive fan of language. Like, you know, you'll hear Sean Parent say that, you know, software engineering is a profession. It's, you know, beholden upon us to know about the history and to treat it as a profession. If you know, it's
+但你需要瞄准你希望他们几年后所处的位置，而不是他们今天所处的位置。Connor，你看上去要么很困扰，要么在沉思。我的意思是，两者都有。我只是，我感到很惊讶，听到主要的——如果我错了请纠正我——听起来委员会通过并标准化它的主要问题之一，如果不是主要问题之一的话，就是对概念映射复杂性的担忧。对于一个语言的忠实粉丝来说，这非常令人惊讶。就像，你知道，你会听到 Sean Parent 说，软件工程是一门职业。我们有责任了解历史并将其视为一种职业。如果你知道，它是
+
+56
+00:36:29.000 --> 00:37:01.000
+a lot of professions, lawyers, doctors, et cetera, they have continuous learning and there's becomes, you know, better tools and things. And you have to continuously, you know, read whether it's the academic papers or seminars and stuff so that you're not a doctor operating, you know, with 50 year old techniques because, you know, the best practice is constantly evolving. And I love that sentiment. I love that statement. You know, it's part of the reason why I love ranges and these kinds of interfaces, because one of the biggest arguments against things like ranges or, you know, they're called different
+很多职业，律师、医生等等，他们有持续的学习，并且有，你知道，更好的工具和东西。你必须不断地，你知道，阅读无论是学术论文还是研讨会之类的东西，这样你就不会成为一个用 50 年前技术操作的医生，因为，你知道，最佳实践在不断演变。我喜欢这种情绪。我喜欢这种说法。你知道，这也是我喜欢范围和这些接口的部分原因，因为反对像范围这样的东西的最大论点之一，或者，你知道，它们被称为不同的
+
+57
+00:37:01.000 --> 00:37:28.000
+things, but like the iterators and rust,, etc. Swift has sequences and multi-pass. I can't remember what they're called. Sequences, what's the other one in Swift? Collection. Collection, yeah. And you can build these kind of pipelines of operations. I love, I absolutely love the elegance and, in my opinion, the readability of this kind of code. It's this kind of data flow model where you start with an input, you do a bunch of operations, and then you end up and you can read it. It's linear, it's beautiful. However,
+东西，但像 Rust 中的迭代器等等。Swift 有序列和多遍（multi-pass）。我不记得它们叫什么了。序列，Swift 中另一个是什么？集合（Collection）。集合，是的。你可以构建这种操作管道。我喜欢，我绝对喜欢这种代码的优雅，在我看来，还有可读性。这是一种数据流模型，你从输入开始，做一堆操作，然后结束，你可以阅读它。它是线性的，很美。然而，
+
+58
+00:37:28.000 --> 00:38:11.000
+you go to Reddit, you go to certain corners of the internet, and there's a huge faction of folks that will argue that like, holy smokes, this is very complicated. It's not the way I'm used to writing code. You know, for loops and if statements are so much easier to reason about. Every language has those. Not true. But the languages they know all have them. And anyway, so the same kind of argument at a certain level exists for other language features, or I guess this is a library feature, that ended up getting into C++ that is the exact same kind of like, oh, this requires learning. You're going to have to go and learn what is a filter, what is a transform, what is an adjacent, you know, etc. All these things, what does it chunk by? But if you go and learn them, you now have a tool that is much more
+你去 Reddit，你去互联网的某些角落，有一大群人会争辩说，天哪，这太复杂了。这不是我习惯写代码的方式。你知道，for 循环和 if 语句更容易推理。每种语言都有这些。不完全是。但他们知道的语言都有这些。总之，在某种程度上，同样的论点也存在于其他语言特性中，或者我猜这是一个库特性，最终进入了 C++，这正是那种，哦，这需要学习。你将不得不去学习什么是 filter，什么是 transform，什么是 adjacent，你知道，等等。所有这些东西，什么是 chunk by？但如果你去学习它们，你现在就拥有了一个更
+
+59
+00:38:11.000 --> 00:38:50.000
+powerful. And the ability to write these kind of expressive pieces of code, you now have and to try and do that with a for loop in an if statement, it's going to be way more complicated. And monologue is coming to an end, which is that like you know ranges got in um and i'm sure that there were some people arguing the same thing uh so how come like concepts in the version that they were uh presented like like how did it's too complicated it will require people to learn too much how did that create like a stump a stumbling block to the extent that like we needed to go and redesign it or rip some stuff anyways that was what the frown on my i was thinking like
+强大的工具。而且编写这种富有表现力的代码的能力，你现在拥有了，而试图用 for 循环和 if 语句来做这件事，将会复杂得多。独白即将结束，那就是，你知道，范围进去了，而且我肯定有些人也在争论同样的事情。那么，像概念在它们被呈现的版本中，怎么会——怎么会太复杂了，它会要求人们学习太多，这怎么会造成像绊脚石一样，以至于我们需要去重新设计它或拆掉一些东西？总之，这就是我皱眉的原因，我在想，
+
+60
+00:38:50.000 --> 00:39:41.000
+ranges got in and there's a lot of people that are upset about the complexity of ranges but it's a tool that you need to learn and if you learn it you you get special powers basically and it sounds very similar to this concepts ox with you know concept know, concept maps. I'm hearing this. It's, it's sure a little more complicated. You will have to go learn, but if you do, you get these tools and these powers that you won't have otherwise. Anyway, so that was what the frown was for. I'm not sure if you can inform what I, what I'm saying, Doug, or Bryce has something to say. So, so before we, uh, before we, we ask Doug the, uh, the question, which is the reason that we're here, of course. I'll read from the isocpp.org, the standard C++ Foundation's website has an FAQ. And one of the FAQ pages is C++ OX concepts history.
+范围进去了，有很多人对范围的复杂性感到不满，但这是一个你需要学习的工具，如果你学会了它，你基本上就获得了特殊能力。这听起来和这个概念 0x 非常相似，你知道，概念映射。我听到了。它确实有点复杂。你将不得不去学习，但如果你这样做了，你就获得了这些工具和力量，否则你将不会拥有。总之，这就是我皱眉的原因。我不确定你是否能告知我所说的，Doug，或者 Bryce 有什么要说的。所以，在我们问 Doug 那个问题之前，也就是我们来到这里的原因，当然。我会读一下 isocpp.org，标准 C++ 基金会的网站有一个常见问题解答。其中一个常见问题页面是 C++0x 概念历史。
+
+61
+00:39:41.000 --> 00:40:18.000
+And there's a section that talks that has a question, what happened to C++ OX concepts? And it says, quote, they were overly complex for C++ OX slash C++ 11. And so we're removed from that standard so that work could continue to simplify them for a future standard. That work has been ongoing and a radically simplified version. Concepts Lite will be part of the C++14 wave of deliverables as a technical specification. So I guess, Doug, the question is,
+有一个部分讨论了一个问题，C++0x 概念发生了什么？它说，引用，它们对于 C++0x/C++11 来说过于复杂。因此从该标准中移除，以便工作可以继续简化它们以供未来的标准使用。这项工作一直在进行，一个彻底简化的版本，概念精简版（Concepts Lite），将作为技术规范成为 C++14 交付成果的一部分。所以我猜，Doug，问题是，
+
+62
+00:40:18.000 --> 00:41:05.000
+what happened to C++ OX concepts? Why was C++11 late? And are you to blame? Wow. So I am not going to take blame for C++11 being late. But I think what happened to C++ OX concepts is a little what Connor's monologue was all about. So, so concepts, they were in the draft standard in 2008. There was wording, which I think ran something like 30 pages of wording with new chapters for concepts and constrained templates and all that. There were 10 proposals that came along with it, adding concepts to all of the standard library. So, you know, we had fundamental concepts,
+C++0x 概念发生了什么？为什么 C++11 会迟到？你是罪魁祸首吗？哇。所以我不会为 C++11 的迟到承担责任。但我认为 C++0x 概念发生的事情有点像 Connor 独白的内容。所以，概念，它们在 2008 年的草案标准中。有措辞，我想大约有 30 页的措辞，有关于概念和约束模板的新章节等等。随之而来有 10 个提案，将概念添加到所有标准库中。所以，你知道，我们有基本概念，
+
+63
+00:41:05.000 --> 00:41:21.000
+iterator concepts, container concepts, all the algorithms got constraints. We had all these- In a much more comprehensive way than the current conceptification of the standard library, right? Yeah. I mean, this was, this is the real, sorry, I don't want to say the real standard library,
+迭代器概念，容器概念，所有的算法都得到了约束。我们有所有这些——以一种比当前标准库的概念化更全面的方式，对吧？是的。我的意思是，这是，这是真正的，抱歉，我不想说真正的标准库，
+
+64
+00:41:21.000 --> 00:41:57.000
+but, you know, the things that were already there, the C++ 98.03, those containers and algorithms got concept constraints. They were backward compatible, and they were checked. So they were in the concept GCC's implementation standard library and checked the template definition time. So we knew they were right by checking, not by just thinking through it. So it was pretty far along. It was in the 2008 draft. And then there was a discussion on the committee mailing list with the provocative title,
+但是，你知道，那些已经存在的东西，C++ 98/03，那些容器和算法得到了概念约束。它们是向后兼容的，并且经过了检查。所以它们在概念 GCC 的实现标准库中，并在模板定义时进行了检查。所以我们通过检查知道它们是正确的，而不是仅仅通过思考。所以它已经相当深入了。它在 2008 年的草案中。然后委员会邮件列表上有一个讨论，标题很有挑衅性，
+
+65
+00:41:57.000 --> 00:42:54.000
+Are Concepts Required of Joe Coder, which was a thread basically saying, oh no, with the way concepts are designed and the way you need to write concept maps in some cases to make a type meet the requirements of a concept, the sort of average Joe Coder, the C++ programmer out there that's been ignoring everything we're doing in the committee is going to be forced to learn this new big feature. And, you know, will resent us for it or whatever. Right. And they'll be forced to learn this feature and they're going to be upset with us because we broke their existing code. And the feature is too hard for them to learn. And there were a bunch of side discussions that were sort of weird, but getting at this overall unused with complexity.
+“Joe Coder 是否需要概念”，这是一个线程，基本上是说，哦不，按照概念的设计方式，以及在某些情况下你需要编写概念映射来使类型满足概念要求的方式，普通的 Joe Coder，即委员会里一直忽略我们所做的一切的 C++ 程序员，将被迫学习这个新的大特性。而且，你知道，会因此怨恨我们什么的。对吧。他们将被迫学习这个特性，而且他们会因为我们破坏了他们现有的代码而对我们感到不满。而且这个特性对他们来说太难学了。还有一堆侧面讨论，有点奇怪，但触及了这种对复杂性的整体不适。
+
+66
+00:42:54.000 --> 00:43:18.000
+Things like if you wanted to use the brand new for each loop with a built-in array, you might have to include the iterator concepts header. If you had nothing else in your CPP file that pulled in the iterator concepts header, you needed to pull that in to get the concept map that made built-in arrays into a container or a
+比如如果你想用全新的 for each 循环处理内置数组，你可能必须包含迭代器概念头文件。如果你的 CPP 文件中没有其他东西引入迭代器概念头文件，你需要引入它来获得使内置数组成为容器或
+
+67
+00:43:18.000 --> 00:43:50.000
+view that you could iterate over. And the compiler told you, but this was considered a potentially massive stumbling block for c++ ox so you said that there was a concern about breaking existing people's code was this about a concern about breaking existing people's code who were using the standard library which was being conceptified interestingly it wasn't about breaking people's working code, because we handled backward compatibility in the same way pretty well.
+视图的概念映射，你可以遍历它。编译器告诉了你，但这被认为是 C++0x 的一个潜在巨大绊脚石。所以你说有人担心破坏现有人的代码，这是关于担心破坏那些正在使用正在被概念化的标准库的现有人的代码吗？有趣的是，这并不是关于破坏人们的工作代码，因为我们处理向后兼容性的方式相当不错。
+
+68
+00:43:50.000 --> 00:44:35.000
+I mean, we didn't have it rolled out through millions of lines of code, but we could run the entire lib standard C++ test suite against the conceptified STL, and it worked, and it worked the same way, and the performance was pretty close. So it was more about, I as a user, maybe I'm dealing with one of the concepts that wasn't auto, or I'm using a library that is expressed in concepts. Now I have to go and learn about this concept map feature. And the expectation here, I think, is that all concept maps would be empty. So you could write an empty concept map if your interface already matched up exactly
+我的意思是，我们没有在数百万行代码中推广它，但我们可以针对概念化的 STL 运行整个 lib 标准 C++ 测试套件，它工作了，并且以同样的方式工作，性能也相当接近。所以更多的是关于，作为用户，也许我正在处理其中一个不是自动的概念，或者我正在使用一个用概念表达的库。现在我必须去学习这个概念映射特性。而且我认为这里的期望是，所有的概念映射都将是空的。所以如果你的接口已经完全匹配
+
+69
+00:44:35.000 --> 00:45:05.000
+with what the concept expected. Oh, OK. And then it became basically just an assertion that says, yes, this is true. Make sure you check it for me. And I think the concern was, well, we're going to be writing lots and lots of empty concept maps everywhere that aren't providing value. Right. I can certainly see how that would be a concern the committee would have. But that would only be the case for concepts
+概念所期望的，你可以编写一个空的概念映射。哦，好的。然后它基本上变成了一个断言，说，是的，这是真的。确保你为我检查它。而且我认为担忧是，好吧，我们将到处编写大量空的、不提供价值的概念映射。对吧。我当然能看出这会是委员会担心的问题。但这只适用于那些
+
+70
+00:45:05.000 --> 00:45:27.000
+that were not auto concepts, right? Right. OK. And nearly every concept was an auto concept. And for things like iterators, where having an auto concept between input and forward iterator would be a little dangerous, you'd get it wrong. In the concepts version of the STL,
+不是自动概念的概念，对吧？对。好的。而且几乎每个概念都是自动概念。对于像迭代器这样的东西，在输入迭代器和前向迭代器之间有一个自动概念会有点危险，你会弄错。在概念版本的 STL 中，
+
+71
+00:45:27.000 --> 00:45:59.000
+we would write concept maps that were able to go and inspect the existing iterator traits to see which iterator tag was used so that we could map over the hierarchies seamlessly. And so at some point, a decision was made to remove concepts from the standard, or to remove C++ OX concepts from the standard, yes. And then at that point, all of the work to conceptify the standard library had to be rolled back.
+我们会编写能够去检查现有迭代器特征（iterator traits）的概念映射，以查看使用了哪个迭代器标签，这样我们就可以无缝地映射层次结构。所以在那一点上，做出了一个决定，从标准中移除概念，或者从标准中移除 C++0x 概念，是的。然后在那一点上，所有概念化标准库的工作都必须回滚。
+
+72
+00:45:59.000 --> 00:46:52.000
+And there were presumably other things, like any work that was using concepts now had to be rolled back. Um, and, and my, I think my understanding of that time was that, that, that was partially, um, uh, one of the reasons why C++ 11 was, was, took longer than anticipated, right? Because we decided to remove this large feature late in the process. Maybe. So there was some unwinding to do. So we had 11 or 12 proposals full of wording that had to be backed out of the standard. There weren't that many features that depended fully on concepts. The one I can think of is the for each loop. So the for each loop was expressed in terms of a concept that had, you know, begin and end and the iterators that had to be recast in terms of what you
+而且大概还有其他事情，比如任何使用概念的工作现在都必须回滚。嗯，而且，我认为我对那个时间的理解是，那，那是部分，嗯，C++11 比预期花费更长时间的原因之一，对吧？因为我们决定在过程后期移除这个大特性。也许。所以有一些撤销工作要做。所以我们有 11 或 12 个充满措辞的提案必须从标准中撤回。没有那么多完全依赖概念的特性。我能想到的一个是 for each 循环。所以 for each 循环是用一个有 begin 和 end 的概念来表达的，迭代器必须根据你
+
+73
+00:46:52.000 --> 00:47:03.000
+see today, which is informed by the concepts discussion. So, you know, looks for a begin function, I think as a member function. And if not, it falls back to a free function and then has some fallbacks,
+今天看到的内容进行重铸，这是由概念讨论所告知的。所以，你知道，寻找一个 begin 函数，我想是作为成员函数。如果没有，它会回退到一个自由函数，然后有一些回退，
+
+74
+00:47:03.000 --> 00:48:07.000
+I think for built in arrays, because we don't want to force someone to include a header to use the for in loop. That one turned around pretty quick. I think I may have written the wording for the for in loop because I felt so guilty about it having been tied to my concepts feature that then died. But there weren't that many features like that that had gone all in on concepts and had to be backed out. I think the other thing that we would have gotten but didn't get is there were some proposals for iterator concepts that came out of the Boost iterator library to separate out traversal from access. That was a proposal it was in good shape early on in the c++ ox time frame got subsumed into the concept effort partly because it was the same people and then didn't get a chance to come back for c++ ox and it wasn't really until ranges came along that you started to see that that that formalism come back interesting so joe coder
+我想是针对内置数组的，因为我们不想强迫某人为了使用 for in 循环而包含一个头文件。那个转变得很快。我想我可能写了 for in 循环的措辞，因为我对自己与我的概念特性挂钩然后死亡感到非常内疚。但没有那么多像那样完全投入概念并必须撤回的特性。我想我们本来会得到但没有得到的另一件事是，有一些来自 Boost 迭代器库的迭代器概念提案，旨在将遍历与访问分开。那是一个提案，在 C++0x 时间框架早期状态良好，部分被概念工作所吸收，因为是同一批人，然后没有机会回到 C++0x，直到范围出现，你才开始看到那种形式主义回归。有趣，所以 Joe Coder
+
+75
+00:48:07.000 --> 00:48:12.000
+killed c++ ox concepts i i think projections of the thinking onto a mythical joe coder is the the main thing here there were complaints. So there was concern about the compile time performance of the concept GCC prototype because it was doing all this template definition checking for the algorithm setter. And so it compiled slower. Be sure to check these show notes either in your podcast app or at ADSP the podcast.com for links to anything we mentioned in today's episode, as well as a link to a GitHub discussion where you can leave thoughts, comments, and questions. Thanks for listening. We hope you enjoyed and have a great day. Low quality, high quantity. That is the tagline of our podcast. It's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+杀死了 C++0x 概念。我认为将这种想法投射到一个神话般的 Joe Coder 身上是这里的主要问题。有抱怨。所以有人担心概念 GCC 原型的编译时间性能，因为它在为算法设置做所有这些模板定义检查。所以它编译得更慢。请务必在你的播客应用程序或 ADSP the podcast.com 上查看这些节目说明，以获取我们在今天剧集中提到的任何内容的链接，以及一个 GitHub 讨论的链接，你可以在那里留下想法、评论和问题。感谢收听。我们希望你喜欢并祝你有美好的一天。低质量，高数量。这就是我们播客的标语。这不是标语。我们的标语是带有信息点缀的混乱。这一集还没有评论。点击转录中的任何句子来发表评论。

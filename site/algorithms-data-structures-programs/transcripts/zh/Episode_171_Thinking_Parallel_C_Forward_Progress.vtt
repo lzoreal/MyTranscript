@@ -1,0 +1,176 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:11.000
+So the talk is called Think Parallel, and it is a talk where I really just deep dive on how to implement a variety of different parallel algorithms and data structures, all of which sort of build on each other. And sort of try to instill upon people the mindset that you and I take when trying to craft parallel code. Welcome to ADSP the podcast episode 171 recorded on February 22nd, 2024. My name is Connor and today my co-host Bryce previews his upcoming talk, Thinking Parallel. So I've been working on making this new talk that I'm going to give some part of today, assuming that I'm able to make slides in the three hours, two hours that I have. And the talk's called Think Parallel. And it is a talk where I really just deep dive on how to implement a variety of different parallel algorithms and data structures, all of which sort of build on each other, and sort of try to instill upon people the mindset that
+这次演讲的主题是“并行思考”（Think Parallel），我将在演讲中深入探讨如何实现各种不同的并行算法和数据结构，它们之间是层层递进的关系。我试图向大家灌输一种你我在编写并行代码时所采用的思维方式。欢迎收听 ADSP 播客第 171 期，录制于 2024 年 2 月 22 日。我是 Connor，今天我的联合主持人 Bryce 将预告他即将进行的演讲《并行思考》。我一直在准备这个新演讲，假设我能在接下来的两三个小时内把幻灯片做出来，我今天会讲其中的一部分。演讲题目叫《并行思考》。我将在演讲中深入探讨如何实现各种不同的并行算法和数据结构，它们之间是层层递进的关系，并试图向大家灌输一种
+
+2
+00:01:11.000 --> 00:02:28.000
+you and I take when trying to craft parallel code. And so one of the storylines that I'm likely going to include in this talk is, okay, how do we implement a parallel scan? How do we implement a better parallel scan? And then what can we do with a parallel scan? And the first of those, what can we do with a parallel scan is how can we implement a parallel copy if with a parallel scan? So I've given a lot of talks where I've shown the sort of two-pass, up-sweep, down-sweep implementation of parallel scan. But I wanted to implement the more clever single-pass decoupled look- is that when you do this upsweep, downsweep, pass, basically the two-pass approach, you do something in parallel where you split up the problem into chunks. And for every chunk, you do a local scan. And then every chunk communicates some aggregate, the aggregate sum from its chunk, into some array somewhere. And then you scan that array
+你我在编写并行代码时所采用的思维方式。我打算在演讲中加入的一个故事线是：我们如何实现并行扫描（parallel scan）？如何实现更好的并行扫描？以及我们能用并行扫描做什么？第一个问题，即我们能用并行扫描做什么，就是如何用并行扫描来实现并行复制（parallel copy）。我做过很多演讲，展示过那种两遍扫描（two-pass）、向上扫描（up-sweep）和向下扫描（down-sweep）的并行扫描实现。但我更想实现那种更巧妙的单遍解耦回溯（single-pass decoupled lookback）算法。当你进行这种向上扫描和向下扫描（即两遍法）时，你实际上是在并行地将问题拆分成多个块。对于每个块，你进行局部扫描。然后每个块将其聚合值（即该块的累加和）传送到某个数组中。接着你扫描那个数组，
+
+3
+00:02:28.000 --> 00:03:34.000
+and then that scanned array of aggregates, you use that to update all of the original chunks. But the scan of that array of aggregates happens in serial. You do that by one thread in the sort of traditional approach. And what decoupled lookback does is it replicates and paralyzes the scan of that aggregates array. So, it says, okay, we're going to do some redundant work in the interest of avoiding the global barrier between this upsweep pass and this downsweep pass. And so, the way that you do that is that if you're, you know, a chunk in this parallel scan, you will look at all of the previous chunks that are before you that are to the left of you in the sequence. You'll look and see, have they written their aggregate yet? And if they have, you add it into some local temporary that you're accumulating. And if they haven't, you wait for them to finish.
+然后利用那个已扫描的聚合数组来更新所有原始块。但是，对聚合数组的扫描是串行进行的。在传统方法中，这是由一个线程完成的。而解耦回溯（decoupled lookback）的做法是复制并并行化对该聚合数组的扫描。它会说：“好吧，为了避免向上扫描和向下扫描之间的全局屏障，我们将做一些冗余工作。”实现的方法是：如果你是并行扫描中的一个块，你会查看序列中在你左侧的所有先前块。你会观察它们是否已经写入了聚合值。如果已经写入，你就将其加到你正在累加的局部临时变量中；如果还没写入，你就等待它们完成。
+
+4
+00:03:34.000 --> 00:04:30.000
+And if you ever encounter that one of the previous chunks has not only written its aggregate, but it's also summed all of the aggregates from all the chunks before us, then you can be like, great, I don't have to keep looking further into the past. And this trick lets you avoid having everybody waiting on just the predecessor that's directly before them. And it allows you to decrease the contention on predecessors when you're doing this scan. So, it's a pretty clever technique. But one thing I started thinking about when I was looking at this is how does this algorithm relate to or what are the forward progress guarantees of this algorithm? And one of the first things that I realized is that
+如果你发现某个先前的块不仅写入了它的聚合值，而且还汇总了它之前所有块的聚合值，那么你就可以说：“太好了，我不需要继续往过去看更远的地方了。”这个技巧让你避免了每个人都必须等待直接前驱的情况，并允许你在进行扫描时减少对前驱的竞争。所以，这是一种非常巧妙的技术。但我在研究这个算法时开始思考：这个算法与前向进度保证（forward progress guarantees）有何关系？我意识到的第一件事是，
+
+5
+00:04:30.000 --> 00:05:12.000
+I don't think that with just the C++ parallel algorithms that we have today, that we can actually write this code because we don't have a way to request the type of forward progress guarantee that we need. How familiar are you with forward progress guarantees? I watched Olivier's talk that I'm pretty sure is called Forward Progress Demystified or something like that. And I've read the CPP reference stuff, but I am by no means an expert. So concurrent forward progress is the strongest form of forward progress. And concurrent forward progress means that the system will ensure that
+我不认为仅凭我们今天拥有的 C++ 并行算法就能写出这段代码，因为我们没有办法请求我们所需的那种前向进度保证。你对前向进度保证有多了解？我看了 Olivier 的演讲，我确定题目叫《揭秘前向进度》（Forward Progress Demystified）之类的。我也读过 CPP 参考资料，但我绝不是专家。并发前向进度（concurrent forward progress）是前向进度中最强的一种形式。并发前向进度意味着系统将确保
+
+6
+00:05:12.000 --> 00:05:54.000
+your thread or your work will make forward progress. So like if you're on Linux or Windows and you spin up a std thread, that std thread will get scheduled and will run. And that'll happen regardless of how many other std threads there are. And if that thread blocks, that's okay. And essentially, the way that operating systems will do this is that they will, at some point, you know, they'll preempt your thread. They'll be like, okay, like, you know, it's time for me to preempt you so that some other thread can run. And that means that you can't end up in a situation
+你的线程或工作能够取得前向进度。比如在 Linux 或 Windows 上，如果你启动一个 std::thread，该线程就会被调度并运行。无论还有多少其他 std::thread，这种情况都会发生。如果该线程阻塞了，也没关系。本质上，操作系统实现这一点的方式是：在某个时刻，它们会抢占你的线程。它们会说：“好了，现在轮到我抢占你了，以便其他线程可以运行。”这意味着你不会陷入一种情况：
+
+7
+00:05:54.000 --> 00:06:28.000
+where you've got, you know, your thread is using some parallel resource and all it's doing is waiting for some other thing to happen. And the thing that it's waiting to happen can't happen because it doesn't have a resource to run on because the resource that it would run on is being used by the thread that's blocking on it. So an example of, well, I'll get back to the example after I explain parallel forward progress. So, parallel forward progress is a little bit weaker. Parallel forward progress says
+你的线程正在使用某种并行资源，而它所做的只是在等待其他事情发生。而它等待发生的事情却无法发生，因为它没有资源来运行，因为本该运行它的资源正被那个阻塞它的线程占用。关于这个例子，等我解释完并行前向进度（parallel forward progress）后再回来讲。并行前向进度稍微弱一些。并行前向进度说的是：
+
+8
+00:06:28.000 --> 00:07:13.000
+once your task or piece of work starts executing, the system guarantees that it will run to completion. But if it hasn't started executing, there's no guarantee that it will. So an example of something that would give you parallel forward progress would be a bounded thread pool. So you have a thread pool that has eight worker threads on it. And you can feed tasks into this thread pool. And those eight worker threads are OS threads. So they have concurrent progress guarantees themselves. And all of those eight threads in the thread pool are going to do is they're going to pull queues out of the task and run those tasks.
+一旦你的任务或工作片段开始执行，系统保证它会运行到完成。但如果它还没有开始执行，则没有保证它一定会运行。并行前向进度的一个例子是有界线程池（bounded thread pool）。你有一个拥有 8 个工作线程的线程池，你可以向其中输入任务。这 8 个工作线程是操作系统线程，它们自身具有并发进度保证。这 8 个线程所做的全部工作就是从任务队列中取出任务并运行它们。
+
+9
+00:07:13.000 --> 00:08:14.000
+And so once one of those worker threads pulls one of your tasks out of the queue and starts running it, it's guaranteed that that task is going to run to completion. But let's say that you enqueued 100 tasks to this thread pool, and 99 of those tasks were going to wait on one of those tasks. Well, if the first eight tasks that get pulled out by those eight worker threads are tasks that wait on that one other task, then you're going to have a deadlock because each one of your worker threads is going to be running a task that is going to be waiting for a thing, for a task to run, and there's not going to be any thread to run that task that everybody's waiting on. So a thread pool that would provide concurrent forward progress instead of parallel forward progress would either be an unbounded thread pool, so a thread pool that will add additional threads if needed,
+所以，一旦其中一个工作线程从队列中取出一个任务并开始运行，该任务就保证会运行到完成。但假设你向这个线程池排队了 100 个任务，而其中 99 个任务都在等待那 1 个任务。好吧，如果被那 8 个工作线程取出的前 8 个任务都是在等待那 1 个任务，那么你就会陷入死锁，因为你的每个工作线程都在运行一个正在等待某事（等待一个任务运行）的任务，而没有任何线程去运行那个大家都在等待的任务。所以，提供并发前向进度而不是并行前向进度的线程池，要么是一个无界线程池（即在需要时会增加额外线程的线程池），
+
+10
+00:08:14.000 --> 00:09:20.000
+you know, if things are taking too long or if there's too many tasks in the queue, or it would be a thread pool in a system that would ensure, that would require you to block in a certain way that would on an atomic or a mutex. If your task's instead weighted by calling some function on your thread pool that was called wait, and that function could wait, but it would also, if the thing that it was waiting for had not been satisfied yet, it might go and execute another task. It might go and pull another task. It might go and pull another task out of the queue and then go run that additional task and only come back to your task once it's run that other task. And then in that sort of system where all the blocking defers to the
+或者是在一个系统中的线程池，它要求你以某种方式在原子变量或互斥锁上阻塞。如果你的任务是通过调用线程池上名为“wait”的函数来等待的，该函数可以等待，但如果它等待的事情尚未满足，它可能会去执行另一个任务。它可能会去从队列中拉取另一个任务，运行那个额外的任务，只有在运行完那个任务后才回到你的任务。然后，在那种所有阻塞都推迟到调度器的系统中，
+
+11
+00:09:20.000 --> 00:10:07.000
+scheduler, you will eventually make forward progress because eventually you'll get through all 100 of those tasks until you get to that one task that will unblock everything else. And then once that one's run, then all the other ones that have been deferred by this boost blocking mechanism is what it's called, would eventually get run. So that's parallel and concurrent forward progress. There's also a weaker form of forward progress called weekly parallel forward progress, which essentially says like, hey, you have no guarantees that execution will run to completion. So weekly parallel, not particularly interesting
+你最终会取得前向进度，因为你最终会处理完那 100 个任务中的所有任务，直到到达那个能解除其他所有任务阻塞的任务。一旦那个任务运行了，所有被这种“提升阻塞”（boost blocking）机制（这是它的名称）推迟的任务最终都会被运行。这就是并行和并发前向进度。还有一种较弱的前向进度形式，称为弱并行前向进度（weakly parallel forward progress），它本质上说：“嘿，你没有任何保证执行会运行到完成。”所以弱并行，对于我今天想谈的内容来说，
+
+12
+00:10:07.000 --> 00:10:55.000
+for what I want to talk about today. And what I want to talk about today is in the case of our scan algorithm, we sort of need a concurrent progress guarantee today because if I'm doing a scan within chunks, the ith chunk depends upon all of the chunks before it. And so, if you were to use a system that has parallel forward progress and it was going to run, again, let's use that example of a worker thread pool with eight worker threads. And you enqueue up in chunks of your scan there.
+并不是特别有趣。我今天想谈的是关于我们的扫描算法，我们目前需要一种并发进度保证，因为如果我在块内进行扫描，第 i 个块依赖于它之前的所有块。所以，如果你使用一个具有并行前向进度保证的系统，并且它要运行——再次使用那个有 8 个工作线程的线程池的例子——并且你将扫描的块排入队列。
+
+13
+00:10:55.000 --> 00:12:00.000
+Well, if it decides that it's going to run the last eight chunks of the scan first, then you're going to have a problem because those last eight chunks are going to depend upon all of the chunks before it and so you'd get a deadlock with that parallel forward progress guarantee thread pool system. However, if you ran the first eight scan chunks first, and if you guaranteed that you only would run a scan chunk if all of the scan chunks that were enqueued before it have been run first, then you'd be fine. So, like if your system has this sort of monotonically increasing guarantee where it says like, hey, if you enqueue n tasks, I will run those tasks. I will not start running task I until all of the tasks before I have either started running or have completed running. So, if you have a system that makes that guarantee, which is weaker than concurrent forward progress, then you can implement something like scan. And that sort of monotonically
+好吧，如果它决定先运行扫描的最后 8 个块，你就会遇到问题，因为最后 8 个块依赖于它之前的所有块，所以你会因为那个具有并行前向进度保证的线程池系统而陷入死锁。然而，如果你先运行前 8 个扫描块，并且保证只有在排在它之前的所有扫描块都已运行的情况下才运行某个扫描块，那么你就没问题了。所以，如果你的系统有这种单调递增的保证，即“嘿，如果你排队了 n 个任务，我会运行这些任务。在所有排在任务 i 之前的任务要么已经开始运行，要么已经完成运行之前，我不会开始运行任务 i。”那么，如果你有一个做出这种保证的系统（它比并发前向进度弱），你就可以实现像扫描这样的算法。而那种单调
+
+14
+00:12:00.000 --> 00:12:47.000
+increasing, you know, forward progress thing, it's actually common to a lot of different problems. You know, you need that guarantee for something like a scan. You need that guarantee for something like what we've called the lost reduction or the fold left type reduction here where it's a reduction that guarantees that things will be reduced sort of left to right. And there's a few other important algorithms that sort of could rely upon that property. And on CUDA, we don't explicitly guarantee this. It's very much like undefined behavior but it has happened to be the case
+递增的前向进度，实际上在许多不同的问题中都很常见。你知道，你需要这种保证来处理像扫描这样的问题。你需要这种保证来处理我们所说的“丢失归约”（lost reduction）或“左折叠”（fold left）类型的归约，这是一种保证事物会从左到右进行归约的归约。还有其他一些重要的算法也可能依赖于该属性。在 CUDA 上，我们没有明确保证这一点。这非常像未定义行为，但自 CUDA 诞生以来，
+
+15
+00:12:47.000 --> 00:13:03.000
+since the start of CUDA that CUDA thread blocks are executed in monotonically increasing order that if you're executing CUDA thread block I you know that all thread blocks
+情况一直如此：CUDA 线程块是按单调递增的顺序执行的。如果你正在执行 CUDA 线程块 i，你知道所有在 i 之前的线程块
+
+16
+00:13:03.000 --> 00:13:48.000
+before I are either currently running or have run to completion. So, this is a very interesting property and I've been thinking about is this property something that should be another forward progress guarantee category in C++? But I don't think that that's necessarily how it would work because this isn't a property about the execution of one thread in isolation. It's a property about I've enqueued in chunks of threads or in threads or in chunks of work. And I want some guarantee about the order in which they are all executed. But I do think it's an important guarantee for us to in some way, shape, or form codify. Because if we can't codify it in some way, shape, or form, then the only way to spell
+要么正在运行，要么已经运行完成。所以，这是一个非常有趣的属性，我一直在思考：这个属性是否应该成为 C++ 中的另一个前向进度保证类别？但我认为这不一定是它的工作方式，因为这不是关于单个线程孤立执行的属性。这是关于“我已经排队了 n 个线程块或 n 个工作块，我想要对它们全部执行的顺序做出某种保证”的属性。但我确实认为，我们需要以某种形式将其编纂下来。因为如果我们不能以某种形式编纂它，那么在标准 C++ 中表达
+
+17
+00:13:48.000 --> 00:14:33.000
+these algorithms in standard C++ would be to require concurrent forward progress, which could be restrictive because some platforms can't guarantee concurrent forward progress while they can guarantee this monotonically increasing thing. Yeah, I recall we've had a version of this conversation because I think we talked about this at one point, maybe even on the pod when we did the loss reduction series. And I think there's even a pull request open right now on the thrust inside of CCCL saying, having like a little chart that points out that we're missing an associative only reduction. And then I think we were talking about that there's a way to implement this kind of
+这些算法的唯一方法就是要求并发前向进度，这可能会有限制性，因为有些平台无法保证并发前向进度，但它们可以保证这种单调递增的特性。是的，我记得我们进行过类似版本的对话，因为我想我们在某个时候谈论过这个，甚至可能是在我们做“丢失归约”系列节目时在播客上谈到的。而且我想现在在 CCCL 的 Thrust 内部甚至有一个拉取请求，指出我们缺少一个仅关联的归约（associative only reduction）。然后我想我们当时在讨论，有一种方法可以实现这种
+
+18
+00:14:33.000 --> 00:15:13.000
+currently, if you just call the inclusive scan and then take the last element. But I can't, I can't remember if this was on pod or off pod, but you said that the way that the scan actually works is kind of relies on this implicit, not explicitly stated behavior. Same thing is true of reduction. The reduction today will guarantee ordering in thrust and cup. Sorry, let me rephrase that. When you're using a thrust reduction with the CUDA backend or when you're using a cub reduction, it's guaranteed that it's going to be left to right, that it's going to be, that it won't commute, it won't change the order of
+目前，如果你只是调用 inclusive_scan 然后取最后一个元素。但我记不清这是在播客上还是播客外说的了，但你说扫描实际工作的方式在某种程度上依赖于这种隐式的、未明确说明的行为。归约也是如此。Thrust 中的归约在 CUDA 后端或使用 Cub 归约时，保证了顺序是左到右的，它不会交换，不会改变参数的顺序。
+
+19
+00:15:13.000 --> 00:16:14.000
+arguments. Because all it does is it endues a CUDA kernel that does the reduction. And as I just said, since the beginning of CUDA, there hasDA, it has been the case that CUDA thread blocks execute in monotonically increasing order. And so if you think about it, like the way the reduction works, it's guaranteed that this will happen. each thread block will break up the input into a series of chunks, and each thread will handle that chunk. And then there's a warp-wide primitive that they'll use to do the reduction across the chunk, and that guarantees the left-to-right ordering too. And then the block-level primitive to do that, I believe also guarantees the ordering as well. And then because all the blocks happen in monotonically increasing order,
+因为它所做的只是启动一个执行归约的 CUDA 内核。正如我刚才所说，自 CUDA 诞生以来，CUDA 线程块一直按单调递增的顺序执行。所以如果你思考一下，归约的工作方式保证了这一点。每个线程块会将输入拆分成一系列块，每个线程将处理该块。然后有一个 warp 级的原语，它们将使用该原语在块内进行归约，这也保证了从左到右的顺序。而且我相信块级的原语也保证了顺序。并且因为所有块都按单调递增的顺序发生，
+
+20
+00:16:14.000 --> 00:16:51.000
+the sort of the grid-wide reduction should also give you that guarantee. I'm like, now that I say it out loud, I'm only 90% sure that that's the case or that that will always be the case because I don't know how the warp level reduction primitive works, but I'm pretty certain that it'll do things left to right. I think we rely upon that in some of our examples and some of the code that you and I have written. It'd be interesting to actually go and see whether that's true. But I'm fairly certain that it's true today.
+网格级的归约也应该给你那个保证。我这么说出来的时候，我只有 90% 的把握确定情况确实如此，或者它总是如此，因为我不知道 warp 级的归约原语是如何工作的，但我相当确定它会从左到右处理。我想我们和你我写过的一些代码示例中都依赖于这一点。如果能去看看这是否属实会很有趣。但我相当确定它在今天确实如此。
+
+21
+00:16:51.000 --> 00:17:36.000
+So how does this all tie back? Because you started saying at the beginning of this episode that you've got this new talk coming up, Think Parallel, and you're going to start from showing how to implement a scan using a copy if and how to build things out of scans etc yeah how does this all tie into like what's the ultimate goal of the talk is is uh are you going to be and also to i said uh olivier who's a former nvidia employee now works at apple last time i checked um he gave a talk at CPP North 2022. And that talk was called forward progress in C++. So if you were intrigued by Bryce's explanation of forward progress,
+那么这一切是如何联系起来的呢？因为你在本集开头说你有一个新的演讲《并行思考》，你将从展示如何使用 copy_if 实现扫描，以及如何用扫描构建事物等开始。是的，这一切是如何联系起来的？最终目标是什么？还有，我提到了 Olivier，他曾是 NVIDIA 员工，现在在苹果工作，我上次查看时，他在 CPP North 2022 上做了一个演讲。那个演讲叫《C++ 中的前向进度》。所以如果你对 Bryce 关于前向进度的解释感兴趣，
+
+22
+00:17:36.000 --> 00:18:25.000
+or confused, and either way, you want to learn more, go check that talk out. So is that stuff going to be covered in your talk? Or like, what's the ultimate? I think I'll have to cover it a little bit. But I mean, I think that I'm most likely to cover it by just using a stood CON execution policy, which we don't have today. We don't actually have an execution policy that guarantees you concurrent forward progress. We just have std par, which guarantees you parallel. We have std par and seek, which guarantees you weekly parallel. And then we have std unseek, which doesn't give you parallelism at all. So theoretically, we could add a std con that would guarantee you concurrent forward progress.
+或者感到困惑，无论哪种方式，如果你想了解更多，去看看那个演讲。那么这些内容会涵盖在你的演讲中吗？或者最终目标是什么？我想我必须稍微涵盖一下。但我的意思是，我最有可能通过使用 std::con 执行策略来涵盖它，我们今天还没有这个策略。我们实际上没有一个保证你并发前向进度的执行策略。我们只有 std::par，它保证你并行。我们有 std::par_unseq，它保证你弱并行。然后我们有 std::unseq，它根本不给你并行性。所以理论上，我们可以添加一个 std::con，它会保证你并发前向进度。
+
+23
+00:18:25.000 --> 00:18:45.000
+And then I could use that for my examples, and that would be sufficient. But again, it would be too strong of a requirement because there's certain platforms that can't promise concurrent execution but can implement these algorithms. So I'll probably just do that because I don't want my talk to turn into like a
+然后我可以在我的示例中使用它，这就足够了。但同样，这会是一个太强的要求，因为有些平台无法承诺并发执行，但可以实现这些算法。所以我可能会那样做，因为我不希望我的演讲变成
+
+24
+00:18:45.000 --> 00:19:23.000
+massive tangent on concurrent progress guarantees and this monotonically increasing execution property. Sounds like a very, very cool talk. Where are you hoping to debut this talk? At ACCU and I think C++ now. Isn't the ACCU like right around the corner and already submissions have been? Oh, so you've already proposed this talk and it's been accepted. Yes. Gotcha. I thought this was the, you know, you just had this, you know, talk idea in the last week and you were starting to pontificate about it. This has been in the pipeline for months now.
+关于并发进度保证和这种单调递增执行属性的大量题外话。听起来是一个非常非常酷的演讲。你希望在哪里首演这个演讲？在 ACCU，我想还有 C++ Now。ACCU 不是快到了吗？而且提交不是已经结束了吗？哦，所以你已经提议了这个演讲并且它已经被接受了。是的。明白了。我还以为这是你上周才有的想法，你还在对此夸夸其谈。这个计划已经筹备好几个月了。
+
+25
+00:19:23.000 --> 00:19:53.000
+Yes, I did. Yes, it's been in the pipeline for four months now yes i did yes it's been the pipeline for a while interesting so accu that means that folks when is when is accu it's in march right yeah accu let's do a little let's do a little not accu weather accu c plus plus we will do a little plug for if i don't need to click 17 links in order to conferences. There we go. Now I click another one. 17th of April. Not in March then.
+是的，我确实……是的，它已经在筹备四个月了。是的，它已经在筹备一段时间了。有趣，所以 ACCU，这意味着大家，ACCU 是什么时候？是在三月，对吧？是的，ACCU，让我们做一个小小的……不是 ACCU 天气，是 ACCU C++。我们将做一个小小的宣传，如果我不需要为了会议点击 17 个链接的话。好了。现在我点击另一个。4 月 17 日。那不是三月。
+
+26
+00:19:53.000 --> 00:20:10.000
+17th to 20th of April in Bristol. Tickets are available. Bryce will be there giving his talk. He. I guess we have to figure out our sticker our sticker situation. Cause we made promises. Oh yeah, we did make promises. And we will have those stickers.
+4 月 17 日到 20 日在布里斯托尔。门票已开放。Bryce 将在那里进行他的演讲。他……我想我们得弄清楚我们的贴纸情况。因为我们做出了承诺。哦，是的，我们确实做出了承诺。我们会有那些贴纸的。
+
+27
+00:20:10.000 --> 00:20:28.000
+My first conference isn't probably going to be until June. And you're thinking about going to C++ now. Yep. I am. C++ now folks is April 29th to May 3rd. April. That is earlier than typically. Oh, it's April 29rd. April, that is earlier than typically. Oh, it's April 29th?
+我的第一次会议可能要到六月。你正在考虑去 C++ Now。是的，我是。C++ Now 的朋友们，是 4 月 29 日到 5 月 3 日。四月。那比通常要早。哦，是 4 月 29 日？
+
+28
+00:20:28.000 --> 00:20:51.000
+Oh, that is earlier. I don't, I didn't realize it was that much earlier. That may be, I don't know. It's going to be a question of whether Ramona is going to come with me because I'm going to be at ACC. Like, I may not see her for a couple weeks before then because I'm going to ACCU and my mom's actually coming with me. And so it is possible.
+哦，那确实更早。我没意识到它早了那么多。这可能……我不知道。这取决于 Ramona 是否会和我一起去，因为我要去 ACCU。就像，在那之前的几周我可能见不到她，因为我要去 ACCU，而且我妈妈实际上要和我一起去。所以这是可能的。
+
+29
+00:20:51.000 --> 00:21:26.000
+If she's going to come, I'll probably go. But I suppose the logistics of this are not of particular interest to our podcast audience. That's all right. It's like I said, I no longer have my finger on the pulse of what the listener finds interesting because they love that credit card episode. C++, the ISO site no longer lists the conferences. But there was, I did see in the last couple months here, how do I tools? We need to put tools anytime,
+如果她要来，我可能会去。但我认为这些后勤工作对我们的播客听众来说没什么特别的兴趣。没关系。就像我说的，我不再掌握听众觉得有趣的东西了，因为他们喜欢那个信用卡那一集。C++，ISO 网站不再列出会议了。但我确实在过去几个月里看到过，我怎么……工具？我们需要随时放置工具，
+
+30
+00:21:26.000 --> 00:21:57.000
+now we need past month, was it news from upcoming conferences, yeah, so let's, this was posted 16 days ago, so seeing as we've plugged ACCU, we've plugged C++ now, let's plug them all, C++ online is February 28th, oh no, those are workshops, sorry, Thursday 29th of Oh, no, those are workshops. Sorry. Thursday, 29th of February. Ooh, leap, leap year, folks, to Saturday, 2nd of March. We talked about ACCU. We talked about C++ now.
+现在我们需要上个月，是来自即将举行的会议的新闻吗？是的，所以让我们……这是 16 天前发布的，所以既然我们已经宣传了 ACCU，宣传了 C++ Now，让我们把它们都宣传一遍。C++ Online 是 2 月 28 日，哦不，那是研讨会，抱歉，2 月 29 日星期四。哦不，那是研讨会。抱歉。2 月 29 日星期四。哦，闰年，朋友们，到 3 月 2 日星期六。我们谈到了 ACCU。我们谈到了 C++ Now。
+
+31
+00:21:57.000 --> 00:22:21.000
+Using stdcpp, that's in Spain, I think. Yeah, Madrid, Spain is the 24th to the 26th of April. So right before C++ now. I think I got these in the wrong order. C++ on C, that's in Folkestone, UK. That is 3rd to the 5th of July. C++ North is the 21st to the 24th of July. Yep, lots of C++ conferences. There's also some Rust conferences.
+Using stdcpp，我想那是在西班牙。是的，马德里，西班牙是 4 月 24 日到 26 日。所以就在 C++ Now 之前。我想我把这些顺序弄错了。C++ on Sea，那是在英国福克斯通。那是 7 月 3 日到 5 日。C++ North 是 7 月 21 日到 24 日。是的，有很多 C++ 会议。还有一些 Rust 会议。
+
+32
+00:22:21.000 --> 00:22:56.000
+I know that there is a rust fest in zurich switzerland in june and then i you said you were thinking about speaking at rust com yeah but that's not until later in the year anyways lots of conferences yeah i should we should probably wrap up because i gotta shower and get into the office yep and i also need to go and watch the quarterly meeting this has been been our lunchtime, technically your breakfast. Yep. And I think the way they let us watch it too, one of the platforms, you can pause it and then put it at 2x speed,
+我知道六月在瑞士苏黎世有一个 Rust Fest，然后你……你说你在考虑在 Rust Conf 上演讲。是的，但那要到今年晚些时候了。总之，有很多会议。是的，我们可能应该结束了，因为我得去洗澡并去办公室。是的，我也需要去观看季度会议。这已经是我们的午餐时间了，技术上是你的早餐时间。是的。而且我认为他们让我们观看的方式，其中一个平台，你可以暂停它，然后以 2 倍速播放，
+
+33
+00:22:56.000 --> 00:23:26.000
+just like YouTube, which I love, folks, which I love, because it means I can be even more productive today. Links in the show notes for all this stuff. And yeah, if it's at ACCU, which is in April, that means you should be able to watch this talk on the YouTubes probably within, you know, a month of that, two months of that or so. So we will update retrospectively a link in this show notes when that becomes available. So be sure to check these show notes either in your podcast app or at ADSP,
+就像 YouTube 一样，我喜欢，朋友们，我喜欢，因为这意味着我今天可以更有效率。所有这些东西的链接都在节目说明中。是的，如果它在 ACCU，也就是四月，这意味着你应该可以在 YouTube 上观看这个演讲，可能在那个时间之后的一个月、两个月左右。所以当它可用时，我们将回顾性地在这些节目说明中更新一个链接。所以一定要在你的播客应用程序中或在 ADSP
+
+34
+00:23:26.000 --> 00:23:39.000
+the podcast.com for links to anything we mentioned in today's episode, as well as a link to a get up discussion where you can leave thoughts, comments, and questions. Thanks for listening. We hope you enjoyed and have a great day. Low quality, high quantity.
+the podcast.com 上查看这些节目说明，获取我们今天节目中提到的任何内容的链接，以及一个 GitHub 讨论的链接，你可以在那里留下想法、评论和问题。感谢收听。我们希望你喜欢，祝你有美好的一天。低质量，高数量。
+
+35
+00:23:39.000 --> 00:23:44.000
+That is the tagline of our podcast. It's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+那是我们播客的标语。那不是标语。我们的标语是“带有信息点缀的混乱”。这一集还没有评论。点击转录中的任何句子来留下评论。

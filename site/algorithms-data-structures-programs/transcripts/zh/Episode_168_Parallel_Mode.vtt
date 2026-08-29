@@ -1,0 +1,346 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:55.000
+It's a two range transform reduce where you're looking at adjacent elements and then the binary operation that you're applying to those to those two adjacent elements is not equal to. And then you're doing a reduction of plus. So here's what's beautiful is that this is a bit obfuscated. There is a much, much nicer way of implementing this. It's amazing to me how often we see these, these like fundamental parallel algorithmic patterns come back. Welcome to ADSP, the podcast episode 16, recorded on February 7th, 2024. My name is Connor, and today with my co-host Bryce, we chat about how to implement a parallel mode. All right, well now I'm recording too.
+这是一个双范围转换归约，你查看相邻元素，然后对这两个相邻元素应用二元运算，该运算是不等于。然后你进行加法归约。这里美妙之处在于它有点晦涩。有一种更好、更优雅的实现方式。令我惊讶的是，我们经常看到这些基本的并行算法模式反复出现。欢迎来到 ADSP 播客第 16 期，录制于 2024 年 2 月 7 日。我是 Connor，今天我和我的联合主持人 Bryce 一起聊聊如何实现并行众数。好了，现在我也在录音了。
+
+2
+00:00:55.000 --> 00:01:10.000
+All right, you looking at my screen? Yes, but you need to be slow and gentle with me. It's all right. Hit the Windows key, type sound. Leave the play black. Type sound. Leave the play black. Oh, no. Play black? Play black?
+好了，你在看我的屏幕吗？是的，但你得对我温柔一点，慢一点。没关系。按下 Windows 键，输入“声音”。保留播放。输入“声音”。保留播放。哦，不。播放黑色？播放黑色？
+
+3
+00:01:10.000 --> 00:01:45.000
+Play black? Listen, all right, listeners, if this makes it in, I apologize. I'm pretty deathly ill right now. The fact that I'm even recording this is a testament to the importance that I, the reverence that I have for the platform that we we've created because we 167 episodes this is going to be 68 we've been cutting it pretty close though you know we used to always have like a queue of episodes like in the pipeline but like the past two to three weeks it's just been like oh crap it's wednesday or thursday we gotta record something
+播放黑色？听着，好吧，听众们，如果这段录进去了，我道歉。我现在病得要死。我之所以还在录音，是因为我对我所创造的这个平台怀有敬意，我们已经录了 167 期，这期是 168 期。不过我们一直都很赶，你知道，我们过去总是有一些存货，但在过去两三周里，总是变成“糟糕，周三或周四了，我们得录点什么”。
+
+4
+00:01:45.000 --> 00:02:28.000
+although i gotta say that's true i think uh i think phone tag one of my favorites i mean here's a question while we're fixing our audio because my audio is still clipping like crazy did you actually listen to the fourth part the fourth part yet um it's on my to-do list i'm gonna do it today hopefully i knew i knew he wouldn't know i knew he wouldn't but importantly i did actually listen to the second part which was you i did well that's because you needed to in order to debated not listening to the second part that actually would have been pretty entertaining everyone would have been like what the heck but then i would have i would have as soon as i heard what you were saying i was like i got it he just he didn't listen he just recorded his own side of
+虽然我得说这是真的，我想……我想“电话标签”是我最喜欢的节目之一。我的意思是，在我们修复音频的时候有个问题，因为我的音频还在疯狂爆音，你真的听了第四部分了吗？嗯，在我的待办事项清单上，我希望今天能听。我知道，我知道他没听，我知道他不会听，但重要的是，我确实听了第二部分，也就是你的那部分。我听了，那是因为你需要听才能辩论。没听第二部分其实会很有趣，大家会觉得“这到底是怎么回事”，但一旦我听到你在说什么，我就明白了，他只是没听，他只是录了他自己那部分。
+
+5
+00:02:28.000 --> 00:03:04.000
+the conversation anyways i actually i actually could have pulled it off because i in my in my second message the third part i i asked a second kind of was starting a new topic yeah yeah yeah you could have just said oh that's that's really interesting. Really interesting. Got a follow-up question. And then that would have been funny. Anyways, hit this little speakers thing. Click properties. Well, we're not going to fix it in today's episode. I will look into this.
+对话。无论如何，我其实本来可以蒙混过关的，因为在我的第二条消息，也就是第三部分，我问了第二个问题，算是开启了一个新话题。是的，是的，你本可以只说“哦，那真的很有趣。非常有趣。有个后续问题。”那会很有趣。无论如何，点击这个小扬声器图标。点击属性。好吧，我们今天这期节目解决不了这个问题。我会研究一下。
+
+6
+00:03:04.000 --> 00:03:25.000
+And we're supposed to have a guest, but we reached out. Should we say who we reached out to? Sure. Tease the listener. We reached out to Andrew Kelly, but he's a busy guy, I guess, and he did not reply to our email. Yes. Yeah. If you happen to have a personal line to Andrew Kelly, creator of the Zig language, who is no longer on
+我们本该有一位嘉宾，但我们联系了。我们要说我们联系了谁吗？当然。吊吊听众的胃口。我们联系了 Andrew Kelly，但他是个大忙人，我想，他没有回复我们的邮件。是的。是的。如果你碰巧有 Andrew Kelly（Zig 语言的创建者，他已经不在 Twitter 或 Reddit 上了）的私人联系方式，请告诉我们。代表我们联系他。我想他会愿意和我们聊聊，特别是考虑到我们过去一年多的空间里，我们很大一部分对话都是关于 C++、Rust、Circle、Hylo 等等，所有这些继任语言。虽然 Zig 完全不是一种继任语言，但它确实在相邻空间竞争，也就是 C 空间。Rust 对 C++ 而言，可以说就像 Zig 对 C 而言，尽管很多人会因为我做了这个比较而不高兴，因为 Zig 在内存安全方面做得不多。我的观点是，Zig 就像一种现代的、所谓的“更好的 C”。这仍然
+
+7
+00:03:25.000 --> 00:04:05.000
+Twitter or Reddit, let us know. Reach out to him on our behalf. I think he'd like to talk to us, especially considering our space over the last year and a bit has been, you know, a big portion of our conversation has been, you know, C++, Rust, Circle, Hylo, etc., all the successor languages. And although Zig is not a successor language at all, it does compete in an adjacent space, which is the C space. Rust is arguably to C++ what Zig is to C, although a bunch of people are going to be upset that I just made that comparison because Zig doesn't do much for memory safety. My point is, is Zig is like a modern, quote unquote, better C. That's still
+会惹恼一些人。就像很多人争论 Rust 是一种现代的、更好的 C++ 一样。无论如何，让互联网去折腾吧。你今天有话题吗？我确实有个话题。但是，我也有个问题。问题是暖气现在开着，声音非常大。我可以把它关掉，但这里冷得要命，我的四肢都没知觉了。所以，我真的不知道该怎么办。我的意思是……我会在后期制作中尽力修复它。
+
+8
+00:04:05.000 --> 00:04:36.000
+going to upset some people. The same way that a lot of people argue Rust is a modern better C++. Anyways, let the, you know, internet have a field day with that. Do you have a topic today? I do have a topic. However, I also have a problem. And the problem is that the heater is on right now and it's very loud. Now I could turn it off, but it's also freezing cold here and I can't feel my extremities. So, I'm not really sure what to do about that. I mean... I'll fix it as best I can in post.
+而且听众已经因为我那鼻音很重的声音而不满了。所以，你知道，第 168 期，就我们带给你们的音频体验而言，质量不是最好的。但你知道吗？另一种选择要么是我们没发布，错过了 167 周以来的第一周，我可不想那样。我不在乎我是不是因为自行车事故脑震荡而在医院里。亲爱的，你得记住，你得帮我记住稍后把暖气打开。哦，刚才我差点被一个狗玩具绊倒。所以 Ramona 给自己买了梵高的《星夜》乐高套装，有多少块？2136 块。她已经开始拼了。呜！预计要花多久
+
+9
+00:04:36.000 --> 00:05:31.000
+And already the listener is being upset by my nasally voice. So, you know, episode 168, it's not the best quality in terms of the audio experience that we're bringing you. But you know what? The alternative was just either we didn't ship and we missed our first week in 167 weeks, which I'm not about that life. I don't care if I'm in the hospital because I got a concussion on a bike accident. Honey, you gotta remember, you gotta help me remember to turn this heat on later. Oh, I nearly died on a dog toy just a moment ago. So Ramona got herself the Van Gogh Starry Night Lego set, which has how many pieces? 2,136 pieces. And she has begun assembling it. Woo! How long is it supposed
+才能拼完？还要八个小时，但我认为会更快，因为我已经拼了一半，只花了几个小时。我们丢乐高积木了吗？还没有。不过，狗决定趴在一些乐高袋子上，所以乐高上全是狗毛。好吧，听众们，敬请期待第 169 期，届时我们会知道
+
+10
+00:05:31.000 --> 00:05:57.000
+to take? Still eight hours, but I think it's gonna take faster because I'm halfway through and I've just been doing a couple of hours. And have we lost any Legos yet? We have not. However, the dog has decided to plop herself down over some of the bags of Legos, so there is dog fur all over Lego. Well, stay tuned, listener, till episode 169 when we find out
+Ramona 完成梵高《星夜》乐高拼图花了多长时间。你看，我有一个理论，那就是这将在我们未来两周的生活中成为一个持续的项目，到处都会有乐高积木，我晚上会踩到它们，我的脚会被割伤。
+
+11
+00:05:57.000 --> 00:06:17.000
+how long it took Ramona to finish the Van Gogh Starry Night Lego puzzle. See, I have a theory, which is that this is going to be like an ongoing project over the course of the next two weeks of our lives, and there's just going to be Legos everywhere, and I'm going to step on them at night, and my feet are going to get all cut up.
+这会很有趣。无论如何，你知道如何实现并行众数吗？并行众数，是指统计学上的众数吗？统计学上的众数。伙计，我今天状态极佳。听说过统计学上的众数吗？它们是我最喜欢的统计数据。并行众数。
+
+12
+00:06:17.000 --> 00:06:37.000
+It's going to be fun. Anyways, you know how to implement parallel mode? Parallel mode, as in the statistical stat? The statistical stat. Man, I'm on my A game today. Ever heard of statistical stats? They're my favorite kind of stats. Parallel mode.
+是的，并行众数。众数是最常见的，对吧？中位数是中间的，平均数是平均的，众数是最常见的，对吧？中位数是中间的，平均数是平均的，众数是最频繁的。真悲哀，我竟然不得不停顿。我会把那个停顿留在那儿，伙计们。那个停顿是真实的，你知道，我吃了日间泰诺，还有几片锌片。我真的希望那个停顿是因为我脑子里的迷雾
+
+13
+00:06:37.000 --> 00:07:06.000
+Yes, parallel mode. Mode is the most common, correct? Median's the middle, average is average, and mode is the most common, correct? Median's the middle, average is average, and mode is the most frequent. It is so sad that I had to pause. I'll leave that pause in there for you, folks. That pause was a genuine, you know, I'm hopped up on day Tylenol, couple of zinc pills. I'm really hoping that that pause was brought to you by the mental fog that i have
+而不是因为我 33 岁就开始神经退化。并行众数，所以众数是……它是出现频率最高的数字或数值。如果你有一个并行哈希映射，比如在 cuco 中，那很简单。是的，所以就像你做一个直方图风格的，然后之后做一个归约。嗯，很好的猜测。并行众数，我的意思是，哦，显然那会是……我其实不确定在 GPU 上哪个性能更好，但我可以在 Jellyfish 中用 10 个字符解决它。好的。还是 Jello？
+
+14
+00:07:06.000 --> 00:07:49.000
+and not like my neural degeneration at age 33 parallel mode so so mode is it's it's the the number or the the the value that appears most frequently if you've got a parallel hash map like in cuco that's pretty simple yeah so that's like you do like a you know histogram style yeah and then just a reduction afterwards um pretty good guess parallel mode i mean oh obviously that would be i'm not actually sure which is more performant on a gpu but i can i can solve that in like 10 characters in Jellyfish. All right. Or is it Jello?
+展示给我看。是 Jelly 吗？展示给我看或者告诉我。其实可能——我没法展示给你看。我本可以展示给你看，但我们 ADS-P 播客不再那样做了，因为那是——展示给我看。好的。好的。
+
+15
+00:07:49.000 --> 00:08:03.000
+Show me. Is it Jelly? Show me or tell me. It's actually probably – I can't show you. I could show you, but we don't do that here on ADS-P podcast anymore because that's – Show me. All right. All right.
+只是因为我病了，我才允许自己……我的意思是，我还在共享屏幕，我刚意识到。让我们用我们的小 WSL 终端。哇，看那个。好了，不能提那个，因为还没公开。我们要取消那个 Docker，跳进 Jello。我想这意味着我们永远不能发布这一期的视频了。不，不，虽然老实说，这应该列入我们的 2024 年目标或新年决议，虽然现在定有点晚。我一直有人告诉我，我们必须把这些东西放到 YouTube 上，因为显然年轻人，Bryce，我们关心年轻人，我们关心年轻人，显然他们不听播客，正因为如此，排名第一的播客平台是 YouTube
+
+16
+00:08:03.000 --> 00:08:46.000
+Only because I'm sick, I'm going to'm gonna allow myself i mean i still am sharing my screen i just realized let's take our little wsl terminal whoa look at that there we go can't mention that because that's not public yet we're gonna cancel out of that docker hop into jello i guess that means we can never publish the video of this one no no although honestly it should be on our 2024 goals or new year's resolutions not we'd be setting it a bit late i keep getting people telling me that we got to put this stuff on youtube because apparently the youth the youth bryce and we care about the youth we care about the youth apparently they don't listen to podcasts and because of that the number one podcasting platform is youtube
+我们错过了一个巨大的群体，我们不喜欢那样。无论如何，回到 Jello。Jello，我们绝对不能把这个视频放到 YouTube 上，因为我穿着睡衣，外面套着昂贵的冬大衣，因为太冷了。其实，我的意思是，我认为这很正常，这是……很正常。这就是，你知道，你谈论你的头等舱飞行谈得够多了，如果你只穿睡衣，他们会失望的。你知道，他们期待的是睡衣加外套的组合。但这些睡衣是我的阿联酋航空头等舱睡衣。
+
+17
+00:08:46.000 --> 00:09:19.000
+and we're missing out on a huge demographic and we don't we don't like that anyways back to jello jello we definitely couldn't put this video on youtube as i sit here in my pajamas with my fancy winter coat on top because it's cold actually i mean i think that's i think that's par for the course that's uh for the course. That's the, you know, you talk enough about your first class flights as if you were wearing just your pajamas, they'd be disappointed. You know, they're expecting a pajama top coat combo. But these pajamas are my Emirates first class pajamas.
+好的。让我们换个话题。所以，我正在输入一串数字，其中 2 将是众数，我想我搞定了。他那里有八个数字，就像一个测试用例，是的，这不是什么……我们不会全面测试这个，但我相信这个解决方案，我之所以说我能这么快做到，是因为注意我正在用 Jell-O 输入。但是这个——我目前输入的，我输入了 ID，这是 Jell-O 中表示恒等式的关键字。但是 ID 的转换，我从 Haskell 那里借来的，因为那是 Haskell 称呼恒等函数的方式，在 Jelly 中是一个上标 1。
+
+18
+00:09:19.000 --> 00:10:01.000
+All right. Let's mix this up a bit. So, I'm typing out a list of numbers where two is gonna be the mode and i think i've got it he's got like eight numbers there just like you know a test case and yes it's not a whatever cop we're not going to comprehensively test this but uh i believe the the solution and the reason i said that i could do this so quickly is note that I'm typing in Jell-O. But this – what I have typed so far, I typed ID, which is the keyword in Jell-O for identity. But the conversion of ID, which I borrowed from Haskell because that's what Haskell calls the identity function, is a superscript one in Jelly.
+太棒了，伙计们。但是等等，什么——什么——Jelly。太棒了伙计们。但是等等，什么是什么？Jelly 是一种代码高尔夫语言，即使对于数组语言来说，像我这样的 Unicode 字形爱好者，也非常难
+
+19
+00:10:01.000 --> 00:10:17.000
+Fantastic, folks. But wait, the what of – what – Jelly. Fantastic folks. But wait, the what of what? Jelly is a code golfing language that is, even for an array language, Unicode glyph fans such as myself, very difficult to
+破译，理解，因为它只是用了一堆东西。无论如何，所以上标 1 是恒等函数，我们这样做只是为了展示我们得到了表达式，但我们要把这个 ID 替换为恒等函数，看看那个自动补全，绝对漂亮，由 Python 编程语言的 prompt toolkit 提供，伙计们。你认为这个函数在这里是什么，Bryce？它是 RLE。RLE。你认为那代表什么？我的意思是，你应该知道。你应该知道，伙计。游程编码？
+
+20
+00:10:17.000 --> 00:10:47.000
+decipher, to comprehend, because it's just using a bunch of stuff. Anyway, so superscript one is the identity function we're just doing that to show that we got our expression but we're going to replace this id for the identity function with and look at that autocomplete absolutely beautiful brought to you by prompt toolkit of the python programming language folks and what do you think this function is right here bryce it's rle rle What do you think that stands for? I mean, you should know. You should know, man. Run length encoding?
+那是正确的，伙计们。实际上，游程编码还不是我们想要的。我们需要先排序。我只是，我不得不说，在做了两年这个播客，我完全没能答对测验之后，我觉得今年对我很好。是的，太棒了，你表现得太出色了。所以现在我们有了一个排序，后面跟着一个 RLE，游程编码。我们应该解释一下什么是游程编码。哦，你想解释还是我来解释？你来，你来吧。游程编码是一个……这是一个很棒的算法，我们喜欢它。我们喜欢它，伙计们。它实际上是一种超级专门的“按块处理”。所以我们过去一年谈论了很多“按块处理”，
+
+21
+00:10:47.000 --> 00:11:38.000
+That is correct, folks. And actually, run length encode is not what we want yet. We need to sort first. I just, I gotta say, I, after like two years of this podcast of me just completely failing at quizzes, I feel like this year has been very good to me yeah fantastic you're crushing it so now we have we have a sort followed by an rle a run length encode we should explain what run length what run length encoding is oh would you like to explain or should i explain you go you go for it run length encode is a it's a fantastic algorithm we We love it. We love it, folks. And it's actually kind of a super specialized chunk by. So we've talked about chunk by quite a bit over the last year,
+这是 C++23 中出现的一种视图，但它存在于其他语言中，比如 D 语言和 Haskell，名字叫“按组处理”。它接受一个二元谓词，然后根据该二元谓词何时失败，将你的列表分块为子列表。在 Haskell 中，在一个名为 data.list.ht 的库中，他们有一个版本叫 group by，然后他们有一个专门的版本叫 group，其中二元谓词固定为“等于”。所以如果你在 C++23 中使用带有视图的 chunk by equal，那会给你一个范围的范围，其中每个范围是相等的连续元素。
+
+22
+00:11:38.000 --> 00:12:13.000
+which is a view that showed up in C++23, but it exists in other languages like the D language and Haskell under the name group by. It takes a binary predicate, and then it chunks your list into sub lists based on whenever that binary predicate fails. And in Haskell, in a library called data.list.ht, they have a version of this called group by, and then they have a specialized version called group where the binary predicate is fixed to equal to. So if you have chunk by equal to in C++23 with views, that'll give you a range of ranges where each range is the contiguous elements that are equal
+彼此相等。所以在我的例子中，我们的示例列表是 1, 1, 3, 2, 4, 2, 2, 6, 2。但如果你排序，你会得到两个 1，四个 2，一个 3，一个 4，和一个 6。所以如果你排序，你会得到两个 1，四个 2，一个 3，一个 4，和一个 6。所以如果你要进行 chunk by equal，实际上我想如果我们进行排序，然后分组，我想 group 就是那个名字。看那个，太美了。所以我们也应该提到，像游程编码是……它通常是压缩等事物中的构建块，对吧？是的。这是一种获取数据并以不同方式表达它的方法，即更短的序列。是的。
+
+23
+00:12:13.000 --> 00:12:52.000
+to each other. So in my case, our example list is 1, 1, or it's actually 1, 1, 3, 2, 4, 2, 2, 6, 2. But if you sort that, you get two 1s, four 2s, 1, 3, 1, 4, and 1, 6. And so if you sort that you get two ones four twos one three one four and one six and so if you were to go chunk by equal and actually i think if we go sort and then group i think group is the name look at that beautiful so so we should also mention like like one link encoding is uh uh it's it's sort of it's often a building block in things like compression, right? Yes. It is a way to take data and express it in a different way, which is a shorter sequence. Yes.
+我们甚至还没讲完游程编码的完整解释，因为我刚才对 chunk by 感到兴奋，它在这个 Haskell 库中被称为 group by。然后它在 Jell-O 中有专门化。这就是我介入的原因，因为，你知道，这个播客上的两个人中必须有一个是成年人。哦，不，不。我们追踪了堆栈。
+
+24
+00:12:52.000 --> 00:13:10.000
+And we didn't even get to the full explanation of run length and code, because I've just gotten excited about chunk by, which is called group by in this Haskell library. And then it has the specialization in Jell-O. That's why I stepped in, because, you know, one of the two people on this podcast have to be the adult in the room. Oh, no, no. We had track of the stack.
+我们知道话题堆栈，我们正要回到它。但在 Jell-O 中，Haskell 中 group 的等价物也叫 group。所以，你可以看到这里，好吧，你们看不到，或者听众们看不到，但我从一个有 10 个元素的列表开始，现在排序分组后的结果是，我们有了这些内部列表。注意，如果它在 Jell-O 中只有一个元素，无论出于什么原因，它都会保持为一个单一元素，这有点令人困惑，因为它有点……但无论如何，游程编码基本上是一个 chunk by equal to，后面跟着一个 map，或者我们在视图领域和 C++ 领域所说的 transform，我们基本上是在做一个 make tuple，然后对我们的两个元组中的每个元素使用一个一元函数。就像一个 make pair。第一个将是 head，也就是我们子范围的第一个值。
+
+25
+00:13:10.000 --> 00:14:08.000
+We knew the topic stack and we were coming back to it. But in Jell-O, the equivalent of group in Haskell is also called group. So, you can see here, well, you guys can't see or the folks listening can't see but i started with a list of however 10 elements and now the resulting after you go sort group is that we have these uh inner lists and note that if it has a single element in jello for whatever reason it just keeps it as a single element a little bit confusing because it's kind of uh but anyways run length and code is basically a chunk by equal to followed by a map or what we call in views land and C++ land, a transform where we are basically doing a make tuple and then using a unary function on each of, for each of the elements in our two tuples. So like a make pair. The first one is going to be head, aka the first value of our sub range.
+第二个值将是 size。在 C++ 中没有优雅的方法来拼写这个。字面上它将是 std::views::transform，括号。然后你要拼写一个 lambda，它将是一个空的捕获列表。然后你要写 paren auto，然后像 ref ref r 这样的范围，n paren，然后在大括号里返回 std::make_pair。
+
+26
+00:14:08.000 --> 00:14:32.000
+And then the second value is going to be size. There is no elegant way to spell this in C++. Like literally it would be stood colon colon, views colon colon, transform parentheses. And then you're going to spell a lambda, which is going to be an empty capture list. Then you're going to go paren auto and then like ref ref r for the range n paren and then embraces return stood colon colon make pair
+技术上我认为有了 CTAD，你甚至不需要拼写它将是什么，然后你要写……range.first 并解引用它，或者像 range r.front，逗号 std::distance of the range，这需要它是一个 sized range。哦，看，你想上播客吗？Ramona 上过播客。不，她不想上播客。你至少想来跟 Bryce 打个招呼吗？呃，她刚才说她今天确实听了我们的“电话标签”播客。她听这个播客。我没提到你？
+
+27
+00:14:32.000 --> 00:15:10.000
+technically i think with ctad you don't even need to spell what it's going to be and uh then you're going to go uh range dot first and dereference that or like range r dot front comma uh stood colon colon distance of the range and this would necessitate it it being like a sized range oh look you want to be on the pod ramona was on the pod no she doesn't want to be on the pod do you want to come say hi to bryce at least uh she just just said that she listened to our phone tag podcast literally just today. She listens to the podcast. I didn't mention you?
+哦，是的。所以这就是为什么我问你是否想上播客，因为上次我周四录音时，Shima 确实凑近麦克风录了“欢迎来到 ADSP 播客”，但我最后把它剪掉了。所以现在这是你的机会。尽管我做得更好。
+
+28
+00:15:10.000 --> 00:15:36.000
+Oh, yeah. So this is why I was asking if you wanted to be on the pod because last time when I was recording on Thursday, Shima actually lent into the mic and recorded the Welcome to ADSP the podcast, but then I ended up cutting it. And so now this is your opportunity. Even though I did it better.
+她做得更好。你好，欢迎来到 ADSP 播客，录制于 2024 年 1 月 30 日至 2 月 1 日，并于今天 2024 年 2 月 2 日发布。在这一期里，Bryce 和我玩了“电话标签”。他在佛罗里达，我刚从哥斯达黎加回来。现在每个人都在播客上了。你有新冠吗，Connor？我们几分钟后录完就会知道了。不，不，不。Connor，我们会在这一期节目中现场揭晓。你想让我解释的时候做个新冠测试吗？是的，我确实想让你做个新冠测试。
+
+29
+00:15:36.000 --> 00:16:05.000
+She kind of did it better hello welcome to ADSP podcast recorded on January 30, 2024 to February 1, 2024 and released today February 2, 2024 on this, Bryce and I played phone tag. He's in Florida, and I just got back from Costa Rica. Everybody's on the podcast now. Do you have COVID, Connor? We're going to find out in a couple minutes here once we're done this recording. No, no, no. Connor, we're going to find out live on this episode. Do you want me to do a COVID test while we're explaining? Yes, I do want you to do a COVID test while we're explaining? Yes, I do want you to do a COVID test.
+所以，你真的是从医院感染的吗？我从周一就开始生病了。无论如何，当我打开这个……这是很棒的播客内容，我得告诉你。无论如何，我拼写出了，几乎拼写完了将进入 views transform 的 lambda，将我们 chunk by 的结果基本上变成一对对的列表，其中第一个是那个连续序列中的值。第二个是长度，也就是你在对你的值进行游程编码，这，我不确定它是否与像
+
+30
+00:16:05.000 --> 00:16:36.000
+So literally, did you get this from the hospital? I've been sick since Monday. And anyways, while I'm opening up this... This is great podcast content, I gotta tell you. Anyways, I spelt out, almost finished spelling out the lambda that would go inside the views transform to turn the result of our chunk by into basically a list of pairs where the first one is the value in that contiguous sequence. And the second one is the length, aka you are run length encoding your values, which is, I'm not sure if it's related to like
+霍夫曼编码有关，但它就像，一旦你开始做压缩之类的事情，它就会作为一个非常经典的例子出现。如果你需要，你知道，降低你存储的东西的密度。同时做这个新冠测试和打字会很难。但在这里，我会继续打字回到我们的排序 RLE。注意，sort space RLE 是在 Jell-O 中。但正如我所说，Jell-O 是这个 Jelly 代码高尔夫语言的 Python 包装器。所以实际上，Jelly 代码是 s under dot，然后我甚至
+
+31
+00:16:36.000 --> 00:17:05.000
+Huffman encoding, but it's like, as soon as you start doing compression stuff, it comes up as like a very classic example. If you need to, you know, reduce the density of the stuff you're storing. This is going to be hard to type and do this COVID test at the same time. But here, I'll continue typing to go back to our sort RLE. And note that sort space RLE is in Jell-O. But like I said, Jell-O is a Python wrapper around this Jelly Code Golf language. So really, the Jelly Code is s under dot and then i don't
+不知道怎么读这个，像 o e r。我们要问 ChatGPT 吗？所以符号 o e 被称为拉丁小连字 o e。好的，所以我们怎么称呼它？我们只叫它 o e。它是 o e 连字。好的，我们搞定了。是的。所以它是 S under dot OE 连字 R，技术上只有两个符号。现在我们需要做的是，我想知道我们是否可以做一个……我想是 each last，还是 last each？我想是。好了。然后是一个 max。
+
+32
+00:17:05.000 --> 00:17:41.000
+even know how to read this like o e r should we ask chat gpt so the symbol o e is known as the latin small ligature o e okay so like how do we how do we refer to that we just call it o e it's the o e ligature sure all right we're done with this. Yeah. So it's S under dot OE ligature R, which is technically only two symbols. And now what we need to do is we need to, I wonder if we can do a, I think it's a each last or is it a, is it a last each? I think. There we go. And then a max.
+所以在 Jell-O 的说法中，看那个，看那个。我们有语法高亮。但是等等。这只给了你哪个计数最高的计数。哦，是的，是的，是的。你还没给出众数，对吧？所以他给我们的答案是众数出现的次数，而不是众数本身是什么。
+
+33
+00:17:41.000 --> 00:18:02.000
+So in Jell-O speak, look at how, look at that. We got syntax highlighting. But hang on. This is only giving you the count of which one has the highest. Oh, yeah, yeah, yeah. You haven't actually given the mode, right? So the answer that he's given us here is the count of how many times does the mode appear, not actually what the mode is.
+那是真的。所以实际上你需要一个带有自定义二元运算的 max，但还有另一种方法可以做到这一点，那就是 index max。但我不认为你可以那样做。你可以做 each last index max，然后我们需要使用一个组合子。所以这给了我们索引，也就是索引 1。哦，他在做饭，伙计们。他在做饭。
+
+34
+00:18:02.000 --> 00:18:26.000
+That's true. So really you want a max with a custom binary operation, but there's another way to do this, which is index max. But I don't think you can do that. You can do that each last index max, and then we're going to need to use a combinator. So this gets us the index, which is index one. Oh, he's cooking here, folks. He's cooking.
+我的意思是，这在 Jell-O，在 Jelly 中绝对仍然会少于十个字符。这就是挑战。你怎么做 select？等一下，Connor。哦，哦，我被告知到目前为止乐高项目中没有丢失任何零件。零丢失零件，零缺失零件。零丢失零件
+
+35
+00:18:26.000 --> 00:18:42.000
+I mean, this is still definitely going to be less than ten characters in Jell-O, in Jelly. That was the challenge. How do you do select? Hang on one second, Connor. Oh, oh, I've been told that there have been zero missing pieces in the Lego project thus far. Zero lost pieces, zero missing pieces. Zero lost pieces
+也是。我不知道怎么选择。我不知道怎么索引到这个数组中，因为我不是 Jelly 专家，但基本上我们只需要再多一样东西，所以它是 sort rle dot each last index max，这得到了索引，技术上如果你有多个，它会返回你所有的索引，然后有没有 filter compress keep？哦，有一个 keep。keep 需要放在前面吗？keep 需要放在前面吗？就在那儿，伙计们，砰。是的，那没用。你什么意思没用？给了你正确的答案。不，那不是正确的答案。去掉加一。等等，我困惑于你认为什么没用。嗯，因为我认为这给了我们第一个，对吧？它实际上并没有得到
+
+36
+00:18:42.000 --> 00:19:26.000
+as well. I don't know how to choose. I don't know how to index into this array because i'm not a jelly expert but basically we just need one more thing so it's sort rle dot each last index max which gets us the index and technically if you've got multiple of them it'll return you all the indexes and then is there a filter compress keep oh there's a keep a keep does the keep need to go in front does the keep need to go in front there it is folks boom yeah that didn't work what do you mean didn't work gave you the right answer no that's not the right answer get rid of the plus one wait i'm confused about what you think didn't work um because i think this is getting us the first right it's not actually getting us
+第二个，所以是的，我的表达式，当我做 last 时，实际上应该是 first head，所以它实际上是 1。所以这让我认为……这让我认为这是一个……它给你零索引，然后这个加一，它仍然不对。我不知道这个 2 3 是什么。无论如何，现在在 Jell-O 中拼写这个的细节，我们现在有 1 2 3 4 5 6 7 8 9 10 11 个技术上，但我不知道，我们会研究它，我们会把它贴在节目笔记中，但我们看看 Thrust 是怎么做这个的？众数？是的，有一个例子。
+
+37
+00:19:26.000 --> 00:20:28.000
+the second and so yeah my expression oh my expression when i did last should actually be first head so it's actually one so that makes me think that that makes me think that this is a it gives you the zero indexes which then this plus one is that it it's still not it i don't know what this two three thing is anyways the details of how to spell this in jello right now we're at one two three four five six seven eight nine ten eleven technically but i'm not sure we'll work on it we'll post it in the show notes but how about we look at how Thrust does this? Mode? Yeah, there's an example.
+我一直在浏览 Thrust 示例，试图为异步算法寻找好的例子。使用多个并行算法的代码，在某种序列排序中，对于异步并行算法接口来说将是有趣的测试用例。所以我浏览了所有的 Thrust 示例。但实际上，你知道我一直在研究的有趣问题是什么吗？我论文中现在有的更有趣的例子之一是来自你谈话中的雨水问题，我们在本期节目中讨论过，但是……让我们谈谈这个众数是如何工作的。等等，所以只是回顾一下我提出的两个不同的解决方案，一个是并行哈希映射，你可以在 koo collections 库中找到，第二个是排序，后面跟着一个像 max by key，也就是 max reduction，其中你有一些自定义的二元运算，正在对第一个进行归约，或者基本上是每个序列的长度。
+
+38
+00:20:28.000 --> 00:21:16.000
+I was looking through Thrust examples, trying to find good examples for async algorithms. code that uses multiple parallel algorithms in some sequencer ordering and would be interesting test cases for an asynchronous parallel algorithms interface. So I went through all the thrust examples. But actually, you know what the interesting problem was that I've been, like one of the more interesting examples that I've now got in my paper is the rainwater problem from uh from your talk that we've discussed in this um uh episode um but uh let's talk about how this mode works wait so just just to recap the two different solutions i proposed were just a parallel hash map which you can find in the koo collections library and the second one was a sort followed by a like max by key aka max reduction where you've got some custom binary operation that is doing the reduction on the first one or the basically length of each of your sequences.
+然后它保留一对东西，扔掉最后一个东西。但现在我们要看看这在 Thrust 中是如何发生的。是的。所以 Thrust 示例。所以首先有一个排序，带有一个注释说，“排序数据以使相等元素聚集在一起”。相当直接。然后它做一个内积。
+
+39
+00:21:16.000 --> 00:21:32.000
+And then it keeps a pair of things and throws out the last thing. But now we're going to see how this happens in Thrust. Yeah. So the Thrust example. So first there's a sort with a comment that says, sort data to bring equal elements together. Pretty straightforward. Then it does an inner product.
+一个内积，其中归约是加法。那是对的吗？而且，等等，看看这个，帮我理清一下。抱歉，我正在拆解我的新冠测试，以确保我们在结束录音时给听众一个报告。所以我们在第 41 行有一个 Thrust sort，然后我们在第 45 行，然后你有了这个内积，然后我们有一个计算唯一键数量的计数，这是一个内积，也就是 transform reduce，它有作为……所以它是一个……它是一个二元 transform reduce，它就像相邻的 transform reduce，其中
+
+40
+00:21:32.000 --> 00:22:14.000
+An inner product where the reduction is a plus. Is that right? And the, hang on, take a look at this and help me sort this out. Sorry, I uh disassembling my covet test so that to make sure that we get the listeners a report by the time we finish wrapping this up so we got online 41 a thrust sort then we've got online 45 and then you've got this inner product and then we've got a count the number of unique keys which is an inner product aka transform reduce and it's got as the so it's a it's so it's a binary transform reduce it's like the the adjacent transform reduce where
+它查看每两个相邻元素，它检查它们是否彼此不相等，然后……它在做求和，所以它本质上是在做类似并行字数统计的事情。我在很多谈话中都用过这个作为例子，你正在寻找像单词的结尾或序列的结尾。Connor 现在正在把拭子插进他的鼻子里。看起来他玩得不开心，我得告诉你。
+
+41
+00:22:14.000 --> 00:22:41.000
+it's looking at every two adjacent elements it's checking whether they're not equal to each other and then uh it it's doing a sum so it it's essentially doing like a parallel word count. I've used that as an example a bunch of talks where you're looking for like the ends of words or the ends of sequences. Connor is now inserting the swab up into his nose. It looks like he's not having a fun time, I got to tell you.
+我的眼睛确实有点流泪，那是肯定的。但是，所以这个 transform reduce，它是 transform reduce，它有两个输入序列。一个是 0 到 n 减 1 的元素。第二个是 1 到 n 的元素。所以每个 transform 都会查看两个相邻元素。而 transform 操作是不等于，它会为每个新唯一元素的开始返回一次 true。
+
+42
+00:22:41.000 --> 00:23:14.000
+My eyes are watering a little bit, that's for sure. But so this transform reduce, it's transform reduce where it's got two input sequences. One is the elements from zero to n minus one. And the second one is the elements from one to n. So every transform is going to look at two adjacent elements. And the transform operation is not equal to, which will return true once for the start of every new unique element.
+然后我们只是归约那个转换后的伪序列，这就给了我们我们有多少个唯一键的计数。这很酷，因为它里面嵌入了并行字数统计问题。不过我们要在这里暂停。我们要在这里暂停。这太棒了。我不认为听众一定跟上了，因为我也不一定跟上了，但我们有一个内积，也就是 transform reduce，其中那个，是的，所以你有并行字数统计在两个范围中，双范围 transform reduce，其中你查看相邻元素，然后你应用的二元运算
+
+43
+00:23:14.000 --> 00:23:48.000
+And then we just reduce that transformed pseudo sequence, and that gives us the count of how many unique keys we have. That's kind of cool because it's got that parallel word count problem embedded inside of it. We're going to pause here, though. We're going to pause here. This is fantastic. I don't think the listener necessarily followed that because I didn't necessarily follow that, but we've got an inner product, aka transform reduce, where the thing, yeah, so you've got the parallel word count is in the two ranges, the two range transform reduce, where you're looking at adjacent elements and then the binary operation that you're applying
+对那两个相邻元素是不等于，然后你进行加法的归约。所以这里美妙之处在于这有点晦涩。有一种更好、更优雅的实现方式。嗯，它真的更好吗？有一种替代的实现方式，我们在这个播客上也讨论过，关于一个不同的问题，实际上……是的，实际上这搞砸了，你需要重构它，但是……是的，所以我没写这段代码。重构，重构，这段代码应该怎么拼写？如果你需要提示，我会在三秒钟内给你，因为它是……提示将是，就像……这实际上是荒谬的，我们正在
+
+44
+00:23:48.000 --> 00:24:30.000
+to those to those two adjacent elements is not equal to and then you're doing a reduction of plus. So here's what's beautiful is that this is a bit obfuscated. There is a much, much nicer way of implementing this. Well, is it actually nicer? There's an alternative way of implementing this well is it actually nicer there's an alternative way of implementing this which we have also talked about on this podcast with respect to a different problem that is actually yeah actually this is a this is messed up you need to refactor this but uh yeah so i didn't write this code reframing reframing how should this code actually be spelt and it's and if you need a hint i'll give it to you in three seconds because it is the the hint is going to be like it's actually absurd that we're
+做这个。好的，告诉我。阅读第 48 行这个内积上面的注释。是的，“计算唯一键的数量”。它可能应该是某种计数。你会用什么算法来处理带有“计算唯一键的数量”注释的代码？我可能会选择 count。我可能会选择 unique count。哦，有 unique count。你没参加我一月份的演讲吗？我们不能说它是关于什么的，其中这是我使用的激励例子之一？就像它实际上是，
+
+45
+00:24:30.000 --> 00:25:00.000
+doing this all right lay it on me read the comment above this inner product on line 48 yeah count number of unique keys it should probably be some form of count what algorithm would you reach for with a comment that says count the number of unique keys? I would probably reach for count. I would probably reach for unique count. Oh, there's a unique count. Weren't you at my presentation in January, which we can't name what it was about, where this was one of the motivating examples that I used? Like it is actually,
+这太棒了。在我那个演讲的 2.0 版本中，我会用这个，因为没有 std unique count，但有 Thrust unique count。在我那个演讲的 2.0 版本中，我会用这个，因为没有 std unique count，但有 Thrust unique count，而 Thrust unique count 的实现方式是使用 count if，带有一个 zip 迭代器，它将相邻元素压缩在一起。令人困惑的不仅是内积的选择，还有“不等于”技术上返回给你一个布尔值，因为它是一个谓词操作。然后你在对布尔值求和，C++ 允许这样做。但如果你尝试在 Rust 或 Java 中做类似的事情，它会冲你大喊，说你不能对布尔值求和。无论所有，我们有这个算法，一个单行算法，整个事情叫 unique count。
+
+46
+00:25:00.000 --> 00:25:42.000
+this is fantastic. In my 2.0 version of that presentation, I'm going to use this because there's no stood unique count, but there is a thrust unique count.0 version of that presentation i'm going to use this because there's no stood unique count but there is a thrust unique count and the way that thrust unique count is implemented is using a count if with a zip iterator that it zips adjacent elements together and what's what's what's confusing is not just the choice of inner product but also that like not equal to technically is returning you a Boolean because it's a predicate operation. And then you're summing Booleans, which C++ allows. But if you tried to do something like this in Rust or Java, it would yell at you and say you can't sum Booleans. Anyways, we have the algorithm, a one-line algorithm for this whole thing called unique count.
+甚至我们的，你知道，NVIDIA 工程师，实际上可能在写这个的时候，unique count 还没存在。我相信这个例子在 unique count 进入 Thrust 之前就存在了。太棒了，伙计们。我们喜欢它。我之所以说我认为它早于
+
+47
+00:25:42.000 --> 00:25:59.000
+And even our, you know, NVIDIA engineers, and actually potentially when this was written, unique count didn't exist. This example, I believe, predates unique count being in Thrust. Fantastic though, folks. We love it. The reason I say that I think it predates
+unique count，是因为它被拼写为 inner product，而不是 transform reduce。而且 inner Thrust 直到其演变的后期才有了 transform reduce。我的意思是，仍然在它革命的早期，就像我们还在大学时，但后来。好的。所以这是我认为这种方法开始崩溃或变得不如你……的地方。
+
+48
+00:25:59.000 --> 00:26:23.000
+unique count is because this is spelled as inner product, not as transform reduce. And inner thrust didn't have transform reduce until later in its evolution. I mean, still very early in its revolution, like we were still in college, but later. Okay. So here's the part where I think that this approach starts to break down or becomes less optimal than what you...
+另外，关于新冠测试的更新。我花了太长时间，它全部蒸发了，所以我需要重新开始，但继续。好的，所以接下来我们创建两个 O 数量的唯一元素设备向量。我们将使用这些来计算每个键的多重性。我们将使用这些来计算每个键的多重性。我们将通过对原始数据进行 reduce by key 来做到这一点，并写入到，
+
+49
+00:26:23.000 --> 00:26:54.000
+Also, update on the COVID test. I spent too long and it all evaporated, so now I need to start over, but continue. Okay, so next we create two O number of unique element device vectors. And we're going to use these to count the multiplicity of each key. And we're going to use these to count the multiplicity of each key. And we're going to do that by doing a reduce by key that is on the original data and writes to,
+这是在做什么？这里有很多迭代器。所以一个 reduce by key，它有很多不同的版本。哇，哇，哇，哇，哇。等等，等等。这个 reduce by key 接受一、二、三、四、五个迭代器？是的。好的，所以前两个迭代器是输入序列。下一个迭代器是键，然后你还有两个迭代器。所以关于 reduce by key 的事情是，reduce by key 有两个输出。它既有键也有值。
+
+50
+00:26:54.000 --> 00:27:24.000
+what is this doing? There's a lot of iterators here. So a reduce by key, there's a bunch of different versions of it. Whoa, whoa, whoa, whoa, whoa. Hang on, hang on. This reduced by key takes one, two, three, four, five iterators? Yeah. Okay, so the first two iterators are the input sequence. The next iterator is the key, and then you've still got two more iterators. So here's the thing about reduced by key is that reduced by key has two outputs. It has both the keys and the values.
+而实际上 Michael Garland，我的老板，和我前几天讨论过这个问题，因为 scan by key 算法只有一个输出。那就是值。它们没有键。Reduce by key 有两个输出，键和值。但它实际上只有在你的二元运算符是“等于”谓词的情况下才有意义。如果你的二元运算符像“小于”呢？你为键输出什么？因为在
+
+51
+00:27:24.000 --> 00:27:49.000
+And here's what actually Michael Garland, my boss and I, had a discussion about this the other day, because the scan by key algorithms only have one output. And that's the values. They don't have the keys. Reduced by key has two outputs, the keys and the values. But it actually only makes sense in the case where your binary operator is an equal to predicate. What if your binary operator is like less than? What do you put, what do you output for the key? Because in the case
+你的二元谓词是“等于”的情况下，你知道你子段中的所有值。等等，什么谓词？你是说归约运算符？所以这个例子中的 reduce by key 没有给你，你看着六分之一，没有给你，如果你看这里的文档，它说这个例子中的这个版本的 reduce by key 没有给你，你看着六分之一，没有给你，如果你看这里的文档，它说这个版本的 reduce by key 使用函数对象 equal to，但有一个重载版本允许你自定义这个二元运算符。而且技术上，我认为他们想让你做的是。它使用 equal to 来测试相等性。
+
+52
+00:27:49.000 --> 00:28:20.000
+where your binary predicate is equal to, you know that all of the values in your sub, your basically your segment, your subsegments. Wait, what predicate? You mean the reduction operator? So reduced by key in this example doesn't give you, you're looking at one out of six, doesn't give you, if you look at the docs right here, it says this version of reduced by key in this example doesn't give you, you're looking at one out of six, doesn't give you, if you look at the docs right here, it says this version of reduced by key uses the function object equal to, but there's an overloaded version that lets you customize this binary operator. And technically, I think what they wanted you to do. It uses equal to to test for equality.
+是的，但你可以把它自定义为任何谓词。而且我认为它通常希望你只使用 equal to，或者基本上像一个适用于你自定义类型的重载 equal to。但技术上，没有什么能阻止你使用像“小于”或“小于等于”这样的东西，在这种情况下，你的子段中最终会有一堆不同的值，它们是不同的。而且就像……你用哪一个？我想当我检查时，它使用最后一个，但它基本上……键输出是无意义的，除非你的二元谓词（无论是默认传递的还是你传递的）是一个“等于”谓词。无论如何，你在这里看到的是，你有键输出，计数输出。常量迭代器是为了让你求和，你基本上是在做游程编码。如果你对实际的键求和，你会得到一些像键的数量乘以键。我们不想要那个。我们只想要总和。所以你怎么做？你对一堆 1 求和，其中 1 对应于每一个元素。然后你的前两个迭代器是你的输入。
+
+53
+00:28:20.000 --> 00:29:18.000
+Yes, but you can customize that to any predicate. And I think it wants you to, in general, to only ever use equal to or basically like an overloaded equal to that works for your custom type. But technically, there's nothing preventing you from using like less than or less or like less equal, in which case, you're going to end up with a bunch of different values in your sub segment that are different. And it's like like which one do you use i think when i checked it uses the last one but like it basically the key output is nonsensical unless if your binary predicate that is passed either by default or by you is an equal to predicate anyway so what you're seeing here is that you've got your keys output your counts output the constant iterator is so that you can sum up you're basically doing a run length and code. And if we sum up the actual keys, you're going to get some like the number of keys times the key. And we don't want that. We just want the sum. So how do you do that? You sum up a bunch of ones where one corresponds to every single element. And then your first two iterators is your input.
+Reduce by key。这就是那个演讲的全部重点，就像我可以生成所有这些。好吧，我不应该那样说，因为那种小预告是我一直在开发的工具，它生成了这个，就像我可以写几个关键字，砰，它就工作了。我字面上有一个叫 chunk by len 的东西，它生成了所有这些，实际上包括内积，但我的内积不是那个，它是一个带 zip 迭代器的 count if。现在我很确定做游程编码比他们在这里做的要好。我感觉它更好的原因之一是他们需要更多的临时存储。
+
+54
+00:29:18.000 --> 00:29:53.000
+Reduced by key. And this was the whole point of that presentation is that like I can generate all of this. Well, I shouldn't say that because that kind of a little teaser is the tool that i've been working on generates this like i can write a couple like a couple keywords and poof it works i literally have a thing called chunk by len that like generates all of this and actually including the inner product but my inner product is not that it's a count if with a zip iterator now i'm pretty sure that doing a run length encoding is better than what they're doing here. And one of the reasons that I feel that it's better is that they need more temporary storage
+通过键进行缩减。这就是那次演示的全部意义所在，即我可以生成所有这些内容。好吧，我不应该这么说，因为那个小预告片就是我一直在开发的工具，它可以生成这些内容，比如我可以写几个关键字，砰的一声，它就起作用了。我确实有一个叫“按长度分块”的东西，它能生成所有这些内容，实际上还包括内积，但我的内积不是那个，它是一个带有 zip 迭代器的计数。现在我很确定，做游程编码比他们在这里做的要好。我之所以觉得它更好的原因之一是，他们需要更多的临时存储空间。
+
+55
+00:29:53.000 --> 00:30:14.000
+here. Well, yeah, no, they need, well, one, they need temporary storage in general. I mean, you can do the, if you're okay with doing it in place, you can do the run length encoding in place. But here you need to store both the keys and the counts. I know, I guess you have to do that in run length encoding too. Is this just a less elegant way to write run length encode? Yeah, I think it is.
+这里。嗯，对，不，他们需要，嗯，首先，他们通常需要临时存储。我的意思是，你可以做，如果你不介意原地操作，你可以原地进行游程编码。但在这里你需要同时存储键和计数。我知道，我想你也必须在游程编码中这样做。这只是编写游程编码的一种不那么优雅的方式吗？是的，我想是的。
+
+56
+00:30:14.000 --> 00:30:54.000
+Okay, so we do a run length encode and then... Well, the run length encode hasn't happened yet. Or yes, this is a less elegant way to do run length encode, which doesn't exist in Thrust, but it does exist in code. And then what we do is we do thrust max element to find the index of the maximum count. In this case, what you're doing is because you're, you don't like in my jello program, your run length and code gave you a list of tuples. But in this example, you've got two separate lists with two separate iterators. So you do the max element on the counts. And then you use that iterator to basically back out the index and then index into the keys is what it's doing here. Whereas my explanation was like, well, you want to do like
+好的，所以我们做一个游程编码，然后……嗯，游程编码还没发生。或者说，是的，这是一种不那么优雅的游程编码方式，Thrust 中不存在这种方式，但在代码中是存在的。然后我们要做的是使用 thrust max element 来找到最大计数的索引。在这种情况下，你所做的是因为你，你不像在我的 Jell-O 程序中那样，你的游程编码给了你一个元组列表。但在本例中，你有两个独立的列表和两个独立的迭代器。所以你对计数执行 max element。然后你使用那个迭代器基本上反推出索引，然后索引到键中，这就是这里所做的。而我的解释是，嗯，你想做类似
+
+57
+00:30:54.000 --> 00:31:37.000
+a max. So in Rust, there's an algorithm called max by key, which you can basically give it a projection like exists in C++ 20 and 23 views, do the max by that, and then it'll return you the tuple, and then you just want to index into the first one, which is the... So one thing that occurred that I thought that occurred to me when I was looking at how you do this in Jell-O, and that occurs to me now again, is there's another way that you could do this, which is, I think, objectively a worse way, but perhaps will lead us to a better algorithm, which is you could do sort, run length encoding, and then sort again to get. Because once you have the run length encoding, sorting the run length encoding will give you. But I wonder if the thing about that that's
+一个最大值。所以在 Rust 中，有一个算法叫 max by key，你可以基本上给它一个投影，就像 C++ 20 和 23 视图中存在的那样，根据那个做最大值，然后它会返回给你元组，然后你只需要索引到第一个，也就是……所以当我查看你在 Jell-O 中如何做这件事时，我想到了一件事，现在又想到了，还有另一种你可以做的方法，我认为客观上是一种更糟糕的方法，但也许会引导我们找到更好的算法，那就是你可以做排序，游程编码，然后再排序以获得。因为一旦你有了游程编码，对游程编码进行排序就会给你。但我怀疑关于那件事的
+
+58
+00:31:37.000 --> 00:32:32.000
+potentially a revelation to me is if you think about it that way in terms of like you essentially need to do two sorts, is there some way to combine that final sort or that final find with the run length encoding itself? And I think the answer is yes. I think you could do a run length encoding where you also, during the run length encoding, find the maximum element. I'm 100% certain that you can now do this because run length encoding is implemented as a scan under the hood because it's just like stream compaction. Yeah, I'm fairly certain that you can write, I think you need to write a bespoke kernel for it, but I think you can write a bespoke kernel that does the run length encoding but keeps track of which run is the longest run, and then gives you the answer. And then you don't have to do that third pass of the max element. I'm trying to think about how exactly would this
+对我来说可能是一个启示，如果你从这个角度考虑，即你本质上需要做两次排序，有没有什么方法可以将最终的排序或最终的查找与游程编码本身结合起来？我认为答案是肯定的。我认为你可以做一个游程编码，在游程编码的过程中，同时找到最大元素。我 100% 确定你现在可以这样做，因为游程编码在底层是作为扫描实现的，因为它就像流压缩。是的，我相当确定你可以编写，我想你需要为它编写一个定制的内核，但我认为你可以编写一个定制的内核，它执行游程编码，但会跟踪哪个游程是最长的游程，然后给你答案。这样你就不必进行第三次 max element 的遍历了。我正在尝试思考这到底会
+
+59
+00:32:32.000 --> 00:33:06.000
+look. I think we'd have to dive into how the CUB run length encoding algorithm is implemented to truly get to the bottom of this and see if we can do this in two passes. But one interesting thing about this algorithm is that because of the first sort, which seems to me unavoidable, it is almost certainly a two-pass algorithm. You'd want to do this as a two-pass algorithm because you need to sort the data first. I can see a path by which we can combine the later passes.
+看起来是什么样。我认为我们必须深入研究 CUB 游程编码算法是如何实现的，才能真正弄清楚这一点，看看我们是否可以在两次遍历中完成。但这个算法的一个有趣之处在于，由于第一次排序（在我看来是不可避免的），它几乎肯定是一个两遍算法。你会想把它作为一个两遍算法来做，因为你需要先对数据进行排序。我可以看到一条路径，通过它我们可以合并后面的遍历。
+
+60
+00:33:06.000 --> 00:33:57.000
+But if I need to sort the whole thing, there's no way for me to avoid this having two parallel passes, unless we can find a way to not need to do the sort. And I mean, the one approach to that would be the histogram style approach that you suggested at first of like, oh, you have a parallel hash map. And that is almost certainly going to be the fastest way to do this, I think. Because with the parallel hash map, you don't need to sort. You don't even really need multiple passes. So that's just got to be the best one, right? And you know what? A fun problem that we should talk about in the future how would we do a parallel rolling mode yeah it's a lot more complicated i think that's a little bit more complicated well we should land this plane because we've got two minutes left but uh while bryce was
+但如果我需要对整个东西进行排序，除非我们能找到一种不需要排序的方法，否则我无法避免进行两次并行遍历。我的意思是，一种方法是你最初建议的直方图式方法，比如，哦，你有一个并行哈希映射。我认为这几乎肯定会是实现这一点的最快方法。因为有了并行哈希映射，你不需要排序。你甚至不需要多次遍历。所以那一定是最好的，对吧？你知道吗？一个我们未来应该讨论的有趣问题是，我们如何做一个并行滚动模式？是的，这复杂得多，我认为那稍微复杂一点。嗯，我们应该结束这个话题了，因为我们只剩下两分钟了，但是，呃，当 Bryce 在
+
+61
+00:33:57.000 --> 00:34:29.000
+pontificating this is what i was or you can you can't see my screen anymore because you're the one sharing or yeah this is what my tool my un you can't see my screen anymore because you're the one sharing. No, I cannot. Or, yeah. This is what my tool, my unnamed tool, like, generates all this. You can literally see, like, there's the make constant iterator. Yeah. Discard iterator because I, like, you can't use this for RLE because I'm discarding the keys. But, like, the equal to, the plus, and this count if with a zip iterator is exactly what they've spelled using an inner product, which of course, mine is much nicer. Anyways, folks.
+高谈阔论时，这就是我正在，或者你，你已经看不到我的屏幕了，因为是你分享的，或者，是的，这就是我的工具，我的未命名工具，生成了所有这些。你可以字面上看到，比如，有 make constant iterator。是的，discard iterator，因为我，就像你不能用这个做 RLE，因为我丢弃了键。但是，比如，equal to，plus，以及这个带有 zip iterator 的 count if，正是他们使用内积所拼写出来的，当然，我的要好得多。总之，各位。
+
+62
+00:34:29.000 --> 00:35:09.000
+That's beautiful. That's very cool, Connor. That's very cool. We can't show, we can't tell, we can't tell the listener. You know, it really amazes me how, you know, you just happen to check your tool and it spits out basically the same pattern. And that same pattern that we saw in that first example is also more or less the way that you do it in Jell-O. And it's just, it's amazing to me how often we see these like fundamental parallel algorithmic patterns come back. Like, the more and more we look at how do you solve, you know, a problem in parallel,
+那太美了。那太酷了，Connor。那太酷了。我们不能展示，我们不能告诉，我们不能告诉听众。你知道，这真的让我很惊讶，你知道，你只是碰巧检查了你的工具，它就吐出了基本相同的模式。我们在第一个例子中看到的那个相同的模式，也或多或少是你用 Jell-O 做它的方式。对我来说，看到我们多久能看到这些基本的并行算法模式回归，真是太神奇了。就像，我们越是观察你如何解决，你知道，一个并行问题，
+
+63
+00:35:09.000 --> 00:35:34.000
+the more and more I find that it breaks down into, like, one of three or four different fundamental answers. You know, like, it's a reduction, it's a sort, it's a scan, or it's a stream compactation which is what run length encoding is or it's just like a parallel four leap like like almost everything that we've talked to has
+我越发现它分解为，比如，三四个基本答案之一。你知道，比如，它是一个归约，它是一个排序，它是一个扫描，或者它是一个流压缩（这就是游程编码），或者它只是像一个并行 for 循环，就像我们谈论的几乎所有东西都
+
+64
+00:35:34.000 --> 00:36:32.000
+boiled down to one of those and in some cases two of those but usually when it's two of those it's a sort followed by one of those yeah it's just it's just mind-blowing to me how how how often we get these deja vu moments of like hey we've seen this before haven't we oh yep completely agree and you might have missed it in that presentation but this this is the code that i had to write to get that we will we will demo that hopefully in the future at some point folks i think the best way to end this is by me stopping sharing my screen and by showing the negative covid test folks hang on you gotta hold it back a little bit because sometimes that line can be very faint nope yeah it looks like connor doesn't have COVID. Connor's just sick. Fantastic. Well, I hope you feel better, buddy. I am reminded of a time during the pandemic
+归结为其中之一，在某些情况下是其中两个，但通常当它是两个时，它是排序后跟其中一个。是的，这真是让我大开眼界，我们多久会有一次这种似曾相识的感觉，比如，嘿，我们以前见过这个，不是吗？哦，是的，完全同意。你可能在那个演示中错过了它，但这，这就是我为了得到那个结果而必须编写的代码。我们希望在未来的某个时候向大家演示它。各位，我认为结束这次谈话的最好方式是我停止共享屏幕，并展示阴性的新冠检测结果。各位，等等，你得稍微往后拿一点，因为有时那条线可能非常微弱。不，是的，看起来 Connor 没有新冠。Connor 只是生病了。太棒了。好吧，希望你感觉好点，伙计。我想起疫情期间的一次经历
+
+65
+00:36:32.000 --> 00:37:12.000
+when you thought you had COVID, but could not get access to a COVID test. And so I... Oh, yeah, yeah, yeah. I bought, I had COVID tests because I'm a little hoarder and I had a stock of them. So I took the COVID test down to FedEx and I overnight FedExed it to you in Canada at what can only be described as an exorbitant fee. And did that arrive overnight, Connor? It did not. It did not. It did not. It got held up by Canadian customs for a while. I think, did you ever get it?
+当你以为自己得了新冠，但无法获得新冠检测时。所以我……哦，是的，是的，是的。我买了，我有新冠检测盒，因为我有点囤积癖，我有一堆。所以我把新冠检测盒带到联邦快递，并以只能用昂贵来形容的费用隔夜快递给你在加拿大的地址。那东西隔夜送达了吗，Connor？没有。没有。没有。它在加拿大海关被扣留了一段时间。我想，你收到它了吗？
+
+66
+00:37:12.000 --> 00:37:37.000
+I did. It was, I think, two or three days later, and I did test positive. I thought it was a while. Yeah. I don't remember why there was the great urgency for me to get you that COVID test. I think it was just you couldn't get the test and you didn't want to go out and risk exposing people no and so i was just like hang on i got you at the time you couldn't get tests in canada there was a period
+我收到了。我想是两三天后，我确实检测呈阳性。我以为那是很久以前的事了。是的。我不记得为什么我给你那个新冠检测盒那么紧急。我想只是因为你无法获得检测，你不想出去冒着暴露他人的风险。不，所以我当时就像，等等，我给你。当时你在加拿大无法获得检测，有一段时间
+
+67
+00:37:37.000 --> 00:38:14.000
+of time where they basically said you could no longer you couldn't buy them or get them at a store and you also couldn't go like unless unless if you were like pregnant or you met some criteria you couldn't go in and get one and then when i told you this you were like this is ridiculous i have the solution yeah but was it actually useful or am i correct in remembering that before the covid test arrived you found some other way to get a COVID test. I did. There was a couple, I don't know if they were rogue operations, but I did find a place that would give me a test,
+他们基本上说你不能再买了，或者在商店里买不到，而且你也不能去，除非，除非你怀孕了或者符合某些标准，否则你不能进去做一个。然后当我告诉你这个时，你说这太荒谬了，我有解决方案。是的，但它真的有用吗？还是我记得没错，在新冠检测盒到达之前，你找到了其他获得新冠检测的方法。我确实找到了。有几个，我不知道它们是否是流氓操作，但我确实找到了一个会给我检测的地方，
+
+68
+00:38:14.000 --> 00:38:42.000
+and then I did test positive there. But I used yours a couple days later and test positive again. So they did come in. They did have some utility. It was not zero. But anyways, FedEx, I'd like a refund, please. Yeah, we've been waiting a couple years, FedEx. I think it was like $120 or something. It was like not cheap. It was it was up there. But anything for my buddy, anything for my buddy. Be sure to check the show notes either in your podcast app or at ADSP to podcast.com for links
+然后我确实在那里检测呈阳性。但我几天后用了你的那个，又检测呈阳性。所以它们确实派上了用场。它们确实有一些用途。不是零。但总之，联邦快递，我想要退款，拜托。是的，我们已经等了几年了，联邦快递。我想大概是 120 美元左右。它不便宜。它相当贵。但为了我的伙计，什么都行，为了我的伙计。一定要查看你的播客应用程序或 ADSP to podcast.com 上的节目说明，获取我们提到的任何内容的链接，
+
+69
+00:38:42.000 --> 00:38:47.000
+to any of the things we mentioned as well as a link to a GitHub discussion where you can leave thoughts, comments and questions. Thanks for listening. We hope you enjoy it and have a great day. Low quality, high quantity. That is the tagline of our podcast. It's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+以及一个 GitHub 讨论的链接，你可以在那里留下想法、评论和问题。感谢收听。我们希望你喜欢它，祝你有美好的一天。低质量，高数量。这就是我们播客的标语。那不是标语。我们的标语是带有信息点缀的混乱。这一集还没有评论。点击转录中的任何句子来留下评论。

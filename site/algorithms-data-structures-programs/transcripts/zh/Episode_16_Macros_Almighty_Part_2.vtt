@@ -1,0 +1,181 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:34.000
+When you just said that about like, I'm not sure why, I just, I love putting myself together a macro sandwich and just taking a big bite. Remember, with great power comes great responsibility. welcome to adsp the podcast episode 16 recorded on february 20th 2021 my name is connor and today with my co-host bryce we wrap up part two of our two-part discussion on macros. Oh man, my head hurts. And then, so, so then the other, the other like more advanced stuff that you get into with, with the preprocessor is dealing with commas and removing or adding parentheses. One of the things I was showing my co-worker how to do is he was writing a macro where it was basically a macro that was an abstraction around something like an if statement. And he wanted to be able to pass arbitrary blocks of C++ code as the second and third argument of this macro. And he was like, but, you know, if there's a comma in there, then everything breaks.
+当你刚才说那个的时候，我不太确定为什么，我只是，我喜欢给自己做一个宏三明治，然后大咬一口。记住，能力越大，责任越大。欢迎收听 ADSP 播客第 16 集，录制于 2021 年 2 月 20 日。我是 Connor，今天和我的联合主持人 Bryce 一起，我们结束了关于宏的两部分讨论的第二部分。天哪，我的头好痛。然后，那么，关于预处理器，你还会接触到一些更高级的东西，比如处理逗号，以及删除或添加括号。我当时正在向我的同事展示如何操作，他当时正在写一个宏，基本上是一个围绕 if 语句的抽象。他希望能够将任意的 C++ 代码块作为该宏的第二个和第三个参数传递。他说，但是，你知道，如果里面有一个逗号，那么一切都会崩溃。
+
+2
+00:01:34.000 --> 00:02:11.000
+Because then if there's a comma, it'll treat that, you know, that argument as being multiple arguments. And that'll be a problem. And so I told him, okay, that's fine. Just always put parentheses around that second and third argument to protect the commas. And then there's a trick that you can use to always strip leading and trailing parentheses from an argument. So that way, if I wanted to write something that has some commas in it as a single argument,
+因为如果有一个逗号，它会把那个参数当作多个参数来处理。那会是个问题。所以我告诉他，没关系。只要在第二个和第三个参数周围加上括号来保护逗号就行了。然后有一个技巧，你可以用来总是剥离参数开头和结尾的括号。这样一来，如果我想写一些带有逗号的内容作为单个参数，
+
+3
+00:02:11.000 --> 00:03:17.000
+I just put parentheses around it, making it into one of these sort of pseudo data structures. And then later I can just remove out all the parentheses to get the original argument that the user intended. This is a fairly common pattern throughout Boost libraries that do advanced macro stuff. So as much as this is sort of saddening me and confusing me, that's useful because I did not know that. And I'm currently, every once in a while, I live stream porting an old C code base that is the implementation of the J language, which is the predecessor or successor, I should say, to APL. And it originally had 10,000 macros in it. And it isn't even C. So that's the thing is seeing this now, the Boost preprocessor library, has me thinking that there is C and there's also C++.
+我只需在它周围加上括号，把它变成这些伪数据结构之一。然后稍后我可以删除所有的括号，得到用户想要的原始参数。这在 Boost 库中是一个相当常见的模式，用于处理高级宏。所以，尽管这让我感到悲伤和困惑，但这很有用，因为我之前不知道这一点。我目前偶尔会直播移植一个旧的 C 代码库，它是 J 语言的实现，也就是 APL 的前身或后继者，我应该这么说。它最初有 10,000 个宏。而且它甚至不是 C。所以这就是问题所在，现在看到这个 Boost 预处理器库，让我觉得既有 C，也有 C++。
+
+4
+00:03:17.000 --> 00:04:20.000
+And then within those two languages, you can build your own, like, macro DSL. Because it's not really like, I'm not really porting C to C++. I'm porting this C macro DSL, where they don't use for loops, they use a do macro. They have a macro for everything, like their functions are macros their you know ifs and uh you know for loops are macros and a ton of their macros use this uh parentheses trick where it has like a it's a 10 argument macro and every single one has parentheses around it uh which i always thought was odd but clearly you just explained why so my question is is like it's like why like is this is this kind of stuff not possible with a hygienic macro system or a language that supports that or like clearly someone's gone to the trouble of doing this and it's if people are utilizing it it's not just like a fun pet
+在这两种语言中，你可以构建自己的宏 DSL。因为我并不是真的在把 C 移植到 C++。我是在移植这个 C 宏 DSL，他们不使用 for 循环，他们使用 do 宏。他们对一切都有宏，比如他们的函数是宏，他们的 if 和 for 循环是宏，而且他们大量的宏使用了这个括号技巧，比如它是一个 10 参数的宏，每一个周围都有括号，我一直觉得这很奇怪，但显然你刚才解释了原因。所以我的问题是，为什么这种东西在卫生宏系统或支持该系统的语言中是不可能的？或者显然有人费尽心思做了这个，如果人们正在使用它，它不仅仅是一个有趣的宠物
+
+5
+00:04:20.000 --> 00:05:26.000
+project it probably is possible with other systems but i'll tell you the reason why people go to macros um and it's that it's it's both the advantage and the downside of it that um macros are purely textual um there is no um knowledge of you, C++ semantics. It's just purely textual. And that makes it very powerful. Like if there's something that you just can't do in the C++ language, like just this very simple model of, hey, we're pasting together strings, basically. That's all that we're doing. We're pasting together strings. That can be very powerful. And like sometimes there's something that just the syntax of C++ prevents you from doing something or prevents you from abstracting around something that macros could let you do.
+项目，它在其他系统中可能也是可能的，但我会告诉你人们为什么使用宏，这是它的优势也是它的劣势，宏是纯文本的，它对 C++ 语义没有任何了解。它纯粹是文本。这使得它非常强大。比如如果有些事情你在 C++ 语言中做不到，比如这种非常简单的模型，嘿，我们基本上是在粘贴字符串。这就是我们所做的全部。我们只是在粘贴字符串。这可能非常强大。有时 C++ 的语法会阻止你做某事，或者阻止你围绕某事进行抽象，而宏可以让你做到。
+
+6
+00:05:26.000 --> 00:06:34.000
+And in particular, it can be very useful if you're dealing with things like language extensions, or non-portability, or extensions that only some compilers support, or compiler bugs. then it can become very useful to use macros because, you know, again, it's just this purely simple textual model that is completely ignorant of the underlying language. So yeah, I hear you saying that. But like, on one hand, it's simple, like textual text replacement is simple. Yet in the process of using a simple thing, you've now created a DSL, which you need to go and learn. Oh, yeah, yeah. Which is the thing about, like, when I am working through the J source code. We've managed to already delete like I think 7,500 of the 10,000 macros, but we're still left I think with like 2,000 or 3,000. And you have to go and learn.
+特别是，如果你在处理语言扩展、不可移植性、只有某些编译器支持的扩展或编译器错误时，它会非常有用。那么使用宏就会变得非常有用，因为，你知道，再说一次，它只是这个完全忽略底层语言的纯粹简单的文本模型。所以是的，我听到了你的说法。但是，一方面，它很简单，文本替换很简单。然而在利用简单事物的过程中，你现在创建了一个 DSL，你需要去学习它。哦，是的，是的。这就是我在处理 J 源代码时的情况。我们已经成功删除了 10,000 个宏中的大约 7,500 个，但我认为我们还剩下大约 2,000 或 3,000 个。你必须去学习。
+
+7
+00:06:34.000 --> 00:07:06.000
+And that's the thing is they're not even well documented. They're not well named in the famous style of APL and J languages. Like a lot of them are one and two characters. Like GA, I inferred stood for get array. So it's for constructing an array type. And then there's a bunch of like variants of GA, there's GA zero, G ATS, GA, etc, etc, which is very similar to what, you know, not not exactly with the tag zero tag one. But yeah, there's a trade-off because you don't have like standard macros. It's just, it's all custom.
+这就是问题所在，它们甚至没有很好的文档记录。按照 APL 和 J 语言的著名风格，它们命名得并不好。比如很多都是一个或两个字符。比如 GA，我推断代表 get array。所以它是用来构造数组类型的。然后还有一堆 GA 的变体，GA zero，G ATS，GA 等等，这与你知道的非常相似，虽然不完全是 tag zero tag one。但确实存在权衡，因为你没有标准宏。它全是自定义的。
+
+8
+00:07:06.000 --> 00:07:40.000
+But I guess that is an argument that I hear when it's, you know, insert programming language plus, you know, the standard algorithms that come with it. And people are like, well, you know, I could just use a for loop and I don't need to go learn everything. Whereas if I go learn the algorithms, like sure, maybe that gets me something, but I have to go and learn them. So there's some, there's some echoing of me saying, oh, you have to go and learn all the macros. But I just, what is your defense to, or maybe there is no defense, and you're just saying like, this is, it has a use. And yes, it's easy to shoot yourself in the foot. Because, like,
+但我猜这就是我听到的一种论点，当人们谈论插入编程语言加上它附带的标准算法时。人们会说，好吧，我可以使用 for 循环，我不需要去学习所有东西。而如果我去学习算法，当然，也许这能给我带来一些东西，但我必须去学习它们。所以这有点像我在说，哦，你必须去学习所有的宏。但我只是，你有什么辩护，或者也许根本没有辩护，你只是说，这东西有它的用途。而且是的，很容易搬起石头砸自己的脚。因为，比如，
+
+9
+00:07:40.000 --> 00:08:29.000
+the most egregious uses of macros that I've come across in multiple different code bases are when you're looking at a local function that has a macro and you see some variable name and it all fits on one screen and like you can't see the variable and you're like oh is this using globals okay that's not great practice you search for the global it's not a global and then if you've seen the problem before you go oh no don't tell me this macro is doing this, where the macro declares the local variable off screen. And so, like, you have context that is, like, important for reasoning about local functions or local code. And then you have to step into the macro and find out that, oh, we're actually declaring that variable X in the macro. And so it's not just that you need to know the macros.
+我在多个不同的代码库中遇到的最严重的宏使用情况是，当你查看一个带有宏的局部函数时，你看到某个变量名，它全部显示在一个屏幕上，你却看不到那个变量，你会想，哦，这是在使用全局变量吗？好吧，这不是很好的做法。你搜索全局变量，它不是全局变量。然后如果你之前见过这个问题，你会想，哦不，别告诉我这个宏在做这个，宏在屏幕外声明了局部变量。所以，你拥有对于推理局部函数或局部代码很重要的上下文。然后你必须进入宏，发现，哦，我们实际上是在宏中声明了那个变量 X。所以不仅仅是你需要了解宏。
+
+10
+00:08:29.000 --> 00:09:09.000
+You need to understand the implementations of them in certain uses. And that just for me is the level of obfuscation and increased difficulty in reasoning about that code is way, way, way too, way past the line that I want. Yeah, it's also, they're also basically impossible to debug. You know, if you get an error, and that can make them very brittle. Like, it's hard for macros to give you good errors. And in many ways, it makes it very similar to type-based template metaprogramming in C++,
+你需要理解它们在某些用途中的实现。对我来说，这种混淆程度和推理代码难度的增加，远远超过了我想要的界限。是的，它们基本上也是不可能调试的。你知道，如果你得到一个错误，这会使它们非常脆弱。宏很难给你提供好的错误信息。在许多方面，这使它与 C++ 中的基于类型的模板元编程非常相似，
+
+11
+00:09:09.000 --> 00:09:39.000
+where it was very powerful. They're actually very similar. They're both very powerful. They're both very functional. And they both have no facility to give you good diagnostics, which can make them very hard to debug. I mean, I would say don't use macros if there's some other solution that works just as well, or even that works 90% as well.
+它非常强大。它们实际上非常相似。它们都非常强大。它们都是函数式的。而且它们都没有提供良好诊断的机制，这使得它们非常难以调试。我的意思是，如果还有其他同样有效的解决方案，甚至有 90% 有效的解决方案，就不要使用宏。
+
+12
+00:09:39.000 --> 00:10:51.000
+The places where I use macros, it tends to be one if I need to abstract over non-portability. So if there is some extension or something that one compiler has that another one doesn't, using a macro to hide that I think is very powerful, sometimes unavoidable. And if I'm going to do that, I'll, you know, I'll try to make the macro as clean as possible. If I have to pick between having if-deft code versus using a macro, I'll use the macro. And let me explain what I mean by that. One way to deal with non-portability is to say, okay, I'm going to write one version of the code with an if def, and then I'm going to write another version of the code that doesn't use this extension that's in the else of the if def. And I like to avoid that as much as possible because I think it either leads to duplicated code, which is a maintenance burden.
+我使用宏的地方，通常是如果我需要抽象不可移植性。所以如果有一个编译器有而另一个没有的扩展或东西，使用宏来隐藏它，我认为非常强大，有时是不可避免的。如果我要这样做，我会尽量让宏尽可能干净。如果我必须在有 if-deft 代码和使用宏之间做出选择，我会使用宏。让我解释一下我的意思。处理不可移植性的一种方法是说，好吧，我要用 if def 写一个版本的代码，然后我要写另一个不使用这个扩展的版本的代码，它在 if def 的 else 中。我尽量避免这种情况，因为我认为这要么导致重复代码，这是一种维护负担。
+
+13
+00:10:51.000 --> 00:11:53.000
+You've duplicated the entire thing. Or you've made the ifdef very constrained and you've done it in such a way that it becomes very hard to actually like read what the code means. So if instead of having two versions of the code, I can have one version of the code in one macro abstraction, I'd prefer the macro abstraction. The other place where I have used macros and where macros have historically been used is to deal with or to minimize repetitive code. It's actually very much the same thing. It's that like, you know, instead of writing, you know, 20 versions of this function, each of which are slightly different, I'll just write a macro that parameterizes the difference. And again, it's, you know, having less repetition in your code, I think can be good. It
+你复制了整个东西。或者你使 ifdef 非常受限，并且你以一种变得非常难以阅读代码含义的方式来做。所以如果我可以用一个宏抽象来代替两个版本的代码，我更喜欢宏抽象。我使用宏的另一个地方，也是宏历史上被使用的地方，是处理或最小化重复代码。这实际上是一回事。就是说，与其写 20 个版本的函数，每个版本都略有不同，我不如写一个参数化差异的宏。再说一次，代码中的重复越少，我认为越好。它
+
+14
+00:11:53.000 --> 00:12:27.000
+might make, you know, using that macro might make it a little bit more confusing. But it means that if I need to update all 20 of those definitions, I can just do it in one place, you know? Yeah, I think, I mean, I think, yeah, in my career, I've written, I want to say one macro that went into production. And that was the use case where I had a single line that was repeated with like a couple just textual differences that was using the double hash. And so I had a single line macro above like three functions that all fit on the same screen
+可能会让使用该宏变得稍微令人困惑一些。但这意味着如果我需要更新所有 20 个定义，我可以在一个地方完成，你知道吗？是的，我的意思是，在我的职业生涯中，我写过一个进入生产环境的宏。那个用例是我有一行代码重复了，只有几个文本差异，使用了双哈希。所以我把一个单行宏放在了三个函数上面，它们都显示在同一个屏幕上，
+
+15
+00:12:27.000 --> 00:12:54.000
+that like drastically simplified the repetition. But like the thing was, is like the macro was right there. You could see the entire contents of the macro. And I still felt bad about it, but I mean, it did make locally the code, I think, easier to reason about because it was less noisy but yeah i mean i have real mixed feelings because of i feel like a lot of these sort of
+这极大地简化了重复。但问题是，宏就在那里。你可以看到宏的全部内容。我仍然对此感到不好，但我的意思是，它确实使代码在局部上更容易推理，因为噪音更小。但是的，我有非常复杂的感觉，因为我觉得很多这种
+
+16
+00:12:54.000 --> 00:13:40.000
+arguments you can make against like c++ in general like oh you know very powerful but very easy to shoot yourself in the foot however c++ comes with an ecosystem of like static analyzers and compilers that have differing levels of warnings that you can enable and all of that leads you in the right direction whereas my guess is that for c++ macro DSLs, like there is none of that. Which means that you... Yeah, maybe. I would say macros were a lot more important to the language in the pre-C++11 era. There were a lot of gaps that macros had to fill.
+针对 C++ 的论点，比如哦，非常强大但很容易搬起石头砸自己的脚。然而，C++ 附带了一个生态系统，包括静态分析器和编译器，它们有不同级别的警告，你可以启用，所有这些都会引导你走向正确的方向。而我的猜测是，对于 C++ 宏 DSL，根本没有这些。这意味着你……是的，也许吧。我会说宏在 C++11 之前的时代对语言来说要重要得多。宏必须填补很多空白。
+
+17
+00:13:40.000 --> 00:15:07.000
+So there's another preprocessor trick, I would argue the most advanced trick, which is file iteration. So this is sort of the way that you can do stateful macros. So the basic idea is you have some header that does not have include guards. And essentially, it's intended that the header will be included multiple times. In each different time, it will be included with a different, you know, with a variable, some iteration variable that is defined in a different way. You know, something like what I'm showing you right now. And so, like, you know, you write this iteration header where it uses this, you know, some macro like n, and then every time that the header gets included, it has an increasing value of n. And it can become a very powerful tool for avoiding repetition. One of the major problems that we had pre C++11 was we didn't have any variadic
+所以还有另一个预处理器技巧，我认为是最先进的技巧，即文件迭代。这是一种你可以执行有状态宏的方法。基本思想是你有一些没有包含保护的头文件。本质上，它的目的是让头文件被多次包含。每次包含时，它都会带有一个不同的变量，一些在不同方式下定义的迭代变量。你知道，就像我现在向你展示的那样。所以，你编写这个迭代头文件，它使用一些像 n 这样的宏，然后每次包含头文件时，它都有一个递增的 n 值。它可以成为避免重复的非常强大的工具。我们在 C++11 之前遇到的主要问题之一是我们没有任何可变参数
+
+18
+00:15:07.000 --> 00:16:16.000
+template parameters. And so to make something like tuple work before C++11, you just had to pick a number of arguments to support. And you'd have to, you know, you'd create a tuple where it has, you know, it has 10 template parameters, each one is defaulted, and then you have, you know, a specialization for each number of parameters that have been provided. You know, this is how things like tuples and any other variadic structures worked pre C++11. And it was very repetitive to write that code by hand. If the only way that you could write variadic templates was to manually unroll things, to manually unroll up to the limit that you wanted to support um uh that would that could be very error prone and a huge pain for um uh uh for
+模板参数。所以在 C++11 之前要让像 tuple 这样的东西工作，你只需要选择支持的参数数量。你必须创建一个 tuple，它有 10 个模板参数，每个都有默认值，然后你必须为提供的每个参数数量提供一个特化。你知道，这就是像 tuple 和任何其他可变参数结构在 C++11 之前的工作方式。手动编写这些代码非常重复。如果编写可变参数模板的唯一方法是手动展开，手动展开到你想要支持的限制，那可能会非常容易出错，并且对于
+
+19
+00:16:16.000 --> 00:17:03.000
+maintenance and so you know using the pre-processor to make that a little bit simpler was a common technique there's even so my my old my old boss and mentor, Hartmut Kaiser, he wrote Boost Wave, which is Boost's C++ preprocessor. And I once asked him, why'd you write your own preprocessor? And he said, you know, I wrote it to embarrass all the vendors because I wrote it in a period of time when nobody had a conformant implementation of the C++ preprocessor. And so I wrote one to show them that it could be done and to embarrass them. I'm not sure whether any vendors were ever aware of
+维护来说是一个巨大的痛苦。所以使用预处理器让它变得简单一点是一种常见的技术。甚至，我的老老板和导师 Hartmut Kaiser，他编写了 Boost Wave，这是 Boost 的 C++ 预处理器。我曾经问他，你为什么要写自己的预处理器？他说，我写它是为了让所有供应商感到尴尬，因为我写它的那个时期，没有人有符合标准的 C++ 预处理器实现。所以我写了一个来向他们展示这是可以做到的，并让他们感到尴尬。我不确定是否有供应商意识到
+
+20
+00:17:03.000 --> 00:18:07.000
+this. Maybe Hartmut was joking, but that's the story I was told. And one of the features that BoostWave supported was it could do partial pre-processing. So you could tell it, hey, just expand this set of macros or just expand these headers. And that could be very useful if you wanted to write some of this preprocessor code and then you wanted to expand some of it out so that you would avoid some of the compilation time costs, but you didn't want to, you know, pre-process everything. I think we used it in HPX. I think it was used in Boost Phoenix at some point, which was a metaprogramming library in the pre-C++11 era. Yeah. So there's two things we should start to wrap up seeing as we're way past our 30-minute goal.
+这一点。也许 Hartmut 在开玩笑，但这就是我听到的故事。BoostWave 支持的功能之一是它可以进行部分预处理。所以你可以告诉它，嘿，只展开这组宏或只展开这些头文件。如果你想编写一些预处理器代码，然后想展开其中一些以避免一些编译时间成本，但你不想预处理所有内容，这可能非常有用。我想我们在 HPX 中使用过它。我想它在某个时候被用于 Boost Phoenix，那是一个 C++11 之前的元编程库。是的。所以我们应该开始总结两件事，因为我们已经远远超过了 30 分钟的目标。
+
+21
+00:18:07.000 --> 00:19:06.000
+But, you know, I knew we were going to talk about the C++ preprocessor slash macros today. And in the back of my head, I was thinking, you know, the title of our podcast is Algorithms plus Data Structures equals Programs. You know, we talk about whatever we want, but I just felt just felt that this is going to be a little bit outside the scope. No, sirree. We, if you take a look at the link, it'll definitely be in the show notes. We've got all your algorithms and all your data structures, just, if, if, if they can be called that, if they can be called that. If a random collection of parentheses and text can be called data structures, then indeed we have data structures. Yeah, we didn't even talk about some of the craziest stuff. I wanted to show you all of this nonsense for how you detect whether there's a comma in a certain set of variadic arguments,
+但是，我知道我们今天要谈论 C++ 预处理器/宏。在我的脑海里，我在想，你知道，我们播客的标题是算法加数据结构等于程序。你知道，我们谈论任何我们想谈论的东西，但我只是觉得这会有点超出范围。不，先生。如果你看一下链接，它肯定会在节目说明中。我们有你所有的算法和所有的数据结构，如果，如果，如果它们可以被称为那样的话。如果一堆随机的括号和文本可以被称为数据结构，那么我们确实有数据结构。是的，我们甚至没有谈论一些最疯狂的东西。我想向你展示所有这些关于你如何检测一组可变参数中是否存在逗号的胡言乱语，
+
+22
+00:19:06.000 --> 00:19:34.000
+and then all this craziness for how you detect whether a variadic is empty. But that would take another hour, and I fear I might break your mind if we were to do that. Well, you never know. We might split this into part one and part two, and then we'll give our listeners just a break, give them a chance to go check out the Boost preprocessor website. But so, final question.
+以及所有这些关于你如何检测可变参数是否为空的疯狂行为。但这需要再花一个小时，我担心如果我们这样做，我可能会让你崩溃。好吧，你永远不知道。我们可能会把这个分成第一部分和第二部分，然后我们会给我们的听众一个休息时间，让他们有机会去看看 Boost 预处理器网站。但最后一个问题。
+
+23
+00:19:34.000 --> 00:20:31.000
+Putting your ISO C++ Library Evolution Working Group hat on, I do believe one of the goals of the standards c++ standards committee is to eradicate all of the use cases of uh the defined macro and then to eventually i know it's like a it's a what do they call it a long-term goal um is to remove it uh and i if i recall i think your stance i don't want to put words in your mouth i think your stance is that that'll never be possible right um so do you want to comment on it being an overarching goal slash whether or not you feel that is actually possible i think that it is it will never happen because i i think there will always be a use case for a textual macro system like this.
+戴上你的 ISO C++ 库演进工作组的帽子，我相信标准 C++ 标准委员会的目标之一是根除所有 define 宏的用例，并最终，我知道这是一个长期目标，是移除它。如果我没记错的话，我想你的立场，我不想替你说话，我想你的立场是那永远不可能实现，对吧？所以你想评论一下它作为一个总体目标，或者你是否觉得这实际上是可能的？我认为这永远不会发生，因为我认为文本宏系统这样的用例将永远存在。
+
+24
+00:20:31.000 --> 00:21:21.000
+There's always going to be a use case for doing some sort of simple textual generation of C++ code. And if we eliminated the C++ preprocessor, people would just go, you know, they would go write Perl scripts or Bash scripts to do it, right? They would just go do it with some other tool. And one of the big benefits of the C++ preprocessor, and one of the reasons why it's often used for these things is because it's like a core part of the language. So Fortran doesn't... So you can write Fortran where it expands, where it has macros, it uses the C++ preprocessor,
+总是会有某种简单的 C++ 代码文本生成的用例。如果我们消除了 C++ 预处理器，人们只会去写 Perl 脚本或 Bash 脚本来做这件事，对吧？他们只会用其他工具来做。C++ 预处理器的一大好处，以及它经常被用于这些事情的原因之一，是因为它是语言的核心部分。所以 Fortran 没有……所以你可以编写 Fortran，它会展开，它有宏，它使用 C++ 预处理器，
+
+25
+00:21:21.000 --> 00:22:08.000
+but that's not like the default Fortran mode. And in fact, I'm not even sure whether it's officially supported by the Fortran language. But I'll tell you this, it's definitely a thing that every Fortran compiler supports, where usually it's with a different file extension. So if you just do like, if you just compile a.f90 file, it won't support C++ style macros. But if it's a.fpp file, that will be Fortran with the preprocessor running. And that just like signals to me that even if we were going to get rid of the preprocessor, I'm sure that there would still be a mode and that there would still be use cases
+但这并不是默认的 Fortran 模式。事实上，我甚至不确定它是否被 Fortran 语言正式支持。但我告诉你，这绝对是每个 Fortran 编译器都支持的东西，通常它有不同的文件扩展名。所以如果你只是编译一个 .f90 文件，它不会支持 C++ 风格的宏。但如果它是 .fpp 文件，那将是带有预处理器运行的 Fortran。这对我来说就像是一个信号，即使我们要摆脱预处理器，我相信仍然会有一种模式，并且仍然会有用例
+
+26
+00:22:08.000 --> 00:22:48.000
+where people would want C++ with the preprocessor as opposed to C++ without the preprocessor. I would argue that maybe the mistake that C++ made was it picked the wrong default. Maybe we should have gone the route of Fortran where by default there was no preprocessor. And if you needed the preprocessor, it was something that you explicitly opted into. I mean, that's a familiar story in C++. But yeah, of us getting the defaults wrong. But I would really argue that I don't think that we'll ever fully eliminate the use case for it, even with something like const eval, even with something like hygienic macros,
+人们会想要带有预处理器的 C++，而不是没有预处理器的 C++。我会说也许 C++ 犯的错误是它选择了错误的默认值。也许我们应该走 Fortran 的路线，默认情况下没有预处理器。如果你需要预处理器，那是你明确选择加入的东西。我的意思是，这是 C++ 中一个熟悉的故事。但关于我们把默认值搞错了。但我真的认为我不认为我们会完全消除它的用例，即使有像 const eval 这样的东西，即使有像卫生宏这样的东西，
+
+27
+00:22:48.000 --> 00:23:40.000
+even with some sort of lazy evaluation mechanism, even with reflection, which static reflection will address a lot of the use cases, as will just the expansion of what constexpr can do means that there's a lot of things that you used to have to do in macros that today you can do in just the native language. I think a lot of that will reduce what the use cases for macros have been historically, but I think that there will continue to be uses and that we'll find that there will be new uses. And again, a lot of language features have been, or a lot of facilities that are now important to C++ were first prototyped with macros. You know, Boost had a library that emulated move semantics
+即使有某种惰性求值机制，即使有反射，静态反射将解决很多用例，就像 constexpr 能做的事情的扩展意味着很多你过去必须在宏中做的事情，今天你可以在原生语言中做。我认为这会减少宏在历史上的一些用例，但我认为将继续有用途，并且我们会发现会有新的用途。再说一次，很多语言特性，或者现在对 C++ 很重要的设施，最初都是用宏原型设计的。你知道，Boost 有一个模拟移动语义的库
+
+28
+00:23:40.000 --> 00:24:13.000
+and relied on macros. The same can be said for a bunch of other C++11 facilities. So I don't, or concept is another good one. A lot of, before we had concepts in language, a lot of libraries used some macro-based concept framework. I think that 10 years from now, we'll be using macros perhaps in slightly different ways than we're using them today. Maybe to prototype, you know,
+并依赖于宏。其他一些 C++11 设施也是如此。所以我不知道，或者 concept 是另一个很好的例子。在语言中有 concept 之前，很多库使用了一些基于宏的 concept 框架。我认为 10 年后，我们使用宏的方式可能与今天略有不同。也许是为了原型设计，你知道，
+
+29
+00:24:13.000 --> 00:24:55.000
+whatever the new hotness is 10 years from now, whatever the next upcoming C++ feature is, but I don't think they're going away. How do, I mean, i'm not a compiler hacker yet uh so i guess i can't i can't speak to this but like i i feel like just because a language feature is prototyped using macros isn't like other languages don't have textual replacement macros yet they still manage to iterate and i would feel like that's just because they work on the compiler like they just make the change in the compiler or the interpreter like uh that's it's not an unfair point but but i would argue that a lot of i would
+10 年后什么是新的热点，无论下一个即将到来的 C++ 特性是什么，但我认为它们不会消失。我的意思是，我还不是编译器黑客，所以我猜我不能谈论这个，但我觉得仅仅因为一个语言特性是用宏原型设计的，并不意味着其他语言还没有文本替换宏，它们仍然设法迭代。我会觉得那只是因为他们在编译器上工作，他们只是在编译器或解释器中进行更改，这不是一个不公平的观点，但我会争辩说，很多，我会
+
+30
+00:24:55.000 --> 00:25:39.000
+argue that a lot of the the most powerful languages in the world do have um some sort of uh macro system like a lot of lisp style languages and a lot of them have textual mechanisms too. Some languages don't, but there's a lot of very powerful languages out there, a lot of functional languages that do have facilities very similar to this. Yeah. Well, you've definitely taught me at least one thing and um maybe one of these days well i'll probably i'll wait till i i give a talk that summarizes all the all the crazy stuff that i've i've had to port in the existing code base but like just in the
+争辩说，世界上许多最强大的语言确实有某种宏系统，比如很多 Lisp 风格的语言，而且它们中很多也有文本机制。有些语言没有，但有很多非常强大的语言，很多函数式语言确实有非常类似于此的设施。是的。好吧，你肯定至少教会了我一件事，也许有一天，我会等到我做一个总结我必须在现有代码库中移植的所有疯狂东西的演讲，但就像在
+
+31
+00:25:39.000 --> 00:26:36.000
+last live stream that i did we i went from you know, a C function with variables declared at the top and then this do macro for loop. And so like, I got rid of the macro, looked at the for loop, and then was like, oh, that's just a stood mismatch. And then replaced, replaced the for loop with an algorithm. And so, yeah, I just, my feeling is that a lot of these cases we're getting tools or the tools already exist um to like use something that's not a macro that's better but no you may be right you may be right i mean maybe that's just because i haven't fallen down this macro rabbit hole um that clearly you have i don't know why i derive great joy and uh in writing these little macro facilities but i really do um i it actually that just made me think of it's a quote that is not
+我做的最后一次直播中，我们从一个在顶部声明了变量的 C 函数，然后是这个 do 宏 for 循环。所以，我摆脱了宏，看了看 for 循环，然后想，哦，那只是一个 std mismatch。然后用算法替换了 for 循环。所以，是的，我的感觉是，很多这些情况下，我们正在获得工具，或者工具已经存在，可以使用不是宏的东西，那更好。但你可能是对的，你可能是对的。我的意思是，也许那只是因为我还没有掉进这个宏的兔子洞，而你显然已经掉进去了。我不知道为什么我从编写这些小宏设施中获得巨大的快乐，但我确实，它实际上让我想到了，这是一句引言，不是
+
+32
+00:26:36.000 --> 00:27:11.000
+you don't want to be associated with like some people program to be happy and uh some people are happy by being clever something like that where like, that's not a quote you want. Like, the quote that that came from was a Ruby talk, and the person that was making the comment was just saying that, you know, in Ruby land, we really want to generate nice code that's pleasant to read, and, like, your programmer happiness is, like, an important thing. Unfortunately, what makes some people happy is to write incredibly clever code and then a comment that says look how clever
+你不想与某些人编程是为了快乐联系在一起，有些人通过变得聪明而快乐，类似那样，那不是你想要的引言。那句引言来自一个 Ruby 演讲，发表评论的人只是说，在 Ruby 世界里，我们真的想生成易于阅读的好代码，而且你的程序员幸福感是一件重要的事情。不幸的是，让一些人快乐的是编写极其聪明的代码，然后加上一条注释说看看有多聪明
+
+33
+00:27:11.000 --> 00:27:38.000
+and uh when you just said that about like i'm not sure why i just i love putting myself together a macro sandwich and uh just taking a big bite sounded a little bit like that, but I will have to spend more time, spend more time with these macros. And we're going to have to come back and revisit this topic. Maybe we'll get it. One of the reasons why I might like it is because doing stuff in macros,
+当你刚才说那个关于我不确定为什么，我只是，我喜欢给自己做一个宏三明治，然后大咬一口时，听起来有点像那样，但我将不得不花更多时间，花更多时间研究这些宏。我们将不得不回来重新讨论这个话题。也许我们会明白的。我可能喜欢它的原因之一是，在宏中做事情，
+
+34
+00:27:38.000 --> 00:28:12.000
+like doing even very simple things in macros can often be like challenging to do. Making something like incrementing an integer work, that's not something that it supports natively, but there's that trick that I showed you that you can do to implement it. And I think I just like, I enjoy making those simple things work because the thing that I'm looking to implement is not something that's very complex.
+即使在宏中做非常简单的事情也常常具有挑战性。让像递增整数这样的东西工作，这不是它原生支持的东西，但有我向你展示的那个技巧，你可以实现它。我想我只是喜欢，我喜欢让那些简单的事情工作，因为我想要实现的东西并不是非常复杂。
+
+35
+00:28:12.000 --> 00:29:12.000
+It's very simple. It's very clean. And there's not a lot of complexity or baggage there. Whereas typically I'm writing concurrent software where the thing you're trying to implement is very complex. There's a lot of tradeoffs. There's a lot of performance issues and guarantees and expectations to worry about. And, you know, if I'm just having to write a macro that does, you One is with great power comes great responsibility from Spider-Man. And then I'm going to play the song. I've got the power and somehow splice your voice into it.
+它非常简单。它非常干净。而且没有太多的复杂性或包袱。而通常我编写并发软件时，你试图实现的东西非常复杂。有很多权衡。有很多性能问题、保证和期望需要担心。而且，你知道，如果我只是不得不写一个宏来做，一是能力越大，责任越大，来自蜘蛛侠。然后我要播放那首歌。我有能力，并以某种方式将你的声音剪辑进去。
+
+36
+00:29:12.000 --> 00:29:17.000
+Talking about the power of macros. I like it. I like it. Thanks for listening. Have a great day and we'll see you in the next episode. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+谈论宏的力量。我喜欢它。我喜欢它。感谢收听。祝你有美好的一天，我们下一集见。本集还没有评论。点击转录中的任何句子即可发表评论。

@@ -1,0 +1,206 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:50.000
+I'm down in Florida this week. I've been in Costa Rica. Welcome to ADSP The Podcast, episode 167, recorded in between January 30th and February 2nd of 2024. My name is Connor, and today with my co-host Bryce, we play phone tag because he was down in Florida and I just got back from Costa Rica. In today's episode, we chat about control structures in array programming and array languages, as well as two algorithms, scatter and gather. Hey Connor, it's Bryce. I was just trying to reach you, but it seems like you're busy right now,
+这周我在佛罗里达。我之前在哥斯达黎加。欢迎收听 ADSP 播客第 167 期，录制于 2024 年 1 月 30 日至 2 月 2 日之间。我是 Connor，今天我和我的联合主持人 Bryce 玩起了电话捉迷藏，因为他在佛罗里达，而我刚从哥斯达黎加回来。在今天的节目中，我们聊聊数组编程和数组语言中的控制结构，以及两种算法：散布（scatter）和收集（gather）。嘿 Connor，我是 Bryce。我刚才试着联系你，但你好像正忙着，
+
+2
+00:00:50.000 --> 00:01:46.000
+so I figured I would leave you a message. I'm down in Florida this week visiting my mom and my stepdad, and we've had some not-so-great weather thus far. But this morning I woke up, and it's nice and sunny and warm. And so I'm out on my mom's patio by her pool, just doing a little bit of work, taking some meetings. And I keep thinking about this conversation and question that I was asked yesterday that I think you'd find quite interesting. So I was talking to somebody about array programming languages, and they asked me, well, how do you express conditional logic in an array programming language? And this is somebody who came from an imperative programming background.
+所以我打算给你留个言。这周我在佛罗里达看望我妈妈和继父，到目前为止天气不太好。但今天早上醒来，天气晴朗温暖。所以我现在在我妈泳池边的露台上，一边处理点工作，一边开几个会。我一直在想昨天有人问我的一个问题，我觉得你会觉得很有意思。当时我在和某人谈论数组编程语言，他们问我：“在数组编程语言中，该如何表达条件逻辑呢？” 这位朋友有着命令式编程的背景。
+
+3
+00:01:46.000 --> 00:03:09.000
+And so I think they were thinking of, well, okay, like, how do I write, you know, if and else? And more so, I think they were in their head sort of imagining like, okay, I can see how I could, you know, chain together some transforms and some reductions and scans. But it wasn't as straightforward for them to see how they might introduce an if-else that maybe would appear in the inner body of a for loop. Now my first reaction was that you would use something like a filter. Now this is something from C++ ranges. Filter is an operation that takes a range and a predicate and it returns you a range that has all of the elements for which the filter returned true. And so then you can use this to select which elements are going to participate in the rest of the operations that you're going to apply to this range. Now, this pattern is very common in parallel programming, where traditional conditional logic can be quite a challenge.
+我想他们当时在想：“好吧，我该怎么写 if 和 else 呢？” 更进一步说，我觉得他们脑子里在想：“好吧，我明白如何将一些转换、归约（reduction）和扫描（scan）串联起来，但要引入一个可能出现在 for 循环内部的 if-else 对他们来说似乎没那么直观。” 我当时的第一反应是你会使用类似 filter（过滤器）的东西。这是 C++ ranges 中的概念。Filter 是一种操作，它接收一个范围和一个谓词，并返回一个包含所有使过滤器返回 true 的元素的范围。然后，你可以用它来选择哪些元素将参与后续应用于该范围的操作。这种模式在并行编程中非常常见，因为传统的条件逻辑在并行环境下可能是一个巨大的挑战。
+
+4
+00:03:09.000 --> 00:04:29.000
+In particular, in the world of vector or SIMD programming, conditional logic can be very hard, and for a long time it was not possible to express in many cases. The way that you often express it is through masked operations. So a masked operation is an operation that takes a bit mask that tells you which elements of the vector are going to participate in this operation. And you can construct those bit masks through other operations that might apply a predicate, etc. This is a very common thing in SIMD programming models, especially today. So like the ARM SVE instruction set essentially has all of the operations have a masked form. And this is also a common pattern in GPU programming. This is how we do selection and grouping in libraries like a cub, we build up some mask. And in some cases, we have to propagate
+特别是在向量或 SIMD 编程领域，条件逻辑可能非常困难，而且在很长一段时间内，很多情况下都无法表达。通常表达它的方式是通过掩码操作（masked operations）。掩码操作是一种接收位掩码的操作，它告诉你向量中的哪些元素将参与此操作。你可以通过应用谓词等其他操作来构建这些位掩码。这是 SIMD 编程模型中非常常见的事情，尤其是在今天。例如，ARM SVE 指令集基本上所有的操作都有掩码形式。这也是 GPU 编程中的常见模式。这就是我们在 cub 等库中进行选择和分组的方式，我们构建一些掩码。在某些情况下，我们必须传播
+
+5
+00:04:29.000 --> 00:05:20.000
+information about this mask forward using scans. For example, Cubs Selective has to do this because it is a stream compacting operation. So it decides, okay, well, these elements in this sequence, you know, match this predicate. And then I need to move all the ones that matched to the front and move all the ones that didn't match to the back. And so I need to know as I'm going, where is the cursor of where's the next spot where I need to put things into? And that requires information from earlier in the sequence, and thus it's a scan.
+关于这个掩码的信息，使用扫描（scans）。例如，Cubs Selective 就必须这样做，因为它是一个流压缩（stream compacting）操作。它会决定：“好吧，序列中的这些元素符合这个谓词。” 然后我需要把所有匹配的元素移到前面，把所有不匹配的元素移到后面。所以我需要在我进行的过程中知道，我需要把东西放进的下一个位置的游标在哪里？这需要序列中较早的信息，因此它是一个扫描。
+
+6
+00:05:20.000 --> 00:06:33.000
+But I think there was a deeper question underneath this question that I was asked, which is that I think this person was really expressing to me that they felt like array programming languages couldn't express everything that you might need to write a full-fledged application. I think that they were telling me, well, okay, array programming languages might be a great thing to use in one part of my application to write, you know, a particular compute operation, but I can't do everything with them that I can only use an array programming language within a broader project that is primarily written in some more general-purpose programming language. And I think maybe what they were getting at is that, you know, there may be cases where you need to write some scalar sort of control logic, you know, like some just single-threaded, some non-array operation that, you know,
+但我认为在这个问题背后还有一个更深层的问题，那就是我觉得这个人实际上是在向我表达，他们觉得数组编程语言无法表达编写一个完整应用程序所需的一切。我想他们是在告诉我：“好吧，数组编程语言可能在我的应用程序的某一部分中非常有用，可以编写特定的计算操作，但我不能用它们做所有事情，我只能在主要用更通用的编程语言编写的更广泛的项目中使用数组编程语言。” 我想他们可能想表达的是，在某些情况下，你可能需要编写一些标量控制逻辑，比如一些单线程的、非数组的操作，
+
+7
+00:06:33.000 --> 00:07:12.000
+does IO or does some initialization or something like that. And they felt like, well, I can't really express that in array programming language. And so I was sort of interested in your thoughts about this, both about this question of can you write full applications in an array programming language? Can you express the sort of imperative logic for setup and IO and you know stitching together you know all
+做一些 IO 或初始化之类的东西。他们觉得：“好吧，我无法在数组编程语言中表达这一点。” 所以我对你的想法很感兴趣，关于“你能在数组编程语言中编写完整的应用程序吗？”这个问题，以及你是否能表达用于设置、IO 和拼接所有那些除了计算之外的幕后工作的命令式逻辑。但我还想知道，我是不是漏掉了一些在数组编程语言中实现条件逻辑的方法。你知道，filter 是我能想到的，但也许还有其他你了解但我没想到的方法。总之，这周我会很忙，我要全职工作，还要花时间陪家人，所以可能不太好联系，但如果你能联系到我，给我回个电话并留个言。
+
+8
+00:07:12.000 --> 00:08:00.000
+the various behind the scenes things that that an application does aside from just compute but also I was wondering whether I'm missing some ways in which conditional logic can be done in array programming languages. You know, the filter is the one that came to my mind, but maybe there's some others that, you know, you know of that I hadn't thought of. Anyways, I'm going to be pretty busy this week you know i'm working a full work week and i've got my family uh to spend time with so it may be a little bit hard to reach but uh you give me a call back and uh leave a message if you can't reach me
+嘿 Bryce，抱歉没接到你的电话。我过去不到一周的时间都在哥斯达黎加参加婚礼。恭喜新郎新娘。这是我参加过的最好的婚礼之一。我们玩得很开心。婚礼是在周六。周二我们还去坐了双体船。总之，我们现在回到加拿大多伦多了。刚看到你的电话，想回复一下。
+
+9
+00:08:00.000 --> 00:08:26.000
+hey bryce sorry i missed your call i've been been in Costa Rica for the last, not week, but just under a week for a wedding. Congratulations to the bride and groom. One of the best weddings I've been to. We had a lot of fun. Wedding was on Saturday. We ended up doing a catamaran on Tuesday. Anyways, we are back in Toronto, Canada now. Just got your call and thought I would reply.
+所以总的来说，问题是：当你想做类似条件分支的事情时，你在数组编程语言中会用什么？你没提到这一点，但人们在数组语言中经常使用的另一个不一定显而易见的东西是类似 while 循环的东西，你有一个试图收敛的条件，它与 for 循环不同，因为 for 循环你知道要完成的迭代次数，而 while 循环可能有一些条件，比如你试图收敛到某个阈值，而你不知道需要进行多少次迭代。所以你基本上需要检查你是否有某种条件。简短的回答是：
+
+10
+00:08:26.000 --> 00:09:10.000
+So the question overall was, what do you reach for in an array programming language when you want to do something like a conditional branch? Or you didn't mention this, but another common thing that people reach for in array language is that isn't necessarily obvious how to do is something like a while loop where you have a condition that you're trying to converge to and it's different than a for loop in that a for loop you know the length of the number of iterations you want to complete where a while loop might have some condition like you know you're trying to converge to some you know threshold and you don't know the number of iterations you're going to need to do. So you need to basically check you have some kind of condition. And the short answer to this is that
+几乎所有的数组语言都有控制结构。我们实际上在我的另一个播客 ArrayCast 上做过一期节目，是第 32 期，标题是《数组语言中的控制结构》，我们在那里回答了这个问题，即：你是怎么做到的？正如我之前所说，答案是大多数语言（如 APL 和 J）实际上都有控制结构。它们本身不是原语，因为它们作为关键字内置在语言中，所以你不会得到那些小的 ASCII 双字符组。在 J 中，我会为那些想要的人在节目说明中留下链接，它们用小写字母后跟一个句点来表示它们的控制结构。所以
+
+11
+00:09:10.000 --> 00:09:53.000
+almost all array languages have control structures. And we actually did an episode on my other podcast, ArrayCast. It was episode 32. And the title of it was Control Structures in Array Languages, where we answer this question, basically, which is, how do you do this? And like I said before, the answer is that most languages like APL and J actually have control structures in them. They're not primitives, per se, because they're built into the language as keywords, so you don't get these little ASCII digraphs. In J, I will leave links in the show notes for folks that want they represent their control structures with lowercase letters followed by a period. So
+其中几个是 for.、if.、else if.、end. 等等。在 APL 中，我们有类似的控制结构，我认为是帕斯卡命名法。比如如果你想要一个 while 循环，它是冒号、大写 W，然后是小写 h-i-l-e。然后有 endwhile、if、endif 等等。但对于这条回复消息的其余部分，我将为你朗读 APL 维基中关于数组语言中控制结构的历史部分，因为它相当有趣。所以我们开始吧。相对于其他在 20 世纪 50 年代末开始采用结构化编程，并在 20 世纪 80 年代末几乎全部支持它的编程语言，APL 在采用这种范式方面进展缓慢。主流数组语言在 20 世纪 90 年代开始采用，而一些方言，如 APL2 和 GNU APL，从未添加对控制结构的支持。2010 年代及以后开发的许多方言也不包含控制结构，而是倾向于轻量级的 defund（定义函数语法），结合诸如 each（显式映射运算符）之类的运算符。埃德加·迪杰斯特拉（Edgar Dykstra）于 1968 年发表的信件《Go To 语句有害论》被广泛认为是推动结构化编程的转折点。当时，
+
+12
+00:09:53.000 --> 00:10:34.000
+a couple of them are for dot, if dot, else if dot, and dot, etc. And in APL, we have similar control structures, which are I I think, Pascal case. So like if you want a while loop, it's colon, capital W, and then lowercase H-I-L-E. And then there's end while, if, end if, et cetera. But for the rest of this, you know, return message, I will read to you from the APL wiki, the history section on control structures in array languages because it is rather interesting. So here we go. Relative to other programming languages, which began to adapt structured programming in the
+APL 程序是作为定义函数编写的，使用分支（branch）进行控制流，但程序员在 20 世纪 70 年代中期开始发表回应，考虑替代方案。几位程序员展示了如何在当前的 APL 系统中使用结构化编程，或修改这些系统以更好地支持它。其他人提出了更激进的改变，允许用户定义控制结构。在 20 世纪 70 年代，用 ALGOL 风格的控制结构扩展 APL 的实验也开始了。这导致了 APL-GOAL 的出现，它于 1972 年首次被描述，使用以带下划线字符开头的名称，并由一个在 APL 360 中实现并以其为目标的编译器支持。一个类似的项目被称为 SAPL（结构化 APL），它使用保留字作为控制结构，并于 1978 年发表。
+
+13
+00:10:34.000 --> 00:11:10.000
+late 1950s and almost all supported it by the end of the 1980s, APL was slow to adopt the paradigm. Adoption by mainstream array languages began in the 1990s, and some dialects, such as APL2 and GNU APL, have never added support for control structures. Many dialects developed in the 2010s and later also do not include control structures, favoring light defund, that stands for defined function syntax, in combination with operators such as each, that is the explicit mapping operator. Edgar Dykstra's letter, Go To Considered Harmful, published in 1968, is widely considered a turning point in the push for structured programming. At the time,
+使用保留字的控制结构在 1989 年被包含在 A+ 中。对于那些不知道的人，A+ 是 Arthur Whitney 创建的最早的编程语言之一，他也是 K 语言的著名创造者。1994 年，它们都被添加到 J（又名 APL 2.0）中，带有诸如 while. 之类的点语法，并添加到 APL*PLUS III 中，使用冒号前缀语法，即冒号大写 W-H-I-L-E，此后在 APL 中被广泛采用。Dyalog 在 1996 年的 8.0 版本中引入了类似的结构。它们也出现在 SACS、APL-X 和 NARS 2000 中。较新的 APL 方言（如 NGN-APL、APL-4 和 Zyma-APL）通常会丢弃控制结构以及分支，理由是 defunds 以及诸如 HNREDUCE 或递归之类的运算符允许类似的功能。这种可能性在 20 世纪 70 年代是不存在的，因为当时的 APL 不允许任意函数作为
+
+14
+00:11:10.000 --> 00:11:54.000
+APL programs were written as defined functions using branch for control flow, but programmers began to publish responses considering alternatives in the mid-1970s. Several programmers showed how to use structured programming in current APL systems or modify these systems to better support it. Others proposed more radical changes that would allow the user to define control structures. Experiments to extend APL with ALGOL-style control structures also began in the 1970s. This led to APL-GOAL, first described in 1972, which used names beginning with underlined characters and was supported by a compiler implemented in and targeting APL 360. A similar project was called SAPL for structured APL and that used reserved words for control structures and was published in 1978.
+操作数，并且在 20 世纪 90 年代 defunds 和隐式编程（tacit programming）兴起之前，通常没有被考虑过。APRIL 是一种在 Common Lisp 中实现的 APL，它不支持控制结构，理由是 APRIL 代码应该嵌入到 Common Lisp 中，后者可以更好地处理控制流。BQN 也不包含预定义的控制结构，但其一等函数和列表字面量允许实现类似的语法，
+
+15
+00:11:54.000 --> 00:12:55.000
+Control structures using reserved words were included in A-plus by 1989. And A-plus, for those of you that don't know, is one of the very first programming languages that Arthur Whitney created, who is famously the creator of the K languages. In 1994, they were both added to J, aka APL 2.0, with a dotted syntax such as while dot and to APL star plus three using the colon prefixed syntax, aka colon capital W-H-I-L-E, that has since been widely adopted in APL. Dialog introduced similar structures in version 8.0 in 1996. They also appear in SACS, APL-X, and NARS 2000. Newer APL dialects such as NGN-APL, APL-4, and Zyma-APL often discard control structures as well as branch on the grounds that defunds, along with operators like HNREDUCE or recursion, allow similar functionality. Such a possibility was not available in the 1970s because APLs at the time did not allow arbitrary functions to be
+而无需扩展语言。这就是历史部分的结尾。总的来说，像 BQN 这样的语言的技术水平更高，它是一种更函数式的语言，允许你做一些事情，比如构建一个函数列表，然后使用你之前描述的掩码来根据你构建的掩码执行条件逻辑和函数。所以你可以做的一件常见的事情就是构建一个包含两个函数的列表，然后构建一个掩码。所以你可以做的一件常见的事情就是构建一个包含两个函数的列表
+
+16
+00:12:55.000 --> 00:13:19.000
+operands and was not generally considered before the rise of defunds and tacit programming in the 1990s. APRIL, which is a APL implemented in Common Lisp, does not support control structures on the grounds that APRL code should be embedded in Common Lisp, which can handle control flow better. BQN also does not include predefined control structures, but its first class functions and list literals allow a similar syntax to be achieved
+和一个要么是 1 0 要么是 0 1 的掩码，然后你可以根据你构建的掩码执行其中一个函数。BQN 也支持递归之类的东西。他们关于 APRIL 的评论也很有趣，
+
+17
+00:13:19.000 --> 00:13:47.000
+without extending the language. So that is the end of the history section. In general, the state of the art in languages like BQN, it is a more functional language and allows you to do things like building up a list of functions and then using your mask that you described earlier to then basically execute conditional logic and functions based on the mask that you build up. So a common thing you can do is just build up a list of two functions and then a mask that you build up. So a common thing you can do is just build up a list of two functions
+这有点类似于你在 GPU 编程世界中使用 Thrust 和 Cub 等库所做的事情。你将通过调用这些库提供的函数来执行你的内核。
+
+18
+00:13:47.000 --> 00:14:04.000
+and then a mask that's either gonna be a one zero or a zero one, and then you can execute one of those functions depending on which of the masks you build up. And then BQN also has support for recursion and things like that. And it's also an interesting comment that they made about April,
+但如果你需要做这些条件逻辑的事情，你仍然可以使用 C++ 附带的一切，因为这些只是 CUDA C++ 库。话虽如此，在这一历史中，很明显某些 APL 在发展过程中从未添加过任何这些结构化编程控制流语句的支持。所以这绝对是可能的。而且其中一个
+
+19
+00:14:04.000 --> 00:14:15.000
+which is something, I guess, a little bit more akin to what you might be doing in the GPU programming world with libraries like Thrust and Cub. You're going to execute your kernels by invoking functions that are provided via these libraries.
+没有真正提到的运算符是幂运算符（power operator）。它让你能够基本上做 while 语句的等价物，使用一种称为“重复匹配”或“幂匹配”的模式，基本上是一个幂或重复运算符，你可以基本上把一个函数提高到某个数字的幂。所以如果你想重复某件事 10 次，比如乘以 10 或平方，你可以用幂运算符和字面数字 10 来做到这一点。这有点模仿了 for 循环。然而，如果你想模仿 while 循环，你可以使用幂匹配模式，其中你基本上包含一个条件语句
+
+20
+00:14:15.000 --> 00:14:38.000
+But if you need to do sort of these conditional logic things, you still have access to everything that comes with C++ because these are just CUDA C++ libraries. That being said, within this history, it is clear that certain APLs along the way never added any support for any of these structured programming control flow statements. So it is definitely possible. And one of the
+连同你的幂运算符。现在你将重复你与高阶函数 power 配对的任何函数，直到它收敛并且这个谓词或条件得到满足。所以递归、幂运算符和掩码基本上让你能够复制你在典型的命令式编程语言中想要做的所有事情。希望这回答了你的问题。有兴趣听听你对历史部分和我刚才提到的所有内容的看法，
+
+21
+00:14:38.000 --> 00:15:19.000
+operators that wasn't really mentioned here is the power operator. And that gives you the ability to basically do the equivalent of the while statement with a pattern called repeat match or power match, which basically a power or repeat operator, you can basically put a function to the power of a number. So if you want to repeat something 10 times, like multiplying by 10 or squaring something, you can do that with the power operator and then the literal number 10. And that kind of mimics a for loop. However, if you want to mimic a while loop, you can use the power match pattern where you include basically a conditional statement
+希望你在佛罗里达玩得开心。很快再联系，伙计。嘿，刚收到你的消息，所以我想试着联系你。听起来你在哥斯达黎加玩得很开心。希望你没有晒伤。游泳游得太多了吗？我们正要出发去打迷你高尔夫，我有种预感，结果对我来说不会太好，因为我相当笨拙。所以听到
+
+22
+00:15:19.000 --> 00:15:48.000
+along with your power operator. And now you're gonna repeat whatever function you've paired your higher order function power with until it converges and this predicate or condition is satisfied. So recursion, the power operator, and masks basically give you the ability to replicate everything that you would want to do in a typical imperative programming language. Hope that answers your question. Interested to hear thoughts on the history section and everything that I just mentioned,
+关于数组编程语言中控制流的所有历史真的很有趣。我最初被问到这个问题时，甚至没想过 while 循环。你知道，C++ 世界中还有另一个例子，那就是在 senders 的世界里。有一个名为 repeat 的 sender 适配器，你给它一个 sender 链和一个计数，它执行该 sender 链 n 次，其中 n 是计数。据推测，你也可以制作一个 while 形式的，它不接受计数，而是接受一个谓词，用于判断何时
+
+23
+00:15:48.000 --> 00:16:14.000
+and hope you're having a good time in Florida. Hear from you soon, buddy. Hey, just got your message, so I thought I'd try to reach you. Sounds like you had a fun time in Costa Rica. I hope you didn't get sunburned. Did you get too much swimming? We're about to leave to go play some mini golf, and I have a feeling it's not going to end well for me because I am quite clumsy. So it was really interesting to hear
+它应该停止。并且该谓词在每次迭代时都会从底层的 sender 链接收值。听到关于 APRIL 的那番话真的很有趣，创造者说：“好吧，我们不需要在 APRIL 中有这个，因为它旨在嵌入到 Lisp 中。” 我想知道有多少数组编程语言被设计为嵌入到其他语言中。如果你仔细想想，ranges 和 range 适配器，以及 senders 和 sender 适配器，整个那种小管道语法，那就像是一种被设计为嵌入到 C++ 中的数组编程语言。所以我还有另一个问题要问
+
+24
+00:16:14.000 --> 00:17:09.000
+about all of the history of control flow in array programming languages. I hadn't even thought about while loops when I was originally asked this question. And you know, there's another example from the world of C++ which is in the world of senders. There is this sender adapter called repeat where you give it a sender chain and then a count, and it performs that sender chain in times where n is the count. And presumably, you could also make a while form of that too, where instead of taking a count, it takes a predicate for when
+你。你熟悉 thrust 的 gather 和 scatter 算法吗？前几天我浏览了几个 thrust 示例，试图找到一些我可以用于我正在撰写的关于 C++ 异步并行算法的论文的示例。我注意到很多 thrust 示例算法都使用了 gather 和 scatter。我不认为这是我们在播客中详细讨论过或使用过的算法。所以 thrust gather，它接收一个映射范围（他们称之为 map）作为输入，然后是一个输入范围（必须是随机访问迭代器），然后是一个输出迭代器。你获取那个映射范围，对于映射范围的每个元素，你将其用作输入范围的索引。然后你将该元素复制到输出迭代器。然后 scatter 做的是相反的事情，它输入范围，
+
+25
+00:17:09.000 --> 00:18:00.000
+it should stop. And that predicate gets sent the value from the underlying sender chain every iteration. It was really interesting to hear that remark about April, where the creator sort of said, well, we don't need to have this in April because it's meant to be embedded in Lisp. I wonder how many array programming languages were designed to be embedded in other languages. If you think about it, ranges and the range adapters and the senders and the sender adapters, that whole like little piping syntax, that's sort of like an array programming language that was designed to be embedded in C++. So I had another question for
+它将其复制到与该输入元素关联的映射中的索引对应的输出元素。所以它们让我想起了 thrust 中的 by-key 算法。它们几乎就像是 copy-by-key。所以这些在其中一个示例中被使用的地方之一是 thrust 字典序排序示例，它执行字典序排序，
+
+26
+00:18:00.000 --> 00:19:47.000
+you. Are you familiar with the thrust gather and scatter algorithms? I was looking through a couple of the thrust examples the other day, trying to find some examples that I could use in a paper that I'm writing about C++ asynchronous parallel algorithms. And I noticed that a lot of the thrust example algorithms use gather and scatter. And I don't think they're algorithms that we've talked about in great detail on the podcast before or that we've used. So thrust gather, it takes as an input a range of a map, they call it, and then an input range, which has to be a random access iterator, and then an output iterator. And you take that map range, and for each element of that map range, you use it as an index to the input range. And then you copy that element to the output iterator. And then scatter does sort of the opposite, where it the input range,
+比如你想对三个元素的元组进行排序，你想先按中间元素排序，然后按第一个元素，然后按第三个元素。这个 Thrust 示例的做法是创建一个排列向量，然后执行这个更新排列步骤，它使用排列向量作为映射对当前的重新排序执行 gather，
+
+27
+00:19:47.000 --> 00:20:34.000
+it copies it to the output element corresponding to the index in the map that is associated with that input element. So they kind of remind me of the by-key algorithms in thrust. They're almost sort of like a copy-by-key, maybe. And so one of the places where these are used in one of the examples is in the thrust lexographical sort example where it does a lexographical sort,
+并将原始输入的键作为 gather 的输入。然后它输出到某个临时存储。然后它对临时键存储执行 stable sort by key。该稳定排序的输出就是这个排列向量。然后你执行这个更新排列步骤 n 次，其中 n 是你想按其排序的列数，
+
+28
+00:20:34.000 --> 00:21:13.000
+like you want to sort some tuple of three elements where you want to sort it first by the middle element and then by the first element and then by the third element. And the way that this Thrust example does it is it creates this permutation vector, and then it does this update permutation step where it does a gather of the current reordering using the permutation vector
+如果你用 Excel 的术语来考虑的话。最终结果是，你得到了需要应用于你正在排序的事物的索引的排列向量。还有几个其他示例使用了这个 gather 算法。我只是觉得这从来没有出现在我们的聊天中非常有趣。
+
+29
+00:21:13.000 --> 00:22:04.000
+as the map, and then the keys of your original input as the input to the gather. And then it outputs to some temporary storage. And then it does a stable sort by key of the temporary key storage. and the output of that stable sort is this permutation vector. And then you do this update permutation step n times, where n is the number of columns that you want to sort by,
+你可以想象 gather 和 scatter 被用于流压缩之类的事情，比如实现类似 copy if 的功能，但也许我们从来没有讨论过它，因为我们只是有优化的 copy if 可用。所以我们总是使用那个 copy if，而从来没有真正讨论过它是如何实现的。总之，我只是想知道你对此有什么想法。你用过 thrust scatter 或 scatter 吗？总之，希望很快能收到你的消息。回头聊，伙计。
+
+30
+00:22:04.000 --> 00:22:31.000
+if you think about this in Excel terms. And then at the end result of that, you have this permutation vector of indices that you need to apply to the thing that you're sorting. And there's a couple other examples that use this gather algorithm. And I just thought it was quite interesting that this is never something that's come up in our chats.
+很高兴收到你的回信，Bryce，希望你玩迷你高尔夫玩得开心。我们得在下一期节目中回顾一下进展如何，因为我相信这可能是最后一条消息了。你提出 scatter 和 gather 算法真的很有趣。我其实记不清我是否在 2021 年 GTC 的“Thrust 与标准 C++ 算法”演讲中涵盖了它们。但如果我没有涵盖它们，我至少简要提到了它们。我熟悉这些算法。我不经常使用它们，就像我不经常使用它们在 APL 中的等价物一样。但它们，我不确定它们是否来自 APL，但它们在 APL 中有完全的等价物。你提出的排序示例实际上很有趣，因为当你试图在 APL 中对某物进行排序时，你实际上没有排序原语。你有
+
+31
+00:22:31.000 --> 00:23:13.000
+You can imagine that gather and scatter are used for things like stream compactation, so to implement something like a copy if, but maybe we never have talked about it because we just have the optimized copy if available. And so we just always use that copy if and we never really talked about how it's implemented. Anyways, I was just wondering if you'd had any thoughts about that. Have you ever used thrust scatter or scatter? Anyways, hope to hear from you soon. Talk to you later, buddy.
+两个不同的原语，你将它们组合在一起以获得该排序。有几种不同的方法可以做到这一点，但我将要解释的方法使用括号索引和一个称为 grade（grade up 和 grade down）的原语。如果你将 grade up 和 grade down 应用于秩为 1 的向量，它们会给你一个索引的排列，如果你通过那种索引方式索引到一个数组以重新排序它们，如果你有一个数组（我们称之为 x），它的拼写方式是 x，左括号，grade up，x，右括号。这组括号就是所谓的括号索引。它是 thrust 中 gather 的等价物。所以它基本上是给定一个索引的排列，括号索引将根据排列索引对你的秩为 1 的向量（即本例中的 x）进行排列。而 scatter 也有
+
+32
+00:23:13.000 --> 00:24:05.000
+Good to hear back from you bryce hope you had fun playing mini golf we'll have to revisit how that went in the next episode as i believe this will probably be the last message so interesting that you bring up the scatter and gather algorithms i can't actually recall if I covered them in my thrust versus standard C++ algorithms talk from, I believe it was GTC 2021. But if I didn't cover them, I at least briefly mentioned them. And I am familiar with these algorithms. I don't reach for them very often, the same way that I don't reach for their equivalents in APL very often. But they, I'm not sure if they come from APL, but they have exact equivalents in APL. And the sort example that you came up with is actually interesting because when you are trying to sort something in APL, you actually don't have a sort primitive. You have
+在 APL 中的等价物，那就是索引赋值。所以在排序示例中，你有 x 括号 grade up 或 grade down x n 括号，那只是一个会返回给你一个秩为 1 的向量的表达式。但你也可以进行索引赋值，因为 APL 中的赋值是左箭头。所以如果你再次有一个向量 x，你可以写 x 括号，然后是一组索引。我们称之为 2、3、4，这将是该向量的第二个、第三个和第四个索引。右括号。然后你有你的左箭头。然后当你进行索引赋值时，你必须在右侧有一个与你试图赋值的索引数量长度匹配的数组。
+
+33
+00:24:05.000 --> 00:25:20.000
+two different primitives that you compose together in order to get that sort. There's a couple different ways to do this, but the way that I'm going to explain uses bracket indexing and a primitive called grade, grade up and grade down. And what grade up and grade down give you, if applied to a rank one vector, is a permutation of indices that if you index into an array to resort them by that sort of indexation, if you have an array which we'll call x, the way you spell this is x, open bracket, grade up, x, close bracket. And what this does is the set of brackets is what's called bracket indexing. And it is the equivalent of a gather in thrust. So it's basically given a permutation of indices, bracket indexing is going to permute your rank one vector, aka x in this example, based on the permutation indices. And scatter has also
+所以这基本上就是 scatter 所做的。你想做 gather 的反面。Gather 类似于 copy if，如果你想那样认为的话，比如 copy if 是一种压缩，你线性地穿过你的向量，然后进行压缩。它就像一个过滤器。你只是摆脱了元素，但它们总是保持稳定。比如顺序总是保持不变。而在 gather 中，它就像一个 copy if，你可以重新排列。它不再是稳定的。你最终可能会得到
+
+34
+00:25:20.000 --> 00:26:05.000
+a equivalent in APL, and that is indexed assignment. So in the sort example where you have x bracket grade up or grade down x n bracket, that's just an expression that's going to return you a rank one vector. But you can also do indexed assignment where assignment in APL is a left arrow. And so if you once again have a vector x, you can go x bracket and then a set of indices. We'll call it, you know, 2, 3, 4, which is going to be the second, third, and fourth indexes or indices of that vector. End bracket. Then you have your left arrow. And then whenever you're doing indexed assignment, you have to have an array on the right that matches the length of the number of indexes that you were trying to assign to.
+末尾的元素在开头。这就是 gather 的全部意义。如果你愿意的话，它有点像一个不稳定的 copy if。但 scatter 完全不同。你基本上是在试图将值发送到秩为 1 的向量或某种任意秩的数组中的特定位置。这就是你可以在 APL 中通过索引赋值做到的。你基本上有你的左箭头。在那个左箭头的左边，你将有一个带有括号索引和一些索引的数组。
+
+35
+00:26:05.000 --> 00:26:33.000
+So this is basically what scatter does. You want to kind of do the opposite of a gather. A gather is similar to a copy if, if you want to think that, like copy if is a compaction where you go linearly across your vector and then you're doing a compaction. It's like a filter. You're just getting rid of elements, but they always stay stable. Like the order always stays the same. Whereas in a gather, it's like a copy if where you can rearrange. It's no longer going to be stable. You can end up with, you know,
+然后在箭头的右边，你将有一个长度等于索引数量的秩为 1 的向量，以及任何对应的值。所以在我们有 x 括号 2 3 4 n 括号箭头的示例中，如果我在一个数组中有值 10 20 30（在 APL 中只是空格分隔），这些值将被发送到你向量的第二个、第三个和第四个索引。所以希望这说得通。正如我之前提到的，我几乎不使用这些，因为即使我在用 APL 编码时，我也不喜欢使用括号索引进行 gather。还有其他方法可以基本上索引到秩为 1 的数组。
+
+36
+00:26:33.000 --> 00:27:00.000
+elements towards the end that are at the beginning. And that's the whole point of a gather. It's kind of like an unstable copy if, if you will. But a scatter is completely different. You're basically trying to send off values to certain locations in a rank one vector or some kind of arbitrarily ranked array. And this is what you can do in APL with indexed assignment. You have your basically left arrow. On the left of that left arrow, you're going to have an array with bracket indexing and some indices.
+其中之一是使用 squad 运算符。我其实不知道它的实际名称。但这些，通常有替代方法来拼写这些算法，我觉得更可取。这有点被认为是，我不想称之为老派 APL，但例如，在 BQN 和另一种数组语言 cap 中，只有排序原语。所以你不需要使用两种不同的语言特性或原语，一个是 grade up 和 grade
+
+37
+00:27:00.000 --> 00:27:47.000
+And then on the right of the arrow, you're going to have a rank one vector that is equal in length to the number of indices and then whatever values correspond so in the example we had x bracket two three four n bracket arrow and then if i had the values 10 20 30 in an array which is just space delimited in apl those values will be will be sent second, third, and fourth index of your vector. So hopefully that makes sense. As I mentioned before, I barely reach for these because even when I'm coding in APL, I don't like to use bracket indexing for the gather. There are other ways to basically index into rank one arrays.
+down，另一个是括号索引。你只需要使用排序原语，它就能做你想做的事。类似于如果你愿意的话，我相信你可以用 thrust 或 cub 原语构建一个排序，就像你在那个字典序示例中拼写的那样。虽然归根结底，你还是传递了一个稳定排序，我相信。但我更愿意如果我能用一个，就不必使用两个不同的东西。在某些情况下你需要两者，但在大多数常见情况下，或者至少在我遇到过的用例中，你只需要使用基本的排序原语就可以应付。总之，我想这就是
+
+38
+00:27:47.000 --> 00:28:16.000
+One of them is using the squad operator. I don't actually know the actual name of it. But these are, there's typically alternative ways to spell these algorithms that I find more preferable. And it's kind of considered, I don't want to call it like old school APL, but like for instance, in BQN and then another array language cap, there are just sort primitives. So you don't need to reach for two different sort of language features or primitives, one being the grade up and grade
+我们结束的地方。我想这就是第 167 期节目。我们将在第 168 期节目中聊天，希望两人都能亲自到场。请务必查看你的播客应用程序或 ADSPthePodcast.com 上的节目说明，获取我们在今天节目中提到的任何内容的链接，以及一个 GitHub 讨论的链接，你可以在那里留下想法、评论和问题。
+
+39
+00:28:16.000 --> 00:28:51.000
+down and the other being bracket indexing. You can just use the sort primitive and it does what you want. Similar to how you could build up a sort if you wanted, I'm sure, with either thrust or cub primitives like you spelled out in that lexicographical. Although at the end of the day, you still passed it a stable sort, I believe. But I would prefer not to have to use two different things if I can use one. There are certain cases where you need both, but in most of the common cases, or at least the use of cases that I've come across, you can get away with just using the basic sort primitive. Anyways, I think that's
+感谢收听。希望你喜欢，祝你有美好的一天。低质量，高数量。这就是我们播客的标语。这不是标语。我们的标语是“带有信息点缀的混乱”。本期节目还没有评论。点击转录中的任何句子即可发表评论。
+
+40
+00:28:51.000 --> 00:29:13.000
+where we'll leave it. That'll wrap episode, I think this is 167. And we will chat in episode 168, hopefully both in person. Be sure to check your show notes either in your podcast app or at ADSPthePodcast.com for links to anything we mentioned in today's episode as well as a link to a GitHub discussion where you can leave thoughts, comments, and questions.
+我们就聊到这里。这期节目就到此结束了，我想这是第167期。我们会在第168期节目中再聊，希望到时候我们能面对面录制。请务必查看您的播客应用或访问 ADSPthePodcast.com 获取本期节目提到的所有内容的链接，以及一个可以留下您的想法、评论和问题的 GitHub 讨论链接。
+
+41
+00:29:13.000 --> 00:29:18.000
+Thanks for listening. We hope you enjoyed and have a great day. Low quality, high quantity. That is the tagline of our podcast. It's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+感谢收听。希望您喜欢这期节目，祝您有愉快的一天。低质量，高产量。这就是我们播客的标语。不对，那不是标语。我们的标语是“充满混乱，点缀信息”。本期节目目前还没有评论。点击转录稿中的任何句子即可发表评论。

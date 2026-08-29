@@ -1,0 +1,226 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:17.000
+I certainly agree with you that given all of the time that was spent on concepts, what we got, I think, is unfortunate. I was rereading the 2003 paper to see what our goals were. And separate type checking is the one goal. That is the one thing that if we had it, you could even throw out concept maps. If you had separate type checking, it would have made generic programming in C++ an order of magnitude easier, right? It would no longer be the domain of experts to use on April 29th 2024 my name is Connor and today with my co-host Bryce we continue our chat with Doug Greger from Apple about the history of C++OX concepts. So, Joe Coder killed C++OX concepts. I think projections of the thinking onto a mythical Joe Coder is the main thing here.
+我当然同意你的观点，考虑到在概念上花费的所有时间，我认为我们最终得到的结果是不幸的。我重读了2003年的论文，想看看我们的目标是什么。独立类型检查是其中一个目标。这是唯一的一件事，如果我们拥有它，你甚至可以抛弃概念映射（concept maps）。如果你有独立类型检查，它会让C++中的泛型编程变得容易一个数量级，对吧？它将不再是专家的领域。在2024年4月29日，我是Connor，今天我和我的联合主持人Bryce继续与来自苹果公司的Doug Greger探讨C++0x概念的历史。所以，Joe Coder扼杀了C++0x概念。我认为将这种想法投射到一个虚构的Joe Coder身上是这里的主要问题。
+
+2
+00:01:17.000 --> 00:01:42.000
+There were other complaints. So, there was concern about the compile time performance of the concept GCC prototype, because it was doing all this template definition checking for the algorithm setter. But there's always going to be some compile time. I mean, there's a compile time cost to see plus plus 20 concepts. People have done a bunch of other stuff. There's always going to be some compile time cost to checking versus not checking, right? I fully agree with you.
+还有其他的抱怨。所以，有人担心概念GCC原型的编译时间性能，因为它在为算法设置器做所有的模板定义检查。但总会有一些编译时间。我的意思是，C++20概念也有编译时间成本。人们做了很多其他事情。检查与不检查总会有一些编译时间成本，对吧？我完全同意你的看法。
+
+3
+00:01:42.000 --> 00:03:06.000
+It seemed like a strange complaint. It hadn't come up before. It hasn't come after. But that it was somehow an insolvable problem that the definition checking could not be done. And that back a little bit to what separate type checking means, you are type checking the implementation of a template against the constraints that it states. Now, C++ has all sorts of ways in which you can make a template behave differently. So imagine, for example, my template definition over some template like parameter T uses a vector of T. Now what happens when T becomes bool? You've kicked over to the partial specialization of vector. The partial specialization of vector could be completely unrelated to the generic primary template for vector.
+这似乎是一个奇怪的抱怨。之前没出现过，之后也没出现过。但不知何故，这成了一个无法解决的问题，即定义检查无法完成。这稍微回到了独立类型检查的含义，你是在根据模板声明的约束来检查模板的实现。现在，C++有各种各样的方法可以让模板表现得不同。所以想象一下，例如，我针对某个模板参数T的模板定义使用了T的向量。那么当T变成bool时会发生什么？你已经切换到了vector的偏特化版本。vector的偏特化版本可能与vector的通用主模板完全无关。
+
+4
+00:03:06.000 --> 00:03:45.000
+And so if you have a language that has something like partial specialization, or where you want to be able to do overloading in sort of an ad hoc manner at template instantiation time, you cannot actually fully type check a template definition and be certain it's going to work in all cases. Because someone can just drop in an explicit specialization or a partial specialization of one of the template types it uses and things can break. So C++ OX concepts were able to do template definition checking using the primary templates and doing overload resolution essentially based on what knowledge it has of the template arguments and
+因此，如果你拥有一种具有偏特化功能的语言，或者你想在模板实例化时以某种临时方式进行重载，你实际上无法完全对模板定义进行类型检查，并确信它在所有情况下都能工作。因为有人可以随意插入一个显式特化或模板所使用的模板类型的偏特化，事情就会崩溃。所以C++0x概念能够使用主模板进行模板定义检查，并基本上根据它对模板参数及其能力的了解来进行重载解析。
+
+5
+00:03:45.000 --> 00:04:30.000
+their capabilities. Now, throughout the C++OX concepts process, we actually loosened the constraints and template instantiations a little bit. So, this is a deliberate decision in reaction to move semantics, actually, the addition of move semantics into the language, where the original definition of C++ OX concepts would say, when you pick an overload at template definition time for any operation, that is the overload that you use at instantiation time, no matter what. The change we made is that we redo overload resolution with the actual template arguments types that come in, the concrete ones at instantiation time. This is treated as a performance optimization because it
+现在，在整个C++0x概念过程中，我们实际上稍微放宽了模板实例化中的约束。所以，这是一个深思熟虑的决定，实际上是为了响应移动语义，即在语言中加入移动语义，其中C++0x概念的原始定义会说，当你在模板定义时为任何操作选择重载时，无论如何，这就是你在实例化时使用的重载。我们所做的改变是，我们在实例化时使用实际传入的模板参数类型（具体的那些）重新进行重载解析。这被视为一种性能优化，因为它
+
+6
+00:04:30.000 --> 00:05:04.000
+meant, for example, that if you're passing an R value here and an L value here, you could pick up an overload that took an R value on the right side and an L value on the left side, and that would have better performance than if you always pushed it through the constel value path. Right. We can cite that for you in the show notes to see the decisions. But that's a very explicit, we gave up some of the separate type checking to maintain the C++ performance model. And so it's true that you don't have perfection, but this kind of overloading is pretty rare,
+意味着，例如，如果你在这里传递一个右值，在这里传递一个左值，你可以选择一个在右侧接受右值而在左侧接受左值的重载，这比你总是通过const左值路径推送它会有更好的性能。对。我们可以在节目笔记中为你引用这些内容以查看决策。但这非常明确，我们放弃了一些独立类型检查以维持C++的性能模型。所以确实你没有达到完美，但这种重载非常罕见，
+
+7
+00:05:04.000 --> 00:05:42.000
+and it's pretty rare that it actually breaks anything. So you still had the property that you had almost no instantiation time failures. They only really came in when you're doing funny overloading or partial specializations that don't line up with the primary templates. So, but is there a reason? Couldn't you just check all of the partial specializations? Wouldn't it just be like, there's no way to like exhaustively check? Isn't that trivially exponential?
+而且它实际上破坏任何东西的情况也非常罕见。所以你仍然拥有几乎没有实例化时间失败的特性。它们真的只出现在你做有趣的重载或与主模板不一致的偏特化时。所以，但有什么理由吗？你不能直接检查所有的偏特化吗？难道不能像，没有办法详尽地检查吗？这难道不是平凡的指数级吗？
+
+8
+00:05:42.000 --> 00:06:11.000
+I suppose so. And there's other constraints here too of, for example, what if you haven't seen the partial specialization at the time you check the template definition? Do you not consider it at instantiation time? Or do you admit the failures again? Yeah. I mean, I suppose good partial specializations shouldn't differ from the primary. It would just be nice if we had a language way to enforce that. Right.
+我想是这样。这里还有其他的约束，例如，如果你在检查模板定义时还没有看到偏特化怎么办？你在实例化时不考虑它吗？还是你再次承认失败？是的。我的意思是，我想好的偏特化不应该与主模板不同。如果我们有一种语言方式来强制执行这一点就好了。对。
+
+9
+00:06:11.000 --> 00:07:03.000
+We could have done that. So that, you know, it would be possible to say, okay, the primary template is itself like a concept, right? It describes an abstract interface and every specialization, whether partial or full, of that template needs to match that interface. That would be completely reasonable direction for the language to take that would help with this kind of problem. Right. The other answer is don't allow specialization, which is what Swift does, for example. Yeah, I think you probably could have done that, too. I mean, you might need different tools than what C++ has to be able to do. Partial specialization is just one of C++'s many janky versions of a pattern matching engine.
+我们本可以做到这一点。所以，你知道，可以说，好吧，主模板本身就像一个概念，对吧？它描述了一个抽象接口，该模板的每个特化（无论是偏特化还是全特化）都需要匹配该接口。这对语言来说是一个完全合理的方向，有助于解决这类问题。对。另一个答案是不允许特化，例如Swift就是这样做的。是的，我想你可能也可以那样做。我的意思是，你可能需要比C++现有的工具不同的工具才能做到。偏特化只是C++众多蹩脚的模式匹配引擎版本之一。
+
+10
+00:07:03.000 --> 00:07:19.000
+And there could have been other ways to have handled that but we may have had needed different tools than we would have had and as you said you have the same problem for an overload set too like if you have some weird overload that returns
+并且可能有其他方法来处理这个问题，但我们可能需要比我们拥有的不同的工具，而且正如你所说，对于重载集你也有同样的问题，比如如果你有一些奇怪的重载返回
+
+11
+00:07:19.000 --> 00:07:38.000
+something different okay I mean it's... I do in... I have seen plenty of partial specializations that do something different than the primary in some way and overload sets in which, you know, that do quirky things.
+不同的东西，好吧，我的意思是……我确实……我见过很多偏特化，它们在某种程度上做的事情与主模板不同，还有重载集，你知道，它们做一些古怪的事情。
+
+12
+00:07:38.000 --> 00:08:27.000
+Usually it's mostly implementation details are not particularly important. I mean, I'm sure I can think of some cases where it's mostly implementation details are not particularly important. I mean, I'm sure I can think of some cases where it's mattered, but I could see how people could have that concern and could conflate that to claims that the checking is not suitable. I think it's a little – or I can see how that narrative got born, I guess is a way to put it. I don't agree with the narrative, but I could see how that narrative got born, I guess is a way to put it. I don't agree with the narrative, but I could see how the narrative got born. Yeah. I think to that, partly this is a, the perfect is the enemy of the good, right? Because for the vast majority of generic code, you write the separate type checking that C++ concepts had would probably work. And the vast majority of template instantiation back
+通常大部分是实现细节，并不是特别重要。我的意思是，我肯定能想到一些实现细节并不是特别重要的案例。我的意思是，我肯定能想到一些有影响的案例，但我能看出人们怎么会有这种担忧，并将其与检查不合适的说法混为一谈。我认为这有点——或者我能看出这种叙事是如何产生的，我想这是一种说法。我不同意这种叙事，但我能看出这种叙事是如何产生的，我想这是一种说法。我不同意这种叙事，但我能看出这种叙事是如何产生的。是的。我认为在某种程度上，这是一个“完美是优秀的敌人”，对吧？因为对于绝大多数泛型代码，你编写的C++概念所拥有的独立类型检查可能会起作用。而且绝大多数从堆栈深处爆炸出来的模板实例化回溯本来会消失。因为偏特化，你可以做它们。我们在一些明显的地方有它们。但VectorBool很突出，因为它是整个标准库中唯一奇怪的一个。而且大多数程序员不这样做。他们有一个定义并使用它。
+
+13
+00:08:27.000 --> 00:08:47.000
+traces that you get from something blowing up deep in the stack would have gone away. Because partial specializations, you could do them. We have them in some obvious places. But VectorBool sticks out because it's kind of the only weird one in the entire standard library. And most programmers don't do this. They have the one definition and they use it.
+所以我认为好处是普遍的。模板实例化回溯会变得非常罕见。一旦人们接受了“好吧，我正在使用概念。我从中获得了所有这些好处。我必须放弃这些才能在这里做偏特化。我会找到另一种方法”的概念，它可能变得更加罕见。而正是那些实例化回溯，才是我们今天所拥有的所有问题诊断的根源。是的，这是我的观点。
+
+14
+00:08:47.000 --> 00:09:14.000
+And so I think the benefits would have been common. Template instantiation backtraces would have become a very rare thing. Possibly made even rarer once people embrace the notion of, well, I'm using concepts. I'm getting all these benefits from it. I would have to give those up to do partial specialization here. I'll find another way. And it's those instantiation backtraces is really the root of all of the problematic diagnostics that we have. Yes, that's my view.
+而且我认为独立检查本来可以消除我们今天经历的大部分痛苦和折磨。我的意思是，你提出了一个很好的观点，即你刚才描述的检查的失败模式不是那种，你知道，你得到了糟糕的代码或做古怪事情的程序。它仅仅是失败发生在编译过程的不同点，而且你可能得到了更糟糕的诊断，这似乎任何可能有影响力的人，那可能需要更新，或者那个页面可以被删除，因为它看起来像是2012年写的，谈论的是已经发生的事情。但听起来不仅仅是决定把它从C++0x中拿出来，而是委员会说，我们想做一些不同的事情。而且他们拒绝了这个设计，并不是说我们要把它拿出来然后再回来处理它。
+
+15
+00:09:14.000 --> 00:10:43.000
+And the separate checking, I think, would have eliminated much of that pain and suffering that we experience today. And I mean, you make a good point that the failure mode of the checking that you just described is not one of, you know, you get bad code or a program that does quirky things. It's simply that the failure happens at a different point in the compilation process and that you maybe get a worse diagnostic, which seems anybody who may have influence, that probably needs to be updated or that page can be deleted because it seems like it was written in like 2012 and talks about things that have already happened. But it sounds like it wasn't just that the decision was made to take it out of C++ OX, but that the committee was like, we want to do something different. And that they rejected the design and it wasn't like we're going to take it out and come back to it.
+就像是，我们要把它拿出来，我们要搞这个“概念精简版”（concepts light）的东西。这或多或少正确吗？还是说在C++0x之后真的有努力推动C++0x模型向前发展？所以我认为将其描述为委员会给予那种程度的指导是不合理的。委员会基于这些担忧决定将其从C++0x中删除。我认为真正发生的是那些推动C++0x概念的人，比如我自己，我几乎是我谈到的每一篇论文的第一作者，在它被删除后对进一步追求它不感兴趣。从个人历史的角度来看，Conor给出了一个相当好的
+
+16
+00:10:43.000 --> 00:11:29.000
+It's like, we're going to take it out and we're going to do this concepts light thing. Is that more or less correct? Or was there ever really an effort after C++ OX to move forward with the C++ OX model? So I don't think it's reasonable to characterize it as the committee giving that level of direction. The committee decided to remove it from C++ OX based on these concerns. I think what really happened is the people that were pushing for C++ OX concepts, like myself, I'm first author on pretty much every one of these papers that I talked about, weren't interested in pursuing it further after it got removed. From personal history standpoint, Conor gave a pretty good
+近似值。但是，你知道，到这个时候，我已经加入苹果公司去开发这个叫Clang的东西，在我加入苹果时，它几乎只是一个没有代码生成的C解析器。我的任务是去把它变成一个好的C++编译器。这就是我所做的。所以我得以实现重载、模板、初始化等等。但回头重新审视C++0x概念的想法在当时并不太吸引人。而且，你知道，仅仅几年后，Clang就成功了。我们正在通过苹果的生态系统推广它，谷歌也采用了它，并用它做了大量工作。我们决定开始开发Swift，一种新语言。
+
+17
+00:11:29.000 --> 00:12:19.000
+approximation. But, you know, by this time, I had joined Apple to work on this thing called Clang, which was barely a C parser with no code generation at the time I joined Apple. And my mission was go make it a good C++ compiler. And that is what I worked on. So I got to implement overloading and templates and initialization and everything. But the idea of going back and revisiting C++ OX concepts was not terribly appealing at the time. And, you know, just a handful of years later, Clang was succeeding. We were rolling it out through Apple's ecosystem and Google picked it up and was doing tons of work with it. We made the decision to start working on Swift, a new language.
+对。所以，在某个时候，一组不同的人开始研究“概念精简版”模型。好吧，让我问你这个。所以我只是假设你是一个强烈的——投票有五种不同的方式。我假设你是一个强烈反对从C++0x中删除概念的人，我问的原因是，有时你知道像这样大的有争议的功能，有时作者决定说“是的，好吧，嗯，我们应该在这个上面花更多时间”，所以有时答案不是作者反对这个，但我有一种感觉，在这种情况下，不，你认为我们应该发布它。我认为我们应该发布它。
+
+18
+00:12:19.000 --> 00:13:10.000
+Right. And so, at some point, a different group of people started working on the concepts light model. Well, let me ask you this. So I'm just assuming that you were a strong – there's five different ways of voting on things. I'm assuming you were a strong against on on removing c++ ox concepts from uh and the reason i ask is that is that sometimes with you know big controversial features like this sometimes the authors decide like yeah okay um we should take more time on this and so sometimes the answer isn't isn't that the author is opposed to this, but I had a feeling that in this case, no, you thought we should have shipped it. I thought we should have shipped it.
+是的。我认为这是一个非常好的模型。我们在那个时候更新各种算法来使用它，并尝试像Boost Graph Library、Conceptified这样的东西，我们所做的所有编程都是非常积极的。这是一个非常好的工作模型。从那以后，我们采用了非常类似于那个模型的某种东西，它变成了Swift泛型系统，在那里我们得以清理了更多的粗糙边缘。这是一个非常好的工作模型。我认为我们应该发布它，如果需要的话，任何问题我们都可以随着时间的推移解决。所以是的，我强烈反对。我还决定，如果我输了投票，
+
+19
+00:13:10.000 --> 00:13:46.000
+Yeah. I thought it was a very good model. All the programming we have done with that model at the time of updating the various algorithms to use it and playing around with like the Boost Graph Library, Conceptified, were very positive. It was a very nice model to work with. Since then, we took something very much like that model, and it became the Swift generic system where we got to clean up even more rough edges. And it's a wonderful model to work with. I think we should have shipped it, and any issues we could have ironed out over time if that was needed. So yeah, I was strongly against. I also had decided that if I lost the vote,
+我就不会再带着概念回来了，尽管在那之后我作为一名专业的编译器开发人员还在全职从事C++工作好几年。你认为如果C++0x概念在11年发布，C++的处境会更好吗？在什么方面处于更好的位置？
+
+20
+00:13:46.000 --> 00:14:12.000
+I wouldn't come back with concepts, even though I was still working on C++ full-time as a professional compiler developer for several years after that. And do you think C++ would have ended up any better positioned if C++ OX concepts had shipped in 11. A better position with respect to what?
+关于某种下一代系统编程语言以及当天的总体趋势，你看看C++的演变与其他语言相比，它可能移动得没有那么快。它不是，你知道，它在C++11之后有了复苏，但你认为编程语言的格局
+
+21
+00:14:12.000 --> 00:14:43.000
+With respect to sort of the next generation systems programming languages and like overall trends of the day and the general, you look at C++'s evolution versus other languages and it's maybe not moving quite as fast. It's not, you know, it had this resurgence after C++11, but do you think that the landscape of programming languages
+或者C++的流行度，如果我们在11年发布概念，今天会有什么巨大的不同吗？我不认为会有巨大的不同。我的意思是，我确实认为较新的语言拥有可能受到C++0x概念启发并很好地完成了它所做许多事情的泛型系统。就像在一种为其泛型提供独立类型检查的语言中编写泛型代码更容易一样。许多语言已经为我们证明了这一点。在这方面，是的，C++本来会处于一个更好的位置。但看起来现在，你知道，围绕C++的担忧确实是关于内存安全。而概念在那里什么也没做。什么都没有。关于概念的人和C++契约（contracts）努力中的主要人员是同一批人，
+
+22
+00:14:43.000 --> 00:15:45.000
+or the popularity of C++ would be drastically different today if we shipped concepts in 11? I don't expect it would be drastically different. I mean, I do think that the newer languages have generic systems that were possibly inspired by C++ OX concepts and do a lot of the things that it did well. Like it is easier to write generic code in a language that has separate type checking for its generics. And a number of languages have proven this out for us. In that regard, yes, C++ would have been in a better place. But it seems like right now, you know, the concern around C++ is really around memory safety. And concepts would have done nothing there. Nothing at all. on concepts are the same people who are the primaries in the C++ contracts efforts and
+也是那些思考C++安全性的人。所以我怀疑如果概念在11年发布，也许他们的努力会更早转向模块和契约，也许我们现在已经得到了像契约这样的东西，也许C++会处于一个更好的位置。也许我们本来会处于更好的位置来应对日益增长的内存安全需求，而不是现在的这种长期的重新设计努力，然后错过了17，勉强进入了20。这实际上是一个，你知道，平行宇宙的心理练习，但我理解Bryce在说什么。就像它，它也是，我，你还没有明确使用这些词，但它确实看起来像是C++0x未能进入的结果。而且我在谈论所有这些时，还有一个小小的题外话，它确实
+
+23
+00:15:45.000 --> 00:16:49.000
+the same people who are the people who think about safety in C++. And so I wonder if concepts had shipped in 11, maybe their efforts would have switched to modules and contracts earlier, maybe we would have gotten something like contracts in a, like by now, and maybe C++ would be in a better place. Maybe we would have been better positioned to respond to the growing need for memory safety than we are instead of this, uh, this long redesign effort and then missing 17 and barely making it into 20. This is actually a, it's a, you know, parallel universe mental exercise, but it is, I understand what Bryce is saying. Like it's, it's also, I, you haven't explicitly used these words, but it does seem like out of C plus plus OX failing to get in. And I also on a side thought on a little tangent when you were talking about all this, it does
+让我觉得C++0x被投票出局的故事是独一无二的。我不知道还有什么其他提案，因为还有其他的，比如契约，你知道，在最后一刻进入，然后进行投票，结果没有通过，这需要巨大的工作量来撤销所有已经对标准库所做的更改。就像，我不知道还有什么其他，你知道，提案需要这样做。而且我认为这实际上是一个独特的属性，如果它只是，好吧，我们不打算把它放进去，但它不需要大量的工作。会有更少的“后果”。这结束了我的题外话，补充Bryce所说的，就像，我不认为仅仅是，我不想，你知道，把人们的名字扔出来。
+
+24
+00:16:49.000 --> 00:17:39.000
+strike me as unique to the C++ OX story of being kind of voted out. I don't know of any other proposal because there's been others like contracts that were, you know, 11th hour going in and then there was a vote and they weren't, that required an immense amount of work to kind of back out all of these changes that have been made to the standard library. Like, I don't know of any other, you know, proposal that necessitated that. And I think that that's actually like a unique property to this is that if it had just been, okay, we're not going to put this in, but it doesn't necessitate a bunch of work. There's going to be less like fallout. And that kind of ends the tangent to me adding to what Bryce was saying is that like, I don't think it was just, I don't want to, you know, throw people's names out there.
+但肯定的是，不仅仅是你，Doug，离开了C++倡议。就像你说的，你仍然在从事C++工作，只是没有欲望去回到委员会处理这个。然后最终，你知道，另一个机会出现了，伴随着一门全新的语言，你知道，显然，你的同事Chris正在研究它。然后，你知道，Dave Abrahams也加入了。所以你就有了这个全明星阵容，其中很多人，你知道，过去花了很多时间和精力在C++上。所以，思考一下如果概念以最初提出的形式在11年进入，会发生什么，这很有趣，一大堆精力没有花在，你知道，接下来的十年，把它弄进C++20。最重要的是，现在正在从事其他工作的人，过去曾从事C++工作，如果他们还在那里会怎样？就像在额外十年里花在把概念弄进去的时间和精力，如果能投入到其他事情上，以及当时参与C++的人，你知道，这一切都只是会
+
+25
+00:17:39.000 --> 00:18:42.000
+But definitely there was more that it was more than just you, Doug, that left sort of the C++ initiative. And like you said, you were still working on C++, you just didn't have the desire to go and go back to the committee with this. And then eventually, you know, another opportunity arose with a brand new language that, you know, obviously, a colleague of yours, Chris was working on. And, and then, you know, Dave Abrahams, as well, joined sort of that. And so then you got this all-star cast, a lot of who, you know, used to spend a lot of time and energy working on C++. So, it is interesting to think like what if concepts went in in 11 in the form that they were initially proposed, a bunch of energy wasn't spent on, you know, the next decade, getting it into C++ 20. And on top of that, the folks that are now working on other things that used to work on C++, what if they were still there? Like the combination of the time and energy spent on extra decade getting concepts in, if that was able to be put towards something else, and the people that were a part of C++ back then, you know, it's all just gonna
+像，我们不生活在那个世界里。所以，你知道，这更多是一个有趣的练习，而不是像，思考在这个平行宇宙中可能发生的事情不会有什么结果。但这和我喜欢的一样，如果比尔·盖茨实现了，你知道，他的APL解释器并把它放在PC上，我们会生活在这个世界里，你知道每种语言都受到apl的启发而不是basic，你知道我们不生活在那个世界里，但思考如果那是比尔·盖茨做出的决定会发生什么很有趣。微软微软本来会破产的。抱歉Connor，我们永远不会知道。所以，我提到的一个原因，我提到的假设是，所以C++11呃持续了很长时间，因为它是一个基于功能的
+
+26
+00:18:42.000 --> 00:19:28.000
+like, we don't live in that world. So, you know, it's more of a fun exercise than it is actually like, nothing's going to come of thinking what could have happened in this parallel universe. But it's the same thing when I like, what if Bill Gates had implemented, you know, his APL interpreter and put it on the PC, we'd be living in this world where you know every language was inspired by apl and not basic you know we don't live in that world but it is fun to think about what would have happened if that was the decision bill kate's made microsoft microsoft would have been bankrupt sorry connor we'll never know so one one of the reasons that i that i mentioned is hypothetical is so the c plus plus 11 uh went went long because it was a feature-based
+发布，而不是基于时间表的发布。在C++11之后，被称为C++0x，因为他们预计它会在前十年发布。这是一个基于功能的发布，这意味着我们说，这些是我们想要发布的东西，当这些东西准备好时，我们将发布标准。在那之后，我们转向了基于时间表的发布，每三年发布一次。我对iscpp.org上那段引文的解读是非常有意的。那段话的最后一部分是，“一个彻底简化的版本，概念精简版将作为技术规范成为C++14交付浪潮的一部分。”所以C++11之后，我们做了几件事。我们转向了这个每三年发布一次的基于时间表的周期，我们对
+
+27
+00:19:28.000 --> 00:20:10.000
+release, not a schedule-based release. After C++11, famously called C++OX because they expected it to ship in the earlier decade. And it was a feature-based release, which means that we said, these are the things we want to ship and we'll ship the standard when those things are ready. And after that, we moved to a schedule based release where we shipped every three years. And my reading of that quote from iscpp.org was very intentional earlier. The last part of that was, and a radically simplified version, Concepts Lite will be part of the C++14 wave of deliverables as a technical specification. So after C++11, we did a few things. We moved to this schedule-based cycle of releasing every three years, and we got all
+技术规范感到非常兴奋。而且我们还，这是大库时代，我们发出了一个号召，我们想要一个巨大的标准库。每个人都把你们的提案带给委员会。从2011年到2016年或17年的那段时间，就像是C++的复兴，委员会，你知道，规模增长了一个数量级。C++变得非常流行，因为C++11里面有所有这些新功能。委员会被提案淹没了。我们开始发布所有这些技术规范。那个时代产生了很多好东西。但热情。随之而来的是我喜欢称之为“小库时代”的东西，即C++17之后的时期，当时委员会在处理事情上有两年的积压，功能错过了船。我们花了很多时间在技术规范上，我们发布了，但没有人真正实现。我们从来没有真正获得我们想要的现场经验
+
+28
+00:20:10.000 --> 00:21:38.000
+excited about technical specifications. And we also, this was the big library era where we put out a call that we want a giant standard library. Everybody come bring your proposals to the committee. And that period from like 2011 to 2016 or 17 was sort of like this C++ renaissance where the committee, you know, grew order of magnitude and size. C++ became very popular because C++11 had all these new features in it. The committee was inundated with proposals. And we started shipping all these technical specifications. And a lot of good things came out of that era. Buted enthusiasm. And it was followed by what I like to call the era of small library, which was the post C++17 period where the committee had a two-year backlog on processing things and features missed that kept missing the boat. And we spent tons of time on technical specifications that we shipped that nobody really implemented. And we never really got the field experience that we wanted
+来自技术规范。它们只是成为了一种快速跟踪强制将你的东西放入标准的方法。C++11之后我们花了一段时间才学会，比如，我们发布的良好节奏是什么？以及，我们应该如何优先考虑和关注事情？我并不是说委员会已经弄清楚了这一点，因为我仍然在这个播客中多次说过，我不认为我们有一个好的演变模型。但我们今天确实比那个时期有一个更好的演变模型。其特点之一是，你知道，我们没有在0x中发布概念，然后我们没有在14中发布它，然后我们没有在17中发布它。然后我们只是勉强在20中发布了它。那额外的十年对C++来说真的很不幸。我的意思是，基于时间表的发布周期真的很棒。
+
+29
+00:21:38.000 --> 00:22:41.000
+from technical specifications. And they just became a way to fast track forcing your thing into the standard. And it took us a while after C++11 to learn, like, what's a good cadence for us to ship at? And, like, how should we prioritize and focus on things? And I'm not claiming that the committee's figured that out yet, because I still have said many times in this podcast, I don't think we have a good evolution model. But we certainly have a better evolution model today than we had in that period of time. And one characteristic of that is that, you know, we didn't ship concepts in OX, and then we didn't ship it in 14, and then we didn't ship it in 17. And then we just barely shipped it in 20. And that additional decade was really unfortunate for C++. I mean, the schedule-based release cycle was really great.
+这是拯救C++的事情之一。Herb带给这个过程的伟大创新之一就是那个。但委员会适应这一点所花费的时间以及那种不受限制的热情确实在某些方面伤害了我们。而且我不认为发布它需要那么长时间。就像，我不认为概念需要进入TS。我想如果像“概念精简版”本来可以完成并发布，就像如果我们今天做它，我想我们会完成它并在14或17年发布，而不是在20年。但是的，这是一个有趣的假设，就像我们之前说的，
+
+30
+00:22:41.000 --> 00:23:36.000
+It's been one of the things that has saved C++. One of the great innovations that Herb has brought to the process was that. But the period of time that it took for the committee to adapt to that and that sort of unchecked enthusiasm really did hurt us in some ways. And I don't think that it needed to take that long to ship it. Like, I don't think that the concepts needed to go to a TS. I think if like, concepts like could have been done and shipped it, Like if we were doing it today, I think we would have done it and shipped it in 14 or 17 and not in 20. But yeah, it's an interesting hypothetical that like as we said before,
+就像“完美是优秀的敌人”。我认为如果我们只是发布0x概念并继续做其他事情，C++会好得多，因为我们还有很多其他工作要做。而且我也认为我们得到的功能被严重淡化了，如果我们在概念上花费了那么多时间，如果我们得到了更接近C++0x概念的东西。呃，但因为我们得到的东西并没有真正给我多少我想要的东西，呃，而且我认为它的语法对我来说更难理解和教给人们。
+
+31
+00:23:36.000 --> 00:24:29.000
+like the perfect is the enemy of the good. I think C++ would have been far better off if we just shipped OX concepts and moved on to do other things because we had a lot of other work to be doing. And I also think the feature that we got is so watered down that spent the amount of time that it did on concepts if we'd got something closer to C++ OX concepts. Uh, but because we got something that doesn't really give me much of what I want, um, and I think has a syntax that's far harder for me to understand and teach to people.
+这让我只想避免这个功能，除了作为Sphenae的一种花哨形式。而且我从中没有得到任何诊断或检查的好处。感觉这并不是对时间的良好利用。这很不幸，因为我确实认为C++如果有一个适当的泛型编程接口，真的会受益匪浅。是的。我不知道过去15分钟里Bryce、我、然后Bryce有多少个问题，但我觉得我们应该让Doug回答你从过去15分钟里记得的任何问题。我甚至不确定从哪里开始接这个线索。所以我当然同意你的观点，考虑到在概念上花费的所有时间，我们得到的结果，我认为，是不幸的。
+
+32
+00:24:29.000 --> 00:25:14.000
+And that makes me just want to avoid the feature other than just as a fancy form of Sphenae. And I don't get any of the diagnostic or checking benefits out of it. It doesn't feel like it was a good use of the time. And that's unfortunate because I do think that C++ really could have benefited from a proper generic programming interface. Yeah. I don't know how many questions were in the last like 15 minutes of Bryce, then me, then Bryce, but I feel like we should let Doug respond to whatever questions you do recall from the last 15 minutes. I'm not even sure where to pick up the thread here. So I certainly agree with you that given all of the time that was spent on concepts, what we got, I think, is unfortunate.
+我正在重读2003年的论文，看看我们的目标是什么。独立类型检查是唯一的目标。这是唯一的一件事，如果我们拥有它，你甚至可以抛弃概念映射。如果你有独立类型检查，它会让C++中的泛型编程变得容易一个数量级。是的。对。使用模板并很好地使用它们将不再是专家的领域。
+
+33
+00:25:14.000 --> 00:25:37.000
+I was rereading the 2003 paper to see what our goals were. And separate type checking is the one goal. That is the one thing that if we had it, you could even throw out concept maps. If you had separate type checking, it would have made generic programming in C++ an order of magnitude easier. Yeah. Right. It would no longer be the domain of experts to use templates and use them well.
+这将是每个程序员都会做的事情，因为他们需要抽象。我们已经看到它在其他语言中起作用。它本来可以在C++中。至于它是否仍然可以，我一直在思考这个问题，它还能修复吗？这是一个有趣的问题，是否可以。所以我确实在10年前写了一篇论文。这是我试图将独立类型检查引入“概念精简版”的最后一次尝试，基本上说，采用概念和你的约束，从中生成一些原型（archetypes），并尝试实例化模板。如果它失败了，显示错误消息，以便，
+
+34
+00:25:37.000 --> 00:26:17.000
+It would be something that every programmer just does because they need the abstraction. And we have seen it work in other languages. And it could have been there in C++. And whether it still can be, I was thinking about this as can it still be fixed? And it's an interesting question of whether it can. So I did actually write a paper 10 years ago. It was my last attempt at trying to get separate type checking into concepts light that said basically take the concepts and your constraints, generate some archetypes from them and try to instantiate the template. And if it fails, show the error messages so that the,
+我不知道这个原型东西是否来自Boost，Boost概念检查库。我应该解释一下。我正要说，因为还有两件事我们还没有涵盖，那就是原型和公理。也许原型是一个很好的开始。原型是一个很好的开始。所以原型本质上是一个新鲜的具体类型。而那个具体类型上唯一的操作是概念要求解释的操作。所以如果你要说，嘿，我有一个算法，它接受一个
+
+35
+00:26:17.000 --> 00:26:51.000
+I don't know if this archetypes thing came out of a boost, boost concept check library. I should explain it. I was about to say, because there were two things that we haven't covered yet, and it was archetypes and axioms. And maybe archetypes is a good thing to start with. Archetypes is a good one. So an archetype is essentially a fresh concrete type. And the only operations that are on that concrete type are the operations that are explained by the concept requirements for it. So if you were to say, hey, I have an algorithm that takes an
+任意容器，该元素是可相等的。现在，你可以为容器创建一个原型，它只是一个普通的类，没有状态，除了容器类型说它需要的东西之外没有其他操作。所以它需要有一个begin和一个end，也许，对吧？让我们保持简单。所以它有begin和end，那些返回迭代器。它为迭代器创建一个新鲜的原型。那是什么？好吧，它有解引用运算符，++运算符，它是可相等的。所以你构建这组完全最小的类型。它们只匹配为那个特定的受约束模板在requires子句中设置的要求。现在，然后你去尝试用这些原型实例化模板。是好的，如果它只使用你的要求中指定的操作，并且它只
+
+36
+00:26:51.000 --> 00:27:46.000
+arbitrary container and that element is equatable. Now, you could create an archetype for the container that is just a plain old class, has no state, has no operations other than what the container type says it needs. So it needs to have a begin and an end, maybe, right? Let's keep this simple. So it has begin and end, those return iterators. It creates a fresh archetype for an iterator. What's that? Well, it has the dereference operator, the plus plus operator, it's equatable. And so you build this little set of types that are completely minimal. They only match the requirements that are placed in the requires clause for that one specific constrained template. Now, then you go try to instantiate the template with those archetypes. is good, if it's only using the operations that are specified in your requirements, and it's only
+调用具有相同要求集或其子集的其他模板，那么你的实例化就会成功。太棒了。你现在已经独立地对你的模板定义进行了类型检查。我提出这个建议的原因是，它是对C++0x模型的一个合理的简化。它肯定带走了你从概念映射中获得的所有好东西。对。你不能再做很酷的重映射语法来说，哦，你知道，我可以让这个库中的矩阵类型作为这个库的图形类型工作，这是我最喜欢的可以用概念映射做的很酷的事情的例子。你不能做任何花哨的事情，但你得到了独立类型检查。你得到了从拥有独立类型检查中带来的简化。
+
+37
+00:27:46.000 --> 00:28:30.000
+calling into other templates that have the same set of requirements or a subset of them, then your instantiation will succeed. Great. You have now separately type checked your template definition. The reason I propose this is it is a reasonable simplification to the C++ OX model. It takes away all of the nice things that you get out of concept maps, for sure. Right. You can no longer do cool remapping syntax to say, oh, you know, I can make the matrix type from this library work as a graph type for this library, which is my favorite example of cool things you can do with concept maps. You don't get to do any of the fancy things, but you get separate type checking. You get the simplification that comes from having separate type checking.
+而且它更容易指定和实现，因为你只需要说我如何将我的概念要求映射到原型？这是一个机械的翻译。用伪签名比用使用模式更容易，但我们可以定义使用模式意味着什么。所以也许那个模型，也许你可以改造它。这很难。你会破坏所有现在有概念的代码，因为我保证几乎所有代码都有一些微妙的错误。
+
+38
+00:28:30.000 --> 00:28:58.000
+And it's a lot easier to specify and implement because all you have to say is how do I map the requirements of my concept over to an archetype? And that's a mechanical translation. It's a little easier with pseudosignatures than it is with usage patterns, but we could define what it means for usage patterns. So maybe that model, maybe you could retrofit that. It's hard. You would break all the code that has concepts now because I guarantee you nearly all of it has some subtle bug.
+每个有概念约束的模板定义都有一个微妙的错误。但你可能可以达到那种你以更有限的形式拥有独立类型检查的模型。是的。可悲的是，我认为那艘船已经开走了。但公理，你应该解释一下公理。公理，是的。公理是C++0x概念设计中的一个功能，本质上想法是你可以描述概念上的语义约束。所以这可能是，例如，如果你有一个可相等概念，对吧？它让你只是比较两个T并说它们是否相等。你会在那个概念中有一个公理，说，
+
+39
+00:28:58.000 --> 00:29:45.000
+Every template definition that has a concept constraint on it has a subtle bug. But you could possibly get to that model where you have separate type checking in a much more limited form. Yeah. Sadly, I think that ship has sailed. But axioms, you should explain the axioms. Axioms, yes. Axioms were a feature in the C++ OX concepts design that essentially the idea was you could describe semantic constraints on your concepts. And so this might be things like, for example, if you have an equatable concept, right? It lets you just compare two Ts and say whether they're equal. You would have an axiom inside that concept that said,
+好吧，如果你有一个值X，X等于X。如果你有两个值，X和Y，那么X等于Y等同于Y等于X。你期望的标准属性。你也有传递属性，即X是Y，Y是Z，因此X等于Z。在C++0x概念中，你实际上可以写公理。这是一个新的关键字，写出这些语义属性。公理背后的想法和希望是，这将为用户提供有价值的信息，以了解他们的类型需要做什么才能真正符合概念，并且它可以被静态检查器和优化器等使用，去确保代码更正确
+
+40
+00:29:45.000 --> 00:30:32.000
+well, if you have a value X, X is equal to X. And if you have two values, X and Y, then X equals Y is equivalent to Y equals X. The standard properties you'd expect. You also have the transitive property that X is Y and Y is Z, therefore X is equal to Z. And in C++ OX concepts, you could actually write axiom. It was a new keyword and write out these semantic properties. The idea and the hope behind axioms is that this would provide valuable information to both users to understand like what their types need to do to actually conform to the concept, and that it could be used by static checkers and optimizers and so on to go and make sure that the code was more correct
+或者通过让你进行高级优化来提高性能。它几乎属于契约可能属于的家族。是的，绝对。是的，因为一个也许重要的事情没有被捕获，我不知道我们到目前为止是否已经捕获了，那就是概念既有语法要求也有语义要求。
+
+41
+00:30:32.000 --> 00:30:56.000
+or to improve performance by letting you do high-level optimizations. It was almost in the family of things that contracts might be in. Yes, absolutely. Yeah, because one perhaps important thing that wasn't captured, I don't know if we've captured thus far, is that concepts have both syntactic and semantic requirements.
+而我们今天拥有的语言功能只能检查语法要求，但这并不意味着语义要求不重要。就像我们之前谈到的，你知道，视图（view）概念是某种语法要求，但这并不意味着语义要求不重要。就像我们之前谈到的，你知道，视图概念是某种
+
+42
+00:30:56.000 --> 00:31:28.000
+And the language feature that we have today can only check the syntactic requirements, but that does not mean that the semantic requirements are not important. Like we talked a little bit before about like, you know, the view concept is something syntactic requirements, but that does not mean that the semantic requirements are not important. Like we talked a little bit before about like, you know, the view concept is something that has semantic requirements that are very important, like that it has O1, you know, copying, and a bunch of other operations have important complexity requirements that essentially mean that these things are cheap to copy around and to pass around.
+具有非常重要的语义要求的东西，比如它有O1，你知道，复制，以及其他许多操作都有重要的复杂性要求，本质上意味着这些东西复制和传递起来很便宜。
+
+43
+00:31:28.000 --> 00:32:19.000
+And that's what distinguishes a view from a range. And that's not something that we can syntactically distinguish. And that's why you have to opt in. Your range is to opt in to being a view using some trait. It does amuse me how frequently I see people having to define C++20 concepts using some trait mechanism or just using the new things like alias templates. There's a bunch of, I just saw a talk the other day by Gaspar where he was showing some trick using some alias templates to define a concept. Or concepts that have to be defined in terms of type traits. Surely a true sign of our success. Traits have been used since the early STL as the way to opt into behavior and state.
+这就是区分视图和范围（range）的东西。这不是我们可以从语法上区分的东西。这就是为什么你必须选择加入。你的范围是使用某种特征（trait）选择加入成为视图。我确实觉得很有趣，我经常看到人们不得不使用某种特征机制或只是使用像别名模板这样的新东西来定义C++20概念。有很多，我前几天刚看到Gaspar的一个演讲，他展示了一些使用别名模板定义概念的技巧。或者必须根据类型特征定义的概念。这确实是我们成功的真正标志。特征自早期STL以来一直被用作选择加入行为和状态的方式。
+
+44
+00:32:19.000 --> 00:32:59.000
+This is what concept maps did. You can think of concept maps as essentially formalizing the notion of traits with some bells and whistles and actual language integration rather than being a specialization-based template trick. Right. And so for anybody who might be thinking like, oh, this concept map thing sounds heavy-handed. Like, I don't have to want to, like, with the concepts we have, we don't have to explicitly opt into things. Well, you know, you look at how many concepts are written in a lot of libraries. There are still a lot of cases where you have to explicitly opt into something. There's just no formalized way to do it. Concepts maps would have given us that.
+这就是概念映射所做的。你可以认为概念映射本质上是将特征的概念形式化，带有一些花哨的东西和实际的语言集成，而不是成为基于特化的模板技巧。对。所以对于任何可能在想，哦，这个概念映射东西听起来很笨重的人。就像，我不必想要，就像，对于我们拥有的概念，我们不必显式地选择加入东西。好吧，你知道，你看看很多库中编写了多少概念。仍然有很多情况下你必须显式地选择加入某些东西。只是没有形式化的方法来做。概念映射本来会给我们那个。
+
+45
+00:32:59.000 --> 00:33:04.000
+And with the auto concepts, you would have gotten all of the implicitness that you want. Be sure to check these show notes either in your podcast app or at ADSP, the podcast.com for links to anything we mentioned in today's episode, as well as a link to a GitHub discussion where you can leave thoughts, comments and questions. Thanks for listening. We hope you enjoyed and have a great day. Low quality, high quantity. That is the tagline of our podcast. It's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+而且有了自动概念，你本来会得到你想要的所有隐式性。请务必在你的播客应用程序或ADSP, the podcast.com上查看这些节目笔记，以获取我们在今天剧集中提到的任何内容的链接，以及一个GitHub讨论的链接，你可以在那里留下想法、评论和问题。感谢收听。我们希望你喜欢并祝你有美好的一天。低质量，高数量。这就是我们播客的标语。这不是标语。我们的标语是“带有信息点缀的混乱”。这一集还没有评论。点击转录中的任何句子来留下评论。

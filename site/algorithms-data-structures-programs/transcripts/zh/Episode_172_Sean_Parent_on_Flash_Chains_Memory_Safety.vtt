@@ -1,0 +1,391 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:50.000
+Yeah, I mean, I think the information coming out of Department of Defense and the White House is filled with a lot of hyperbole. But at the base of it, it's not wrong. Just, you know, in working on this chain library at one point, I accidentally wrote T instead of decay type T. And the result was I captured a reference instead of a value. Even though the code looked like it was fine, the type was not. And that meant that I had a use after return on my stack, and it cost me half a day to debug the thing. Hear that, folks? The luminary. Sean Perry, debugging his problem for half a day. There's hope for all of us.
+是啊，我的意思是，我认为来自国防部和白宫的信息充斥着许多夸张的成分。但从根本上说，它并没有错。你知道，在处理这个链式库时，有一次我意外地写成了 T 而不是 decay type T。结果是我捕获了一个引用而不是一个值。尽管代码看起来没问题，但类型却不对。这意味着我的栈上出现了“返回后使用”（use after return）错误，我花了大半天时间才调试好。听到了吗，各位？大牛 Sean Parent，调试他的问题花了半天时间。我们大家都有希望了。
+
+2
+00:00:50.000 --> 00:01:38.000
+Yeah, so it's too easy to make a mistake like that. Welcome to ADSP, the podcast episode 172, recorded on March 7th, 2024. My name is Connor, and today with my co-host Bryce, we interview Sean Parent from one of the New York Adobe offices and chat about Adobe Flash, his new library and idea about function composition called Chains, and his latest thoughts on memory-safe programming languages and C++. And we're live. Connor, why are we in a cab? Turn your gain down.
+是啊，所以犯这种错误太容易了。欢迎来到 ADSP 播客第 172 期，录制于 2024 年 3 月 7 日。我是 Connor，今天我和我的联合主持人 Bryce 一起采访来自纽约 Adobe 办公室之一的 Sean Parent，聊聊 Adobe Flash、他关于函数组合的新库和想法（称为 Chains），以及他关于内存安全编程语言和 C++ 的最新见解。我们现在直播。Connor，我们为什么在出租车里？把你的增益调低点。
+
+3
+00:01:38.000 --> 00:02:01.000
+Testing, testing. We're in a cab because we went to the wrong Adobe offices. We are going to interview Sean. Connor, what was the one job that I gave you? Listen. I asked Connor, hey, Connor, can you get the address of where we're going? And then we show up at the wrong building. So now we're going to have like 40 to 50 minutes to interview Sean Parent.
+测试，测试。我们在出租车里是因为我们去了错误的 Adobe 办公室。我们要去采访 Sean。Connor，我交给你的那件事是什么？听着。我问 Connor，嘿，Connor，你能拿到我们要去的地方的地址吗？然后我们就出现在了错误的楼里。所以现在我们大概只有 40 到 50 分钟的时间来采访 Sean Parent。
+
+4
+00:02:01.000 --> 00:02:20.000
+We are currently at Broadway and 28th? 28th, 20th. Listen folks, I'd like to clear my name here. We were at the correct Adobe office for the meetup. That is true. It was unclear that
+我们现在在百老汇和 28 街？28 街，20 街。听着，各位，我想澄清一下。我们当时在正确的 Adobe 办公室参加聚会。那是真的。但不清楚的是
+
+5
+00:02:20.000 --> 00:02:42.000
+Sean was going to be at a different Adobe office. But Connor mentioned that, hey, Sean said that the office is really near his hotel. I did. And the office that we were going to be at a different Adobe office. But Connor mentioned that, hey, Sean said that the office is really near his hotel. I did. And the office that we were going to is not near his hotel. And I said, well, maybe they have a second office in New York. I didn't think that there was no possibility of there being a second office in New York. But in fact, Adobe has two offices in New York.
+Sean 会在另一个 Adobe 办公室。但 Connor 提到，嘿，Sean 说办公室离他的酒店很近。我确实说了。而我们要去的那个办公室并不在他酒店附近。我说，好吧，也许他们在纽约有两个办公室。我没觉得在纽约没有第二个办公室是不可能的。但事实上，Adobe 在纽约确实有两个办公室。
+
+6
+00:02:42.000 --> 00:03:06.000
+It's New York, of course. I mean, literally when I worked at Amazon, they have like six offices in Vancouver, which is like a fraction of the size. Anyways, but... Should we bottom out on that reduced by key thing? Not yet, not yet. I'm clearing my name. But my point was is that I don't think it's unreasonable to assume that Sean would be at the Adobe two hours before the meetup happens at that building. You're not wrong.
+这是纽约，当然了。我的意思是，我在亚马逊工作时，他们在温哥华就有六个办公室，而温哥华的规模只是纽约的一小部分。总之，但是……我们应该把那个“按键归约”（reduced by key）的事情彻底搞清楚吗？还没，还没。我正在澄清我的名声。但我的观点是，假设 Sean 会在聚会开始前两小时出现在那栋楼的 Adobe 办公室，这并不不合理。你没说错。
+
+7
+00:03:06.000 --> 00:03:19.000
+And, yeah. Oops. My bad. And that's why we're recording in the back of the cab right now. A beautiful yellow New York City cab. Not an Uber, not a Lyft. It is nice. Because those take forever to show up.
+而且，是的。哎呀。我的错。这就是为什么我们现在在出租车后座录音的原因。一辆漂亮的黄色纽约市出租车。不是 Uber，不是 Lyft。这挺好的。因为那些车要等好久才到。
+
+8
+00:03:19.000 --> 00:03:38.000
+It is nice. You just stick your hand out and it captures it. It's wonderful. And now, yeah. Now we're going to go to the correct Adobe office. All right, we've got to get out of the, we've got to get out of the, I was going to say elevator, but it's a taxi. It is a taxi now. I'm going to clink these microphones.
+这挺好的。你只要伸出手，它就停下了。太棒了。现在，是的。现在我们要去正确的 Adobe 办公室了。好了，我们得下……我本来想说电梯，但这是出租车。现在是出租车。我要把这些麦克风碰一下。
+
+9
+00:03:38.000 --> 00:04:03.000
+We've got two mics now. Thank you, sir. You have a wonderful day. Okay, well, same to you, sir. You have a wonderful day. Okay, well, same to you, brother. Try not to forget. Thank you, sir. First ever pod recorded in a cab. Yeah.
+我们现在有两个麦克风了。谢谢你，先生。祝您有美好的一天。好的，您也一样，先生。祝您有美好的一天。好的，您也一样，兄弟。尽量别忘了。谢谢你，先生。有史以来第一次在出租车里录制的播客。是啊。
+
+10
+00:04:03.000 --> 00:04:26.000
+Here, take There's a possibility that we've swapped mics, which would make your editing life so much harder. Not really, honestly. Okay, good. Then we should swap mics. Awesome. Thank you so much, sir. All right, folks. The main office is on the fourth floor. They have 408. Awesome.
+来，拿着。我们可能把麦克风换了，这会让你的剪辑工作变得困难得多。其实不会。好的，太好了。那我们应该换回麦克风。太棒了。非常感谢您，先生。好了，各位。主办公室在四楼。他们有 408。太棒了。
+
+11
+00:04:26.000 --> 00:04:39.000
+Thank you. Thank you so much, sir. All right, folks. We're going to the fourth floor. See the further south you go in Manhattan. Holy smokes, it's hot. The further south you go in Manhattan, the hotter the elevators get and the smaller the elevators get.
+谢谢。非常感谢您，先生。好了，各位。我们要去四楼。看，你在曼哈顿越往南走。天哪，太热了。你在曼哈顿越往南走，电梯就越热，电梯也越小。
+
+12
+00:04:39.000 --> 00:05:05.000
+Damn. This one's got a little small weird door. I don't think they have a reception. I don't know. We are outside of the Adobe Union Square offices. Please check in at reception. Where is reception? I think we should just did we just message Sean
+该死。这个电梯有个又小又奇怪的门。我不觉得他们有前台。我不知道。我们在 Adobe 联合广场办公室外面。请在前台登记。前台在哪里？我想我们应该……我们刚才给 Sean 发消息了吗？
+
+13
+00:05:05.000 --> 00:05:21.000
+to NVIDIA employees try to break into Adobe offices Adobe is a weapons free workplace this is ADSP the podcast episode 172 I think oh there is Sean
+NVIDIA 员工试图闯入 Adobe 办公室。Adobe 是一个无武器工作场所。这是 ADSP 播客第 172 期。我想……哦，那是 Sean。
+
+14
+00:05:21.000 --> 00:05:37.000
+look at that like magic Sean just popped out of the elevator this was a series of unfortunate events Oh, there is Sean. Oh, look at that. Like magic. Perfect timing. Sean just popped out of the elevator. This was a series of unfortunate events. We did not think that it was possible if there were two Adobe offices in New York. No, that's not true. We literally, I said, I didn't say that New York didn't have two.
+看那个，就像变魔术一样，Sean 从电梯里冒出来了。这是一系列不幸的事件。哦，那是 Sean。哦，看那个。就像变魔术一样。时机太完美了。Sean 刚从电梯里出来。这是一系列不幸的事件。我们没想到纽约会有两个 Adobe 办公室。不，那不是真的。我们……我字面上说，我没说纽约没有两个。
+
+15
+00:05:37.000 --> 00:05:51.000
+I just said, why would Sean be at a different Adobe office than the meetup? And I was wrong about that fact. You definitely were. This was your fault, and I chose to say it. No, is it my fault? I'll take the blame. You know, I'm Canadian, and I apologize. the meetup and i was wrong about that fact uh you definitely were this was your fault and i and i know is it my fault i'll take the blame you know i'm canadian and i apologize on behalf of uh
+我只是说，为什么 Sean 会在和聚会不同的 Adobe 办公室？我在那个事实上错了。你确实错了。这是你的错，我选择说出来。不，是我的错吗？我来承担责任。你知道，我是加拿大人，我道歉。聚会，我在那个事实上错了。呃，你确实错了。这是你的错，而且我……我知道，是我的错吗？我来承担责任。你知道，我是加拿大人，我代表……
+
+16
+00:05:51.000 --> 00:06:19.000
+the two americans here yeah all right let's um let's wait are you not able to get into these offices either no oh i'm gonna say we're all we're all locked out. All right. We got you on the leash here. All righty. This is where we steal the IP, folks. Ooh, these are nice offices. You know, I've never been in an Adobe office that does not have nice art. Well, I mean, it kind of is like the creative company, you know?
+这里的两个美国人道歉。是啊，好吧，让我们……让我们……等等，你们也进不去这些办公室吗？没有。哦，我要说我们都被锁在外面了。好了。我们把你拴在这儿了。好了。这就是我们窃取知识产权的地方，各位。哦，这些办公室真不错。你知道，我从来没去过没有精美艺术品的 Adobe 办公室。嗯，我的意思是，它毕竟是创意公司，你知道吧？
+
+17
+00:06:19.000 --> 00:06:49.000
+I know, exactly. We're upstairs. Okay. Ooh. We'll whisper like we're in a library. Very quiet. What has this podcast become, folks? Let's take the picture after 5.
+我知道，确实。我们在楼上。好的。哦。我们要像在图书馆里一样低声说话。非常安静。这个播客变成什么样了，各位？让我们 5 点后再拍照。
+
+18
+00:06:49.000 --> 00:07:14.000
+Alright. Open concept, folks. Alright. Thank you to the lady that helped us get the directions to the room. I really hope that you keep this all in. Oh, yeah, definitely. Hear what we're saying? All right, we successfully snuck in to our second Adobe building.
+好的。开放式概念，各位。好的。感谢那位帮我们指路到房间的女士。我真的希望你们把这些都保留下来。哦，是的，绝对。听到我们说的话了吗？好的，我们成功潜入了我们的第二个 Adobe 大楼。
+
+19
+00:07:14.000 --> 00:07:49.000
+This one has Sean Parent in it. And we'll make sure we got the gains right. Who knows about the audio quality of our little cab ride there? Good to have you back on the pod sean thank you you were we were talking about room names and you were explaining yeah well bryce mentioned he did not uh or he was seeing a pattern with the the room names on this this floor um and i said in san jose when they put in the west tower which is our first first headquarter building they named all the the Tower, which is our first headquarter building,
+这个里面有 Sean Parent。我们会确保增益调好了。谁知道我们在出租车里的音频质量如何呢？很高兴你回到播客，Sean。谢谢。你……我们刚才在谈论房间名称，你正在解释……是啊，好吧，Bryce 提到他没有……或者他看到了这一层房间名称的规律……我说在圣何塞，当他们建西塔楼时，那是我们的第一个总部大楼，他们以字体命名了所有的……塔楼，那是我们的第一个总部大楼，
+
+20
+00:07:49.000 --> 00:08:22.000
+they named all the conference rooms after fonts, alphabetical, which made it very easy to find the right conference room, alphabetical by floor. And then when they put in the East Tower, somebody said, oh, I see, some of the fonts in the West Tower are named after cities. So they continued that theme since there's fonts like New York and our East Tower. All the conference rooms are named after cities, which is very confusing because now if you have a meeting in New York, which building are you in? There's a font called New York? There is a font called New York.
+他们按字母顺序以字体命名了所有的会议室，这使得按楼层按字母顺序找到正确的会议室非常容易。然后当他们建东塔楼时，有人说，哦，我明白了，西塔楼里的一些字体是以城市命名的。所以他们延续了这个主题，因为有像“纽约”这样的字体，而在我们的东塔楼，所有的会议室都以城市命名，这非常令人困惑，因为现在如果你在纽约开会，你在哪栋楼里？有一个字体叫“纽约”吗？确实有一个字体叫“纽约”。
+
+21
+00:08:22.000 --> 00:08:59.000
+So there are many fonts named after cities. I guess fonts is not the first thing that comes to mind when I think of Adobe, but I guess it is one of the things that you do. Yeah. So we have a significant font business, and there's even a Warnock font, which is design influenced by our our founder so have you ever had to deal with any interesting programming problems related to fonts not at adobe i actually worked on
+所以有很多以城市命名的字体。我想字体不是我想到 Adobe 时第一个想到的东西，但我猜这是你们做的事情之一。是的。所以我们有重要的字体业务，甚至还有一个 Warnock 字体，这是受我们创始人影响设计的。所以你有没有处理过任何与字体相关的有趣的编程问题？在 Adobe 没有，我实际上参与过
+
+22
+00:08:59.000 --> 00:09:33.000
+what became true type which was Apple's and Microsoft's font system. Most of the development started at Apple, and it was part of the QuickTryGX project. I worked on the QuickTryGX project. So I worked on bits of that, largely trying to optimize how you render quadratic Bezier's. So Apple's font system was based off of quadratic Bezier curves,
+后来成为 TrueType 的项目，那是苹果和微软的字体系统。大部分开发始于苹果，它是 QuickDraw GX 项目的一部分。我参与了 QuickDraw GX 项目。所以我参与了其中的部分工作，主要是试图优化如何渲染二次贝塞尔曲线。所以苹果的字体系统是基于二次贝塞尔曲线的，
+
+23
+00:09:33.000 --> 00:09:58.000
+where Adobe, everything is cubic. I heard a story. I don't know if this is true, but I heard a story that on Windows, the little spinning logo is actually a font because their font system is so optimized. It's just the best way to do a little spinning logo is just a series
+而 Adobe，一切都是三次的。我听过一个故事。我不知道这是不是真的，但我听说在 Windows 上，那个旋转的小标志实际上是一个字体，因为他们的字体系统优化得非常好。制作旋转小标志的最佳方式就是一系列
+
+24
+00:09:58.000 --> 00:10:28.000
+of glyphs in the font. I have no idea if that's true. You've got the topic. Yeah, I do have the topic. We don't even know if Sean has anything to say about this, but Bryce assured me that the next topic, because you have questions and he better have answers. Well, there is something else that Adobe is known for or was known for in the past that we've not talked about here. Usually, I think these days we think about Adobe, we think about Photoshop, we think about generative AI.
+字体中的字形。我不知道这是否属实。你有话题。是的，我确实有话题。我们甚至不知道 Sean 对此是否有话要说，但 Bryce 向我保证下一个话题，因为你有问题，而他最好有答案。嗯，Adobe 还有其他出名的地方，或者过去出名的地方，我们在这里还没谈到。通常，我想这些天我们想到 Adobe，我们会想到 Photoshop，想到生成式 AI。
+
+25
+00:10:28.000 --> 00:11:06.000
+But it used to be that most people knew Adobe because of Flash. And I remember when I was back in the day, when I was a kid, all the cool websites used Flash. Connor, you said yesterday that you used to be an action script wizard i don't even know really what action script is action script was the language that you program flash in and i wrote well a couple different applications but one was like a pretty it was terrible code i didn't know what i was doing back then but it was like a stock technical analysis program and it was amazing because it was so fast like i i originally wrote it in visual
+但过去大多数人知道 Adobe 是因为 Flash。我记得我小时候，所有酷炫的网站都用 Flash。Connor，你昨天说你曾经是 ActionScript 大师。我甚至不知道 ActionScript 到底是什么。ActionScript 是你编写 Flash 的语言，我写过……嗯，几个不同的应用程序，但其中一个是……代码非常糟糕，我当时不知道自己在做什么，但它是一个股票技术分析程序，它很棒，因为它太快了。比如我最初是用 Visual
+
+26
+00:11:06.000 --> 00:11:39.000
+basic six but like drawing all those little rectangles and every single time you hit a button and it had to display everything it just crawled to a halt but flash you can just basically like redraw everything and it's silky smooth like doesn't matter how much stuff i put on screen anyway so i put action script 3..0 at my expert languages at one point. But anyways, yeah. Yeah, so did you have anything to do with Flash? Did you have any involvement with Flash? Very little.
+Basic 6 写的，但每次你点击按钮，它必须显示所有东西时，画那些小矩形就会慢得像爬一样，但 Flash 你基本上可以重绘所有东西，而且非常流畅，不管我在屏幕上放多少东西。总之，我曾经把 ActionScript 3.0 列为我的专家语言。但总之，是啊。是啊，你和 Flash 有什么关系吗？你参与过 Flash 吗？很少。
+
+27
+00:11:39.000 --> 00:12:51.000
+So Flash came in when we acquired Macromedia. It was initially a Macromedia product, and it came in through an acquisition. And when I came back to Adobe from Google, our CTO was big on Flash and decided that we were going to write all of the mobile products in Flash. And we had just started this project called Adobe Revel, which was a consumer version of Lightroom and eventually kind of morphed into Lightroom Mobile. And we did not want to code a Revel in Flash. And so we had a plan because Revel was going to largely be a tablet-based product. So it was going to be centered around the tablet. And the idea was to then feed into a Lightroom on desktop. And then Adobe had a product called Photoshop Express, which is still there in the App Store,
+所以 Flash 是在我们收购 Macromedia 时进来的。它最初是 Macromedia 的产品，是通过收购进来的。当我从谷歌回到 Adobe 时，我们的 CTO 非常看好 Flash，并决定我们要用 Flash 编写所有的移动产品。我们刚开始这个叫 Adobe Revel 的项目，它是 Lightroom 的消费者版本，最终演变成了 Lightroom Mobile。我们不想用 Flash 编写 Revel。所以我们有一个计划，因为 Revel 很大程度上是一个基于平板电脑的产品。所以它将以平板电脑为中心。我们的想法是将其输入到桌面版的 Lightroom 中。然后 Adobe 有一个叫 Photoshop Express 的产品，它现在还在 App Store 里，
+
+28
+00:12:51.000 --> 00:13:23.000
+but has very little to do with actual Photoshop. And so our thinking was to repurpose Photoshop Express since it had kind of the camera tech and stuff, and to tailor that as the way to feed the ecosystem and get pictures into this consumer product standpoint or consumer product line. And so we had just started working with a team that was doing Express to morph it into what we needed.
+但与真正的 Photoshop 关系不大。所以我们的想法是重新利用 Photoshop Express，因为它有相机技术之类的东西，并将其定制为输入生态系统并将图片放入这个消费者产品线的方式。所以我们刚开始与一个做 Express 的团队合作，将其改造成我们需要的东西。
+
+29
+00:13:23.000 --> 00:13:57.000
+And when this mandate came down, we decided to sacrifice Express to get rewritten into Flash. And so that eventually got done, and then it was like a two-year effort, and then it was scrapped. What was it written in originally? It was written largely two-year effort, and then it was scrapped. What was it written in originally? It was written largely in C++, so with a bit of objective C++ at the front and side.
+当这个指令下达时，我们决定牺牲 Express，将其重写为 Flash。所以最终完成了，然后那是一个两年的努力，然后它被废弃了。它最初是用什么写的？它主要是……两年的努力，然后它被废弃了。它最初是用什么写的？它主要是用 C++ 编写的，前面和侧面有一点 Objective C++。
+
+30
+00:13:57.000 --> 00:14:28.000
+Wouldn't it be a pretty big performance hit to rewriting nothing from C++ to Flash? Yeah, but our CTO thought that that was the way of the future and that hardware would get faster than it would matter. And it was not the case. So Express got rewritten into Flash, and it never shipped because it took them two years to get to feature parity to what they had two years ago.
+从 C++ 重写到 Flash 不会造成很大的性能损失吗？是的，但我们的 CTO 认为那是未来之路，硬件会变得足够快，以至于性能不再重要。但事实并非如此。所以 Express 被重写为 Flash，它从未发布，因为它花了他们两年时间才达到两年前的功能对等。
+
+31
+00:14:28.000 --> 00:15:28.000
+And it just was all around a worse experience. So that got scrapped. So we were very thankful that we didn't take Revel down that path. So I had some tentative involvement with Flash during those times. And then about the time Flash was almost canceled or about to be canceled, right? For people who don't know, the reason why Flash was canceled was it just had an unbelievable stream of security issues. It was written as an old Netscape browser plugin. And so it plugged into your browser, and that was a C API, and so it was running outside of the sandbox. And one of the big reasons why people liked Flash is because it could give your website access to your operating system and your operating system capabilities.
+而且整体体验更差。所以它被废弃了。所以我们非常庆幸没有让 Revel 走那条路。所以我当时对 Flash 有一些初步的参与。然后在大约 Flash 快要被取消或即将被取消的时候，对吧？对于不知道的人，Flash 被取消的原因是它有一连串令人难以置信的安全问题。它是作为一个旧的 Netscape 浏览器插件编写的。所以它插入到你的浏览器中，那是一个 C API，所以它在沙箱之外运行。人们喜欢 Flash 的一大原因是它可以让你的网站访问你的操作系统和操作系统的功能。
+
+32
+00:15:28.000 --> 00:16:26.000
+The problem with that is it gave websites access to your operating system and your operating system capabilities. The problem with that is it gave websites access to your operating system and your operating system capabilities. So it became a big security problem, and there was a stream of exploits against it, and they got patched and patched and patched, and that kind of sucked in so many resources it was decided that that it was untenable to maintain it there were a couple efforts to to sandbox it or to rewrite it at the time it would have been into uh asm.js and pinnacle which were precursors to wasm um uh both of those rewrites were were were internal, but, uh, we couldn't see a way to, to roll them out because being sandboxed, they cut the capabilities off from the desktop. And so even though you would be able to run some sites in them, the main business that we had for Flash was not around games, which is how most people know
+问题在于它让网站可以访问你的操作系统和操作系统的功能。问题在于它让网站可以访问你的操作系统和操作系统的功能。所以它成了一个巨大的安全问题，针对它的漏洞层出不穷，它们被修补、修补、再修补，这消耗了太多的资源，以至于决定维护它已不可行。当时有几次尝试将其沙箱化或重写，当时本应该是 asm.js 和 PNaCl，它们是 Wasm 的前身。嗯，这两个重写都是内部的，但是，我们看不到推广它们的方法，因为被沙箱化后，它们切断了桌面端的功能。所以即使你可以在其中运行一些网站，我们 Flash 的主要业务也不是围绕游戏，那是大多数人知道
+
+33
+00:16:26.000 --> 00:17:19.000
+Flash content, but it was around a corporate business where corporations developed their in-house applications to be written that way. And all of those required access to the operating system. And there wasn't a way to provide that without opening up a bunch of security holes. So it got killed. This was right at the time when the first software technology lab was in the process of being nuked, and there was a point there briefly where the team got redistributed, and I ended up reporting into the flash organization but now it was the flash authoring tool which was in the middle of a big rewrite on top of HTML 5 and so I got to that assigned to that team what's the name of that tool
+Flash 内容的方式，而是围绕企业业务，企业开发他们的内部应用程序以这种方式编写。所有这些都需要访问操作系统。如果不打开一堆安全漏洞，就没有办法提供这种访问。所以它被杀死了。这正是在第一个软件技术实验室即将被摧毁的时候，有一段时间团队被重新分配，我最终向 Flash 组织汇报，但现在它是 Flash 创作工具，它正在 HTML 5 之上进行大规模重写，所以我被分配到了那个团队。那个工具叫什么名字？
+
+34
+00:17:19.000 --> 00:18:06.000
+is it is it a product these days yeah I think it still is I don't even know what the name of it is now for a while it was just called flash which was very confusing because i can't imagine why yeah yeah yeah uh yeah so so i got assigned to that team for a little while i spent like less than a month consulting with them and this was when i was uh uh we were trying to figure out what was going to happen with uh software technology lab and then I had a sabbatical and so the day before my sabbatical I got called into a meeting and they said well we wanted to have this straightened out before you left on sabbatical and the decision is is we're we're distributing the entire team all over the company
+它现在还是个产品吗？是的，我想它仍然是。我甚至不知道它现在的名字是什么。有一段时间它就叫 Flash，这非常令人困惑，因为我无法想象为什么。是啊，是啊，呃，是啊，所以我被分配到那个团队待了一段时间。我花了不到一个月的时间咨询他们，当时我们正试图弄清楚软件技术实验室会发生什么，然后我休了假。所以在我休假的前一天，我被叫去开会，他们说，嗯，我们想在你休假前把这件事理顺，决定是我们要把整个团队重新分配到公司各处。
+
+35
+00:18:06.000 --> 00:18:36.000
+and uh that's the way it's my my uh my girlfriend it keeps every time before vacation her boss like the day before vacation boss schedules a meeting and then it's always some bad news and then it's just like it ruins the whole thing yeah yeah so so my sabbatical was spent looking for another job. And so I came back and resigned. Was that when you went to Google? That was when I went to Google, yeah. Have we talked about Sean's time ago? We have, yeah.
+而且，这就是……我的女朋友，每次休假前，她的老板，就在休假前一天，老板安排了一个会议，然后总是些坏消息，然后它就毁了整个假期。是啊，是啊，所以我的休假是在找另一份工作中度过的。所以我回来后辞职了。那是你去谷歌的时候吗？那是我去谷歌的时候，是的。我们谈过 Sean 在谷歌的时间吗？我们谈过，是的。
+
+36
+00:18:36.000 --> 00:19:14.000
+That's the famous Rotate story. Oh, that is. Yeah, that's where Rotate came from. So that's the little involvement I had with Flash. I got what I wanted out of that. My thinking is like, you know, it makes the Flash, renaming to Flash for a different product makes Microsoft Teams new teams not seem so bad because they prefixed at least a new. We work at nvidia i don't think we can give anybody shit about product naming because ours is pretty bad tesla we got we named tesla first
+那是著名的 Rotate 故事。哦，那是。是的，Rotate 就是从那里来的。所以这就是我参与 Flash 的一点点经历。我从中学到了我想要的。我的想法是，你知道，把 Flash 重命名为另一个产品，让 Microsoft Teams 的“新 Teams”看起来没那么糟糕，因为他们至少加了“新”这个前缀。我们在 NVIDIA 工作，我不认为我们可以对产品命名指手画脚，因为我们的也很糟糕。Tesla，我们先命名了 Tesla，
+
+37
+00:19:14.000 --> 00:20:08.000
+and then they you know tesla at nvidia is the name of a business unit a product um a micro architecture and uh like a particular uh gpu skew well in my ivory tower and then i do my research and i wasn't aware of all that so it's actually my business unit is called the tesla business unit the that's what the hbc business unit was called back in the day tes Tesla was the name of the first NVIDIA, like, real compute architecture back in the day. Well, we've got halfway through the episode, and we've still got 25 minutes until Sean needs to go to his next meeting. So maybe in the last 25 minutes, we might get to a couple more topics. You can give us, we are T-minus 25 minutes from Sean's next meeting, but T-minus one hour and 55 minutes from the New York C++ meetup being held at the other Adobe office,
+然后他们，你知道，NVIDIA 的 Tesla 是一个业务部门、一个产品、一个微架构和一个特定的 GPU SKU 的名称。好吧，在我的象牙塔里，我做研究时并不知道所有这些，所以实际上我的业务部门叫 Tesla 业务部门，那是 HPC 业务部门过去的名字。Tesla 是 NVIDIA 第一个真正的计算架构的名字。好吧，我们已经完成了这一集的一半，距离 Sean 去参加下一个会议还有 25 分钟。所以也许在最后 25 分钟里，我们可能会谈到更多话题。你可以给我们，我们距离 Sean 的下一个会议还有 25 分钟，但距离在另一个 Adobe 办公室举行的纽约 C++ 聚会还有 1 小时 55 分钟，
+
+38
+00:20:08.000 --> 00:20:22.000
+which we already have badges to because we went there a little earlier, as you heard. You're going to be speaking. Do you want to tell us about your talk and yeah, what you're going to be talking about? Sure. I'm going to be talking about, well,
+我们已经有入场证了，因为我们早些时候去过那里，正如你所听到的。你要演讲。你想告诉我们你的演讲内容吗？当然。我要谈论的是，嗯，
+
+39
+00:20:22.000 --> 00:21:18.000
+this is a kind of a draft of a talk about a draft of a library, about a half an idea. So we'll see how this goes. So I've been talking with mostly with Eric Niebler about senders and receivers. I looked it up. It's more than eight years we've been having conversations around this. And I built the STLAB concurrency library, which is mentioned in the sender-receiver proposal as prior work and some inspiration there. And I've had some issues with sender-receivers. And one conversation that I've had with Eric repeatedly is at the end of the day, I think senders and receivers are just a way of doing function composition. So basically all that they are, are you're doing, you're composing a bunch of functions, which then you're going to execute.
+这是一个关于一个库的草稿的草稿，关于一个半成品的想法。所以我们看看进展如何。所以我一直在和 Eric Niebler 讨论发送者和接收者（senders and receivers）。我查了一下。我们围绕这个话题的对话已经超过八年了。我构建了 STLAB 并发库，它在发送者-接收者提案中被提及为先前工作和一些灵感来源。我对发送者-接收者有一些问题。我和 Eric 反复进行的一次对话是，归根结底，我认为发送者和接收者只是一种函数组合的方式。所以基本上它们所做的，就是你正在做，你正在组合一堆函数，然后你将执行它们。
+
+40
+00:21:18.000 --> 00:21:46.000
+And those functions describe asynchronous or concurrent operations, and you're effectively building a program and then running the program. And it's a somewhat functional language that you're building them in, but the sender-receiver interface doesn't readily expose that. You've got you know some complicated
+这些函数描述了异步或并发操作，你实际上是在构建一个程序，然后运行这个程序。你构建它们的语言是一种函数式语言，但发送者-接收者接口并没有直接暴露这一点。你有，你知道，一些复杂的
+
+41
+00:21:46.000 --> 00:22:22.000
+concepts that have multiple interface calls on them for setting values and setting exceptions and setting stopped and getting stop tokens and and and it's this very broad interface that doesn't look like under the hood, like just function composition. And so a couple weeks ago, literally a day less than two weeks ago, I had this thought about, well, if you just took a sequence of functions and stuck them in a tuple, that you could use a fold expression
+概念，它们有多个接口调用，用于设置值、设置异常、设置停止、获取停止令牌，这是一个非常广泛的接口，在底层看起来不像函数组合。所以几周前，字面上不到两周前，我有了这个想法，嗯，如果你只是取一系列函数并将它们塞进一个元组中，你可以使用折叠表达式
+
+42
+00:22:22.000 --> 00:23:02.000
+to execute them flat in sequence where the result of one feeds to the argument of the next and could make that work. And so I wrote a little snippet of code to do that, and then I started to think, how do you go from there to building up the rest of the capabilities that you would have in sender-receivers. And got pretty far and had some insights along the way. The work certainly isn't complete at this point. But it's got some interesting aspects to it in that the structure of these things,
+来按顺序平铺执行它们，其中一个的结果输入到下一个的参数中，并可以使之工作。所以我写了一小段代码来做这件事，然后我开始思考，你如何从那里构建起你在发送者-接收者中拥有的其余功能。进展相当顺利，并在此过程中获得了一些见解。这项工作目前肯定还没有完成。但它有一些有趣的方面，即这些东西的结构，
+
+43
+00:23:02.000 --> 00:24:07.000
+I call them chains, it's really just a two-dimensional tuple of tuples under the hood. And that's maintained and exposed. The structure of them is very simple, but when you want to actually do something with them, you can wrap an algorithm around them that transforms that structure into a new structure and then executes that new structure. And what that means is, like in senders or receivers, you would say then and hand it a lambda. And what that is in senders receivers is, what is it? It's a sender adapter closure, right? So it's taking a lambda and it's capturing it in a sender, so, and adapting it to the sender interface and giving you back a new function, function in quotes, which is a sender that accepts a sender and returns a sender.
+我称它们为链（chains），底层实际上只是一个二维的元组的元组。这是被维护和暴露出来的。它们的结构非常简单，但当你真正想用它们做点什么时，你可以围绕它们包装一个算法，将该结构转换为新结构，然后执行该新结构。这意味着，就像在发送者或接收者中，你会说“then”并给它一个 lambda。在发送者-接收者中，那是什么？它是一个发送者适配器闭包，对吧？所以它接受一个 lambda，并将其捕获在一个发送者中，并将其适配到发送者接口，然后给你返回一个新函数（函数加引号），这是一个接受发送者并返回发送者的发送者。
+
+44
+00:24:07.000 --> 00:24:36.000
+So it's this complicated little thing. And in my model, then lambda expression is just take the lambda expression and append it to the end of the tuple. That's it. And then all the magic happens when you go to execute this, all the transformation to execute it. And I think there's some significant power in there. So I've shown that I can do the, you know, transfer the execution onto other threads or other execution contexts, and I
+所以这是一个复杂的小东西。而在我的模型中，then lambda 表达式只是取 lambda 表达式并将其附加到元组的末尾。就是这样。然后所有的魔法都在你执行它时发生，所有的转换都在执行时发生。我认为其中蕴含着巨大的力量。所以我已经证明我可以做到，你知道，将执行转移到其他线程或其他执行上下文中，并且我
+
+45
+00:24:36.000 --> 00:25:11.000
+can inject in the transformation cancellation tokens and error handling. You know, these functions are free to throw exceptions if they want to throw exceptions. All of the handling of that is handled outside and injected into the system. So that's what my talk is about, and that's the idea. And I kind of build it up from first principles, and I start with the ideas that led to me building the STLAB concurrency library and what are the problems with the ideas that led to me building the STLab concurrency library, and what are the problems with the STLab concurrency library, and why senders and receivers
+可以在转换中注入取消令牌和错误处理。你知道，这些函数如果想抛出异常，可以自由抛出异常。所有这些处理都在外部处理并注入到系统中。这就是我的演讲内容，这就是这个想法。我从第一性原理出发构建它，我从导致我构建 STLAB 并发库的想法开始，以及导致我构建 STLAB 并发库的想法存在什么问题，以及 STLAB 并发库存在什么问题，以及为什么发送者和接收者
+
+46
+00:25:11.000 --> 00:25:53.000
+are one potential way to solve that problem. The punchline at the end is I'm not quite sure where to go from here. I've discovered some things that are broken and stood exact, and the realization that at the end of the day, this is just a, which we're building up as a functional language. We would like to prove that it's computationally complete. So I've nerd sniped the Studexac authors into trying to figure out how they do that inside of std exec and trying to fix the issues that I've raised, which are mostly around the split operation in senders receivers, which
+是解决该问题的一种潜在方法。最后的结论是，我不确定从这里该往哪里走。我发现了一些损坏的东西，并意识到归根结底，这只是一个我们正在构建的函数式语言。我们想证明它是计算完备的。所以我 nerd-sniped（用极客话题吸引）了 Studexac 的作者，让他们尝试弄清楚他们如何在 std exec 内部做到这一点，并试图修复我提出的问题，这些问题主要围绕发送者-接收者中的拆分（split）操作，这
+
+47
+00:25:53.000 --> 00:26:15.000
+is a required operation if you want to prove you're computationally complete. For Connor, you have to be able to implement an S combinator, and an S combinator repeats a term, and that's a split. We love that. The starling bird. We love the starling. Yep. K is the kestrel. K is the kestrel.
+是一个如果你想证明你是计算完备的所必需的操作。对于 Connor，你必须能够实现一个 S 组合子，而 S 组合子会重复一个项，那就是一个拆分。我们喜欢那个。椋鸟（starling）。我们喜欢椋鸟。是的。K 是红隼（kestrel）。K 是红隼。
+
+48
+00:26:15.000 --> 00:26:34.000
+S is the starling. Yep. In this talk, it'll be – I think Adobe records them. I remember seeing – or was that when Sean Baxter was at Bloomberg? I mean, hopefully this will be recorded. It's supposed to be recorded. And it will be on YouTube at some point. I'm sure at some point Sean will probably give this talk at some other conferences too.
+S 是椋鸟。是的。在这个演讲中，它将是——我想 Adobe 会录制它们。我记得看到过——还是那是 Sean Baxter 在彭博社的时候？我的意思是，希望这会被录制下来。它应该会被录制。并且在某个时候会出现在 YouTube 上。我相信在某个时候 Sean 可能也会在其他会议上做这个演讲。
+
+49
+00:26:34.000 --> 00:26:55.000
+This is true. This is true. Yeah. But the eager and avid listener will want to see it as soon as possible. But, I mean, we were chatting about this. Was it two nights ago on Tuesday when we were at Sugarfish? And this time you explained it. Well, I think the same way, maybe slightly different details.
+这是真的。这是真的。是啊。但热切的听众会想尽快看到它。但是，我的意思是，我们正在聊这个。是前天周二我们在 Sugarfish 的时候吗？这次你解释了它。嗯，我想方式一样，也许细节略有不同。
+
+50
+00:26:55.000 --> 00:27:38.000
+But it made me realize that I actually, in a first edition of a different tool that I was working on at work, I did something not exactly similar. But I was trying to store views in these tuples and like the C++ 20 and 23 views. Because at one point I was trying to like lazily build these up and then just like launch them at the end. But that ran into just like massive compile time problems because the larger those things grow without actually, you know, invoking them, the slower and slower the compile times get. And because I was like automating this stuff, I was doing something super terse and then it would explode into this massive thing. So then the alternative I thought was like, what if I can
+但这让我意识到，实际上，在我工作中使用的另一个工具的第一个版本中，我做了一些不完全相似的事情。但我试图在这些元组中存储视图，比如 C++ 20 和 23 的视图。因为有一次我试图懒加载构建它们，然后在最后启动它们。但这导致了巨大的编译时间问题，因为这些东西在没有实际调用它们的情况下增长得越大，编译时间就越慢。而且因为我是在自动化这些东西，我做了一些超级简洁的事情，然后它就会爆炸成这个巨大的东西。所以我想到的替代方案是，如果我可以
+
+51
+00:27:38.000 --> 00:27:58.000
+just store each of these as like, you know, a slot and a tuple or whatever with of some arbitrary length. And it worked up to a certain point, but then I just ran into a mess. I'm not like a crazy template metaprogrammer, so I was probably doing some stuff wrong. But I remember like, you know, trying to store lambdas in tuples because like lambdas have unique signatures
+只是把它们中的每一个存储为，你知道，元组中的一个槽位，或者任何长度任意的东西。它在一定程度上起作用了，但我陷入了一团糟。我不是那种疯狂的模板元编程专家，所以我可能做错了一些事情。但我记得，你知道，试图在元组中存储 lambda，因为 lambda 有独特的签名，
+
+52
+00:27:58.000 --> 00:28:39.000
+and you had to stamp out a bunch of different, like, and then you said you're using fold expressions, which I was not doing. Is there like a bunch of tricks that you're using to do this or or it's it's it's not much of a trick i mean if not in my slides but if if you um uh so if you've got a tuple of functions and you can call uh std apply to basically split those out into an argument pack. And so now, now you've got, got an argument pack of functions. And then you can take the, the arguments that you want to call it with, and you, you turn that into
+你必须印出一堆不同的，然后你说你正在使用折叠表达式，而我没有。你是在用一堆技巧来做这个吗，还是……这其实没什么技巧。我的意思是，如果不在我的幻灯片里，但如果你……呃，所以如果你有一个函数元组，你可以调用 std apply 来基本上将它们拆分成一个参数包。所以现在，你有一个函数参数包。然后你可以取你想用它调用的参数，你把它变成
+
+53
+00:28:39.000 --> 00:29:10.000
+a, you capture that itself into a tuple, whatever the arguments are, and wrap that into a little struct that's got a pipe operator. And it can then feed the next function and capture the result of it as a pipeable entity. And so now you can just say, my initial argument's pipe, my argument's pipe, dot, dot, dot, and you've got a fold expression. It will execute the complete sequence of tuples flat. I mean, it is a cute trick.
+一个，你把它自己捕获到一个元组中，无论参数是什么，并将其包装成一个带有管道运算符的小结构体。然后它就可以输入下一个函数并将结果捕获为可管道实体。所以现在你只需要说，我的初始参数 pipe，我的参数 pipe，点，点，点，你就得到了一个折叠表达式。它将平铺执行元组的完整序列。我的意思是，这是一个巧妙的技巧。
+
+54
+00:29:10.000 --> 00:29:46.000
+I definitely think that would have been useful in my failed attempt to do that. Then I just started, I switched to Python and made up on C++ and, you know, dynamic interpreted language. Woo! That's a lot easier, folks lot easier folks yeah stuff on the fly well you know i'll i'll admit when i was starting to to build the code i got lost in the type signatures pretty quickly and i was like like okay i'm just gonna start with make it work with an any right right we collapse everything to an any make it work through that and then then figure
+我绝对认为这在我失败的尝试中会有用。然后我就切换到 Python 了，在 C++ 上编造，你知道，动态解释语言。呜！那容易多了，各位，容易多了，各位。是啊，即时处理。好吧，你知道，我会承认，当我开始构建代码时，我很快就在类型签名中迷失了，我就想，好吧，我只是要从让它与 any 一起工作开始，对吧？我们把所有东西折叠成一个 any，通过它让它工作，然后弄清楚……
+
+55
+00:29:46.000 --> 00:30:32.000
+halfway to python basically halfway to python yep yeah it's interesting because um one thing that i and to some degree connor have been working on recently has been looking at how do we paralyze range pipelines and one of the challenges with that is is that if we have like a range pipeline that has a filter somewhere inside of there, we got to go find that filter and we got to replace it with some other operation that introduces some tombstone values and then later we remove them. And there's all sorts of other optimizations that we got to do or we have to be able to inspect the whole pipeline. And because of the way that range pipelines are built today which is where they're recursively they're nested um it's a little bit
+基本上有一半是 Python，对吧？是啊，这很有趣，因为……我和 Connor 在某种程度上最近一直在研究的一件事是，我们如何并行化范围管道（range pipelines），其中一个挑战是，如果我们有一个在某个地方有过滤器的范围管道，我们必须去找到那个过滤器，我们必须用一些引入墓碑值（tombstone values）的其他操作替换它，然后稍后我们移除它们。还有各种各样的其他优化，我们必须做，或者我们必须能够检查整个管道。而且因为范围管道今天构建的方式，也就是它们是递归的、嵌套的，这有点
+
+56
+00:30:32.000 --> 00:31:28.000
+harder to do this um this decomposition and optimization and you know if instead of being this nested structure if they were um represented as like a tuple of of views or a tuple of things that were going to be applied together it would be so much easier things to be composed instead of things already composed exactly exactly right yeah because because like the i think maybe the realization that we didn't have was that um like with ranges the the reason that they come to you already composed is because there's you know that there was in the serial world there's really just sort of one way of composing them um but um but actually or sort of naively there's just one way of composing them but actually you might want to do optimizations or transformations or compose them in a different way, you know, apply some different thing to them.
+更难进行这种分解和优化，你知道，如果它们不是这种嵌套结构，而是被表示为视图的元组或将被一起应用的元组，那会容易得多，东西会被组合而不是已经组合好了，完全正确，是啊，因为……因为像……我想也许我们没有意识到的是，嗯……就像范围（ranges），它们之所以已经组合好来到你面前，是因为你知道，在串行世界中，确实只有一种组合它们的方式，但是……但是实际上，或者说天真地，只有一种组合它们的方式，但实际上你可能想要进行优化或转换，或者以不同的方式组合它们，你知道，对它们应用一些不同的东西。
+
+57
+00:31:28.000 --> 00:32:28.000
+And so representing them in the uncomposed form, and that gives you a lot more flexibility. Yeah, and that's what I found is you can inject, like I said, all the structure you need. And so instead of in the sender-receiver model, where you're pulling through a message for what happens if there's an exception and messages for stops and things like that, that interface impacts every single level all the way through the pipeline because it all has to be composed together. If instead you say, just give me the structure, all of that information can be injected after by just transforming that structure. And when the structure is flat, it's pretty simple to do. And since these are all, you know, it's a tuple of tuple of functions, and they can be lambdas, but you could also have a type in there, which is your filter.
+所以以未组合的形式表示它们，这给了你更多的灵活性。是的，这就是我发现的，你可以注入，就像我说的，你需要的所有结构。所以不像在发送者-接收者模型中，你必须拉取一条消息来处理如果发生异常会发生什么，以及停止的消息等等，那个接口影响了管道中的每一层，因为它们都必须组合在一起。如果相反，你说，只给我结构，所有这些信息都可以通过转换该结构在之后注入。当结构是平铺的时，这很容易做到。而且因为这些都是，你知道，它是函数元组的元组，它们可以是 lambda，但你也可以在其中有一个类型，那就是你的过滤器。
+
+58
+00:32:28.000 --> 00:32:58.000
+And so now you can scan through the tuple of tuple and pull out particular types. So if you have additional information you want encoded in there, you can encode it in the type system and pull that out as part of the transformation. I wonder too if it depends on how it was implemented, but like if you have an ability to avoid one of the worst parts of ranges, which is the errors at compile time, because like, even as a ranges expert, and you know,
+所以现在你可以扫描元组的元组并提取特定的类型。所以如果你有想要编码在其中的额外信息，你可以将其编码在类型系统中，并将其作为转换的一部分提取出来。我想知道这是否取决于它是如何实现的，但如果你有能力避免范围最糟糕的部分之一，也就是编译时的错误，因为，即使作为范围专家，你知道，
+
+59
+00:32:58.000 --> 00:33:24.000
+I'm not Tristan or Eric level, but you know, I've spent quite a bit of time playing around with ranges. Every once in a while, I'm running into my first few errors. It's just like this wall. And it's not wrong. It is technically the type, and it's just this nested crazy thing. You might run into the same problem, but potentially there's an opportunity to avoid that. Yeah. It's potential at this point. The error message that I most
+我不是 Tristan 或 Eric 级别的，但你知道，我花了不少时间玩范围。偶尔，我会遇到我的前几个错误。它就像一堵墙。而且它没有错。从技术上讲，它就是那个类型，它只是那个嵌套的疯狂东西。你可能会遇到同样的问题，但潜在地有机会避免它。是的，目前这只是潜在的。我最
+
+60
+00:33:24.000 --> 00:34:19.000
+frequently get is Tuple doesn't support the call operator. And that really means that some piece of my tuple in my fold expression is gone and it doesn't tell me. Since it's within the fold expression, it's like one of the 20 things you have in this pipeline is bad right yeah and and that's um that's a pain i've got some thoughts about how to to well there's there's a couple things right now i'm building things where everything takes you know auto dot dot dot as the args and and which means you're able to build these very generic computational patterns. But that also means when you actually call it with, you know, invoke it with 42 and something goes wrong because there's a type mismatch in the path, that you're completely lost.
+经常得到的错误信息是“元组不支持调用运算符”。这确实意味着我的折叠表达式中元组的某一部分不见了，它没有告诉我。因为它在折叠表达式中，就像你在这个管道中拥有的 20 个东西中的一个坏了，对吧？是啊，而且……那很痛苦。我有一些关于如何……嗯，现在有几件事，我正在构建一切都采用 auto... 作为参数的东西，这意味着你能够构建这些非常通用的计算模式。但这也意味着当你真正用，你知道，用 42 调用它，并且因为路径中有类型不匹配而出错时，你完全迷失了。
+
+61
+00:34:19.000 --> 00:35:25.000
+And so one of the things I'm playing with now is what are the tradeoffs between having the developer declare the interface for the entire construct up front so that as you append each thing, you can say, okay, if I know what the interface is, then when I append the first thing, I can see, well, will it take those arguments? And then what does it return? And when I append the next thing, I can say, will it take the thing that's returned from the previous thing? And so on. So I can type check the entire path. Yeah, it's kind of – I think you make a – it's a very interesting observation there. And I think to do better, you have to not diagnose either when you're folding or once the thing is folded because the problem is that the folding operation, you end up with this recursive structure. And then if something bad happens down deep in the structure, then it has to roll up the stack. compiler diagnostics is are going to work it's going to tell you well this failed here and you
+所以我现在正在尝试的一件事是，在开发者预先声明整个构造的接口时，会有什么样的权衡。这样当你追加每一项时，你可以说，好吧，如果我知道接口是什么，那么当我追加第一项时，我可以看看它是否接受这些参数？然后它返回什么？当我追加下一项时，我可以判断它是否接受上一项返回的结果？以此类推。这样我就能对整个路径进行类型检查。是的，这有点——我认为你提出了一个非常有趣的观察。我认为要做得更好，你不能在折叠（folding）时或折叠完成后进行诊断，因为问题在于折叠操作会导致这种递归结构。如果结构深处发生了糟糕的事情，它就必须回溯堆栈。编译器诊断程序会告诉你，好吧，这里失败了，然后
+
+62
+00:35:25.000 --> 00:36:14.000
+know and then this is the failure in the source and then that was in this context in this context in this context and i'll walk up this stack trace but um if you've got it as this linear chain of tuples um then you maybe have some other options where you can um do some checking uh before you do the fold where you just go through each pair and say like, do these things, you know, does the first one connect to the second one, the second one connect to the third one. And that could, I think, give you better diagnostics and give you more of the flat diagnostics that you'd get from just if you were writing like straight imperative code. So yeah, I think that that has some real potential there to give you better diagnostics. I don't know whether it will help.
+你知道，这就是源代码中的失败，然后是在这个上下文中，在这个上下文中，在这个上下文中，我会沿着这个堆栈跟踪走。但是，如果你把它作为一个元组的线性链，那么你可能还有其他选择，可以在进行折叠之前进行一些检查，只需遍历每一对，说，这些东西，你知道，第一个连接到第二个吗，第二个连接到第三个吗？我认为这可以为你提供更好的诊断，并提供更平坦的诊断，就像你编写直接的命令式代码时得到的那样。所以是的，我认为这在提供更好的诊断方面确实有一些真正的潜力。我不知道这是否有帮助。
+
+63
+00:36:14.000 --> 00:36:51.000
+The other challenge that I think a lot of people have with ranges is around compilation time. But same for senders. I don't know that this helps you there per se because ultimately at the end of the day, you're still doing the same composition. But I think it may really help with the diagnostics. It's very interesting. I mean, I'll link in the show notes. This has nothing to do with C++. But I saw in a talk by Jose Faleem, the of Elixir as they have a big pipeline it's like not even just a library it's the whole way the whole language works and they showed this little
+我认为很多人对范围（ranges）的另一个挑战是关于编译时间。发送者（senders）也是如此。我不知道这本身对你有什么帮助，因为归根结底，你仍然在做同样的组合。但我认为它可能真的有助于诊断。这非常有趣。我的意思是，我会在节目笔记中链接。这与 C++ 无关。但我看到 Jose Faleem 的一个演讲，他是 Elixir 的开发者，他们有一个很大的管道，甚至不仅仅是一个库，而是整个语言的工作方式，他们展示了这个小
+
+64
+00:36:51.000 --> 00:37:33.000
+demo in a Elixir live book I think is what they call it it's like a Jupyter notebook but they just rebranded it and you build up your little pipe expressions and then if you have a problem they just like in the notebook you can like toggle off each one of the pipes like if you got a functional map or a reduction or whatever and then like you there's a little hamburger bar and you can slide them around and stuff so i was watching this and i was like oh my god like when you've got a problem in c++ with ranges it's just like you know yeah a wall of template mess. Whereas over in this dynamically typed language, they're like, well, check out this little demo of debug. And like you could, as the final thing, you could pipe it to like a debug print or something.
+演示，在 Elixir Livebook 中，我想他们是这样称呼它的，它就像一个 Jupyter 笔记本，但他们只是重新命名了它，你构建你的小管道表达式，然后如果你有问题，他们就像在笔记本中一样，你可以切换每一个管道，比如如果你有一个函数式映射或归约等等，然后有一个小汉堡菜单栏，你可以滑动它们之类的。所以我看着这个，我就想，天哪，当你在 C++ 中使用范围遇到问题时，它就像，你知道，是的，一堵模板混乱的墙。而在这种动态类型语言中，他们就像，嘿，看看这个调试的小演示。就像你可以，作为最后一步，你可以把它管道传输到调试打印之类的东西。
+
+65
+00:37:33.000 --> 00:38:06.000
+And then in the notebook, it shows you at every stage, like what the current, you know, value. Anyways, it was just amazing. So I'm not saying we're ever going to get to that. But there is hope out there that, you know, things can be better. And, you know, that's why we have you on the show, so we can give you a bunch of work, Sean. You're going to go write a C++ committee paper, of course, and give us full reference implementation. Sure. And, you know, first now that you've got me thinking about this idea, I'm going to go write a C++ interpreter just so we can do this.
+然后在笔记本中，它会在每个阶段向你展示当前的数值。总之，这太棒了。所以我不是说我们永远能做到这一点。但希望就在那里，你知道，事情可以变得更好。而且，你知道，这就是为什么我们请你上节目，这样我们就可以给你布置一堆工作，Sean。你当然要去写一份 C++ 委员会论文，并给我们提供完整的参考实现。当然。而且，你知道，既然你让我思考这个想法，我要去写一个 C++ 解释器，这样我们就可以做到这一点。
+
+66
+00:38:06.000 --> 00:38:27.000
+That'll be a good weekend project, I'm sure. So I got a great thing for us to close on. All right. So the White House tells us no more C++. What do we think? So does Gemini 1.5. We were talking about this the other day, too. It's C++ 20 concepts is too unsafe for anyone under the age of 18.
+那肯定是一个很棒的周末项目。所以我有一个很好的话题来结束。好的。白宫告诉我们不再使用 C++。我们怎么看？Gemini 1.5 也是这么说的。我们前几天也在谈论这个。C++ 20 的概念对 18 岁以下的人来说太不安全了。
+
+67
+00:38:27.000 --> 00:38:57.000
+So we apologize to our younger listeners out there that are paying the $20 a month. If you're a younger listener, please hang up now. Yeah. But, yeah, what do we make of this? We talked about this last time I was on. It's no surprise that this is coming. For corporations, I think there's going to be some amount of risk management that has to go on, and Adobe's certainly in that boat.
+所以我们向那些每月支付 20 美元的年轻听众道歉。如果你是年轻听众，请现在挂断。是的。但是，我们对此有何看法？我上次来的时候我们谈过这个。这并不奇怪。对于企业来说，我认为必须进行一定程度的风险管理，Adobe 当然也处于那种境地。
+
+68
+00:38:57.000 --> 00:39:53.000
+My team's on the hook for developing the roadmap, the memory safety roadmap for Adobe and how we approach that. I had an absolutely terrifying meeting with our security team yesterday on this very topic. Yeah, I mean, I think the information coming out of Department of Defense and the White House is filled with a lot of hyperbole, but at the base of it, it's not wrong. Just in working on this chain library at one point, I accidentally wrote T instead of decay type T. And the result was I captured a reference instead of a value. Even though the code looked like it was fine. The type was not. And that meant that I had a use after return on my stack and it cost me half a day to debug the thing. Hear that folks?
+我的团队负责制定路线图，Adobe 的内存安全路线图以及我们如何处理这个问题。昨天我和我们的安全团队就这个话题开了一个非常可怕的会议。是的，我的意思是，我认为来自国防部和白宫的信息充满了夸张，但从根本上说，它并没有错。就在开发这个链库时，我有一次不小心写了 T 而不是 decay_t<T>。结果是我捕获了一个引用而不是一个值。即使代码看起来没问题。类型却不对。这意味着我的堆栈上出现了释放后使用（use-after-return）错误，我花了大半天时间来调试它。听到了吗，各位？
+
+69
+00:39:53.000 --> 00:40:14.000
+The luminary. Debugging his problem for half a day. There's hope for all of us. Yeah. So it's too easy to make a mistake like that. And a lot of times the wrong code looks better than the right code. And that's a problem. And this was one of those cases.
+这位大师。调试他的问题花了半天时间。我们所有人都有希望。是的。所以犯这样的错误太容易了。而且很多时候错误的代码看起来比正确的代码更好。这就是一个问题。而这正是其中一种情况。
+
+70
+00:40:14.000 --> 00:41:24.000
+There are some people that are either trying to define a safe subset of C++ or tools or things to make C++ safe or who claim that C++ is safe. Do you buy the argument that C++ is fundamentally unsafe and that there's no hope for it? Or do you think that people in environments that care about safety can find a way to continue using languages like C++? It's just a matter of defining the rules and the guidelines to make it – to define a safe form of C++. So I think there's like Herb Sutter's CPP2, which he states that one of his goals is not provable safety. But my team's looked at his proposals and we've given him some feedback. We actually think he's very close to being able to prove safety. He wouldn't have to compromise much to be able to do that. He doesn't seem interested in it at the moment, but maybe that will change with the current
+有些人要么试图定义 C++ 的安全子集，要么试图寻找工具或方法来使 C++ 安全，或者声称 C++ 是安全的。你是否相信 C++ 从根本上是不安全的，并且对此毫无希望的论点？还是你认为在关心安全的环境中的人们可以找到一种方法继续使用像 C++ 这样的语言？这只是定义规则和指南的问题，以使它——定义一种安全的 C++ 形式。所以我认为有像 Herb Sutter 的 CPP2，他声明他的目标之一不是可证明的安全性。但我的团队查看了他的提案，我们给了他一些反馈。我们实际上认为他非常接近能够证明安全性。他不需要做出太多妥协就能做到这一点。他目前似乎对此不感兴趣，但也许随着当前的
+
+71
+00:41:24.000 --> 00:42:12.000
+legislation. I think the work that Sean Baxter has been doing is very promising, but of course that's one guy on a non-open source project. I hope something comes out of it, if nothing more than other people steal ideas from it. We talk a lot about memory safety in the abstract, both without a clear definition of memory safety is and losing sight of what the goals of the memory safety are. And safety properties in general are tools to help prove correctness of code. And, you know, if you, to prove partial correctness of an application, you have to, you have to demonstrate that it satisfies a set of safety properties. And memory safety being one of those.
+立法，情况会改变。我认为 Sean Baxter 所做的工作非常有前途，但当然那是一个人在非开源项目上的工作。我希望从中能产生一些东西，即使只是其他人从中窃取想法。我们经常在抽象层面谈论内存安全，既没有明确定义什么是内存安全，也忽略了内存安全的目标是什么。安全属性通常是帮助证明代码正确性的工具。而且，你知道，如果你要证明一个应用程序的部分正确性，你必须证明它满足一组安全属性。而内存安全就是其中之一。
+
+72
+00:42:12.000 --> 00:42:57.000
+But the goal from a security standpoint is something called a non-interference property, which is both a safety and lightness property, and the memory safety is just in support of non-interference. And the basic idea with non-interference is that a defect in one piece of your code should not affect another piece of your code. It should limit the blast radius. So when you're really talking about non-interference properties, things like shared pointers become a problem. Any shared mut shared pointers become a problem. Any shared mutable state becomes a problem. Sharing indices to the same array is another way to share information becomes a problem, right? So
+但从安全角度来看，目标是所谓的非干扰属性（non-interference property），它既是安全属性也是活性属性，而内存安全只是为了支持非干扰。非干扰的基本思想是，代码中某一部分的缺陷不应影响代码的另一部分。它应该限制爆炸半径。所以当你真正谈论非干扰属性时，像共享指针这样的东西就成了问题。任何共享可变状态都成了问题。共享指向同一个数组的索引是共享信息的另一种方式，也成了问题，对吧？所以
+
+73
+00:42:57.000 --> 00:43:38.000
+even if you're outside of the pointer space. And C++ doesn't give you any tools to help you build code that satisfies a non-interference property. Even if you could go through with C++ and you could say, every place where it's undefined behavior, I'm going to insert a runtime check, and ta-da, C++ is completely safe. Your program will probably never terminate because it will run so slow, but it will be very safe. So at one end, that's completely doable, your program will probably never terminate because it will run so slow, but it will be very safe. So at one end, that's completely doable. And then the next end is how much performance can you get back through optimization, knowing that some of these checks are unnecessary? And then how do you
+即使你不在指针空间内。C++ 没有给你任何工具来帮助你构建满足非干扰属性的代码。即使你可以通读 C++ 并说，每一个未定义行为的地方，我都要插入一个运行时检查，当当，C++ 就完全安全了。你的程序可能永远不会终止，因为它运行得太慢了，但它会非常安全。所以在一端，这是完全可行的。而另一端是，通过优化，你知道其中一些检查是不必要的，你能收回多少性能？然后你如何
+
+74
+00:43:38.000 --> 00:44:29.000
+structure your code to guarantee that those optimizations kick in and what are the guidelines for that. But then you're still left with a piece of code that looks like a piece of C++ code and probably needs a redesign. And when they're talking about memory safety, it's 70% of the exploitable CVEs, according to Microsoft and Google, that they see. Well, that leaves another 30% of the problem. So even if we fixed all the memory safety problems, we wouldn't have super bulletproof software.
+构建你的代码以保证这些优化生效，以及这方面的指南是什么。但随后你仍然会剩下看起来像 C++ 代码的代码，并且可能需要重新设计。当他们谈论内存安全时，根据微软和谷歌的说法，这是 70% 可利用的 CVE。好吧，那还剩下 30% 的问题。所以即使我们解决了所有的内存安全问题，我们也不会拥有超级防弹的软件。
+
+75
+00:44:29.000 --> 00:44:56.000
+It's like your ship's going down, it's got three holes in it, and you're like, well, we got a way to patch two of them. Yeah. Right? Well, and also, if everybody's programming memory-safe languages, then attackers will spur innovation and new ways of attacking software. There will always be attacks. Yeah. There will always be attacks. Yeah, there will always be attacks. So I think eventually the changes have to be much deeper and much more radical than
+这就像你的船要沉了，上面有三个洞，你说，好吧，我们有一种方法可以补上两个。是的。对吧？嗯，而且，如果每个人都在编写内存安全的语言，那么攻击者就会刺激创新和攻击软件的新方法。总会有攻击。是的。总会有攻击。是的，总会有攻击。所以我认为最终这些变化必须比
+
+76
+00:44:56.000 --> 00:45:23.000
+just shoring up C++. That said, Photoshop alone has 30 million lines of C++ code. And it's not going away anytime soon. How long did you say that flash rewrite took? Two years? How many lines was that probably? I don't know, maybe 500,000 tops. So that's like a factor of 30 million.
+仅仅加固 C++ 更深入、更激进。话虽如此，仅 Photoshop 就有 3000 万行 C++ 代码。而且它不会很快消失。你说那个 Flash 重写花了多久？两年？那大概有多少行？我不知道，最多 50 万行。所以那是 3000 万行的 1/60。
+
+77
+00:45:23.000 --> 00:45:43.000
+I think it's just two, so it's like four years is all you need. Good math there. We should probably let Sean go because he's got another meeting. This is true. We have made you late. I've been hearing my watch buzz. Be sure to check these show notes either in your podcast app or at ADSPthePodcast.com for links to anything we mentioned in today's episode,
+我认为只是两个，所以四年就是你所需要的。数学不错。我们可能应该让 Sean 走了，因为他还有另一个会议。这是真的。我们让你迟到了。我一直听到我的手表在响。请务必在你的播客应用程序或 ADSPthePodcast.com 上查看这些节目笔记，以获取我们在今天节目中提到的任何内容的链接，
+
+78
+00:45:43.000 --> 00:45:48.000
+as well as a link to a GitHub discussion where you can leave thoughts, comments and questions. Thanks for listening. We hope you enjoyed and have a great day. Low quality, high quality. That is the tagline of our podcast. It's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+以及一个 GitHub 讨论的链接，你可以在那里留下想法、评论和问题。感谢收听。我们希望你喜欢并祝你有美好的一天。低质量，高质量。这是我们播客的标语。这不是标语。我们的标语是带有信息碎片的混乱。这一集还没有评论。点击转录中的任何句子来发表评论。

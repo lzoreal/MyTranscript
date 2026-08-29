@@ -1,0 +1,281 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:40.000
+So when Chris started this off, what was his original vision and intent? Was it to create a general purpose systems programming language? I see a nod. I am nodding, yes. The overall goal was general purpose systems programming language. Would you say that's what Swift has become? Yes. So I think that is what Swift has become, but that's not necessarily what the perception of Swift is.
+那么当Chris开始做这件事时，他最初的愿景和意图是什么？是为了创建一个通用的系统编程语言吗？我看到你在点头。我是在点头，是的。总体目标确实是通用的系统编程语言。你会说这就是Swift最终成为的样子吗？是的。所以我认为这就是Swift最终成为的样子，但这并不一定是人们对Swift的看法。
+
+2
+00:00:40.000 --> 00:01:45.000
+Welcome to ADSP, the podcast episode 18, recorded on April 29th, 2024. My name is Connor, and today with my co-host Bryce, we continue our interview with Doug Greger, and in this episode, chat about C++, variadic templates, std tuple, std variant, the Swift programming language, and more. But actually, this is perhaps a good transition point because I don't want to talk solely with Doug about concepts. I actually want to bring up something that you said to me last year at PLDI, and I'm not sure if you'll remember this, but we were talking about a feature that you worked on that did end up going into C++11, which was variadic templates. And I believe you said something akin to variadic templates was like a perfect feature. There were no defects. It's just a perfect, pure thing. And I'm very happy with it. And I felt a little bit differently
+欢迎来到ADSP播客第18期，录制于2024年4月29日。我是Connor，今天和我的联合主持人Bryce一起，我们将继续采访Doug Greger。在本期节目中，我们将聊聊C++、可变参数模板、std tuple、std variant、Swift编程语言等等。但实际上，这可能是一个很好的过渡点，因为我不想只和Doug谈论概念。我实际上想提起你去年在PLDI上对我说的某件事，我不确定你是否还记得，但当时我们正在谈论你参与开发并最终进入C++11的一项功能，即可变参数模板。我相信你说过类似可变参数模板是一个完美的功能。它没有任何缺陷。它只是一个完美、纯粹的东西。我对它非常满意。而我的感觉则略有不同
+
+3
+00:01:45.000 --> 00:02:12.000
+because while variadic templates are a wonderful feature and anybody who does not feel that way should look at how Tuple was implemented pre-variadic templates. You can go find it in the old Booz libraries or the Thrust tuple, a thing that I have had to deal with for many more years than I would like.
+因为虽然可变参数模板是一个很棒的功能，任何不这么认为的人都应该看看在可变参数模板出现之前Tuple是如何实现的。你可以在旧的Boost库或Thrust tuple中找到它，那是我不得不处理了比我想要的还要多得多的东西。
+
+4
+00:02:12.000 --> 00:02:55.000
+But my objection, my issue with variadic templates is this head-tail pattern that you can't index into them. Although, interestingly, last committee meeting, we voted in parameter pack indexing. But explain yourself, sir. Why are variadic templates such a great feature? I should have known it wasn't safe to talk to you about variadic templates. So the reason I was so happy with variadic templates, I still like the feature, is it's a pretty tiny extension. And for a tiny extension, it enables a whole lot of really interesting abstractions.
+但我的反对意见，我对可变参数模板的问题在于这种头尾模式，你无法对它们进行索引。尽管有趣的是，在上次委员会会议上，我们投票通过了参数包索引。但请解释一下，先生。为什么可变参数模板是一个如此伟大的功能？我早该知道和你谈论可变参数模板是不安全的。所以我对可变参数模板如此满意的原因——我仍然喜欢这个功能——是因为它是一个非常小的扩展。对于一个微小的扩展，它实现了大量非常有趣的抽象。
+
+5
+00:02:55.000 --> 00:03:36.000
+So at its core, you have one, I guess you have two new things. It only introduces two things into the C++ language. What did you just do you you put the p sign up for for the listener you know doug doug was uh i had a p sign for two who put his two fingers up and then a bunch of balloons appeared you know floating up around his head i'm not sure if there's some birthday sign or something like that. Maybe they thought you were... It's not going to happen on our systems, Connor, because we are both connecting from non-Apple systems.
+所以从核心上讲，你有一个，我想你有两个新东西。它只在C++语言中引入了两个东西。你刚才做了什么？你为听众举起了“2”的手势，你知道Doug，Doug举起了两个手指，然后一堆气球出现在他的头顶周围飘浮。我不确定这是不是什么生日标志之类的。也许他们以为你是……这在我们的系统上不会发生，Connor，因为我们都是从非Apple系统连接的。
+
+6
+00:03:36.000 --> 00:04:02.000
+And I'm pretty sure that this is a Apple thing. Yeah. Look at that. That's amazing that it's an Apple feature in a Microsoft product. Well, my understanding of how it works is that it's like an injection. So it's something that Apple layers on top of the camera feed and then feeds through to the apps. So it's transparent. Yeah.
+而且我很确定这是Apple的功能。是的。看那个。在Microsoft产品中拥有Apple功能真是太神奇了。嗯，我对它工作原理的理解是，它就像一种注入。所以它是Apple叠加在摄像头画面之上，然后馈送到应用程序中的东西。所以它是透明的。是的。
+
+7
+00:04:02.000 --> 00:04:34.000
+That's pretty cool, actually. It's pretty impressive. But the net effect is that we got a party with balloons while we're talking about variadic templates. I'm pretty happy with that. This is true. This is true. Okay. The two things that variadic templates added are parameter packs, introduced by the ellipsis, that abstract over any number of parameters. Same idea, whether it's template arguments or function parameters. And pack expansion, which lets you take a pack and expand it out into multiple arguments.
+这其实很酷。令人印象深刻。但最终的效果是，当我们谈论可变参数模板时，我们举办了一个气球派对。对此我很高兴。这是真的。这是真的。好的。可变参数模板添加的两件事是参数包（由省略号引入），它抽象了任意数量的参数。无论是模板参数还是函数参数，想法都是一样的。以及包展开，它允许你获取一个包并将其展开为多个参数。
+
+8
+00:04:34.000 --> 00:05:00.000
+As a feature, it's really tiny. And it wasn't terribly hard to implement. So the initial implementation took about a week or two in GCC, including porting over tuple, function, and bind libraries and getting them completely working. And so it's fairly easy to teach. It's a fairly small extension. And yet it let us get rid of this horrible limitation on the number of template parameters
+作为一个功能，它真的很小。而且实现起来并不太难。所以最初的实现大约花了一两周时间在GCC中，包括移植tuple、function和bind库并使它们完全工作。因此，它相当容易教授。它是一个相当小的扩展。然而，它让我们摆脱了模板参数数量上的这种可怕限制，
+
+9
+00:05:00.000 --> 00:05:50.000
+you could have in a way that I was fairly proud of. Pack indexing is nice, I agree. So why didn't we get pack indexing in the first version? Why was it like this head-tail sort of pattern to unpack them? So we didn't have pack indexing in the first version, mostly because we couldn't come up with a syntax, which sounds really silly. But, you know, we tried several different things and you couldn't really subscript. That wouldn't work. And I think we tried subscript with the leading dot, like x dot subscript, you know, open square bracket something. And that was hitting problems with the preprocessor. And essentially, we sort of got tired of looking for a syntax for a feature that wasn't strictly
+我对此感到相当自豪。包索引很好，我同意。那么为什么我们在第一个版本中没有得到包索引呢？为什么解包它们是这种头尾模式？所以我们在第一个版本中没有包索引，主要是因为我们想不出一种语法，这听起来真的很傻。但是，你知道，我们尝试了几种不同的东西，你不能真正地进行下标操作。那行不通。我想我们尝试过带前导点的下标，比如x点下标，你知道，左方括号之类的。这在预处理器上遇到了问题。本质上，我们有点厌倦了为一个并非严格
+
+10
+00:05:50.000 --> 00:06:15.000
+necessary, right? Because you can implement this directly. Why couldn't you subscript? Well, because X subscript with an I, that is completely reasonable if your pack X had a bunch of values in it that were all like vectors or something or arrays. Right, right. The syntax that we settled on that we have in C++26 is dot, dot, dot subscript. Okay, sure.
+必要的功能寻找语法，对吧？因为你可以直接实现它。为什么你不能下标？嗯，因为X下标加一个I，如果你的包X里有一堆值，它们都是向量或数组之类的，那是完全合理的。对，对。我们最终确定的、在C++26中拥有的语法是点、点、点下标。好的，没问题。
+
+11
+00:06:15.000 --> 00:06:51.000
+Yeah. That will work. That may have provoked antibodies had we tried to add it to the proposal at that point in the C++ OX timeframe. To be fair, it would have been almost impossible to have foreseen at that time how widely used parameter packs would have been and how important the indexing would end up being. I think the same can be said of constexpr. Constexpr is like the C++ case study in incremental evolution,
+是的。那会起作用的。如果我们当时在C++0X的时间框架内尝试将其添加到提案中，那可能会引起抗体反应。公平地说，在当时几乎不可能预见到参数包会被如此广泛地使用，以及索引最终会变得多么重要。我认为constexpr也可以这么说。Constexpr就像是C++增量演进的案例研究，
+
+12
+00:06:51.000 --> 00:07:10.000
+where we shipped a very minimal, restricted form of constexpr in C++11, and it's slowly grown over the past decade with every release, us allowing more things in constexpr, making more things constexpr. It's a point now that you can have constexpr vectors and strings. And that constexpr today is a very different beast
+我们在C++11中发布了一个非常最小、受限的constexpr形式，并且在过去十年中随着每个版本的发布，它缓慢地增长，我们允许在constexpr中做更多的事情，使更多的事情成为constexpr。现在已经到了你可以拥有constexpr向量和字符串的地步。而今天的constexpr是一个非常不同的野兽，
+
+13
+00:07:10.000 --> 00:07:31.000
+than it was back then. And it's used, you know, a whole new form of metaprogramming has arisen around constexpr, replacing type-based metaprogramming in ways that I don't think the people who originally worked on constexpr could have ever really imagined. And as you say, variadic templates, a very important and
+与当时相比。而且它被使用，你知道，围绕constexpr出现了一种全新的元编程形式，以我当时认为最初从事constexpr工作的人永远无法真正想象的方式取代了基于类型的元编程。正如你所说，可变参数模板，C++11的一个非常重要和
+
+14
+00:07:31.000 --> 00:08:05.000
+signature feature of C++11, at the time, it may not have seemed like that because it was this very easy and simple thing to do. You said it was pretty straightforward to put into the language, it's pretty straightforward to implement. And the full impact of it may not have been known or realized at the time. No. And our goals when we did it were very much around these libraries. So std function was mine. I was working with Jaco Yarvey, who did std tuple.
+标志性的功能，在当时，它可能看起来并不像那样，因为它是一个非常简单易行的事情。你说把它放入语言中非常直接，实现起来也非常直接。而它的全部影响在当时可能并不为人所知或意识到。不。我们做这件事时的目标很大程度上是围绕这些库的。所以std function是我的。我和做std tuple的Jaco Yarvey一起工作。
+
+15
+00:08:05.000 --> 00:08:42.000
+And we were both really frustrated by this dumb limit that we had. you could only have 10 or 20 or whatever the implementation defined limit was values that worked and so we wanted this feature to make our libraries better and that that was kind of the scope we imagined that you know only library designers doing this kind of thing would end up using variadic templates. So keeping it sort of smaller was a benefit. So tuple actually is an interesting one because I, for a long time, have been a proponent of the exposed things as structing class abstractions. And the way I like to explain this to people
+我们俩都对我们拥有的这个愚蠢限制感到非常沮丧。你只能有10个或20个，或者任何实现定义的限制值，所以我们想要这个功能来让我们的库变得更好，这就是我们想象的范围，你知道，只有做这种事情的库设计者才会最终使用可变参数模板。所以保持它较小是一种好处。所以tuple实际上是一个有趣的例子，因为长期以来，我一直是将事物作为结构类抽象暴露的倡导者。我喜欢向人们解释这一点的方式
+
+16
+00:08:42.000 --> 00:09:11.000
+is like C arrays and C++ are weird because they don't really behave like other things. There's a whole bunch of caveats when you have an array object. You can't return them from functions. They have all these like when you pass them into parameters to functions, there's all these pointer decay things that happen. And like std array is better because it's a normal thing. It is a, you know, it's a struct. So therefore it follows all the basic rules of what a struct is. And that's a good thing. We like things that sort of
+就像C数组在C++中很奇怪，因为它们不像其他东西那样表现。当你有一个数组对象时，有一大堆注意事项。你不能从函数中返回它们。当你把它们作为参数传递给函数时，会发生所有这些指针衰减的事情。而std array更好，因为它是一个正常的东西。它是一个，你知道，它是一个结构体。因此，它遵循结构体是什么的所有基本规则。这是一件好事。我们喜欢那些有点
+
+17
+00:09:11.000 --> 00:10:09.000
+like behave like the other things. And that's one of the reasons why in sort of modern C++ design, we like to expose things as even things that are language features, we like to expose them through the library. Even things like, you know, reflection, like the metadata type is exposed as a library type. And things like, you know, tuple and variant get exposed as library types, because then they behave like all other class instruct types. With that said, just so many hours and years of people's time have been spent on making tuple work or making variant work. And tuple, aside from std git being a little bit ugly, tuple's not so bad. Variant, I think, is less pleasant to work with.
+像其他东西一样表现的东西。这就是为什么在现代C++设计中，我们喜欢将事物暴露出来，即使是语言功能，我们也喜欢通过库来暴露它们。即使是像，你知道，反射，比如元数据类型被暴露为库类型。而像，你知道，tuple和variant被暴露为库类型，因为这样它们就像所有其他类和结构体类型一样表现。话虽如此，人们已经花费了太多的时间和精力来使tuple工作或使variant工作。而且tuple，除了std get有点丑之外，tuple还不算太糟。Variant，我认为使用起来不那么令人愉快。
+
+18
+00:10:09.000 --> 00:10:46.000
+The real place where tuple's painful is more in the implementation side of things. And I just wonder, would we have been better off with a language tuple? Was that something that was considered at the time? I don't remember it being seriously considered at the time. Now, Tuple has a pretty long history, so it was a boost library. Yeah. And, you know, it and function were the first two papers that were voted into the C++ technical report on library extensions. Which is like the first thing the committee did after C++98.
+Tuple真正痛苦的地方更多是在实现方面。我只是想，如果我们有一个语言级的tuple会更好吗？那是当时考虑过的事情吗？我不记得当时有认真考虑过。现在，Tuple有很长的历史，所以它是一个Boost库。是的。而且，你知道，它和function是第一批被投票进入C++库扩展技术报告的论文。这就像委员会在C++98之后做的第一件事。
+
+19
+00:10:46.000 --> 00:11:09.000
+Yeah, the TR. The TR, right? The good old TR. It eventually came into C++OX. And there wasn't a whole lot of appetite for language extensions at that time. So I don't know that people would have really considered it as a language feature. And part of the thing is what you said. There's, you know, Tuple as a library works pretty well.
+是的，TR。TR，对吧？美好的旧TR。它最终进入了C++0X。当时对语言扩展并没有太大的胃口。所以我不知道人们是否真的会把它视为一种语言功能。部分原因是正如你所说。有，你知道，作为库的Tuple工作得相当好。
+
+20
+00:11:09.000 --> 00:11:56.000
+If we get a nice pattern matching facility, then it'll work pretty well, probably quite well in C++. Variant is a completely different story, though. I do not love using variant. I tend to hand code my own discriminated union types. This is one of those things where in Swift, we got it right. And when I get to write the Swift form of, you know, what I think variant should have been, it is wonderful. And then I have to port it to C++ for some reason. And it's, you know, to fit in the C++ compiler or whatever. I have to express that idea. It is really painful because discriminated unions is actually a fundamental data type. Like it should be a
+如果我们有一个好的模式匹配设施，那么它在C++中会工作得很好，可能非常好。不过，Variant完全是另一回事。我不喜欢使用variant。我倾向于手写我自己的判别联合类型。这是Swift中我们做对了的事情之一。当我写出我认为variant应该有的Swift形式时，它是美妙的。然后出于某种原因，我必须把它移植到C++。而且，你知道，为了适应C++编译器什么的。我必须表达那个想法。这真的很痛苦，因为判别联合实际上是一种基本数据类型。就像它应该是一个
+
+21
+00:11:56.000 --> 00:12:35.000
+fundamental data type. We have structs, right? What do structs do? They let you put a bunch of things together. What does discriminated union? It lets you express a bunch of things together what does discriminated union it lets you express a choice between a couple different things and variant makes that choice really painful you have you have to basically embed each of your choices in another type that you create just for its name like there's no way to name these things every operation on a variant is either this like unsafe thing where you want to go and check, do you have this? And then use it. And then you have big ifs. Or you have to write a giant type switch visitor thing. It can be so much nicer.
+基本数据类型。我们有结构体，对吧？结构体做什么？它们让你把一堆东西放在一起。判别联合做什么？它让你表达一堆东西在一起，它让你表达在几个不同的东西之间做出选择，而variant让那个选择变得非常痛苦。你必须基本上把你每个选择嵌入到你专门为它的名字创建的另一个类型中，就像没有办法命名这些东西一样。对variant的每一个操作要么是这种不安全的东西，你想去检查，你有这个吗？然后使用它。然后你有大的if语句。或者你必须写一个巨大的类型切换访问者。它可以好得多。
+
+22
+00:12:35.000 --> 00:13:23.000
+Yeah. Yep. I completely agree. I think at the very least, we should have done variant as a language thing. But if we were going to do variant as a language thing, it probably didn't make sense to have a language variant, not a language tu tuple so maybe we should have just done both those language things in c++ 17. so so before i do want to chat with you about swift um but before there's one last c++ topic which if and this is like bar stories that I was told many years ago. And so I'm not sure if I'm going to remember the details or this is something that you're going to want to talk about. Oh, no. Do you recall playing a role in the history of digit separators in C++?
+是的。是的。我完全同意。我认为至少我们应该把variant作为一个语言功能来做。但如果我们打算把variant作为一个语言功能来做，那么拥有一个语言级的variant而不是语言级的tuple可能没有意义，所以也许我们应该在C++17中同时做这两件语言级的事情。所以，在我想和你聊Swift之前，还有一个最后的C++话题，如果，这就像我多年前听到的酒吧故事。所以我不知道我是否会记得细节，或者这是你想谈论的事情。哦，不。你还记得在C++数字分隔符的历史中扮演过角色吗？
+
+23
+00:13:23.000 --> 00:13:44.000
+Digit separators in C++. Digit separators in C++. There was a story. Did we end up getting digit separators in C++? I literally cannot remember. I remember a lot of discussions over what it could be, and there was a serious problem because of user-defined literals. So you couldn't have nice things. You couldn't have the obvious underscore syntax.
+C++中的数字分隔符。C++中的数字分隔符。有一个故事。我们最终在C++中得到了数字分隔符吗？我真的记不起来了。我记得有很多关于它可能是什么的讨论，而且因为用户定义的字面量，有一个严重的问题。所以你不能拥有美好的东西。你不能拥有明显的下划线语法。
+
+24
+00:13:44.000 --> 00:14:37.000
+So what I've been told, so the way the committee used to work was there used to be a plenary on Friday. And that was the fun plenary where we would, and the way that the closing plenary has worked has changed like three or four times. So I'm just going to describe one of them, although it's actually sort of describes, there were three different evolutions of this way of doing plenary, but I'll just describe all of them. It used to be that we had two plenaries, one on Friday, and that was the fun one where discussion was allowed. And then one on Saturday morning where we weren't supposed to have any discussion, it was supposed to be just procedural and we'd vote. And there would only really be discussion if new information had been uncovered overnight. And these days, we don't even, we just have one plenary. We don't even like have technical discussion during the plenary because we're supposed to like front load
+所以我被告知，委员会过去的工作方式是周五有一个全体会议。那是很有趣的全体会议，我们会，闭幕全体会议的工作方式已经改变了三四次。所以我只是要描述其中一种，尽管它实际上描述了，这种进行全体会议的方式有三种不同的演变，但我会描述所有这些。过去我们有两个全体会议，一个在周五，那是很有趣的一个，允许讨论。然后是周六早上，我们不应该有任何讨论，它应该是程序性的，我们会投票。只有在隔夜发现了新信息时，才会有真正的讨论。而这些天，我们甚至不，我们只有一个全体会议。我们甚至不喜欢在全体会议期间进行技术讨论，因为我们应该预先加载
+
+25
+00:14:37.000 --> 00:15:23.000
+all of it. But we used to do it this way. And those Friday plenaries could go long. And the story that I had heard was that it was very rare that information changed overnight. But what I seem to recall is that in one case involving digit separators, on Friday, there was the plenary and we were going to vote out digit separators. And then everybody went off to the bar. And then some group of people found some new issue. And then some folks went around and told everybody about this issue. And then between the close of plenary and Saturday morning, the room had changed and the vote on digit separators failed.
+所有这些。但我们过去是这样做的。那些周五的全体会议可能会持续很长时间。我听到的故事是，信息隔夜发生变化的情况非常罕见。但我似乎记得，在一个涉及数字分隔符的案例中，周五举行了全体会议，我们打算投票通过数字分隔符。然后大家都去了酒吧。然后一群人发现了一些新问题。然后一些人四处告诉大家这个问题。然后在全体会议结束和周六早上之间，房间里的情况变了，关于数字分隔符的投票失败了。
+
+26
+00:15:23.000 --> 00:16:06.000
+And some stakeholders had decided to fly out on Saturday morning because they were so confident that everything was good. And then there were some surprises. Do you recall any of this? This sounds vaguely familiar. I mean, an interesting problem with this approach, of course, is that you only learn in the Friday plenary what some of the other working groups have been up to. Right, right. We've gotten better about that. If you're a compiler implementer, it may very well be that you were in another room when some of these things were decided and might be a problem. So I have a vague recollection of this happening.
+有些利益相关者决定在周六早上飞走，因为他们非常确信一切都很好。然后出现了一些意外。你还记得这些吗？这听起来有点耳熟。我的意思是，这种方法的一个有趣问题当然是，你只有在周五的全体会议上才能了解到其他工作组在做什么。对，对。我们在这方面已经有所改进。如果你是一个编译器实现者，很有可能当这些事情决定时你正在另一个房间，这可能会是个问题。所以我对这件事的发生有模糊的记忆。
+
+27
+00:16:06.000 --> 00:16:44.000
+I do not even remember why digit separators were so problematic. Oh, I will find the meeting minutes if I can and send them around in the show notes. But yeah, I had a vague recollection that you were one of the people involved. I won't say the culprit because that would be unfair. That sounds deeply unfair. I just, I had a vague recollection that you were, you were one of the people involved. I won't say the culprit because that would be, that would be unfair. That sounds deeply unfair. I will say that I won't say the culprit. So the implication exists. I think we should talk about Swift because you were, you were there at the beginning.
+我甚至不记得为什么数字分隔符会有那么大的问题。哦，如果可以的话，我会找到会议纪要并将其发送到节目笔记中。但是的，我模糊地记得你是参与其中的人之一。我不会说是罪魁祸首，因为那不公平。这听起来非常不公平。我只是，我模糊地记得你是，你是参与其中的人之一。我不会说是罪魁祸首，因为那会，那会不公平。这听起来非常不公平。我会说我不会说是罪魁祸首。所以暗示是存在的。我想我们应该谈谈Swift，因为你，你从一开始就在那里。
+
+28
+00:16:44.000 --> 00:17:00.000
+And, and Chris will come on our podcast. So how else are we going to learn about how Swift started? I see. So I'm your second choice. Okay. I'll remember that. Thanks, Bryce. Before we ask any questions, I'm curious, Bryce.
+而且，Chris会来我们的播客。所以我们还能怎么了解Swift是如何开始的呢？我明白了。所以我是你的第二选择。好的。我会记住的。谢谢，Bryce。在提问之前，我很好奇，Bryce。
+
+29
+00:17:00.000 --> 00:17:35.000
+We're going to test Bryce's knowledge. Just, you know, simple question. What version do you think Swift, the latest Swift is on? Just. Oh, I'm going to guess the last time I knew what Swift version was, was around 14 or 15. Because I asked Chris something about when an async feature was going to go in. And he said, that's not planned until like 15 or something. And that must have been five or six years ago because I would have been working at NVIDIA. So let's assume it's five years.
+我们要测试一下Bryce的知识。只是，你知道，简单的问题。你认为Swift，最新的Swift版本是多少？只是。哦，我猜我最后一次知道Swift版本是在14或15左右。因为我问过Chris关于异步功能何时会加入的问题。他说，那要到15左右才计划。那一定是在五六年前，因为那时我还在NVIDIA工作。所以我们假设是五年。
+
+30
+00:17:35.000 --> 00:18:50.000
+So let's assume that Swift revs like twice a year at least. So it's got to be at least in the 20s um but maybe the early 30s so i'm gonna say 24 25 wow the purpose of this question is everything i hoped it would be folks uh doug would you like to tell bry Bryce what version Swift is currently on? So the most recently shipped Swift version is Swift 5.10. Oh, okay. Well, then what do I know? The big push right now is for Swift 6, which is actually a big deal. So we treat the major version as the only time that we can sort of make a real change that is source incompatible with the prior versions. So we did it much more often in the early days as Swift was still growing and learning its space. Swift 5 has been Swift 5 since early 2019.
+所以我们假设Swift至少一年更新两次。所以它一定至少在20多，嗯，也许是30出头，所以我说是24、25。哇，这个问题的目的正如我所希望的那样，伙计们。Doug，你想告诉Bryce Swift目前是什么版本吗？所以最近发布的Swift版本是Swift 5.10。哦，好的。那我知道什么呢？现在的大力推动是Swift 6，这实际上是一件大事。所以我们将主版本视为我们唯一可以进行真正改变的时间，即与之前版本源代码不兼容的改变。所以我们在早期Swift还在成长和学习其空间时，做得更频繁。Swift 5自2019年初以来一直是Swift 5。
+
+31
+00:18:50.000 --> 00:19:59.000
+So actually, basically half of its life has been Swift 5. That's the point at which we declared ABI stability. So then I must have been thinking of, Chris must have told me 4 and 5, and 4 and 5 thought something and i must have in my head mixed that up to 14 and 15 okay it's my theory could have been swift four would have been around 2017 i guess i may be off by one but but all joking aside I'm actually very excited to have Doug here on the podcast because I do not get starstruck by many people that I was exposed to early in my career who I like looked up to and sort of get that little star struckness with. Doug's definitely one of them. I would probably say Dave is another one.
+所以实际上，它生命周期的一半基本上都是Swift 5。那就是我们宣布ABI稳定性的时间点。所以我一定是在想，Chris一定告诉过我4和5，而4和5想了一些什么，我脑子里一定把它们混淆成了14和15。好的，这是我的理论。可能是Swift 4，大约在2017年左右，我想我可能差了一年。但撇开玩笑不谈，我真的很高兴Doug能来参加播客，因为我很少会对我在职业生涯早期接触过的人感到受宠若惊，那些我仰慕的人，那种小小的受宠若惊的感觉。Doug绝对是其中之一。我可能会说Dave是另一个。
+
+32
+00:19:59.000 --> 00:20:37.000
+Sean Perrin's actually not just because I spent so much time at bars in C++ now with Sean, it's like he just became a friend. And yeah, but Doug's one of those people who is like, we have Doug Greger on the podcast. Wow. So you are in no way a second choice. But Chris, if you want to come on the podcast, you're always welcome, buddy. So, okay. So you're at Apple. You've been tasked with working on Klang.
+Sean Perrin其实不是，只是因为我现在和Sean在C++酒吧里花了很多时间，就像他成了朋友一样。是的，但Doug是那种人，就像，我们有Doug Greger在播客上。哇。所以你绝不是第二选择。但是Chris，如果你想来参加播客，你总是受欢迎的，伙计。好的。所以你在Apple。你被指派从事Clang的工作。
+
+33
+00:20:37.000 --> 00:21:06.000
+And then at some point, Swift happens. Like what happens in between you working on Clang and Swift? Sure. So we worked on Clang. We made super fast progress early on. So I joined in late 2008. By 2010, we had a C++ compiler that could compile Boost. So things moved really quick.
+然后在某个时候，Swift出现了。在你从事Clang和Swift之间发生了什么？当然。所以我们从事Clang的工作。我们早期取得了超快的进展。所以我是在2008年底加入的。到2010年，我们就有了一个可以编译Boost的C++编译器。所以事情进展得非常快。
+
+34
+00:21:06.000 --> 00:21:38.000
+And we were rolling it out. It became the preferred compiler on Apple platforms by 2010, 2011, and sunsetted GCC. It's worth its time. Why? Why build a new compiler? We needed a compiler that was more flexible. GCC was kind of hard to work with. I implemented a lot in GCC. So I did variac templates. I did concept GCC.
+我们正在推广它。到2010年、2011年，它成为Apple平台上的首选编译器，并淘汰了GCC。它值得它的时间。为什么？为什么要构建一个新的编译器？我们需要一个更灵活的编译器。GCC有点难用。我在GCC中实现了很多东西。所以我做了可变参数模板。我做了概念GCC。
+
+35
+00:21:38.000 --> 00:22:40.000
+I think I also did R value references and so on, as well as some type system surgery. It was just a hard compiler to work with. It was an old C code base. I think they've moved to C++ since then. But we felt that starting from scratch, knowing C++ as of like the C++ 11 standard was, you know, mostly done at that point. We figured we could do a much better implementation that, you know, leveraged LLVM the backend and leveraged the philosophy of the library based design that LLVM had and build a compiler that was just both better for users, but also more extensible to build better tooling on, make it easier to implement new language features, and so on. And so it went very well. We did that. We started adding some features. I mean, this is at the point where if someone came up with a feature in the C++ committee, myself or later Richard Smith could go ahead and try to hack it up in Clang. It's very possible that your digit separator story was this exactly, that we went and
+我想我还做了右值引用等等，以及一些类型系统手术。它只是一个很难使用的编译器。那是一个古老的C代码库。我想他们从那以后已经转向了C++。但我们觉得从零开始，了解C++，就像C++ 11标准在那个时候已经基本完成一样，你知道。我们认为我们可以做一个更好的实现，利用LLVM后端，利用LLVM拥有的基于库的设计理念，构建一个不仅对用户更好，而且更易于扩展以构建更好工具的编译器，使实现新语言功能更容易，等等。所以进展非常顺利。我们做到了。我们开始添加一些功能。我的意思是，这是在如果有人在C++委员会中提出一个功能，我自己或后来的Richard Smith就可以去尝试在Clang中实现它的阶段。很有可能你的数字分隔符故事正是如此，我们去
+
+36
+00:22:40.000 --> 00:23:31.000
+tried to hack it up in Clang and found some ambiguity or something, even though I don't remember it. And so, but as this was happening, we were also adding more support to Clang for other things like for Objective-C, which is the other language Apple, you know, supports in the C family. We added automatic reference counting to try to improve the memory safety of the language. But we really realized that C++ and just the C family of languages had some fundamental limitations that we could never fix. Some of those are around memory safety. I don't necessarily want to go down that rabbit hole, but our view was that these are unsolvable problems in the language as we have it, or that solving them would change the language so much that it wouldn't still be the same. And the other problem is that you can't really remove anything
+尝试在Clang中实现它，并发现了一些歧义之类的，尽管我不记得了。所以，但当这一切发生时，我们也在为Clang添加对其他事物的更多支持，比如Objective-C，这是Apple在C家族中支持的另一种语言。我们添加了自动引用计数以试图提高语言的内存安全性。但我们确实意识到C++和C语言家族有一些我们永远无法修复的基本限制。其中一些是关于内存安全的。我不一定想钻那个牛角尖，但我们的观点是，这些在我们现有的语言中是无法解决的问题，或者解决它们会改变语言太多，以至于它不再是原来的样子。另一个问题是你真的不能从C++中删除任何东西
+
+37
+00:23:31.000 --> 00:24:16.000
+from C++. And so you're stuck with a lot of decisions that we would not have made early on. And so we decided to, it was time to go and build a new modern native language based on all we had learned about language design and compiler design. And so Chris Blattner totally started it in secret. And then after a bit of hacking, he looped in several of us to go and join him. So I'm committer number two to the repository for Swift and have been working on it ever since, including the generic system was initially my design.
+所以你被困在很多我们早期不会做出的决定中。所以我们决定，是时候去构建一种基于我们所学到的语言设计和编译器设计知识的新的现代原生语言了。所以Chris Blattner完全秘密地开始了它。在经过一番黑客攻击后，他拉拢了我们中的几个人加入他。所以我是在Swift存储库中的第二个提交者，从那以后一直致力于它，包括泛型系统最初是我的设计。
+
+38
+00:24:16.000 --> 00:24:56.000
+I've also worked on the concurrency system, the macro system, and most other aspects of the language over the years. So when Chris started this off, what was his original vision and intent? Was it to create a general purpose systems programming language? I see a nod. I am nodding, yes. The overall goal was general purpose systems programming language. Would you say that's what Swift has become? Yes. So I think that is what Swift has become, but that's not necessarily what the perception of Swift is.
+我也致力于并发系统、宏系统以及多年来语言的其他大多数方面。那么当Chris开始这一切时，他最初的愿景和意图是什么？是为了创建一个通用的系统编程语言吗？我看到一个点头。我在点头，是的。总体目标是通用系统编程语言。你会说这就是Swift已经成为的样子吗？是的。所以我认为这就是Swift已经成为的样子，但这不一定是人们对Swift的看法。
+
+39
+00:24:56.000 --> 00:25:43.000
+Yes, I would tend to agree. I think people tend to think of Swift as that language that you write your Apple, your iOS apps in, right? Yes. But so, okay. So maybe you can, you can tell us a little bit more about Swift and Swift's design and specifically what makes it a general purpose language and not just that app language. Sure. So, I mean, what does systems programming language actually mean? Because you can define it a lot of different ways, and so it's tough. So the things that we look at are, as a language, it needs to have abstractions so that you can build good libraries
+是的，我倾向于同意。我认为人们倾向于认为Swift是你编写Apple、iOS应用程序的那种语言，对吧？是的。但是，好的。所以也许你可以，你可以告诉我们更多关于Swift和Swift的设计，特别是是什么让它成为一种通用语言，而不仅仅是那种应用程序语言。当然。所以，我的意思是，系统编程语言实际上意味着什么？因为你可以用很多不同的方式定义它，所以这很难。所以我们关注的事情是，作为一种语言，它需要有抽象，这样你就可以构建好的库
+
+40
+00:25:43.000 --> 00:26:36.000
+because any system of any size is architected as a set of libraries. It needs to have a compilation model that admits efficient code. So in our view, this meant it had to compile to native code. We couldn't accept requiring a JIT behind the scenes. And the design has to be such that you can scale your program. So I've had a hard time articulating exactly what this means. But, you know, if your language depends on having to see every bit of source code everywhere and compiling it all together, you aren't going to be able to scale up to a larger system. You have to be able to ship separate software components with stable interfaces that can evolve over time. And so our view is those are the main ingredients.
+因为任何规模的系统都被架构为一组库。它需要有一个允许高效代码的编译模型。所以我们认为，这意味着它必须编译成原生代码。我们不能接受在后台需要JIT。而且设计必须是这样的，你可以扩展你的程序。所以我很难准确地表达这意味着什么。但是，你知道，如果你的语言依赖于必须看到到处每一位源代码并将其全部编译在一起，你将无法扩展到更大的系统。你必须能够发布带有稳定接口的独立软件组件，这些组件可以随着时间的推移而演变。所以我们的观点是，这些是主要成分。
+
+41
+00:26:36.000 --> 00:27:31.000
+And the last piece that we cared about a lot is related to memory safety, but it's not memory safety. So it was really, we wanted to make it such that it was easy to get to correct code. So the compiler and its type system should support you in getting your code right. Things like undefined behavior shouldn't happen. And the type system should encourage good patterns that help you write correct code and deal with erroneous cases and so on in a way that it's obvious when you look at the code what it's doing and that's what it actually is doing under the hood. And so that's kind of the overall dream of Swift. And you can see this play out in how the language is actually designed. So things you're probably familiar with, for example, in Swift,
+我们非常关心的最后一点与内存安全有关，但它不是内存安全。所以我们真的，我们想让它变得容易得到正确的代码。所以编译器及其类型系统应该支持你编写正确的代码。像未定义行为这样的事情不应该发生。类型系统应该鼓励好的模式，帮助你编写正确的代码并处理错误情况等，以一种当你查看代码时它在做什么很明显，并且在底层它确实在做这件事的方式。所以这就是Swift的总体梦想。你可以看到这在语言的实际设计中是如何体现的。所以你可能熟悉的事情，例如，在Swift中，
+
+42
+00:27:31.000 --> 00:27:59.000
+we push value semantics everywhere. We love value semantics. And value semantics have this wonderful property that if you have a value and you make a copy of it, the original value and its copy are completely independent. Nothing you can do to one will change the other. This is so good for local reasoning because you can just reason about the code that's on your screen. You don't have to think about, well, someone else might have an alias to my data structure over here that's going to create some spooky action at a distance
+我们到处推行值语义。我们喜欢值语义。值语义有一个奇妙的特性，如果你有一个值并制作了它的副本，原始值及其副本是完全独立的。你对其中一个所做的任何事情都不会改变另一个。这对局部推理非常好，因为你可以只推理屏幕上的代码。你不必考虑，嗯，其他人可能在这里有我的数据结构的别名，这会产生一些幽灵般的超距作用
+
+43
+00:27:59.000 --> 00:29:02.000
+and affect my code. And when you have that basis of value semantics, which runs throughout Swift, then you can make immutability that really works and say, okay, well, most of the time you're not changing things. So let's make it easy to do immutability in the language and make that sort of the default view that things should be immutable unless you really, really want to make it mutable. And then those mutations will be local. When did automatic reference counting become the memory management story of choice for Swift? Or does that just come from the Objective-C background? Or was it a principled choice? No, it was actually a principled choice. So it was certainly true that Objective-C had a convention-based manual reference counting scheme that we then codified in Clang to make it automatic. When we started Swift, we looked at the options. I mean, the main options there were traditional garbage collection
+并影响我的代码。当你有了贯穿Swift的值语义基础时，你就可以实现真正有效的不可变性，并说，好吧，大多数时候你并没有改变东西。所以让我们让在语言中实现不可变性变得容易，并使之成为默认视图，即除非你真的、真的想让它可变，否则事物应该是不可变的。然后这些突变将是局部的。自动引用计数是什么时候成为Swift内存管理的首选故事的？还是它只是来自Objective-C背景？或者这是一个原则性的选择？不，这实际上是一个原则性的选择。所以确实，Objective-C有一种基于约定的手动引用计数方案，我们随后在Clang中将其编纂为自动。当我们开始Swift时，我们研究了各种选择。我的意思是，那里的主要选择是传统的垃圾回收
+
+44
+00:29:02.000 --> 00:29:45.000
+or something like automatic reference counting. And they're interesting and have different trade-offs. I think the easy answer probably would have been, ah, let's do a traditional garbage collector. But there's a couple things that worked against that. One, we'd had sort of a poor experience with trying to do garbage collection for Objective-C. There was an attempt. It didn't really work out very well. But there's a reason for that, which is when you're interoperating with a C stack, you have some of your software written in C and some of it written in another language. You can't trust C to behave the way you want it to from the perspective of a garbage collector, right? And you see how hard this is in any language that has garbage collection
+或者像自动引用计数这样的东西。它们很有趣，有不同的权衡。我认为简单的答案可能是，啊，让我们做一个传统的垃圾回收器。但有几件事对此不利。第一，我们在尝试为Objective-C做垃圾回收方面有很差的经验。曾经有过尝试。结果不太好。但这是有原因的，当你与C堆栈互操作时，你有一些软件是用C编写的，另一些是用另一种语言编写的。你不能信任C以你想要的方式从垃圾回收器的角度表现，对吧？而且你看到这在任何有垃圾回收的语言中是多么困难
+
+45
+00:29:45.000 --> 00:30:30.000
+and also has a native interface to C. And with Swift, we knew that one of our key features had to be really good interoperability with C so that we could start like incrementally moving the world over. Having garbage collector would have made that really hard. That's one of the points. The other point that I think is really important is that the great thing about reference counting is you can locally optimize it away when you have more information. It becomes a compiler optimization problem. You set up your calling conventions so that you know where the reference counts are supposed to be maintained. But if you have some performance critical code where you absolutely cannot handle the cost of reference counting,
+并且也有到C的原生接口。对于Swift，我们知道我们的关键功能之一必须是与C的真正良好的互操作性，这样我们就可以像逐步地将世界转移过来。拥有垃圾回收器会使这变得非常困难。这是其中一点。我认为非常重要的另一点是，引用计数的好处在于，当你拥有更多信息时，你可以局部地优化它。它变成了一个编译器优化问题。你设置你的调用约定，以便你知道引用计数应该在哪里维护。但是如果你有一些性能关键的代码，你绝对无法处理引用计数的成本，
+
+46
+00:30:30.000 --> 00:31:15.000
+you can force the optimizer to look harder, add more annotations to the language, whatever it takes to eliminate the reference counting just in that place without affecting anything else in the system. So it has this really nice property that you can do local optimizations to improve performance without throwing out the model. Finally, you don't need a runtime except for like we have retain and release. That's it, right? A couple of instructions. It's an atomic basically. And so you need very little runtime support to make this model work. And so that lets you scale your language down to run it in environments where you would never consider having a garbage collector running. Yeah.
+你可以强制优化器更努力地工作，在语言中添加更多注释，无论需要什么来消除引用计数，只需在那个地方，而不影响系统中的任何其他部分。所以它有这个非常好的特性，你可以进行局部优化以提高性能，而无需抛弃模型。最后，你不需要运行时，除了我们有保留和释放。就是这样，对吧？几个指令。它基本上是原子的。所以你需要很少的运行时支持来使这个模型工作。所以这让你能够将你的语言缩小到在那些你永远不会考虑运行垃圾回收器的环境中运行。是的。
+
+47
+00:31:15.000 --> 00:31:54.000
+Right. And so that gave us the option to actually say, well, you know what? This is actually reasonable to use down in a kernel or down in firmware somewhere where you don't, you could never do a GC and you would have to essentially switch the model. We don't have to change the model. We just have to make sure it's optimized well in those places. And it also gives you determinism, right? You know, you don't, yeah. Yes. That is the other thing I should have mentioned. It gives you determinism of, you know, at the end of your scope or when you stop using a value that the reference count is going to drop and it will go away. So you can reason about it better than you can with a garbage collector.
+对。所以这给了我们选择，实际上说，好吧，你知道吗？在内核或固件中某处使用它是合理的，在那里你永远无法进行GC，你将不得不从根本上改变模型。我们不必改变模型。我们只需要确保它在那些地方优化得很好。它也给了你确定性，对吧？你知道，你不会，是的。是的。这是我应该提到的另一件事。它给了你确定性，你知道，在你的作用域结束时或当你停止使用一个值时，引用计数会下降，它会消失。所以你可以比使用垃圾回收器更好地推理它。
+
+48
+00:31:54.000 --> 00:32:38.000
+One of the reasons I've always been a fan of Swift has been Arc. Because I, for many years, worked on the HPX runtime, which is an HPC, parallel programming runtime. And HPX relies entirely upon reference counting and has this distributed reference counting mechanism where it's based on, you know, you get a number of reference count tokens and then as the thing moves, you can split them. And so you don't have get a number of reference count tokens. And then as the thing moves, you can split them. And so you don't have to have that much reference counting traffic. And that's what I'd spent a lot of my early work on. And, you know, one of the things that I came to appreciate in that time was, in particular, when you're working on a concurrent system,
+我一直喜欢Swift的原因之一是ARC。因为我多年来一直致力于HPX运行时，这是一个HPC，并行编程运行时。HPX完全依赖于引用计数，并拥有这种分布式引用计数机制，它是基于，你知道，你获得一定数量的引用计数令牌，然后当事物移动时，你可以拆分它们。所以你不需要获得一定数量的引用计数令牌。然后当事物移动时，你可以拆分它们。所以你不需要有那么多的引用计数流量。这就是我早期工作所花费的时间。而且，你知道，我在那段时间里开始欣赏的一件事是，特别是当你从事并发系统工作时，
+
+49
+00:32:38.000 --> 00:33:28.000
+you need to have some form of managed lifetimes because you cannot solely rely upon new and delete, and you don't have this scoping. So you can't just rely on something like unique pointer. You need some way of managing the lifetimes of objects. And I really believe that reference counting is the best option. It's deterministic. I think it gives you the best performance. It's straightforward to reason about. The only thing you really have to concern yourself with is the potential risk of cycles. But in my years of dealing with reference counting systems, it's never been a major issue. I've run into it a couple of times.
+你需要某种形式的管理生命周期，因为你不能仅仅依赖new和delete，而且你没有这种作用域。所以你不能仅仅依赖像unique pointer这样的东西。你需要某种管理对象生命周期的方法。我真的相信引用计数是最好的选择。它是确定性的。我认为它给你最好的性能。推理起来很简单。你真正需要关心的唯一事情是循环的潜在风险。但在我处理引用计数系统的多年里，它从来不是一个主要问题。我遇到过几次。
+
+50
+00:33:28.000 --> 00:34:18.000
+But I think automatic reference counting is something that almost makes Swift unique because I think most of the languages that are in the space of a language like Swift either has no automatic memory management story or they do a GC. A reference kind of thing has just not been very popular over the years. And it's one of the things I really like about Swift, I have to say. Yeah, it's really interesting because, you know, there's been an enormous amount of effort putting into making GCs, like, way better than they were before, right? Ten years ago, I probably would have said, you know, no GC pauses from when you use reference counting.
+但我认为自动引用计数是几乎使Swift独一无二的东西，因为我认为大多数在像Swift这样的语言空间中的语言要么没有自动内存管理故事，要么它们做GC。引用计数这些年来一直不是很流行。我必须说，这是我真正喜欢Swift的一点。是的，这真的很有趣，因为，你知道，人们投入了巨大的努力使GC比以前好得多，对吧？十年前，我可能会说，你知道，当你使用引用计数时没有GC暂停。
+
+51
+00:34:18.000 --> 00:34:55.000
+But GCs have gotten so much better that, you know, that can be an issue, but it's pretty rare. The main place it affects users is with reference cycles. And, you know, that, that can be an issue, but it's pretty rare. The main place that affects users is with reference cycles. And, you know, we do see it, right? We do see users that end up with a reference cycle and we were very deliberate. And when we picked reference counting, we said, there shall not be a cycle collector. We consider the presence of a cycle to be a programmer error. The memory will leak, you will find it with your tools, and we'll provide the tools that make it obvious where that is, as well as providing the language tools where you can have a weak reference, for example. Yeah, I was just about to ask. So,
+但垃圾回收机制（GC）已经改进了很多，所以你知道，这可能是一个问题，但非常罕见。它影响用户的主要地方是引用循环。而且，你知道，这确实可能是一个问题，但非常罕见。它影响用户的主要地方是引用循环。而且，你知道，我们确实看到了，对吧？我们确实看到用户最终陷入了引用循环，我们当时非常慎重。当我们选择引用计数时，我们说，不应该有循环收集器。我们将循环的存在视为程序员的错误。内存会泄漏，你会用你的工具找到它，我们会提供让问题显而易见的工具，同时也会提供语言工具，比如你可以使用弱引用。是的，我正要问。所以，
+
+52
+00:34:55.000 --> 00:35:37.000
+is there in Swift some sort of weak reference mechanism? Yeah, right. So, the way it works is you have, you know, if you just have a, you know have a variable that refers to an object, the value of class type, then that is a strong reference. It'll keep it alive. You can describe that variable as a weak variable, spelled like that. The type of that variable is always an optional of that class type. The reason is that optional will implicitly become nil if the object ever goes away. Because a weak pointer does not keep it alive. It has to tell you.
+Swift 中是否有某种弱引用机制？是的，没错。它的工作方式是，如果你只是有一个指向对象的变量，即类类型的变量，那么这就是强引用。它会保持对象存活。你可以将该变量描述为弱变量，拼写就是那样。该变量的类型始终是该类类型的可选类型。原因是，如果对象消失了，该可选类型会隐式变为 nil。因为弱指针不会保持对象存活。它必须通知你。
+
+53
+00:35:37.000 --> 00:36:27.000
+Now, optionals are actually deeply ingrained into the Swift language. And there's a lot of syntactic sugar to make them easy to use. Part of the reason we can do this thing with weak is that there are no null pointers in Swift. This was a massively controversial decision when we first did it, when Swift was introduced. But basically, if you have a value of type person where person is a class, there's always an object there and it's kept alive. If you want a null pointer, that's fine, but it shall now be of type person question mark, meaning an optional person. And to access it, you always have to go and look like, is it nil or is it not nil? And we provide nice syntax to make it easy to go in and and do that um consistently uh to make your code more
+现在，可选类型实际上已经深深植根于 Swift 语言中。并且有很多语法糖使它们易于使用。我们能用弱引用做这件事的部分原因是 Swift 中没有空指针。当我们第一次这样做，即 Swift 刚推出时，这是一个非常有争议的决定。但基本上，如果你有一个 Person 类型的值，其中 Person 是一个类，那么总会有一个对象在那里，并且它会被保持存活。如果你想要一个空指针，没问题，但它现在必须是 Person? 类型，意味着一个可选的 Person。要访问它，你总是必须去检查，它是 nil 还是不是 nil？我们提供了很好的语法，使你可以轻松地去执行这些操作，从而一致地使你的代码更
+
+54
+00:36:27.000 --> 00:37:12.000
+robust and it's it's one of those places where it aids correctness like it the first time you if you're coming from c++ you're like i know how to deal with null pointers i know what i'm doing why are you making me do all this ceremony you kind of get angry with us. We had that. But after a while, you realize you stopped thinking about no ever. And the only time it ever comes up is when you have an optional and the type system is showing you what's going on and the type checker is helping you deal with it in a reasonable way. And you realize you no longer have this background. I'm worried about this stuff. Because the language has got a better model that reinforces correct code. And this is something we could totally have done weak
+健壮。这是它有助于正确性的地方之一。如果你是从 C++ 转过来的，第一次你会想：我知道如何处理空指针，我知道我在做什么，为什么要让我做所有这些繁琐的仪式？你会对我们感到生气。我们经历过这种情况。但过了一段时间，你意识到你不再考虑空值了。唯一出现这种情况的时候是当你有一个可选类型时，类型系统会向你展示发生了什么，类型检查器会帮助你以合理的方式处理它。你意识到你不再有这种背景负担。我担心这些东西。因为该语言有一个更好的模型来强化正确的代码。这是我们完全可以做到的弱
+
+55
+00:37:12.000 --> 00:37:59.000
+pointers with the GC behind. That's pretty common in there, but it fits so nicely together using the reference counting model with all of these benefits of determinism and optimizability and small runtime overhead for that feature. But I think that the determinism and the performance advantages to me allow languages with reference counting to thrive in spaces that they otherwise would not be acceptable in, which is one of the appeals to me. Be sure to check these show notes either in your podcast app or at ADSP the podcast dot com for links to anything we mentioned in today's episode, as well as a link to a GitHub discussion where you can leave thoughts, comments and questions. Thanks for listening. We hope you enjoyed and have a
+指针，并在后台使用 GC。这在其中很常见，但使用引用计数模型与确定性、可优化性和该功能带来的较小运行时开销的所有这些好处结合得非常好。但我认为，确定性和性能优势使引用计数语言能够在原本无法接受的领域中蓬勃发展，这也是吸引我的地方之一。请务必在你的播客应用程序或 ADSPthepodcast.com 查看这些节目说明，获取我们今天节目中提到的任何内容的链接，以及一个 GitHub 讨论链接，你可以在那里留下想法、评论和问题。感谢收听。我们希望你喜欢，并祝你
+
+56
+00:37:59.000 --> 00:38:04.000
+great day. Low quality, high quality. That is the tagline of our podcast it's not the tagline our tagline is chaos with sprinkles of information There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+度过愉快的一天。低质量，高质量。那是我们播客的标语，不，那不是标语，我们的标语是带有信息点缀的混乱。本集还没有评论。点击转录中的任何句子即可发表评论。

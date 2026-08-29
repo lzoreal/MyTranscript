@@ -1,0 +1,206 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:23.000
+At some point, something has to give. And then the theory is it goes, boom. There's the cold open right there. And then it goes, boom. I also had the thought too that, you know, the reason I don't use pen and paper, it's because I have APL. That is basically like not the inductive proof thing you just described, but like I can go and visually explore some algorithm or some solution in a REPL.
+在某个时刻，总会有东西支撑不住。然后理论上它就会“砰”地一声炸开。这就是开场白了。然后它就“砰”地一声。我当时也想到，你知道，我不使用纸笔的原因是因为我有 APL。这基本上不像你刚才描述的那种归纳证明，而是我可以去 REPL 中直观地探索某种算法或解决方案。
+
+2
+00:00:23.000 --> 00:01:23.000
+And you actually can do this with like Haskell as well. Like with a REPL, it's like the digital equivalent of like pen and paper. You can see step by step every single time you add some operation to some expression. Like literally yesterday I was presenting and I was showing solutions to that sushi for two problem that I presented in like 2023 at C++ on C and maybe one other conference. And I do it in the REPL. And it's like, I'm showing you that when you chunk by it result like you can see it visually. Welcome to ADSP, the podcast, episode 219, recorded on January 22nd, 2025. My name is Connor, and today with my co-host, Bryce, we chat about flood fills, adaptive mesh refinement, and white doors.
+你实际上也可以用 Haskell 做同样的事情。就像使用 REPL 一样，它相当于纸笔的数字版本。你可以看到每当你向表达式添加操作时，每一步的变化。就在昨天，我还在做演示，展示我在 2023 年 C++ on C 以及其他会议上介绍过的“寿司二人组”问题的解决方案。我是在 REPL 中完成的。我向你展示了当你按结果进行分块时，你可以直观地看到它。欢迎收听 ADSP 播客，第 219 期，录制于 2025 年 1 月 22 日。我是 Connor，今天我和我的联合主持人 Bryce 一起聊聊泛洪填充、自适应网格细化和白矮星。
+
+3
+00:01:23.000 --> 00:02:13.000
+So immediately my mind jumps to how do we implement this on a GPU? And my first thought is, of course, that, okay, you can just partition the entire space up into chunks and then just have each chunk be done by a thread block so you just partition up the entire domain and then uh you just you know locally do your flood fill within or or you can really just i guess paralyze it for every element um uh and then for every element determine if it's inside the region does that work i? I suppose so, right? It depends if what you're using your flood fill for. If you're using your flood fill just to literally do something like in the paint operation
+所以我的脑海里立刻跳出一个问题：我们如何在 GPU 上实现这一点？我的第一个想法当然是，好吧，你可以把整个空间分成若干块，然后让每个线程块处理一个块，这样你就把整个域划分开了，然后你可以在本地进行泛洪填充，或者我猜你可以为每个元素进行并行化，然后为每个元素确定它是否在区域内，这行得通吗？我想是可以的，对吧？这取决于你用泛洪填充做什么。如果你用它仅仅是为了像在绘图操作中那样做点什么
+
+4
+00:02:13.000 --> 00:02:38.000
+where you don't actually care about the resulting values, like if you're searching for the number of steps to get to some or number of moves to get to some final square, that's going to be a lot trickier. We can talk about that in a sec if you want. However, if you're just trying to flood it with a single value, a single color, then you're basically, by partitioning it, you could do some coloring problem.
+你并不关心最终的值，比如如果你是在搜索到达某个方格所需的步数或移动次数，那会棘手得多。如果你愿意，我们稍后可以谈谈这个。然而，如果你只是想用一个单一的值、一种单一的颜色来填充它，那么基本上通过划分，你可以解决某种着色问题。
+
+5
+00:02:38.000 --> 00:03:04.000
+And the tricky part is that when you join up your partitions, you don't actually know that the color that you filled in is going to be connected with your origin point. So that's the tricky part. But you just compare edges and stuff. And you're going to end up doing a ton of extra work because you've got like... That was the next thing I was thinking of, which is... So back when I worked in HPC, I primarily worked on a type of grid code that used what's
+棘手的部分在于，当你连接你的分区时，你实际上并不知道你填充的颜色是否会与你的起始点相连。所以这就是难点。但你只需要比较边缘之类的东西。你最终会做大量额外的工作，因为你有……这就是我接下来想到的，也就是……回到我从事高性能计算（HPC）的时候，我主要研究一种网格代码，它使用了
+
+6
+00:03:04.000 --> 00:04:00.000
+called adaptive mesh refinement. Have you ever heard of that? Nope. Okay. So the particular application I worked on was simulations of the mergers of white dwarf stars. And so when you have two white dwarf stars that are evolving around each other and they start merging. One of them, the smaller one, which becomes called the accreter, it'll start, the bigger, more massive one will start pulling material off of the accreter. And there'll be this accretion stream that'll come from one of the stars into the other one. And as this stream of stellar material hits the bigger star that's sucking up the smaller one, it's a pretty violent thing. And so, you've got a bunch of stellar material that gets ejected out there. And so, if you're going to simulate this,
+所谓的自适应网格细化。你听说过吗？没有。好的。我研究的具体应用是白矮星合并的模拟。当你有两个白矮星围绕彼此演化并开始合并时，其中一个较小的，被称为吸积体，较大的、质量更大的那个会开始从吸积体上拉取物质。会有一条吸积流从一颗恒星流向另一颗。当这股恒星物质流撞击正在吞噬较小恒星的较大恒星时，这是一个相当剧烈的过程。所以，你会有一堆恒星物质被喷射出来。因此，如果你要模拟这个过程，
+
+7
+00:04:00.000 --> 00:04:40.000
+you need to simulate not just the two stars, but this huge space around it because you're going to simulate all of this material that's getting ejected out there. But you end up where you've got this huge grid, and in the center, you have these two tiny stars. And if you simulate the entire grid with the resolution that you'd want, that becomes a computationally massive problem. And you're not actually interested in the entire grid. You don't need the same resolution of the entire grid. There's a few places where you need really high resolution. For example, the accretion stream of material between the two stars.
+你需要模拟的不仅仅是这两颗恒星，还有它们周围巨大的空间，因为你要模拟所有被喷射出来的物质。但最终你会得到一个巨大的网格，而在中心，你有两颗微小的恒星。如果你以你想要的精度模拟整个网格，那将是一个计算量巨大的问题。而且你实际上并不关心整个网格。你不需要整个网格都具有相同的分辨率。有几个地方你需要极高的分辨率。例如，两颗恒星之间的物质吸积流。
+
+8
+00:04:40.000 --> 00:05:40.000
+When the stars start merging, that stream can be very, very narrow. And so you might need a lot of resolution on that feature because it's a very small feature relative to the rest of the simulation, but it's very important. And also, around the edges of the stars, the boundary of the stars, you want to have a lot of resolution so you can really study, you know, what's happening as the material leaves in one star and hits the other star. And so, the technique that you use is you have a grid of a hierarchical grid of different resolutions. So, you start off with a very, very coarse grid, which is your root level grid. And then you can refine. So, you pick a region of that grid, maybe multiple regions, and you say, we're going to create a new grid that's going to have twice the number of points that represents this region of the parent grid.
+当恒星开始合并时，那股流可能非常非常窄。因此，你可能需要在该特征上使用高分辨率，因为它相对于模拟的其余部分是一个非常小的特征，但它非常重要。此外，在恒星的边缘，即恒星的边界周围，你希望有很高的分辨率，这样你就可以真正研究物质离开一颗恒星并撞击另一颗恒星时发生了什么。所以，你使用的技术是拥有一个不同分辨率的层次化网格。因此，你从一个非常非常粗糙的网格开始，这就是你的根级网格。然后你可以进行细化。所以，你选择该网格的一个区域，也许是多个区域，然后你说，我们将创建一个新的网格，它将拥有代表父网格该区域的两倍数量的点。
+
+9
+00:05:40.000 --> 00:06:17.000
+And then you can refine further. So, the applications I worked with, sometimes you could have up to eight levels of refinement. So basically, you take some sub-region of the grid, and you say, okay, I'm going to create a whole new grid that has a lot more points inside of it. And then you have to do what's interpolation and then coarsening between these grids. So if you're at the eighth level of refinement, you need to take an average of your eighth level very refined grid and you need
+然后你可以进一步细化。所以我研究的应用，有时你可以有最多八级的细化。所以基本上，你取网格的某个子区域，然后说，好吧，我要创建一个全新的网格，里面有更多的点。然后你必须在这些网格之间进行插值和粗化。所以如果你处于第八级细化，你需要取第八级非常精细网格的平均值，并且你需要
+
+10
+00:06:17.000 --> 00:07:17.000
+to send it back up to the seventh level. And then the seventh level has to send it to the sixth and the fifth and the fourth and all the way up to the parent grid so that at every level of the grid, you have a correct for that resolution view of the world. And I was thinking with this fill problem, if all you care about is just filling in the region, you could maybe take an approach similar to this, where you start off with a very coarse grid, and then you partition it up. And then for each one of the partitions, you check, okay, are all of the points in this partition within the boundary? And if so, you can do something simple. Or if all of these points within the partition are not in the boundary, then it's pretty boring. You can just ignore it. And if it's an actual point where it's, if the boundary is within the chunk that you're looking at, then you could go and, you know, look at it with greater refinement or
+把它传回第七级。然后第七级必须把它传给第六级、第五级、第四级，一直传到父网格，这样在网格的每一级，你都有一个针对该分辨率的世界视图。我当时在想，对于这个填充问题，如果你关心的只是填充该区域，你也许可以采用类似的方法，从一个非常粗糙的网格开始，然后将其分区。然后对于每一个分区，你检查，好吧，这个分区中的所有点是否都在边界内？如果是，你可以做一些简单的处理。或者如果分区内的所有点都不在边界内，那它就很无聊。你可以直接忽略它。如果它是一个实际的点，即边界在你正在查看的块内，那么你可以去，你知道，用更高的精度去查看它或者
+
+11
+00:07:17.000 --> 00:08:32.000
+something. So, I don't know. At least in my mind, it sort of seemed like you could use a technique like that. It was called adaptive metric something? Adaptive mesh refinement. Yeah, it's funny, when you were describing this, I actually almost implemented conceptually the exact same thing, but for a completely different application. I have, I think I've mentioned it before on this podcast, I have a repo called CityStrideHacking that I use for creating heat maps and generating paths for my city striding hobby where I try to collect streets all over the world. But there is this limitation where when you're collecting the nodes that define the ends and curves of streets, you're only allowed to – the website will only return you 1,000 at a rectangle defined by two latitude and longitude points, and you're trying to collect all the nodes in that space, it just, I just defined like a square small enough, and then
+什么的。所以，我不知道。至少在我看来，这似乎可以使用类似的技术。它叫自适应网格什么？自适应网格细化。是的，很有趣，当你描述这个的时候，我实际上几乎在概念上实现了完全相同的东西，但用于一个完全不同的应用。我想我之前在这个播客上提到过，我有一个名为 CityStrideHacking 的仓库，我用它来创建热图并为我的城市漫步爱好生成路径，我试图收集世界各地的街道。但有一个限制，当你收集定义街道末端和曲线的节点时，你只被允许——网站只会返回给你一个由两个经纬度点定义的矩形内的 1000 个节点，而你试图收集该空间内的所有节点，它只是，我只是定义了一个足够小的正方形，然后
+
+12
+00:08:32.000 --> 00:09:09.000
+it just grids over it. But even that sometimes doesn't pick all of them up. And so I thought, you know, the smart thing to do would be just to have a recursive algorithm that looks at the top level, sends a request, and every time that you hit a thousand, you just partition your rectangle into like four sub rectangles or like split it up by some like square thing. And then every time you send a request where you hit a thousand for that smaller rectangle, you just keep on sending requests where you partition your rectangle into smaller and smaller. And the nice thing about this is it probably actually ends up with fewer requests
+它就在上面网格化。但即使那样有时也无法全部获取。所以我认为，聪明的做法是使用一个递归算法，查看顶层，发送请求，每当你达到 1000 个时，你就把你的矩形分成四个子矩形，或者按某种正方形的东西拆分它。然后每当你发送一个请求，对于那个较小的矩形达到 1000 个时，你就继续发送请求，将你的矩形分得越来越小。这样做的好处是，它最终可能实际上会产生更少的请求
+
+13
+00:09:09.000 --> 00:09:35.000
+at the end of the day, because as you run exhaustively a space like the Toronto, like I'm running, there's whole areas of the map where there's no more nodes because I've run them all. And so at the top level, when you've partitioned it for the first time and then you've got like the bottom quarter of the map, that might result in like, you know, 250 requests with this really small rectangle that I had before. But now at the top level, as soon as you get zero nodes,
+因为当你详尽地运行像多伦多这样的空间时，就像我正在运行的那样，地图上有整个区域没有更多的节点，因为我已经把它们都跑完了。所以当你在顶层第一次对它进行分区，然后你得到了地图的底部四分之一时，这可能会导致，你知道，250 个请求，用我之前那个非常小的矩形。但现在在顶层，一旦你得到零个节点，
+
+14
+00:09:35.000 --> 00:10:04.000
+it'll just ignore that corner of the map. And now you've saved yourself like 25 or 50% of the work. Anyways, while you were explaining this about this two star, what did you call them? Red dwarfs or something? White dwarfs. White dwarfs. When you were describing that, I was like, huh, I never implemented this. But this is the exact same idea for something much less important that I never did implement, but would be a neat thing to do. But I was too lazy. And so I just, like I said, I just kept the small rectangle. And then actually, James, I hope James
+它就会直接忽略地图的那一角。现在你就节省了大约 25% 或 50% 的工作量。总之，当你解释这个关于这两颗恒星的事情时，你叫它们什么？红矮星还是什么的？白矮星。白矮星。当你描述那个的时候，我就想，哈，我从来没实现过这个。但这对于我从未实现过但会是一件很酷的事情的、重要性低得多的东西来说，是完全相同的想法。但我太懒了。所以我就像我说的那样，我只是保留了小矩形。然后实际上，James，我希望 James
+
+15
+00:10:04.000 --> 00:10:34.000
+doesn't listen to the podcast. He probably doesn't know who I am. But I said, I just kept the small rectangle. And then actually, James, I hope James doesn't listen to the podcast. He probably doesn't know who I am. But I think he's been observing that people are like abusing or hitting his servers over and over again, because he over time has been making it increasingly hard for me, for my algorithm, like my Python code that hits the server like a thousand times. He put these like rate limiting things in where every once in a while now it'll be like sorry you've exceeded your threshold please wait like five to ten minutes because you need to be logged in with your credentials uh so i have some
+不要听这个播客。他可能不知道我是谁。但我说，我只是保留了小矩形。然后实际上，James，我希望 James 不要听这个播客。他可能不知道我是谁。但我认为他一直在观察人们是否在滥用或反复点击他的服务器，因为随着时间的推移，他让我，让我的算法，比如我那个点击服务器一千次的 Python 代码，变得越来越困难。他设置了这些速率限制，现在每隔一段时间它就会说，抱歉，你已经超过了阈值，请等待五到十分钟，因为你需要用你的凭据登录，所以我有一些
+
+16
+00:10:34.000 --> 00:11:13.000
+like i don't know python cookie header thing uh that enables so he knows like which account it is and then just like blocks that user so it's kind of like a cat and mouse game. Currently, I have, I just, I put some, whenever you get the first warning, I just wait for like a minute or something. And that seems to have worked for the moment. But anyways, it's a very interesting idea. And I'm sure, actually, speaking of the summed area tables from earlier on, we got, I think, messages from three or four different people. Off the top of my head, I know that Phineas, soon to be guest of the upcoming Arraycast episode,
+比如，我不知道，Python cookie 标头之类的东西，它启用了，所以他知道是哪个账户，然后就直接封锁那个用户，所以这有点像猫鼠游戏。目前，我只是，我放了一些，每当你收到第一个警告时，我就等待一分钟左右。这似乎暂时奏效了。但总之，这是一个非常有趣的想法。而且我敢肯定，实际上，说到早些时候的求和面积表，我们收到了，我想，来自三四个不同人的消息。凭记忆，我知道 Phineas，即将成为下一期 Arraycast 的嘉宾，
+
+17
+00:11:13.000 --> 00:11:50.000
+and former guest that we had dinner with that time we went and played an escape room. Yes, yes. We went to that vegan restaurant. So Phineas, we recorded an impromptu episode at that restaurant. He reached out and said that I think it was for book orders because he works in finance. He said that they use some Dairy Table algorithm to get some information off of those. I might have that slightly wrong, but in finance, they use it. And then I think also on GitHub, in our discussion, someone had mentioned that they use it in image processing for something.
+也是我们上次去玩密室逃脱时一起吃过饭的前嘉宾。是的，是的。我们去了那家素食餐厅。所以 Phineas，我们在那家餐厅录制了一期即兴节目。他联系我说，我想是因为图书订单，因为他在金融行业工作。他说他们使用求和面积表算法从那些数据中获取一些信息。我可能记错了，但在金融领域，他们确实使用它。然后我想在 GitHub 上，在我们的讨论中，有人提到他们在图像处理中也用它做某事。
+
+18
+00:11:50.000 --> 00:12:20.000
+Those are two of like the three or four. I had three or four people ping me and they were like, oh, yeah, we use this algorithm for X, Y, and Z, where they were all completely different fields and completely different things. But it seems to be, and I bring that up because this algorithm that you've just mentioned, this kind of adaptive drilling in, I'm sure is used also in a couple different places. Because it seems like a very intuitive way to get like highly detailed information in a certain space and then ignore the other spaces that you don't really care about. Yes, it is quite widely used.
+这是三四个中的两个。我有三四个人联系我，他们说，哦，是的，我们在 X、Y 和 Z 中使用了这个算法，他们都是完全不同的领域和完全不同的东西。但似乎，我之所以提到这一点，是因为你刚才提到的这个算法，这种自适应钻取，我相信在其他几个地方也被使用。因为它似乎是一种非常直观的方法，可以在某个空间中获取高度详细的信息，然后忽略你并不真正关心的其他空间。是的，它确实被广泛使用。
+
+19
+00:12:20.000 --> 00:13:10.000
+Somewhere I have a great video, specifically the simulations that we did um but uh if they're online do some digging afterwards and uh send me a youtube link i'll show you i have a still picture i'll show you that at least um just a tweet or or blue sky or mastodon or is there a generic term for social mediaing so so that we can... No? Do we still say tweet? Oh, wow. I showed my screen and the audio got weird. It's fine on my end. But you can see here there's one star that's denser and more massive. And then there's the other one that has a stream of material going out from it. And then you see in the bottom one here, that shows the size of the entire grid.
+我在某处有一个很棒的视频，专门针对我们所做的模拟，但如果它们在线，事后做些挖掘，给我发一个 YouTube 链接，我会展示我有一张静态图片，我会展示那个，至少，只是推特或 Blue Sky 或 Mastodon，或者社交媒体有没有通用的术语？所以我们可以……没有？我们还说推特吗？哦，哇。我展示了我的屏幕，音频变得很奇怪。在我这边没问题。但你可以看到这里有一颗恒星更致密、质量更大。然后另一颗有一股物质流从它那里流出。然后你看到下面的这个，它显示了整个网格的大小。
+
+20
+00:13:10.000 --> 00:13:44.000
+And then those two stars are just in the center. So they're pretty small relative to the size of the grid. And then you can see these more and more refined grids surrounding the stars here on the left. Take my word for it, listener. It looks cool i will i will find that video um which i'm sure is on one of my other hard drives i will find it later in uh uh uh because it's uh it's pretty cool it's i've actually been looking for it because i wanted to show ramona to get back to the the your original question like 15 or 20 minutes ago which is
+然后那两颗恒星就在中心。所以相对于网格的大小，它们非常小。然后你可以看到这些在左侧围绕恒星的越来越精细的网格。听众朋友们，相信我，它看起来很酷。我会找到那个视频，我敢肯定它在我的一块硬盘上，我稍后会找到它，因为它非常酷。我其实一直在找它，因为我想给 Ramona 看，回到你 15 或 20 分钟前最初的问题，也就是
+
+21
+00:13:44.000 --> 00:14:33.000
+probably in the last episode at this point. So I'll repeat the question in full was, you know, do you use pen and paper? Or that was this author, I think Panos was his name. You know, an algorithm is a thing that you can do by hand. I will say at my very first job, I used to use pen and paper and it was a classic thing. I was literally just talking with my buddy victor um who also worked there uh and has moved on to a different company since then so we were both actuaries and a part of uh actuarial calculations are these things called projections and you are forecasting the financial and mortality future if you will of of groups of people. And you typically will have like adverse scenarios that are like a projection off of a projection. And then you have to compare like you have to hold money in the form of what they call
+可能在上一集里了。所以我完整地重复一下这个问题，就是，你使用纸笔吗？或者那是这位作者，我想他叫 Panos。你知道，算法是可以手工完成的事情。我会说在我第一份工作时，我确实使用纸笔，那是一件经典的事情。我当时正和我的伙伴 Victor 聊天，他也曾在那里工作，后来跳槽到了另一家公司。所以我们俩都是精算师，精算计算的一部分是所谓的预测，如果你愿意的话，你是在预测人群的财务和死亡率未来。你通常会有不利情景，就像预测的预测。然后你必须比较，比如你必须以所谓的
+
+22
+00:14:33.000 --> 00:15:03.000
+reserves or capital in order for if some adverse situation happens that you've got the money on your books to pay out these insurance claims. And that you would do by hand all the time because you'd have, you know, different mortality rates. You'd have this sort of one line, which is your main projection. And then you'd have these kind of adverse scenarios at the five, the seven, the 10. And then those would have like different mortality. Anyway, so you do that stuff all the time to try and visualize this complex calculation.
+储备金或资本的形式持有资金，以便如果发生某些不利情况，你的账上有钱来支付这些保险索赔。你一直都是手工做这些，因为你有不同的死亡率。你会有一条线，这是你的主要预测。然后你会有这些在 5、7、10 年的不利情景。然后那些会有不同的死亡率。总之，你一直都在做这些事情，试图可视化这种复杂的计算。
+
+23
+00:15:03.000 --> 00:15:24.000
+So when it comes to stuff like that, that is a lot going on, it's not so much describing the algorithm, but it's more describing like a visualization of a calculation, if you will. That stuff I definitely think is super useful, but I'm not sure the last time when I actually pen and paper worked through
+所以当涉及到这类事情时，有很多事情要做，与其说是在描述算法，不如说是在描述计算的可视化，如果你愿意的话。那些东西我绝对认为超级有用，但我不太确定我上次真正用纸笔推导
+
+24
+00:15:24.000 --> 00:15:58.000
+like a generic algorithm. I don't know. Maybe we're breaking Sean Parent's heart right now because it's like a – although I'm sure he just sits there like a monk and does it in his head. I don't know. Well, I'm sure we'll get a message from Sean clarifying whether or not he actually uses pen and paper um i i think maybe part of the reason why i do it is i as much as i i hate to admit it i do actually have a college degree and that college degree is in applied math and i i've said i think a few times maybe even on this podcast that
+一个通用算法是什么时候。我不知道。也许我们现在伤了 Sean Parent 的心，因为这就像一个——尽管我敢肯定他就像个僧侣一样坐在那里，在脑子里完成它。我不知道。好吧，我相信我们会收到 Sean 的消息，澄清他是否真的使用纸笔。我想也许我这样做的部分原因是我，尽管我不愿承认，我确实有一个大学学位，那个学位是应用数学。而且我说了，我想几次，也许甚至在这个播客上，
+
+25
+00:15:58.000 --> 00:16:48.000
+um i feel like the one thing that i really took away from my math education that I use with some regularity is proofs, going through and constructing a proof. And actually, sad story, I had this professor who was teaching our class on proofs and logic. And he's a great professor. And he actually, he died very suddenly of a heart attack in the middle of the semester. And I remember I walked into class and, you know, I was me. So, I was always late for class. And I walked into class and he wasn't there. There was some other professor there. And I just assumed, oh, I've come into the wrong class. And so, I very quickly exited and started walking down the hall.
+我觉得我从数学教育中真正学到并经常使用的一件事是证明，经历并构建一个证明。而且实际上，一个悲伤的故事，我有一位教授教我们证明和逻辑课。他是一位伟大的教授。他实际上在学期中途突然死于心脏病发作。我记得我走进教室，你知道，我就是我。所以我总是迟到。我走进教室，他不在。那里有另一位教授。我只是以为，哦，我走错教室了。所以我很快退了出来，开始沿着走廊走。
+
+26
+00:16:48.000 --> 00:17:46.000
+And then somebody ran out of the classroom. And they were like, no, no, no, come in, like something's happened. And they told me that unfortunately, our professor had been out for a run and I just had a heart attack. And it was very sad, but he was an amazing professor. And I feel like maybe one of the reasons why I go and write stuff out by hand is that like, I'm just going through like the process, like of coming up with a proof to prove to myself that this algorithm is going to work. And, you know, when I'm when you're constructing a like an inductive proof, you start off with like the zero case and then the one case and then the two case. And I and I think that's maybe why I start off with looking at like, you know, some, you know, one small problem. And then I look at another small problem, et cetera, et cetera. Yeah, I definitely don't have that background.
+然后有人从教室里跑出来。他们说，不，不，不，进来，发生了什么事。他们告诉我，不幸的是，我们的教授出去跑步时心脏病发作了。这非常令人难过，但他是一位了不起的教授。我觉得也许我手工写东西的原因之一是，我只是在经历这个过程，比如想出一个证明来向自己证明这个算法是有效的。而且，当你构建一个归纳证明时，你从零情况开始，然后是一情况，然后是二情况。我想这就是为什么我从查看一些小问题开始。然后我查看另一个小问题，等等，等等。是的，我绝对没有那个背景。
+
+27
+00:17:46.000 --> 00:18:11.000
+I mean, I took a discrete mathematics course, but I wasn't paying attention too closely. And I also had the thought too, that you know the reason I don't use pen and paper? It's because I have APL. That is basically like not the inductive proof thing you just described, but like I can go and visually explore some algorithm or some solution in a REPL.
+我的意思是，我修过一门离散数学课程，但我没有太注意。而且我也想到，你知道我不使用纸笔的原因吗？是因为我有 APL。这基本上不像你刚才描述的那种归纳证明，而是我可以去 REPL 中直观地探索某种算法或解决方案。
+
+28
+00:18:11.000 --> 00:18:57.000
+And you actually can do this with like Haskell as well. Like with a REPL, it's like the digital equivalent of like pen and paper. You can see step by step every single time you add some operation to some expression like literally yesterday i was presenting and i was showing solutions to that sushi for two problem uh that i presented in like 2023 at c++ on c and maybe one other conference and i do it in the ripple and it's like i'm showing you that when you chunk by it result like you can see it visually like you are permuting and changing an input and you can see it at every step so that is kind of convincing yourself like okay i do this next thing i expect this okay it happens i do this next thing oh right there's a corner case there
+你实际上也可以用 Haskell 做同样的事情。就像使用 REPL 一样，它相当于纸笔的数字版本。你可以看到每当你向表达式添加操作时，每一步的变化。就在昨天，我还在做演示，展示我在 2023 年 C++ on C 以及其他会议上介绍过的“寿司二人组”问题的解决方案。我是在 REPL 中完成的。我向你展示了当你按结果进行分块时，你可以直观地看到它。就像你在置换和改变输入，你可以在每一步看到它。所以这是一种说服自己的方式，比如，好的，我做下一步，我期待这个，好的，它发生了。我做下一步，哦，对了，那里有一个边界情况。
+
+29
+00:18:57.000 --> 00:19:47.000
+uh when you have whatever so i'm not sure like how often do you spend time in a repl i'm guessing python's the only language that you really use actively that has a repl like do you spend time in a REPL? I'm guessing Python is the only language that you really use actively that has a REPL. Do you spend any time in it? Yeah, I do. I think my way of learning is by doing and experimenting. I'm very unlikely to go and read the the documentation learn how something works i'm much more likely to go and pop into you know for c++ godbolt for python just into the repl to just play around with something and and learn how it works uh through example through doing so i i do do that fairly frequently i feel like i do it for c++ too and the c++ equivalent of a repl is just going to godbolt yes that is as
+当你有什么的时候，所以我不太确定你多久花时间在 REPL 中。我猜 Python 是你真正积极使用的唯一有 REPL 的语言。你花时间在 REPL 中吗？我猜 Python 是你真正积极使用的唯一有 REPL 的语言。你花时间在里面吗？是的，我花。我认为我的学习方式是通过实践和实验。我不太可能去阅读文档，学习某样东西是如何工作的，我更有可能去跳进，你知道，对于 C++ 是 Godbolt，对于 Python 只是进入 REPL，去玩弄某样东西，并通过例子、通过实践来学习它是如何工作的。所以我确实相当频繁地这样做。我觉得我也为 C++ 这样做，而 C++ 的 REPL 等价物就是去 Godbolt。是的，那是
+
+30
+00:19:47.000 --> 00:20:21.000
+close as you will ever get to the repl feedback uh when compared to languages like apl python haskell yeah it's etc i did i did just find the video i will show you the video all right here we go folks maybe i'll cut'll cut in the audio if I have the energy, which sometimes I do. I don't think there is audio from the video. All right, folks. I will not be cutting in the audio. Let me see if I can make it a little bigger. We're in PowerPoint.
+你所能得到的最接近 REPL 反馈的东西，与 APL、Python、Haskell 等语言相比。我确实刚刚找到了那个视频，我会给你看那个视频。好的，我们开始吧，伙计们。也许如果我有精力的话，我会剪辑音频，有时我有。我不认为视频里有音频。好的，伙计们。我不会剪辑音频。让我看看能不能把它弄大一点。我们在 PowerPoint 里。
+
+31
+00:20:21.000 --> 00:20:46.000
+Here. We've got some blue with two dots. Oh, PowerPoint's gone. I can just share my entire screen. It would be cool if I ever changed the thumbnails for ADSP the podcast. I would definitely put this as the thumbnail. But it's been 218, 19 episodes, and I've never changed the thumbnail once, and I'm not about to start now.
+这里。我们有一些带两个点的蓝色。哦，PowerPoint 没了。我可以只分享我的整个屏幕。如果我曾经为 ADSP 播客更改缩略图，那会很酷。我肯定会把它作为缩略图。但已经 218、19 期了，我从来没改过缩略图，而且我现在也不打算开始改。
+
+32
+00:20:46.000 --> 00:21:09.000
+All right, here we go. We're hitting the play button. So the grid here is rotating, but- It's a rotate. That's a rotate, folks. Holy smokes. So the stars are actually rotating around each other incredibly fast. Like, white dwarf stars are rotating around each other at, like, you know, a few times a second in some
+好的，我们开始吧。我们点击播放按钮。所以这里的网格在旋转，但是——这是一个旋转。伙计们，这是一个旋转。天哪。所以恒星实际上在以极快的速度围绕彼此旋转。比如，白矮星在某些情况下每秒围绕彼此旋转几次。
+
+33
+00:21:09.000 --> 00:22:27.000
+cases. So, these things are, these are giant stars that are spinning around each other very quickly, but we rotate the grid with the stars. So, they appear to be rotating very slowly here because the frame of reference is rotating. And you can see here, it's now zoomed in, you can actually see the grids. And you can see that one of the things that we do with the adaptive mesh refinement for these types of simulations is we add and remove refinement as needed. So, you can see as these stars move, those little grids were, you know, finer grids were appearing and disappearing, tracking the stars as they move around this grid here. And now you can see that there's much coarser resolution towards the edges of the grid where you've just got some stellar matter and not the stars themselves. And the reason that you study these things is that these are one of the possible progenitors of type 1a supernovae, type 2a supernovae, some type of supernovae, which are used to measure stellar distances.
+所以，这些东西是巨大的恒星，它们在快速地围绕彼此旋转，但我们让网格随恒星一起旋转。所以它们在这里看起来旋转得很慢，因为参考系在旋转。你可以看到这里，现在放大了，你实际上可以看到网格。你可以看到我们对这些类型的模拟所做的自适应网格细化的一件事是，我们根据需要添加和删除细化。所以你可以看到当这些恒星移动时，那些小网格，你知道，更精细的网格在出现和消失，跟踪着恒星在网格上的移动。现在你可以看到，在网格边缘有更粗糙的分辨率，那里只有一些恒星物质，而不是恒星本身。你研究这些东西的原因是，它们是 Ia 型超新星、IIa 型超新星、某种超新星的可能祖先之一，这些超新星被用来测量恒星距离。
+
+34
+00:22:27.000 --> 00:22:59.000
+Because we believe that we, oh, there it goes. It just slurped up the star. And you could see as it zoomed in, you could see that towards the edges there was like lower resolution and in the center there was higher resolution. And here's another little visual. It shows you just how those finer grids can track features because they get dynamically added. And so there's two images here. There's one that shows before the accretion stream forms. And there's no fine grid between the two stars.
+因为我们相信我们，哦，它去了。它刚刚吞噬了那颗恒星。当你放大时，你可以看到边缘的分辨率较低，而在中心分辨率较高。这是另一个小视觉效果。它向你展示了那些更精细的网格是如何跟踪特征的，因为它们是动态添加的。这里有两张图片。一张显示了吸积流形成之前。两颗恒星之间没有精细网格。
+
+35
+00:22:59.000 --> 00:23:30.000
+And then there's an image that shows after it forms where you've got these fine grids tracking that stream of material. And that gets added dynamically. And then you remove the resolution dynamically as needed to save computational resources. Anyways, yeah. Pretty cool, folks. questions about the universe because we use this type of supernovae to measure stellar distances because we believe that they put out a fairly
+然后是一张显示它形成之后的图片，你有这些精细网格跟踪那股物质流。这是动态添加的。然后你根据需要动态移除分辨率以节省计算资源。总之，是的。很酷，伙计们。关于宇宙的问题，因为我们使用这种类型的超新星来测量恒星距离，因为我们相信它们在这些类型的超新星爆炸时会释放出相当
+
+36
+00:23:30.000 --> 00:23:47.000
+uniform amount of energy when these type of supernovae explode. And so if you can see, oh, hey, this type of supernovae exploded over here, and we know how bright it appears to be relative to us us then we can
+均匀的能量。所以如果你能看到，哦，嘿，这种类型的超新星在这里爆炸了，我们知道它相对于我们看起来有多亮，那么我们就可以
+
+37
+00:23:47.000 --> 00:25:10.000
+measure roughly how far away that thing was um and so it's measuring events like this that were we were able to determine that oh hey the universe is expanding so anyways um this is uh what do you call it cosmology 101 201 maybe? Maybe 401 with Bryce Lelbeck? And the reason we would want to simulate these things is that if we use these things to measure stellar distances and to understand our universe, we want to make sure that we have a good understanding of their dynamics and whether they actually are standard candles and what actually causes these type of supernovae to occur. The theory is, so, white dwarfs are very, very dense. And once a white dwarf goes above a certain mass, which is called the Chandrasekhar limit, then there's literally no space for any more stuff in the center of it. And then it just reaches a point where if any more stuff gets pulled into it by gravitational forces, it's just going to explode because of the radiation forces and simply the lack of any space left in the core of this very, very dense thing.
+大致测量那个东西有多远。所以正是测量这样的事件，我们才能够确定，哦，嘿，宇宙正在膨胀。所以总之，这是，你叫它什么，宇宙学 101，201 也许？也许是 Bryce Lelbeck 的 401？我们想要模拟这些东西的原因是，如果我们使用这些东西来测量恒星距离并了解我们的宇宙，我们想确保我们对它们的动力学有很好的理解，以及它们是否真的是标准烛光，以及到底是什么导致了这些类型的超新星发生。理论是，白矮星非常非常致密。一旦白矮星超过某个质量，这被称为钱德拉塞卡极限，那么它的中心就真的没有空间容纳任何更多的东西了。然后它就到了一个点，如果引力拉入更多的东西，它就会因为辐射力以及这个非常非常致密的物体核心中缺乏任何剩余空间而爆炸。
+
+38
+00:25:10.000 --> 00:25:32.000
+It's like, you know, this thing is like essentially imagine there's no space between the atoms. It's all just completely compacted, but more stuff keeps coming in because of gravity. And so at some point something has to give. And then the theory is it goes boom. There's the cold open right there. And then it goes boom there's the cold open right there and then it goes boom but um one other thing i wanted to talk to you about from this book um so i was gonna say
+就像，你知道，这个东西本质上就像想象原子之间没有空间。它完全被压缩了，但由于引力，更多的东西不断涌入。所以在某个时刻，总会有东西支撑不住。然后理论上它就会砰地一声炸开。这就是开场白了。然后它就砰地一声，这就是开场白了，然后它就砰地一声。但是，关于这本书，我还想和你谈谈另一件事，所以我要说
+
+39
+00:25:32.000 --> 00:25:55.000
+we've got like i think it's five minutes till we hit the hour mark which would be a good two part we'll call i don't know what we'll call it algorithms panos algorithms one two or airport algorithm book we'll cut we'll algorithm book we'll come up with something catchy so what's the put a bow on this with the last thing or one of the other things that you wanted to chat about that's worth highlighting so
+我们还有，我想是五分钟就到一小时了，这将是一个很好的两部分，我们叫它，我不知道我们叫它什么，算法 Panos 算法一、二或机场算法书，我们会想出一个吸引人的名字。所以，用你想要聊的最后一件事或其中一件事来总结一下，值得强调的。
+
+40
+00:25:55.000 --> 00:26:18.000
+well I had a whole new another topic a whole new topic end of episode 219 start of episode 219. Start of episode 220. Be sure to check these show notes either in your podcast app or at ADSP the podcast dot com for links to anything we mentioned in today's episode, as well as a link to a get up discussion where you can leave thoughts, comments and questions. Thanks for listening.
+好吧，我有一个全新的话题，一个全新的话题。第 219 期结束，第 219 期开始。第 220 期开始。请务必在你的播客应用程序或 ADSP the podcast dot com 上查看这些节目说明，获取我们今天节目中提到的任何内容的链接，以及一个 GitHub 讨论的链接，你可以在那里留下想法、评论和问题。感谢收听。
+
+41
+00:26:18.000 --> 00:26:23.000
+We hope you enjoyed and have a great day. Low quality, high quantity. That is the tagline of our podcast. That's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+我们希望你喜欢，祝你有美好的一天。低质量，高数量。这就是我们播客的标语。那不是标语。我们的标语是带有信息点缀的混乱。这一集还没有评论。点击转录中的任何句子来留下评论。

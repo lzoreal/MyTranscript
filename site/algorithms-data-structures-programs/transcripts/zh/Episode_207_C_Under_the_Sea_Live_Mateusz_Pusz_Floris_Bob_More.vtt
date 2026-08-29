@@ -1,0 +1,341 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:55.000
+So I was commenting earlier that I've noticed a trend that it seems that at every conference you are the person assigned to be my handler. I'm not assigned. I've just decided that that's the best way to give you a check. Because in your own words you need like princess treatment. welcome to adsp the podcast episode 207 recorded on october 11th 2024 my name is connor and today with my co-host bryce we record live from c++ under the c for the final time in this episode we chat with multiple attendees and speakers from the conference, including Mateusz, Imbal, Floris, Bob, and Jonathan. The subject of your talk has been brought up,
+我之前提到过，我注意到一个趋势，似乎在每次会议上，你都是被指派来担任我“负责人”的那个人。我没有被指派。我只是觉得这是给你发工资的最佳方式。因为用你自己的话来说，你需要像公主一样的待遇。欢迎收听 ADSP 播客第 207 期，录制于 2024 年 10 月 11 日。我是 Connor，今天我和我的联合主持人 Bryce 在 C++ under the Sea 会议现场进行最后一次录制。在本期节目中，我们与会议的多位参会者和演讲者进行了交流，包括 Mateusz、Imbal、Floris、Bob 和 Jonathan。你的演讲主题已经被提到了，
+
+2
+00:00:55.000 --> 00:01:28.000
+and I have some fun things to mention about your talk that you should give a brief overview of what your talk is about. All right, the title was a bit cryptic. It was called Arrays, Fusion, and CPUs versus GPUs as I yank the cord out of my headphones. It covered a simple problem, which basically boils down to a map reduce. And I covered it, I don't know, six different ways, eight different ways in C++, a bunch of just through the for loop to algorithms to views,
+关于你的演讲，我有一些有趣的事情要提，你应该先简要概述一下你的演讲内容。好的，标题有点晦涩。它叫《数组、融合以及 CPU 与 GPU》，当时我正把耳机线拔掉。它涵盖了一个简单的问题，基本上归结为 MapReduce。我用 C++ 以六种、八种不同的方式涵盖了它，从简单的 for 循环到算法，再到视图，
+
+3
+00:01:28.000 --> 00:01:59.000
+and then I did a range V3 one, I did a flux one, I did three different GPU ones, CUPEI, MVC++, and Thrust with MVCC. I also showed Rust and Swift, and then had some benchmarks at the end that the conclusion was flux was the fastest, and GPUs are really good after a certain point. And yeah, Bryce has got some updates from people that know about stuff. Well, and what was the, when you showed us that benchmark graph, what was the major takeaway that
+然后我做了一个 Range V3 版本，一个 Flux 版本，还有三个不同的 GPU 版本：CuPy、MVC++ 和带有 MVCC 的 Thrust。我还展示了 Rust 和 Swift，最后给出了一些基准测试，结论是 Flux 最快，而且 GPU 在达到一定程度后表现非常好。是的，Bryce 从了解相关情况的人那里得到了一些更新。那么，当你向我们展示那个基准测试图表时，你希望我们看到的主要结论是什么？
+
+4
+00:01:59.000 --> 00:02:39.000
+you wanted us to see? Oh yeah, the major takeaway is that regardless of language, almost 100% of the time when you have a fusion, meaning that you are iterating a single time over your sequence or your data or you're generated, in this case it was an IOTA sequence, that is the fastest. Whether you're in Rust or C++ or Python versus any kind of, and this is one of my quants, if you will, with array languages, not just the array languages I like, APL, BQN, et cetera, but also with libraries like NumPy and Kupy, that any time you do a simple operation of plus one to an array, you're immediately,
+哦，是的，主要的结论是，无论使用什么语言，几乎 100% 的情况下，当你进行融合（Fusion）时，即你对序列、数据或生成器（在本例中是 IOTA 序列）进行单次迭代，那才是最快的。无论你是在 Rust、C++ 还是 Python 中，这都是我对于数组语言的一个不满之处，不仅仅是我喜欢的 APL、BQN 等数组语言，还有像 NumPy 和 CuPy 这样的库，任何时候你对数组进行简单的加一操作，你都会立即，
+
+5
+00:02:39.000 --> 00:02:58.000
+one, iterating across that data again, but then two, a lot of the time doing some separate allocation, which is, I know that there are, like I think technically in WeWa, for simple things, they are able to detect that you don't have multiple references to the same sequence, and they will do an in-place mutation. But in general speaking, when you do a plus one to a numpy array,
+第一，再次遍历该数据，第二，很多时候会进行单独的内存分配。我知道，我想在 WeWa 中，对于简单的事情，它们在技术上能够检测到你没有对同一个序列的多个引用，并且它们会进行原地修改。但总的来说，当你对一个 NumPy 数组进行加一时，
+
+6
+00:02:58.000 --> 00:03:13.000
+you end up with a new array. They're not doing that in place. And so it just ends up being not very performant, and that's the main takeaway. Well, one of the things that Connor pointed out during his talk was that KubePy by default does not do fusion
+你最终会得到一个新数组。它们不是原地执行的。所以它最终的性能并不高，这就是主要的结论。嗯，Connor 在演讲中指出的其中一点是，CuPy 默认情况下不进行融合，
+
+7
+00:03:13.000 --> 00:03:36.000
+and the results that we saw for KubePy were not as good as I would have liked because recently I've been working on Python stuff at NVIDIA. My new mandate is to make Python super fast, super feature complete. And yeah, so after Connor's talk, I made some calls.
+我们看到的 CuPy 结果并不像我希望的那样好，因为最近我一直在 NVIDIA 从事 Python 相关的工作。我的新任务是让 Python 变得超级快、功能超级完备。所以，在 Connor 的演讲之后，我打了一些电话。
+
+8
+00:03:36.000 --> 00:03:55.000
+I phoned up headquarters. I got our best people. I was like, hey, what's the deal? How do we do Fusion in KooPi? What are the options if you want to fuse together NumPy operations? I just asked that as a general question, aside from GPU stuff, but then also specifically in KooPi.
+我给总部打了电话。我找了我们最优秀的人。我说，嘿，这是怎么回事？如果我们想融合 NumPy 操作，在 CuPy 中该怎么做？有哪些选择？我只是把它作为一个一般性问题提出来，撇开 GPU 的东西不谈，但也特别针对 CuPy。
+
+9
+00:03:55.000 --> 00:04:13.000
+And it turns out there is a way to do this sort of fusion in KooPi. There's a decorator called KooPiFuse, but it is a little bit limited. And we did try it by we. I mean, the colleague I contacted. We, not me at all. Some other person.
+结果发现，在 CuPy 中确实有一种方法可以进行这种融合。有一个叫 CuPyFuse 的装饰器，但它有点局限性。我们确实尝试过——我说的“我们”是指我联系的那位同事。是我们，根本不是我。是另一个人。
+
+10
+00:04:13.000 --> 00:04:36.000
+We did try it. We meaning not Bryce. The individual that he contacted on Slack went and tried it. So it's not a we, it's a he. Yes. And he tried it and did not see much of a performance difference we think that there may have been uh uh you know some sort of bug in the lowering he i i'm getting a slack message every like two to three minutes he's running benchmarks he's investigating i'm sure
+我们尝试了。我们是指不是 Bryce 的那个人。他在 Slack 上联系的那个人去尝试了。所以这不是“我们”，而是“他”。是的，他尝试了，但没有看到太大的性能差异。我们认为在降低（lowering）过程中可能存在某种 bug。我每两三分钟就会收到一条 Slack 消息，他正在运行基准测试，他正在调查，我相信
+
+11
+00:04:36.000 --> 00:05:17.000
+by the time this podcast is done recording there will be there will be either we'll know the reason or there will be commits landed that'll fix it. But my other colleague mentioned some other options for fusing NumPy array operations in Python. So first of all, he mentioned that Numba, which is a Python JIT compiler, has a parallel accelerator, which you might be able to use for this. Although he says, I don't recommend it. And there's also another thing which, oh, I'm going to have to check whether that's an internal only thing or not, because it's some sort of Envy research thing. But it sounds like it could be cool. But anyways, it sounds like there may be some options out there
+在这个播客录制完成时，要么我们会知道原因，要么会有修复它的提交。但我的另一位同事提到了在 Python 中融合 NumPy 数组操作的其他选项。首先，他提到 Numba（一个 Python JIT 编译器）有一个并行加速器，你也许可以用它来做这件事。虽然他说，我不推荐它。还有另一件事，哦，我得检查一下那是否只是内部使用的东西，因为它似乎是某种 NVIDIA 研究项目。但听起来可能很酷。总之，听起来可能有一些选项
+
+12
+00:05:17.000 --> 00:06:17.000
+for fusing together NumPy array operations into faster code. And of course, the sort of the most common way is that you can write NumPy Ufunks or universal functions, which is like a function that operates on either scalars or lower order vectors. And then you can apply it to NumPy arrays and it will use NumPy arrays, and it will use NumPy broadcasting rules to apply that function element-wise. And that is sort of the most common pattern for doing this. Now, of course, that pattern, I think, is not what you or I would like to see, because what we would like to see is to be able to compose together array operations, not to have to write a scalar function that gets applied. Yes. Anything that involves me hand-rolling some code that can manually replicate what I did is neat, but not interesting because I didn't highlight it in the talk, but all of the code
+可以将 NumPy 数组操作融合为更快的代码。当然，最常见的方法是编写 NumPy Ufuncs（通用函数），这是一种对标量或低阶向量进行操作的函数。然后你可以将其应用于 NumPy 数组，它会使用 NumPy 的广播规则逐元素应用该函数。这算是最常见的模式。当然，这种模式我认为不是你或我想要看到的，因为我们想要看到的是能够组合数组操作，而不是不得不编写一个被应用的标量函数。是的。任何涉及我手工编写代码来手动复制我所做的事情的东西都很整洁，但并不有趣，因为我在演讲中没有强调它，但所有的代码
+
+13
+00:06:17.000 --> 00:06:38.000
+is a basically translation of generated code. And so anything that involves like hooking into some bespoke thing that I can hand roll for this one thing does not scale for my purposes. And Bryce now has a response. There's another major reason why something like ufunks, like
+基本上都是生成代码的翻译。所以任何涉及挂钩到某种我可以为这一件事手工制作的定制东西，对于我的目的来说都无法扩展。Bryce 现在有回应了。还有另一个主要原因，为什么像 ufuncs 这样的东西，比如
+
+14
+00:06:38.000 --> 00:06:58.000
+in numpy.vectorize, is not something that we like. And that is because of parallelism. Let's say that you want to write a map reduce with NumPy. Well, how do you do it without having a temporary array? You literally asked me this the other day on Slack. And then I was like, you don't. It's not a thing.
+numpy.vectorize，不是我们喜欢的东西。那就是因为并行性。假设你想用 NumPy 编写一个 MapReduce。好吧，你怎么在没有临时数组的情况下做到这一点？你前几天在 Slack 上确实问过我这个问题。然后我说，你做不到。这不是一回事。
+
+15
+00:06:58.000 --> 00:07:21.000
+And one of the reasons why it's not a thing is because typically the folks who are using NumPy historically aren't thinking parallel. You're just writing in Python. You're not thinking about how do I go and run this on my GPU. And in that case, okay, I need to do, like, you know, a transform, reduce. I don't want a temporary. Well, then I can write a ufunc that does the reduction within it.
+它不是一回事的原因之一是，通常历史上使用 NumPy 的人并没有考虑并行。你只是在用 Python 编写代码。你没有考虑我该如何去在 GPU 上运行它。在这种情况下，好吧，我需要做一个，你知道，转换、归约（transform-reduce）。我不想要临时变量。好吧，那么我可以编写一个在内部进行归约的 ufunc。
+
+16
+00:07:21.000 --> 00:07:59.000
+And that's not something that we would even consider as an option because when you do that reduction in single thread, yeah, it's pretty straightforward. You just have an accumulator variable. But when you're doing that reduction or a scan or something similar to that in parallel, you need some sort of parallel algorithm primitive to do it because otherwise you're going to have to write the parallel reduction yourself and you're not going to do a better job than the high-performance algorithm. And so we've talked about this before, where the thinking in terms of array operations and array programming languages are particularly well-suited to parallelism.
+那甚至不是我们会考虑的选项，因为当你以单线程进行那种归约时，是的，它非常简单。你只需要一个累加器变量。但当你并行进行那种归约或扫描或类似的事情时，你需要某种并行算法原语来完成它，否则你将不得不自己编写并行归约，而且你不会做得比高性能算法更好。所以我们之前讨论过这个问题，即在数组操作和数组编程语言方面的思考特别适合并行性。
+
+17
+00:07:59.000 --> 00:08:28.000
+I agree with everything that was just said. I have an obligation that Connor and I failed to fulfill, which is that we should have put a mention in our slide deck to go to NVIDIA's partner's booth at the conference, which is this company MDCS.ai. We were asked to put a slide in, but we had some issues accessing the slide template. But anyways, they've got a booth here,
+我同意刚才所说的一切。我有一个 Connor 和我没有履行的义务，那就是我们应该在幻灯片中提到去会议上 NVIDIA 合作伙伴的展位，也就是这家公司 MDCS.ai。我们被要求放一张幻灯片，但我们在访问幻灯片模板时遇到了一些问题。但无论如何，他们在这里有一个展位，
+
+18
+00:08:28.000 --> 00:09:02.000
+which probably is not applicable to people listening to the podcast. However, you can go to MDCS.ai, and they have free learning sessions on various NVIDIA content, AI things, maybe some CUDA things. Anyways, you can go check it out. if Connor lets this get into the podcast, which we don't usually do sponsored stuff, so we'll probably cut it. But I do feel a little guilty that we did not do what we were supposed to do. Anyways, Inval, say something.
+这可能对听播客的人不适用。不过，你可以去 MDCS.ai，他们有关于各种 NVIDIA 内容、AI 知识、也许还有一些 CUDA 知识的免费学习课程。总之，你可以去看看。如果 Connor 让这段内容进入播客的话——我们通常不做赞助内容，所以我们可能会剪掉它。但我确实感到有点内疚，因为我们没有做我们应该做的事情。总之，Inval，说点什么吧。
+
+19
+00:09:02.000 --> 00:09:30.000
+Oh, Connor, I felt so bad that we didn't put this into our slides that I put a plug in for the thing. Listen, folks, I don't feel bad. Here's why. I have abandoned Windows because I'm tired of getting automatic installations. And it's just, I'll shut down my computer when I want to shut down my computer. And if that's in two years, that's what's going to happen. And so now I'm on Linux.
+哦，Connor，我感到非常糟糕，我们没有把这个放进我们的幻灯片里，所以我为这件事做了个广告。听着，伙计们，我不觉得糟糕。原因如下：我已经放弃了 Windows，因为我厌倦了自动安装。我会在我想关机的时候关机。如果那是两年后，那就会是那样。所以现在我用 Linux。
+
+20
+00:09:30.000 --> 00:09:46.000
+I'll wrap this story up because it's a bit of a long one. And that means I no longer have access to PowerPoint. Don't tell me about Wine. I don't want to have to download some third-party software in order to run Microsoft as a local client. I don't want a virtual machine. They have Microsoft 365. Similar to Google Slides,
+我会结束这个故事，因为它有点长。这意味着我不再能访问 PowerPoint 了。别跟我提 Wine。我不想为了运行 Microsoft 作为本地客户端而下载一些第三方软件。我也不想要虚拟机。他们有 Microsoft 365。类似于 Google Slides，
+
+21
+00:09:46.000 --> 00:10:04.000
+you can run and display a PowerPoint from the browser. However, NVIDIA's templates for PowerPoint do not work if you are running Microsoft 365 from a Linux OS. And you know what? And the slide that we were asked to put in is using the templates,
+你可以从浏览器运行和显示 PowerPoint。但是，如果你从 Linux 操作系统运行 Microsoft 365，NVIDIA 的 PowerPoint 模板无法工作。你知道吗？我们被要求放的那张幻灯片正在使用这些模板，
+
+22
+00:10:04.000 --> 00:10:30.000
+and I couldn't use the templates. I actually tried to use the template for this talk because it's a kind of an NVIDIA-esque talk. We're talking about GPUs. And so you know what? I'm happy to put the slide in in the future if the great folks at NVIDIA in marketing, in HR, figure out how I can use the template from Linux. You can't tell me as an engineer that I am not able to use the template. And like literally, I've asked the LLMs. You know what they said?
+而我无法使用这些模板。我实际上尝试过为这次演讲使用该模板，因为它是一种 NVIDIA 风格的演讲。我们在谈论 GPU。所以你知道吗？如果 NVIDIA 市场部、人力资源部那些伟大的人能弄清楚我如何从 Linux 使用该模板，我很乐意在未来放上那张幻灯片。你不能作为一个工程师告诉我我不能使用该模板。而且字面上，我问过 LLM。你知道它们说什么吗？
+
+23
+00:10:30.000 --> 00:10:47.000
+You have to download it locally. And then it's like gives me six options of like, you can use Wine, you can use a virtual box, you can use a virtual VM or whatever. And I'm like, I'm not doing that. I'm not doing that, folks. So I just use a plain black. Also, I shouldn't have done black with the Dracula theme.
+你必须在本地下载它。然后它给了我六个选项，比如你可以用 Wine，你可以用 VirtualBox，你可以用虚拟机等等。我说，我不做那个。我不做那个，伙计们。所以我只是用了一个纯黑色的。另外，我不应该用 Dracula 主题做黑色背景。
+
+24
+00:10:47.000 --> 00:11:07.000
+The one piece of feedback, I mean a couple pieces of feedback, but the one that I'll mention, because it was a great conference for first-time organizers. Bryce would have liked some desserts. That's not the one piece of feedback. Although he did get some desserts at the end of the day. But it was the light wash in the second room was pretty bad. I don't think it affected visibility too much,
+有一条反馈，我是说几条反馈，但我会提到这一条，因为对于首次组织者来说这是一次很棒的会议。Bryce 本来想要一些甜点。那不是那条反馈。虽然他在一天结束时确实得到了一些甜点。但第二个房间的灯光漫射（light wash）非常糟糕。我不认为它对可见度影响太大，
+
+25
+00:11:07.000 --> 00:11:40.000
+but definitely there was a couple times I'm 10 feet from the screen and I couldn't see the Rust logo that was there. So I don't know if this is intentional or not, but I am a little bit of a princess, and I have noticed that now at almost every conference I seem to have the same volunteer assigned to me and i don't mean i don't mean that like at the same conference multiple years i mean every conference florist bob seems to be the person assigned to handle me and and this is
+但确实有几次我离屏幕 10 英尺远，却看不见上面的 Rust 标志。所以我不知道这是不是故意的，但我有点像个公主，而且我注意到现在在几乎每次会议上，我似乎都有同一个志愿者被指派给我，我不是说在同一个会议上多年，我是说每次会议。Floris Bob 似乎就是那个被指派来负责我的人，而且这
+
+26
+00:11:40.000 --> 00:12:20.000
+good because i i've given a lot of talks in a lot of different environments, and I've learned some do's and don'ts. One, I never accept having my slides presented from somebody else's laptop or having somebody else change my slides before I present. Because I was at a conference in Japan, and they wanted our slides so they could translate them, and my boss gave a talk before me and he gets up there and he's using their slide deck and i can see he looks confused because they not only translated his slides but they deleted half of his slide notes and the other half of the slide notes were now in japanese and he just found out about it and i was like you know what i'm gonna insist they use
+很好，因为我已经在很多不同的环境中做过很多演讲，我学到了一些该做和不该做的事情。第一，我从不接受让别人用他们的笔记本电脑演示我的幻灯片，或者让别人在我演示之前更改我的幻灯片。因为我在日本参加过一次会议，他们想要我们的幻灯片以便翻译，我的老板在我之前做了一个演讲，他走上去，正在使用他们的幻灯片，我能看出他看起来很困惑，因为他们不仅翻译了他的幻灯片，还删除了他一半的幻灯片备注，而另一半幻灯片备注现在变成了日语，他刚刚发现这件事，我就想，你知道吗，我要坚持让他们使用
+
+27
+00:12:20.000 --> 00:12:50.000
+my laptop but the other thing i've learned over the years because there was one con one talk at cpp con back in the day where i used a questionable syntax highlighting scheme and this is the reason i no longer use syntax highlighting to my slides and it used a dark blue and nobody could read any of my code uh and so i have since learned like you got to be careful with the lighting you got to always like double check before and fortunately i was in a different room than connor where they had shades that you could fortunately, I was in a different room than Connor, where they had shades that you could be close. That was the problem. The room Connor was in, there was no...
+我的笔记本电脑。但我多年来学到的另一件事是，因为在 CPP Con 的某次演讲中，我使用了一种有问题的语法高亮方案，这就是我不再在幻灯片中使用语法高亮的原因，它使用了深蓝色，没有人能读懂我的任何代码。所以我后来学到，你必须小心灯光，你必须总是像之前那样仔细检查。幸运的是，我在一个和 Connor 不同的房间，他们有可以关闭的遮光帘。那是问题所在。Connor 所在的房间，没有……
+
+28
+00:12:50.000 --> 00:13:14.000
+And it was a little tough to read Connor's slides, but Connor's talk was so good that it was worth suffering through. I'm sure they'll fix it for next time. I mean, it's not the first conference I've been to where light wash... I mean, CPP North, the first two years, had LightWash problems as well. Italian C++... I'm not just calling out conferences that have had LightWash problems. Admittedly, it wasn't the Italian C++ folks.
+读 Connor 的幻灯片有点吃力，但 Connor 的演讲太棒了，值得忍受。我相信他们下次会修复它的。我的意思是，这不是我参加过的第一个有灯光漫射问题的会议。我的意思是，CPP North 前两年也有灯光漫射问题。意大利 C++……我不仅仅是在点名那些有灯光漫射问题的会议。诚然，那不是意大利 C++ 的人。
+
+29
+00:13:14.000 --> 00:13:47.000
+They were holding it at a university, and the university classroom roof was broken. So they did have things that could close. They were just broken. So it's not on them. But more concretely, for speakers, first-time speakers, even experienced speakers, I got a bullet list of four things that you should do in your pre-talk checklist. Number one, you got to go up and you got to check the projector and the lighting. You got to go put your slides up. Know what slides are going to demonstrate problems so like a code heavy
+他们在大学里举办，大学教室的屋顶坏了。所以他们确实有可以关闭的东西。只是坏了。所以这不怪他们。但更具体地说，对于演讲者，首次演讲者，甚至是经验丰富的演讲者，我有一个包含四件事的清单，你应该在演讲前的检查清单中完成。第一，你必须上去检查投影仪和灯光。你必须把你的幻灯片放上去。知道哪些幻灯片会显示问题，比如代码密集的
+
+30
+00:13:47.000 --> 00:14:26.000
+slide with a lot of like colors figure out what slide of yours has the smallest text and then go and look from the middle of the room and make sure the text isn't too small the colors in the projector are going to be different so that's number one is check check how your slides look and the lighting of the room. Bullet point number two is the microphone. Before, you know, a couple, not five minutes before the talk, figure out what type of microphone they're going to give you. Are they going to give you a lav mic that's going to clip on to your clothing? If you are, are you wearing clothing where that's going to work or that's going to be problematic?
+幻灯片，有很多颜色。找出你哪张幻灯片文字最小，然后从房间中间看一看，确保文字不会太小。投影仪上的颜色会不同，所以第一点是检查你的幻灯片看起来如何以及房间的灯光。第二点是麦克风。在演讲前，你知道，不是在演讲前五分钟，弄清楚他们要给你什么类型的麦克风。他们会给你一个夹在衣服上的领夹麦克风吗？如果是的话，你穿的衣服能用吗，还是会有问题？
+
+31
+00:14:26.000 --> 00:14:49.000
+Are they going to give you an over-the-ear mic? Me, I'm susceptible to knock those over-the-ear mics over, so I prefer to not have those. Are you going to be given a handheld mic? In which case, if you have a handheld mic, is that going to be an issue for you? Is that something you've got to prepare for? Because what if you need to use your clicker, on the other hand? That's the next thing, which is that you want to check on your clicker. And those were three things.
+他们会给你一个耳挂式麦克风吗？我很容易把那些耳挂式麦克风碰掉，所以我更喜欢不用那些。你会得到一个手持麦克风吗？如果是这样，如果你有一个手持麦克风，那对你来说是个问题吗？那是你需要准备的事情吗？因为如果你需要用另一只手使用翻页笔怎么办？那是下一件事，也就是你想检查你的翻页笔。那是三件事。
+
+32
+00:14:49.000 --> 00:15:09.000
+I had a fourth. I don't know what the fourth was. I don't know what the fourth was. I think maybe the lighting was one and then how your slides show on the projector was probably another. So check the room lighting, check how your slides show on the projector. And part of room lighting is make sure to get comfortable with the lighting in the room.
+我还有第四件。我不知道第四件是什么。我不知道第四件是什么。我想也许灯光是一件，然后你的幻灯片在投影仪上显示如何可能是另一件。所以检查房间灯光，检查你的幻灯片在投影仪上显示如何。房间灯光的一部分是确保适应房间里的灯光。
+
+33
+00:15:09.000 --> 00:15:44.000
+Some venues will have very bright lights on you and that can be intimidating. In other venues where the room's really big, like just being on stage, you might feel a little intimidated. If you go up first and just get a feel for it, You're going to feel better. So lighting, projector, slide clicker, and microphone. Those are the four things you should check before you give your talk. I have nothing to say because I don't do any of that stuff. Oh, and make sure to have water. I mean, water is key. I mean, half that stuff you can't fix.
+有些场地会有非常明亮的灯光照在你身上，这可能会让人感到畏惧。在其他房间很大的场地，比如只是站在舞台上，你可能会感到有点畏惧。如果你先上去感受一下，你会感觉更好。所以灯光、投影仪、幻灯片翻页笔和麦克风。这是你在演讲前应该检查的四件事。我没什么可说的，因为我不做那些事。哦，一定要有水。我的意思是，水是关键。我的意思是，那些事的一半你无法修复。
+
+34
+00:15:44.000 --> 00:16:05.000
+Bryce needs the mic because he needs to talk to Matush, the physical units guy. Over to Bryce. This is going to be a good tie-in for something that was recorded earlier. Matush, how are you doing? Good. Units, C++ 26 or 29? 29, hopefully. Not 26.
+Bryce 需要麦克风，因为他需要和物理单位专家 Matush 谈谈。交给 Bryce。这将是之前录制内容的很好衔接。Matush，你好吗？很好。单位，C++ 26 还是 29？29，希望如此。不是 26。
+
+35
+00:16:05.000 --> 00:16:29.000
+Not 26? Not 26. Not 26? Not 26, not for the units. Okay, everybody's happy. Everybody's in agreement. For the record, I am very less stressed now because I was worried you'd be hoping for 26. But I just want to give people to be aware. Bryce was catching me when I was getting off my talk with a headache
+不是 26？不是 26。不是 26？不是 26，单位不是。好的，大家都很高兴。大家都达成了一致。郑重声明，我现在压力小多了，因为我担心你会希望是 26。但我只是想让大家知道。Bryce 在我演讲结束时抓住我，当时我头痛，
+
+36
+00:16:29.000 --> 00:17:05.000
+because I didn't have enough coffee. But anyway, thank you. I'm very happy with that. But in order to make it 29, we have to start working right now in the committee because this is quite a big subject. So please don't delay this in the committee for too long we will see you in Poland oh my mother says hi why are you having the mic back to me should we go get Flores Bob he's right he was Flores Lob! Alright. Jonathan is
+因为我咖啡喝得不够。但无论如何，谢谢。我对那个结果非常满意。但为了让它成为 29，我们必须现在就在委员会开始工作，因为这是一个相当大的课题。所以请不要在委员会中拖延太久，我们会在波兰见到你。哦，我妈妈问好。你为什么要让我把麦克风还给你？我们应该去叫 Floris Bob 吗？他就在……他是 Floris Bob！好的。Jonathan 正在
+
+37
+00:17:05.000 --> 00:17:22.000
+bringing over Mr. Floris Bob. Now Bryce is physically coercing Floris Bob to be on the podcast. So I was commenting earlier that I've noticed a trend that it seems that at every conference you are the person
+把 Floris Bob 带过来。现在 Bryce 正在强迫 Floris Bob 上播客。所以我之前提到过，我注意到一个趋势，似乎在每次会议上，你都是被指派来担任我
+
+38
+00:17:22.000 --> 00:17:48.000
+assigned to be my handler. I'm not assigned. I've just decided that that's the best way to give you a check. Because in your own words, you need princess treatment. All right, we're here with Flores Bob, a.k.a. Flobo. This is fantastic. I'd ask you to introduce yourself, but I would actually personally just like to hear you comment more about what it's like working with Bryce
+“负责人”的那个人。我没有被指派。我只是觉得这是给你发工资的最佳方式。因为用你自己的话来说，你需要公主待遇。好的，我们现在和 Floris Bob 在一起，也就是 Flobo。这太棒了。我本来想让你自我介绍，但我个人其实更想听你评论一下与 Bryce 合作是什么感觉，
+
+39
+00:17:48.000 --> 00:18:04.000
+on such a personal level because that was great, I'd love to hear more it's really simple make sure there's no light in the room like none at all because he refuses to have any backup like Connor but you know
+在如此私人的层面上，因为那太棒了，我很想听听更多。这真的很简单，确保房间里没有光，一点都没有，因为他拒绝像 Connor 那样有任何备份，但你知道，
+
+40
+00:18:04.000 --> 00:18:25.000
+Bryce is able to enforce people to make the room dark, whereas no one was able to read Connor's code today. So, you know, he demands a certain level of respect. I don't think the mic picked that up, but Bryce said, everything has to be just right. But over to the princess. I'm going to start telling conferences if they want me to come speak that Floris Pop has to be brought to the princess. I'm going to start telling conferences if they want me to come speak that Floris Bob
+Bryce 能够强制人们让房间变暗，而今天没有人能读懂 Connor 的代码。所以，你知道，他要求一定程度的尊重。我不认为麦克风录到了，但 Bryce 说，一切都必须恰到好处。但交给公主吧。我开始告诉会议，如果他们想让我去演讲，Floris Bob 必须被带到公主身边。我开始告诉会议，如果他们想让我去演讲，Floris Bob
+
+41
+00:18:25.000 --> 00:18:52.000
+has to be brought to the conference. You can negotiate my fee as well, right? Yes, and I'll negotiate his fee. So, in more exciting news, thanks to Floris Bob, I was not aware that Breda... Would you say that's a decent pronunciation? Breda. Breda. All right, Breda.
+必须被带到会议现场。你也可以协商我的费用，对吧？是的，我会协商他的费用。所以，在更令人兴奋的消息中，多亏了 Floris Bob，我才知道 Breda……你会说那是一个不错的发音吗？Breda。Breda。好的，Breda。
+
+42
+00:18:52.000 --> 00:19:29.000
+I think what I was saying... Is only 10 kilometers from the border of Belgium. And thanks to this knowledge that I've acquired, I will be running to and from Belgium tomorrow to add a country to my list of countries visited. And I found out, because last night we were walking around, it was myself, Phil Nash, Jason Turner, Matheus, who you just heard from, Mr. Physical Units. Peter Bindel joined us later, so when we bumped into you, he wasn't there.
+我想我刚才说的是……距离比利时边境只有 10 公里。多亏了我获得的这些知识，我明天将跑着往返比利时，以便在我的访问国家列表中增加一个国家。我发现这一点，因为昨晚我们四处走动，当时有我、Phil Nash、Jason Turner、Matheus（你刚才听到的那位物理单位先生）。Peter Bindel 后来加入了我们，所以当我们碰到你时，他不在。
+
+43
+00:19:29.000 --> 00:19:51.000
+And I feel like I'm missing someone, but maybe not. Because I think we had six. No, we had five people, so I think that was everyone. Then you were six, then Peter was seven. And we were just walking, trying to find a place to eat, and we randomly bump into you. And we first met, I want to say, it was at the Cologne potential. It was one of the committee meetings where we first met at.
+我觉得我漏掉了一个人，但也许没有。因为我想我们有六个人。不，我们有五个人，所以我想那是所有人。然后你是第六个，Peter 是第七个。我们只是在走，试图找个地方吃饭，然后随机碰到了你。我们第一次见面，我想说，是在科隆的潜力（Cologne potential）。那是我们第一次见面的委员会会议之一。
+
+44
+00:19:51.000 --> 00:20:08.000
+Maybe it was the Belfast back in... I just went to the Cologne meetup. It's the Cologne one. So it was Cologne 2019. Was that the last time we met? I feel like we met at a conference in between then at some point. Do you recall? CPP on C last year?
+也许是贝尔法斯特，在……我刚去过科隆聚会。是科隆那次。所以是 2019 年的科隆。那是我们最后一次见面吗？我觉得我们在那期间的某个会议上见过面。你记得吗？去年的 CPP on Sea？
+
+45
+00:20:08.000 --> 00:20:24.000
+Yeah, I think CPP on C 2023. Anyway, so we've bumped into each other a couple times. And then randomly, we're going to dinner, and we'd run into you. And it turns out you live here. So tell us what it's like. A conference has come to town, and it's now in your backyard. What was the conference like? You helped volunteer.
+是的，我想是 CPP on Sea 2023。总之，我们碰过几次面。然后随机地，我们要去吃晚饭，就遇到了你。结果你住在这里。所以告诉我们那是什么感觉。一个会议来到了城里，现在就在你的后院。会议怎么样？你帮忙做了志愿者。
+
+46
+00:20:24.000 --> 00:20:46.000
+You had to deal with Bryce. I apologize about that. How was the conference from an individual that lives in the city? It's a conference now in your backyard. I mean, any conference in your backyard is perfect. I just cycled for 15 minutes this morning instead of flying and dealing with jet lag and all that stuff. Yeah, it was great. Honestly, for a first-time conference, I yeah it was great honestly for a first time conference i think it
+你不得不应付 Bryce。对此我表示歉意。对于一个住在这个城市的人来说，会议怎么样？会议现在就在你的后院。我的意思是，任何在你后院举办的会议都是完美的。我今天早上只是骑了 15 分钟自行车，而不是坐飞机和处理时差之类的东西。是的，这很棒。老实说，对于一个首次会议，我……是的，这很棒，老实说，对于一个首次会议，我想它
+
+47
+00:20:46.000 --> 00:21:30.000
+was 270 people today everything ran smoothly yeah it's really impressive i'm just hoping it's going to be like a two-day conference next year i i would imagine i mean i i'm trying to think bryce how many first time conferences have you been to how many first like uh how many inaugural editions of a conference i've've been to CPP North. I think they were roughly 200 people. Well, I was at the first C++ Now, the rebranded ones, not the original BoostCons. That's a smaller conference, though. I was at the first CPPCon because I was one of the organizers. How many people were at the first CPP? I think it was 400 to 500, maybe a little more than that.
+今天有 270 人，一切运行顺利。是的，这真的很令人印象深刻。我只是希望明年它会是一个为期两天的会议。我想象，我的意思是，我在想，Bryce，你参加过多少次首次会议？你参加过多少次……多少次会议的开幕版？我参加过 CPP North。我想大约有 200 人。好吧，我参加过第一届 C++ Now，是更名后的那些，不是最初的 BoostCons。那是一个较小的会议。我参加过第一届 CPPCon，因为我是组织者之一。第一届 CPP 有多少人？我想是 400 到 500 人，也许比那多一点。
+
+48
+00:21:30.000 --> 00:21:49.000
+I remember there was a concern that we were going to only have like 200 and 300 and lose a lot of money, but I think it was 400 to 500. I was at the first CPP North. Not at the first CPP on Sea, I don't think. First one of this. I was at the first CPP on Sea, I don't think. First one of this. I was at the first PyCon Netherlands.
+我记得当时有人担心我们只会只有 200 到 300 人，会亏很多钱，但我认为有 400 到 500 人。我参加过第一届 CPP North。我不认为我参加过第一届 CPP on Sea。第一届这个。我参加过第一届 PyCon Netherlands。
+
+49
+00:21:49.000 --> 00:22:12.000
+I don't know. I don't know about any others. The point being, though, is... So it sounds like probably after CPPCon, this is the largest turnout for an inaugural C++ conference, I think. How many people were here? 270, 275, something like that. How many was C++ conference, I think. How many people were here? 270, 275, something like that. How many was CPP North, though? CPP North was definitely less than 275.
+我不知道。我不知道其他的。但重点是……所以听起来可能在 CPPCon 之后，这是首次 C++ 会议中规模最大的一次，我想。这里有多少人？270，275，差不多那样。CPP North 有多少人？CPP North 肯定少于 275。
+
+50
+00:22:12.000 --> 00:22:30.000
+I think it was, if you include speakers, it was 200 plus or minus. I can't remember the exact number. I was also at the first Core C++, and Enball probably knows how many people were at the first Core C++. I was actually another organizer at that conference. I think it was around 450. Yeah, I think it was a lot, yeah. In 2019.
+我想，如果你算上演讲者，大约是 200 人左右。我不记得确切数字了。我也参加过第一届 Core C++，Enball 可能知道第一届 Core C++ 有多少人。我实际上是那次会议的另一位组织者。我想大约是 450 人。是的，我想很多，是的。在 2019 年。
+
+51
+00:22:30.000 --> 00:22:51.000
+Yeah. I was there just to talk. The point being, though, is if it's number three, CppCon and Core Cpp are two kind of mainstay C++ conferences now that I know CppCon attendees are above a thousand and Core Cpp. I know past editions have I think been upwards of like 800 or something like that. 600. So
+是的。我当时只是去演讲。但重点是，如果它是第三名，CppCon 和 Core Cpp 现在是两个主要的 C++ 会议，我知道 CppCon 的参会者超过一千人，而 Core Cpp。我知道过去的版本我想已经超过了 800 人左右。600。所以
+
+52
+00:22:51.000 --> 00:23:13.000
+the point being is that I think the future is bright for C++ under the sea. And I was talking to Jason about this yesterday is that it seems like, like I was thinking, like there's not really like what is the closest C++ conference geographically is it meeting c++ i don't actually know if c++ on c you're meeting c++ meeting c++ the c++ on c
+重点是，我认为 C++ under the Sea 的未来是光明的。我昨天和 Jason 谈过这件事，似乎，就像我在想，并没有真正像地理上最近的 C++ 会议是什么，是 Meeting C++ 吗？我实际上不知道 C++ on Sea 你是 Meeting C++，Meeting C++，C++ on Sea
+
+53
+00:23:13.000 --> 00:23:52.000
+the point being is that like there are a ton of companies here that were represented on imc asml i mean we heard about glass and carpets there's a ton of companies and uh it sounds like this is kind of like not not an untapped market, but just like there was a meetup, a ton of interest. And without like a ton of marketing or fanfare, a dual track, single day conference, it's done really, really well. I would imagine that this is going to grow out to be more similar to like a meeting C++ or a C++ on C over the next couple of years. Yeah. there's, I think, a couple factors here. One, the Netherlands has a lot of tech, and there's a lot of industrial tech, too,
+重点是，这里有很多公司代表，IMC、ASML，我的意思是，我们听说了 Glass 和 Carpets，有很多公司，而且听起来这有点像不是未开发的市场，而只是像有一个聚会，有大量的兴趣。而且没有大量的营销或大张旗鼓，一个双轨、单日的会议，它做得非常好。我想象这在未来几年会发展得更像 Meeting C++ 或 C++ on Sea。是的。我认为这里有几个因素。第一，荷兰有很多科技，也有很多工业科技，
+
+54
+00:23:52.000 --> 00:24:20.000
+like manufacturing, and a lot of that is in C++, like ASML, all the various companies that manufacture lenses and mirrors and machines and whatnot. But also, geographically, this is a really good location. Relatively easy to get to from the UK. Another big tech hub by both train and by flight. And it's EU, so it's very easy for anyone in the EU to get to.
+比如制造业，其中很多是用 C++ 编写的，比如 ASML，所有制造透镜、镜子和机器等等的各种公司。但从地理位置上看，这也是一个非常好的位置。从英国相对容易到达。另一个大科技中心，无论是乘火车还是乘飞机。而且它是欧盟，所以任何在欧盟的人都很容易到达。
+
+55
+00:24:20.000 --> 00:24:53.000
+Folks from, you know, like France, another big tech hub. Germany, another big tech hub. Germany, another big tech hub, all pretty close, well-situated. And also, if you're coming from the U.S., this is not as long of a flight by a couple hours as going to Mini C++. This is a little bit closer. So, yeah, all in all, I'm not surprised to see this.
+来自，你知道，比如法国，另一个大科技中心的人。德国，另一个大科技中心。德国，另一个大科技中心，都很近，位置很好。而且，如果你从美国来，这比去 Mini C++ 的飞行时间短几个小时。这稍微近一点。所以，总而言之，看到这一点我并不感到惊讶。
+
+56
+00:24:53.000 --> 00:25:18.000
+I also wonder if the decision by the organizers to have some sort of targeted tracks, like they had a GPU and accelerated computing track, I wonder if that sort of attracted more of an audience to have more specific themes for some of their content. I mean, yeah, and speaking of it being in the EU, when you mentioned, oh, it's runnable, I was like, do I need to bring my passport on the run in order to enter Belgium? And your response was... It's Europe.
+我也想知道组织者决定设置一些有针对性的轨道，比如他们有一个 GPU 和加速计算轨道，我不知道这是否吸引了更多的观众，为他们的一些内容设置了更具体的主题。我的意思是，是的，说到它在欧盟，当你提到，哦，它是可跑的，我就想，我需要带护照去跑吗，以便进入比利时？你的回答是……这是欧洲。
+
+57
+00:25:18.000 --> 00:25:35.000
+To which I was like, I know. I know we're in Europe, thank you, but do I need my passport? Completely missing the fact that in Canada, if, if I want to go to America, I definitely need to bring my passport. I don't need to run with my passport tomorrow, folks. And, I mean, we'll find out. Tune in in a couple weeks.
+对此我说，我知道。我知道我们在欧洲，谢谢，但我需要护照吗？完全忽略了在加拿大，如果我想去美国，我绝对需要带护照的事实。伙计们，我明天不需要带着护照跑步。而且，我的意思是，我们会发现的。几周后收听。
+
+58
+00:25:35.000 --> 00:26:02.000
+Maybe I will get into Belgium and they won't let me back in. I don't know. We're trusting force, Bob, here. Tune in. We'll find out what happens. Well, okay, but to be fair, there are, if you force, Bob, here. Tune in. We'll find out what happens. Well, okay. But to be fair, if you're going between two different EU countries in a car, in some cases you've got to have a special sticker. In some cases, if you're renting a car, you have to have a special permission. And sometimes on trains, too, if it's an international train,
+也许我会进入比利时，他们不会让我回来。我不知道。我们在这里信任 Floris Bob。收听吧。我们会发现发生了什么。好吧，但公平地说，如果你在两辆车之间在两个不同的欧盟国家之间行驶，在某些情况下你必须有一个特殊的贴纸。在某些情况下，如果你租车，你必须有特殊的许可。有时在火车上也是，如果是国际火车，
+
+59
+00:26:02.000 --> 00:26:25.000
+you either have to buy a different type of ticket, and in some cases you have to have your passport. So it's not like in the U.S., like if you're driving between two states, you never need to worry about that, like on a rental car or something like that. So his question is not completely unreasonable. I'll let Jonathan. We've got two people from Europe here that have opinions. So technically you need a form of ID every time you cross an EU border
+你要么必须买不同类型的票，在某些情况下你必须有护照。所以这不像在美国，比如如果你在两个州之间开车，你永远不需要担心那个，比如在租车上之类的。所以他的问题并非完全不合理。我会让 Jonathan 说。我们这里有两个来自欧洲的人，他们有意见。所以从技术上讲，每次你越过欧盟边境，你都需要一种身份证件，
+
+60
+00:26:25.000 --> 00:26:50.000
+because there could be border checks. Of course, the German would know all the rules. And of course, what do you have to add? I mean, that's very true. Like Germany recently reintroduced border checks. But if you're just going like 500 meters into Belgium, I think you'll be okay. On second thought, I'm not going to make my comment.
+因为可能会有边境检查。当然，德国人会知道所有的规则。当然，你有什么要补充的吗？我的意思是，那非常正确。比如德国最近重新引入了边境检查。但如果你只是跑进比利时 500 米，我想你会没事的。再想一想，我不会发表我的评论。
+
+61
+00:26:50.000 --> 00:27:19.000
+I don't know. Is that it? Is that a wrap? I mean, this thing was supposed to be over 28 minutes ago. What is our plan for the rest of the night? I assume we're going to have to eat food. Yes, I'm starving, even though I did have that sausage that was... I'm pretty sure... I believe my girlfriend has abandoned me for the evening to go eat at some Michelin star restaurant, which she said was going to be her plan yesterday. So yeah, I think I'm on my own for getting food. All right. Well, it was nice chatting with you,
+我不知道。就这样吗？结束了吗？我的意思是，这东西本应在 28 分钟前结束。我们今晚剩下的计划是什么？我假设我们必须吃东西。是的，我饿死了，尽管我确实吃了那根香肠……我非常确定……我相信我女朋友为了今晚去吃某家米其林星级餐厅已经抛弃了我，她说那是她昨天的计划。所以是的，我想我得自己找吃的。好的。好吧，很高兴和你聊天，
+
+62
+00:27:19.000 --> 00:27:42.000
+Bryce. I guess we'll say goodbye now. I mean, do we need to talk? We were supposed to talk to Jeroen. J-E-R-O-E-N. We met him earlier today. All right. I mean, but if he's still here... He is the individual that commented on Reddit that our podcast was chaos with sprinkles of information. But I do not see him visually.
+Bryce。我想我们现在说再见吧。我的意思是，我们需要谈谈吗？我们本应和 Jeroen 谈谈。J-E-R-O-E-N。我们今天早些时候见过他。好的。我的意思是，但如果他还在……他就是那个在 Reddit 上评论说我们的播客是带有信息碎片的混乱的人。但我没有在视觉上看到他。
+
+63
+00:27:42.000 --> 00:27:58.000
+He might be around somewhere. Do we have anything we want to talk about? I wanted to talk to you about algorithms for counting crimes. But I do not see him visually. He might be around somewhere. Do we have anything we want to talk about? I wanted to talk to you about algorithms for counting primes. But I think both of those are more extended discussions. Yeah. You need to calculate primes. Just go to the J language.
+他可能在某个地方。我们有什么想谈的吗？我想和你谈谈计算素数的算法。但我没有在视觉上看到他。他可能在某个地方。我们有什么想谈的吗？我想和你谈谈计算素数的算法。但我认为这两者都是更深入的讨论。是的。你需要计算素数。直接去 J 语言。
+
+64
+00:27:58.000 --> 00:28:14.000
+P colon, folks. P colon. We'll do. We can do. We can talk about those at a future time. We should go get food because... Connor did not have lunch. And Connor, like, I'm here, oh wait, Connor, how much did you run this morning? It was a light morning.
+P 冒号，伙计们。P 冒号。我们会做的。我们可以做。我们可以在未来谈论那些。我们应该去吃东西，因为……Connor 没吃午饭。而且 Connor，就像，我在这里，哦等等，Connor，你今天早上跑了多少？这是一个轻松的早晨。
+
+65
+00:28:14.000 --> 00:28:35.000
+It was 10K. Okay. Yeah. Connor's running a little bit of a calorie deficit right now. And the only option here is to fill it with beer. So I think we have to go get him food. Yeah, I am, I am a tiny bit hungry right now i was actually i thought about leaving your keynote in ball to go see if there was a vending machine because that's how hungry darcy mcdonald's at 50 meters i mean uh i
+是 10K。好的。是的。Connor 现在有点热量赤字。这里唯一的选择是用啤酒填补它。所以我认为我们必须去给他找吃的。是的，我，我现在确实有点饿，我实际上想过离开你的主题演讲，Inval，去看看有没有自动售货机，因为我饿得……50 米外有麦当劳，我的意思是……我
+
+66
+00:28:35.000 --> 00:29:06.000
+said i thought about leaving but i didn't um i don't think we're going to be going to mcdonald's right now all right i think that's it for c plus plus the Sea. That's one more country and one more conference added to where the great folks of ADS Be The Podcast have recorded. And, yeah, we're going to be going probably into town, probably the same place roughly we went yesterday. We have to find somewhere suitable for Bryce's palate and his princess requirements. Will we be successful?
+说我想过离开，但我没有。我不认为我们现在要去麦当劳。好的，我想 C++ under the Sea 就到这里了。这是 ADS Be The Podcast 的伟大伙计们录制的又一个国家和又一个会议。而且，是的，我们可能会进城，可能和我们昨天去的地方差不多。我们必须为 Bryce 的口味和他的公主要求找到合适的地方。我们会成功吗？
+
+67
+00:29:06.000 --> 00:29:32.000
+Hey, my actual princess is already spending all the money on food tonight. We know that your actual princess is you talking in the third person. We know that for sure. Anyways, till next time, folks. Be sure to check these show notes either in your podcast app or at ADSP the podcast dot com for links to anything we mentioned in today's episode as well as a link to a github discussion where you can leave thoughts comments and questions thanks for listening we hope you enjoyed and have a great day
+嘿，我真正的公主今晚已经把所有的钱都花在食物上了。我们知道你真正的公主是你用第三人称说话。我们肯定知道这一点。总之，下次见，伙计们。一定要在你的播客应用程序或 ADSP the podcast dot com 上查看这些节目说明，获取我们今天节目中提到的任何内容的链接，以及一个 GitHub 讨论的链接，你可以在那里留下想法、评论和问题。感谢收听，我们希望你喜欢，祝你有美好的一天。
+
+68
+00:29:32.000 --> 00:29:37.000
+low quality high quantity that is the tagline of our podcast it's not the tagline our tagline is chaos with sprinkles of information There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+低质量、高数量，这就是我们播客的标语。这不是标语，我们的标语是“带有信息碎片的混乱”。本期节目还没有评论。点击转录中的任何句子来留下评论。

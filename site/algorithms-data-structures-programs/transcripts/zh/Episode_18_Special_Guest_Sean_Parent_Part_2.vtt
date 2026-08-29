@@ -1,0 +1,236 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:06.000
+A lot of the characters in APL were chosen because of how they look visually, and Aniota... Welcome to ADSP The Podcast, episode 18, recorded on March 18th 2021. My name is Connor and today with my co-host Bryce we wrap up part two of our conversation with Sean Parent. Be sure to check out part one before listening to this one. Do you think that C++ should have adopted a destructive move model where the object left behind was not in a valid state but was gone? Ideally, yes. I think now we have kind of a better idea of how that could have been done at the time when move was being defined. Nobody could come up with a way to make it work. You know, one of the
+APL 中的许多字符之所以被选中，是因为它们在视觉上的样子，而 Iota……欢迎收听 ADSP 播客第 18 期，录制于 2021 年 3 月 18 日。我是 Connor，今天我和我的联合主持人 Bryce 一起结束与 Sean Parent 对话的第二部分。在收听本期节目之前，请务必先收听第一部分。你认为 C++ 是否应该采用一种破坏性移动模型，即被留下的对象不再处于有效状态，而是直接消失了？理想情况下，是的。我认为现在我们对当时定义移动语义时可以如何实现这一点有了更好的想法。当时没人能想出一种行之有效的方法。你知道，其中一个
+
+2
+00:01:06.000 --> 00:02:04.000
+problems with it is it changes the strict ordering of destruction rules that we have in C++, which is somewhat problematic. If anybody's used Objective C++, which mostly on Apple platforms, the Objective C language gets used. A lot of people don't know, but if you just stick an extra M on the extension for your file, so you have files that are type.mm instead of just.m, then you get a language called Objective-C++, which is basically all of C++ with the Objective-C constructs added in. And Objective-C in recent versions has a feature called ARC, which is automatic reference counting. So for a while, Objective-C had a garbage collector,
+问题在于它改变了我们在 C++ 中拥有的严格销毁规则，这有点问题。如果有人使用过 Objective C++，它主要在 Apple 平台上使用，Objective C 语言会被用到。很多人不知道，但如果你在文件扩展名后面多加一个 M，也就是文件类型是 .mm 而不是 .m，那么你就会得到一种叫 Objective-C++ 的语言，它基本上就是所有 C++ 加上 Objective-C 的结构。Objective-C 在最近的版本中有一个叫 ARC 的特性，即自动引用计数。所以有一段时间，Objective-C 有一个垃圾回收器，
+
+3
+00:02:04.000 --> 00:03:14.000
+and then Apple kind of backed away from the garbage collector and decided to go with automatic reference counting. So Objective-C objects are, you can think of the the pointer that you get to them as being very similar to a shared pointer, except the language manages the shared pointer as opposed to you managing it manually. But one of the unique features of arc objects is they have more precise lifetime rules than C++ objects would. So if I have an arc object, it is destructed at the end of the last sequence point where it is last used. So that allows for a destructive move of arc types, which saves you additional increment-decrements on your ref counts, and it happens automatically without ever having to put in an explicit move.
+然后 Apple 放弃了垃圾回收器，决定采用自动引用计数。所以 Objective-C 对象，你可以认为你得到的指向它们的指针非常类似于共享指针，只不过是语言在管理这个共享指针，而不是你手动管理它。但 ARC 对象的一个独特之处在于，它们比 C++ 对象具有更精确的生命周期规则。所以如果我有一个 ARC 对象，它会在最后一次使用的序列点结束时被销毁。这允许对 ARC 类型进行破坏性移动，从而为你节省了引用计数上额外的增减操作，而且它是自动发生的，无需显式地放入移动操作。
+
+4
+00:03:14.000 --> 00:04:18.000
+And so one of the biggest problems that we have with C++ is that explicit move is is a is a cast circumventing the type system and that makes the move operation unsafe you know you're ended up you end up with this shell of an object and you have to take care in how you deal with that that object with a with an unspecified value right yeah it's it's it's a odd quirk of the function called stood colon colon move that it does not actually move. It just casts it to a type that then the thing, whatever it gets passed to could move from it. Could move. Right, right, right. And within the language, if you just have an implicit move, then the only thing the language is going to do after the move is destruct it. And so that makes the move safe. But when you circumvent the type system and you cast with stood move, now you've got got an unsafe operation. And there's only a few places in the language where
+所以我们在 C++ 中面临的最大问题之一是，显式移动是一种绕过类型系统的强制转换，这使得移动操作不安全。你知道，你最终会得到一个对象的空壳，你必须小心处理那个具有未指定值的对象，对吧？是的，函数 std::move 有一个奇怪的特性，它实际上并不移动。它只是将其转换为一种类型，然后无论传递给什么东西，都可以从中移动。可以移动。对，对，对。在语言内部，如果你只是进行隐式移动，那么语言在移动后唯一会做的就是销毁它。这使得移动是安全的。但当你绕过类型系统并使用 std::move 进行转换时，现在你就有了不安全的操作。在语言中只有少数几个地方
+
+5
+00:04:18.000 --> 00:05:03.000
+stood move is required, right, to get a move. If you had the rule that you could somehow decorate a type and say this type supports a destructive move, then you could get rid of those cases, and you could just say this thing will automatically move on the last use, or the compiler is allowed to automatically move it on the last use. And that would make those cases safe, because now your object would be out of scope, and you couldn't reference it after that. But it would be a significant change to the language.
+需要 std::move，对吧，才能实现移动。如果你有这样一条规则：你可以以某种方式装饰一个类型并说该类型支持破坏性移动，那么你就可以摆脱这些情况，你可以直接说这个东西会在最后一次使用时自动移动，或者编译器被允许在最后一次使用时自动移动它。这会使这些情况变得安全，因为现在你的对象已经超出了作用域，你无法在那之后引用它。但这将是对语言的重大改变。
+
+6
+00:05:03.000 --> 00:05:25.000
+And it was something that I believe was considered in the original design of Move, but the destructive model, they were not able to work it out in the C++11 era. Yeah, there were a lot of ideas in that time frame. I think post then, I think a number of people have a lot of newer ideas and kind of a newer take on it. One of the best proposals i've seen float
+我相信在 Move 的最初设计中确实考虑过这一点，但破坏性模型在 C++11 时代没能实现。是的，那个时期有很多想法。我想在那之后，很多人有了很多更新的想法，对它有了更新的看法。我见过流传的最好的提案之一
+
+7
+00:05:25.000 --> 00:05:59.000
+around is the idea of uh uh just having something be trivially movable and it turns out most types are trivially movable and what that means is is if you just mem copied them and then didn't do anything with the hole they left, that would be sufficient. Is that Arthur O'Dwyer's paper you're thinking of? I'm horrible with names, so probably. I believe it is, yeah. I think it's Arthur O'Dwyer's paper. Yeah, so I think if we had a notion of trivially movable
+是关于让某些东西变得“平凡可移动”（trivially movable），事实证明大多数类型都是平凡可移动的，这意味着如果你只是对它们进行内存拷贝，而不对它们留下的空洞做任何处理，那就足够了。你指的是 Arthur O'Dwyer 的论文吗？我不擅长记名字，所以可能是吧。我相信是的，没错。我想是 Arthur O'Dwyer 的论文。是的，所以我想如果我们有一个平凡可移动的概念，
+
+8
+00:05:59.000 --> 00:06:40.000
+and the notion of allowing the compiler to then say, if my type is trivially movable then I can can move it on last use. Then you get this automatic move on last use and you don't have to cast. And it's safe because if then if then you add another use app post that point then that becomes the last use and and you know you don't get any kind of compiler error that says hey you use this after it fell out of scope it did fall out of scope but now you just extended the scope and what was a previous move safely became a copy and and now the last use becomes a move and so you know it's less for the user to
+以及允许编译器说，如果我的类型是平凡可移动的，那么我可以在最后一次使用时移动它。那么你就会得到这种最后一次使用时的自动移动，而且你不需要进行转换。它是安全的，因为如果在那之后你又增加了一次使用，那么那就会变成最后一次使用，而且你知道，你不会得到任何编译器错误说“嘿，你在它超出作用域后使用了它”，它确实超出了作用域，但现在你只是扩展了作用域，之前的一次移动安全地变成了拷贝，而现在的最后一次使用变成了移动，所以你知道，用户需要输入的内容更少，
+
+9
+00:06:40.000 --> 00:07:21.000
+type and it's easier to get correct and it's less error prone if if we could get to that state so what uh what paper or what mailing are you aiming to for your paper to be coming out in uh you know i'm trying to rush through at least getting a uh an r0 out because um uh this came about because in John Lakos's upcoming book, he's got these sections called annoyances, and he reached out to me and said, I know you've got this annoyance about move. Could you write a couple pages on the annoyance of move?
+而且更容易做到正确，也不那么容易出错，如果我们能达到那种状态的话。那么你打算把你的论文投到什么期刊或邮件列表中呢？你知道，我正试图赶在至少发布一个 R0 版本，因为……这是因为在 John Lakos 即将出版的书里，他有一些叫“烦恼”的章节，他联系我说，我知道你对移动语义有这种烦恼。你能写几页关于移动语义的烦恼吗？
+
+10
+00:07:21.000 --> 00:08:16.000
+And so we just kind of finished up a couple rounds of editing. I just wrote it right after ACCU wrapped up. And part of that is I want to cite a paper with a proposal to fix this annoyance. And I had started about a year ago on actual wording for how I would go about fixing this annoyance and I had a round of conversations at that time with with with Nico who was at the time what kind of set it all off was he was writing his book on move and he had on our value semantics and he had reached out to me to get some clarifications on some things so we had a conversation about that and that led to my complaint and we kind of started on some wording and I roped in Howard Hinnant and
+所以我们刚刚完成了几轮编辑。我是在 ACCU 结束后立刻写的。其中一部分是我想要引用一篇带有修复此烦恼提案的论文。大约一年前，我就开始构思如何修复这个烦恼的实际措辞，当时我和 Nico 进行了一轮对话，当时引发这一切的是他正在写关于移动语义的书，他有关于右值语义的内容，他联系我以澄清一些事情，所以我们对此进行了交谈，这导致了我的抱怨，我们开始着手一些措辞，我拉上了 Howard Hinnant 和
+
+11
+00:08:16.000 --> 00:08:46.000
+and Herb Sutter and and got some you know additional feedback and so I just kind of had this this bunch of scraps of notes for something that could have been a proposal. I was hoping that an employee who recently left Adobe was going to, and he had joined the standards committee, was going to kind of pick it up and see it through. But he recently left, and then this whole thing with John came up, so now I'm resurrecting it. So I'm going to try to get a quick number for it and get a paper into whatever the next mailing is that
+Herb Sutter，并得到了一些额外的反馈，所以我只是把这些笔记碎片凑在一起，形成了一个可能是提案的东西。我曾希望一位最近离开 Adobe 的员工，他加入了标准委员会，能够接手并完成它。但他最近离开了，然后 John 的这件事就出现了，所以现在我正在复活它。所以我打算给它一个快速编号，并把论文投到下一个邮件列表中，
+
+12
+00:08:46.000 --> 00:10:22.000
+would just basically say it's going to outline the problem with some potential proposed wording. The whole fact that over time the requirements have been weakened so much in the standard makes it a little complicated, but I think that we can cover it with just kind of an upfront requirement, which we, that's how we handle the move semantics already, that basically says, you know, there's a precondition that for all of these functions that they have this notion of a domain of operation. And we can't reassociate that domain of operation with specific semantics because that would then be a breaking change because it would be strengthening the semantics of the existing library. But we can, I think, introduce the notion of the domain of operation and then simplify the wording in a whole bunch of the algorithms where we don't have to say, you know, the equal equal has to apply in all of these cases because that's just globally covered by this notion of a lot of things that would then simplify the wording, you know, and then we get into the wording of how we make the exceptions for the post conditions of a move from object,
+它基本上会概述这个问题并提出一些潜在的措辞。事实上，随着时间的推移，标准中的要求被削弱了这么多，这使得它有点复杂，但我认为我们可以用一种预先的要求来涵盖它，我们已经这样处理移动语义了，它基本上说，你知道，所有这些函数都有一个操作域的前提条件。我们不能将该操作域与特定的语义重新关联，因为那将是一个破坏性的改变，因为它会加强现有库的语义。但我认为，我们可以引入操作域的概念，然后简化一大堆算法中的措辞，我们不必说，你知道，相等运算符必须在所有这些情况下适用，因为这在全局上被这个概念所涵盖，很多事情会因此简化措辞，你知道，然后我们进入如何为移动对象的后置条件制造例外的措辞，
+
+13
+00:10:22.000 --> 00:11:11.000
+which basically says it gets pulled out of the domain of operation for everything but destruction and assignment 2. And then there's a little complication in there, which is if you swap and if you swap, if you do a self swap, so you call swap a to a, in the middle of swap a to a, it's going to do a move from a move from object to itself. And the standard indirectly guarantees that swap a to a is valid and should be a no op. And so that adds an additional wrinkle,
+它基本上说它被从除销毁和赋值之外的所有操作域中移除。然后里面有一个小小的复杂之处，就是如果你进行交换，如果你进行自我交换，也就是你调用 swap(a, a)，在 swap(a, a) 的中间，它将执行从移动对象到其自身的移动。标准间接地保证了 swap(a, a) 是有效的，并且应该是一个空操作。所以这增加了一个额外的复杂性，
+
+14
+00:11:11.000 --> 00:11:58.000
+which is how do you specify that you can move from an object that's been moved from into itself and get that into the spec. So I've got kind of two options for proposed wordings on that. One of the proposed wordings gets a bit complicated, and to satisfy the other conditions of move, it requires you to introduce a fixed point, which the standard hasn't done anyplace else, but it kind of wraps everything up neatly, even if it's a little complex. The other approach is to just say, no, we don't support swap AA, which would be a breaking
+那就是你如何指定你可以从一个已经被移动到其自身的对象中进行移动，并将其纳入规范中。所以我对建议的措辞有两种选择。其中一种建议的措辞变得有点复杂，为了满足移动的其他条件，它要求你引入一个不动点，这是标准在其他任何地方都没有做过的，但它把所有东西都整齐地包装起来了，即使它有点复杂。另一种方法是直接说，不，我们不支持 swap(a, a)，这将是一个破坏性的
+
+15
+00:11:58.000 --> 00:12:50.000
+change, but most people on the standards committee agree that any time in the wild they've actually seen a self-swap, it's been a bug anyways. So this sounds like, if I recall correctly, at one point you told me, Sean, that you don't identify as a C++ committee standards member. You identify as someone who sometimes drives by the committee and lobs a Molotov cocktail into it just to cause discussion. Are you promoting yourself now to be a committee member or do you still identify with the latter? I can confirm this is a Molotov cocktail. Yeah. I think my actual quote is a hand grenade, but Molotov cocktail. Yeah. I think my actual quote is a hand grenade, but Molotov cocktail works too, I guess.
+改变，但标准委员会的大多数人同意，在野外看到的任何自我交换实际上都是一个 bug。所以这听起来，如果我没记错的话，有一次你告诉我，Sean，你不认为自己是 C++ 委员会的标准成员。你认为自己是一个有时开车经过委员会并向里面扔一枚莫洛托夫鸡尾酒以引起讨论的人。你现在是在提升自己成为委员会成员，还是仍然认同后者？我可以确认这是一枚莫洛托夫鸡尾酒。是的。我想我实际的引述是手榴弹，但莫洛托夫鸡尾酒也行，我想。
+
+16
+00:12:50.000 --> 00:13:36.000
+Lobbying hand grenades into the committee. Yeah. I think this is a little of both. Going through finding the kind of, you know, weakening of the semantics in the standard library has kind of reminded me of why I get so frustrated working with the standards committee. This has been my, you know, the post conditions of MOVE since, you know, ASL, if you go back, it had a MOVE library, and I think it was one of the first, it was not
+向委员会投掷手榴弹。是的。我想这有点两者兼有。回顾并发现标准库中语义的削弱，让我回想起为什么我与标准委员会合作时感到如此沮丧。这就是我的，你知道，MOVE 的后置条件，自从，你知道，ASL，如果你回溯的话，它有一个 MOVE 库，我想它是第一个，它不是
+
+17
+00:13:36.000 --> 00:14:29.000
+the first MOVE library, but I think it was the first MOVE library that actually worked. There was a library that Andre Alex Andreescu wrote that was, I think it was called loci or loci, that introduced the notion of move. It was a fairly complex library and in most cases it didn't actually work, meaning that it would fail to generate a move. And then Howard Hinnant and Dave Abrahams wrote another move library that they put out that kind of worked, but failed in a bunch of cases. That was Boost Move? That was Boost Move? That was Boost Move.
+第一个 MOVE 库，但我想它是第一个真正起作用的 MOVE 库。有一个 Andre Alex Andreescu 写的库，我想它叫 loci，它引入了移动的概念。那是一个相当复杂的库，在大多数情况下它并没有真正起作用，意味着它无法生成移动。然后 Howard Hinnant 和 Dave Abrahams 写了另一个他们发布的移动库，它在某种程度上起作用了，但在很多情况下失败了。那是 Boost Move 吗？那是 Boost Move。
+
+18
+00:14:29.000 --> 00:14:56.000
+ASL, for those that don't know, I believe is the Adobe Standard Library, correct? Adobe Source Libraries. Or Source Library. Yeah. And they're still kicking around, still available. If you go to github.com slash stlab is where they are. And we've got a website, stlab.cc, which I think is a nice domain name for the libraries.
+ASL，对于那些不知道的人，我相信是 Adobe Standard Library，对吧？Adobe Source Libraries。或者 Source Library。是的。它们仍然存在，仍然可用。如果你去 github.com/stlab，它们就在那里。我们有一个网站，stlab.cc，我认为这是一个很好的库域名。
+
+19
+00:14:56.000 --> 00:15:36.000
+And the idea of all libraries in this class was before C++11, when move was a language feature, there were a bunch of attempts to emulate move in a library, partially with macros, partially with other things, to varying degrees of success. To varying degrees of success, yeah. And so ASL implemented move, which relied on on RVO which is return value optimization and and it turns out at that time I validated a whole bunch of compilers.
+而这类所有库的想法是在 C++11 之前，当移动是一个语言特性时，有许多尝试在库中模拟移动，部分使用宏，部分使用其他东西，取得了不同程度的成功。取得了不同程度的成功，是的。所以 ASL 实现了移动，它依赖于 RVO，即返回值优化，事实证明在当时我验证了一大堆编译器。
+
+20
+00:15:36.000 --> 00:16:59.000
+Every compiler if you put it in optimization mode implemented named return value optimization which was allowed by the standard at the time, but not required. I don't think it's actually required till C++ 17. So even going way back to C++ 03, everybody implemented it for release builds. And so in ASL we had a move library that looks very much like the move library that was that standardized to that you know it was it was STLAB colon colon move was the way way you invoke to move and and that got you know a lot of commercial use and actually worked very well to good effect. In fact, the last standards committee meeting I actually attended, the reason why I attended was to pitch a library solution instead of all the complexity that came in with rvalue references. And I demonstrated that if we just required NRVO, which we do now, and all the compilers already implemented it, that we could get more than 90% the benefit of move semantics.
+每个编译器如果你把它放在优化模式下，都会实现命名返回值优化，这是当时标准所允许的，但不是必须的。我不认为直到 C++17 它才真正被要求。所以即使追溯到 C++03，每个人都在发布版本中实现了它。所以在 ASL 中，我们有一个看起来非常像标准化的移动库，你知道，它是 STLAB::move，这是你调用移动的方式，这得到了很多商业用途，实际上效果非常好。事实上，我参加的最后一次标准委员会会议，我参加的原因是为了推销一种库解决方案，而不是引入右值引用带来的所有复杂性。我演示了如果我们只是要求 NRVO，我们现在确实这样做了，而且所有编译器都已经实现了它，我们就可以获得移动语义 90% 以上的好处。
+
+21
+00:16:59.000 --> 00:17:52.000
+There are some cases that you can't do that way, but the vast majority of cases you can. So we can get the we can handle the vast majority of the cases without introducing a new language construct of r-value references, which are kind of weird and all the complexity that came out of that. And it was interesting because the counter argument was largely that without rvalue references, we didn't get forwarding references. And at that time, rvalue references and forwarding references were the same thing. And later, forwarding references became something else with the same syntax. So had we known that at the time, maybe we could have gone with a library solution for moving
+有些情况你不能那样做，但绝大多数情况你可以。所以我们可以在不引入右值引用这种新的语言结构的情况下处理绝大多数情况，右值引用有点奇怪，而且由此产生的所有复杂性。这很有趣，因为反驳的观点主要是没有右值引用，我们就得不到转发引用。而在当时，右值引用和转发引用是同一回事。后来，转发引用变成了具有相同语法的其他东西。所以如果我们当时知道这一点，也许我们可以选择一种移动的库解决方案，
+
+22
+00:17:52.000 --> 00:18:53.000
+and had a separate construct for forwarding. Would we still have needed forwarding references in a world where we didn't have our value references? If you want kind of the perfect the perfect forwarding yeah you do because you need to be able to know know you know is this thing a move or a copy and carry that down through through your levels so so do you remember what uh committee meeting that was at, the last one you went to? I don't remember the dates. It was in Bellevue, Washington. And basically, it was interesting because I gave a presentation and I gave a demonstration of the ASL MOVE library. And I hadn't written a paper on it. I just come in at the request of a committee member to kind of show it and and there was a you know It was a small group that was actually worried about our values and we had a straw vote and the straw vote vote
+并为转发提供一个单独的结构。在一个没有右值引用的世界里，我们还需要转发引用吗？如果你想要那种完美的转发，是的，你需要，因为你需要能够知道，你知道，这个东西是移动还是拷贝，并将其传递下去。那么你还记得那是哪次委员会会议吗，你参加的最后一次？我不记得日期了。是在华盛顿州的贝尔维尤。基本上，这很有趣，因为我做了一个演示，我演示了 ASL MOVE 库。我没有写论文。我只是应一位委员会成员的要求进去展示它，有一个小组实际上担心右值，我们进行了一次投票，投票
+
+23
+00:18:53.000 --> 00:19:51.000
+there was to yes, we should abandon our value references and go with a library solution and then largely because of political reasons in the In the larger meeting, that got overturned. And so, which for me was an interesting lesson, which is, you know, convincing the people who matter isn't necessarily enough. Right? You know, convincing the people who are actually working with the stuff. And it wasn't 100%, you know, the people who are actually working with the stuff and and it wasn't a hundred percent uh you know you know even in the small room but it was it was was in favor and um uh yeah that was in 2008 by the way 2008 2008 yeah so that um uh so we kind of lost in the in the in the in the larger committee, and that's when our value references got voted.
+结果是，是的，我们应该放弃右值引用，采用库解决方案，然后主要是因为政治原因，在更大的会议中，这被推翻了。所以，这对我来说是一个有趣的教训，那就是，你知道，说服重要的人并不一定足够。对吧？你知道，说服那些真正使用这些东西的人。而且这并不是 100%，你知道，即使在那个小房间里也不是 100% 支持，但确实是赞成的，而且……是的，那是 2008 年，顺便说一下，2008 年。所以，我们在更大的委员会中失败了，那就是右值引用被投票通过的时候。
+
+24
+00:19:51.000 --> 00:20:54.000
+I think the terminology is voted out of the standard, which has the reverse meaning of what you was allocators at the time, which broke the notion of a regular type for pair. And that was something that I was, you know, this is why, you know, the implementation of std pair is so incredibly long and complex and that pair supports allocators. And it's, in my opinion, ridiculous. I think you're not wrong. It is quite unintuitive that pair needs to support allocators. And the number of times in the committee that a good feature has been unnecessary has been hung up on oh do we need to add allocator support for this thing and the pains associated with that
+我想术语是“投票通过”进入标准，这与你当时使用分配器的含义相反，它破坏了 pair 的常规类型概念。这就是为什么，你知道，std::pair 的实现如此冗长和复杂，而且 pair 支持分配器。在我看来，这很荒谬。我想你没说错。pair 需要支持分配器确实非常不直观。在委员会中，一个好的特性因为不必要而被挂起，因为“哦，我们需要为这个东西添加分配器支持吗？”以及与之相关的痛苦，这种情况发生过很多次。
+
+25
+00:20:54.000 --> 00:21:46.000
+yeah so the the stood pair gaining allocator support which broke regularity of stood pair. That even more than, you know, the R-value references, I thought, you know, Howard's proposal was sound, I just thought it was too much complexity for the language, but breaking regularity of pair was the, you know, for me was kind of the last straw. And at that point I walked out of the meeting and that's the last standards committee meeting I've attended. So. I, I, um, so, so John Laco, who's, uh, another member of the committee, uh, very well known for his talks about an advocacy for allocators. Um, he has in recent years started, started promoting the idea that, that allocators should be
+是的，所以 std::pair 获得分配器支持，这破坏了 std::pair 的常规性。这甚至比右值引用更让我觉得，你知道，Howard 的提案是合理的，我只是觉得它对语言来说太复杂了，但破坏 pair 的常规性对我来说是压死骆驼的最后一根稻草。在那一点上，我走出了会议，那是我参加的最后一次标准委员会会议。所以。我……所以，John Lakos，委员会的另一位成员，以他关于分配器的演讲和倡导而闻名。他在最近几年开始推广一种想法，即分配器应该是
+
+26
+00:21:46.000 --> 00:23:11.000
+something that are supported at the language level and i actually think that he's probably right about this because the amount of complexity that has been added to the library to support allocators the library facility is is really great That's come with a huge amount of cost. And for types that avoid that cost, for things that we say don't support allocators, that takes control away from users. And I do wonder if maybe we would have been better off if we had thought up some language-based solution for customizing allocation. Yeah, the fundamental problem with allocators is part of the allocator. And so you can't put the allocator into call, you know, an incidental data structure.
+在语言层面支持的东西，我实际上认为他关于这一点可能是对的，因为为了支持分配器而添加到库中的复杂性，库设施确实很棒，但它付出了巨大的代价。对于那些避免这种代价的类型，对于那些我们说不支持分配器的东西，这剥夺了用户的控制权。我确实想知道，如果我们当初想出某种基于语言的自定义分配解决方案，情况会不会更好。是的，分配器的根本问题是分配器的一部分。所以你不能把分配器放入调用，你知道，偶然的数据结构中。
+
+27
+00:23:11.000 --> 00:24:18.000
+It means now really what I've got is an allocator that contains objects, but I've expressed it the other way around. I've got a bunch of objects pointing to an allocator that actually contains them. So my opinion has always been that we don't actually need allocators, what we need are better data structures that manage their parts, you know, that manage the allocation of their parts. So flip that equation around and that's, you know, harder to do than just say, well, we can take a vector and we can slap an allocator into it and now we have a different behavior for a vector. It means you actually have to have to think through, you know, a class that makes sense of structures that
+这意味着现在我真正拥有的是一个包含对象的分配器，但我以相反的方式表达了它。我有一堆对象指向一个实际上包含它们的分配器。所以我的观点一直是我们实际上不需要分配器，我们需要的是更好的数据结构来管理它们的部分，你知道，管理它们部分的分配。所以颠倒那个等式，这比仅仅说“好吧，我们可以拿一个 vector，然后给它加上一个分配器，现在我们就有了一个不同的 vector 行为”要难得多。这意味着你实际上必须思考，你知道，一个对需要自定义分配的结构有意义的类。
+
+28
+00:24:18.000 --> 00:25:22.000
+require custom allocation. You know, it is so it means you end up with more types and there's not quite the same uniformity, but you get rid of these issues. Is there a library out in the wild that implements this kind of idea? You know, I don't think there's a library out in the wild, but if you look at, you know, some of the adapters which are, you know, if you just just look at, you know, adapting a vector to be a priority queue by using a heap structure in there, that's really just using the vector as if it were an allocator for a heap structure object, And so one could imagine having something like a pooled list if you wanted to say, oh, I've got a list for the allocations for the nodes.
+你知道，这意味着你最终会有更多的类型，而且没有完全相同的统一性，但你摆脱了这些问题。野外有实现这种想法的库吗？你知道，我不认为野外有这样的库，但如果你看看，你知道，一些适配器，它们是，你知道，如果你只是看看，你知道，通过在其中使用堆结构将 vector 适配为优先级队列，那实际上只是把 vector 当作堆结构对象的分配器来使用。所以人们可以想象如果想说“哦，我有一个用于节点分配的列表”，那么拥有像池化列表这样的东西。
+
+29
+00:25:22.000 --> 00:26:03.000
+Since I know they're all fixed sized, I can do that more efficiently within some pool and So I can create create a structure for that So no, you know, I don't know of a library that's that's that's taken that approach although, you know, I will say This is the approach that you know, like the Photoshop teams takes say, oh, well, we've got within our tiling system, which is this quad tree data structure. We don't say, and that's connected to this allocator. The allocator for the quad tree structure is part of the quad tree structure. All right.
+因为我知道它们都是固定大小的，我可以在某个池中更有效地做到这一点，所以我可以为此创建一个结构。所以不，你知道，我不知道有哪个库采取了这种方法，尽管，你知道，我会说这是 Photoshop 团队采取的方法，他们说，“哦，好吧，在我们的平铺系统中，也就是这个四叉树数据结构，我们不说，它连接到这个分配器。四叉树结构的分配器是四叉树结构的一部分。”好的。
+
+30
+00:26:03.000 --> 00:26:54.000
+Well, we're like 15 minutes past our scheduled time. And I have a stack of questions, but we'll have to... So Sean at ACCU said he'd be happy to be a regular recurring guest, which is definitely something that we're going to make happen. We'll have to defer the whole Mac OS X in the greg gilly uh story for a whole episode um because i wanted to ask about that but i knew like that yeah we're gonna have to do a whole whole episode of sean stories about about apple and mac os yeah well that's good we're gonna have to part i don't know how we're gonna partition this up we. We said mismatch earlier. Now we're saying partition. But also all the stories from when you worked with Alex Stepanov.
+好吧，我们比预定时间晚了 15 分钟。我有一堆问题，但我们必须……所以 Sean 在 ACCU 上说他很乐意成为常客，这绝对是我们会实现的事情。我们必须把整个 Mac OS X 和 Greg Gilly 的故事推迟到一整集，因为我想问那个，但我知道……是的，我们将不得不做一整集关于 Sean 在 Apple 和 Mac OS 的故事。是的，好吧，那很好，我们将不得不……我不知道我们该如何划分这个。我们之前说了“不匹配”，现在我们说“划分”。还有你和 Alex Stepanov 一起工作时的所有故事。
+
+31
+00:26:54.000 --> 00:27:38.000
+And then also, too, we haven't even talked about your time before Adobe. And also, too, I was. Oh, so maybe I'll ask. I'll ask this quick follow up because it was. You know, we talked a lot about Stepanov today. And you mentioned sort of he got into C and C++ while at Bell Labs. And we had sort of chatted about this at ACCU, is that I recently discovered from watching one of the A9 lectures that were recorded when Stepanov worked at Amazon, that he actually spent a decade teaching Scheme. And that, like, I like to think I know quite a bit about Stepanov and that I've, you know, I've spent a lot of time on stepanovpapers.com, but I had no idea that he sort of made the
+还有，我们甚至还没谈到你在 Adobe 之前的时间。还有，我……哦，所以也许我会问。我会问这个快速跟进，因为它……你知道，我们今天谈了很多 Stepanov。你提到他是在贝尔实验室时接触 C 和 C++ 的。我们在 ACCU 上聊过这个，我最近从观看 Stepanov 在亚马逊工作时录制的 A9 讲座之一中发现，他实际上花了十年时间教 Scheme。而且，就像，我喜欢认为我对 Stepanov 了解不少，而且我，你知道，我在 stepanovpapers.com 上花了很多时间，但我完全不知道他竟然开玩笑说他浪费了十年在 Scheme 上。
+
+32
+00:27:38.000 --> 00:28:31.000
+joke that he lost a decade to Scheme. And so I'm not sure if you want to comment because you knew Stefanov a lot better about... You know, I don't know how much to add to that. Yeah, he was, you know, he had certainly taught courses in Scheme and, you know, he'd been an associate professor, I forget, I think at RPI, if I might get that wrong. So yeah, so he was an avid Scheme user, and all the time I worked with him, he would frequently prototype an algorithm first in Scheme, and then write it in C++. So he was definitely very comfortable in Scheme. Put it that way. Yep, so we all got to go learn Lisp, or
+所以我不知道你是否想评论，因为你比我更了解 Stepanov……你知道，我不知道该补充什么。是的，他，你知道，他确实教过 Scheme 课程，而且，你知道，他曾是一名副教授，我忘了，我想是在 RPI，如果我没记错的话。所以是的，他是一个狂热的 Scheme 用户，在我与他共事的所有时间里，他经常先用 Scheme 原型化一个算法，然后用 C++ 编写它。所以他在 Scheme 中绝对非常自在。这么说吧。是的，所以我们都得去学 Lisp，或者
+
+33
+00:28:31.000 --> 00:28:58.000
+your favorite language of choice. Yeah, on that, you know, one thing I think I agree with you, Connor, about is that learning other languages has a huge amount of value. I think one of the things that set off my career was I went to school at Seattle University and
+你选择的最喜欢的语言。是的，关于这一点，你知道，有一件事我想我同意你，Connor，那就是学习其他语言有巨大的价值。我认为开启我职业生涯的事情之一是我在西雅图大学上学，
+
+34
+00:28:58.000 --> 00:29:26.000
+there were 12 of us in our graduating class for computer science. It was their first graduating class in computer science at the university their first graduating class in computer science at the university. And we had a couple of young professors who taught the course and they decided that, or who taught the program, the professors there decided that they would teach every course in a different language and not teach the language.
+我们计算机科学专业的毕业生班里有 12 个人。那是该大学第一个计算机科学毕业生班，那是该大学第一个计算机科学毕业生班。我们有几位年轻的教授教这门课程，他们决定，或者说教这个项目的教授们决定，他们将用不同的语言教授每一门课程，而不是教授这门语言。
+
+35
+00:29:26.000 --> 00:30:12.000
+So you would walk in and you know first day of a class and they would say you know this class we're going to to be looking at databases so you're going to be programming in Ingress, so go learn Ingress and we're not teaching it. And in this class we're going to be doing image processing and we're going to do all of that in Lisp, so go learn Lisp. And so we could talk about the pros and cons. I think there were only a couple of us for which this plan actually worked. I'm not saying it was a good teaching strategy.
+所以你会走进去，你知道，第一天上课，他们会说，你知道，这门课我们将研究数据库，所以你将使用 Ingress 编程，所以去学习 Ingress，我们不教它。在这门课上，我们将进行图像处理，我们将用 Lisp 完成所有这些，所以去学习 Lisp。所以我们可以谈谈利弊。我想只有几个人这个计划真的奏效了。我不是说这是一个好的教学策略。
+
+36
+00:30:12.000 --> 00:30:40.000
+But for me, it was one that did. And it just gave a huge exposure and appreciation to a bunch of different languages very early in my career. This is crazy that you're saying this because literally just last night, I was watching a talk from Channel 9 with Herb Sutter and Eric Meyer. Most of our listeners probably know Herb Sutter as the chair of the ISO C++ committee. Eric Meyer worked on C Sharp
+但对我来说，它是奏效的。它在我职业生涯的早期就让我接触并欣赏了一堆不同的语言。你这么说太疯狂了，因为就在昨晚，我还在看 Channel 9 上 Herb Sutter 和 Eric Meyer 的谈话。我们的大多数听众可能知道 Herb Sutter 是 ISO C++ 委员会的主席。Eric Meyer 在 C# 工作，
+
+37
+00:30:40.000 --> 00:31:09.000
+and he's a big functional programming advocate. And they had an hour-long discussion. And at the end of it, Herb Sutter says probably one of the most important things for his career. Um, and the best university course that he took and he went to Waterloo in Canada was a course on comparative languages where every week they looked at a different language and they looked at lisps and prologue and et cetera. Anyway. So just the fact that I literally listened to that last night and now you're saying basically the exact same thing with a different flavor is crazy.
+他是一位伟大的函数式编程倡导者。他们进行了一个小时的讨论。在最后，Herb Sutter 说他职业生涯中最重要的事情之一，以及他参加过的最好的大学课程，他在加拿大的滑铁卢大学，是一门关于比较语言的课程，每周他们都会看一门不同的语言，他们看了 Lisp、Prolog 等等。总之。所以，我昨晚刚听过那个，现在你基本上说了完全相同的事情，只是换了一种口味，这太疯狂了。
+
+38
+00:31:09.000 --> 00:31:30.000
+Yep, yep, yep, yep. I think there's huge value in that. Language affects how you think. And so learning other languages allows you to think about problems from different perspectives. So I think what Sean, and this is where we'll end the episode,
+是的，是的，是的，是的。我认为这有巨大的价值。语言影响你的思考方式。所以学习其他语言可以让你从不同的角度思考问题。所以我认为 Sean，这就是我们要结束本集的地方，
+
+39
+00:31:30.000 --> 00:31:49.000
+is trying to say is that everybody needs to go learn APL. Absolutely. Absolutely. Connor must have some deal with the people that sell those funky APL keyboards. He must get some cut with the people that sell those funky APL keyboards. He must get some cut of it or something. Yeah.
+想说的是，每个人都需要去学习 APL。绝对。绝对。Connor 一定和那些卖时髦 APL 键盘的人有什么交易。他一定从卖那些时髦 APL 键盘的人那里拿了回扣，或者类似的东西。是的。
+
+40
+00:31:49.000 --> 00:32:38.000
+You guys got to put a link in your show notes for where to get your APL keyboard. I don't even have an APL keyboard. I'm going to send you one, buddy. I'm going to send you one. Yeah. All right. It's funny. I'm going to send you one, buddy. I'm going to send you one. was suing everybody who did a unix knockoff but mpw was kind of a unix knockoff but to not uh step on att's toes um they used different syntax for everything and so the like the wild card
+你们得在节目笔记里放一个链接，告诉大家去哪里买 APL 键盘。我甚至没有 APL 键盘。我会送你一个，伙计。我会送你一个。是的。好吧。这很有趣。我会送你一个，伙计。我会送你一个。当时正在起诉所有制作 Unix 仿制品的人，但 MPW 算是一种 Unix 仿制品，但为了不踩到 AT&T 的脚趾，他们对所有东西都使用了不同的语法，所以通配符
+
+41
+00:32:38.000 --> 00:33:54.000
+character if you were doing a search instead of just being an asterisk was, you know, a squiggly equal sign. So, yeah, they were all, you know, non-ASCII unusual characters. And I still, to this day, you know, when I'm typing in bash, will type those just by habit and have to go, oh, no, wait, I need an asterisk, not a squiggly equal sign there. This makes me think, now I said we'd end the episode, but this now made me thought of, you taught me something, Sean, at ACCU, which is you said you remarked while listening to an earlier episode is that I said that I don't actually know why they chose Iota to represent sort of like a sequence, an arithmetic sequence that increases by one. And you said you actually know. Do you want to educate our listeners why they chose Iota? Sure. So a lot of the characters in APL were chosen because of how they look visually. And an iota looks like a small 1, and it's kind of a backwards J.
+字符，如果你在搜索而不是仅仅使用星号，是，你知道，一个波浪号加等号。所以，是的，它们都是，你知道，非 ASCII 的不寻常字符。直到今天，你知道，当我在 bash 中输入时，我还会习惯性地输入那些，然后不得不说，哦，不，等等，我需要一个星号，而不是那里的波浪号加等号。这让我想起，现在我说我们要结束本集了，但这让我想起，Sean，你在 ACCU 教过我一些东西，你说你在听之前的一集时评论说，我说我实际上不知道他们为什么选择 Iota 来代表某种序列，一种增加 1 的算术序列。你说你实际上知道。你想教育我们的听众为什么他们选择 Iota 吗？当然。所以 APL 中的许多字符之所以被选中，是因为它们在视觉上的样子。而 Iota 看起来像一个小 1，它有点像一个反向的 J。
+
+42
+00:33:54.000 --> 00:34:42.000
+So it's like a small 1, and then it kind of hooks out to the right. And so if you say, you know, iota 5, that kind of looks like 1...5. So, and that's what iota 5 would do, is it would generate the sequence from 1 to 5. You know, APL was 1-based instead of 0-based. You know, out of that now we get, you know, std iota, which is not a glyph. It's spelled out as iota, and it's zero-based by default. There's only one algorithm in the Thrust algorithm library that renamed a C++ standard algorithm. And Bryce, do you want to? What, iota?
+所以它就像一个小 1，然后它向右钩。所以如果你说，你知道，iota 5，那看起来有点像 1...5。所以，这就是 iota 5 会做的，它会生成从 1 到 5 的序列。你知道，APL 是基于 1 的，而不是基于 0 的。你知道，从那以后我们现在有了，你知道，std::iota，它不是一个字形。它拼写为 iota，默认是基于 0 的。Thrust 算法库中只有一个算法重命名了 C++ 标准算法。Bryce，你想？什么，iota？
+
+43
+00:34:42.000 --> 00:34:57.000
+Yeah. You mean stood sequence? But there's a difference. Thrust sequence predated stud iota. That's not true. We've had this discussion before because it was in the SGI docs. And so a lot of us actually think. It's not even in the SGI.
+是的。你是说 std::sequence？但有一个区别。Thrust sequence 早于 std::iota。那不是真的。我们之前讨论过这个问题，因为它在 SGI 文档中。所以我们很多人实际上认为。它甚至不在 SGI 中。
+
+44
+00:34:57.000 --> 00:35:42.000
+It's in the original HP STL. There's a lot of stuff in the original HP STL that didn't make it into the standard. But yeah, iota is what it is. Is that on steppingoffpapers.com i believe yeah yeah yeah the hpstl is up there maybe we'll have to do an episode where bryce and i dig through and see all the algorithms that um alex had to to cut off yeah yeah they went through uh alex and bjarnene went through an editorial process where Bjarne wanted to strip everything that wasn't necessary. So kind of, it's interesting, you know, what's left is you have a couple of the higher level functions like, you know, stable sort and sort.
+它在最初的 HP STL 中。最初的 HP STL 中有很多东西没有进入标准。但是的，iota 就是它现在的样子。那是在 stepanovpapers.com 上吗？我相信是的，是的，hpstl 就在那里。也许我们得做一集，我和 Bryce 深入挖掘一下，看看 Alex 不得不砍掉的所有算法。是的，是的，他们经历了一个编辑过程，Bjarne 想要剥离所有不必要的东西。所以，这很有趣，你知道，剩下的是你有一些更高级别的函数，比如，你知道，stable_sort 和 sort。
+
+45
+00:35:42.000 --> 00:36:00.000
+And almost everything in the rest of the libraries is just to build stable sort and sort. And almost everything in the rest of the libraries is just to build stable sort and sort. Yep. They're all puzzle pieces. I'll link your talk, Generic Programming from 2018 at Pacific C++, which is one of my absolute favorite talks of yours. Because I think you talk about that in that talk.
+而库中其余的几乎所有东西都只是为了构建 stable_sort 和 sort。而库中其余的几乎所有东西都只是为了构建 stable_sort 和 sort。是的。它们都是拼图碎片。我会链接你 2018 年在 Pacific C++ 上的演讲《泛型编程》，这是我最喜欢的你的演讲之一。因为我想你在那个演讲中谈到了这一点。
+
+46
+00:36:00.000 --> 00:36:16.000
+I believe I do, yeah. All right. With that, I feel like we should wrap it up. Thank you so much, Sean. Hey, thank you guys. Once again, thanks to Sean Parent for coming on. It was an absolute blast chatting with him. And one final announcement is that if you
+我相信我谈到了，是的。好吧。就这样，我觉得我们应该结束了。非常感谢你，Sean。嘿，谢谢你们。再次感谢 Sean Parent 来到这里。与他聊天真是太棒了。最后一个公告是，如果你
+
+47
+00:36:16.000 --> 00:36:21.000
+are listening to this before March 31st there is a free half-day conference for APL beginners or the APL curious that are looking to learn a little bit more about the language. You can go to dialog.com, that's D-Y-A-L-O-G.com, or you can go to the show notes for a direct link to register. Hope you enjoyed, and have a great day. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+在 3 月 31 日之前收听此节目，有一个为 APL 初学者或对 APL 好奇、希望多了解一点该语言的人准备的免费半天会议。你可以去 dialog.com，即 D-Y-A-L-O-G.com，或者你可以去节目笔记获取直接注册链接。希望你喜欢，祝你有美好的一天。本集还没有评论。点击转录中的任何句子即可发表评论。

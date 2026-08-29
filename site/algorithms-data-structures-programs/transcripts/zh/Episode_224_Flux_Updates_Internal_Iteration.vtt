@@ -1,0 +1,271 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:02.000
+Effectively, compilers can generate really, really, really good code. Optimizers just seem to absolutely love this style of doing things. What I've discovered is that this is just amazing for performance. Welcome to ADSP the podcast episode 224 recorded on February 17th, 2025. My name is Connor and today with my cohost Ben, we continue our conversation with Tristan Brindle in today's episode. We chat about updates in Tristan's library flux, internal iteration versus external iteration and more. Now we're starting episode 224 and we haven't even talked about flux. So a part of the goal was to bring Tristan on because I mean, it's been a while now, but back in August,
+实际上，编译器可以生成非常、非常、非常好的代码。优化器似乎非常喜欢这种做事风格。我发现这对性能来说简直太棒了。欢迎收听 ADSP 播客第 224 期，录制于 2025 年 2 月 17 日。我是 Connor，今天我和我的联合主持人 Ben 将继续与 Tristan Brindle 进行对话。在今天的节目中，我们将聊聊 Tristan 的库 Flux 的更新、内部迭代与外部迭代等内容。现在我们开始第 224 期，我们甚至还没谈到 Flux。所以邀请 Tristan 来参加节目的一部分原因是因为，虽然已经过去一段时间了，但在去年八月，
+
+2
+00:01:02.000 --> 00:01:51.000
+I told this story twice on the podcast. We met up a couple times. Taylor Swift delayed us meeting up by an hour or so at one point, because she was performing at Wembley. And I said at that point that we were going to have you back on, get some updates about Flux. And then I had some follow-up questions about fully understanding the internal iteration model of Flux because I actually don't think I tweeted this. It is, I know it's public somewhere and that somewhere is for sure in the PDF slide deck of the talk that I gave at C++ Under the Sea which was called Fusion Arrays and CPU versus GPU, something like that. I just, it was a bunch of things because I couldn't figure out a good title, so I just put some commas in between it.
+我在播客上讲过两次这个故事。我们见过几次面。有一次泰勒·斯威夫特（Taylor Swift）在温布利演出，导致我们见面推迟了一个小时左右。当时我就说，我们要请你回来，了解一下 Flux 的最新进展。然后我还有一些后续问题，关于如何完全理解 Flux 的内部迭代模型，因为我其实不记得我有没有发过推文。我知道它在某个地方是公开的，那个地方肯定是我在“C++ Under the Sea”大会上演讲的 PDF 幻灯片里，演讲题目叫《融合数组与 CPU 对比 GPU》，大概是这样。我只是，因为当时想不出一个好的标题，所以就随便加了几个逗号。
+
+3
+00:01:51.000 --> 00:02:25.000
+In there, it shows a highlight of rankings of a bunch of different quote-unquote backends to this tool I wrote with three different C++ quote-unquote libraries. Flux is one of them, Range V3 is another one, and then the standard C++ 20, 23 ranges. And then Swift's there, Rust is there. There's a few different GPU backends like Kupai, Kuda Thrust, etc. There's a few others. And at least on the lower end of the sizes that I tested, so I think that was like a thousand elements and vectors up to a
+在那里，它展示了我用三种不同的 C++ 库编写的工具中，各种所谓的“后端”的排名亮点。Flux 是其中之一，Range V3 是另一个，还有标准的 C++ 20/23 ranges。然后 Swift 也在那里，Rust 也在那里。还有一些不同的 GPU 后端，比如 Kupai、Kuda Thrust 等。还有其他一些。至少在我测试的较小规模数据下，也就是一千个元素到十万个元素的向量，
+
+4
+00:02:25.000 --> 00:02:55.000
+hundred thousand. Flux hands down one in every single one. So it beat ranges, it beat range v3, it beat swift, it beat rust. I mean the other ranges implementations were right behind Flux. But this echoes, I mean you gave a lightning talk at I want to say C++ North 2024, at, I want to say C++ North 2024, which was called filtering, filtering fast with Flux, something like that. Faster filtering with Flux, I think it was, yeah. Faster filtering with Flux, where it was a five minute lightning talk,
+Flux 在每一个测试中都毫无疑问地胜出了。它击败了 ranges，击败了 range v3，击败了 Swift，击败了 Rust。当然，其他的 ranges 实现紧随 Flux 之后。但这呼应了——我想你在 2024 年 C++ North 大会上做过一次闪电演讲，题目大概是《用 Flux 进行快速过滤》，或者类似的东西。我想是《用 Flux 进行更快的过滤》，对吧？是的，用 Flux 进行更快的过滤，那是一个五分钟的闪电演讲，
+
+5
+00:02:55.000 --> 00:03:17.000
+link in the show notes, and you showed how this double dereference issue can get in the way of compilers optimizing code, what you could write with a hand-rolled for loop. Anyways, I'm gonna throw it over to you. So I've got questions, but first give us an update for folks that haven't listened to episode 126 and 127, where I think, it wasn't the last time you were on,
+链接在节目说明里，你展示了这种双重解引用问题是如何阻碍编译器优化代码的，而你可以用手写的 for 循环来编写。总之，我要把话筒交给你。我有一些问题，但首先请为那些没有听过第 126 期和第 127 期节目的听众更新一下情况，我想那不是你最后一次来做客，
+
+6
+00:03:17.000 --> 00:03:34.000
+but it was the last time you were on that we talked about Flux, because I think you came on in between to do the one algorithm to rule them all episode at some point, I think. Oh yeah, we were supposed to argue with Ben and then we ended up agreeing about, yeah. So yeah, what's the state of Flux?
+但那是我们最后一次讨论 Flux 的时候，因为我想你中间还来过一次，做过关于“统治一切的算法”的那一期节目。哦，是的，我们本来要和 Ben 争论，结果最后我们达成了一致。所以，Flux 的现状如何？
+
+7
+00:03:34.000 --> 00:03:49.000
+What are the updates and then we can get to- What's the state of Flux? That's a greater, that's what I should call the updates, right, the state of Flux. Why didn't I think of that? I was gonna say, and also to give a little like a summary of just what the, I mean, I've compared it to ranges already. So maybe people have an idea,
+有哪些更新，然后我们可以进入——Flux 的现状？这真是一个很棒的标题，我应该把更新称为“Flux 的现状”，对吧？我怎么没想到呢？我本来想说，还要给那些刚开始听的人做一个总结，毕竟我已经把它和 ranges 比较过了，所以大家可能有个概念，
+
+8
+00:03:49.000 --> 00:04:26.000
+but in case they started listening since then, and this is the first time they're hearing about Flux, maybe give them just a little background so that we're not. Okay, so Flux is a library for doing what we might call collection-orientated programming or sequence-orientated programming. It's similar in spirit to things like C++20 ranges, Range V3, the Rust iterator library, like Python iter tools, D ranges, all those sorts of things.
+但万一他们是从那之后才开始听的，这是他们第一次听说 Flux，也许可以给他们一点背景介绍，这样我们就不至于……好的，Flux 是一个用于执行我们所谓的“面向集合编程”或“面向序列编程”的库。它的精神类似于 C++20 ranges、Range V3、Rust 迭代器库、Python 的 itertools、D 语言的 ranges 等等。
+
+9
+00:04:26.000 --> 00:04:57.000
+The idea is that you have algorithms that operate on sequences, as we call them in Flux, and you can have sequence adapters that you can chain together to build up kind of a view of your data, and then call some algorithm that operates on that data. So as I say, this is pretty much every language, I think, you can do this sort of thing. So Flux is kind of an alternative to C++20 ranges. The way it works is a little bit different because it doesn't use STL iterators. So
+其理念是，你拥有在序列（Flux 中这样称呼）上运行的算法，并且你可以将序列适配器链接在一起，构建出一种数据的视图，然后调用一些在该数据上运行的算法。正如我所说，我认为几乎每种语言都可以做到这一点。所以 Flux 算是 C++20 ranges 的一种替代方案。它的工作方式略有不同，因为它不使用 STL 迭代器。所以
+
+10
+00:04:57.000 --> 00:05:36.000
+standard ranges, they're built on iterators that are effectively a generalization of pointers. Raw pointers are the most general or the most powerful kind of iterators, they're contiguous iterators and the STL takes these and generalizes backwards to bidirectional iterators and forward iterators and eventually input iterators. You can only have single pass. Flux, rather than using pointers, takes the idea of indices and generalizes backwards from there. So slightly different approach,
+标准的 ranges 是建立在迭代器之上的，它们实际上是指针的泛化。原始指针是最通用或最强大的迭代器，它们是连续迭代器，STL 将其向后泛化为双向迭代器、前向迭代器，最终是输入迭代器。你只能进行单次遍历。Flux 不使用指针，而是采用了索引的概念，并从那里向后泛化。所以方法略有不同，
+
+11
+00:05:36.000 --> 00:06:14.000
+but we end up being kind of, we can do the same things as you can do with ranges, just the way that you do them is slightly different. And the goal with this is because, or was originally anyway, that being pointer based, indices, sorry, iterators, STL iterators share the same downsides as pointers in that they can quite easily be invalidated, they can quite easily end up dangling. It's just not a very safe abstraction. Whereas with indices, the generalized version, we call them cursors in Flux, rather than like an iterator can advance itself, it can dereference itself,
+但我们最终可以做到和 ranges 一样的事情，只是实现方式略有不同。这样做的目标是——或者最初的目标是——因为基于指针的索引（抱歉，是迭代器）与指针有着相同的缺点，即它们很容易失效，很容易变成悬空指针。这并不是一个非常安全的抽象。而使用索引（即泛化版本，我们在 Flux 中称之为“游标”），不像迭代器那样可以自我推进、自我解引用，
+
+12
+00:06:14.000 --> 00:06:53.000
+whereas a cursor just purely represents a position in some sequence. And in order to advance the cursor, you have to have the sequence object available to say, please, will you give me the next position after this? Or in order to retrieve the value corresponding to that position, you have to ask the sequence, please, will you give me, you know, read the cursor position and give me that value? So it means that if you ever end up with a dangling cursor, you know, you're holding on to a cursor and the sequence has vanished, it's perfectly safe because there is literally nothing you can do with this cursor,
+游标仅仅代表序列中的一个位置。为了推进游标，你必须拥有序列对象，才能说“请给我这个位置之后的下一个位置”。或者为了获取该位置对应的值，你必须询问序列“请给我……读取游标位置并给我那个值”。这意味着如果你最终得到了一个悬空游标，你知道，你持有一个游标而序列已经消失了，这是完全安全的，因为你对这个游标什么也做不了，
+
+13
+00:06:53.000 --> 00:07:33.000
+because you can't just try and dereference it like you would be able to with a dangling iterator. So the initial goal of Flux, what I set out to do, was to do something that's pretty much the same as ranges, but less prone to dangerous dangling things. I think actually that's one of the titles. You gave, I think, the same talk a couple different times in 2023. Once it's C++ on C, once it's C++ North, I think it's CppCon, and I think the C++ on C1, it retitled the talk to a safer, there's the safe is in the title, even though the actual title of the talk is iteration revisited.
+因为你不能像对待悬空迭代器那样尝试解引用它。所以 Flux 的最初目标，我着手要做的事情，就是做一些和 ranges 几乎一样，但更不容易出现危险悬空问题的东西。我想这其实就是其中一个标题。你在 2023 年在不同的场合做过同样的演讲。一次是在 C++ on Sea，一次是在 C++ North，我想还有 CppCon，而在 C++ on Sea 那次，你把演讲重新命名为“更安全”，标题里确实有“安全”二字，尽管演讲的实际标题是《迭代重访》。
+
+14
+00:07:33.000 --> 00:08:14.000
+So you might see different titled talks, but they're all versions of the same one. And so Flux is a safer version. But as I mentioned before, it ends up performance wise, beating ranges and range v3. And in the episode 126 discussion, we talked about these two different models of internal iteration and external iteration. And to this day, I don't think I've fully grasped what the difference is. And I actually in preparation because I went and rewatched that talk, I went and re listened to the episode. I didn't rewatch Barry Revson's talk, which we'll also link. He's given it a couple times where he compares the various models across programming languages, D, Swift, C++, C sharp, Python, et cetera. But now we live in the
+所以你可能会看到不同标题的演讲，但它们都是同一个演讲的版本。所以 Flux 是一个更安全的版本。但正如我之前提到的，它在性能上最终击败了 ranges 和 range v3。在第 126 期的讨论中，我们谈到了内部迭代和外部迭代这两种不同的模型。直到今天，我想我还没有完全掌握它们的区别。为了准备这次节目，我回去重看了那次演讲，重听了那一期节目。我没有重看 Barry Revson 的演讲（我们也会附上链接），他曾多次比较过各种编程语言（D、Swift、C++、C#、Python 等）中的模型。但现在我们生活在
+
+15
+00:08:14.000 --> 00:08:38.000
+age of LLMs. And so I figured I'll go, they got these reasoning models. I'm not sure if this is 03 or 01 mini on ChatGPT, but I went and I asked, I said, explain internal iteration as it exists in libraries like C++ Flux and also the issue of double dereference. And this is what it said, it reasoned for 18 seconds. That's a reasonable amount of time for me to wait. It says in many traditional C++ designs, you iterate over containers or ranges using external iteration.
+LLM 的时代。所以我心想，它们有这些推理模型。我不确定这是 ChatGPT 的 o3 还是 o1-mini，但我去问了，我说：“解释一下 C++ Flux 等库中存在的内部迭代，以及双重解引用的问题。”它是这样说的，它推理了 18 秒。这对我来说是一个合理的等待时间。它说，在许多传统的 C++ 设计中，你使用外部迭代来遍历容器或 ranges。
+
+16
+00:08:38.000 --> 00:08:53.000
+That is you write a loop that pulls values out via iterators. With internal iteration on the other hand, you pass a function, often a lambda, to an algorithm, and the algorithm internally, in quotations, iterates over the data, applying your function to each element. This means control.
+也就是说，你编写一个循环，通过迭代器拉取值。另一方面，使用内部迭代，你将一个函数（通常是 lambda）传递给算法，算法在“内部”（加引号）遍历数据，将你的函数应用于每个元素。这意味着控制权。
+
+17
+00:08:53.000 --> 00:09:12.000
+The library's algorithm controls the loop rather than the caller optimization. The library can optimize the iteration process, potentially fusing multiple operations together, a technique often called loop fusion, and even parallelizing work and abstraction. Users work at a higher level of abstraction, you chain operations together without managing the low level mechanics of looping.
+库的算法控制循环，而不是调用者。优化方面，库可以优化迭代过程，潜在地将多个操作融合在一起（这种技术通常称为循环融合），甚至可以并行化工作。抽象方面，用户在更高的抽象层工作，你将操作链接在一起，而无需管理循环的底层机制。
+
+18
+00:09:12.000 --> 00:09:55.000
+So before I throw this over to you, and we'll ignore the double dereference exclamation answer that it gave us, my first thought when I hear this is, okay, I mean, I agree with this loop fusion thing, but explaining it as like passing higher order functions to these operations and letting the algorithms manage the iteration. My first thought is like, that's what doesn't like ranges you like, if I call a, you know, stood colon colon views, colon, colon transform versus a flux dot map, you're passing a lambda to both of those. So like that explanation of handing over this kind of callback that then enables the algorithms or the adapters to control the iteration doesn't fully check out.
+所以在把话筒交给你之前，我们先忽略它给出的关于双重解引用的解释，我听到这里的第一反应是：好吧，我同意循环融合的说法，但将其解释为“将高阶函数传递给这些操作并让算法管理迭代”，我的第一反应是：这不就是 ranges 喜欢做的事吗？如果我调用 std::views::transform，或者 Flux 的 map，你都要给它们传递一个 lambda。所以，那种“移交回调函数，从而使算法或适配器能够控制迭代”的解释，似乎并不完全成立。
+
+19
+00:09:55.000 --> 00:10:35.000
+I did ask a follow-up question that said, okay, so what does C++ ranges and range V3 use? And it did say this uses external iteration because you can use this with for loops. And then I asked, can you can you not use flux with for loops and it says typically no you can't so anyways how much of that is right and wrong and where it's wrong please elaborate and correct okay okay right so um it is uh correct apart from the bit about flux um not using external iteration. Flux, the cursor model that I described is a form of external iteration. What we mean by that is that you
+我确实问了一个后续问题，说：“那么 C++ ranges 和 range V3 使用的是什么？”它确实说这使用的是外部迭代，因为你可以将它们与 for 循环一起使用。然后我问：“你不能将 Flux 与 for 循环一起使用吗？”它说通常不能。所以，无论如何，其中有多少是正确的，有多少是错误的？如果错了，请详细说明并纠正。好的，好的，没错。除了关于 Flux 不使用外部迭代的那一点外，它是正确的。Flux，我描述的游标模型，就是一种外部迭代形式。我们所说的意思是，你
+
+20
+00:10:35.000 --> 00:11:37.000
+have some, or typically you have some sort of external, some sort of object that represents your iteration state. And then you can, as the caller, you can request the next value of the sequence. So typically we would call this thing, this state, like an iterator. Right. So this is the way that it works in C++. In Flux, our iteration state is this cursor object, you know, Python, almost all languages, in fact, you use this external iteration model. But as an optimization, and at the moment, we might get into how I'm planning to change things, but at the moment, it's purely an optimization in Flux, is that we can turn this round for certain algorithms and we can, just as you described it, we can instead say to the sequence, okay, here is a function. I want you, please, to call this
+有某种——或者通常有某种外部的、某种代表你迭代状态的对象。然后作为调用者，你可以请求序列的下一个值。所以通常我们会把这个东西、这个状态称为“迭代器”。没错。这就是 C++ 中的工作方式。在 Flux 中，我们的迭代状态就是这个游标对象。你知道，Python，几乎所有语言，实际上都使用这种外部迭代模型。但作为一种优化——目前我们可能会谈到我计划如何改变它——但在目前，这在 Flux 中纯粹是一种优化，我们可以为某些算法扭转这种局面，我们可以像你描述的那样，转而对序列说：“好的，这是一个函数。我请你为你的每一个元素调用这个
+
+21
+00:11:37.000 --> 00:12:16.000
+function for every one of your elements. And it turns out that by turning things inside out like that, instead of requesting elements one at a time, by saying here is a function, please, will you do the iteration for me, effectively compilers can generate really, really, really good code. Optimizers just seem to absolutely love this style of doing things. That's kind of what I've discovered is that this is just amazing for performance. So wait, just to clarify, so you're saying actually that Flux doesn't use internal iteration? It's X?
+函数。”事实证明，通过这样将事物“由内而外”地翻转，而不是一次请求一个元素，通过说“这是函数，请你为我执行迭代”，编译器实际上可以生成非常、非常、非常好的代码。优化器似乎非常喜欢这种做事风格。这就是我发现的，这对性能来说简直太棒了。等等，澄清一下，你是说 Flux 实际上并不使用内部迭代？它是外部的？
+
+22
+00:12:16.000 --> 00:12:43.000
+No, it does. It uses it as an optimization. So if you're doing like a basic for each algorithm, if it can, it will attempt to use an internal iteration code path. If it can't do that, if one of your adapters or your source doesn't support internal iteration, it will use regular external iteration using cursors. Interesting.
+不，它确实使用。它将其作为一种优化手段。所以如果你在做类似 for_each 的基本算法，如果可以的话，它会尝试使用内部迭代代码路径。如果做不到，如果你的适配器或源不支持内部迭代，它就会使用带有游标的常规外部迭代。有趣。
+
+23
+00:12:43.000 --> 00:13:03.000
+So if it can, it internally iterates. If it can't, it externally iterates. That is the current situation. And so how is that? I mean, not that we want to get into implementation details, but like, what does that look like from an implement? Because I actually took a look at like the map adapter, but I don't know. It's a lot of templates and stood invokes and stood forwards.
+所以如果可以，它就内部迭代。如果不行，它就外部迭代。这就是目前的情况。那么，这……我的意思是，并不是说我们要深入实现细节，但从实现者的角度来看，这看起来是什么样的？因为我确实看了一下 map 适配器，但我不知道。那里面有很多模板和 std::invoke 以及 std::forward。
+
+24
+00:13:03.000 --> 00:13:39.000
+And it's hard to make sense of like, you know, how does it determine? Is it just basically like every single one of the adapters is tagged with, like, whether or not it can do this and it dispatches based on that or something or? OK, so imagine that like there's a function called. Well, I have to imagine because there's a function called for each. Right. And you can write the forEach algorithm, which is, you know, in terms of the cursors, you just say, okay, well, give me a curse to the start, like the start cursor. And while it's not equal to the end, I'm going to read a value, I'm going
+很难理解它是如何判断的。是不是基本上每个适配器都标记了它是否能做到这一点，然后它根据这个进行分发，或者类似的东西？好的，想象一下有一个函数叫……好吧，我必须想象，因为有一个函数叫 for_each。没错。你可以编写 for_each 算法，用游标来表示，你只需要说：“好的，给我一个指向开始的游标。”当它不等于结束时，我读取一个值，我
+
+25
+00:13:39.000 --> 00:14:48.000
+to call the function, the given function with that value, I'm going to increment the cursor, and then eventually it's equal to the end position and then we finish. Okay, so that's, that is a, like, just, just how we, how we write a 4-H in terms of, uh, excellent iteration. However, you could also, and this is the way we do it, allow sequences to provide a specialization of the for each algorithm. So something like a vector or a C++ range, you could just use a for loop, like a language for loop, and within this loop you would just call the function. And then you think about, well, okay, what about a map adapter? Can we provide a specialization for each on a map adapter? And the answer is yes, we can. So what we do is we take the mapping function and we apply that first. so we get the adapted value, and then we pass that adapted
+调用带有该值的给定函数，我递增游标，最终它等于结束位置，然后我们完成。好的，这就是我们如何用外部迭代编写 for_each。然而，你也可以——这也是我们的做法——允许序列提供 for_each 算法的特化。所以像 vector 或 C++ range，你可以直接使用语言的 for 循环，在这个循环中你只需调用该函数。然后你考虑一下，map 适配器呢？我们能为 map 适配器提供 for_each 的特化吗？答案是肯定的。所以我们要做的是，我们先获取映射函数并应用它，
+
+26
+00:14:48.000 --> 00:15:31.000
+value to the user called function. So we can compose mapping and filtering inside of this for each. And the way that this works, and it's quite hard to describe, it's much easier if you can sort of see it in code, the way that these lambdas all sort of nest inside each other, but they're all completely transparent to the compiler and it can just see right through them and do an amazing job of optimization because we can specialize this for each function. And that's sort of at the heart of what we mean by internal iteration. And so, yeah, in terms of algorithms,
+这样我们得到适配后的值，然后我们将该适配后的值传递给用户调用的函数。所以我们可以在这个 for_each 内部组合映射和过滤。它的工作方式——描述起来相当困难，如果你能在代码中看到它会容易得多——这些 lambda 嵌套在一起的方式，但它们对编译器来说是完全透明的，编译器可以直接看穿它们，并做出惊人的优化，因为我们可以特化这个 for_each 函数。这就是我们所说的内部迭代的核心。所以，是的，就算法而言，
+
+27
+00:15:31.000 --> 00:16:07.000
+pretty much anything that is a fold or a scan can end up using internal iteration. Everything, anything that where you begin at the beginning of a sequence and run linearly until a certain point can almost always be written in terms of internal iteration and that is the vast majority of things people tend to do with sequences. So it ends up like I said the goal with Flux really was to have something that was safer than the status quo but it turns out that most people have noticed
+几乎任何 fold 或 scan 最终都可以使用内部迭代。任何从序列开头开始并线性运行到某一点的东西，几乎总是可以用内部迭代来编写，而这正是人们倾向于对序列执行的绝大多数操作。所以最终，正如我所说，Flux 的目标确实是拥有比现状更安全的东西，但事实证明，大多数人都注意到
+
+28
+00:16:07.000 --> 00:16:35.000
+that it also, because of this internal iteration, optimization ends up generating really good code as well. So, yes. So is there this technique of providing specializations, is there a reason this can't be applied to standard ranges? It could be, right? So in fact there was a proposal by Jonathan Mueller and Barry, I think Barry Resson, I can't remember the paper number, we'll have to look it up.
+由于这种内部迭代优化，它最终也生成了非常好的代码。所以，是的。那么，这种提供特化的技术，有什么理由不能应用于标准 ranges 吗？可以的，对吧？事实上，Jonathan Mueller 和 Barry（我想是 Barry Revson）有一个提案，我不记得论文编号了，我们得查一下。
+
+29
+00:16:35.000 --> 00:17:11.000
+But there was a proposal for exactly this kind of thing. So yeah, it didn't succeed because it kind kind of I think it was probably a little bit too ambitious for uh initially but uh it could in theory be applied to um to ranges as well. So you're saying the reason it failed wasn't technical it was just that they were trying to land too much stuff at once? I it's a while since I since I read it but yeah I think they were kind of proposing to the changes to the way range for loops work and things like that, which probably made people a bit nervous. Yeah, I'm not really.
+但确实有一个关于这种东西的提案。所以，是的，它没有成功，因为我认为它对于最初来说可能有点太雄心勃勃了，但理论上它也可以应用于 ranges。所以你是说它失败的原因不是技术上的，只是因为他们试图一次性加入太多东西？我读那篇论文已经过去很久了，但我认为他们当时是在提议改变 range for 循环的工作方式之类的东西，这可能让人们感到有点紧张。是的，我不太……
+
+30
+00:17:11.000 --> 00:17:30.000
+I can't remember the precise details. Not necessarily just touching library stuff, like touching language stuff as well. Yeah, yeah. Interesting. Interesting. So there's nothing actually that, yeah. Yeah, in principle, we could have the range's algorithms perform this optimization as well.
+我不记得确切的细节了。不一定只是涉及库的东西，还涉及语言层面的东西。是的，是的。有趣。有趣。所以实际上没有什么……是的。是的，原则上，我们可以让 ranges 算法也执行这种优化。
+
+31
+00:17:30.000 --> 00:18:08.000
+Yeah, I do know that there, I mean, I don't really pay attention to it, but I do know there's like a year long filter view saga happening right now where I see talks from people about the brokenness and yeah, I don't follow the committee papers closely anymore, but I do know at some point papers were being written. So yeah, I don't really know what the status of that stuff is. Of course, this kind of thing. It's interesting you can say we can apply that to standard ranges because this kind of thing always the question in the back of my mind whenever we talk about things like this is the question of did we standardize
+是的，我知道——我的意思是，我并没有真正关注它，但我知道现在有一个长达一年的 filter_view 传奇，我看到人们谈论它的缺陷，是的，我不再密切关注委员会的论文了，但我知道在某个时候确实有人在写论文。所以，是的，我真的不知道那些东西的现状如何。当然，这种事情……有趣的是你说我们可以将其应用于标准 ranges，因为每当我们谈论这类事情时，我脑海中总是会浮现出一个问题：我们是否标准化得太早了？ranges 在有几种实现的情况下被标准化了，但没有这种内部迭代设计，也许当时还没发现，或者你知道，所以要问的问题是：通过那么早标准化，我们关闭了哪些大门？值得等待吗？你对此有什么想法吗？我的意思是，人们曾说：“你会提议将 Flux 标准化吗？”我说：“不，因为与 ranges 的重叠太多了。”但另一方面，没有 ranges，没有我从学习它中学到的东西，Flux 就不会存在。所以，就像，你总是可以等待下一个东西，因为我现在想对 Flux 做一些改变，因为我觉得我可以做得更好，而且你总是可以……总有一种方法可以把事情做得更好，对吧？总有下一个东西。所以到某个时候你必须说：“好吧，让我们把它放进去。”所以，我的意思是，从技术上讲，有一个论点是你不需要这样做，如果我们有更好的包管理方案，可以说应该是 range，range V2，
+
+32
+00:18:08.000 --> 00:18:53.000
+something too early, right? Ranges got standardized with several implementations but without this internal iteration design it hadn't been discovered yet maybe or you know and so the question to ask is like which doors have we closed by standardising as early as that? Would it have been worth waiting? Do you have thoughts on that? I mean, people have kind of said, well, you know, would you propose flux for standardisation? I was like, well, no, because it because the overlap with ranges is too much. But on the other hand, flux wouldn't exist without ranges, without what I learned from
+range V3，然后是 Flux，你知道，Flux 2，然后你就可以轻松获取东西了，对吧？但问题是，除非你配置好了构建系统，或者为一家公司工作——你知道，所有大公司都有解决方案，对吧？这不像 cargo install 那样容易。如果是一个库，这些天我想我在这个播客上说过，我只是使用 fetch 命令和 make
+
+33
+00:18:53.000 --> 00:19:24.000
+studying that. So it's like, you can always wait for the next thing, because I have changes I now want to make to flux, because I think I can do it better and you can always, there's always a way to do something better, right? There's always a next thing. So at some point you've got to go, well, let's just, let's put this in there. So, well, I mean, I mean, technically there's an argument that you don't have to, like if we had a better story for package management, arguably it would have been range, range V2,
+脚本，每次我有新项目时，我都复制我的 makefile，然后从最新的 GitHub 仓库拉取。我不使用任何包仓库。它们是什么？Frog 有一个，Frog 公司，Conan，Jfrog，谢谢，然后还有 vcpkg，我不使用任何那些东西，我只是指向 GitHub 仓库，幸运的是，我想要使用的几乎所有库，CMake 的较新版本都有这个 fetch
+
+34
+00:19:24.000 --> 00:19:50.000
+range V3, then Flux, you know, Flux 2, and then you can just reach for stuff management, arguably it would have been range, range V2, range V3, then flux, you know, flux two, and then you can just reach for stuff easily, right? But the problem is, is that unless if you, you know, have your build system configured or worked for a company, like, you know, all the major companies have some solution for this, right? It's not as easy as going cargo install, whatever for your, if you're a library, like these days, I think I've said this on this podcast, I just do the fetch command and make
+content，我发现对于个人项目来说这相当不错。我使用 CPM，它是 fetch content 的一个包装器。它和 CMake 完全不同。是的，有人最近告诉我那个，说我应该切换到 CPM，但问题是，一旦你有了能用的东西，你所要做的就是更改 GitHub URL。是的。是的，好吧，你应该切换到 CPM，因为它是一个 fetch content 的包装器，因为它
+
+35
+00:19:50.000 --> 00:20:21.000
+scripts and every single time I have a new project, I copy my make file and I just pull from the latest whatever GitHub repo. I don't use any of the package repo. Like what are they? The frog has one one the frog company Conan J frog thank you and then there's VC package like I don't use any of that stuff I just I just point at github repos and luckily almost all of the libraries that I want to use CMake's has recent versions of CMake have this fetch
+工作方式相同。它只是一个更好的 API。它更容易。好了，各位。我想这就是我想说的，它拥有你喜欢的所有东西。下次我们录制时，我会汇报情况。虽然我甚至不知道我是否还在积极从事任何 C++ 项目。
+
+36
+00:20:21.000 --> 00:20:42.000
+content which I found to be pretty good for just like home projects. I use CPM, which is a wrapper around fetch content. It's entirely different than CMake. Yeah, someone told me about that recently and said I should switch to CPM, but the thing is once you have something that works and all you have to do is change a GitHub URL. Yeah. Yeah, well you should switch to CPM because it's a wrapper around fetch content, because
+这些天我大部分时间都在 Python 的世界里。但是的，我的意思是，所以无论如何，回到……在某个时候你必须把它放进标准里，可以说，你知道。好吧，是的，确实。你必须吗？是的。如果我们有更好的方案的话。这非常像有很多东西进入标准，人们
+
+37
+00:20:42.000 --> 00:20:57.000
+it works the same way. It's just a better API. It's just easier. All right, folks. Has all the things you like, I think, is what I'm saying. Next time we record, I will report back. Although I don't even know if there's any C++ projects that I actively am working on.
+有不同的意见，关于它们是否应该……比如，格式化（formatting）可能就是这方面的典型例子，对吧？我交谈过的大多数人可能还是坚持使用 libfmt，尽管 std::format 已经存在。libfmt 功能更丰富，而且是他们已经在使用的，你可能会……因此他们想坚持使用它，他们想……而且它仍在开发中，仍在维护中，非常稳定且好用。现在，当然，总是会被提出来的反驳论点是：那些监管严格的行业怎么办？监管是一个大问题，他们可以针对标准进行监管，但针对第三方库进行监管是一个大问题，对吧？昂贵之类的。
+
+38
+00:20:57.000 --> 00:21:17.000
+Mostly these days I'm in Python land. But yeah, I mean, so anyways, back to the, you know, at some point you have to put it in to the standard, arguably, you know. Well, yeah, exactly. Do you? Yeah. If we had a better story for it. And this is very much like there's lots of things going into the standards and people
+所以我不知道答案是什么，但我所知道的是，我交谈过的几乎每个人都想使用 libfmt 而不是 std::format。有趣。我认为在 format 这个特定例子中，它足够重要。我们应该有一种好的方式来打印出随语言附带的东西。我同意。那个特定的例子，我认为，
+
+39
+00:21:17.000 --> 00:22:11.000
+have different opinions about whether they should maybe like, like the poster child for this maybe is formatting, right? Most of the people I talk to probably sticking with libfmt, even though std format exists. libfmt is better featured and it's what they were already using and you would probably, you know, therefore they want to stick with it and they want to... and it's still being developed, still being maintained and it's very stable and nice. Now, the counter argument of course that always gets brought up as well, what about the regulated industries where regulation is a big deal and they can regulate against the standard but but regulating against third party is is a big deal right expensive or whatever
+是的，那是标准库合理的东西。然而，还有其他东西，线性代数（linear algebra）就是一个最近的例子，我不确定对我个人而言，我认为它是否适合标准库。是的。Sender/Receiver 对我来说是一个。我已经实现了 Sender/Receiver，一个它们的版本。我不知道标准化的东西是否能满足我所有的用例。
+
+40
+00:22:11.000 --> 00:22:41.000
+so I don't know what the answer there is but but I did what I do know is that almost everyone I talked to wanted to use slip FMT rather than stood format. Interesting. I think in the particular example of format, that is important enough. We should be able to have a good way of just printing stuff out that comes with the language. I agree. That particular example, I think,
+我希望它能。我相信致力于此的人希望它能，但我认为即使有最好的意愿，它可能还需要十年才能支持所需的所有用例。在 libfmt 的例子中，我同意我们应该有好的方式来标准地格式化东西。libfmt 为我提供的额外好处主要是在 constexpr 空间。这是标准不断让我失望的地方。我们仍然在标准化东西，却没有使它们适当地 constexpr。是的。我不……以至于我不……我认为这现在可能是一种策略。
+
+41
+00:22:41.000 --> 00:23:07.000
+yeah, that's something that's reasonable for the standard library. However, there are other things that linear algebra being a recent example that I'm not sure for me personally, whether I think that's a good fit for the standard library. Yeah. Senders receivers is one for me. I've implemented senders receivers, a version of them. I don't know if what's being standardized will fit all my use cases.
+就像那只是一个过程，对吧？首先我们标准化某样东西，然后我们使它 constexpr。在某些情况下，也许不是在其他情况下，但当你遇到你想在编译时使用的东西时，它几乎总是令人失望的。而且在所有意图和目的上，它都应该可以在编译时使用。而它不能使用的唯一原因是它在标准化时没有在前面加上 constexpr 关键字。这种情况仍然会发生。
+
+42
+00:23:07.000 --> 00:23:54.000
+I hope it will. I believe that the people working on it want it to, but I think with the best will in the world it might take another decade before it supports all the use cases required. In the case of libfmt, I agree that we should have good ways to standardly format things. The extra benefit that libfmt provides for me is largely in the constexpr space. And this is something where the standard continually disappoints me. We still standardize things without making them properly constexpr. Yeah. I don't, to the point where I don't, I think that might be a tactic now.
+是的。说到委员会花在那些我宁愿他们只是有一个好的包管理方案的东西上的时间，我觉得委员会花在试图进入标准的东西上至少 50% 的时间，你只会觉得：哦，除了那些必须处理这些东西的受监管公司之外。
+
+43
+00:23:54.000 --> 00:24:23.000
+Like that is just a process, right? First we standardize something, then we make it constexpr. In some cases, maybe not in other cases, but it's almost always disappointing when you come up against something that you want to use at compile time. And to all intents and purposes, it should be usable at compile time. And the only reason it isn't is that it was not standardized with that constexpr keyword in front. It still happens.
+然后如果你把所有那些额外的时间投入到语言上，比如 sum types，像一个好的 tuple，一个好的语言 variant 和模式匹配（pattern matching），那实际上是我要问你的一个问题，Tristan。我在“C++ Under the Sea”上问过 Phil Nash。我说有一个我想构建的项目，由于种种原因，用 C++ 做会更容易。我说我想使用 Flux，但对于现在来自所有都有非常好的代数数据类型、sum types 和模式匹配的语言的我来说，回到 library variant 的世界，你知道，alternative，这太
+
+44
+00:24:23.000 --> 00:24:45.000
+Yeah. Speaking of the time that the committee spends on stuff that arguably I would prefer if they just had a good package management story, then I feel like at least 50% of the stuff the committee spends time on trying to get into the standard, where you just be like, oh, modulo the regulatory companies that have to deal with that stuff.
+繁琐了，我说如果你想要在 C++ 中有那种体验，你的建议是什么？你知道，你是一个做这个有一段时间的人，他的回答是：使用 Swift。所以，我想我可以把这个问题抛给你，Ben，有没有……如果我想做某种函数式编程风格的东西，要么使用 ranges 或 range V3 或 Flux，但我想要那种如今几乎所有语言都有的 sum type 模式匹配，答案是目前没有好的解决方案，我必须等待未来的标准，直到模式匹配被
+
+45
+00:24:45.000 --> 00:25:29.000
+And then if you took all that extra time and put it towards language, some types, like a nice tuple, a nice language variant and pattern matching, that was actually a question I was going to ask you, Tristan. I asked Phil Nash this at C++ Under the Sea. I said there was a project that I wanted to build that for reasons would have been easier to do in C++. And I said I want to use Flux, but like it's just so hard for me coming from languages now that all have really nice algebraic data types and sun types and pattern matching to like come back to like library variant land and you know is alternative it's just it's so
+标准化，还是有……你在问我吗？我不确定我是最适合回答这个问题的人。我认为 Circle 有模式匹配。我确实考虑过转向 Circle，然后用一种拥有（你知道，使用 choice types 和模式匹配）的 C++ 变体进行编程。但那样的话，你编程的不仅仅是一个方言，我几乎可以说那是一个不同的语言，对吧？因为你不能去 GCC 或 Clang，它不会工作，对吧？是的。
+
+46
+00:25:29.000 --> 00:26:07.000
+cumbersome and I said what's your suggestion if I want like that experience in C++ you know you're you're someone who's been doing this for a while and his answer was use Swift so what is there I guess I can open this up to you Ben like is there what is the best Experience in C++ if I want to do some kind of functional programming esque So either reaching for ranges or range V3 or flux But then I I want I want the the sum type pattern matching that almost all languages these days have Is just the answer is there is no good solution currently and I have to wait for a future standard until pattern matching is
+我想，我的意思是，有一个模式匹配提案已经运行很长时间了。是的，好几年了。Michael Park。但我认为……看起来它要错过了。它错过了这班船。是的。是的。哦，它是……
+
+47
+00:26:07.000 --> 00:26:39.000
+standard or is there... You're asking me? I'm not sure I'm the best person to ask. I think Circle has pattern matching. I did actually consider going to Circle and then programming in like a C++ variant that has, you know, uses choice types and uses pattern matching. But then like, you're not programming in a, you're programming in not just like a dialect, but I would almost argue like a different language at that point, right? Because you can't then go to a GCC or Clang and it's, it's not going to work, right? Yeah.
+为了 C++26。突发新闻，各位。突发新闻。C++26。看起来它不会了。我们不能确定。我的意思是，尘埃……还是尘埃落定了？
+
+48
+00:26:39.000 --> 00:26:51.000
+I think, I mean, there's been a pattern matching proposal that's been in flight for a long time. Yeah, for years. Michael Park. But I think... It looks like it's just going to miss. It's missed the boat. Yeah. Yeah. Oh, it's...
+我想上次会议是……它应该是功能完整的。我犹豫的原因是我记不清我是否确定……让我看看我能不能找到……是的，我想在上次会议上，看起来模式匹配要错过 26 了。老实说，即使是模式匹配，它会让事情变得更好，但实际上你需要语言支持，在我看来，才能真正获得完整的、一流的体验。我的意思是，我前几天和 Sean Baxter 谈论，你知道，他问我如果有一个新的语言，你想要支持数组编程的哪些东西，我说忘了数组编程，我只需要——因为他说它需要像一种 C++ 语言——我说我需要 sum types 和模式匹配。他说：“哦，Circle 已经有了。”所以，你知道，选另一个特性。我说：“好吧，C++ 没有它。”所以，嗯，抱歉，Tristan，你要说什么。我只是想说，我找到了它。
+
+49
+00:26:51.000 --> 00:26:59.000
+For C++26. Breaking news, folks. Breaking news. C++26. Looking like it won't. We don't know for sure. I mean, the dust... Or has the dust settled?
+我说模式匹配没有达成共识，但非常接近。人们觉得它还没有为 C++ 26 做好准备。所以很有趣。我想知道这意味着什么，比如有更多细节。它非常接近，但没有进入，因为人们对设计没有达成一致。哦，好吧。我的意思是它迟早会来的。我不知道我们现在能不能说它是设计，但某种东西。我不知道。
+
+50
+00:26:59.000 --> 00:27:33.000
+I think the last meeting was the... It's supposed to be feature complete. It's just the reason I'm wavering is because I can't remember off the top of my head whether I'm pretty sure let me just see if I can find the... Yeah I think in the last week meeting it looks like pattern matching is going to miss 26. And I honestly too like even pattern matching it would make it nicer but really you need you need the language support, in my opinion, to really get the full first class experience. I mean I was talking to Sean Baxter the other day about, you know, he was asking me if there
+我没参加那个会议。是的，这就是为什么你必须在核心圈子里。你必须参加会议才能……我的意思是，我确定，我猜 CPPcast 已经有一段时间没出新节目了，但通常 Phil 和 Timur 会请人来谈论委员会会议。我想 Timur 一直忙于合同（contract）的事情，因为那是他的专长。所以他可能太忙于参与行动，而没时间做关于行动的播客，如果你明白我的意思的话。
+
+51
+00:27:33.000 --> 00:27:57.000
+was some new language on the block, what are the things that you would want to support array programming, and I said forget array programming, I just need, because he said it needs to be like a C++ like language, And I was like, I need some types and pattern matching. He's like, oh, Circle already has that. So, you know, choose another feature. And I was like, well, C++ doesn't have it. So, um, sorry, Tristan, you were going to say something. I was just going to say, I found it as a thing.
+请务必在你的播客应用程序或 adspthepodcast.com 上查看这些节目说明。这一期还没有评论。点击转录中的任何句子即可发表评论。
+
+52
+00:27:57.000 --> 00:28:27.000
+And I said pattern matching does, did not get consensus, but was extremely close. Tendies felt that it wasn't quite ready for C++ 26. So interesting. I wonder what that means, like with more details. It was extremely close but didn't make it in in terms of like just people didn't agree on the design. Oh well. I mean it is coming at some point. I don't know if it's the, I don't know if we can say it's the design at this point but something. I don't know if it's the, I don't know if we can say it's the design at this point, but something. I don't know.
+我说模式匹配没有达成共识，但非常接近了。委员会觉得它还没为 C++ 26 做好准备。真有意思。我想知道这意味着什么，比如更多细节。它非常接近但没能入选，仅仅是因为人们对设计没有达成一致。好吧。我的意思是它迟早会来的。我不知道现在能不能说这就是最终设计，但总会有东西的。我不知道。
+
+53
+00:28:27.000 --> 00:29:02.000
+I wasn't at the meeting. Yeah, this is why, this is why you have to be in the inner circle. You got to be at the meetings in order to, I mean, I'm sure, I guess CPPcast hasn't come out with an episode in a while, but usually Phil and Timur, they, they'll have someone on to talk about the committee meeting. I think Timur's been so busy with the contract stuff because that's his thing. So he's probably been too busy being part of the action to do the podcast about the action if you see what I mean.
+我没参加那次会议。是的，这就是为什么你必须进入核心圈子。你必须参加会议才能……我的意思是，我确定，我猜 CPPcast 已经有一段时间没出新剧集了，但通常 Phil 和 Timur 会请人来谈论委员会会议。我想 Timur 一直忙于合同相关的事情，因为那是他的专长。所以他可能太忙于参与行动，而没时间做关于行动的播客，你懂我的意思吧。
+
+54
+00:29:02.000 --> 00:29:07.000
+Be sure to check these show notes either in your podcast app or at adspthepodcast.com the action if you see what I mean. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+请务必在您的播客应用程序中或访问 adspthepodcast.com 查看这些节目笔记。本集目前还没有评论。点击转录稿中的任何句子即可发表评论。

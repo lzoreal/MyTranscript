@@ -1,0 +1,251 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:00.000
+Well, and this is why you should use algorithms instead of raw for loops. Because you can do this not only in some array language like Jelly, but you can also do this in standard C++. It's a little bit harder, but there's actually, so there's an effort to develop um a new high level ir for claim i'm using the the ml ir framework which is a framework for sort of developing high level more language specific irs that are exist at a level above lvm ir Welcome to ADSP, the podcast, episode 169, recorded on February 14th, 2024. My name is Connor, and today with my co-host, Bryce, we chat about the parallel algorithm
+嗯，这就是为什么你应该使用算法而不是原始的 for 循环。因为你不仅可以在像 Jelly 这样的数组语言中做到这一点，还可以在标准的 C++ 中做到。这稍微难一点，但实际上，目前有人在努力为 Clang 开发一种新的高级 IR，我使用的是 MLIR 框架，这是一个用于开发更高级、更特定于语言的 IR 的框架，它们存在于 LLVM IR 之上。欢迎收听 ADSP 播客，第 169 期，录制于 2024 年 2 月 14 日。我是 Connor，今天我和我的联合主持人 Bryce 一起聊聊并行算法
+
+2
+00:01:00.000 --> 00:01:26.000
+thrust unique count, other algorithms, and the algorithm advisor. What is wrong with my voice? I technically haven't said... Oh, Jesus. I'm going to sound like I smoke a... Are you using your mic? I am. Oh, but the microphone would not be on me, so that might be... It sounds about 100 times better.
+thrust unique count、其他算法以及算法顾问。我的声音怎么了？我严格来说还没说……哦，天哪。我听起来像抽了……你在用麦克风吗？我在用。哦，但麦克风没对着我，所以可能是……听起来好了一百倍。
+
+3
+00:01:26.000 --> 00:01:40.000
+You know, minor details. I did turn it on. Happy Valentine's Day, buddy. Happy Valentine's Day, Connor. How you doing? We're recording nice and early in the morning. Yep. What are your big Valentine's Day plans?
+你知道，小细节。我确实打开了。情人节快乐，伙计。情人节快乐，Connor。你怎么样？我们一大早就开始录音了。是的。你有什么重大的情人节计划吗？
+
+4
+00:01:40.000 --> 00:02:00.000
+It's more like a, well, we're not talking about this on the pod. Yeah, we are. Yeah, we are. Yeah, we are. Ramona and I are doing nothing. It's Ramona's birthday. It's February 13th. So we went out for dinner on Saturday and then yesterday.
+更像是，嗯，我们不在播客里谈这个。是的，我们要谈。是的，我们要谈。是的，我们要谈。Ramona 和我什么都不做。今天是 Ramona 的生日。今天是 2 月 13 日。所以我们周六出去吃了晚餐，然后是昨天。
+
+5
+00:02:00.000 --> 00:02:50.000
+But, you know, it's like impossible to go out on Valentine's Day. You have to get a reservation. Everywhere has a special menu where they charge it extra. But since her birthday's the day before, it's like, we can just go out the day before. It's great. So we're going to stay at home. We're going to, our little local Korean place, though, has a special Valentine's Day menu. So I may try to talk her into going out to there. But we're probably going to stay at home, eat take-in or leftovers. And then, I don't know, watch a movie, read books. We're going to be lazy. So there's like a foot of snow in New York, but we're up in Albany and there is no snow which I'm very upset about because it didn't snow at all in New York last year and I love the snow
+但是，你知道，情人节出去简直是不可能的。你必须预订。到处都有特别菜单，而且还要额外收费。但既然她的生日在前一天，我们就可以在前一天出去。这太棒了。所以我们打算待在家里。不过，我们当地的一家韩国小店有特别的情人节菜单。所以我可能会试着说服她去那里。但我们很可能会待在家里，吃外卖或剩菜。然后，我不知道，看电影，看书。我们要懒散一下。纽约下了大约一英尺的雪，但我们在奥尔巴尼，这里没有雪，我对此感到非常难过，因为去年纽约根本没下雪，而我喜欢雪
+
+6
+00:02:50.000 --> 00:03:04.000
+so we really missed out well I'm sure you'll be back to the Big Apple soon yeah Friday actually and you're going to come down to the Big Apple this is true
+所以我们真的错过了。嗯，我相信你很快就会回到大苹果城。是的，实际上是周五。你要来大苹果城。这是真的。
+
+7
+00:03:04.000 --> 00:04:06.000
+March 5th to 8th we will be me you and sean parent yes i we i'm excited we should actually check the new york c plus plus meetup we happen to know that it is on march 7th, which is the Thursday, I believe. But as of this recording, which for those of you that know when Valentine's Day is, is February 14th. It is not posted on, and I assume this is the NYC++ meetup not the new york c++ developers meetup which hasn't been active new york developers yeah there's two new york meetups but this one hasn't been active for a couple years and then the nyc plus plus is the one that adobe kind of quasi sponsors now but yes there should be a meetup for the C++ folks.
+3 月 5 日到 8 日，将会有你、我和 Sean Parent。是的，我很兴奋。我们其实应该查一下纽约 C++ 聚会。我们碰巧知道它是在 3 月 7 日，也就是周四，我想。但在本次录制时，对于那些知道情人节是哪天的人来说，今天是 2 月 14 日。它还没有发布，我假设这是 NYC++ 聚会，而不是纽约 C++ 开发者聚会，那个已经不活跃了。纽约开发者，是的，有两个纽约聚会，但这个已经好几年不活跃了，而 NYC++ 是 Adobe 现在某种程度上赞助的那个，但是的，应该会有一个面向 C++ 爱好者的聚会。
+
+8
+00:04:06.000 --> 00:04:32.000
+And also, if you're not interested in C++ and you just want to come and hang out for an evening, Bryce and I will be there. I believe Sean Parent is the speaker, if not one of the speakers. No, he'll be the speaker. And yeah, should be a good time. You've booked us some plans on the Tuesday night. We're going to a, I think I saw a comedy club. I accepted a bunch of invites.
+而且，如果你对 C++ 不感兴趣，只是想过来聚聚，Bryce 和我都会在那里。我相信 Sean Parent 是演讲者，如果不是其中之一的话。不，他会是演讲者。是的，应该会很愉快。你帮我们预订了周二晚上的计划。我们要去一个，我想我看到了一个喜剧俱乐部。我接受了一堆邀请。
+
+9
+00:04:32.000 --> 00:04:59.000
+Although our plans may change because the dinner venue is going to change a little bit. But yeah, the plan is we're going to go to a comedy club and then go get food somewhere. Yep, looking forward to it. Love comedy. Was just at Second City on Monday in Toronto, not in Chicago. Hopefully. Nobody's heard of Second City in Toronto. Is that even a thing?
+虽然我们的计划可能会改变，因为晚餐地点会稍微变动一下。但是的，计划是我们去喜剧俱乐部，然后去别的地方吃东西。是的，很期待。我喜欢喜剧。周一刚在多伦多去了 Second City，不是在芝加哥。希望如此。没人听说过在多伦多的 Second City。那东西存在吗？
+
+10
+00:04:59.000 --> 00:05:46.000
+It definitely is. There are three different Second City locations, Toronto chicago and i believe new york actually is the other one yes i think it's new york and chicago i don't know about toronto i mean from what i've been told the a lot of canada's top comedians come out of second city um like oh canada's top comedians i'm gonna i'm gonna get so canceled for this have you heard of mike myers uh i have heard of mike myers canadians are too nice to be comedians is that true do we have any mean comedians i guess that's true mike myers was nice j Jim Carrey was really nice.
+它绝对存在。有三个不同的 Second City 地点，多伦多、芝加哥，我想纽约其实是另一个。是的，我想是纽约和芝加哥，我不知道多伦多。我的意思是，据我所知，加拿大很多顶级喜剧演员都出自 Second City，比如，哦，加拿大的顶级喜剧演员，我会因为这个被取消资格的。你听说过 Mike Myers 吗？我听说过 Mike Myers。加拿大人太友好了，不适合做喜剧演员，这是真的吗？我们有刻薄的喜剧演员吗？我想那是真的，Mike Myers 很友好。Jim Carrey 真的很友好。
+
+11
+00:05:46.000 --> 00:06:32.000
+He admits to it. I mean, that's the thing. It's like America. Ramona is giving me a look like this is the important podcast content that you need to be recording. So we better get down to business before she comes over here and kills me with a dinner fork. i mean we were talking about the c++ meetup so link in the show notes we will add it in post whenever it gets posted do you have a topic i mean i was gonna i was gonna follow up on what we chatted about last time because i am yeah i do not have a topic i am thrilled with the refactor of the thrust inner product to be count unique. And there's two follow-ups. The first follow-up is that...
+他承认这一点。我的意思是，这就是问题所在。就像美国一样。Ramona 给了我一个眼神，好像这是我录制时需要的重要播客内容。所以我们最好在她在用餐叉杀了我之前进入正题。我的意思是，我们刚才在谈论 C++ 聚会，所以节目说明里会有链接，我们会在发布后添加。你有话题吗？我的意思是，我本来打算跟进我们上次聊的内容，因为我，是的，我没有话题。我对将 thrust inner product 重构为 count unique 感到非常兴奋。有两个后续。第一个后续是……
+
+12
+00:06:32.000 --> 00:07:05.000
+Wait, wait, wait. The thrust inner product to be count unique? Yes. Yes, that is exactly... Technically not count unique. Unique count is the name of the algorithm. But to recap, we were solving or walking through the parallel implementation of the mode algorithm, aka more commonly known as outside of the world of statistics as most frequent element. And there's like a one-liner way to solve this in Python where you just reach for the counter collection and then you do
+等等，等等，等等。将 thrust inner product 重构为 count unique？是的。是的，这正是……严格来说不是 count unique。Unique count 是该算法的名字。但回顾一下，我们当时正在解决或梳理众数算法的并行实现，也就是在统计学界之外更广为人知的“最频繁元素”。在 Python 中有一种一行代码的解决方法，你只需要调用 counter 集合，然后做
+
+13
+00:07:05.000 --> 00:08:06.000
+a max reduction by looking at the values and then get the key corresponding to that. Pretty straightforward but the way it worked in the thrust example was to sort then to do a inner product to get the unique number of keys and they did that with an inner product, which we refactored to a unique count, then do a reduce by key, and then do a max element at the end of all that. And the two follow ups are that not only did that example use inner product, which it shouldn't have. My tool or project, yet to be named, yet to be announced, also was using not unique count. I have sort of this example that generates a reduce by key, and it does the exact same thing where it counts the number of unique keys, but the code that it generated was a count if using zip iterators which is basically another
+一个最大值归约，通过查看值并获取对应的键。非常直接，但在 thrust 示例中的工作方式是先排序，然后做一个 inner product 来获取唯一键的数量，他们用 inner product 做了这件事，我们将其重构为 unique count，然后做一个 reduce by key，最后在所有这些之后做一个 max element。这两个后续是，不仅那个示例使用了 inner product，它本不该这样。我的工具或项目，尚未命名，尚未宣布，也使用了不是 unique count 的方法。我有这种生成 reduce by key 的示例，它做的完全一样，它计算唯一键的数量，但它生成的代码是使用 zip iterators 的 count if，这基本上是另一种
+
+14
+00:08:06.000 --> 00:08:56.000
+way to spell how to count the unique number of keys and when you combine that with the fact that we spent a whole episode in venice talking about unique account do you remember this when we went and got the donuts and set and sat in that little square, we initially, that whole sort of theme or topic theme through our Slovenian trip was how to implement unique in parallel. But we ended up at unique count because I had mentioned that I had had a conversation with Michael, my boss, about how to implement a unique count and that, you know, one way to do it is with copy ifs and actually calling unique but you don't actually need to do any of that at the end at the end of the day you can just do a reduction account if and when you combine the fact that like i have this tool
+拼写如何计算唯一键数量的方法，当你结合我们花了一整集在威尼斯谈论 unique count 的事实时，你还记得吗？当我们去买甜甜圈并坐在那个小广场上时，我们最初，整个 Slovenian 之旅的主题就是如何在并行中实现 unique。但我们最终得到了 unique count，因为我提到过我曾与我的老板 Michael 谈过如何实现 unique count，而且，你知道，实现它的一种方法是使用 copy ifs 并实际调用 unique，但你最终根本不需要做任何这些，你只需要做一个 reduction count if。当你结合我拥有这个工具的事实
+
+15
+00:08:56.000 --> 00:09:46.000
+that i've done this i've written this you know exact similar code to this parallel mode example didn't reach for unique account and then you staring at this code weren't able to immediately recognize that this inner product was a unique account and we spent the whole episode in venice talking about how we could optimize the implementation of unique account and we actually never followed up from that whole series because you might not remember but at the end of that we like we said we need to go refactor this to make sure that we're not materializing anything in this unique account. Because we were looking at this struct that was called zip underscore adj short for adjacent underscore not, which was basically a struct that would bundle. It would basically do the trick of zip iterators and complementing your your
+我做过这个，我写过这个，你知道，和这个并行众数示例完全相似的代码，没有用到 unique count，而你盯着这段代码却无法立即识别出这个 inner product 就是一个 unique count，我们花了一整集在威尼斯谈论我们如何优化 unique count 的实现，而我们实际上从未跟进那个系列，因为你可能不记得了，但在那集最后，我们说我们需要去重构它，以确保我们在 unique count 中没有物化任何东西。因为我们当时在看这个名为 zip_adj 的结构体，它是 adjacent_not 的缩写，它基本上是一个会捆绑的结构体。它基本上会实现 zip iterators 的技巧并补充你的
+
+16
+00:09:46.000 --> 00:10:25.000
+binary predicate which you don't really need that but at the end of the day we thought that that was like calling it was some kernel that was materializing anything it wasn't it was basically just the zip iterators so the refactoring that we said we needed to do actually we didn't because unique can't unique count calling count if using this little struct was doing the optimal thing. It just looked a bit weird. And so my, my, my, the end of my whole ramble and this sort of, you know, follow-up is how, how did, how did we both miss this? Like in looking at you, looking at the parallel mode example, and then in me doing something similar in my own project. And it's like, one, how did that happen?
+二元谓词，你其实并不需要那个，但归根结底，我们认为调用它就像是某种正在物化任何东西的内核，其实不是，它基本上只是 zip iterators。所以我们说需要做的重构实际上我们没做，因为 unique count 调用使用这个小结构体的 count if 正在做最优的事情。它只是看起来有点奇怪。所以我的，我的，我的整个长篇大论的结尾和这种，你知道，后续是，我们俩怎么会错过这个？就像看着你，看着并行众数示例，然后我在我自己的项目中做类似的事情。就像，一，那是怎么发生的？
+
+17
+00:10:25.000 --> 00:10:38.000
+And two, I had this idea once, which I actually have implemented in Jell-O. Maybe I should whip out Jell-O again. Back-to-back Jell-O episodes, folks. And let me share my screen. We said we won't do this, but honestly, we're not going to be, it'll be easy for Bryce to explain
+二，我曾经有个想法，我实际上已经在 Jell-O 中实现了。也许我应该再次拿出 Jell-O。连续两集 Jell-O，伙计们。让我分享我的屏幕。我们说过我们不会这样做，但老实说，我们不会，Bryce 解释起来会很容易
+
+18
+00:10:38.000 --> 00:10:55.000
+what I'm about to do here. So if we can... For me to explain? And Connor's going to spin up Jello again. Let's make this full screen. So we're launching Jello. So let's actually just see what happens if we do this.
+我接下来要做的事情。所以如果我们能……让我来解释？Connor 要再次启动 Jello 了。让我们全屏显示。所以我们正在启动 Jello。那么让我们看看如果我们这样做会发生什么。
+
+19
+00:10:55.000 --> 00:11:19.000
+If we do plus fold on a list of numbers and actually let's just do five and then if we do IOTA what do you see here? So the expression that i just rolled essentially was iota plus fold five yeah so he's got an iota of to five and then he's got a plus fold uh and says plus fold can be replaced with some and then it shows the steps of
+如果我们对数字列表进行 plus fold，实际上让我们只做 5，然后如果我们做 IOTA，你在这里看到了什么？所以我刚才输入的表达式本质上是 iota plus fold 5，是的，所以他有一个到 5 的 iota，然后他有一个 plus fold，呃，并说 plus fold 可以被 sum 替换，然后它显示了算法的步骤
+
+20
+00:11:19.000 --> 00:11:41.000
+the algorithm and the first one is it shows the list of 1, 2, 3, 4, 5. And then the second one shows the sum of the two. And then it says this is a 1-2-q monadic chain. Everything after that I've highlighted, we can ignore. It's really the first part that I'm trying to highlight here. The plus fold can be replaced with sum. And then what does it say right out of that? Algorithm advisor. Yes.
+第一个是它显示了 1, 2, 3, 4, 5 的列表。然后第二个显示了它们的和。然后它说这是一个 1-2-q 单子链。在那之后我高亮显示的所有内容，我们可以忽略。我试图在这里强调的确实是第一部分。plus fold 可以被 sum 替换。然后它在那之后说了什么？算法顾问。是的。
+
+21
+00:11:41.000 --> 00:12:30.000
+Let's look at another example now. Say that I want to say i want to do the maximum consecutive ones problem nco mco yeah that's a fun one so if i do this i typed out just a list of ones and zeros i go group and all right he's got ones and zeros folks he's grouping them he's lengthening them he's eating them and again it says all right so he's got lists and then he's got group len each and it says group len each can be replaced with group len algorithm advisor and it also says that len each can be replaced with len each or with len space each can be replaced with len underscore each so do you remember at one point that we actually had a meeting where we talked about the idea of something
+现在让我们看另一个例子。假设我想说我想解决最大连续 1 问题，nco mco，是的，那是一个有趣的例子。所以如果我这样做，我输入了一串 1 和 0，我执行 group，好了，伙计们，他有一串 1 和 0，他正在对它们进行分组，他正在延长它们，他正在计算它们，它再次说，好了，所以他有列表，然后他有 group len each，它说 group len each 可以被 group len 算法顾问替换，它还说 len each 可以被 len each 替换，或者 len space each 可以被 len_each 替换。所以你还记得在某个时候我们实际上开过一个会，谈论过某种
+
+22
+00:12:30.000 --> 00:13:31.000
+like this where yes i do i was just about to say did jello steal this from you or did you steal this from jello no no i jello is a i wrote this whole tool and that you wrote this tool for jello jello is my tool i wrote the whole thing oh i didn't realize that oh yeah sorry so jelly is a pro is a programming language written by i mean his online alias is dennis mitchell which is the name of the character from dennis the menace so i'm not actually sure that's his name it could be and i wrote a wrapper around the language which is this tool that basically if you look at the things in yellow the atoms in yellow this oe ligature g l and then i think that's the british pound symbol that is that is jelly syntax so So that is the actual Jelly program for group len each. So Jello is just basically a keywordified Jelly language.
+像这样的想法，是的，我记得。我正要说，是 Jello 从你那里偷来的，还是你从 Jello 那里偷来的？不，不，Jello 是一个，我写了整个工具，你为 Jello 写了这个工具，Jello 是我的工具，我写了整个东西。哦，我没意识到。哦，是的，抱歉。所以 Jelly 是一种编程语言，由，我的意思是他的在线别名是 Dennis Mitchell，也就是《丹尼斯闹剧》中角色的名字，所以我其实不确定那是他的名字，可能是。我为这种语言写了一个包装器，也就是这个工具，基本上如果你看 Jelly 中的东西，Jelly 中的原子，那个 oe 连字 g l，然后我想那是英镑符号，那是 Jelly 语法。所以这就是 group len each 的实际 Jelly 程序。所以 Jello 基本上就是一个关键词化的 Jelly 语言。
+
+23
+00:13:31.000 --> 00:14:16.000
+And a part of this tool I realized is that they have so many, like when I hit space, they have so many of these functions that come with the language that half the time I forget that, like, oh, there's a len each or a group len or a specific specialization of some kind of reduction. And so I basically just added a dictionary slash regex matcher that will let you know when you're using a suboptimal composition of algorithms. And this just brings me back to my observation about the fact that both of us missed opportunities to use unique account even though we spent like a whole journey not a not a whole four episodes but like we got to the fourth episode and then we're like what about unique account and i think we both consider ourselves like algorithm
+这个工具的一部分我意识到，他们有太多，比如当我按空格键时，他们有太多随语言附带的函数，以至于我有一半时间忘记了，比如，哦，有一个 len each 或 group len 或某种归约的特定专门化。所以我基本上只是添加了一个字典/正则表达式匹配器，当你使用次优的算法组合时，它会通知你。这让我想起了我的观察，即我们俩都错过了使用 unique count 的机会，尽管我们花了一整段旅程，不是整整四集，但我们到了第四集，然后我们说 unique count 怎么样，我想我们俩都认为自己是算法
+
+24
+00:14:16.000 --> 00:15:06.000
+experts yet we still miss this stuff well and this is why you should use algorithms instead of raw for loops. Because you can do this not only in some array language like Jelly, but you can also do this in standard C++. It's a little bit harder, but there's actually, so there's an effort to develop a new high-level IR for claim using the MLIR framework, which is a framework for sort of developing high-level IR for Clang using the MLIR framework, which is a framework for sort of developing high-level, more language-specific IRs that exist at a level above LLVM IR. And one of the cool things that somebody's doing with Clang IR is looking at optimizing and analyzing usage of standard algorithms.
+专家，但我们仍然错过了这些东西。嗯，这就是为什么你应该使用算法而不是原始的 for 循环。因为你不仅可以在像 Jelly 这样的数组语言中做到这一点，还可以在标准的 C++ 中做到。这稍微难一点，但实际上，目前有人在努力为 Clang 开发一种新的高级 IR，我使用的是 MLIR 框架，这是一个用于开发更高级、更特定于语言的 IR 的框架，它们存在于 LLVM IR 之上。有人正在用 Clang IR 做的一件很酷的事情是研究优化和分析标准算法的使用。
+
+25
+00:15:06.000 --> 00:15:47.000
+And if everybody expresses their algorithms in terms of the named set of algorithms in a language, then it's pretty easy to write an algorithm advisor for that language. But if you write your things in terms of raw for loops, then the compiler has to figure out, okay, well, this for loop that this person wrote, this is really a bespoke, you know, unique count. And I can tell them that they can optimize it in this way. But it's a lot harder to identify that than if you're just like, oh, well, this is an inner product. It does this. And oh, actually, you can just, like, this thing should just be that.
+如果每个人都用语言中的命名算法集来表达他们的算法，那么为该语言编写算法顾问就很容易了。但如果你用原始的 for 循环来写，编译器就必须弄清楚，好吧，这个人写的这个 for 循环，这实际上是一个定制的，你知道，unique count。我可以告诉他们可以用这种方式优化它。但识别这一点比直接说“哦，这是一个 inner product，它做这个，哦，实际上，你可以直接，这个东西应该就是那个”要难得多。
+
+26
+00:15:47.000 --> 00:16:18.000
+Like one of the big benefits of a, sort of an array-style programming model where you're working with array, where array operations are your primitives, not raw for loops, where you have named array operations, and be that in C++ or in an array programming language one of the big advantages of that is that those array operations can be one implemented in some optimized way by the platform but two the platform can look at
+就像数组式编程模型的一大好处，你使用数组，数组操作是你的原语，而不是原始的 for 循环，你有命名的数组操作，无论是在 C++ 中还是在数组编程语言中，这种模型的一大优势是这些数组操作可以：一，由平台以某种优化方式实现；二，平台可以查看
+
+27
+00:16:18.000 --> 00:16:50.000
+the composition of different array operations that you're using and identify opportunities for optimizations across that composition. And that is very, very powerful. And so that is the way by which your hand-rolled, bespoke, low-level C4 loop can be beaten by higher-level code. It's entirely possible that you could write an algorithm using some tool like Jelly
+你正在使用的不同数组操作的组合，并识别跨该组合的优化机会。这非常非常强大。这就是为什么你手写的、定制的、低级的 C++ for 循环可以被更高级的代码击败的原因。完全有可能你使用像 Jelly 这样的工具编写算法
+
+28
+00:16:50.000 --> 00:17:14.000
+and get better performance than something like CUDA C++ simply because when you write it with Jelly, it tells you, oh yeah, you could write it this way instead. And that thing that both of us, who are probably, I think, considered experts in algorithms, missed. The tool won't miss that. That is one of my life goals, basically,
+并获得比 CUDA C++ 更好的性能，仅仅是因为当你用 Jelly 编写它时，它会告诉你，哦，是的，你可以改用这种方式编写。而我们两个可能被认为是算法专家的人都错过了这一点。工具不会错过。这基本上是我的人生目标之一，
+
+29
+00:17:14.000 --> 00:17:43.000
+is to build this kind of thing, either in the form of a library or the form of a language. And it should be mentioned that the initial one, recognizing that a plus fold can be replaced with a sum, there's no perf advantage there. But in the example here, when you're doing a group, a group being something that's basically the equivalent of a chunk by, so you're splitting a range up into a range of ranges, and then when you do len each, which is the equivalent of transforming basically a stood
+就是构建这种东西，要么以库的形式，要么以语言的形式。应该提到的是，最初的那个，识别出 plus fold 可以被 sum 替换，并没有性能优势。但在本例中，当你进行 group 时，group 是某种基本上等同于 chunk by 的东西，所以你把一个范围拆分成一系列范围，然后当你执行 len each 时，它等同于转换基本上是 std
+
+30
+00:17:43.000 --> 00:18:26.000
+colon colon distance or stood colon colon ranges colon colon distance this can recognize that at least for the jello implementation or the jelly implementation a group len each is going to materialize each of the sort of sub ranges and then calculate what the length of that because this is just jelly is implemented in python at the at the end of the day but group len doesn't materialize it. It basically just like, while it's going through, it at the same time it's going through it and quote unquote grouping, it's using iter tools and more iter tools, which is like Python's iterator facility. So it manages to avoid something that's much less efficient, which depending on what you are
+::distance 或 std::ranges::distance，这可以识别出，至少对于 Jello 实现或 Jelly 实现，group len each 将会物化每个子范围，然后计算它的长度，因为这只是 Jelly，归根结底是用 Python 实现的，但 group len 不会物化它。它基本上只是，当它遍历时，它同时在遍历并进行所谓的“分组”，它使用 iter tools 和 more iter tools，这就像 Python 的迭代器设施。所以它设法避免了效率低得多的东西，这取决于你
+
+31
+00:18:26.000 --> 00:19:00.000
+lowering this down onto, you could do something extremely similar, right? Like imagine someone that is not aware of unique count and that's making use of thrust unique. And then we're just able to programmatically see, oh, you did a reduction right after this unique, we can just switch that for you. Yeah, I more and more think that writing array primitives yourself instead of using existing array primitives and using array style programming, writing this all by hand
+将此降低到什么之上，你可以做一些极其相似的事情，对吧？比如想象一个不知道 unique count 并且正在使用 thrust unique 的人。然后我们能够以编程方式看到，哦，你在这次 unique 之后立即做了一个 reduction，我们可以为你切换它。是的，我越来越认为自己编写数组原语而不是使用现有的数组原语并使用数组式编程，完全手工编写
+
+32
+00:19:00.000 --> 00:19:43.000
+is more and more like handwriting assembly instead of using know using some language in an optimizing compiler yeah and that's the thing like it's already writing efficient either cuda c++ code or even you know efficient code that just calls thrust algorithms or cub algorithms is already like a non-trivial thing yeah like pointing case episode 168 last last episode i managed to notice it but even it took me a second when you were yeah i think i was trying to take my covid test and you were like hey hey pay attention we need to figure out what this is doing i read through it and my first thought actually was like
+越来越像手写汇编而不是使用某种语言和优化编译器。是的，就是这样，编写高效的 CUDA C++ 代码，或者仅仅是调用 thrust 算法或 cub 算法的高效代码，本身就是一件不简单的事情。是的，比如第 168 集，上一集，我设法注意到了，但即使是我也花了一秒钟，当时你，我想我当时正试图做我的新冠测试，而你说“嘿，嘿，注意，我们需要弄清楚这在做什么”。我读了一遍，我的第一反应其实是
+
+33
+00:19:43.000 --> 00:20:01.000
+oh this is a count if and i was like wait a second i saw that then i read the comment and my first thought actually was like, oh, this is a count if. And I was like, wait a second. I saw that. Then I read the comment and I was like, I immediately thought, I'm pretty sure I'm doing this wrong in my own tool. I'll see if Bryce sees it. You didn't see it. And then in the back of my head, we were already running long on that episode. But my thought was just like, how are we missing this in two different instances?
+哦，这是一个 count if，然后我想“等一下，我看到了”。然后我读了注释，我的第一反应其实是“哦，这是一个 count if”。然后我想“等一下，我看到了”。然后我读了注释，我立刻想到，我敢肯定我在我自己的工具中做错了。我会看看 Bryce 是否能看出来。你没看出来。然后在我的脑海里，那一集我们已经录得很长了。但我的想法只是，我们怎么会在两个不同的实例中错过这个？
+
+34
+00:20:01.000 --> 00:20:54.000
+When at the end of the day, perf wise, wise the inner product my count if in my gen my generated code and the unique account ultimately all do the same thing so it's not like there's any perf loss but like from a readability perspective it's so much more difficult to figure out what that inner product's doing and in not all cases i'm not i'm not sure that you're right about the no perf loss because um unique count in thrust for the cuda back end has a bespoke bespoke implementation um and i don't i don't know that the inner product will lower down to this like isn't the bespoke implementation the count if with that zip add not struct no no that's the generic implementation the generic for that works for all backends there's a bespoke kernel
+当归根结底，从性能上讲，inner product、我的 count if、我生成的代码和 unique count 最终都做同样的事情，所以并不是说有任何性能损失，但从可读性的角度来看，弄清楚那个 inner product 在做什么要困难得多。而且在某些情况下，我不确定你关于没有性能损失的说法是对的，因为 thrust 中用于 CUDA 后端的 unique count 有一个定制的实现，我不知道 inner product 是否会降低到这个，难道定制实现不是那个带有 zip add not 结构体的 count if 吗？不，不，那是通用实现。那是适用于所有后端的通用实现。有一个定制的内核
+
+35
+00:20:54.000 --> 00:21:18.000
+for unique account i'm actually looking at it right now in the bespoke share your screen maybe it's maybe it's just for unique though um let. Let's see. I was going to say, I'm almost positive, because I've looked this up now three different times, and the one in the CUDA... No, no, no, no, no. It just says this. Yeah, so it is... We'll permalink this for folks.
+用于 unique count，我实际上现在正在看它。在定制的……分享你的屏幕，也许它只是针对 unique 的……嗯，让我们看看。我本来想说，我几乎可以肯定，因为我已经查过三次了，CUDA 中的那个……不，不，不，不，不。它只是这样说。是的，所以它是……我们会为人们提供永久链接。
+
+36
+00:21:18.000 --> 00:22:02.000
+We'll permalink it to the GitHub line in the main repo of Thrust, which now lives in the NVIDIA Cl repo but yeah it's a so it actually it does use a zip iterator so actually i have i have no idea what the zip underscore adj underscore not predicate like it seems like that's totally unnecessary it calls count if it calls it makes a zip iterator um of uh zipping adjacent elements so it basically it's like taking a range and doing adjacent to with it. And then it does a count if on that range and it uses a zip adjacent not. Oh, you know what this zip ADJ not predicate function is? So there is a thrust make zip
+我们会把它永久链接到 Thrust 主仓库的 GitHub 行，它现在存在于 NVIDIA Cl 仓库中，但是的，它确实使用了 zip iterator，所以我真的不知道 zip_adj_not 谓词是什么，它看起来完全没必要。它调用 count if，它制作了一个 zip iterator，压缩相邻元素，所以它基本上就像取一个范围并对它做 adjacent_to。然后它对该范围做 count if，并使用 zip adjacent not。哦，你知道这个 zip ADJ not 谓词函数是什么吗？所以有一个 thrust make zip
+
+37
+00:22:02.000 --> 00:22:50.000
+function where you pass it a binary predicate and then it'll apply it to something that has been passed to a zip iterator. So this is basically that exact same thing, but it also performs the complement. So it's basically composing not with zip make zip function. Yeah, I think so. Which really this should not be like a one-off. Really, there should be a way that we can just compose like a not fun because isn't Yeah, I think so. complements the result of something that returns a Boolean. Anyways, we should, whether we build an algorithm advisor for C++ or for Thrust.
+函数，你传递给它一个二元谓词，然后它会将其应用于传递给 zip iterator 的东西。所以这基本上就是完全相同的东西，但它也执行了补集。所以它基本上是将 not 与 zip make zip 函数组合。是的，我想是这样。这真的不应该是一个一次性的东西。真的，应该有一种方法，我们可以直接组合像 not fun 这样的东西，因为不是……是的，我想是这样。补充了返回布尔值的东西的结果。无论如何，我们应该，无论我们是为 C++ 还是为 Thrust 构建算法顾问。
+
+38
+00:22:50.000 --> 00:23:20.000
+You know what's funny? My word count example that I've used for years could also be implemented with unique count instead of transform reduce. I only just realized that. Yes, yes yes yes and this is the thing is like you've been giving that talk or that example in variations of talks since like what 2016 i think is the first one i remember seeing yeah but it's it's earlier than
+你知道什么很有趣吗？我用了多年的单词计数示例也可以用 unique count 而不是 transform reduce 来实现。我刚刚才意识到。是的，是的，是的，是的，这就是问题所在，你从 2016 年左右开始就在各种演讲中给出那个演讲或示例，我想那是我记得看到的第一个，是的，但它比
+
+39
+00:23:20.000 --> 00:23:52.000
+that it's from like 2014 and that's the thing is like no one – A unique count would make it so much clearer what it's doing. Because the way that the parallel word count works is you're basically – like you have some predicate to determine what the end of the word is. Like, okay, when do I have a space on the right? Like when I have a non-white space character followed by a space character, that's the end of the world. And then like that's the transform part. And then the reduce part is just counting
+那个更早，它来自 2014 年左右，这就是问题所在，没有人——一个 unique count 会让它所做的事情变得清晰得多。因为并行单词计数的工作方式是你基本上——你有一些谓词来确定单词的结尾是什么。比如，好的，我什么时候在右边有一个空格？比如当我有一个非空白字符后跟一个空格字符时，那就是单词的结尾。然后这就是转换部分。然后归约部分只是计算
+
+40
+00:23:52.000 --> 00:24:25.000
+all of those instances of the end of a word. So what is a parallel word count? I am like counting all the places, you know, all the unique words, all the ends of words. Yeah. And so this is actually another fantastic, because we've got, we've got like five minutes left. This is a fantastic note to end on that I had temporarily forgotten I wanted to bring up. First of all, it's actually, you're in the clear, because unique account, I looked up the PR, wasn't added until 2022 you're in the clear buddy
+所有那些单词结尾的实例。所以什么是并行单词计数？我是在计算所有的地方，你知道，所有唯一的单词，所有单词的结尾。是的。所以这实际上是另一个极好的，因为我们还剩下五分钟。这是一个极好的结尾，我暂时忘记了我想提出来。首先，实际上，你是清白的，因为 unique count，我查了 PR，直到 2022 年才添加，你是清白的，伙计
+
+41
+00:24:25.000 --> 00:25:07.000
+so that's a good good thing to mention wait wait wait why was it added it was added i think because someone pointed out that it was a useful algorithm to go along with all of the reduced by key algorithms yeah i kind of remember i kind of remember its addition i will we will leave because i went and found the PR that added it. Because for those that checked the show notes, probably nobody, I went and created a PR to refactor that mode example. And then in the PR, I linked to the other PR that added unique count initially to Thrust. But here is the last note I want to end on. And that is unique count is not
+所以这是一个值得一提的好事。等等，等等，为什么它被添加了？我想是因为有人指出它是一个有用的算法，可以与所有的 reduce by key 算法一起使用。是的，我有点记得，我有点记得它的添加。我会，我们会留下，因为我去找了添加它的 PR。因为对于那些查看节目说明的人，可能没人看，我创建了一个 PR 来重构那个众数示例。然后在 PR 中，我链接到了最初将 unique count 添加到 Thrust 的另一个 PR。但这是我想结束的最后一个点。那就是 unique count 不是
+
+42
+00:25:07.000 --> 00:25:58.000
+like technically it's fine that there exists an algorithm called unique count, but this is not like the correct generic name for this algorithm. And I actually gave a lightning talk at one point called algorithm selection, where I showed that all of these algorithms like is sorted and is sorted until and then adjacent find all of them are in this hierarchy and the root algorithm that sits at the top of the hierarchy is do you know what it is it's the arguably the worst named algorithm in all of c++ um i don't know mismatches what that is it what comes to mind that is it it is it is and that's because really what mismatch is is it's zip find i i followed my intuition and it paid off yeah you're crushing the quizzes these years you're crushing the quizzes zip find not is essentially
+从技术上讲，存在一个名为 unique count 的算法是可以的，但这并不是该算法的正确通用名称。我曾经做过一次闪电演讲，名为“算法选择”，我展示了所有这些算法，如 is sorted 和 is sorted until，然后 adjacent find，它们都在这个层次结构中，而位于层次结构顶部的根算法是，你知道它是什么吗？它是 C++ 中命名最糟糕的算法，我不知道，mismatch 是什么，它是什么，它浮现在脑海中，就是它，就是它，这是因为 mismatch 实际上是 zip find。我遵循了我的直觉，它得到了回报。是的，你这些年一直在通过测验，你一直在通过测验。zip find not 本质上是
+
+43
+00:25:58.000 --> 00:26:51.000
+like the generic name for that algorithm and in case, like we have the exact same thing. Unique count is at like one of the leaf nodes of this tree and transform reduces at the top. But in the middle, we've got like a version of count if that bundles this zip iterator pattern. And if you recall, the very first talk I ever gave at C++ Now, I showed a sequential algorithm to solve a problem called dangerous teams that was adjacent reduce, which was basically this transform reduce with the built-in pattern of the zip iterator. And so my point here is that unique count really shouldn't be implemented in terms of count if, it should be implemented in terms of some parallel version of transform reduce called adjacent reduce, where you still have two binary operations,
+该算法的通用名称。而且，我们有完全相同的东西。Unique count 位于这棵树的叶节点之一，而 transform reduce 位于顶部。但在中间，我们有像 count if 的版本，它捆绑了这个 zip iterator 模式。如果你还记得，我在 C++ Now 上做的第一次演讲，我展示了一个顺序算法来解决一个名为“危险团队”的问题，它是 adjacent reduce，它基本上是这个带有内置 zip iterator 模式的 transform reduce。所以我的观点是，unique count 真的不应该用 count if 来实现，它应该用某种名为 adjacent reduce 的并行 transform reduce 版本来实现，在那里你仍然有两个二元操作，
+
+44
+00:26:51.000 --> 00:27:34.000
+one that performs this transform and one that performs the reduction, but then it takes care of that zip iterator trick for you. Because this pattern is so common. It's so common that even before I had entered the land of parallel thinking, this adjacent reduce thing is so common. It's so common that even before I had entered, you know, the land of parallel thinking, this adjacent reduced thing is so common. And the reduction here is really just summing Booleans. So your binary predicate would be not equal to, similar to the inner product. And then your second binary operation that does the reduction would just be sum. And so really, then at the end of the day, all you would see inside of unique count is just, you know, a call to adjacent reduce. And really, unique is just like, I don't know, once again, you can still have the algorithm there, but there is no unique in range v3.
+一个执行这个转换，一个执行归约，但它为你处理了那个 zip iterator 技巧。因为这种模式太常见了。太常见了，以至于在我进入并行思维领域之前，这个 adjacent reduce 的东西就太常见了。太常见了，以至于在我进入，你知道，并行思维领域之前，这个 adjacent reduce 的东西就太常见了。这里的归约实际上只是对布尔值求和。所以你的二元谓词将是不等于，类似于 inner product。然后执行归约的第二个二元操作将只是 sum。所以归根结底，你在 unique count 内部看到的将只是，你知道，对 adjacent reduce 的调用。而且真的，unique 只是，我不知道，再一次，你仍然可以在那里拥有该算法，但 range v3 中没有 unique。
+
+45
+00:27:34.000 --> 00:28:09.000
+There is an algorithm called adjacent remove if. Because really, unique is just an algorithm. Which is a better name. It just does compaction based on a binary predicate unique doesn't capture the fact that it only removes like consecutive things yes like like if you if you tell people who don't know they're not many in the background like what does a unique operation do they're gonna think like it removes all the duplicates yeah i mean and is unique count even i know that like unique now has a meaning in C++, but if you were to have, I guess, yeah, you can't do it with adjacent remove if that wouldn't
+有一个名为 adjacent remove if 的算法。因为真的，unique 只是一个算法。这是一个更好的名字。它只是基于二元谓词进行压缩，unique 没有捕捉到它只删除连续的东西这一事实。是的，就像如果你告诉那些不知道的人，背景里没几个人，unique 操作做什么？他们会认为它删除了所有的重复项。是的，我的意思是，unique count 甚至，我知道 unique 现在在 C++ 中有含义，但如果你要，我想，是的，你不能用 adjacent remove if 来做，那不会是
+
+46
+00:28:09.000 --> 00:28:45.000
+be the best way to do it. It would just be to have like a call to adjacent reduce, at least in parallel land and sequential land, it'd be fine to call, I guess, adjacent remove if, and then follow that up with a fold. But anyways, the point being here is that just these names you know we can we can be doing better here oh yeah i mean it's all a mess it's all a big mess and and really at the last thought i have in my head is like is it better to have like an algorithm advisor that tells the user hey here's a better thing or is it just better to have a library or a language that like the compiler
+最好的方法。最好的方法是调用 adjacent reduce，至少在并行领域和顺序领域，调用 adjacent remove if，然后跟一个 fold 是可以的。但无论如何，重点是这些名字，你知道，我们可以在这里做得更好。哦，是的，我的意思是，这一切都是一团糟，这一切都是一团糟。我脑海中最后一个想法是，拥有一个告诉用户“嘿，这里有一个更好的东西”的算法顾问更好，还是拥有一个库或语言更好，让编译器
+
+47
+00:28:45.000 --> 00:29:28.000
+or their or your tools will do it all for you so like you never need to think should i write it way a way b way c at the end of the day it can just see through everything and will always do the most efficient thing i think that's honestly what like devs want that's what people want yeah i mean and i think the question is can we i mean i clearly we can do that in array programming languages but the question is can we take those techniques from array programming languages and bring them to um to python to rust to c++ i think the answer is probably yes yeah stay tuned folks the update on andrew kelly oh yeah i meant actually maybe yeah that was my other thinking which is that it's been a while since we've had some guest episodes so let's let's let's bring on the guests yeah maybe i'll
+或者你的工具为你做这一切，这样你永远不需要思考“我应该用 A 方法、B 方法还是 C 方法写它”。归根结底，它可以看穿一切，并且总是做最有效的事情。我认为这老实说是开发者想要的，这是人们想要的。是的，我的意思是，我认为问题在于我们能否，我的意思是，显然我们可以在数组编程语言中做到这一点，但问题在于我们能否采用那些来自数组编程语言的技术，并将它们带到 Python、Rust、C++ 中。我认为答案可能是肯定的。是的，敬请期待，伙计们。关于 Andrew Kelly 的更新，哦，是的，我其实是想，也许，是的，那是我的另一个想法，那就是我们已经有一段时间没有嘉宾了，所以让我们，让我们请嘉宾来吧。是的，也许我会
+
+48
+00:29:28.000 --> 00:30:08.000
+maybe i'll pick up i'll cut this in somewhere but we had actually let's go let's go get their name because we love it we love it on adsp when people reach out so on episode 168 we had a couple people ping us. One of them was Marco Seidentopf. I probably butchered that pronunciation. But thank you, Marco. He pinged us and said, for contacting Andrew Kelly of Zig, I recommend talking to Loris, who is the Zig's VP of community. And I went ahead
+也许我会挑选，我会把这个剪辑到某个地方，但我们实际上，让我们去，让我们去获取他们的名字，因为我们喜欢它，我们在 ADSP 上喜欢人们联系我们。所以在第 168 集中，有几个人 ping 了我们。其中一个是 Marco Seidentopf。我可能把那个发音搞砸了。但谢谢你，Marco。他 ping 了我们并说，为了联系 Zig 的 Andrew Kelly，我建议和 Loris 谈谈，他是 Zig 的社区副总裁。我继续
+
+49
+00:30:08.000 --> 00:30:49.000
+and did that. I DMed Loris on Twitter. Twitter got back to me. Loris got back to me and said that Andrew's very busy, but he is interested in going on podcasts when he's less busy, and he'll ping us when he is available. So probably not anytime soon, but maybe sometime in 2024, we will get a message from Andrew and we will figure out who we're going to guest host next time. Be sure to check your show notes, either in your podcast app or at adsbthepodcast.com for links to anything we mentioned in today's episode, as well as a link to a get up discussion where you can leave thoughts, comments, and questions. Thanks for listening. We hope you enjoyed and have a great day. Low quality, high quantity.
+并做了这件事。我在 Twitter 上私信了 Loris。Twitter 回复了我。Loris 回复我说 Andrew 非常忙，但他有兴趣在不那么忙的时候参加播客，他会在有空时 ping 我们。所以可能不会很快，但也许在 2024 年的某个时候，我们会收到 Andrew 的消息，我们会弄清楚下次请谁做嘉宾主持。请务必查看你的节目说明，无论是在你的播客应用中还是在 adsbthepodcast.com 上，获取我们在今天节目中提到的任何内容的链接，以及一个 GitHub 讨论的链接，你可以在那里留下想法、评论和问题。感谢收听。我们希望你喜欢，祝你有美好的一天。低质量，高数量。
+
+50
+00:30:49.000 --> 00:30:54.000
+That is the tagline of our podcast. It's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+那是我们播客的标语。那不是标语。我们的标语是“带有信息点缀的混乱”。这一集还没有评论。点击转录中的任何句子来留下评论。

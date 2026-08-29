@@ -1,0 +1,276 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:00.000
+The thing with the scan is that the decoupled look back is a clever way to do a scan, but there's still this serial dependence. So the decoupled look back lets everybody do their local scan and writing the results of their local scan, like the sum of all the threads in their block to an aggregate. It lets everybody do that in parallel. And that's all something that everybody's going to do in roughly the same time. Welcome to ADSP, the podcast, episode 175, recorded on March 6, 2024. My name is Connor. Today with my co-host, Bryce, we continue our conversation on Parallel Chunk Buy, as well as talk about a few random topics, including stickers, the NVIDIA AI podcast, and more.
+关于扫描（scan）的问题在于，解耦回溯（decoupled look back）是一种巧妙的扫描方式，但它仍然存在这种串行依赖。因此，解耦回溯让每个人都能进行局部扫描，并将局部扫描的结果（比如块中所有线程的总和）写入聚合器。它让每个人都能并行完成这一步。而且这基本上是每个人都会在差不多相同时间内完成的事情。欢迎收听 ADSP 播客第 175 期，录制于 2024 年 3 月 6 日。我是 Connor。今天我和联合主持人 Bryce 继续讨论 Parallel Chunk Buy，并聊了一些随机话题，包括贴纸、NVIDIA AI 播客等等。
+
+2
+00:01:00.000 --> 00:01:58.000
+Let's go back to the two pass reduced by key. I'm not convinced that works. Why? Because, well, you explained to me how you think it would work is a reduce allowed to reduce a vector like imagine we're doing our uh reduce by key but we know that we're going to end up with a vector of reductions. Correct? Yeah. And as long as I'm allowed to build up some kind of struct that handles, you know, it's one of those operator overloaded structs that knows how to combine a struct with the initial value, an initial value with a struct, a struct with a struct, as long as it's got all those things, at some points... So for what it's worth, I have now started to prefer to not write those that way.
+让我们回到两遍（two-pass）的按键归约（reduce by key）。我不确定这是否可行。为什么？因为，嗯，你向我解释了你认为它会如何工作，即归约允许归约一个向量，比如想象我们正在做我们的 uh 按键归约，但我们知道最终会得到一个归约向量。对吧？是的。只要我能构建某种处理结构，你知道，就是那种知道如何将结构与初始值、初始值与结构、结构与结构相结合的运算符重载结构，只要它具备所有这些功能，在某些点上……不管怎么说，我现在开始倾向于不那样写了。
+
+3
+00:01:58.000 --> 00:02:16.000
+What I prefer to do is what I did in the chunk buy by where instead of writing an operator that handles all the cases, I simply figure out how do I can, how do I transform the sequence so that it's homogeneous? And so it's like, okay, if I have, if I have Boolean flags,
+我更喜欢做的是我在 chunk buy 中所做的事情，而不是编写一个处理所有情况的运算符，我只是弄清楚如何转换序列，使其同质化。所以就像，好吧，如果我有布尔标志，
+
+4
+00:02:16.000 --> 00:02:45.000
+how do I turn a Boolean flag into one of my interval objects? And that just makes it a whole lot cleaner. Yes. And that is, that is like a classic thing in array programming where sometimes you need to do a scan but a scan you output the result of your operation but you need to the stuff that you want to carry is different so you kind of need these two pieces of information what do you do there and in j uh the apl 2.0 they actually have a special kind of algorithm
+我该如何将布尔标志转换为我的区间对象？这会让代码变得整洁得多。是的。这在数组编程中是很经典的做法，有时你需要进行扫描，但扫描会输出操作的结果，而你需要携带的数据却不同，所以你需要这两部分信息，你该怎么办？在 j uh APL 2.0 中，他们实际上有一种特殊的算法，
+
+5
+00:02:45.000 --> 00:03:01.000
+and there's like six different flavors of it called fold which is specifically for this when you want to like carry state but output a different value at each index you can do that but anyways same idea and so like if you've got a block that is the chunk is
+有六种不同的变体，称为 fold，专门用于这种情况，当你想要携带状态但在每个索引处输出不同的值时，你可以这样做，但无论如何，思路是一样的。所以，如果你有一个块，这个块在两边都比块大，那么你的结果就像你的小归约向量。它只会有一个值，因为它会与左边和右边的东西相加。但如果你在块内有一堆块（chunks），你的归约向量就会有几个值，因为每个块都会有一个值。当你进行第二遍归约时，它所做的只是你基本上会拥有
+
+6
+00:03:01.000 --> 00:03:28.000
+bigger than the block on both sides your result of that is like your little, you know, reductions vector. It's going to just have a single value in it because it's going to get added with, you know, things on the left and things on the right. But if you've got a bunch of chunks within your block, your reductions vector is going to have a couple values in it because there's going to be one for each chunk. And when you get to your second pass reduction, all it's doing is you're going to have basically
+一个向量的向量，其中一些有一个归约结果，一些有五个，还有一些……但我们如何为它们分配空间？这就是问题所在。你可以在预先计算出来。你怎么能算出来？
+
+7
+00:03:28.000 --> 00:03:43.000
+a vector of vectors that have got, like some have got one reduction, some have got five reductions, and some of them... But how do we allocate the space for those? That's the problem. You can figure that out up front. How can you figure that out?
+你只需要做 chunk by。你执行这一遍。你甚至不需要在那里做扫描。你可以使用转换 zip 迭代器技巧来应用你的二元谓词，然后你就会得到你的标志。所以基本上你计算出你的标志，然后你知道，因为你的块大小，你可以直接查看我们需要多少个向量。如果你在块中没有看到标志，你就知道只需要一个值。如果你看到三个标志，我们需要多少个向量。如果你在块中没有看到标志，
+
+8
+00:03:43.000 --> 00:04:05.000
+You just do the chunk by. You do the pass. You don't even need to do a scan there. You can do a transform zip iterator trick to apply your binary predicate, and then you're going to get your flags. So basically you calculate your flags, and then you know what, because your size of your blocks, you can just look how many vectors are we going to need in here. And if you see no flags in your block, you know you just need one value. If you see three flags how many vectors are we going to need in here. And if you see no flags
+你就知道只需要一个值。如果你看到三个标志，你就知道你需要……但我们不能在设备端进行分配。我们必须在启动之前完成。没关系。我们可以做到。但这可能需要第一遍并行扫描来弄清楚。
+
+9
+00:04:05.000 --> 00:04:21.000
+in your block, you know you just need one value. If you see three flags, you know you're going to need... But we can't do the allocation device size. We have to do it before we launch. That's fine. We can do that. But that might require a first parallel pass to figure
+所以也许这就是为什么归根结底扫描可能更有效，但在我看来，我真的很难相信扫描更有效。扫描的问题在于，嗯，解耦回溯是一种巧妙的扫描方式，但它仍然存在这种串行依赖，所以解耦回溯让每个人都能进行局部扫描，并将局部扫描的结果（比如块中所有线程的总和）写入聚合器，这让每个人都能并行完成这一步，而且这基本上是每个人都会在差不多相同时间内完成的事情，然后它并行化了
+
+10
+00:04:21.000 --> 00:04:56.000
+that out. So maybe this is why at the end of the day maybe the scan is more efficient but in my i i find i actually find it hard to believe the scan is more efficient the the thing with the scan is that um the decoupled look back is a clever way to do a scan but there's still this serial dependence so that like the decoupled look back lets everybody do their local scan and writing that the result of their local scan like the sum of all the threads in their block to an aggregate that lets everybody do that in parallel and that's all something that everybody's going to do in roughly the same time and then it paralyzes
+每个块所需前缀的计算。但它最终仍然存在串行依赖，即对于给定的块，给定的一块元素 I，要完成这些元素 I 的扫描，所有 I-1 块必须已经完成。这种单调性要求很苛刻，而归约则是严格且极其并行的，除了在这些局部小块内之外，没有通信或争用。或者换一种思考方式，忘掉块，从你的词汇表中删掉块，
+
+11
+00:04:56.000 --> 00:05:45.000
+the computation of the the prefixes that every block needs. But it still ultimately has a serial dependence that for, given a block, given a chunk of elements I, for you to complete the scan of those elements I, all I minus one chunks must have completed. And that is this monotonic uh requirement is tough whereas the reduce is just strictly embarrassingly parallel there's no communication or contention outside of within these like local little um blocks or like another way to think about it forget forget blocks like delete blocks from your vocabulary um for a minute way to think about it, forget blocks, like delete blocks from your
+忘掉块，从你的词汇表中删掉块，从 CPU 并行性的角度来思考。GPU 并行性有两层，你知道，有线程块，它们有点像基本的 SMPTE 执行环境，你让这些线程都在一起执行。但如果我们只从 CPU 并行性的角度来思考，即我们没有第二层，只有线程，那么等效的 CPU 并行归约就是一个归约，你只需启动 n 个线程，让每个线程归约一定数量的元素，然后将该线程的结果写入向量。然后第二遍只需要一个线程对该向量求和。
+
+12
+00:05:45.000 --> 00:06:34.000
+vocabulary for a minute and think about it in terms of CPU parallelism. So GPU parallelism has this second layer of both, you know, there's thread blocks, which are kind of like the basic, the SMPTE execution environment where you had these threads that are all executing together. But if we think about it just in terms of like CPU parallelism, where we don't have that second layer and where it's just threads, the equivalent CPU parallel reduce would be a reduce where you just spin up in threads, have each one of them reduce some amount of elements, and then write the result for that thread into a vector. And then the second pass would be just, you just have one thread sum up that vector.
+第一遍是 100% 极其并行的。没有任何通信，这是最好的并行算法类型。而扫描，任何形式的扫描算法都有线程之间的通信。所以我确实觉得，除非按键算法有某种结构上的原因需要扫描，而且有很多比我聪明得多的人在做 Cub，
+
+13
+00:06:34.000 --> 00:06:57.000
+And that first pass is 100% embarrassing parallel. Like there's no communication at all, which is like the best type of parallel algorithm. Whereas the scan, any form of the scan algorithm has threads talking to each other. So I do find it, unless there is some structural reason for needing the scan for the bi-key algorithms, and there's a lot of people more smarter than me that work on Cubs,
+所以，你知道，这可能是事实，但话又说回来，有时我们确实会发现像这样的东西实际上可能更快。但我确实觉得这值得怀疑。我确实觉得这值得怀疑，我想知道是否可以进行预扫描来计算键块在哪里结束，嗯，你不必计算，好吧，我想是的，这就是你所说的，是的，你必须这样做，因为我们需要弄清楚存储空间在哪里。我们需要知道最终有多少个键。是的。好吧，伙计们，是时候结束了。等等，等等，等等。
+
+14
+00:06:57.000 --> 00:07:51.000
+so, you know, that's probably the case, but then again, there's also some times when we do find things like this that could actually be faster. But I do find it questionable. I do find it questionable, and I wonder do a pre-pass to compute where the key chunks end um you don't have to you don't have to calculate it's well i guess yeah that's what you're saying yeah you do you do because we need to figure out where the storage goes. We need to know how many keys we end up with. Yeah. Well, it's time to wind down, folks. Wait, wait, wait.
+好的，好的，好的。等等。在未来的剧集中？不，不，不。等等，等等。现在已经一小时四十分钟了。这本来应该是 30 分钟的。所以也许我们谈谈三遍算法，第一遍只是计算我们有多少个
+
+15
+00:07:51.000 --> 00:08:12.000
+Okay, okay, okay. Hang on. In a future episode? No, no, no. Hang on, hang on. It's an hour and 40 minutes now. This is supposed to be 30 minutes. So maybe we talk about a three pass thing where pass number one is just count how many you
+唯一的键段，计算我们有多少个块，然后为这些块分配临时存储空间，然后进行第二遍，即归约，嗯，聚合归约，然后第三遍是，嗯，嗯，聚合的总和。启动另一个可能的按键归约实现的成本是多少？你只是为每个块启动一个块，每个块的大小是任意的。那基本上就是归约的工作方式。你是什么意思，归约的工作方式是什么？嗯，它们每个线程的归约项数，或者至少对于归约，我认为每个线程的项数不像扫描那样固定。
+
+16
+00:08:12.000 --> 00:09:29.000
+know unique key segments we have count how many chunks we have, then allocate temp storage for those chunks, then do pass two, which is the reduce, uh, the aggregate reduce, and then pass three is the, um, uh, the summation of uh of the aggregates what's the cost also of launching like another a possible implementation of reduced by key is you just launch one block for every chunk and every chunk is just arbitrarily sized what's the that's basically what that's basically how the reductions work what do you mean that's how the what is the reductions uh um well they they the number of items per thread for reduction or at least for reduce i think the number of items per thread isn't uh fixed in the same way that it is for scan um It will, it picks a number of items per thread, but then it also, it iterates so that it,
+它会选择每个线程的项数，但它也会迭代，以便它，
+
+17
+00:09:29.000 --> 00:09:56.000
+I think the number of blocks is fixed for reduce. So for like, for scan, because of like. But like, couldn't you implement a kernel that like launches a block with arbitrary number of elements each, like for every chunk, you just launch a block? Like I don't, to me, that obviously has some kind of overhead compared to just launching. You're saying to launch a block for every chunk in the end, but then they may be different sizes.
+我认为归约的块数是固定的。所以对于扫描，因为……但是，难道你不能实现一个内核，为每个块启动一个块，每个块有任意数量的元素吗？就像，对我来说，这显然比仅仅启动有一些开销。你是说最后为每个块启动一个块，但它们的大小可能不同。
+
+18
+00:09:56.000 --> 00:10:41.000
+They're almost definitely going to be different, and some of them are also going to be very small. Some of them are going to be big. Yeah, so you can't have different block sizes um that is an interesting idea um you know we have this segmented reduced thing which is when you have different actual inputs or like a uh scatter gather thing that georgie worked on um an employee yeah it's one of our co-workers he's very he's very smart he's like if you like cloned connor or not like he's like smarter than like 10 uh of me and connor's like that's 10 of me's and 10 of connor's um uh he's very good um so for segment and reduce i remember he
+它们几乎肯定会不同，而且其中一些会非常小。其中一些会很大。是的，所以你不能有不同的块大小，嗯，这是一个有趣的想法，嗯，你知道我们有这个分段归约的东西，就是当你拥有不同的实际输入或者像 Georgie 做的那种分散收集（scatter gather）东西时，嗯，一个员工，是的，他是我们的同事之一，他非常聪明，他就像如果你克隆了 Connor，或者不，他就像比我和 Connor 聪明 10 倍，嗯，他非常出色，所以对于分段归约，我记得他
+
+19
+00:10:41.000 --> 00:11:32.000
+there was some interesting thing about like sorting the size of the segments um uh and like i think it broke down to like having three phases where there's like big segments go first and then like medium segments and then small segments i remember something about that we should talk about the segmented reduced too because those are the newer algorithms in cub i've not even when honestly when you said segmented reduce i was like is my guy just referring to what we've been talking to about yeah we should maybe we should have georgie literally also too when you just said he's he's worth 20 of you and i combined i was like well why isn't he on the podcast here we are bumbling around for an hour and a half i mean because i think that i think that one of the nice things about the podcast is that people, most programmers can connect.
+有一些关于对段大小进行排序的有趣事情，嗯，我想它分解为三个阶段，大段先走，然后是中段，然后是小段，我记得有这么回事。我们也应该谈谈分段归约，因为那是 Cub 中较新的算法。我甚至，老实说，当你提到分段归约时，我还在想，这家伙是不是在指我们一直在谈论的东西？是的，也许我们应该让 Georgie 也来。还有，当你刚才说他抵得上我和你加起来的 20 倍时，我就想，那他为什么不在播客上？我们在这里瞎聊了一个半小时。我的意思是，因为我认为播客的好处之一是人们，大多数程序员都能产生共鸣。
+
+20
+00:11:32.000 --> 00:12:34.000
+To the struggle. brilliant programmers who are far smarter than us. Everybody's experience is subjective. And so I'm sure that no matter what your intelligence level is, you can connect with the struggle. That's one of the reasons why this podcast and this podcast format works is because no matter what level you're at, no matter your, your, your skillset, your, your learning, um, regardless of how, uh, intelligent you may think you are, um, everybody struggles. Even the people who are like who you look up to they struggle too and uh it's very uh therapeutic to see other people struggle and be like oh yeah it's not just me other people struggle too and i
+对这种挣扎产生共鸣。聪明的程序员比我们聪明得多。每个人的经历都是主观的。所以我相信无论你的智力水平如何，你都能对这种挣扎产生共鸣。这就是为什么这个播客和这种播客形式有效的原因，因为无论你处于什么水平，无论你的技能、你的学习，嗯，无论你认为自己有多聪明，嗯，每个人都在挣扎。即使是你仰望的人，他们也在挣扎，看到别人挣扎并觉得“哦，是的，不仅仅是我，别人也在挣扎”是非常治愈的，我
+
+21
+00:12:34.000 --> 00:13:07.000
+think that's why people tolerate the pot the chaos of the podcast um because there's something very human um and uh there's something very human about the struggle and there's something very human about the struggle, and there's something very human about us making mistakes and being okay with making mistakes and advertising those mistakes to the world. Well, ideally, we're not here to advertise our mistakes. They just happen, and people get to hear them. Ideally, we could— But that's what people connect with
+认为这就是为什么人们能容忍播客的混乱，因为有一种非常人性化的东西，嗯，关于挣扎有一种非常人性化的东西，关于我们犯错并接受犯错并将这些错误向世界宣传有一种非常人性化的东西。好吧，理想情况下，我们不是来宣传我们的错误的。它们只是发生了，人们听到了。理想情况下，我们可以——但这就是人们产生共鸣的地方
+
+22
+00:13:07.000 --> 00:13:36.000
+i think in the podcast yeah it's not like us just being like oh here's how you know like here's all these things works it's mostly like oh well we don't know let's go find out okay so i gotta add a new to-do list item which is we need to figure out what's going on with reduced by key and whether we can do a better algorithm there. But that's going to require some thought. And we're going to bring on Georgie. We should bring on Jake as well. We've mentioned Jake a couple times.
+我认为在播客中，是的，这不像我们只是说“哦，这就是你知道的，这就是所有这些东西的工作原理”，它更多是“哦，好吧，我们不知道，让我们去查查”。好的，所以我得添加一个新的待办事项，我们需要弄清楚按键归约到底是怎么回事，以及我们是否可以做出更好的算法。但这需要一些思考。我们要请 Georgie 来。我们也应该请 Jake 来。我们已经提到过 Jake 几次了。
+
+23
+00:13:36.000 --> 00:14:04.000
+We mentioned the CCCL GitHub repo. He's in charge of all this stuff now. He should be on the pod. So there you have it. I actually don't know what's going to happen now, folks. Maybe I'll put this at the beginning because this was an hour and 20 minutes after the 30-minute couch episode. I just said you'd hear the couch episode in like 20 episodes, but maybe I am going to edit the couch episode. You promised, Connor. You bastard.
+我们提到了 CCCL GitHub 仓库。他现在负责所有这些事情。他应该上播客。所以就这样。伙计们，我其实不知道现在会发生什么。也许我会把它放在开头，因为这是 30 分钟沙发剧集之后的一小时二十分钟。我刚才说你会在大约 20 期之后听到沙发剧集，但也许我要编辑沙发剧集。你答应过的，Connor。你这个混蛋。
+
+24
+00:14:04.000 --> 00:14:25.000
+You promised. What? You promised not to 10x me. No 10x me. No, no episode. You promised, Connor. You bastard. You promised. What? You promised not to 10X me. No 10X me. No, no, no, no, no. I said, what I was saying is I said the couch episode would be in like 20 episodes because I wanted to edit this one for Friday and then leave the couch episode. But now this one is an hour and 20 minutes, which doesn't go into all one episode.
+你答应过的。什么？你答应过不让我 10 倍速。没有 10 倍速。没有，没有剧集。你答应过的，Connor。你这个混蛋。你答应过的。什么？你答应过不让我 10 倍速。没有 10 倍速。没有，没有，没有，没有，没有。我说的是，我说沙发剧集会在大约 20 期之后，因为我想为周五编辑这一期，然后留下沙发剧集。但现在这一期是一小时二十分钟，这不能全部放在一期里。
+
+25
+00:14:25.000 --> 00:14:51.000
+It's probably going to get cut up into three parts or at least two parts. I have no idea what the cut is. And so the problem – I don't mind editing the first part of this. But the problem is then I want to get Sean's episodes out right after we record them. We didn't even talk about the fact that the Norwegian ambassador to the UN lives in the penthouse in my building. Yeah, it's unimportant. All right, folks. We are going to wrap this up.
+它可能会被剪成三部分，或者至少两部分。我不知道怎么剪。所以问题是——我不介意编辑这一期的第一部分。但问题是，我想在录制完 Sean 的剧集后立即发布。我们甚至没有谈论挪威驻联合国大使住在我这栋楼的顶层公寓这件事。是的，这不重要。好了，伙计们。我们要结束了。
+
+26
+00:14:51.000 --> 00:15:11.000
+Phineas has been waiting. Oh, God. Somebody has been waiting this whole time? That's who you told me not to message while we were recording the pod. I did tell you not to message. Maybe I'll cut all of this out. Not a chance. Not a chance. Not a chance, says the guy that does none of the editing.
+Phineas 一直在等。天哪。有人一直在等吗？这就是你告诉我在我们录制播客时不要发消息的那个人。我确实告诉过你不要发消息。也许我会把这些都剪掉。没门。没门。没门，那个不做任何编辑的家伙说。
+
+27
+00:15:11.000 --> 00:15:37.000
+And doesn't, you know. I still haven't listened to the end of Phone Tag. You're a terrible friend, Bryce. It's been a while to do this. You're a great friend in some respects. And you're a terrible friend in other respects and you're a terrible friend in other respects i'm really interested to know though maybe on my flight to japan all right we should probably wrap it here all right folks this is probably this is like probably either one episode 176 or episode
+而且不，你知道。我还没听完 Phone Tag 的结尾。你是个糟糕的朋友，Bryce。做这件事花了不少时间。你在某些方面是个好朋友。你在其他方面是个糟糕的朋友，你在其他方面是个糟糕的朋友，但我真的很想知道，也许在我去日本的航班上。好吧，我们可能应该在这里结束。好吧，伙计们，这可能是第 176 期或者第
+
+28
+00:15:37.000 --> 00:16:06.000
+like 179 it's i'm curious just for myself i'll be editing it at some point this, like two months in the future, and I want to see how close I was to it, if I was right with 176 or 179. Woo, we're getting close to 200. Yeah, what are we going to do for episode 200? Remember we recorded a special episode 200 back at like episode 40? I have no recollection of what I said. What did we say about episode 200? Do you even remember the topic? I don't.
+179 期，我很好奇，我自己会在未来的某个时候编辑它，我想看看我离它有多近，如果我猜对了 176 或 179。呜，我们快到 200 期了。是的，第 200 期我们要干什么？还记得我们在第 40 期左右录制了特别的第 200 期吗？我不记得我说过什么了。关于第 200 期我们说了什么？你还记得主题吗？我不记得。
+
+29
+00:16:06.000 --> 00:16:29.000
+Wow. I'm going to, I'm going to, you know, you have to tell me because you know, I won't listen to it. I'm going to say, I was literally about to say, you know, there's one way to guarantee that I can get Bryce to listen to at least one episode out of our first 200. And that'll be episode 200 when I air it without us recording. And he'll be like, wait, what? And I'll be like, well, you're going to have to listen.
+哇。我要，我要，你知道，你必须告诉我，因为你知道，我不会去听的。我要说，我刚才真的想说，你知道，有一种方法可以保证我能让 Bryce 听我们前 200 期中的至少一期。那就是第 200 期，当我播出它而我们没有录制时。他会说，等等，什么？我会说，好吧，你得去听听。
+
+30
+00:16:29.000 --> 00:16:54.000
+Wait, did we record an entire episode? I think we recorded, truth be told, I think we recorded half of an episode. And the idea was we made some predictions, and we were going to revisit them at episode 200. When would we have recorded these predictions? I think it was around like episode 40 or something. What year would that have been? That would have been, we started in 2019, so 40 would have been in 2020. Okay.
+等等，我们录制了整整一期吗？我想我们录制了，说实话，我想我们录制了半期。当时的想法是我们做了一些预测，并打算在第 200 期时回顾它们。我们是什么时候录制这些预测的？我想是在第 40 期左右。那会是哪一年？那会是，我们 2019 年开始的，所以 40 期应该是在 2020 年。好的。
+
+31
+00:16:54.000 --> 00:17:21.000
+Would that have been in 2020 before I became jaded and salty about C++? No, I think it was before. Oh, crap. Then most of those predictions are probably dad ones. This little bit right here, I'm going to splice. I got to remember. Whatever episode this was, hopefully it was 179. I'm going to splice this little bit where Bryce clearly has no idea what he said.
+那会是在 2020 年我变得对 C++ 厌倦和愤世嫉俗之前吗？不，我想是在那之前。哦，该死。那大多数预测可能都是老掉牙的。这一小段，我要拼接一下。我得记住。无论这是哪一期，希望是 179 期。我要拼接这一小段，Bryce 显然不知道他说了什么。
+
+32
+00:17:21.000 --> 00:17:47.000
+I really have no idea. Doesn't know the topic. Doesn't know what he said. I mean, that was pre me moving to new york even yeah yeah it was just like mid-pandemic um actually no it was it was probably like the summer of 2020 why did i even record then god i just have no memory of what happened in life before the last like year or two this is good stuff too honestly i've got to start i got to start looking to see what other podcasts have gone weekly this long
+我真的不知道。不知道主题。不知道他说了什么。我的意思是，那是在我搬到纽约之前。是的，是的，那是在疫情中期。嗯，其实不，那可能是在 2020 年夏天。我当时为什么要录制？天哪，我真的对过去一两年之前生活中发生的事情没有任何记忆。这东西也很棒，老实说，我得开始，我得开始看看还有哪些播客能坚持每周更新这么久。
+
+33
+00:17:47.000 --> 00:18:02.000
+because I'm pretty sure we're getting, I'm pretty sure there's a couple out there that have done a couple thousand that have never missed a week. But as far as tech podcast goes, I think I'm- We've come close to missing weeks. Like the past month or two has been week to week.
+因为我很确定我们快到了，我很确定有几家播客已经做了几千期，从来没有错过一周。但就科技播客而言，我想我——我们差点错过几周。就像过去一两个月是每周更新。
+
+34
+00:18:02.000 --> 00:18:19.000
+It's been week to week. Let me rephrase what Bryce, Bryce is incorrect. Bryce, what really happened is we got close to you not being on the podcast and me just recording separately for 30 minutes going blah, blah, blah, blah, blah. Guess what?
+是每周更新。让我重新表述一下 Bryce，Bryce 不正确。Bryce，真正发生的是我们差点让你没能参加播客，而我只是单独录制了 30 分钟，在那儿胡说八道。你猜怎么着？
+
+35
+00:18:19.000 --> 00:18:38.000
+This is episode 169. Bryce, we weren't able to connect and there's no way, even if listeners, one day you get like a three-minute episode. I promise. I promise. I'll need to be close to dead, you know, in order for us – I shouldn't say that because knock on walnut.
+这是第 169 期。Bryce，我们没能连上，而且没门，即使是听众，有一天你可能会得到一期三分钟的剧集。我保证。我保证。我需要快死了，你知道，为了我们——我不应该那样说，因为敲敲胡桃木。
+
+36
+00:18:38.000 --> 00:18:58.000
+That was – here, let's get that walnut ring just a little bit cleaner on the pod. Knock on wood that won't happen. Anyways, any final words? Because we're now at an hour 53 minutes. Now I'm getting sentimental about my coffee table. I do have to get rid of it. All right, we're going to end it there, folks. Wait, wait, no, no, no, no.
+那是——来，让我们在播客上把那个胡桃木敲击声弄得更干净一点。敲敲木头，那不会发生的。总之，有什么临别赠言吗？因为我们现在已经一小时 53 分钟了。现在我对我的咖啡桌感到多愁善感了。我确实得把它处理掉。好了，我们要在这里结束了，伙计们。等等，等等，不，不，不，不。
+
+37
+00:18:58.000 --> 00:19:24.000
+If you live in New York City and you'd like Bryce's coffee table, DM me, I guess. We should actually give it away. We should give it away as like a podcast. You know, that would actually be – It's a decent – honestly, Bryce is saying it's dinged up and whatnot, but like Bryce – like this is a very nice coffee table. I'm running my hands on it. Like sure, there's a couple blemishes on the top.
+如果你住在纽约市，想要 Bryce 的咖啡桌，我想你可以私信我。我们其实应该把它送人。我们应该把它作为播客的礼物送出去。你知道，那实际上会是——这是一个不错的——老实说，Bryce 说它有磕碰什么的，但像 Bryce——这真的是一张非常好的咖啡桌。我正在用手摸它。当然，顶部有几个瑕疵。
+
+38
+00:19:24.000 --> 00:20:01.000
+I'm not getting rid of it because there's any problem with it. I'm getting rid of it because not – some of the furniture – like my girlfriend and I are getting a larger place together this summer. And some of the furniture that is my furniture has to go away and some of the furniture that is her furniture has to go away. And while I love this coffee table and it is my oldest piece of furniture, it is one that is going away. And you know what we should do? We should get the ADSP logo, like, etched into the corner. And we make it, like, an ADSP episode 200. Because episode 200 is going to be, like, September timeline.
+我不是因为有什么问题才把它处理掉的。我把它处理掉是因为——我女朋友和我今年夏天要搬到一个更大的地方住。我的一些家具必须处理掉，她的一些家具也必须处理掉。虽然我喜欢这张咖啡桌，而且它是我最古老的家具，但它还是要走。你知道我们应该做什么吗？我们应该把 ADSP 标志蚀刻在角落里。我们把它做成 ADSP 第 200 期。因为第 200 期大概会在九月份。
+
+39
+00:20:01.000 --> 00:20:24.000
+Are you telling me I have to figure out how to ship this coffee table? I mean, yeah, we'd have to do that. But I think it could be worth it. We might start a Patreon, folks. Listen, this is like episode 179 now. The Adobe C++ Meetup, New York Meetup people are not getting ADSP stickers tomorrow. That's because, one, I forgot about it last week. But, two, over the last two days, I've been looking into New York sticker options.
+你是说我得弄清楚怎么运送这张咖啡桌吗？我的意思是，是的，我们得那样做。但我认为这很值得。我们可能会开始一个 Patreon，伙计们。听着，这现在就像第 179 期了。Adobe C++ 聚会，纽约聚会的人明天拿不到 ADSP 贴纸了。这是因为，第一，我上周忘了。但第二，过去两天我一直在研究纽约的贴纸选项。
+
+40
+00:20:24.000 --> 00:20:58.000
+I got quoted for, I think it was 100 stickers 329 dollars they they pass very well at the nvidia i know i know i know but i there was other options that were less than 100 for like 200 stickers anyways point is is that uh and also too i really what i want is i've learned they're called die in stickers and they have like the little white border around them. It needs to be rounded corners. I don't want I don't want like because if they would have gotten stickers, they would have been like sheets of stickers where they were square with no border and no rounded edges. And like we want top tier. Yeah.
+我收到的报价是，我想是 100 张贴纸 329 美元，它们在 NVIDIA 那里通过得很好，我知道，我知道，我知道，但我还有其他选项，200 张贴纸不到 100 美元。总之，重点是，而且我也真的，我想要的是，我了解到它们叫模切贴纸，它们周围有白色边框。它需要圆角。我不想要，我不想要，因为如果他们拿到贴纸，它们会是那种方形的、没有边框、没有圆角的贴纸。我们想要顶级的。是的。
+
+41
+00:20:58.000 --> 00:21:18.000
+We're not going to give out some first draft kind of like, oh, these were last minute. But here you go. No, this is going to have the logo? Just the logo. We're starting off simple, and then we'll expand the merch empire. I do wonder whether we need a flashier logo. No, no, no, no. There's no way we're changing the logo.
+我们不会分发那种第一稿，那种“哦，这些是最后一分钟做的，给你吧”。不，这会有标志吗？只有标志。我们从简单的开始，然后我们会扩展周边帝国。我确实想知道我们是否需要一个更华丽的标志。不，不，不，不。我们不可能换标志。
+
+42
+00:21:18.000 --> 00:21:50.000
+I would like to change the Arraycast logo, if you're listening, Bob. I don't like it. What don't you like about it? I like that I've got three podcasts and two of them basically have the same kind of style. It's just a matte color. One's green, one's red, and then just kind of blocky text centered. It's simple, it's clean, and it's got equidistant bordering to the edge from all the text. Whereas a Raycast, it's got, you know, huge margins above and below the text and it's got like negative margins on the left and
+如果你们在听的话，Bob，我想换 Arraycast 的标志。我不喜欢它。你不喜欢它什么？我喜欢我有三个播客，其中两个基本上是同一种风格。它只是哑光颜色。一个是绿色，一个是红色，然后是居中的块状文字。它简单、干净，文字到边缘的距离相等。而 Arraycast，它有，你知道，文字上方和下方有巨大的边距，左边和右边有负边距。
+
+43
+00:21:50.000 --> 00:22:35.000
+right. So that just like, you know, you would. I do, I do have to say one, one interesting thing about this podcast name is that when we started this podcast, we picked a name that was mostly for SEO and I did not think that it was going to be an applicable name. And then we went into a phase that was very heavily interview-based. But then increasingly over the past year and a half, this podcast has become more and more deeply algorithm-focused. It's also parallel, but I did notice a pattern that we've got an episode called vectorizing filter. And I think I'm going to go back and rename that one parallel filter. And then since then, we've had like parallel scan. I think we've had another parallel episode, but like we've had three now episodes.
+所以那只是，你知道，你会的。我确实，我确实不得不说，关于这个播客名字的一件有趣的事情是，当我们开始这个播客时，我们选了一个主要是为了 SEO 的名字，我没想到它会是一个适用的名字。然后我们进入了一个非常依赖采访的阶段。但过去一年半里，这个播客越来越深入地关注算法。它也是并行的，但我确实注意到一个模式，我们有一期叫“向量化过滤”。我想我会回去把它重命名为“并行过滤”。从那以后，我们有了像“并行扫描”这样的剧集。我想我们还有另一期并行剧集，但我们现在已经有三期了。
+
+44
+00:22:35.000 --> 00:22:56.000
+And this one is probably going to be like parallel chunk by part one, two, and three. And I have no problem. I mean, I love talking about algorithms. You know, sometimes we just get lost in the sauce. We never talk about the data structures. Well, I mean, every data structure is basically an algorithm anyway, is a quote I heard the other day. It's basically each of your operations is just a different type of algorithm.
+而这一期可能叫“并行 Chunk Buy 第一、二、三部分”。我没问题。我的意思是，我喜欢谈论算法。你知道，有时我们只是迷失在其中。我们从不谈论数据结构。好吧，我的意思是，每个数据结构基本上都是一种算法，这是我前几天听到的一句话。基本上你的每个操作都只是不同类型的算法。
+
+45
+00:22:56.000 --> 00:23:08.000
+And we live in a GPU land where, like, the only data structure, not the only one. We care about graphs, too. Just calm down. Calm down, folks. I have been thinking about another podcast project. What do you mean? Like between us or just you on your own?
+我们生活在 GPU 世界里，像，唯一的数据结构，不是唯一的一个。我们也关心图。冷静点。冷静点，伙计们。我一直在考虑另一个播客项目。你是什么意思？像我们之间，还是你自己？
+
+46
+00:23:08.000 --> 00:23:27.000
+Well, like shouldn't like NVIDIA have like a – We do have a podcast. It's called the NVIDIA AI Podcast hosted by Noah Kravitz. Is it good? Is it good? Is it good? I listen to every episode. What do they talk about? they're roughly 20 to 30 minute
+嗯，像 NVIDIA 不应该有一个——我们确实有一个播客。它叫 NVIDIA AI Podcast，由 Noah Kravitz 主持。它好吗？它好吗？它好吗？我听了每一期。他们谈论什么？它们大约是 20 到 30 分钟的
+
+47
+00:23:27.000 --> 00:24:05.000
+episodes uh i'm i'm allowed to give my honest opinion i'm not gonna get in trouble right you can give your honest opinion yeah it's not my favorite podcast um mostly what they do like technical yeah it's very technical but what they do is they bring on uh representatives of companies and startups that are doing cool stuff with uh gpus and like our tech and so it's like okay that is not what i had in mind one of the most recent ones um i think it was uh actually i can't remember it was like it was like health related or something but it's always like you know some startup company and they're trying to figure out a way to use gpus to affect like climate change or to do
+剧集，嗯，我可以发表我的诚实意见，我不会惹麻烦，对吧？你可以发表你的诚实意见，是的，它不是我最喜欢的播客，嗯，他们主要做的是技术，是的，它非常技术性，但他们做的是请来使用 GPU 和我们的技术做酷事的公司和初创公司的代表，所以就像，好吧，那不是我想要的。最近的一期，嗯，我想是，其实我不记得了，它像是什么健康相关的，但总是像，你知道，一些初创公司，他们试图找出一种方法来使用 GPU 来影响气候变化或进行
+
+48
+00:24:05.000 --> 00:24:49.000
+like genome sequencing or and so like you get to hear about all these stories but like my favorite podcasts are one that they don't really have an ulterior motive like the motive there is to like highlight cool companies that are using our gpus so you can figure out how you could use the motive there is to sell gps yeah weed and then like other podcasts like people have courses people have books uh people have like uh you know things that they're trying it's like oh the bigger our audience the more that we can sell this thing and like uh podcasts that don't have like a goal like oxide and friends like i don't think even though oxide and friends sure maybe they get like a little bit of you know uh press or whatever pr like people hear about them more like literally that's just a bunch of nerds like that have a lot of
+基因组测序，所以你可以听到所有这些故事，但我最喜欢的播客是那些他们没有真正不可告人动机的播客，那里的动机是突出使用我们 GPU 的酷公司，这样你就可以弄清楚你如何使用，那里的动机是销售 GPU，是的，还有其他播客，人们有课程，人们有书，人们有，你知道，他们试图销售的东西，就像“哦，我们的受众越多，我们就能卖出更多的东西”，像那些没有目标的播客，比如 Oxide and Friends，我不认为，即使 Oxide and Friends 可能确实得到了一点点，你知道，媒体报道或什么的公关，就像人们更多地听说他们，那真的只是一群有很多
+
+49
+00:24:49.000 --> 00:25:27.000
+seniority and have been in the industry for decades that are like talking about what's exciting to them and like literally episode to episode it completely changes and it's literally just like passionate people sharing what they care about which is what this podcast is like we don't make money we don't have sponsors we don't really have a goal which is very clear to the listener sometimes we choose a topic and then change like three minutes later and it's the same thing with the raycast like it's literally like a raycast even more so it's just like people talking about what they're excited about and honestly yeah it's like far and few between i want for an nvidia podcast is i want a podcast where i can grill my coworkers about why cuda is the way that it is so you should should, literally, you should start a podcast
+资历并且在行业里工作了几十年的书呆子，他们在谈论让他们兴奋的事情，而且真的每一期都在完全改变，这真的就像充满激情的人分享他们关心的东西，这就像这个播客，我们不赚钱，我们没有赞助商，我们没有真正的目标，这对听众来说有时很明显，有时我们选择一个话题，然后三分钟后就换了，Arraycast 也是一样，它真的就像人们谈论他们兴奋的事情，老实说，是的，这很少见，我想要一个 NVIDIA 播客，我想要一个我可以质问我的同事为什么 CUDA 是现在这个样子的播客，所以你应该，真的，你应该开始一个播客
+
+50
+00:25:27.000 --> 00:25:48.000
+because that is what I did with ArrayCast. ArrayCast, I honestly sometimes think of it as like my personal think tank. Like I'll come up with a question and then I'll be like, oh, look at that, Marshall Lockbaum, the creator of the language that I've been thinking about this problem in, BQN, is on the panel. And I'll just be like, all right, so today we're going to talk about game programming but first i've got a question for marshall and then the first 10
+因为这就是我对 ArrayCast 所做的。ArrayCast，我老实说有时认为它就像我的个人智囊团。我会想出一个问题，然后我会想，哦，看那个，Marshall Lockbaum，我一直在思考这个问题的语言 BQN 的创造者，在小组里。然后我会说，好吧，所以今天我们要谈论游戏编程，但首先我有一个问题要问 Marshall，然后播客的前 10
+
+51
+00:25:48.000 --> 00:26:15.000
+minutes of the podcast is him answering that question it's fantastic it's fantastic you should call it like uh you know the nvidia think tank or the unofficial cuda podcast i think yeah do it and then that's the thing you have to choose like a panel it can even be a rotating panel which is kind of what a raycast is as well so you just have four or five people and uh the thing. You have to choose like a panel. It can even be a rotating panel, which is kind of what a Raycast is as well. So you just have four or five people. And the thing is you just got to find someone to do the work, similar to this podcast. Yeah, I know. That's the problem.
+分钟是他回答那个问题，太棒了，太棒了，你应该叫它，像，你知道，NVIDIA 智囊团或非官方 CUDA 播客，我想是的，去做吧，然后这就是你必须选择的，像一个小组，它甚至可以是一个轮换小组，这也就是 Arraycast 的方式，所以你只需要四五个人，而且事情是，你只需要找人来做这项工作，类似于这个播客。是的，我知道。这就是问题所在。
+
+52
+00:26:15.000 --> 00:26:29.000
+All right, folks. It is two hours, one minute, 18 seconds. We're signing off from Bryce's apartment. Yeah, we're going to go do a fun activity that Connor doesn't know about. Are we going to dinner first though? No, I don't think you're allowed to have food. We can't go to dinner? That's what Phineas thinks we're doing, going to go do a fun activity that Connor doesn't know about. Are we going to dinner first, though? No, I don't think you're allowed to have food. We can't go to dinner? That's what Phineas thinks we're doing, going to dinner.
+好了，伙计们。现在是两小时一分十八秒。我们要从 Bryce 的公寓下线了。是的，我们要去做一个 Connor 不知道的有趣活动。不过我们要先去吃晚饭吗？不，我不认为你被允许吃东西。我们不能去吃晚饭吗？这就是 Phineas 认为我们要做的，去做一个 Connor 不知道的有趣活动。不过我们要先去吃晚饭吗？不，我不认为你被允许吃东西。我们不能去吃晚饭吗？这就是 Phineas 认为我们要做的，去吃晚饭。
+
+53
+00:26:29.000 --> 00:26:43.000
+I have different plans. Can he come to the thing? He can come to the thing. Is it a thing he'd want to come to? I mean, he can come. He may not be able to leave, though. He may not be able to leave. Is it a movie?
+我有不同的计划。他能来参加那个活动吗？他可以来参加那个活动。那是他想参加的活动吗？我的意思是，他可以来。不过他可能无法离开。他可能无法离开。那是电影吗？
+
+54
+00:26:43.000 --> 00:26:59.000
+I really can't tell you any more details. We'll send Phineas a voice note and he may or may not come. Hope everybody enjoyed this. Be sure to check these show notes either in your podcast app or at ADSPthepodcast.com for links to anything we mentioned
+我真的不能告诉你更多细节。我们会给 Phineas 发一条语音信息，他可能会也可能不会来。希望大家喜欢这一期。请务必查看这些节目说明，无论是在你的播客应用程序中还是在 ADSPthepodcast.com 上，获取我们提到的任何内容的链接，
+
+55
+00:26:59.000 --> 00:27:04.000
+in today's episode as well as a link to a GitHub discussion where you can leave thoughts, comments, and questions. Thanks for listening. We hope you enjoyed and have a great day. Low quality, high quantity. That is the tagline of our podcast. It's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+以及 GitHub 讨论的链接，你可以在那里留下想法、评论和问题。感谢收听。我们希望你喜欢，祝你有美好的一天。低质量，高数量。这就是我们播客的标语。这不是标语。我们的标语是带有信息点缀的混乱。这一期还没有评论。点击转录中的任何句子来留下评论。
