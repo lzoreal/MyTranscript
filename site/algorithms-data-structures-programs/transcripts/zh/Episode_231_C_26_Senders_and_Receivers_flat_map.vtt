@@ -1,0 +1,401 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:13.000
+So the important parts, the three important things about senders and receivers. One, independent of mechanism of concurrency. It runs with thread pools, it runs with coroutines, it runs with interrupts, right? So that's one of the things that makes it very amenable to application either in the big data space or in the tiny embedded space with interrupts. Very important. Second important thing, it is asynchronous function composition, right? If you think about it like that, that's another very easy way, a good way in to think about it. Nothing happens when you declare senders. You can declare these things all day, you can compose them all day. No work happens at that point. It only happens when you say, kick off the work. And the third important thing is the what's called structured concurrency, which is to do with lifetimes. Welcome to ADSP the podcast episode 231 recorded on April 9th, 2025. My name is Connor and today with my co-host Ben we chat about senders and receivers, flatmap
+关于发送者（senders）和接收者（receivers），有三个重要的方面。第一，它独立于并发机制。它可以在线程池、协程或中断中运行，对吧？这就是为什么它非常适合应用于大数据领域或带有中断的微型嵌入式领域。这一点非常重要。第二个重要点是，它是异步函数组合，对吧？如果你这样思考，这是理解它的另一种非常简单且有效的方式。当你声明发送者时，什么都不会发生。你可以整天声明这些东西，整天组合它们，但此时不会执行任何工作。只有当你发出指令，启动工作时，它才会执行。第三个重要点是所谓的结构化并发，这与生命周期有关。欢迎收听 ADSP 播客第 231 期，录制于 2025 年 4 月 9 日。我是 Connor，今天我和我的联合主持人 Ben 将讨论发送者和接收者、flatmap
+
+2
+00:01:13.000 --> 00:02:05.000
+and more. My other topic was talking about senders and receivers, you because you and you and Bryce often talk about parallelism concurrency and so I thought it might be interesting to talk about senders which are you know in C++ 26 and I wanted to... Bryce made a claim that I want to rebut or finesse maybe so Bryce made a claim in a previous podcast that I have a quote here. Today we live in a parallel world. Almost every hardware platform is parallel from the smallest embedded devices to the largest supercomputers. I would finesse that by saying that embedded devices have concurrency but not much parallelism and therefore
+以及更多内容。我的另一个话题是关于发送者和接收者，因为你和 Bryce 经常讨论并行和并发，所以我认为讨论一下 C++26 中的发送者可能会很有趣，而且我想……Bryce 在之前的播客中提出了一个观点，我想反驳一下，或者说润色一下。Bryce 的原话是：“今天我们生活在一个并行的世界里。几乎所有的硬件平台都是并行的，从最小的嵌入式设备到最大的超级计算机。”我会润色一下这个观点，我会说嵌入式设备有并发性，但没有太多的并行性，因此
+
+3
+00:02:05.000 --> 00:02:47.000
+that almost all hardware platforms in the world today have no parallelism because almost all hardware platforms are embedded devices but it is certainly true to say they have concurrency mostly in the form of interrupts and so you know I wanted to I thought maybe senders would be an interesting thing to talk about, you know, in particular to talk about the two worlds that it addresses, you know, Bryce and you live and you work for Nvidia, you live in the world of huge hardware, right? Massive computation. I live in a completely different world, which is tiny hardware, no computation,
+世界上几乎所有的硬件平台都没有并行性，因为几乎所有的硬件平台都是嵌入式设备。但可以肯定地说，它们确实具有并发性，主要以中断的形式存在。所以，我想讨论发送者会是一个有趣的话题，特别是讨论它所解决的两个世界。你和 Bryce 在 Nvidia 工作，你们生活在大型硬件的世界里，对吧？海量的计算。而我生活在一个完全不同的世界，即微型硬件，没有海量计算，
+
+4
+00:02:47.000 --> 00:03:30.000
+but still concurrency. Still the problem of concurrency in the form of interrupts. And senders, I think, addresses both worlds. For a long time, it was developed by folks firmly with their feet in the big hardware world. But, you know, the work I'm doing with my team with Michael and with Luke, we are applying it to the very, very small, to the embedded, to the world of interrupts, not just to the world of huge, possibly heterogeneous hardware, large computation. So it's really interesting for me to sort of contrast those two ideas and yet recognize that I think senders has a good answer to both. I don't know, what do you think?
+但仍然存在并发性。仍然存在以中断形式出现的并发问题。我认为发送者解决了这两个世界的问题。很长一段时间以来，它都是由那些深耕于大型硬件领域的人开发的。但是，我和我的团队 Michael 以及 Luke 所做的工作，是将它应用于非常非常小的领域，应用于嵌入式领域，应用于中断的世界，而不仅仅是应用于巨大的、可能是异构的硬件和大规模计算的世界。所以，对比这两个概念，同时认识到我认为发送者对两者都有很好的解决方案，这对我来说非常有趣。我不知道，你怎么看？
+
+5
+00:03:30.000 --> 00:04:09.000
+Well, so I think we should start off this topic. It's a huge topic. Having you give an overview of what senders and receivers, we've talked about it before and admittedly, I said the other day when I was recording an array cast podcast We were talking about Julia and the topic of multiple dispatch came up and I said to the guest you know multiple dispatch is one of these things which I have a surface level understanding of but I've never really like it's the Julia folks talk about how it's it's the killer feature of the language and I'm like, I don't I clearly don't understand it comprehensively enough to understand what the big deal is. And then even after he explained it, I think
+嗯，我认为我们应该从这个话题开始。这是一个巨大的话题。让你概述一下什么是发送者和接收者。我们之前讨论过它，我不得不承认，前几天我在录制 Array Cast 播客时，我们正在讨论 Julia，话题涉及到了多重分派（multiple dispatch）。我对嘉宾说，多重分派是我只有浅层理解的东西，但我从来没有真正……Julia 的人们谈论它是该语言的杀手级特性，而我却觉得，我显然没有足够全面地理解它，以至于不知道它到底有什么了不起。即使在他解释之后，我想
+
+6
+00:04:09.000 --> 00:04:50.000
+it, my understanding improved, but it still wasn't like, ah, a hundred percent could go give a lightning talk on this. And I feel the same way about senders and receivers. My background on it, I've perused, I can't remember which version of the P 2300 paper. I believe that was the last number. I think we're up to at least R10 okay at one point I I read most of minus the you know the code the code snippets That paper and the most helpful thing that I had was because Eric Niebler works at Nvidia Oh sure point I I grabbed an hour of his time and he actually walked me through, immediately he was driving, I wasn't doing any typing, a bare-bones implementation.
+我的理解有所提高，但仍然没有达到那种“啊，我可以百分之百地就此做一个闪电演讲”的程度。我对发送者和接收者也有同样的感觉。关于它的背景，我浏览过 P2300 论文，我不记得是哪个版本了。我相信那是最后一个编号。我想我们至少已经到了 R10。好吧，有一次我读了大部分内容，除了代码片段。那篇论文对我最有帮助的是，因为 Eric Niebler 在 Nvidia 工作，我抓住了他一个小时的时间，他实际上带我走了一遍——当时是他操作，我没有打字——一个最基础的实现。
+
+7
+00:04:50.000 --> 00:05:25.000
+And the thing that I've heard and I think understand is, you know, in Eric's words, what iterators are for serial algorithms, like in, you know, C++11, is what senders and receivers are for asynchronous algorithms and I Understood, you know Eric's little presentation and I understand at a high level But I definitely don't I'm sitting the same position with you know, Julia's multiple dispatch I don't feel like I could go give a five minute lightning talk and be like, you know, here's the explain the eat What is it? Yeah life I explained like I'm five. I five minute lightning talk and be like, you know, here's the explain the what is it?
+我听到并认为我理解的是，用 Eric 的话来说，迭代器对于串行算法（比如 C++11 中的那些）的作用，就是发送者和接收者对于异步算法的作用。我理解了 Eric 的简短演示，并且在高层面上理解了它，但我绝对……我现在的处境和你提到的 Julia 的多重分派一样。我觉得我无法做一个五分钟的闪电演讲，然后说：“这就是……解释一下，它是什么？是的，生活……我像五岁小孩一样解释。”五分钟的闪电演讲，然后说：“这就是……解释一下，它是什么？”
+
+8
+00:05:25.000 --> 00:05:49.000
+Elif I explained like I'm five. I think I can I can probably give a good account of that in in five or so minutes. I feel like I'm up to that. And we should mention I think it's been mentioned on the podcast before but you yourself are in a position to do that because you have implemented basically that's right a version of it yourself which is the number one best way in my opinion to understand something comprehensively is just to implement your own version.
+像五岁小孩一样解释。我想我大概可以在五分钟左右的时间里很好地说明这一点。我觉得我能做到。我们应该提到，我想播客之前提到过，你自己就有能力做到这一点，因为你基本上已经自己实现了一个版本。在我看来，全面理解某件事的最好方法就是实现你自己的版本。
+
+9
+00:05:49.000 --> 00:06:16.000
+I have, it's not a completely standard version, but it is certainly I have implemented senders and receivers in a code base, which will be in production, and certainly to the same platonic ideals as exist in the standard and to mostly the same interfaces. Some of the details differ. Awesome. So over to you and help me and our listeners, because I guarantee you that more than 50%,
+我确实实现过，虽然不是完全标准的版本，但它肯定是在代码库中实现了发送者和接收者，这些代码将投入生产，并且在很大程度上符合标准中存在的柏拉图式理想，以及基本相同的接口。一些细节有所不同。太棒了。那么交给你了，请帮助我和我们的听众，因为我敢保证，超过 50%，
+
+10
+00:06:16.000 --> 00:06:45.000
+maybe more than 75 or 90 are in the same boat as me. Okay, so senders and receivers. Firstly, it's a framework for expressing asynchronous computation. And the name is a bit of a misnomer. So, or it doesn't really give the idea of what this let's say. Really senders, forget about receivers for a minute. Senders are asynchronous functions, right? So when you call a regular function,
+甚至超过 75% 或 90% 的人处境和我一样。好的，那么发送者和接收者。首先，它是一个表达异步计算的框架。这个名字有点用词不当。所以，或者说它并没有真正给出这个概念的想法。实际上，发送者——先别管接收者。发送者就是异步函数，对吧？所以当你调用一个普通函数时，
+
+11
+00:06:45.000 --> 00:07:06.000
+you give it arguments, you get a return value. When you call a sender, you give it arguments, you get a return value, but you don't get that return value through a return statement. Instead, that return value, we might say, goes onto the next sender as a continuation, right? So because this is asynchronous functions,
+你给它参数，你得到一个返回值。当你调用一个发送者时，你给它参数，你得到一个返回值，但你不是通过 return 语句得到那个返回值的。相反，那个返回值，我们可以说，作为延续（continuation）传递给下一个发送者，对吧？所以因为这是异步函数，
+
+12
+00:07:06.000 --> 00:07:42.000
+we're not exactly executing it like there are some similarities. We're not really executing it like a regular function stack and returning values. Instead, we're passing the values, what would be the return values, onto the next continuation, which is the next sender in the chain. So a very high level, that's what it is. So some things we can note, senders and receivers is asynchronous computation embodied and it does not therefore tie itself to any particular
+我们并不是完全像普通函数栈那样执行它并返回值的。相反，我们将值（即本应是返回值的东西）传递给下一个延续，也就是链中的下一个发送者。所以从很高的高度来看，这就是它。所以我们可以注意到一些事情，发送者和接收者是具体化的异步计算，因此它不会将自己绑定到任何特定的
+
+13
+00:07:42.000 --> 00:08:26.000
+method of concurrency, right? So when you're writing an asynchronous system, there are three things which you want to separate. One is the expression of the functionality, the business logic if you like. That's what senders is concerned with. But the other two things are firstly, the mechanism of concurrency. If you can use thread pools or interrupts or You know what or deferred queue or whatever? There are many mechanisms we can use to achieve concurrency senders doesn't care or go co routines right senders doesn't care You can use any of them and the other thing is like what's the strategy of parallelism, right? Which things do we actually want to occur
+并发方法，对吧？所以当你编写一个异步系统时，有三件事是你想要分开的。一是功能性的表达，也就是业务逻辑。这是发送者所关注的。但另外两件事是，首先，并发机制。如果你可以使用线程池、中断，或者你知道的，延迟队列或其他什么？有很多机制可以用来实现并发，发送者不在乎，或者使用协程，对吧？发送者不在乎。你可以使用它们中的任何一个。另一件事是并行策略，对吧？哪些事情我们实际上希望
+
+14
+00:08:26.000 --> 00:09:18.000
+at the same time, probably parallel? And those three things, the business logic, the mechanism of concurrency, and the strategy of parallelism, we can separate out. And senders is concerned with expressing the asynchronous computation in a way that does not concern itself with the mechanism of concurrency. Ascender is an asynchronous function, right? When you make a sender, it's just a no work happens, right? You declare a sender and you give it, you know, like some, like you might give it a lambda to do. Like the first, the simplest sender is called just right and you give it you give it a value and when you run that sender it will produce that value. In other words, it will send that value downstream to the next
+同时发生，可能是并行的？这三件事——业务逻辑、并发机制和并行策略——我们可以分开。而发送者关注的是以一种不关心并发机制的方式来表达异步计算。发送者是一个异步函数，对吧？当你创建一个发送者时，什么工作都不会发生，对吧？你声明一个发送者并给它，你知道，比如你可能会给它一个 lambda 来执行。比如第一个、最简单的发送者叫做 just，你给它一个值，当你运行那个发送者时，它会产生那个值。换句话说，它会将该值向下游发送给下一个
+
+15
+00:09:18.000 --> 00:09:38.000
+continuation the next sender rather than returning it like a function would. So the senders are, when you compose these, you get a basically representation of a computation, but nothing happens. And then the strategy for parallelism and- The strategy for parallelism comes in in the ways that you compose senders together, or sometimes in the algorithms that you use
+延续（下一个发送者），而不是像函数那样返回它。所以发送者是，当你组合这些时，你基本上得到了一个计算的表示，但什么都不会发生。然后是并行策略和——并行策略体现在你组合发送者的方式中，或者有时体现在你使用的算法中
+
+16
+00:09:38.000 --> 00:10:01.000
+to compose senders together. But the mechanism of concurrency, whether you use thread pools or coroutines or whatever, that's completely independent. So having declared our just sender, let's say we say, you know, just 42. So when we run it, it's going to just send 42. We can run that sender on the sender and receivers framework abstracts this to the idea of a scheduler.
+来组合发送者。但是并发机制，无论你使用线程池、协程还是其他什么，都是完全独立的。所以声明了我们的 just 发送者后，假设我们说，你知道，just 42。所以当我们运行它时，它只会发送 42。我们可以在发送者和接收者框架上运行该发送者，该框架将其抽象为调度器（scheduler）的概念。
+
+17
+00:10:01.000 --> 00:10:42.000
+So a scheduler embodies the idea of where I'm going to run this. You could have a scheduler that's tied to a thread pool, you could have a scheduler that's tied to an interrupt, an ISR, you could have a scheduler that's tied to that does coroutines or whatever. A scheduler, you can ask it for a sender and the sender that corresponds to a scheduler represents the entry point into the computation. It does nothing, but it just represents starting the computation on whatever computation resource that scheduler represents. So the very simplest one actually is just the scheduler that doesn't a function, a regular function call, right? That's a perfectly valid
+所以调度器体现了“我将在哪里运行它”的想法。你可以有一个绑定到线程池的调度器，你可以有一个绑定到中断（ISR）的调度器，你可以有一个绑定到协程的调度器，等等。你可以向调度器请求一个发送者，而对应于调度器的发送者代表了计算的入口点。它什么都不做，它只是代表在调度器所代表的任何计算资源上开始计算。所以最简单的一个实际上只是一个不执行函数的调度器，一个普通函数调用，对吧？那是一个完全有效的
+
+18
+00:10:42.000 --> 00:11:05.000
+scheduler and it's called, I think, the inline scheduler, not to be confused with inlining functions, but executes the computation inline in the current thread, just as if you had called a regular function, right? That's a perfectly valid scheduler. And when you ask it for a sender, it will give you back a sort of regular function. But then you can compose more senders with that.
+调度器，它被称为，我想是内联调度器（inline scheduler），不要与内联函数混淆，它在当前线程中内联执行计算，就像你调用了一个普通函数一样，对吧？那是一个完全有效的调度器。当你向它请求一个发送者时，它会给你返回一种普通函数。但随后你可以用它组合更多的发送者。
+
+19
+00:11:05.000 --> 00:11:33.000
+So you can say, then, then is a sender algorithm that is that is F map. Right. Similar to the and then on the optional API. Yeah, exactly. Cy brand got got into the standard and friends. Yeah. So it receives what the sender before it sends, it transforms it, and it sends on the result of the transfer. It's like transform on vector, right? It's like, and then on optional,
+所以你可以说，then 是一个发送者算法，也就是 F map。对吧。类似于 optional API 上的 and then。是的，完全正确。Cy 品牌进入了标准及相关领域。是的。所以它接收前一个发送者发送的内容，对其进行转换，并发送转换的结果。这就像 vector 上的 transform，对吧？这就像 optional 上的 and then，
+
+20
+00:11:33.000 --> 00:12:13.000
+it's working on the value, in this case, inside the sender chain. So this is senders implement the continuation monad just like vector implements the list monad. Yeah, the list monad and optional implements the maybe monad, right? Right. In the same way senders implement the continuation monad. So you have the same kind of monadic ideas. They are not in C++ expressed in functional style, but they are given names that are cromulant with C++, right?
+它正在处理值，在这种情况下，是在发送者链内部。所以发送者实现了延续单子（continuation monad），就像 vector 实现了列表单子（list monad）。是的，列表单子，而 optional 实现了 maybe 单子，对吧？对。同样地，发送者实现了延续单子。所以你有同样的单子思想。它们在 C++ 中不是以函数式风格表达的，但它们被赋予了与 C++ 相容的名字，对吧？
+
+21
+00:12:13.000 --> 00:12:52.000
+Right. So we have just is like lifting a value into the monad, right? It's what Haskell calls pure or return. And when you say just 42, then you get 42 in your continuation, right? Being sent downstream. Then is like transform. We said let value is a third algorithm that is like then, except it doesn't return, it doesn't transform the value and return a new value, it returns a new sender, right? So it's like you can make a choice of which sender
+对。所以我们有 just，就像把一个值提升到单子中，对吧？这就是 Haskell 所说的 pure 或 return。当你写 just 42 时，你就会在你的延续中得到 42，对吧？被发送到下游。Then 就像 transform。我们说 let value 是第三种算法，它和 then 很像，除了它不返回，它不转换值并返回一个新值，它返回一个新发送者，对吧？所以就像你可以做出选择，选择哪个发送者
+
+22
+00:12:52.000 --> 00:13:21.000
+to run next based on a runtime value that came to you down the continuation. It's monadic bind, if you're familiar with that. And the purpose of monadic bind is to make that runtime choice when you have that data dependency, when what you run next depends on what was sent to you. What is the monadic bind in the like RxJS reactive world? You mentioned concat earlier, it's map concat. It's transform reduce. Map concat.
+接下来运行，基于通过延续传给你的运行时值。如果你熟悉的话，这就是单子绑定（monadic bind）。而单子绑定的目的是当你拥有数据依赖时，当你接下来运行什么取决于发送给你的内容时，做出那个运行时选择。在 RxJS 响应式世界中，什么是单子绑定？你刚才提到了 concat，它是 map concat。它是 transform reduce。Map concat。
+
+23
+00:13:21.000 --> 00:14:07.000
+So imagine your transform produces a vector from each element of your vector and then you concatenate them all together in your reduction some languages call it flat map some call it map can cat okay I mean I definitely am familiar with flat map but in my mind that's like you're taking a nested structure and then this is when you need to Google Translate. Let's look at the optional version We mentioned and then okay, so it's and then on optional actually because then is called transform on optional and And monadic bind or let value is called and then on optional. Oh no. So then is called transform and and then.
+所以想象你的 transform 从你的向量的每个元素产生一个向量，然后你在归约中将它们全部连接在一起。有些语言称之为 flat map，有些称之为 map concat。好吧，我的意思是，我肯定熟悉 flat map，但在我的脑海中，那就像你取一个嵌套结构，然后这是你需要 Google 翻译的时候。让我们看看我们提到的 optional 版本，然后好吧，所以它是 optional 上的 and then，实际上因为 then 在 optional 上被称为 transform，而
+
+24
+00:14:07.000 --> 00:14:24.000
+Because the function you pass to and then itself returns an optional. That's the key. So like you have a pipeline with optional where each step of the pipeline returns an optional result. Right. Like you go fetch some HTML content. Right.
+单子绑定或 let value 在 optional 上被称为 and then。哦，不。所以 then 被称为 transform 和 and then。
+
+25
+00:14:24.000 --> 00:14:56.000
+You make a connection, the connection might fail. You fetch the URL, that might fail. Each step is basically a function from a sort of concrete thing, the thing that's not optional to an optional thing, right? And the way you chain them together is with and then. Right, so I mean, in a very simple case of this optional example, you know, transform. Takes a unary operation. So say we've got an optional of an int.
+因为你传递给 and then 的函数本身返回一个 optional。这就是关键。所以就像你有一个带有 optional 的管道，其中管道的每一步都返回一个 optional 结果。对吧。就像你去获取一些 HTML 内容。对吧。
+
+26
+00:14:56.000 --> 00:15:20.000
+It's got some value and we want to plus one. You just send the the the lambda that you pass to transform. Its signature is int to int, because it's gonna do the unboxing of the optional if it's there, and then calculate the value and put it back, whereas, and then, its signature is int to optional? The function you passed, yeah.
+你建立一个连接，连接可能会失败。你获取 URL，那可能会失败。每一步基本上都是从一种具体的东西（非 optional 的东西）到 optional 的东西的函数，对吧？而你将它们链接在一起的方式就是使用 and then。对，所以我的意思是，在这个 optional 示例的非常简单的情况下，你知道，transform。接受一个一元操作。所以假设我们有一个 int 的 optional。
+
+27
+00:15:20.000 --> 00:15:38.000
+Imagine if you wanted to do- Or the function that you passed to and then, yes, yes, sorry. Imagine if you wanted to do... Or the function that you passed to and then yes, yes, sorry. Imagine if you wanted to transform with taking a square root, right? What are you going to do if there's a negative number inside your optional? Yeah, yeah, yeah. Your square root, not the standard square root, but you might choose to make square
+它有一些值，我们想要加一。你只需发送你传递给 transform 的 lambda。它的签名是 int 到 int，因为它会拆箱 optional（如果存在的话），然后计算值并放回去，而 and then，它的签名是 int 到 optional？你传递的函数，是的。
+
+28
+00:15:38.000 --> 00:15:55.000
+root return an optional, right? Because it can fail. Right. It might be undefined. And so if you transform with that function, the result you get would be an optional, optional int. Right? Because you've taken the int inside the optional
+想象一下如果你想做——或者你传递给 and then 的函数，是的，是的，抱歉。想象一下如果你想用平方根来转换，对吧？如果你的 optional 里有一个负数，你打算怎么办？是的，是的，是的。你的平方根，不是标准平方根，但你可能会选择让平方
+
+29
+00:15:55.000 --> 00:16:16.000
+and you've transformed it. It's something that now produces an optional int. So you've got a doubly wrapped int in the optional. Right. Right, right, right. So what you do instead of transform is and then. Right, right, right, right. So what you do instead of transform is AND THEN, right? Which effectively collapses down those two optionals so that you stay in just a singly wrapped optional. Interesting. This
+根返回一个 optional，对吧？因为它可能会失败。对吧。它可能是未定义的。所以如果你用那个函数进行转换，你得到的结果将是一个 optional, optional int。对吧？因为你取出了 optional 里的 int
+
+30
+00:16:16.000 --> 00:17:00.000
+is, this is, I don't know. This is what monadic bind is. Yeah, this is, I've always been a little bit confused by flat map, but I'm not sure if this is a eureka moment, but definitely I think my understanding of something is clarifying here because there is a function or this flat map and what I am about to say, could be wrong and Ben will correct me if so, hopefully. Okay. like, you can think of if you want to go from, it will go to ArrayLand, you know, where, you know, you've got a matrix representable as a list of lists in any language like Python or a vector of vectors in C++. And sometimes you want to turn that into a flat list and then maybe map, once again,
+并转换了它。它现在产生了一个 optional int。所以你在 optional 里得到了一个双重包装的 int。对吧？对，对，对。所以你不是用 transform，而是用 and then。对，对，对，对。所以你不是用 transform，而是用 AND THEN，对吧？它有效地折叠了那两个 optional，这样你就保持在一个单一包装的 optional 中。有趣。这
+
+31
+00:17:00.000 --> 00:17:23.000
+plus one on that matrix. So you want to go from matrix to vector, rank one array, and one on that matrix. So you wanna go from matrix to vector rank one array and then do an operation. And definitely in certain APIs there, you can do this with something like a flat map where they similar to the way that you can do a transform reduce in one call in C++, you could also do that with a transform
+是，这是，我不知道。这就是单子绑定。是的，我一直对 flat map 有点困惑，我不确定这是否是一个顿悟时刻，但肯定的是，我认为我对某件事的理解在这里变得清晰了，因为有一个函数或这个 flat map，我接下来要说的话可能是错的，如果这样的话，Ben 会纠正我，希望如此。好的。就像，你可以认为如果你想去，它会去 ArrayLand，你知道，在那里，你知道，你有一个在任何语言（如 Python）中可表示为列表的列表的矩阵，或者在 C++ 中表示为向量的向量。有时你想把它变成一个扁平列表，然后也许再次 map，
+
+32
+00:17:23.000 --> 00:18:07.000
+followed by another call to reduction. And I know like in Rust and other APIs, they have the map, they have the fold, but they also have algorithms called foldMap or mapFold or whatever. And so is this the case where, so my guess actually is where flatMap Actually is not going from like 2d to 1d it's you're in The list monad aka a rank one vector a list you're doing some operation that could explode it to a list of lists and flat map right keeps it as Like sure you go to a mate. So instead of ending up with a list of lists You're gonna end up still with just a list
+在那个矩阵上加一。所以你想从矩阵变成向量，秩为 1 的数组，在那个矩阵上加一。所以你想从矩阵变成向量秩为 1 的数组，然后做一个操作。而且肯定在某些 API 中，你可以用类似 flat map 的东西来做这个，它们类似于你可以在 C++ 中通过一次调用进行 transform reduce 的方式，你也可以通过一个 transform
+
+33
+00:18:07.000 --> 00:18:39.000
+Because everything has been flattened which the eureka moment that I was talking about is that like I'm conceptualize of going from like 2d Down to 1d, but really it's 1d within your operation You could go up which is similar to the option of an option if you have some failure Yeah, so you need to make sure that you only got one level of nesting, basically, whether that's the list monad or the maybe monad. And so I think that there's a bit of conflating. I'm sure there is an operation similar to fold map that is the flat map that actually goes from 2D to 1D.
+后跟另一个对归约的调用来做到这一点。我知道在 Rust 和其他 API 中，他们有 map，他们有 fold，但他们也有称为 foldMap 或 mapFold 之类的算法。所以这是这种情况吗，所以我的猜测实际上是 flatMap 实际上不是从 2D 到 1D，你是在列表单子（即秩为 1 的向量，一个列表）中，你正在做一些可能将其爆炸成列表的列表的操作，而 flat map 保持它为……当然，你去了矩阵。所以你最终得到的不是列表的列表，你最终得到的仍然只是一个列表
+
+34
+00:18:39.000 --> 00:19:19.000
+But in this case, the flat map that we're talking about, the monadic bind we're talking about, you're at one level of nesting. And you want avoid in certain cases going up to two whether that's a list of lists optional optionals does that sound about right and also maybe flat map in no language actually does the idea does this 2d to 1d um maybe that maybe maybe i've always just misunderstood flat map and it never does that well so there are a couple of ways to get there. You can either, I mean, you can maybe fuse elements of it in the array languages. And also you can generate the list of lists and then concatenate them. Or you can sort of go the other side.
+因为一切都被扁平化了，我刚才谈到的顿悟时刻是，我将其概念化为从 2D 到 1D，但实际上它是 1D，在你的操作中，你可以向上走，这类似于如果你有某种失败时的 optional 的 optional。是的，所以你需要确保你基本上只有一个嵌套层级，无论是列表单子还是 maybe 单子。所以我认为这里有一点混淆。我相信肯定有一个类似于 fold map 的操作，就是 flat map，它实际上是从 2D 到 1D。
+
+35
+00:19:19.000 --> 00:20:08.000
+I think I'm thinking of it as like the other side of the square where you, I guess in the case of bind, it's effectively the same thing. But it's map followed by join, if you like. Join is the other monadic term that gets used here. In Haskell, there's a function join, and map followed by join is bind. Okay, well so let's have a little tangent fun. It's a... Yeah, we've come off of send and receive and now we're talking about... So I've got another example, another maybe good example which might help. But before we do that though, let's have this tangent fun which is something that I've never really taken time to think about and
+但在这种情况下，我们谈论的 flat map，我们谈论的单子绑定，你处于一个嵌套层级。而你想要避免在某些情况下上升到两个，无论是列表的列表还是 optional 的 optional，这听起来对吗？而且也许 flat map 在没有任何语言中实际上做的是 2D 到 1D 的想法……也许，也许我一直误解了 flat map，它从来没有那样做。好吧，所以有几种方法可以达到目的。你可以，我的意思是，你可以在数组语言中融合它的元素。而且你也可以生成列表的列表，然后连接它们。或者你可以从另一边走。
+
+36
+00:20:08.000 --> 00:20:43.000
+I apologize to the listener for about to lose you But this is the kind of stuff that I know Ben spends time thinking about and I should have so join and haskell corresponds to the W combinator W which is it sounds highfalutin what I just said but it's actually quite simple it takes a Binary in the space of functions, which I actually don't know. What is it? Is there a function monad? I don't actually know what oh, yeah, is that the function monad or function composition? That's yeah is a type of monad and so in array languages. It's super super simple
+我想我把它想成是正方形的另一边，在那里，我想在 bind 的情况下，它实际上是一回事。但它是 map 后跟 join，如果你喜欢的话。Join 是这里使用的另一个单子术语。在 Haskell 中，有一个函数 join，而 map 后跟 join 就是 bind。好的，那么让我们来点有趣的题外话。这是一个……是的，我们已经离开了发送和接收，现在我们正在谈论……所以我还有另一个例子，另一个可能很好的例子，可能会有帮助。但在我们做之前，让我们来点有趣的题外话，这是我从来没有真正花时间去思考过的，而且
+
+37
+00:20:43.000 --> 00:21:07.000
+it takes a binary operation and it turns that into a unary operation by duplicating the argument. And that's actually, in most array languages, it is called duplicate, even though it has a glyph or a symbol. Sometimes it's called self. And I think there's one other name for it. But the idea being that if you want to square something, that is just the W combinator applied
+我向听众道歉，因为我即将失去你们，但这是我知道 Ben 花时间思考的东西，我也应该思考。所以 join 和 Haskell 对应于 W 组合子 W，这听起来很深奥，但我刚才说的，但它实际上很简单。它接受一个函数空间中的二元操作，我实际上不知道。它是什么？有函数单子吗？我实际上不知道，哦，是的，那是函数单子还是函数组合？那是，是的，是一种单子，所以在数组语言中。它超级超级简单
+
+38
+00:21:07.000 --> 00:21:37.000
+to multiplication. Yeah. So now think of your binary operation as a unir operation nested inside another unir operation because in lambda calculus that's how it might be expressed, right? You would bind one argument getting back a partially applied function and then you would bind the second argument and that is a binary operation. Here I am thinking this is going to be like a seven minute tangent and then basically it took you 10 seconds and like three seconds into your explanation I was like oh wait that's just but that's a weird I mean so that so it's a function
+它接受一个二元操作，并通过复制参数将其转换为一元操作。而且实际上，在大多数数组语言中，它被称为 duplicate，即使它有一个字形或符号。有时它被称为 self。我想还有另一个名字。但想法是，如果你想对某物求平方，那只是应用于乘法的 W 组合子。是的。所以现在把你的二元操作想象成嵌套在另一个一元操作中的一元操作，因为在 lambda 演算中，这就是它可能被表达的方式，对吧？你会绑定一个参数，得到一个部分应用的函数，然后你会绑定第二个参数，这就是一个二元操作。在这里，我以为这将是一个七分钟的题外话，然后基本上它只花了你 10 秒钟，而且在你解释了三秒钟后，我就想，哦，等等，那只是……但这很奇怪，我的意思是，所以它是一个函数
+
+39
+00:21:37.000 --> 00:22:15.000
+inside the function the same way as an optional inside an optional or a vector inside you know vector of vectors. That is amazing I hope I that was, I mean, I got three seconds into your explanation, it clicked. And I've never understood how, I guess because I've never taken time to think about it because it's actually pretty straightforward, that the equivalent of copying your argument to a binary function is just really nesting, well actually no, now that I say that. I mean, it's it's not invoking the binary function. It's just like a what you would call it like a partial application. Yeah, yeah. And I guess it has all that works because everything is technically like a unary
+在函数内部，就像 optional 在 optional 内部，或者向量在（你知道，向量的向量）内部一样。这太神奇了，我希望我……我的意思是，在你解释了三秒钟后，它就点击了。我从来没有理解过，我想是因为我从来没有花时间去思考它，因为它实际上非常直截了当，即复制你的参数到二元函数的等价物实际上只是嵌套，好吧，不，现在我这么说。我的意思是，它不是调用二元函数。它就像一个你称之为部分应用的东西。是的，是的。而且我想它之所以能行得通，是因为一切在技术上都像是一个一元
+
+40
+00:22:15.000 --> 00:22:45.000
+function. Right. I mean, how partial application is built in. Could you build I mean, I guess we we have we have this on the optional interface, but like, how would you do this for functions? Would you, in C++, you do this with like bind first just to call the bind first twice? Yeah, I guess so. In C++, we don't have very good tools for function composition, but you could build similar things. Bind first might be part of it. We don't tend to express, you know, for historical and maybe for efficiency
+函数。对。我的意思是，部分应用是如何内置的。你能构建……我的意思是，我想我们有这个在 optional 接口上，但就像，你如何为函数做这个？你会，在 C++ 中，你用类似 bind first 的东西，只是调用两次 bind first？是的，我想是这样。在 C++ 中，我们没有很好的函数组合工具，但你可以构建类似的东西。Bind first 可能是其中的一部分。我们倾向于不表达，你知道，出于历史原因，也许出于效率
+
+41
+00:22:45.000 --> 00:23:24.000
+reasons, we don't express partial application very much. It's fairly niche thing, but it is mathematically working out to the same thing as as as n-ary functions. Yeah, I wonder what the what the disconnect of like trying to spell this because like you or it does it does this rely on in a functional language like Haskell does this rely on in a functional language like Haskell does it rely on currying like how are you able to apply this like nest yourself within yourself and then you end up with a unary function like there must be a way to do this in C++ with a function like if you take stood col colon colon plus brace brace like the function object I mean you definitely can write a lambda called w that like does
+原因，我们不太表达部分应用。这是一个相当小众的事情，但在数学上它和 n 元函数是一回事。是的，我想知道试图拼写这个的脱节是什么，因为像你……或者它确实……这是否依赖于像 Haskell 这样的函数式语言？这是否依赖于柯里化（currying）？你是如何能够应用这个的——嵌套你自己于你自己内部，然后你最终得到一个一元函数？在 C++ 中一定有一种方法可以用一个函数来做到这一点，如果你取 std::plus，你知道，函数对象。我的意思是，你绝对可以写一个名为 w 的 lambda，它像……做
+
+42
+00:23:24.000 --> 00:24:02.000
+the copying, but is there? Yeah, yeah. And you can write a curry. You can write a curry function or higher or a function in C++. And a while ago, this was a topic of discussion at my meetup, where we sort of worked it out. And I think Jason put in one of his talks. Yes, I recall seeing this a while a while back. Anyways, all right, I'll think about the C++ side of this but definitely definitely that makes 98% Sense minus the C++ piece. So we strayed a little bit from senders I actually the the other example the other intuition I was gonna give for for join or map concat was
+复制，但是有吗？是的，是的。你可以写一个 curry 函数，或者更高阶的函数在 C++ 中。不久前，这是我聚会上的一个讨论话题，我们把它算出来了。我想 Jason 在他的一个演讲中提到了这一点。是的，我记得很久以前看到过这个。总之，好吧，我会考虑这个的 C++ 方面，但绝对，绝对这让 98% 的内容变得有意义，除了 C++ 部分。我们稍微偏离了发送者。我实际上……我打算给 join 或 map concat 的另一个例子，另一个直觉是
+
+43
+00:24:02.000 --> 00:24:25.000
+Imagine writing a chess program, right? So imagine a very simple kind of, I mean chess programs these days are much more involved obviously. But imagine you're in 1985 writing a naive chess program. You're fundamentally what you're going to do is look at the position, generate all the moves that could be made,
+想象写一个国际象棋程序，对吧？所以想象一个非常简单的种类，我的意思是，现在的国际象棋程序显然要复杂得多。但想象你在 1985 年写一个天真的国际象棋程序。你从根本上要做的是查看位置，生成所有可能做出的走法，
+
+44
+00:24:25.000 --> 00:25:08.000
+right? From those moves, from those new board positions, again, generate more moves. You know, you're generating a tree of board positions based on moves and then you're scoring them, obviously. But just considering the generation, you're doing each, you know, you start with your one board position, the current one, and you produce N, or new board positions based on the moves that can be made. Each one of those N goes on to produce M more, right, based on moves that can be made from that position. You want to collapse all these down, you know, in the process of scoring them, you're also selecting the new
+对吧？从这些走法中，从那些新的棋盘位置中，再次生成更多的走法。你知道，你正在生成一个基于走法的棋盘位置树，然后你给它们评分，显然。但仅仅考虑生成，你正在做每一个，你知道，你从你的一个棋盘位置（当前的那个）开始，你根据可以做出的走法产生 N 个新的棋盘位置。每一个 N 都继续产生 M 个更多的走法，对吧，基于可以从那个位置做出的走法。你想要折叠所有这些，你知道，在给它们评分的过程中，你也在选择新的
+
+45
+00:25:08.000 --> 00:25:53.000
+best board position, right? And so it's that kind of operation where you are generating each board position can generate n. So that's your function from value to like list of values, right? You're in the list moment out here. Yes, that makes complete sense. And to clarify from my understanding is that you're reducing this list, the flattening happens at every step. You're not you're not doing like the Yeah, yeah, yeah, yeah, what did Alpha go? It was the MCTS Monte Carlo tree search that one goes out n steps. And then after a certain number of steps, it chooses the best path and then repeats. Whereas this one, your tree search is-
+最佳棋盘位置，对吧？所以这就是那种操作，你正在生成每一个棋盘位置都可以生成 n 个。所以这就是你从值到值列表的函数，对吧？你在这里处于列表单子中。是的，这完全说得通。为了澄清我的理解，你是说你正在归约这个列表，扁平化发生在每一步。你不是在做……是的，是的，是的，是的，AlphaGo 是什么？它是 MCTS 蒙特卡洛树搜索，那个走出去 n 步。然后在一定步数后，它选择最佳路径，然后重复。而这个，你的树搜索是——
+
+46
+00:25:53.000 --> 00:26:14.000
+Well, you want to flatten it down. I think one of Bartosz's talks that he gave at C++ now, maybe 10 years ago, had this. He talked about the n queens problem, which is very similar. Right, right. So you're trying to, you put a queen down and then that constrains the space. There are only so many spaces you can put another queen down.
+嗯，你想要把它扁平化。我想 Bartosz 在 C++ Now 上做的一次演讲，也许是 10 年前，就有这个。他谈到了 n 皇后问题，这非常相似。对，对。所以你正在尝试，你放下一个皇后，然后这限制了空间。你只能在有限的空间里放下另一个皇后。
+
+47
+00:26:14.000 --> 00:26:40.000
+But there is more than one place, right? And so you are searching this tree of boards, of valid positions, and he uses a monadic approach to do that. Interesting. Well, I'll see if I can find that talk. I definitely know I haven't seen all of Bartosz's C++ now talks. I've seen a couple, but I don't recall seeing that one. So, I mean, to bring it back to senders and receivers, how does this we're now we now go to the continuation.
+但有一个以上的地方，对吧？所以你正在搜索这个棋盘、有效位置的树，他使用单子方法来做到这一点。有趣。好吧，我会看看我是否能找到那个演讲。我肯定知道我没有看过 Bartosz 的所有 C++ Now 演讲。我看过几个，但我不记得看过那个。所以，我的意思是，回到发送者和接收者，这怎么……我们现在……我们现在去延续。
+
+48
+00:26:40.000 --> 00:27:08.000
+I feel now I have not given the five minute. I was going to say you mentioned continuation monad after the first five minutes. So I think probably the first five minutes you were good, then you said that and then I was like, ah. So the important parts, the three important things about sends and receivers. One, independent of mechanism of concurrency. It runs with thread pools, it runs with coroutines, it runs with interrupts, right? So that's one of the things that makes it very amenable to application, either in the
+我觉得现在我还没有给出五分钟的演讲。我本来想说，你在前五分钟后提到了延续单子。所以我认为可能前五分钟你讲得很好，然后你说了那个，然后我就想，啊。所以关于发送者和接收者的重要部分，三个重要的事情。第一，独立于并发机制。它可以在线程池、协程、中断中运行，对吧？所以这就是使它非常适合应用于
+
+49
+00:27:08.000 --> 00:27:45.000
+big data space or in the tiny embedded space with interrupts. Very important. Second important thing, it is asynchronous function composition, right? If you think about it like that, that's another very easy way, a good way in to think about it. Nothing happens when you declare senders. You can declare these things all day. You can compose them all day. No work happens at that point. It only happens when you say, kick off the work, wait for the calculation to finish. Right? Right. So senders are descriptions of work. They areners are descriptions of work.
+大数据空间或带有中断的微型嵌入式空间的事情之一。非常重要。第二个重要的事情，它是异步函数组合，对吧？如果你这样思考，这是另一种非常简单、很好的切入方式。当你声明发送者时，什么都不会发生。你可以整天声明这些东西。你可以整天组合它们。此时不会发生任何工作。只有当你发出指令，启动工作，等待计算完成时，它才会发生。对吧？对。所以发送者是工作的描述。发送者是工作的描述。
+
+50
+00:27:45.000 --> 00:28:47.000
+They aren't kicking off the work. The work kicks off when you say something like sync weight, which is an algorithm that consumes a sender or remembering that a sender is a composition of senders potentially, right? These things that are infinitely composable. So when we say a sender, we might mean a single like just, or we might mean a whole chain of just produce, then do this, then something else, then right send as a composable. And the third important thing is the what's called structured concurrency, which is to do with lifetimes. Right. So when you're in regular function call land, synchronous function call land, you have a stack and the lifetimes of your variables are implicit because of that function call stack. Right. So when you call a function, everything, the parameters you pass in like references to variables on the stack, those variables
+它们不是启动工作。当你发出像 sync weight 这样的指令时，工作就会启动，这是一种消耗发送者的算法，或者记住发送者可能是发送者的组合，对吧？这些东西是无限可组合的。所以当我们说一个发送者时，我们可能指的是一个单一的 just，或者我们可能指的是一整串 just produce，然后做这个，然后做其他事情，然后……对，发送者是可组合的。第三个重要的事情是所谓的结构化并发，这与生命周期有关。对。所以当你处于普通函数调用领域，同步函数调用领域时，你有一个栈，而你的变量的生命周期因为那个函数调用栈而隐含。对。所以当你调用一个函数时，一切，你传入的参数（比如对栈上变量的引用），那些变量
+
+51
+00:28:47.000 --> 00:29:30.000
+stay alive during that function call because it's only when the function returns that the current stack is popped. The stack ensures that lifetime, the lifetimes of variable arguments cover the lifetimes of the functions you call them with. Right? And there's a similar thing happening with senders, except that it's not a stack. These things are called operation states. So when you connect a sender to a receiver, the resulting thing is the operation state. I'll talk about receivers in a sec. But the operation state is that lifetime object. That's where the state lives for the computation.
+在函数调用期间保持存活，因为只有当函数返回时，当前栈才会被弹出。栈确保了生命周期，变量参数的生命周期覆盖了你调用它们的函数的生命周期。对吧？发送者也有类似的事情发生，只是它不是一个栈。这些东西被称为操作状态（operation states）。所以当你将一个发送者连接到一个接收者时，产生的东西就是操作状态。我一会儿会谈到接收者。但操作状态是那个生命周期对象。那是状态为计算而存在的地方。
+
+52
+00:29:30.000 --> 00:30:09.000
+That's the object whose lifetime covers the computation. And because senders are composed together in a very similar way, operation states get composed together and they form this kind of what's been described as an onion of states that the outer states wrap the inner states, right? And so the lifetimes of the variables persist and it's, you know, the lifetime of the variables in the outer skin and then in the skin inside that and the skin inside that all the way down to the center of the onion. Similar to a function called stack where you can think about variables
+那是生命周期覆盖计算的对象。而且因为发送者是以非常相似的方式组合在一起的，操作状态也会组合在一起，它们形成了这种被描述为状态洋葱的东西，外部状态包裹内部状态，对吧？所以变量的生命周期会持续，而且，你知道，外部皮肤中的变量的生命周期，然后是内部皮肤，再内部皮肤，一直到洋葱中心。类似于函数调用栈，你可以考虑变量
+
+53
+00:30:09.000 --> 00:30:53.000
+living at levels of the stack, you can think about variables living on layers of the onion. Okay, I think that makes sense. Yeah. And the first sender that you run is the innermost part of the onion, right? When that completes, the next sender in you run is the innermost part of the onion, right? When that completes, the next sender in the chain is the next level of onion skin and the computation proceeds all the way out to the outer layer. When the final sender completes, the lifetime of the whole object is over. So that's how, when people talk about structured concurrency, that's what they mean. It's this this framework takes care of lifetimes in a in a way that can be reasoned about similar
+生活在栈的层级上，你可以考虑变量生活在洋葱的层面上。好的，我想这说得通。是的。而你运行的第一个发送者是洋葱的最内层，对吧？当那个完成时，链中的下一个发送者是洋葱的下一层皮肤，计算一直进行到外层。当最终的发送者完成时，整个对象的生命周期就结束了。所以这就是，当人们谈论结构化并发时，他们的意思。它是这个框架以一种可以被推理的方式处理生命周期，类似于
+
+54
+00:30:53.000 --> 00:31:27.000
+to the way we reason about lifetimes on the stack, when we call functions. Right. It is interesting, you know, in this conversation, you know, for better or for worse, unfortunately, I've probably steered this in a less digestible thing because I got excited about understanding join. But there is this, like, I don't know if it's isomorphism is the correct word, but when you think about, you know, the list monad versus the, we'll call it function monad, even though that's might not be what it's called, and then the continuation monad, which we're talking about. And they call each of these operations different things.
+我们推理栈上生命周期的方式，当我们调用函数时。对。这很有趣，你知道，在这次谈话中，不管好坏，不幸的是，我可能把这个引向了一个不那么容易消化的东西，因为我对理解 join 感到兴奋。但确实存在这种，我不知道同构（isomorphism）是否是正确的词，但当你思考，你知道，列表单子与，我们称之为函数单子（即使那可能不是它的名字），以及我们正在谈论的延续单子时。而且他们称这些操作中的每一个为不同的东西。
+
+55
+00:31:27.000 --> 00:31:51.000
+There really is like a one-to-one equivalence almost. You can think of senders and receivers give you the ability to represent an asynchronous graph of computation. And you can think of it in a way, if you take a bunch of functions that take parentheses and multiple arguments and you nestedly like Russian doll, call these in a different order,
+这确实几乎是一种一一对应的关系。你可以认为发送者（senders）和接收者（receivers）赋予了你表示异步计算图的能力。你可以这样想，如果你有一堆函数，它们接受括号和多个参数，并且像俄罗斯套娃一样嵌套调用，顺序各不相同，
+
+56
+00:31:51.000 --> 00:32:12.000
+that's a way of representing a graph of computation, right? Like you have to work your way down to the most inner functions, evaluate those, pass it back up. The same way with combinatorial logic and combinators, you can chain operations together, which is also gonna represent like this. And my guess is that this senders and receivers,
+这是一种表示计算图的方法，对吧？你必须一直深入到最内层的函数，计算它们，然后再传回上一层。组合逻辑和组合子也是一样，你可以将操作串联起来，这同样可以表示成这样。我的猜测是，这些发送者和接收者，
+
+57
+00:32:12.000 --> 00:32:28.000
+cause it's the continuation, you could actually use this to build versions of all these different, like you said, cause it's separate in the- Yes, you can. Not that that's the way to teach this or explain this, which is why I said for better or for worse, is the kind of the, where the the but we can revisit this topic and it's true
+因为它是延续（continuation），你实际上可以用它来构建所有这些不同版本的，正如你所说，因为它是分开的——是的，你可以。并不是说这是教授或解释这一点的最佳方式，这就是为什么我说不管好坏，这就是……但我们可以重温这个话题，这是真的。
+
+58
+00:32:28.000 --> 00:33:03.000
+The continuation monad is very powerful and can express other monads In fact, there's a blog post out there where someone calls it. I think the mother of all monads Yeah, we will I'll find that blog link that blog and We can also observe of course that Asynchronous computation is a superset of synchronous computation. In other words, we can express synchronous computation in an asynchronous way. We can't do the other way around, but you can always collapse an asynchronous computation into asynchronous one by running it on the aforementioned inline scheduler that just
+延续单子（continuation monad）非常强大，可以表达其他单子。事实上，有一篇博客文章里有人称它为“所有单子之母”。是的，我会找到那篇博客链接。我们当然也可以观察到，异步计算是同步计算的超集。换句话说，我们可以用异步方式表达同步计算。反之则不行，但你总是可以通过在前面提到的内联调度器上运行异步计算来将其折叠为同步计算，该调度器只是
+
+59
+00:33:03.000 --> 00:33:30.000
+does function calls. And so there's a lot of machinery in senders, but it can all boil down to exactly, if you actually want to run it synchronously, it boils down to nothing less efficient than function calls. Right. And like everything in C++, if you run it asynchronously, the idea is that it runs exactly as efficiently as if you had hand-coded everything. Yeah.
+执行函数调用。因此，发送者中有很多机制，但如果归根结底，如果你真的想同步运行它，它最终的效率并不比函数调用低。没错。就像 C++ 中的一切一样，如果你异步运行它，其理念是它的运行效率与你手工编写所有代码的效率完全相同。
+
+60
+00:33:30.000 --> 00:33:55.000
+At least as efficiently. It makes me think of some of the things that I look at for work are Jax, which is a library out of Google, and KooPie, which is a GPU-accel GPU accelerated version of NumPy. And both of these have decorators in Python that you can use to basically JIT compile certain functions. And internally, they will once again
+至少效率相当。这让我想起了一些我在工作中关注的东西，比如 Jax（谷歌的一个库）和 KooPie（NumPy 的 GPU 加速版本）。这两者在 Python 中都有装饰器，你可以用来对某些函数进行即时（JIT）编译。在内部，它们会再次
+
+61
+00:33:55.000 --> 00:34:25.000
+create a graph of computation based on the function calls, and then they see what they can optimize. And so you're building a graph, but in the simplest case, you can just have a function that linearly calls one thing and then another thing and then another thing. And then your graph is just a linked list, right? Which is just serial computation. I mean, technically a linked list is a graph. It's just a very simple one, right? Yeah. Yeah. And if you run it on an inline scheduler, it more or less literally becomes a regular function call stack.
+基于函数调用创建一个计算图，然后看看能优化什么。所以你是在构建一个图，但在最简单的情况下，你可以只有一个函数，线性地调用一个东西，然后是另一个，再然后是另一个。那么你的图就只是一个链表，对吧？这只是串行计算。我的意思是，从技术上讲，链表也是一种图。它只是一个非常简单的图，对吧？是的。而且如果你在内联调度器上运行它，它或多或少就变成了常规的函数调用栈。
+
+62
+00:34:25.000 --> 00:34:51.000
+Yeah. So the other thing we can, we can, so I haven't mentioned receivers yet. Receivers, the proposal is often called senders and receivers. The important thing really is the senders. They're what express the computation. The receivers mostly don't occur in user code. They're mostly used for the glue between the senders that algorithms use to plug these things together. One of the important things that Senders gives us is not just the happy path called the value channel, right?
+是的。所以我们还可以提到的另一件事是——我还没提到接收者。接收者，这个提案通常被称为“发送者和接收者”。真正重要的是发送者。它们是表达计算的东西。接收者大多不会出现在用户代码中。它们主要用于算法用来将这些东西连接在一起的胶水代码。发送者给我们的重要一点不仅仅是所谓的“快乐路径”（happy path），即值通道（value channel），对吧？
+
+63
+00:34:51.000 --> 00:35:14.000
+If everything goes right, you're on the happy path. You're in the value channel, everything's succeeding. But also, there are two other channels, the error channel, right? When something goes wrong, you want to be able to handle an error, you want to be able to handle an error. You want to be able to potentially short circuit the computation, error out and handle it a different way. And the cancellation channel or the stopped channel, right? You want to
+如果一切顺利，你就在快乐路径上。你在值通道中，一切都在成功进行。但还有另外两个通道，错误通道（error channel），对吧？当出现问题时，你希望能够处理错误。你希望能够潜在地中断计算，报错并以不同的方式处理它。还有取消通道（cancellation channel）或停止通道（stopped channel），对吧？你希望
+
+64
+00:35:14.000 --> 00:35:55.000
+be able to tell from the outside this thing to stop because something else changed in the world and you're no longer interested in waiting for the result, right? Events have overcome it. And these are really important. And these are also built into the sender's framework. So every sender can complete in those three different ways with a value, with an error, or by having stopped. And every receiver handles those three channels. And so this is built into the idea of the framework of asynchronous with senders, the capability of canceling the work or handling an error as well as just staying on the happy path.
+能够从外部告诉这个东西停止，因为世界上的其他事情发生了变化，你不再有兴趣等待结果了，对吧？事件已经发生了。这些非常重要。它们也内置在发送者框架中。因此，每个发送者都可以通过这三种方式之一完成：带有值、带有错误或已停止。每个接收者都会处理这三个通道。因此，这内置于发送者异步框架的理念中，即取消工作或处理错误的能力，以及仅仅保持在快乐路径上的能力。
+
+65
+00:35:55.000 --> 00:36:32.000
+Now, because senders are completely agnostic about the mechanism of concurrency, the cancellation has to be cooperative. There is no stop the thread or anything like that because senders don't know anything about threads or coroutines or whatever else you're using for your mechanism of currency. So you don't get to preempt them or anything like that. What you get to do is request that they stop, right? And they have to take heed of that request to be good citizens, which, you know, they
+现在，因为发送者对并发机制完全不可知，所以取消必须是协作式的。没有“停止线程”之类的东西，因为发送者对线程、协程或你用于并发机制的任何其他东西一无所知。所以你无法抢占它们。你能做的是请求它们停止，对吧？它们必须听从这个请求，做一个好公民，这你知道，它们
+
+66
+00:36:32.000 --> 00:37:06.000
+will do because at the end of the day, you will be writing the business logic. Right. Is this one of, I mean, my memory is failing me now. I remember when Bryce and I were talking to Sean Parent, he gave a talk at, I want to say yeah, it was an Adobe office in New York for a meetup and he presented, I think since then he's probably presented at a conference. He changed and he was pointing out potential flaw in the flaw quote-unquote, you know, a trade-off in the design of senders and receivers and that was what Chains was addressing.
+会做到的，因为归根结底，你编写的是业务逻辑。没错。这是其中之一吗？我的记忆力现在有点衰退了。我记得当 Bryce 和我与 Sean Parent 交谈时，他在纽约的一个聚会上做过演讲，我想是在 Adobe 办公室，他提出了——我想从那以后他可能在某个会议上也提过——他改变了观点，并指出了发送者和接收者设计中的一个潜在缺陷，即所谓的“缺陷”，也就是一种权衡，而这正是 Chains 所要解决的问题。
+
+67
+00:37:06.000 --> 00:37:47.000
+Was this it or was that something else? Chains, I did see Sean's talk at C++ now, but I don't remember all the details. But yeah, well, I can't, I think Chains is basically an alternative way of expressing asynchronous function computation. It's not so very different from senders and receivers, but it's a little bit different in the details. And yeah, it's a trade off, I think. It's a slightly different design. I think in particular, one of the things perhaps that, and I'm sort of talking just based on remembering now, there's a design choice to be made about external control of
+是这个吗，还是别的什么？Chains，我确实看过 Sean 在 C++ Now 上的演讲，但我记不清所有细节了。但是的，我认为 Chains 基本上是表达异步函数计算的另一种方式。它与发送者和接收者并没有太大不同，但在细节上略有差异。是的，我认为这是一种权衡。这是一种略有不同的设计。我认为特别是一点，我只是凭记忆在说，关于外部控制生命周期有一个设计选择，
+
+68
+00:37:47.000 --> 00:38:15.000
+lifetime. Like if I delete the object, am I allowed to delete the object? Should that result in a request for it to stop? Should that result in unwinding the chain of computation? There are different choices that can be made there. And I think chains makes a different choice than senders in that regard. Yeah, I'll have to go back and rewatch that. Or I mean, when we bring Sean back on, because we already mentioned him two episodes ago, we can just ask him directly.
+比如如果我删除了对象，我是否被允许删除该对象？这是否应该导致停止请求？这是否应该导致计算链的展开？那里可以做出不同的选择。我认为 Chains 在这方面做出了与发送者不同的选择。是的，我得回去重看一遍。或者说，当我们请 Sean 回来时，因为我们在两集前已经提到过他，我们可以直接问他。
+
+69
+00:38:15.000 --> 00:38:34.000
+So yeah, I mean, I definitely, I mean, I still feel, I feel like I have a better understanding, but like when you start talking about the onion analogy of, you know, about the onion analogy of, you know, wrapping the state, operation state, you know, my head immediately goes to like, how would I implement this? And I feel like I would still,
+所以，是的，我绝对觉得我对它有了更好的理解，但当你开始谈论洋葱类比，关于包装状态、操作状态时，我的脑海里立刻就会浮现出：我该如何实现这个？我觉得我仍然，
+
+70
+00:38:34.000 --> 00:38:56.000
+it would take me a while to go and implement. I don't know, every once in a while, it's like I have this, a better surface level understanding, but still could I go and implement this thing like, right now, snap of the fingers. And I probably could, but still could I go and implement this thing like right now, snap of the fingers and I probably could but I would struggle whereas you know something like a combinator model, I can go implement that with my eyes closed because I... Sure, sure. And I wonder why that is though, like what is...
+我需要花点时间去实现它。我不知道，偶尔我会觉得我有了更好的表面理解，但如果现在让我去实现这个东西，打个响指，我可能做得到，但我会很挣扎。而像组合子模型这样的东西，我可以闭着眼睛去实现，因为我……当然，当然。但我很好奇为什么会这样，比如什么是……
+
+71
+00:38:56.000 --> 00:39:28.000
+Eric can sit down and implement a simple version of sends and receivers. Exactly, with his eyes closed. A few hundred lines of code. Yeah. I have to say in my implementation, I found, you know, there are some C plus plus isms that you have to kind of dance around a little bit, but the design of it is really very simple under the hood. And once you grok the design and once you just sort of get the hang of a few different implementation patterns, the implementation is really nice. It just sort of falls out very nicely.
+Eric 可以坐下来实现一个简单的发送者和接收者版本。没错，闭着眼睛。几百行代码。是的。我必须说在我的实现中，我发现有一些 C++ 的特性你必须绕过，但它的设计在底层确实非常简单。一旦你理解了设计，一旦你掌握了几种不同的实现模式，实现起来真的很棒。它非常自然地就完成了。
+
+72
+00:39:28.000 --> 00:40:06.000
+It's not difficult at all in general to add new algorithms, to add new ways of combining senders, that kind of thing. It all fits together very nicely in my experience. Yeah, I know, Eric, that's one of the things that when I've chatted with him is that, you know, he shows this kind of base set of algorithms and senders. But similar to how Stepanov was always saying, you know, this is just the initial set, you know, there should be multiples more, you know, there should always be an underscore, the counted version of the underscore n versions and like, there should be tons tons more and don't just stop at what the
+总的来说，添加新算法、添加组合发送者的新方法等并不困难。根据我的经验，它们结合得非常好。是的，我知道，Eric，这是我与他交谈时提到的事情之一，他展示了发送者的一套基础算法。但类似于 Stepanov 一直说的，这只是初始集合，应该有更多倍的算法，应该总是有带下划线的版本，即计数版本的 _n 版本，应该有成千上万个，不要只停留在
+
+73
+00:40:06.000 --> 00:40:43.000
+standard library gives you is, Eric has said the same thing in designing these and proposing them, is that this is just the core set but it should give you the ability to write a world of asynchronous algorithms for all your different types of computation that you want to do. Yeah, yeah. Which is exciting that we're getting it in the standard because then, hypothetically speaking, down the road in 10 years there should be a bunch of asynchronous algorithms that you'll have access to readily available in your standard library near you. Or 15 years, however long it takes the... it can take time. And so have you, or I'm not sure if we want to kick this because
+标准库给你的东西上。Eric 在设计和提出这些建议时也说过同样的话，这只是核心集合，但它应该让你有能力为你想要做的所有不同类型的计算编写一个异步算法的世界。是的，是的。这很令人兴奋，因为我们将其纳入了标准，所以假设在 10 年后，你应该能够随时在你的标准库中获得大量异步算法。或者 15 年，无论需要多久……这需要时间。所以你是否，或者我不确定我们是否想跳过这个，因为
+
+74
+00:40:43.000 --> 00:40:57.000
+we've already gone past time a while. Maybe we should do sender to receivers part two, and you can talk about some of the algorithms that you've ended up designing. Sure. Because that's something that I have spent very little time working with. Yeah, yeah.
+我们已经超时很久了。也许我们应该做“发送者和接收者”第二部分，你可以谈谈你最终设计的一些算法。当然。因为那是我花很少时间研究的东西。是的，是的。
+
+75
+00:40:57.000 --> 00:41:15.000
+We can put that on ice for today and talk about it in the future. It would be great if we could talk to Eric as well. Yeah, I'll reach out. I know he's a busy guy. He's juggling several things right now. Committee work, the internal implementation of std execution, and now there's
+我们今天可以先搁置一下，以后再谈。如果我们能和 Eric 谈谈就太好了。是的，我会联系他。我知道他是个大忙人。他现在同时处理好几件事。委员会工作、std::execution 的内部实现，现在还有
+
+76
+00:41:15.000 --> 00:41:44.000
+a whole new other C++ equivalent of a Python initiative that he's spearheading as well. So he's a very busy guy. But I'm sure if I mention that we want to chat about centers and receivers, I know he's given talks at CPPCon and it's been one of his life mission is to make this a more understandable topic because it does for some reason seem to be a thing that it takes a couple times, including for me, for people to hear it. And I know that there's more and more folks, you are one of them. Is it Dietmar? Dietmar.
+一个全新的、他正在牵头的 Python 的 C++ 等价项目。所以他非常忙。但我相信如果我提到我们想聊聊发送者和接收者，我知道他在 CPPCon 上做过演讲，让这个话题变得更容易理解是他的使命之一，因为出于某种原因，这似乎是一个需要多次学习才能听懂的东西，包括我自己。我知道有越来越多的人，你就是其中之一。是 Dietmar 吗？Dietmar。
+
+77
+00:41:44.000 --> 00:42:31.000
+And there's a few other folks that like, one of them. Is it deep mar? Deep mar. And there's a few other folks that like, at first it was just Eric and then now that I know that there's a handful. Yeah, I think Rob Leahy has been doing some stuff as well. Yeah, past guests on the podcast. So it is becoming a more, you know, well understood and, you know, topic. So part one in the books part two all right maybe with maybe with Eric TBD yeah all right well I mean I know we we had the schedule for 1030 minutes we have a bit over time yeah I should just start looking these for two hours because I don't think we've had a single conversation where we... And you say in general, I book off more time or like, you know, in your head at least. Well, we end up recording what, a month's worth of podcasts whenever we get together,
+还有其他几个人，比如……是 Dietmar 吗？Dietmar。还有其他几个人，起初只有 Eric，现在我知道有一小群人了。是的，我想 Rob Leahy 也做了一些相关工作。是的，播客的往期嘉宾。所以它正在成为一个更广为人知的话题。所以第一部分已完成，第二部分……好吧，也许和 Eric 一起，待定。好吧，我知道我们原计划是 30 分钟，我们超时了。是的，我应该开始把这些看作两小时的节目，因为我不认为我们有哪次谈话是……你说你通常会预留更多时间，或者至少在心里是这样。好吧，我们每次聚在一起最终录制的播客内容大概是一个月的量，
+
+78
+00:42:31.000 --> 00:43:07.000
+something like that. I think this one, this will probably be three, even though we have the time, the recorded time enough, but I feel like splitting up the SNR one into two would, you know, that'd be doing our listeners a disservice because I try my best because I get enough complaints about the slicing halfway through a topic and then they're like, why do you do that? And a lot of folks I've realized they actually wait for like all four parts and then they'll listen like a month later all at once. And then they'll listen together? Which isn't a bad strategy. I prefer, you know, as soon as things are out
+差不多吧。我想这一集，这可能会分成三部分，尽管我们有足够的时间，但我感觉把 SNR（发送者和接收者）拆分成两部分会对我们的听众不公平，因为我尽力了，因为我收到足够多关于在一个话题中途切断的抱怨，他们会问：你为什么要那样做？我意识到很多人实际上是在等所有四部分都出来，然后一个月后一次性听完。然后一起听？这倒不是一个坏策略。我更喜欢，你知道，一旦东西出来
+
+79
+00:43:07.000 --> 00:43:23.000
+to listen to them, but yes, if you just finished listening to this, I took the time to edit the extra 20 minutes. But yeah, we'll do this again. And yeah, I'll reach out to Eric and see if we can get him on. And to the listener, till next time. Be sure to check these show notes
+就去听，但是的，如果你刚刚听完这一集，我花时间编辑了额外的 20 分钟。但是的，我们会再做一次。我会联系 Eric，看看能不能请他来。对于听众，下次见。一定要查看这些节目说明，
+
+80
+00:43:23.000 --> 00:43:28.000
+either in your podcast app or at adspthepodcast.com for links to anything we mentioned in today's episode, And to the listener, till next time. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+无论是在你的播客应用中还是在 adspthepodcast.com 上，查看我们今天提到的任何内容的链接。对于听众，下次见。这一集还没有评论。点击转录中的任何句子即可发表评论。
