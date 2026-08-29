@@ -1,0 +1,296 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:25.000
+Has this stuff been talked about before, or is this kind of like breaking news? I guess it hasn't. This is somewhat breaking news. So we ported it to Rust. We're within about 15% performance of the C++ implementation. In some cases, the Rust implementation actually wins. This is a straight port of the new concurrency features that Nick wrote in the C++ library. He ported them to Rust. So when you say they were running inside Rust, it wasn't like Rust bindings to the C++ library.
+以前讨论过这些东西吗，还是这有点像突发新闻？我想还没有。这算是突发新闻。所以我们将其移植到了Rust。我们在性能上达到了C++实现的15%以内。在某些情况下，Rust实现实际上甚至超过了C++。这是对Nick在C++库中编写的新并发功能的一个直接移植。他将它们移植到了Rust中。所以当你听到它们在Rust内部运行时，这并不是指针对C++库的Rust绑定。
+
+2
+00:00:25.000 --> 00:00:59.000
+No, no, no. This is a port. Gotcha. I wrote the portable executor. And then Nick ported it to Rust. And not just Rust, but safe Rust. So we did it without using unsafe calls, which is nice because now we have established that there's no race conditions in this body.
+不，不，不。这是一个移植。明白了。我编写了可移植执行器。然后Nick将其移植到了Rust。不仅是Rust，而且是安全的Rust。所以我们在没有使用不安全（unsafe）调用的情况下完成了它，这很好，因为现在我们已经确定这个代码体中没有竞态条件。
+
+3
+00:00:59.000 --> 00:01:45.000
+Welcome to ADSP, the podcast, episode 160, recorded on December 12th, 2023. My name is Connor, and today with my co-host, Bryce, we chat with Sean Parent about the latest updates on the Hilo programming language and the state of Rust and safety at Adobe. I think the plan for today is we will try to record probably three different mini episodes because the way that this is going to roll out, we're currently recording this on December 12th. So this episode, first episode will come out on December 15th. And then next Monday, we're recording with Zach Lane the holiday special, which should just be one one-hour-ish episode that'll come out on the 22nd. And then part two and part three of this conversation will come out on the 29th of December and then the 5th of January. So with that in mind, i was thinking for the first
+欢迎收听ADSP播客第160期，录制于2023年12月12日。我是康纳（Connor），今天我和我的联合主持人布莱斯（Bryce）一起，与肖恩·帕伦特（Sean Parent）探讨了希洛（Hilo）编程语言的最新进展，以及Adobe公司关于Rust和安全性的现状。我想今天的计划是我们可能会尝试录制大约三个不同的迷你单集，因为这种发布方式，我们目前是在12月12日录制的。所以这一集，第一集将在12月15日发布。然后下周一，我们将和扎克·莱恩（Zach Lane）录制节日特辑，那应该是一个大约一小时的单集，将在22号发布。接着，这段对话的第二部分和第三部分将分别在12月29日和1月5日发布。考虑到这一点，我当时想对于第一
+
+4
+00:01:45.000 --> 00:02:21.000
+mini episode 30 minutes or so we could i mean we'll introduce sean i mean no needs no introduction at this point this has got to be i think your 12th episode fourth recording if we include the last time we recorded which was in june of 2023 at cpp on c in Folkestone, UK, which was an absolute blast. That was fun. Hopefully, we will be able to repeat that at some point in the future. Not necessarily at C++ on C, but at some other conference. And we can just catch up on everything that has happened since then. Because I know, Bryce, you were at at least one conference.
+个大约30分钟左右的迷你单集，我们可以，我的意思是我们将介绍肖恩，不过他现在已经不需要介绍了，这肯定得是，我想你的第12次出场，第四次录制了，如果我们把上次录制算上的话，那是在2023年6月在英国福克斯通（Folkestone）的C++ on Sea会议上，那次真是太棒了。那太有趣了。希望我们未来能在某个时候再次举办。不一定是在C++ on Sea，而是在其他某个会议上。我们可以顺便了解一下自那以后发生的所有事情。因为我知道，布莱斯，你至少参加了一个会议。
+
+5
+00:02:21.000 --> 00:02:39.000
+You were at Meeting C++ in November, right? And I don't think we have... I was not at Meeting C++ in November, right? And I don't think we have... I was not at Meeting C++ in November. You were not? No. Why did YouTube just show me Meeting C++? I gave a talk remotely. Oh, okay.
+你在11月份参加了Meeting C++，对吧？我不认为我们有……我11月份没有去Meeting C++，对吧？我不认为我们有……我11月份没有去Meeting C++。你没有？没有。为什么YouTube刚才给我推送了Meeting C++？我是远程做了一场演讲。哦，好吧。
+
+6
+00:02:39.000 --> 00:03:00.000
+But that was at the conference or at a meetup? At the conference. Okay. So you were not in Berlin, but you were presenting at the meetup. And I know, Sean, you as well have attended, I think, CPPCon and potentially one or more conferences. Anyway, so we'll start with Sean. Sean Parent, you know, longtime guest, longtime listener. Everyone should know him.
+但那是在会议上还是在见面会上？在会议上。好吧。所以你不在柏林，但你在见面会上做演讲。而且我知道，肖恩，你也参加了，我想是CPPCon，可能还有一个或更多的会议。不管怎样，我们从肖恩开始。肖恩·帕伦特，你知道的，老嘉宾，老听众。每个人都应该认识他。
+
+7
+00:03:00.000 --> 00:03:32.000
+We will link every single one of his past appearances on ADSP the podcast as well as appearances on other podcasts. I know you've been on CPP cast and we'll throw it over to you. Feel free to update us on conferences and also how things at Adobe have been going. I know that you are not sure if it was the last time we recorded with you or two times ago you mentioned that you know you've been putting together the dream team and bringing back to life the ST lab. So yeah we'll throw it over to you. And this is our Catching Up with Sean, part one of our three-part conversation here. Hey.
+我们将在ADSP播客中链接他过去的所有出场记录以及他在其他播客上的出场记录。我知道你上过CPP cast，现在把话筒交给你。请随时向我们更新会议情况，以及Adobe最近的情况。我知道你不太确定上次录制还是上上次录制时你提到过，你在组建梦之队并让ST lab重获新生。所以，是的，我们把话筒交给你。这是我们的“走近肖恩”，我们三部分对话的第一部分。你好。
+
+8
+00:03:32.000 --> 00:04:08.000
+Well, thanks. Yeah, since last time we talked, let's see what's been going on. On the Hilo front, we talked a lot about Hilo last time. And actually, thanks for the PR on that. After my interview came out on your podcast, we had a significant uptick in Hilo contributors. So it was very helpful. And that's a whole announcement in itself, because at the time, we were referring to Hilo as Val, because Val hadn't been rebranded. And then I think like a month later, I got a message saying, hey, you might want to rename your episodes and i was like well i mean it turns out there's a uh another val programming
+嗯，谢谢。是的，自从我们上次交谈以来，让我们看看发生了什么。在希洛（Hilo）方面，我们上次聊了很多关于希洛的内容。事实上，谢谢你为此提交的PR。在我的采访在你们的播客上播出后，希洛的贡献者数量有了显著增长。所以这非常有帮助。这本身就是一个大公告，因为当时我们将希洛称为Val，因为Val还没有被重新命名。然后我想大约一个月后，我收到一条消息说，嘿，你可能想给你的 episodes 改个名，然后我说，嗯，我的意思是，结果发现有一个呃，另一个Val编程
+
+9
+00:04:08.000 --> 00:04:50.000
+language uh which is a robotics language uh been around since the 70s corporate owned and so the trademark was owned uh so so the val team got a cease and desist, and we had to pick a different name. Actually, that's the reason. So you got a cease and desist. Yeah. Wow. So. And where did the Hilo name come from? The Hilo name came from making a big, long list of potential names and vetting them with legal and crossing them off until we had one left.
+语言，呃，这是一个自70年代以来就存在的机器人语言，由公司所有，所以商标是被拥有的，所以Val团队收到了停止侵权警告函（cease and desist），我们不得不选择一个不同的名字。其实，这就是原因。所以你们收到了停止侵权警告函。对。哇。所以。那Hilo这个名字是怎么来的？Hilo这个名字是通过列出一大长串潜在名字，并让法务部门进行审查，然后一个一个划掉，直到只剩下一个得来的。
+
+10
+00:04:50.000 --> 00:05:20.000
+So not the ideal way to pick a language name. Do you remember any of the top contenders or your favorites that did not make the legal removal process? Some of them had Val in the name, like Valkyrie and things like that. And unfortunately, basically, if you've got a trademark named and you've potentially violated it, any derivative name is also off the table.
+所以这不是挑选语言名字的理想方式。你还记得任何没有通过法律审查程序的顶级候选者或你最喜欢的名字吗？有些名字里带有Val，比如Valkyrie（女武神）之类的。不幸的是，基本上，如果你有一个带有商标的名字并且你可能侵犯了它，任何衍生名称也都不能用了。
+
+11
+00:05:20.000 --> 00:05:51.000
+And so all names that included Val were immediately off the table. This is just because you got the cease and desist? Yeah, yeah. Interesting. So if you had gone for a more specific name and had never gone through the path of getting the cease and desist for Val, you potentially would have been okay to have that more specific name including Val. It's kind of like if you said, you know, like, oh, I'm going to call my new operating system Windows and Microsoft sued you and you said, okay, I'm going to call it
+因此，所有包含Val的名字立刻都被排除了。这只是因为你们收到了停止侵权警告函？对，对。有趣的是。所以如果你起了一个更具体的名字，并且从来没有经历过为Val获取停止侵权警告函的过程，你可能就可以使用那个包含Val的更具体的名字了。这有点像如果你说，你知道，比如，哦，我要把我的新操作系统命名为Windows，然后微软起诉了你，你说，好吧，我要把它叫做
+
+12
+00:05:51.000 --> 00:06:20.000
+Blindos. They'd be like, no, that's still too close. But if you had started with Blindos, they might have never had a case, right? That is amazing. So how did they hear about Val? Probably from your podcast. Whoops. So I don't know. Well, that's unfortunate. That's also, that's pretty aggressive if they like, they started with like a cease and desist letter.
+Blindos。他们会说，不，那还是太接近了。但如果你一开始就叫Blindos，他们可能根本就不会有案由，对吧？太神奇了。那他们是怎么知道Val的？可能是通过你们的播客。哎呀。所以，我不知道。好吧，那太不幸了。这也是，如果他们直接发一封电子邮件，这其实挺激进的，
+
+13
+00:06:20.000 --> 00:07:11.000
+If they had just sent you an email email you probably would have figured out some solution exactly exactly so so but you know it is what it is um so the hylod name's kind of sticking so so that's that's doing well so far it's more googleable it's more googleable yeah uh yeah and then uh let's see we are now available on Compiler Explorer. So you can select Hylo as a language and write a little bit of code. We are making our biggest breakthrough here recently was we got arrays working on important data structure, which is kind of the start of the standard library which is going it's it's the language is very much in the flavor of swift where where all your types including you
+如果他们只是给你发了一封电子邮件，你可能就会想出某种解决方案了，确实，确实。所以，嗯，既来之则安之，嗯，所以Hilo这个名字算是定下来了，所以目前进展顺利。它更容易被谷歌搜索到，更容易被谷歌搜索到，是的，呃，是的，然后，呃，让我们看看，我们现在可以在Compiler Explorer（编译器浏览器）上使用了。所以你可以选择Hylo作为语言并编写一些代码。我们最近取得的最大突破是，我们让数组（arrays）在一个重要的数据结构上工作了，这可以说是标准库的开始，它非常类似于Swift的风格，在那里你所有的类型，包括
+
+14
+00:07:11.000 --> 00:07:44.000
+know your integer types are our library types and so getting to the point where we had enough of the facilities in place to build arrays has been significant emphasis rightphasis right now is we trip up something in LLVM's optimizer. And so if you turn on optimizations on our project, the compiler LLVM explodes. And that's unfortunate, because we'd like to start to get a feel for what kind of code we actually generate
+你的整数类型都是库类型，所以能够达到具备构建数组所需的大部分设施的阶段是非常重要的，我们目前的重点是，我们在LLVM的优化器中遇到了一些问题。因此，如果在我们的项目中开启优化，编译器LLVM就会崩溃。这很不幸，因为我们希望开始了解在没有优化器的情况下，我们实际上会生成什么样的代码。
+
+15
+00:07:44.000 --> 00:08:29.000
+without the optimizer. It's just very crude and shows it. I mean, I think it's of the actual, because we were talking to Richard Feldman over the last few episodes and Rock is not a C++ successor initiative, but of the C++ successor initiatives, I think yours is the only one that's actually hosted on Compiler Explorer or is CPP2 potentially as well. Although that's slightly different, right? Because it's transpiling to C++ and then compiling the C++ code where you're actually building a completely different front end and then having to compile that. But like compared to Carbon, I think, or I guess Circle as as well so i guess it's just hylo versus carbon of the ones that are actually building their own like compiler stack uh or you know
+它只是非常简陋并展示出来。我的意思是，我认为这实际上是因为我们过去几期一直在和理查德·费尔德曼（Richard Feldman）交谈，Roc并不是一个C++继承者倡议，但在C++继承者倡议中，我认为你们是唯一一个真正在Compiler Explorer上托管的项目，或者说CPP2可能也是？尽管那略有不同，对吧？因为它是在转译为C++然后编译C++代码，而你们实际上是在构建一个完全不同的前端，然后必须编译它。但与Carbon相比，我想，或者还有Circle，所以我想这只是Hylo与Carbon的对比，在那些真正构建自己的编译器栈的项目中，或者说最终目标是LLVM的项目中，
+
+16
+00:08:29.000 --> 00:09:01.000
+targeting lvm at the end of the day yeah yeah and it was interesting because uh you know not less than a year ago our our we'd actually started targeting llvm early on and then and then the decision was made that that was kind of too big of a lift and so we were going to compile to c++ and do the transpiler thing. And we thought there would be benefits there for kind of bringing things up quickly. And that turned into a bit of a nightmare. And so we backed off and went back to LLVM. Interesting.
+对，对。这很有趣，因为，你知道，不到一年前，我们的，我们实际上很早就开始以LLVM为目标，然后，然后做出了决定，认为那个工作量太大了，所以我们将编译为C++并做转译器那一套。我们认为这样可以带来快速启动的好处。结果那变成了一场噩梦。所以我们退了回来，又回到了LLVM。有趣的是。
+
+17
+00:09:01.000 --> 00:09:22.000
+And that's working pretty well right now. So we can target Mac, Linux, and the Windows support is limping. Most of the Windows issues are around. We leveraged to the Swift Package Manager until they're actually Swift Package Manager on Windows issues. Oh, the beautiful thing is Windows these days has WSL2,
+目前这运行得相当不错。所以我们可以将Mac、Linux作为目标平台，而Windows的支持则一瘸一拐。大部分Windows问题都围绕着。我们利用了Swift Package Manager，直到它们在Windows上真正成为Swift Package Manager的问题。哦，美妙的是，现在的Windows有了WSL2，
+
+18
+00:09:22.000 --> 00:09:58.000
+so you can find a way to run it if it works on Linux, right? Yeah, exactly. So yeah, it's making progress. I'm hoping over this next year, I've got Dave Senkel working on university relations for our team. And so I'm hoping that we can get a collaboration going with a university or two around Hilo development and keep it going that way. You know, right now, officially, Adobe's, we've got one person on it part-time. Not going to be hard to double or triple that
+所以如果你能在Linux上运行它，你就能找到方法运行它，对吧？是的，完全正确。所以，是的，它在取得进展。我希望在接下来的一年里，我让戴夫·森克尔（Dave Senkel）负责我们团队的关系维护工作。所以我希望我们能围绕Hilo的开发与一两所大学开展合作，并以这种方式保持下去。你知道，目前，官方来说，Adobe在上面投入了一个兼职人员。要将这个数字翻倍或三倍并不难
+
+19
+00:09:58.000 --> 00:10:37.000
+amount. Not going to be hard to double or triple that amount, right? It's a long effort. And I think building community support is critical. So we've got a big meeting this afternoon, or not this afternoon, tomorrow afternoon, we're discussing a concurrency model. We've got Lucien, who's one of the collaborators on sender receivers. He collaborated with Eric Niebler on some of that work and now he's jumped into the Hilo project and he's been helping us on the concurrency front. And so we've got a big meeting tomorrow to try to get everybody on the same page.
+要将这个数字翻倍或三倍并不难，对吧？这是一项漫长的努力。我认为建立社区支持至关重要。所以我们今天下午有一个大会议，或者说不是今天下午，是明天下午，我们在讨论并发模型。我们有吕西安（Lucien），他是发送者-接收者（sender receivers）的合作者之一。他与埃里克·尼布勒（Eric Niebler）合作过其中一些工作，现在他加入了Hilo项目，一直在并发方面帮助我们。所以我们明天有个大会议，试图让每个人达成共识。
+
+20
+00:10:37.000 --> 00:10:58.000
+So hopefully I can convince them that we can do better than senders receivers. So what do you have in mind? I like the sender receiver model, but I think the cancellation model in sender receivers is broken. Elaborate. Yeah, should we dig into this in our catching up episode? We are taking a hard right to Sean's thoughts on
+希望我能说服他们，我们能做得比发送者-接收者更好。那你有什么想法？我喜欢发送者-接收者模型，但我认为发送者-接收者中的取消模型是有缺陷的。详细说说。是的，我们应该在我们的叙旧集里深入探讨这个吗？我们直接转向肖恩对
+
+21
+00:10:58.000 --> 00:11:54.000
+why the sender and receiver model is broken. In what way? So the cancellation model in sender receivers is very manual and it's top down. And so what I mean by that is you need to carry around a token, a cancellation token, and then you can flip the cancellation token to say cancel. And then something up the call chain basically receives that and cancels down to the caller. The problem there is anything within that chain could be holding on to effectively a sender for another asynchronous task that it's not yet waiting on. And so that cancellation won't happen until the things that are currently executing finish up. So the STLAB model is the other way around. It's bottom up. When you drop a future or equivalent of the sender,
+为什么发送者和接收者模型是有缺陷的看法。在什么方面？所以发送者-接收者中的取消模型非常手动，而且是自上而下的。我的意思是，你需要随身携带一个令牌，一个取消令牌，然后你可以翻转取消令牌来表示取消。然后调用链上方的某些东西基本上接收到这个信号并向下取消到调用者。这里的问题是，该链内的任何东西都可能实际上持有另一个它尚未等待的异步任务的发送者。因此，在当前正在执行的东西完成之前，该取消操作不会发生。所以STLAB模型恰好相反。它是自下而上的。当你丢弃一个future或发送者的等价物时，
+
+22
+00:11:54.000 --> 00:12:50.000
+it unravels the chain automatically going backwards. Any task that hasn't started is destructed or any task that's suspended is destructed means that if you have a future being held up the chain, it's the destruction of that future that cancels that operation. And so you get a faster and asynchronous cancellation. And where that came from was doing real-time rendering, right? The whole ST Lab library came out of me working on Lightroom Mobile and Lightroom Web. And in that model, when you're sliding the sliders, say, adjusting exposure, we're doing approximate frames, trying to give you quick feedback at 60 frames a second. And as you slow down on the slider, we're going to generate a higher resolution image. But if you move the slider again, we need to get back to 60 frames a second
+它会自动向后解开调用链。任何尚未启动的任务都被销毁，或者任何被挂起的任务被销毁，意味着如果你有一个future被链条上方持有，正是对该future的销毁取消了该操作。因此，你可以获得更快、异步的取消。而这源于做实时渲染，对吧？整个ST Lab库源于我参与Lightroom Mobile和Lightroom Web的工作。在该模型中，当你滑动滑块时，比方说调整曝光，我们正在制作近似帧，试图以每秒60帧的速度给你快速反馈。当你放慢滑块时，我们将生成更高分辨率的图像。但如果你再次移动滑块，我们需要立即回到每秒60帧。
+
+23
+00:12:50.000 --> 00:13:37.000
+immediately. So we need to cancel the operation. We need those resources back now. And we're going to fall back into generating an approximate thread or over an approximate frame. And we do that at various dynamic levels, so we can kind of tune things. The faster you move the slider, the lower quality frames you get, and as you slow your slider movements down, you get higher quality frames. And so the sender-receiver cancellation model, basically, as it's written, it's too manual, and it's too slow. So I'm hoping that we can, you know, that said, sender-receivers has a huge amount of benefits too, right?
+所以我们需要取消该操作。我们需要这些资源立刻归还。我们将退回到生成一个近似线程或近似帧。我们在不同的动态级别上这样做，以便我们可以微调事物。你滑动滑块的速度越快，得到的帧质量就越低，而当你放慢滑块移动速度时，就会得到更高质量的帧。因此，发送者-接收者取消模型，基本上，正如它所写的那样，太手动了，也太慢了。所以我希望我们能，话虽如此，发送者-接收者也有巨大的好处，对吧？
+
+24
+00:13:37.000 --> 00:14:08.000
+The whole building up task chains before you start to execute them so that you're not paying synchronization costs every time you're attaching a new task. You know, it's got a nice composition model in there. So it's got some huge benefits. So I'm hoping we can kind of blend blend the two models my understanding of snr is not as good as bryce's but bryce is there is that like a fundamental limitation what sean just explained like there's no way to design that into like basically the way it's designed you'd never be able to replicate that you'd need to uh i don't know that's a that's an open issue. Eric Niebler asserts that it's doable.
+在开始执行之前构建整个任务链，这样你每次附加新任务时就不需要支付同步成本。你知道，它里面有一个很好的组合模型。所以它有一些巨大的好处。所以我希望我们能把这两种模型融合在一起。我对SNR（注：应为sender/receiver，此处指发送者-接收者模型）的理解不如布莱斯，但布莱斯，肖恩刚才解释的那是一个根本性的限制吗？就像没有办法把它设计进去一样——基本上按它的设计方式，你永远无法复制它，你需要——我不知道，这是一个开放的问题。埃里克·尼布勒断言这是可行的。
+
+25
+00:14:08.000 --> 00:15:18.000
+I've taken a couple stabs at it. Basically building the STLAB cancellation model on top of senders and receivers. I've taken a couple stabs at it and failed. But part of that is because I ran into a bunch of things within the sender-receiver library that were not yet implemented. Now I've got Nick DiMarco on my team on the STLAB concurrency libraries where kind of at the base of that, we've got this nice library that provides an abstraction over the system thread pool. So if you're running on Windows, it will target Apple's lib dispatch. And if you're running on Windows, it will target the Windows thread pool. And if you're on Linux and you have lib dispatch available, it will target that. It's also got a very high performance portable task stealing thread pool. And so if there's no system
+我尝试过几次。基本上就是在发送者和接收者之上构建STLAB取消模型。我尝试了几次但都失败了。但部分原因是因为我遇到了发送者-接收者库中尚未实现的许多东西。现在我的团队里有尼克·迪马科（Nick DiMarco），负责STLAB并发库，在这个库的基础之上，我们有了这个优秀的库，它提供了对系统线程池的抽象。所以如果你在Windows上运行，它将以苹果的lib dispatch为目标。如果你在Windows上运行，它将以Windows线程池为目标。如果你在Linux上并且有lib dispatch可用，它将以它为目标。它还有一个高性能的可移植任务窃取线程池。所以如果没有系统
+
+26
+00:15:18.000 --> 00:16:06.000
+thread pool available, it will target that. It's also got a notion of a main executor because most platforms have such a thing or frameworks do. So if you're running on Mac, the main executor is the main queue for lib dispatch. And if you're running in Qt, it will pick up the main executor in Qt. And these are updates to Hylo or a STLab concurrency library that Nick's working on? No, this is the STLab concurrency library, which is a C++ library that's been available for a while. And one of the experiments that Nick did recently is he's gotten our portable high-performance executor running inside of Rust.
+线程池可用，它将以该线程池为目标。它还有一个主执行器（main executor）的概念，因为大多数平台或框架都有这样的东西。所以如果你在Mac上运行，主执行器就是lib dispatch的主队列。如果你在Qt中运行，它将拾取Qt中的主执行器。这些是针对Hilo的更新，还是尼克正在开发的STLab并发库的更新？不，这是STLab并发库，这是一个已经推出一段时间的C++库。尼克最近做的一个实验是，他让我们的可移植高性能执行器在Rust内部运行了。
+
+27
+00:16:06.000 --> 00:16:25.000
+What? Yeah, and so we ported it to Rust. We're within about 15% performance of the C++ implementation. In some cases, the Rust implementation actually wins. This is a straight port of the new concurrency features that Nick wrote in the C++ library. He ported them to Rust. So when you say they were running inside Rust, it wasn't like Rust Nick wrote in the C++ library, he ported them to Rust.
+什么？是的，所以我们把它移植到了Rust。我们在性能上达到了C++实现的15%以内。在某些情况下，Rust实现实际上甚至赢了。这是对尼克在C++库中编写的新并发功能的直接移植。他把它们移植到了Rust中。所以当你听到它们在Rust内部运行时，这并不是指针对C++库的Rust绑定，尼克在C++库中编写，他把它们移植到了Rust。
+
+28
+00:16:25.000 --> 00:16:40.000
+So when you say they were running inside Rust, it wasn't like Rust bindings to the C++ library. No, no, no. This is a port of... Gotcha. I wrote the portable executor. And then Nick ported it to Rust. And not just Rust, but safe Rust.
+所以当你听到它们在Rust内部运行时，这并不是指针对C++库的Rust绑定。不，不，不。这是一个移植……明白了。我编写了可移植执行器。然后尼克将其移植到了Rust。不仅是Rust，而且是安全的Rust。
+
+29
+00:16:40.000 --> 00:17:29.000
+So we did it without using unsafe calls, which is nice because now we have established that there's no race conditions in this body. Was that the motivation for reporting it to Rust? Or was it just a curiosity to see the perf of the ported Rust version? Well, a few things. One is what my team is tasked with, where we started with, was being tasked with basically how do you do correct and efficient concurrency? And it turns out there's a really strong correlation between correct concurrency and safety. And if you go back to the Leslie Lampert papers, which were all written about how do you reason about concurrent code, you'll find a big part of that is about safety and liveness properties.
+所以我们在没有使用不安全调用的情况下完成了它，这很好，因为现在我们已经确定这个代码体中没有竞态条件。这就是将其移植到Rust的动机吗？还是仅仅出于好奇，想看看移植后的Rust版本的性能？嗯，有几个原因。一个是我的团队的任务，我们开始时的任务是，基本上是如何做到正确且高效的并发？事实证明，正确的并发与安全性之间存在着非常强的相关性。如果你回顾莱斯利·兰伯特（Leslie Lamport）的论文，这些论文都是关于如何对并发代码进行推理的，你会发现其中很大一部分是关于安全性和活性属性的。
+
+30
+00:17:29.000 --> 00:18:14.000
+And so you'd have to prove a set of safety properties to prove your concurrent codes correct. And that, as it turns out, has a strong correlation to what we talk about when we talk about memory safety and things of that nature. So this, so we started working on concurrency and then because of all the pending legislation around safety, we kind of took a detour to focus a little bit more on safety because it very much fell within our domain. But in looking at that, you know, know within c++ it's a huge challenge if you say something like you know well i've got a a high performance task stealing thread pool
+因此，你必须证明一组安全属性，以证明你的并发代码是正确的。事实证明，这与我们谈论内存安全以及此类性质的话题时所讨论的内容具有很强的相关性。所以，我们开始研究并发，然后由于围绕安全性的所有悬而未决的立法，我们有点绕道去更多地关注安全性，因为它非常符合我们的领域。但在研究这一点时，你知道，在C++中这是一个巨大的挑战，如果你说类似“我知道我有一个高性能的任务窃取线程池”
+
+31
+00:18:14.000 --> 00:18:58.000
+how do you know you implemented that correctly and and that you don't have some subtle race condition buried in there and you And you can run it with threat sanitizer, but that's not a proof. It will only show you a race condition if you hit the race condition. So a programming language like Rust, as long as you're within safe Rust, lets you demonstrate no races by construction. And so that's where the interest came from. Could we start to move critical concurrency components into Rust? You know, we're also looking at moving critical safety components into Rust.
+你怎么知道你实现得正确，并且其中没有埋下什么微妙的竞态条件？你可以用线程SANITIZER运行它，但这并不是一个证明。它只有在触发竞态条件时才会向你显示竞态条件。因此，像Rust这样的编程语言，只要你在安全的Rust范围内，就能让你通过结构本身来证明没有竞态条件。这就是兴趣的来源。我们能否开始将关键的并发组件移入Rust？你知道，我们也在考虑将关键的安全组件移入Rust。
+
+32
+00:18:58.000 --> 00:19:35.000
+So things where we're, you know, within our products, parsing untrusted inputs, those should either be sandboxed or moved into a memory-safe language like Rust. Interesting. And so this is actually have that code being run through the Rust compiled executable, not verifying that it works in Rust and then continuing to use the C++ version? No, the plan is to, we want to continue to performance tune the Rust implementation, but if we can get the Rust implementation a little bit closer, right? We don't have to have 100% the performance we have on the C++ side,
+因此，比如在我们的产品中，解析不受信任的输入，这些输入要么应该沙盒化，要么应该移入像Rust这样的内存安全语言中。有趣的是。所以这实际上是将该代码通过Rust编译的可执行文件运行，而不是验证它在Rust中工作然后继续使用C++版本？不，我们的计划是，我们希望继续对Rust实现进行性能调优，但如果我们能让Rust实现更接近一些，对吧？我们不必拥有我们在C++端100%的性能，
+
+33
+00:19:35.000 --> 00:20:05.000
+but if we can get within a few percentage points, which I think is doable, then we'll just probably swap out the implementations and we'll have it there. The other thing we want to do is we want to do Rust bindings to the platform thread pools because within a product you really don't want to have multiple thread pools running and so if you're running on Mac you as great as our portable implementation is you really want to be using Apple's lib dispatch. And same on Windows, you want to be using the Windows thread pool.
+但如果我们能达到几个百分点以内，我认为这是可行的，那么我们可能就会直接替换这些实现，把它放在那里。我们想做的另一件事是为平台线程池制作Rust绑定，因为在一个产品中，你真的不想运行多个线程池，所以如果你在Mac上运行，尽管我们的可移植实现很棒，但你真的想使用苹果的lib dispatch。在Windows上也一样，你想使用Windows线程池。
+
+34
+00:20:05.000 --> 00:20:58.000
+And so we'd like to release this as a library for Rust developers, because we think it's something kind of missing in the Rust ecosystem. So you go to Cargo and pull down your Rust code and you'll have a library for a high performance thread pool that will run anywhere and it will target your platform thread pools where appropriate. So we think there's value there also. It's also giving us experience in how difficult it is to do the bindings back and forth, which are not bad. Adobe has a lot of experience with binding C++ to other languages. We were a little surprised in that the bindings that are available, few of them start with basically how do you do function object calls between the two.
+所以我们希望将此作为面向Rust开发者的库发布，因为我们认为这是Rust生态系统中某种程度上缺失的东西。所以你去Cargo拉取你的Rust代码，你就会拥有一个高性能线程池的库，它可以在任何地方运行，并且会在适用的情况下以你的平台线程池为目标。所以我们认为这也有价值。这也让我们体验到了双向绑定的难度，其实并不算太糟糕。Adobe在将C++绑定到其他语言方面有着丰富的经验。我们有点惊讶的是，现有的绑定中，很少有从以下方面开始的：如何在两者之间进行函数对象调用。
+
+35
+00:20:58.000 --> 00:21:49.000
+And that's kind of always where I start. It's like, you know, how do you call function objects from C++ into Rust, and how does Rust call a C++ function object? And the ones you get that, you can bridge all the rest. And so that's where we've been starting with our bindings, and we found the existing work that was a gap. So hopefully people can look at what we're doing there and also pick up some tips. Is there any talks that have been given or blogs that have been written on this kind of Rust at Adobe or Rust at STLab? Because this, I think, like Reddit and the Internet are going to have a field day with. If we title this episode like Rust at Adobe and you talk about how, you know, due to the safety and, you know, critical nature of parts of our code, we're trying to migrate to Rust. And there's like a 15 percent gap and i'm sure like the listeners would be very interested to hear
+这差不多总是我开始的地方。就像，你知道，你如何从C++调用函数对象到Rust中，以及Rust如何调用C++函数对象？一旦你掌握了这些，你就可以架起其余所有的桥梁。所以这就是我们开始做绑定时的地方，我们发现现有的工作存在一个空白。所以希望人们能看看我们在那里做的事情，也能学到一些小技巧。有没有关于Adobe的Rust或STLab的Rust的演讲或博客？因为我认为，Reddit和互联网将会为之疯狂。如果我们把这一集命名为“Adobe的Rust”，并且你谈到由于我们部分代码的安全性和关键性质，我们正试图迁移到Rust。而且存在大约15%的差距，而且我确信听众会非常渴望听到
+
+36
+00:21:49.000 --> 00:22:27.000
+like you know what is it the you know you think it's one to two percent as possible but there's a gap right now like what are the things that are causing that but the first part of the question was has this stuff been talked about before or is this is this kind of like breaking news i guess it hasn't this is somewhat breaking news. Adobe's got something called our Content Authenticity Initiative, which is a way that we tag content that's generated with AI or content that's been edited otherwise versus content straight off your camera as a way to build trust. So it's an opt-in system.
+诸如：你认为1%到2%是可能的吗，但现在有差距，到底是什么原因导致了这种差距？但第一个问题是，以前讨论过这些东西吗，还是这有点像突发新闻？我想还没有。这算是有点突发新闻。Adobe有一个叫做我们的内容真实性倡议（Content Authenticity Initiative）的东西，这是我们用来给用AI生成的内容或经过其他编辑的内容打上标签的一种方式，与直接从相机拍摄的内容进行区分，以此建立信任。所以这是一个选择加入的系统。
+
+37
+00:22:27.000 --> 00:23:28.000
+It's not something where we're trying to like auto detect what's AI or what's not AI. But the idea is that it uses a blockchain and builds a chain of trust. And it's starting to get built into cameras. And so that if you're a photographer and you're taking pictures and you're sending them off to the New York Times the New York Times has a token that's that they can validate that says yes what this photographer says about the origin of this image and that it wasn't edited inside of of Photoshop or any other application is true and so it allows you to build a chain of trust around your content and it's become incredibly important as as we're moving into the AI realm and so you have it's you know increasingly difficult to tell what's real and what's not but in any case the the content authenticity plugin that's written for Photoshop is itself written in Rust.
+这不是那种我们试图自动检测什么是AI、什么不是AI的東西。但它的想法是它使用区块链并建立信任链。它开始被内置到摄像机中，这样如果你是一个摄影师，你正在拍照并将它们发送给《纽约时报》，《纽约时报》就拥有一个可以验证的令牌，它说：是的，这位摄影师关于该图像来源的说法是真实的，并且它没有在Photoshop或任何其他应用程序中被编辑过，因此它允许你围绕你的内容建立信任链，随着我们进入AI领域，这变得非常重要，所以你发现越来越难以分辨什么是真实的，什么不是。但无论如何，为Photoshop编写的内容真实性插件本身就是用Rust编写的。
+
+38
+00:23:28.000 --> 00:24:21.000
+So that choice was made because they needed high level of assurance that the code was correct. And Rust seemed like a better starting point than C++. So that's one project at Adobe that's currently in Rust. Around the concurrency stuff, yeah, Nick is working on a couple of blog posts on that front, and hopefully he'll give some conference talks on it here soon. So that's coming. And then we're also discussing internally around the pending legislation around safety and security, what Adobe's response is going to be. And right now our thinking is we would like to publish a roadmap on basically how we're going to address that. And that's not finalized yet in any form, but I expect a component of that
+所以做出这个选择是因为他们需要高度保证代码是正确的。而且Rust似乎比C++是一个更好的起点。这是Adobe目前使用Rust的一个项目。关于并发方面，是的，尼克正在撰写几篇关于这方面的博客文章，希望他很快就会在会议上做一些演讲。所以这正在筹备中。然后我们也在内部讨论围绕安全和安全性的悬而未决的立法，Adobe的响应会是什么。目前我们的想法是，我们希望发布一个路线图，基本上说明我们将如何解决这个问题。这还没有以任何形式最终确定，但我预计该路线图的一个组成部分
+
+39
+00:24:21.000 --> 00:25:33.000
+roadmap is going to be that some of our critical components will get rewritten into Rust or another memory safe language. When you say pending legislation, is that a nod to some pending legislation that you actually know is on the horizon or just anticipating that it's going to happen at some point? Oh, yeah, no, there's, so there are two bills. Sorry, I don't have. It's all right. We'll find them. We'll find them and link them in the show notes afterwards. Yeah, yeah. I can hunt down the links. uh within 270 days of the bill passing and it's a funding bill which means it will probably pass late this year early next year uh the department of defense will establish uh guidelines around safety and security including uh memory safety for software products purchased by Department of Defense.
+将是我们的某些关键组件将被重写为Rust或另一种内存安全语言。当你提到悬而未决的立法时，这是在暗示你知道正在酝酿的立法，还是只是预测它迟早会发生？哦，是的，不，有，所以有两个法案。抱歉，我没有。没关系。我们会找到的。我们会找到它们并在之后的节目笔记中链接它们。是的，我可以找出链接。在法案通过后270天内——这是一个拨款法案，这意味着它可能会在今年晚些时候或明年初通过——国防部将围绕安全和安全性建立指导方针，包括国防部采购的软件产品的内存安全性。
+
+40
+00:25:33.000 --> 00:26:13.000
+The EU has a similar wording in a bill that's slowly winding its way through their channels. I don't have insight into when that will pass. The U.S. one will almost certainly pass here within a month or two. There's a long way between having a bill passed that says almost a year later, they have to establish a plan for what they're going to do, right? So it's not hard legislation in any way. But I view this, I can send you a link. There was a podcast I listened to recently on Mac OS Folklore. I actually got a call out to your podcast within that podcast. I've never even heard of this podcast.
+欧盟在一个缓慢通过其渠道推进的法案中有类似的措辞。我没有关于它何时通过的内部消息。美国的那个几乎肯定会在一两个月内通过。在通过一项法案说将近一年后他们必须制定关于他们将要做什么计划之间，还有很长的一段路要走，对吧？所以它在任何意义上都不是强制性立法。但我认为这个，我可以给你发个链接。我最近听了一个关于Mac OS民间传说的播客。我实际上在那个播客里听到了对你们播客的提及。我甚至从未听说过这个播客。
+
+41
+00:26:13.000 --> 00:27:11.000
+Now I'm going to have to go, how many episodes? Is this going to cost me like a month or two of listening to all the backlog? It's all in one episode, so I can hunt down the link. But it's talking about how in the early 90s, there was a somewhat similar round of legislation that went around around POSIX compliance. And basically, the Department of Defense decided that in order to have portable software, every operating system that they purchased had to have POSIX compliance, and there was a roadmap put into place. And that's why Apple pursued building their own Unix, which was AUX, and then eventually partnered with IBM to do AIX. And Microsoft, in the same timeframe, had a big push to get POSIX compliance in Windows OS. And the thinking was eventually in order to sell to the government your operating system, it would require POSIX compliance.
+现在我不得不去听了，有多少集？这会花掉我一两个月的时间来听所有的积压节目吗？它全都在一集里，所以我可以找出链接。但它谈到在90年代初，有一轮关于POSIX合规性的类似立法。基本上，国防部决定，为了拥有可移植的软件，他们购买的每个操作系统都必须具有POSIX合规性，并且为此制定了路线图。这就是为什么苹果追求构建自己的Unix（即AUX），然后最终与IBM合作开发AIX。微软在同一时间段内，大力推动在Windows操作系统中实现POSIX合规性。当时的想法是，最终为了向政府出售你的操作系统，它将需要POSIX合规性。
+
+42
+00:27:11.000 --> 00:27:53.000
+What actually happened if you wanted to buy just traditional Macintosh operating system, you would just say, well, I require Photoshop or pick your application. And there is no alternative that runs under Unix. So therefore, I need an exception to buy Mac OS. And it was extra paperwork, but it got signed off on. And so it really never materialized into hard restrictions on sales of non-POSIX compliant OSs. And we expect the, or I expect the safety legislation to take somewhat the same route,
+如果你只想购买传统的麦金塔（Macintosh）操作系统，实际发生的情况是，你会说，嗯，我需要Photoshop或随便选个应用程序。而且没有在Unix下运行的替代品。因此，我需要购买Mac OS的例外批准。这需要一些额外的 paperwork，但最终获批了。所以它实际上从未演变成对销售不符合POSIX的操作系统的大规模限制。我们预计，或者我预计安全立法会走大致相同的路线，
+
+43
+00:27:53.000 --> 00:28:47.000
+which is there will be pressure to write more software in memory safe languages. Where you don't write software in memory safe languages, there's going to be more pressure for you to document what your your process is to mitigate the risks you know and this is all initially it's going to be all in the realm of government sales although there's some discussion in both the eu legislation and in the the on the u.. side of extending this to to just a consumer to a consumer safety issue. But there will be, you know, an escape hatch because you couldn't wave any kind of magic wand as a legislator and say you can't sell software anymore if it's written in C++ like the world would grind to a halt. So there will be an escape hatch and there will be pressure.
+即会有压力要求用内存安全语言编写更多的软件。在你不使用内存安全语言编写软件的地方，将会有更大的压力要求你记录你的流程，以减轻你面临的风险，你知道，这最初都将完全属于政府销售的领域，尽管在欧盟立法和美国方面都有一些讨论，将其扩展到纯粹的消费者安全问题。但总会有一个逃生舱口（escape hatch），因为作为一个立法者，你不可能挥舞任何魔法棒说，如果软件是用C++编写的，你就再也不能卖了，因为世界会陷入停顿。所以总会有一个逃生舱口，也会有压力。
+
+44
+00:28:47.000 --> 00:29:29.000
+And so as a company, you have to look at how are you going to mitigate that risk going forward? And what's your plan going to be so that you can continue to sell products to the governments? And how do you make sure that you're not opening up a competitive threat if you've got a competitor that can say, well, we're written entirely in Rust. So we don't have to do the paperwork. That becomes a faster path. So you want to make sure that you're aware of those issues and that you've got a plan in place to mitigate them. I wonder if there's like an analogy to a JF and I think it was his C++ Now safety talk has this comparison to seatbelts
+因此，作为一家公司，你必须考虑如何降低未来的风险。你的计划是什么，以便你能继续向政府销售产品？以及你如何确保自己没有打开竞争威胁，如果你有一个竞争对手可以宣称：“好吧，我们完全是用Rust编写的。所以我们不必做那些 paperwork。”那会成为一条更快的路径。所以你想确保自己意识到这些问题，并有一个到位的计划来减轻这些风险。我想这是否类似于J·F（JF），我想他的C++ Now安全演讲中将此与安全带进行了比较，
+
+45
+00:29:29.000 --> 00:29:48.000
+and how at the time, you know, a bunch of people said, like, I'm a safe driver, I don't need a seatbelt. But now we live in a world where everyone wears a seatbelt, even if, you know, 90% of drivers are never going to get in an accident and no one's going to get hurt. But like the analogy I'm thinking here with respect to, sure, you know, trying to, the legislation that was passed with respect to operating system is one thing. But
+以及当时，你知道，许多人说，像，我是个安全的司机，我不需要安全带。但现在我们生活在一个每个人都系安全带的世界里，即使，你知道，90%的司机永远不会遭遇事故，也没有人会受伤。但我这里想到的类比是，当然，你知道，试图去，通过的关于操作系统的立法是一回事。但是
+
+46
+00:29:48.000 --> 00:30:17.000
+like the legislation being passed here is with respect to like safety and critical systems. And the same way that if you're caught not wearing a seatbelt these days, you get ticketed. Like you can make the choice not to put this, wear the seatbelt that was put in every vehicle, but you could end up with a ticket. Potentially that's going to be the same thing in the future with this. Like you can make the choice not to use the, you know, mandated language that are safe for critical systems. But if something ends up happening and you took the escape hatch and said, for these reasons, it'll be okay.
+这里通过的立法是关于安全和关键系统的。就像如果你现在被抓到不系安全带，你会吃到罚单。你可以选择不系这个、不佩戴每辆车里都安装的安全带，但你最终可能会吃到罚单。未来这可能也会对这个产生同样的效果。就像你可以选择不使用为关键系统确保安全的强制性语言一样。但如果最终发生了什么事情，而你走了逃生舱口说，出于这些原因，这会没问题的。
+
+47
+00:30:17.000 --> 00:31:00.000
+And then it ends up not being okay that there's going to be, you know, fines that are handed out by the government saying that like, you know, we made this recommendation, et cetera. And or not recommendation. We passed some legislation, you chose to take the escape hatch, people died, or something bad happened. And now you're getting fined. That's the basics of it. And this is the White House put out a cybersecurity strategy. And, and part of that cybersecurity strategy is to shift liability. And what that means is right now, if you're a consumer and you buy a piece of software and the software crashes, you signed a EULA that said the software manufacturer doesn't warrant that this does anything.
+然后结果证明并非没问题，政府将会开出罚单，说，你知道，我们提出了这个建议，等等。或者说不是建议。我们通过了一些立法，你选择走逃生舱口，有人死了，或者发生了坏事。现在你被罚款了。这就是它的基础。白宫发布了一项网络安全战略。而该网络安全战略的一部分就是转移责任。这意味着现在，如果你是一个消费者，你买了一件软件，然后软件崩溃了，你签署了一份最终用户许可协议（EULA），上面说软件制造商不保证这能做任何事情。
+
+48
+00:31:00.000 --> 00:31:59.000
+And so it crashes and it takes out your hard drive. That's on you for running the software. You know, and there are very few exceptions where people have won cases around that. And so part of the strategy is to start to shift liability to the manufacturer and say, look, if if if that happens, you know, you're liable for the for the loss that your your your customer paid. And so so, you know, and that's true in almost every other industry. Right. If you if you buy a phone charger and your phone charger explodes or your phone and your battery explodes, that's going to be, you know, on Apple or Samsung or whoever whoever built that component. And so to protect organizations around that, to protect them from suits for negligence, is you get industry-established standards on best practices. So kind of in the hardware industry, you have, you know, UL listed, right?
+所以它崩溃了并毁掉了你的硬盘。那是你运行软件的责任。（你知道，在这方面赢得官司的例外情况非常少。）所以战略的一部分就是开始将责任转移给制造商，并说，看，如果，如果发生了那种情况，你知道，你要对你的客户所遭受的损失承担责任。所以，你知道，这在几乎其他所有行业都是如此。对吧。如果你买了一个手机充电器，然后你的手机充电器爆炸了，或者你的手机和电池爆炸了，那将是，你知道，苹果或三星或任何制造该组件的人的责任。因此，为了保护相关组织，为了保护他们免受疏失诉讼，你需要建立行业公认的最佳实践标准。就像在硬件行业，你有，你知道，UL认证（UL listed），对吧？
+
+49
+00:31:59.000 --> 00:32:58.000
+So you'll see, you know, this product is UL listed. And that basically means that there's a lab that's certified that, yeah, this component was built following best practices and is safe to use. And I expect over time, as the software industry matures, we'll see similar industry practices appear. I mean, the closest equivalent right now is MISRA, which is largely the automotive industry. But, you know, I think you'll start to see similar industry standards appear and similar compliance requirements and more transparency in how software is developed. And so it's just going to be, you know, a little bit stricter engineering practice and a little bit more bureaucracy around what it takes to build software. You know, personally, I think it's a good thing, right? It's the number of times where I'm utterly frustrated by the quality of software on my devices a day is amazing. And we've just
+你会发现，你知道的，这个产品是经过UL认证的。这基本上意味着有一个认证实验室，是的，这个组件是按照最佳实践构建的，使用起来是安全的。我预计随着时间的推移，随着软件行业的成熟，我们会看到类似的行业实践出现。我的意思是，现在最接近的等同物是MISRA，这主要在汽车行业。但是，你知道的，我认为你会开始看到类似的行业标准出现，以及类似的合规要求，并且在软件开发方式上会有更高的透明度。所以这只会变成，你知道的，更严格一点的工程实践，以及围绕构建软件所需付出的一些官僚作风。你知道的，就个人而言，我觉得这是一件好事，对吧？我每天对设备上软件质量感到彻底沮丧的次数是惊人的。我们只是
+
+50
+00:32:58.000 --> 00:33:49.000
+come to accept it. You know, we started this meeting and we were talking about two of us, two of three of us updated Teams to the latest version of teams and it's like oh my god is this going to work is it going to crash are we going to get any audio um not to pick on microsoft but but we go through this every time we we expect failure yeah right from our software and and we shouldn't we should expect success right right if my phone exploded the note you know the number of times my software crashes per day yeah it would be a pretty dangerous world so and it costs like to pick on a different company google one time i think i had the pixel two or three at the time i did a software upgrade it bricked my phone. And then I contacted Google thinking that like, this is clearly a Google software program. I hit the upgrade, you know, OS. Now my phone no longer
+开始接受它了。你知道的，我们开始这个会议时，在谈论我们三个中有两个把Teams更新到了最新版本，然后就像是，天哪，这能用吗？会崩溃吗？会有音频吗？嗯，不是故意针对微软，但我们每次都经历这些，我们对软件的期望就是失败，对吧？我们的软件就是会失败，我们不应该这样，我们应该期望成功，对吧？如果我的手机爆炸了，你知道，我的软件每天崩溃的次数，那将是一个相当危险的世界。所以，而且这代价就像——有一次换作另一家公司，谷歌，我想我当时用的是Pixel 2或3，我做了一次软件升级，它把我的手机变成了一块板砖。然后我联系谷歌，心想，这显然是谷歌的软件问题。我点击了升级操作系统。现在我的手机再也
+
+51
+00:33:49.000 --> 00:34:10.000
+works. You owe me a new phone. And when I contacted Google, they were like, that's not on us. Like, you know, we don't guarantee that like software or OS upgrades are going to be like, you know, bug free or whatever. And I was like, this is not a bug problem. This is that you bricked my phone. And I was so angry. Like I was like, you know, I'm problem. This is you bricked my phone. And I was so angry. Like I was like, you know, I'm taking a break from Google. I love the Pixel phones. They're amazing. Software is great, you know.
+无法使用了。你们欠我一部新手机。当我联系谷歌时，他们的态度是，这不关我们的事。就像，你知道的，我们不保证软件或操作系统的升级不会出现漏洞或类似情况。当时我就想，这不是漏洞问题，这是你们把我的手机弄成板砖了。我当时太生气了。就像，你知道的，我要暂停使用谷歌的产品。我喜欢Pixel手机。它们太棒了。软件也很棒，你知道的。
+
+52
+00:34:10.000 --> 00:34:52.000
+But I switched to OnePlus for the time being and haven't gone back because OnePlus has been treating me great. But it's just like, you know, that's like a thousand plus dollar phone. And it's ridiculous that like, you know, something like that can happen. And they're not, they don't owe me anything for that. It's like, oh, well, we didn't guarantee you that this wasn't going to completely set your phone on fire. Yeah, by clicking OK to do that update, you accepted the risk. Which is absurd. I think we've mentioned this on the podcast before, but I'll drop a link in the show notes of, I think it's Jonathan Blow.
+但我暂时换成了一加，而且没有再换回去，因为一加对我很不错。但这就像，你知道的，那是一部一千多美元的手机。发生这种事太荒谬了。而他们并不欠我任何东西，他们不承担任何责任。就像，哦，好吧，我们没有向你保证这不会彻底烧毁你的手机。是的，通过点击确定进行更新，你接受了这种风险。这太荒谬了。我想我们在之前的播客中提到过这个，但我会在节目说明中放一个链接，我想那是乔纳森·布洛（Jonathan Blow）。
+
+53
+00:34:52.000 --> 00:35:27.000
+And there's this like 10 minute lightning talk within a larger talk that he gave where he just goes through. He's like, I got really frustrated with how terrible quality of software is. And then he goes for 10 minutes and he documented for a week, just like everything that happened. And it was like 50 things or something. And he was just like, nothing works here. You know, like i open this window and it's off the screen and so i need to know that i need to window snap something but like someone that doesn't know that stuff they're just constantly restarting and that's we we accept it right like you know people know if it doesn't work just restart it and probably that'll that'll fix things like we've just gotten uh completely like desensitized to the quality of our software yeah that's a reason why you know
+在他做过的一个较大演讲中，有一个大约10分钟的闪电演讲，他在里面详细讲述了这些。他说，我对软件质量有多糟糕感到非常沮丧。然后他讲了10分钟，记录了一个星期的经历，就像所有发生的事情一样。大约有50件事左右。他当时就说，这里什么都行不通。你知道的，比如我打开这个窗口，它在屏幕外面，所以我需要知道我需要让窗口吸附，但是不懂这些的人就会不断重启，而这就是我们——我们接受了它，对吧？就像，你知道的，人们知道如果它不能工作就重启，可能这样就能解决问题——我们已经对软件的质量变得完全麻木了。是的，这就是为什么，你知道的
+
+54
+00:35:27.000 --> 00:36:00.000
+intel's effort around optane which was kind of you know promising technology it was like like like what if your ram were persistent right and what they discovered was nobody knows how to write software for persistent ram we assume that you can always just restart and clear things out. But if you're not saving things, if just everything just keeps running, what happens? And nobody knows how to write software in that environment. And so they found that people wouldn't utilize Optane, they would write software
+英特尔围绕Optane的努力——这曾是一种很有前途的技术，就像——如果你的RAM是持久的会怎么样？而他们发现的是，没有人知道如何为持久RAM编写软件。我们假设你总是可以随时重启并清理所有东西。但是如果你不保存数据，如果一切都在持续运行，会发生什么？没有人知道在这种环境下如何编写软件。所以他们发现人们不会利用Optane，他们写软件的方式
+
+55
+00:36:00.000 --> 00:36:47.000
+as they were writing software today. And so instead of having a slightly slower RAM, but a slightly faster SSD in one, the only way people used Optane was as an SSD, and it wasn't competitive in that space. So it's interesting, right? Our software has evolved in this environment and and we just take for granted that there's a you know a reset button we can just just like okay put everything back to at least some initial known state and we can start from there yeah i mean windows has that built i mean just just the other day you know windows auto restarts they give me a little warning but then i'll say i'll decide later and then i to decide. And then they just restart my computer. And, you know,
+依然和今天写软件的方式一样。因此，人们没有将稍微慢一点的RAM和稍微快一点的SSD合二为一，人们使用Optane的唯一方式就是把它当作一个SSD，它在这个领域并没有竞争力。所以这很有趣，对吧？我们的软件在这种环境下进化，我们认为理所当然的是有一个重置按钮，我们可以直接——就像，好吧，把一切恢复到至少某个初始的已知状态，然后我们可以从那里开始。是的，我的意思是Windows内置了这个——我的意思是，就在前几天，你知道的，Windows自动重启，他们给了我一个小警告，但我说我稍后决定，然后我忘了决定。然后他们就重启了我的计算机。而且，你知道的，
+
+56
+00:36:47.000 --> 00:37:29.000
+I lost some file. And like, it's like, that's why I hate Windows. It's just like, come on, like, let me not restart my computer if I don't want to. And they're like, No, no, no, we have to so you don't you don't get a say in this, you're gonna lose whatever notepad file that you had that doesn't have like autosave built into it, which is why basically everything other than notepad has autosave built into it. Because, basically everything other than notepad has autosave built into it because you know vs code you don't actually lose anything from your computer restarting because it happens so freaking often yeah mac does that and uh it's it's you can turn it off but it's like really freaking hard to get it turned off and keep it off and even if you turn it off there's still like critical updates where they will force a restart on you and it drives me nuts because if you have encryption turned on on your hard drive
+我丢失了一些文件。这就像，这就是我讨厌Windows的原因。就像，拜托，如果我不想重启我的计算机，就别让我重启。而他们却说，不，不，不，我们必须这样做，所以你没有发言权，你会失去你在记事本里写的所有文件，因为里面没有内置自动保存功能——这就是为什么基本上除了记事本之外的所有软件都内置了自动保存功能。因为，基本上除了记事本之外的所有软件都内置了自动保存功能，因为你知道VS Code，你的电脑重启后你实际上不会丢失任何东西，因为重启发生得太频繁了。是的，Mac也会那样，而且你可以把它关掉，但要把它关掉并一直保持关闭状态真的很难。而且即使你把它关掉了，仍然会有一些关键更新，它们会强制重启你的电脑，这把我气疯了，因为如果你在硬盘上开启了加密
+
+57
+00:37:29.000 --> 00:38:14.000
+then when the machinery starts you can't remote into it and so like all of you working from home and my machine in the office will have been forced restarted and it's like now i have to drive to the office to log back into my machine so that i can start remoting into it again it's like now i have to drive to the office to log back into my machine so that i can start remoting into it again it's like yeah so and apple's apple's answer to that is we'll turn off hard drive encryption i'm like how is that better it's like going into the doctor and saying this this hurts, doc. And they say, well, don't do that. It's not what I was hoping for. And with that, then, we will transition to, this was what, episode 160.
+那么当机器重启时，你就无法远程连接到它了。所以，比如你们所有在家办公的人，我在办公室的机器会被强制重启，现在我不得不开车去办公室重新登录我的机器，这样我才能再次开始远程连接它。这就好像，现在我不得不开车去办公室重新登录我的机器，这样我才能再次开始远程连接它。这就好像，是的，苹果对这事的回答是：我们将关闭硬盘加密。我就想，这怎么能算更好呢？这就像去看医生说，医生，这里疼。他们说，哦，那就别这样。这不是我所期望的。说到这里，我们将过渡到——这是什么来着，第160期节目。
+
+58
+00:38:14.000 --> 00:38:35.000
+We've now skipped ahead over Zach. Be sure to check these show notes either in your podcast app or at ADSPthepodcast.com for links to anything we mentioned in today's episode, as well as a link to the GitHub discussion where you can leave comments, thoughts, and questions. Thanks for listening. We hope you enjoyed and have a great day. Low quality, high quantity. That is the tagline of our podcast. It's not the tagline.
+我们现在跳过了扎克。请务必在您的播客应用中或访问ADSPthepodcast.com查看节目说明，获取我们在今天节目中提到的任何内容的链接，以及GitHub讨论区的链接，您可以在那里留下评论、想法和问题。感谢收听。希望您喜欢，祝您有美好的一天。低质量，高质量。这就是我们播客的标语。其实不是标语。
+
+59
+00:38:35.000 --> 00:38:40.000
+Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+我们的标语是带有信息 sprinkles（点缀）的混乱。本期节目还没有评论。点击文稿中的任意句子即可留下评论。

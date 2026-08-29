@@ -1,0 +1,246 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:25.000
+I have this idea for a talk that I might flesh out at some point. It's like, what is the most powerful algorithm in the STL? And just to give away the punchline, my conjecture is that it's standard find if. Really? So I think, yeah. I mean, he's not wrong because a find if is essentially just a reduction. And the correct answer is a reduction. I was like, there's no
+我有一个关于演讲的想法，可能在某个时候会将其完善。大致是这样的：STL 中最强大的算法是什么？直接剧透一下，我的推测是 standard find if。真的吗？所以我认为，是的。我的意思是，他并没有说错，因为 find if 本质上只是一种归约（reduction）。而正确的答案就是归约。当时我想，绝对
+
+2
+00:00:25.000 --> 00:01:15.000
+way Bryce's answer isn't stood reduced. Welcome to ADSP, the podcast episode 126 recorded on April 5th, 2023. My name is Connor. Today with my co-host, Bryce, we interview Tristan Brindle. This is part two of a three-part interview. And today, we talk about his library's flux and flow. So, okay. So at this point, it's worth mentioning, Barry Rizvin has this amazing talk. You've probably seen. I think he gave it a keynote at C++ Paris where he compares the iteration schemes of various languages. Rusty and C++, yeah.
+不可能布莱斯的答案不是 std::reduce。欢迎来到 ADSP 播客，第 126 期节目于 2023 年 4 月 5 日录制。我是康纳。今天我和我的联合主持人布莱斯一起采访特里斯坦·布林德尔（Tristan Brindle）。这是三部分采访的第二部分。今天，我们讨论他的库 flux 和 flow。所以，好吧。所以在这一点上，值得一提的是，巴里·里兹温（Barry Revzin）有一个非常精彩的演讲。你可能看过。我想他在 C++ 巴黎会议上做过一次主题演讲，其中他比较了各种语言的迭代方案。Rust 和 C++，是的。
+
+3
+00:01:15.000 --> 00:01:48.000
+Yeah, Rusty, C++. He also mentions like C Sharp and Java and Python and stuff. And it's an amazing talk. So if anybody's interested in this stuff, like really do go and watch this. I can't, I can't recommend it highly enough. But I, I, so I was kind of interested in like how, before Barry's talk, how, how do other languages do this? And I started writing a new library that was implementing Rust style iterators in C++. So for maybe people
+是的，Rust，C++。他还提到了 C#、Java、Python 之类的语言。这是一个非常精彩的演讲。所以如果有人对这些东西感兴趣，真的应该去看看。我怎么推荐都不为过。但是，我，我——所以我有种好奇，在巴里的演讲之前，其他语言是怎么做这个的？于是我开始编写一个新库，在 C++ 中实现 Rust 风格的迭代器。所以对于可能
+
+4
+00:01:48.000 --> 00:02:40.000
+who know C++ but don't know Rust, the Rust iteration scheme is really quite different to how it's done in C++. So what they do is they have this object called an iterator, and this iterator has a function called next. And what next does is it returns you an optional with the next value in the sequence right so you call next the first time it returns you the first object an optional containing the first object in the sequence call next again it returns you the second object in the sequence and so on until eventually the sequence is exhausted and that point it returns you an empty optional which tells you that the iteration is complete so it's an alternative way of doing iteration um there are pros and cons to it the pro being it's very very much simpler than the c plus plus model right um the downside is
+了解 C++ 但不了解 Rust 的人来说，Rust 的迭代方案与 C++ 中的做法有很大不同。他们的做法是，他们有一个叫做迭代器的对象，这个迭代器有一个叫 next 的函数。next 的作用是向你返回一个包含序列中下一个值的 optional。所以你第一次调用 next，它返回第一个对象，即包含序列中第一个对象的 optional；再次调用 next，它返回序列中的第二个对象，依此类推，直到最终序列耗尽。此时它会返回一个空的 optional，这告诉你迭代已经完成。所以这是进行迭代的另一种方式，嗯，它有利有弊。好处是它比 C++ 模型简单得多，非常非常简单，对吧？坏处是
+
+5
+00:02:40.000 --> 00:03:10.000
+that uh it's more limited it's not as powerful as what you can do with C++ where you can go all the way to random access. So I wrote this library, it's called- That's quite a big limitation, especially once you start thinking about wanting to have implementations of your algorithms that consume iterables that are optimized for parallelism and for vectorization,
+它更加受限，不如你在 C++ 中能做的那样强大，在 C++ 中你可以一路支持随机访问。所以我写了这个库，它叫做——这真是一个相当大的限制，特别是当你开始考虑想要实现那些针对并行性和向量化进行优化的、消费可迭代对象的算法时，
+
+6
+00:03:10.000 --> 00:03:50.000
+if you don't have a way to do random access, that's kind of a problem. Yeah, well, this was, so I'm absolutely by no means a Rust expert and i'm sure the rust people will say no no no you do it this way instead right so i don't i don't want to step on anybody's toes there must be some something that we're missing here is my guess yeah yeah um as i say not my not my not my my sort of field of expertise for how all this parallelism stuff is done in Rust. But for me, so I wrote this library.
+如果你没有办法做到随机访问，那这就是个问题了。是的，好吧，这是——所以绝对不是说我是 Rust 专家，我确信 Rust 社区的人会说“不不不，你应该这样而不是那样做”，所以我不希望踩到任何人的脚趾。我们肯定漏掉了某些东西，我猜是这样。是的，是的，嗯，正如我所说，这并不是我的专长领域，不知道 Rust 中所有这些并行性是如何完成的。但对于我来说，我写了这个库。
+
+7
+00:03:50.000 --> 00:04:22.000
+It's actually on GitHub. It's called Flow. It kind of does this Rust iteration scheme in C++, just kind of for my own, like, just for fun, really, just to kind of see how this was done. But I found this limitation of not being able to go all the way to random access, you know, this bothered me. So I was like, okay, is there a way we can extend the Rust iteration scheme, or Rust-like iteration scheme? It's actually used in a couple of other languages as well.
+它其实在 GitHub 上。它叫做 Flow。它在 C++ 中实现了这种 Rust 迭代方案，某种程度上纯粹是为了我自己的乐趣，真的，只是想看看这是怎么做的。但我发现这种无法一路支持随机访问的限制，你知道，这困扰着我。所以我当时想，好吧，有没有办法扩展 Rust 的迭代方案，或者类 Rust 的迭代方案？其实它在其他一些语言中也被使用着。
+
+8
+00:04:22.000 --> 00:05:08.000
+We can extend this to do something like Rust, something like random access. And it turns out that the way you actually implement these iterators in the Rust, or the way I implemented these, is you have like your iterator object, and it holds a cursor to the underlying sequence vector, let's say. So your cursor could be just an integer index. And every time someone calls next, you bump the index and you return the next element. So I was like, okay, well, what if we provided an API to expose these cursors to the user so that you could then move the cursor in arbitrary
+我们可以扩展它来做到类似 Rust、类似随机访问的事情。事实证明，你在 Rust 中实现这些迭代器的方式，或者我实现它们的方式是：你有一个迭代器对象，它持有指向底层序列（比方说向量）的游标（cursor）。所以你的游标可以只是一个整数索引。每次有人调用 next 时，你将索引递增并返回下一个元素。所以我当时想，好吧，如果我们提供一个 API 向用户公开这些游标，以便你可以根据需要对游标进行任意量的移动，从而实现随机访问，会怎么样呢？
+
+9
+00:05:08.000 --> 00:05:59.000
+amount as you need to for random access. And then I did some experiments with this and I was like, you know, this works. But actually, if you do this thing, if you expose these cursors um you know to the user and allow them to manipulate cursors you really don't need this dot next function at all you can do it all with cursors um so that was my starting point for this new library that um i've been working on called flux so i was like okay scrap everything I've done. I'm going to start again from the beginning and we're going to have this API based on cursors. So what is a cursor? So this is getting into Flux now. This is the new thing, right? What is a cursor? A cursor
+然后我对此做了一些实验，我想，你知道，这行得通。但实际上，如果你这样做——如果你把这些游标向用户公开，并允许他们操作游标——你根本就不需要这个 dot next 函数了，你可以完全用游标来做到这一切。所以这就是我一直在开发的这个名为 flux 的新库的起点。当时我想，好吧，我之前做的一切都废弃掉。我要从头开始，我们将拥有一个基于游标的 API。那么什么是游标？现在我们要进入 Flux 了。这是新东西，对吧？什么是游标？游标
+
+10
+00:05:59.000 --> 00:06:32.000
+is no more and no less than a position in a sequence, right? So the most general kind of cursor is just an integer index into an array, right? Cursors are a generalization of array indices. It's so funny that you say that because I've been using the same term for the same thing in this multidimensional indices library that I've been playing around with. I must have heard you say it before or something, because I recall hearing somebody
+不多不少，就是一个序列中的位置，对吧？所以最通用的游标就是数组中的整数索引，对吧？游标是对数组索引的泛化。你这么说真是有趣，因为我在自己一直在玩的一个多维索引库中，对同样的东西也一直在使用同一个术语。我以前一定听你说过或者类似的话，因为我记得听到过某人
+
+11
+00:06:32.000 --> 00:07:25.000
+use this terminology. I just didn't remember who. Well, I don't think I've talked about this. Maybe we were having a chat at a conference or or something but i can't remember talking about it before but um yeah so a curse is like a like a generalization uh of an index in the same way that an stl iterator is a generalization of an array pointer but really the key thing is that you can't independently manipulate curses so if you think about STL iterators, STL iterators are smart, right? STL iterators know how to increment themselves. They know how to dereference themselves. Cursors don't. So a cursor just represents a position in a sequence and nothing else. And if you want to increment the cursor, you have to say to the sequence, please will you increment this for
+使用过这个术语。我只是不记得是谁了。嗯，我不认为我谈论过这个。也许我们曾在会议上聊过天或者做过什么，但我记不清以前有没有谈过这个了。但是，嗯，是的，所以游标就像是一个索引的泛化，就像 STL 迭代器是数组指针的泛化一样。但真正关键的是，你不能独立操作游标。所以如果你想想 STL 迭代器，STL 迭代器是很聪明的，对吧？STL 迭代器知道如何自增，它们知道如何解引用自己。游标则不然。所以游标只代表序列中的一个位置，没有别的了。如果你想递增游标，你必须对序列说：“请帮我把这个递增一下好吗？”
+
+12
+00:07:25.000 --> 00:08:14.000
+me? If you want to access the element, if you want to like dereferencing for iterators, you have to say to the sequence, please will you give me the element at this position? And this doesn't seem like a very big change compared to iterators. But it turns out this has pretty far, and that's the core of Flux, right? That's the difference between Flux and Ranges. But it turns out this has pretty far reaching consequences. Number one is that it pretty dramatically improves safety, which is kind of a big deal at the moment, right? Because there are so many ways that you can accidentally stumble into undefined behavior when you're using iterators. Dereferencing a past the end iterator is undefined behavior. Incrementing past the
+如果你想访问元素，如果你想像对迭代器那样进行解引用，你必须对序列说：“请把这个位置的元素给我好吗？”这与迭代器相比似乎并不是一个很大的改变。但事实证明，这具有相当深远的影响——这就是 Flux 的核心，对吧？这就是 Flux 和 Ranges 之间的区别。但事实证明，这具有相当深远的影响。第一点是它戏剧性地显著提高了安全性，这在目前来说是个相当大的事情，对吧？因为在使用迭代器时，有太多方法会让你不小心陷入未定义行为（undefined behavior）。对越界的迭代器进行解引用是未定义行为。递增越过
+
+13
+00:08:14.000 --> 00:08:42.000
+end iterator is undefined behavior. Bidirectional sequence decrementing a begin iterator is undefined behavior, right? If you're holding onto an iterator and you change the, if it's vector and you change the underlying vector, you're gonna have, you can have a dangling iterator. Well, you can have dangling iterators because you're holding onto this iterator and the vector dies, but you still got the iterator. You know, there are many ways in which
+尾部的迭代器是未定义行为。双向序列在 begin 迭代器上进行递减是未定义行为，对吧？如果你一直持有迭代器，然后改变了——如果它是一个 vector，你改变了底层 vector，你就会遇到悬空迭代器（dangling iterator）。好吧，你可能会有悬空迭代器，因为你一直抓着这个迭代器不放，而 vector 已经消亡了，但你手里依然有迭代器。你知道，有许多种方法
+
+14
+00:08:42.000 --> 00:09:15.000
+you can stumble into undefined behavior this is much more difficult if a cursor just represents a position this you it's much more difficult to accidentally stumble into undefined behavior land right because to give you an example if the cursor let's just think of it as a as index. If you're holding onto an integer index and your vector goes out of scope, like there's no danger there because you can't do anything with the index without the original vector to like try and access it. Right.
+你会陷入未定义行为。如果游标仅仅代表一个位置，这就困难得多了。你很难不小心掉进未定义行为的深渊，对吧？举个例子，如果游标——我们把它想象成一个索引。如果你一直持有一个整数索引，而你的 vector 超出了作用域，那这里就没有危险，因为如果没有原始 vector 让你去尝试访问它，你就无法对这个索引做任何事情。对吧？
+
+15
+00:09:15.000 --> 00:09:42.000
+Right. So just immediately dangling your traces like return from functions, let's say, are no longer a problem like by design. We can also do, because we've always got the sequence object available, we can do cheap bounds checking. So this is something that is quite expensive to do with iterators because it means iterators need to have a reference to the parent array
+对。所以像从函数返回这类会立即导致悬空迭代器的问题，在设计上就不再是问题了。我们还可以做到——因为我们总是能获得序列对象，所以我们可以进行廉价的边界检查（bounds checking）。这是使用迭代器时开销相当大的事情，因为这意味着迭代器需要持有指向父数组
+
+16
+00:09:42.000 --> 00:10:16.000
+or to the parent range. Whereas with influx, we do bounds checking universally. And unless you specifically request unchecked access, we will check and make sure that your cursor is in bounds before we do the dereference. And otherwise, well, depends on the configuration, what happens either we crash or we throw an exception. But so we've got bounds checked access. So this is like, I think, I mean,
+或父范围（range）的引用。而在 Flux 中，我们普遍进行边界检查。除非你专门请求未经检查的访问，否则我们会在进行解引用之前检查并确保你的游标在边界之内。否则，嗯，这取决于配置，结果要么是我们崩溃，要么是抛出异常。所以我们拥有了经过边界检查的访问。所以这就像是，我认为，对
+
+17
+00:10:16.000 --> 00:10:53.000
+for me, I think that's really important. It's something that languages like Swift and Rust and many languages do everywhere. So we've got bounce checking, we've got no dangling. There are various other things that turn out to be better. Like in C++, we have to worry about iterators versus const iterators, which is, you know, just kind of a burden on the programmer to, particularly if you're implementing ranges,
+我来说，我认为这真的很重要。这是像 Swift 和 Rust 以及许多语言在各个地方都在做的事情。所以我们有了边界检查，我们没有悬空指针。事实证明还有其他各种好处更好。比如在 C++ 中，我们不得不担心迭代器与常量迭代器（const iterators）的区别，这（你知道的）对程序员来说只是一种负担，特别是如果你正在实现 range 的话，
+
+18
+00:10:53.000 --> 00:11:17.000
+you have to worry about bad iterators and const iterators, and they're not quite the same thing, but you have to be able to convert from one to the other, and it's just a pain. Whereas with cursors, because a cursor is, you know, you can think of it as just being like an index, you can have the same index, whether you have a const vector or a non-const vector, it doesn't matter, right? We make the decision about const or non-const access
+你必须担心普通迭代器和常量迭代器，它们不完全是一回事，但你必须能够在它们之间进行转换，这简直是个痛苦。而在游标方面，由于游标（你知道的）可以被认为就像一个索引一样，无论你拥有的是常量 vector 还是非常量 vector，你都可以拥有相同的索引，这无关紧要，对吧？我们根据你传入的序列来决定是常量访问还是非常量访问。
+
+19
+00:11:17.000 --> 00:12:08.000
+based on the sequence that you pass in. There are a few other benefits as well when you get to writing adapters. So when you are actually implementing range adapters, things like map, things like transform, the way that the iterators for these things work is that you have to wrap the underlying iterator. You see what I mean. So like, in general, anyway, if you think about the filter, the iterator for a filter view, it needs to contain the iterator for the underlying range, but also have a pointer back to the filter view object so that it can access the predicate.
+当你开始编写适配器时，还有一些其他的好处。因此，当你实际实现 range 适配器（比如 map、transform）时，这些东西的迭代器的工作方式是你必须包装底层的迭代器。你知道我的意思。所以，总而言之，如果你考虑 filter，filter 视图的迭代器需要包含底层范围的迭代器，但同时也必须有一个指向 filter 视图对象的反向指针，以便它可以访问谓词（predicate）。
+
+20
+00:12:08.000 --> 00:12:42.000
+And so when you build up one of these ranges pipelines, your iterators, the size of your iterators grows. Like for each added stage of your pipeline, in general, your iterator object gets bigger and bigger. And since C++ algorithms, we assume that iterator is really cheap to copy. You know, it's not a big deal, but it, you know, it's not ideal. Whereas in the Flux model with cursors, there is less need to wrap these cursor objects and have them get bigger and bigger.
+因此，当你构建其中一个 ranges 管道时，你的迭代器——迭代器的大小会增长。对于管道的每个新增阶段，通常来说，你的迭代器对象会变得越来越大。由于 C++ 算法假定迭代器复制起来非常廉价（你知道的，这不算什么大事），但它（你知道的）并不是最理想的。而在采用游标的 Flux 模型中，就不那么需要包装这些游标对象并让它们变得越来越大了。
+
+21
+00:12:42.000 --> 00:13:37.000
+So that I think is good. And also, what's also quite nice about this is we can provide compatibility with ranges code because if we need to form an iterator, we can form a C++20 compatible iterator by having effectively like a pointer to a sequence and a cursor as a pair and then provide all of the, you know, whatever it is, like 20 odd functions you've got to write for an iterator. So we can be compatible, like in some sense this is even more fundamental than iter iterators because we can we can provide compatibility with existing with existing iterations, so I'm very excited about this. I think it's I think it's pretty good
+所以我认为这很好。而且，这同样非常棒的一点是，我们可以提供与 ranges 代码的兼容性。因为如果我们真的需要生成一个迭代器，我们可以通过有效地将指向序列的指针和游标作为一个对（pair）组合起来，从而生成一个 C++20 兼容的迭代器，然后提供所有——你知道的，诸如此类的东西——大概 20 个你必须为迭代器编写的函数。所以我们可以保持兼容，在某种意义上，这甚至比迭代器更加基础，因为我们可以提供与现有迭代的兼容性，所以我对此外兴奋。我认为这相当不错
+
+22
+00:13:37.000 --> 00:14:11.000
+This is I've never talked about this before anywhere. I've like tease it on Twitter a couple of times with like Hey, look at this you can do this with my code doesn't it look awesome but i've never actually talked and talked about this uh anywhere so um yeah announcing to the world well like first part of this episode will be like uh you know nano nano ranges implementing nano ranges and how you can too and then the the second part will be uh flux and then in parentheses and Flow, but mostly above Flux. Yeah, the other thing to mention,
+这是我以前从未在任何地方谈论过的事情。我曾在推特上暗示过好几次，比如“嘿，看这个，你可以用我的代码做到这一点，难道不是很棒吗？”但我实际上从未在任何地方真正讨论过这个。所以，嗯，向全世界宣布——好吧，这一集的第一部分将像是在讲解 nano ranges、如何实现 nano ranges 以及你如何也能做到；然后第二部分将是 flux，括号里还有 flow，但主要还是关于 flux。对，另外要提到的一件事，
+
+23
+00:14:11.000 --> 00:14:44.000
+and I didn't know this one. I didn't know this when I started out, but we were talking about Swift before. It turns out that the Swift collection API is pretty much the same as what I'm doing in Flux. So I didn't know this when I started, right? Because I don't really know much about Swift at all. I only found this out later. So I mentioned before, Swift has like these two different protocols, but the collection protocol is this same abstraction of the idea of an index. They use different terminology,
+我以前并不知道这一点。当我刚开始的时候我并不知道，但我们之前谈到了 Swift。事实证明，Swift 集合 API 和我在 Flux 中做的事情几乎是一样的。当我开始的时候我并不知道这一点，对吧？因为我其实对 Swift 了解不多。我后来才发现这一点。正如我之前提到的，Swift 有这两种不同的协议，但集合协议是对索引概念的相同抽象。他们使用不同的术语，
+
+24
+00:14:44.000 --> 00:15:09.000
+they use different function names, but the kind of the fundamental design is the same abstraction of the idea of an index they use different terminology they use different function names but the kind of the fundamental design is the same which actually gives me quite a lot of confidence that i'm i'm going in the right direction if you know what i mean like because swift is a safe language in all the same ways that russ does safe language and if it works for them well you know there's a good chance it'll work for us and what i've heard too uh dave abrahams is you know he's a pretty pretty novice work for us. And what I've heard too, uh, Dave Abrahams is, you know, he's a pretty, pretty novice programmer that doesn't have too many years of experience. Right.
+他们使用不同的函数名，但基本设计是相同的，即对索引概念的相同抽象。他们使用不同的术语，他们使用不同的函数名，但基本设计是相同的，这其实让我对我正在走正确的方向充满了信心，如果你明白我的意思的话——因为 Swift 是一门安全的语言，在 Rust 成为安全语言的所有相同方面它也是一门安全的语言，如果它对他们管用，嗯，你知道的，它对我们管用的可能性也很大。而且我也听说过，戴夫·亚伯拉罕斯（Dave Abrahams）你知道的，他是一个经验相当不多的新手程序员，并没有太多的经验，对吧。
+
+25
+00:15:09.000 --> 00:15:16.000
+Uh, yeah. We'll just see. Um, wow. That's, uh, that's quite interesting.
+嗯，对。我们拭目以待。嗯，哇。这，呃，这相当有趣。
+
+26
+00:15:16.000 --> 00:15:23.000
+Wow. So obviously we'll definitely link to this and, and I mean, uh, a couple, I mean, we never got back to the tweet of why you ended up here, but the second tweet.
+哇。所以很显然我们一定会把这个链接放出来，而且，我的意思是，呃，有几个，我的意思是，我们从来没有回到关于你为什么会来到这里的那条推文，而是第二条推文。
+
+27
+00:15:23.000 --> 00:15:54.000
+Oh, um, yeah. Well, actually, did I link before I move on? I just got to say, I think, I think, we never got back to the tweet of why you ended up here, but the second tweet. Oh, yeah. Well, actually, did I link? Before I move on, I just got to say, I think I think you're you're on the right track with this with this model. And I think that it opens up a lot of things, especially related to loop optimization that are challenging with the iterator model. And I think, especially like in numeric, in computational science spaces, this cursor model is potentially a much better fit.
+哦，嗯，对。嗯，事实上，在我继续之前，我有提到链接吗？我只想说，我觉得，我觉得，我们从没回到关于你为什么会来到这里的那条推文，而是第二条推文。哦，对。嗯，事实上，我有没有给链接？在我继续之前，我只想说，我觉得你对这个模型的思路是正确的。而且我认为这开启了很多可能性，尤其是与循环优化相关的、在迭代器模型中具有挑战性的方面。并且我认为，特别是像在数值计算、计算科学领域，这个光标（cursor）模型可能是一个更好的契合点。
+
+28
+00:15:54.000 --> 00:16:38.000
+Yeah, yeah. So that's actually one thing I didn't mention is that we have an extra customization point that is not in ranges uh but we but uh in flux we have this customization point for doing internal iteration oh that's interesting that's that's similar to what i've been messing around with in uh like yeah this episode's not out but the the one unreleased episode is basically bright i mean all the listeners have heard it now they're listening to this one because it was like two episodes ago now but it's bryce trying to convince me that like filter is broken for the purposes of parallelization and then coming up with like a new filter and then i'm like my point is bryce that's not a filter that's a transform but anyways did we talk in that episode about that my my spaces idea
+对，对。所以实际上有一点我没有提到，那就是我们有一个额外的定制点，它不在 ranges 中，但是我们，但是呃，在 flux 中我们有这个用于进行内部迭代的定制点。哦，那很有趣，那跟我一直在瞎搞的东西有点像，呃，就像，对，这一期还没播，但那个未播出的那一期基本上就是，我的意思是，所有听众现在都已经听过这期了，因为这已经是两期之前的事了，但那就是布莱斯（Bryce）试图说服我，比如 filter 为了并行化的目的已经坏掉了，然后想出了一个新的 filter，然后我就说，我的意思是，布莱斯，那不是一个 filter，那是一个 transform。不过话说回来，我们在那一期里聊过我那个“空间”的想法吗？
+
+29
+00:16:38.000 --> 00:17:19.000
+which is which is solved it tackles this problem of internal iteration you did end up screen sharing because i was asking for a more motivating example yeah because your example i said was unmotivating and then we got into an argument you were like that's your problem not my problem and i was like it seems like a you problem and then you showed me a motivating example and then i said oh i can tell me how your model for internal iteration works okay Okay, so we have a function that it's called, I called it for each while, which I don't necessarily think that's a great name. But the idea is that a sequence has this fundamental
+也就是解决了、处理了内部迭代这个问题的那个。你最后确实共享屏幕了，因为我在要求一个更有说服力的例子。对，因为你那个例子我说是缺乏说服力的，然后我们就吵起来了，你说“那是你的问题，不是我的问题”，然后我说“这看起来像是你的问题”，接着你给我看了一个有说服力的例子，然后我说“哦，能告诉我你的内部迭代模型是怎么运作的吗？”。好的，所以我们有一个函数，它被称为——我把它叫做 for each while，我觉得这不一定是个好名字。但这个想法是，一个序列有这样一个根本性的
+
+30
+00:17:19.000 --> 00:17:49.000
+customization point that's called for each while, and you pass it a predicate. And you say uh iterate all of iterate over the sequence in the way best way that you know how iterate over every element until the predicate returns false and at that point it returns us the cursor uh for the the element that for which the predicate returned false and it turns out that for things like filter uh and map and things like that, and really an enormous number of these adapters,
+定制点，叫做 for each while，你传给它一个谓词（predicate）。然后你说，呃，以你所知的最佳方式迭代序列中的所有内容，迭代每一个元素，直到谓词返回 false，而在那个点上，它会为我们返回一个光标，指向那个使谓词返回 false 的元素。事实证明，对于像 filter 和 map 之类的东西，以及大量这类适配器，
+
+31
+00:17:49.000 --> 00:18:13.000
+you can do internal iteration in a way that is more efficient than just stepping through and doing increment, dereference, increment, dereference, you know, et cetera, et cetera. And this makes a real difference when it comes to, although the algorithmic complexity is the same, it makes a real difference in terms of the generated code. Like the compiler can see through this. This was literally our last episode.
+你可以用一种比单纯步进并执行自增、解引用、自增、解引用（诸如此类）更有效的方式来进行内部迭代。当涉及到生成的代码时，这会产生真正的影响，尽管算法复杂度是一样的。比如编译器可以看透这一点。这简直就是我们的上一期节目。
+
+32
+00:18:13.000 --> 00:18:38.000
+We're two episodes now for the listener. So for the benefit of the listener, I've heard part one of the discussion on views filter. And then you left me hanging, right? You were like, we're just going to go and share the screen. And that's the end of the discussion on views filter. And then you left me hanging, right? You were like, we're just going to go and share the screen and that's the end of the episode. So I have not heard the conclusion of that, but yeah. So in particular, one of the,
+对听众来说，现在已经是两期之后了。所以为了听众的福利，我听了关于 views filter 讨论的第一部分。然后你把我晾在一边，对吧？你就说：“我们要去共享屏幕了”，然后对 views filter 的讨论就到此为止了。然后你把我晾在一边，对吧？你就说：“我们要去共享屏幕了”，然后那一集就结束了。所以我还没有听到那个讨论的结局，但是，是的。所以特别地，其中的一个，
+
+33
+00:18:38.000 --> 00:19:13.000
+I don't want to call it a problem, but one of the things that you have to bear in mind with C++ ranges, and this is true of Flux as well, and Barry talks about this in this fantastic talk, is when you have transform and then filter, then you have this issue of double dereference. Because when you're filtering, you have to see whether the element matches the filter. You do that in the increment operation. And so that requires dereferencing the underlying iterator. And then when the user comes to dereference your filter iterator, you have to like, again,
+我不想称之为问题，但你使用 C++ ranges 时必须牢记的事情之一——flux 也是如此，巴里（Barry）在他那场精彩的演讲中也谈到了这一点——就是当你有了 transform 然后又是 filter 时，你就会遇到双重解引用的问题。因为当你进行过滤时，你必须查看该元素是否匹配过滤器。你在自增操作中完成这一步。所以这需要对底层迭代器进行解引用。然后当用户来对你的 filter 迭代器进行解引用时，你又得，再次
+
+34
+00:19:13.000 --> 00:19:42.000
+dereference the underlying iterator. So you get this double dereference happening. It doesn't occur in the Rust model, for example, but there are other equivalent problems with the Rust model. But it turns out when you do internal iteration, you don't need to do this double D reference, right? So right away, this is a tremendous benefit. And there are a huge number of algorithms
+对底层迭代器进行解引用。所以你会发生这种双重解引用。例如，在 Rust 模型中不会发生这种情况，但 Rust 模型有其他等效的问题。但事实证明，当你进行内部迭代时，你不需要进行双重解引用，对吧？所以马上，这是一个巨大的好处。而且有大量的算法
+
+35
+00:19:42.000 --> 00:20:13.000
+that can be written in terms of internal iteration. I have this idea for a talk that I might flesh out at some point. It's like, what is the most powerful algorithm in the STL? And just to give away the punchlines, my conjecture is that it's standard findif. Really? So I think, yeah. I mean, he's not wrong because a find if is essentially just a reduction and the correct the correct answer is a reduction i was like there's no way
+可以用内部迭代来编写。我有一个关于演讲的想法，我可能在某个时候会把它充实起来。就是，STL 中最强大的算法是什么？剧透一下，我的推测是 std::find_if。真的吗？所以我想，是的。我的意思是，他说得没错，因为 find_if 本质上只是一种规约（reduction），而正确的、正确的答案是规约。我当时想，绝对不可能
+
+36
+00:20:13.000 --> 00:20:48.000
+bryce's answer isn't stood reduce or or stood accumulator well okay so so um ben dean has this has a great talk where he did accumulate's going to accumulate an algorithmic empire. Yes, yes. And he talks about how all the things you can write in terms of standard accumulates, which is a funny way of spelling fold. But it sounds like you can write accumulate in terms of find if. But find if is just a funny way of spelling fold as well.
+布莱斯的答案不是 std::reduce 或 std::accumulate。好吧，所以，嗯……本·迪恩（Ben Dean）有一个很棒的演讲，他讲了 accumulate 要建立一个算法帝国的历程。是的，是的。他谈到了所有你可以用 std::accumulate（这是 fold 的一种滑稽拼写方式）来编写的东西。但听起来你可以用 find_if 来编写 accumulate。但 find_if 也是 fold 的一种滑稽拼写方式。
+
+37
+00:20:48.000 --> 00:21:07.000
+Well, yes. I guess they're equivalent. It depends if you're happy to have a stateful thing that you pass to. Wait, wait, wait. You're saying you can implement accumulate in terms of find if or find if in terms of accumulate? I think you can do either. Well, what was first you have to have some way of terminating
+嗯，是的。我想它们是等价的。这取决于你是否乐意传递一个有状态的东西。等等，等等，等等。你是说你可以用 find_if 来实现 accumulate，还是用 accumulate 来实现 find_if？我想你两个都能做到。好吧，首先你必须有一种方法来终止
+
+38
+00:21:07.000 --> 00:21:22.000
+you have to have some way of terminating the iteration early that's the key right so that's what find if does yeah well okay so we could have a whole discussion here now about you're coming back again Tristan and we're going to have a find if versus the advantages and disadvantages
+你必须有一种方法来提早终止迭代，这才是关键，对吧？所以这正是 find_if 所做的事。是的，好吧——所以我们现在可以就在这里进行一场大讨论，关于你又回来了，特里斯坦（Tristan），我们要讨论 find_if 与
+
+39
+00:21:22.000 --> 00:22:01.000
+of having a find if that is required to terminate early so but what what was it that you initially said though what do you said that you can implement accumulate in terms of find if because that one seems easier than the other way around if the other way around is even possible that's so that is what uh i do in in flux because i'm not worried about parallelism which um you know this is all just uh are you suggesting that it's harder to implement find if in terms of accumulate yes i think you just said that backwards no why and why is the what what is the number one reason that it's trickier and you should know this because i know you've tried this
+要求提早终止的 find_if 的优缺点。那么，但你最初说的是什么呢？你不是说你可以用 find_if 来实现 accumulate 吗？因为相比于反过来（如果反过来甚至可能的话），那个似乎更容易一些。所以这就是我在 flux 中所做的，因为我不担心并行性，嗯……你知道，这全都是……你是说用 accumulate 来实现 find_if 更难吗？是的，我想你刚才说反了。不，为什么？为什么这是最棘手的第一大原因？你应该知道这一点，因为我知道你尝试过这个
+
+40
+00:22:01.000 --> 00:22:45.000
+and you literally dm me on twitter how do you do this thing to get around this i don't know one returns an iterator and one returns a value and trying to implement uh algorithms that i don't care about i don't i'm not interested in the yeah i'm not interested in the particular in the particulars of the interface my my point is that we're we're talking about these algorithms in the abstract i think when we were spelling out std colon colon find if instead colon colon accumulate we were being pretty specific right but like we will we'll table this because this definitely could be like a whole 60 minute discussion but so what you initially said was that implementing accumulate in terms of find if is basically what you do in flux and it is your
+并且你还在推特上直接发私信问我：“怎么做这个东西来绕过这个？”我不知道，一个返回迭代器，另一个返回值，而且试图实现……我不关心那些算法，我对……是的，我不对接口的具体细节感兴趣。我的意思是，我们在抽象地讨论这些算法。我想当我们把 std::colon::find_if 写成 std::colon::accumulate 时，我们已经相当具体了，对吧？但我们会把这个搁置，因为这绝对可以成为一个长达 60 分钟的完整讨论。但你最初说的是，用 find_if 实现 accumulate 基本上就是你在 flux 中所做的，而且你的
+
+41
+00:22:45.000 --> 00:23:32.000
+opinion that because find if then therefore because the in the hierarchy of what is built on top of what because accumulate is a child of find if find if is the most basically uh important or fundamental algorithm that everything else is built on top of that is my conjecture until bryce convinces me otherwise yes so just about every algorithm just about a lot of algorithms that operate on a single that the boil down to some sort of reduce operation or things like uh all or any and none and all of those um you can you can write in terms of find if. So if you can do a find if more efficiently, for example, by using internal iteration,
+观点是，因为 find_if，因此，在什么建立在什么之上的层级中，因为 accumulate 是 find_if 的子集，所以 find_if 基本上是最重要或最基础的算法，其他一切都是建立在它之上的。这就是我的推测，直到布莱斯说服我改变看法。是的，所以几乎每一个算法，几乎大量对单个对象进行操作的算法，最终都归结为某种规约操作，或者像 all、any、none 以及所有这些——
+
+42
+00:23:32.000 --> 00:23:59.000
+then that has tremendous benefits in terms of- Well, I mean, in serial, you always will want to have a specialized version of a find if, because you want to do a specialized version of a Findif because you want to do it in early termination. But in parallel, the way that you implement a reduction is to just do it with a – in parallel, the way that you implement a Findif is just to do a reduction, at least on something like a GPU.
+你都可以用 find_if 来编写。因此，如果你能更高效地执行 find_if，例如通过使用内部迭代，那么这在以下方面有巨大的好处——嗯，我的意思是，在串行中，你总是会想要有一个定制版本的 find_if，因为你想做一个定制版本的 find_if，因为你想进行提早终止。但在并行中，你实现规约的方式就是用一个——在并行中，你实现 find_if 的方式就是做一个规约，至少在像 GPU 这样的设备上是这样的。
+
+43
+00:23:59.000 --> 00:24:42.000
+Yeah, for sure. I mean, it's not my field of expertise, but, yeah. One day, perhaps, I'll look at a parallel version of Flux, but many years from now, probably. I need to get the serial version working first. So what's interesting is that you probably, I'm not sure if you've even seen, I think you have seen the talk, but at the end of my intuition, algorithm intuition i present this table and i present find if and accumulate as like two of the most important but the the distinguishing difference is that accumulate is a reduction that carries state with it and a find if yeah is a reduction that does not
+对，当然。我的意思是，这不是我的专业领域，但，是的。也许有一天，我会研究 flux 的并行版本，但可能要很多年以后。我需要先把串行版本搞定。有趣的是，你可能，我不确定你是否看过，我想你看过那个演讲，但在我的直觉，算法直觉结束时，我展示了这张表，我把 find_if 和 accumulate 作为最重要的两个算法展示出来，但显著的区别在于 accumulate 是一个带有状态的规约，而 find_if 则是
+
+44
+00:24:42.000 --> 00:25:00.000
+carry state with it and so that what do you do for that then? Do you have like a- So, okay, so you're absolutely right. And in this standard model, you're not actually allowed to pass the, I can't remember the exact term. Anyway, you're not allowed to pass a stateful thing to find if.
+一个不带状态的规约。那么对于那个你该怎么做呢？你是不是有一个——所以，好吧，你说得绝对没错。在标准模型中，实际上不允许你传递，我不记得确切的术语了。总之，不允许你把一个有状态的东西传给 find_if。
+
+45
+00:25:00.000 --> 00:25:47.000
+So we have to slightly, for influx, we slightly weaken this requirement to allow you to pass. He's doing the hand wavy thing too. He's doing it in flux though. We were talking about the standard library. I understand, but that was a different conversation than the conversation we were having there. Yeah, so basically all of the functional objects that you ever pass to, almost all of the functional objects you pass to standard library algorithms have this requirement can't give you, however many times you call them, they have to give you the same answer.
+所以我们必须稍微，对于 flux，我们稍微放宽了这个要求，允许你传递。他又在做手势了。他在 flux 里这么做。我们在谈论标准库。我明白，但那和我们当时正在进行的对话是不同的对话。是的，所以基本上你传给所有的那些函数对象，你传给标准库算法的几乎所有的函数对象都有这个要求：无论你调用它们多少次，它们都必须给你相同的答案。
+
+46
+00:25:47.000 --> 00:26:06.000
+If we slightly weaken that, or not slightly, if we weaken that, then you're allowed to pass a stateful thing into this. That's why I call it for each while and not find if, because it's more akin to for each than the stricter requirements that are on find if.
+如果我们稍微放宽这一点，或者说不只是稍微，如果我们放宽这一点，那么你就可以把一个有状态的东西传进去。这就是为什么我把它叫做 for each while 而不是 find_if，因为它比对 find_if 的更严格要求更类似于 for each。
+
+47
+00:26:06.000 --> 00:27:17.000
+Oh, so this weakened find if is what is for each while. Yeah, exactly. And if someone can come up with a better name than for each while, then let me know. Naming is not something I'm good good at you know what's great at naming chat gpt uh no don't don't don't get me started on uh on large language bottles because i've had a i've drunk the kool-aid in the past week yeah maybe a whole separate episode yeah well we'll table that as well but uh yeah, for each while... this is my multi-dimensional iteration thing, which is that you have this notion of a space, which is essentially just a collection of ranges. And then you have these space-aware algorithms
+哦，所以这个放宽的 find_if 就是 for each while。对，完全正确。如果有人能想出一个比 for each while 更好的名字，请告诉我。命名不是我擅长的。你知道什么擅长命名吗？ChatGPT。不，别，别让我开始谈论大语言模型，因为我在过去的一周里已经被洗脑了。好吧，也许这可以单独成为一期节目。好吧，我们也会把这个搁置，不过，是的，for each while……这就是我的多维迭代东西，也就是你拥有一个“空间”的概念，它本质上只是一组 ranges 的集合。然后你有这些感知空间的算法
+
+48
+00:27:17.000 --> 00:28:25.000
+that recursively unpack them. And one of the key insights that I had was that each inner loop needs to have the value of the induction variable at the outer loop. So, you know, if you have a nested loop of, you know, k, where you iterate over k, where you, like the first for loop is a for loop over some thing, and it gives you, element K and the innermost for loop is an element J. When you call this space thing, when you extract the range from the space thing in the inner loop, you have to give it the value of whatever element you're at in the outer loop. And that lets you incrementally build up your position as you go. I did a very, very poor job of explaining that, but they're able to look at code. I'm getting like eerie, like just remembering university lectures about tensors and stuff.
+它们递归地解包这些 ranges。我得到的关键见解之一是，每个内循环都需要有外循环中归纳变量的值。所以，你知道，如果你有一个嵌套循环，比如 k，你迭代 k，就像第一个 for loop 是对某个东西的 for loop，它给你元素 K，而最内层的 for loop 是元素 J。当你调用这个空间东西时，当你在内循环中从空间东西中提取 range 时，你必须提供你在外循环中所处元素的任何值。这使你能够在行进过程中递增地建立你的位置。我把这个解释得非常非常糟糕，但他们能够看代码。我有一种诡异的感觉，就像记起了大学里关于张量之类的讲座。
+
+49
+00:28:25.000 --> 00:28:30.000
+And yeah, horrible flashbacks to things I didn't really understand at the time. Be sure to check the show notes either in your podcast app or at ADSP, the podcast.com for links to any of the things that we talked about in today's episode, as well as a link to a GitHub discussion where you can leave comments, questions or thoughts that you have on this episode. Thanks for listening. We hope you enjoyed and have a great day. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+还有，对以前没真正搞懂的东西的恐怖回忆。请务必查看你的播客应用中或访问 ADSPthepodcast.com 上的节目shownotes，获取我们在今天节目中讨论的任何事物的链接，以及一个 GitHub 讨论的链接，你可以在那里留下你对本期节目的评论、问题或想法。感谢收听。我们希望你喜欢并度过美好的一天。本期节目暂无评论。点击文稿中的任何句子即可留下评论。

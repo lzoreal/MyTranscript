@@ -1,0 +1,306 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:36.000
+Wait, weren't you a ninth grader? Yeah. Okay. I don't know. I think of like, you know, a young kid wants to cut up frogs. I'm thinking like eight. I'm thinking like eight. Welcome to ADSP, the podcast episode 118 recorded on February 16th, 2023. My name is Connor and today with my co-host Bryce, we interview Zach Lane.
+等一下，你以前不是个九年级学生吗？是的。好吧。我不知道。我觉得像，你知道的，一个小屁孩想把青蛙切碎。我觉得像八岁。我觉得像八岁。欢迎收听 ADSP 播客第 118 期，录制于 2023 年 2 月 16 日。我是康纳（Connor），今天我和我的共同主持布莱斯（Bryce）一起采访扎克·莱恩（Zach Lane）。
+
+2
+00:00:36.000 --> 00:01:18.000
+This is part two of a probably four-part interview series. If you missed part one, check the link in the description for episode 117. We talk about C++ allocators and lots more. Well, speaking of strong opinions that you hold, you are, I think, famously one of the people on the committee who has very low tolerance for allocators. Yes. What do you have against allocators? I want to create a scenario in which allocators are just asleep in their bed and then they smell smoke and the allocators try to get out of the house, but I've locked them all with padlocks on the outside. The allocators die in fire. That's what I want.
+这是可能分为四部分的采访系列的第二部分。如果你错过了第一部分，请查看第 117 期的链接。我们讨论了 C++ 分配器以及更多内容。嗯，说到你坚定的观点，你被公认为委员会中对分配器容忍度极低的人之一。是的。你对分配器有什么意见？我想创造这样一个场景：分配器正睡在床上，然后他们闻到了烟味，分配器试图逃离房子，但我用挂锁把它们从外面锁上了。分配器在大火中丧生。这就是我想要的。
+
+3
+00:01:18.000 --> 00:02:03.000
+I'm not going to say they should die slowly. I want it to be quick, but I want it to be painful. I just don't like allocators. I hate them. So to me, the killer argument against allocators is just think of vector, like the simplest type that we have that allocates memory, right? So a vector at a high-level abstraction, a vector is a thing that manages the storage of heap-allocated buffer of stuff, okay? Heap-alloc allocated array of t um and you can or this is not actually allowed with with the typical allocator um people have tried to change the allocator model so that you can do this and the this i'm thinking of is uh make it
+我不会说它们应该慢慢死去。我希望它快一点，但我希望它是痛苦的。我只是不喜欢分配器。我讨厌它们。所以对我来说，反对分配器的致命论点就是想想 vector，就像我们拥有的分配内存的最简单类型一样，对吧？所以一个 vector 在高层抽象上，vector 是一个管理堆分配的缓冲区存储的东西，好吧？堆分配的 t 数组，嗯，你可以，或者用典型的分配器实际上不允许这样做，人们试图改变分配器模型，以便你可以做到这一点，而我想到的这个是，呃，让它
+
+4
+00:02:03.000 --> 00:02:28.000
+where you can substitute in an allocator and basically you get a small vector, right? Like it's got a small buffer optimization and then it goes to the heap. Or worse yet, you just drop in an allocator and now it's a static vector. So all of its allocations happen in a fixed size buffer. If you exceed that, it's either UB or you get an exception. There's different schools of thought on what to do there. But the idea is it never allocates, right? But it gives the same vector interface, right? That's incredibly useful.
+变成你可以替换分配器，基本上你得到了一个小 vector，对吧？就像它有一个小缓冲区优化，然后它去堆上。或者更糟糕的是，你直接放入一个分配器，现在它是一个静态 vector。所以它的所有分配都发生在一个固定大小的缓冲区中。如果你超过了这个大小，要么是未定义行为（UB），要么你会得到一个异常。关于在那里做什么有不同的思想流派。但这个想法是它从不分配，对吧？但它提供了相同的 vector 接口，对吧？这非常有用。
+
+5
+00:02:28.000 --> 00:03:11.000
+The problem is when you do it with an allocator, you've already lost before you've started. And the reason is that if you implement vector, you will find that the way you do things when you reallocate is completely different based on whether you may or may not be going to the heap, you never go to the heap, or you always go to the heap. So adding a new element, the code looks completely different when you have to resize the array, right? And the problem with that is that if you just substitute in the allocator, you cannot make the code change in something like pushback or insert. It's fixed. It only works a certain way. Now, what you could do is you could write the vector
+问题是，当你用分配器这样做时，你在开始之前就已经输了。原因在于，如果你实现 vector，你会发现你重新分配时做事情的方式完全不同，这取决于你可能去也可能不去堆、从不去堆、或者总是去堆。所以添加一个新元素时，当你必须调整数组大小时，代码看起来完全不同，对吧？这里的问题是，如果你只是替换分配器，你无法在 pushback 或 insert 之类的东西中改变代码。它是固定的。它只能以某种特定的方式工作。现在，你能做的是你可以编写 vector
+
+6
+00:03:11.000 --> 00:03:37.000
+where it knows about all these possible styles of allocation, appreciates them as alternatives, and there's some kind of static thing about the allocator model where it can detect, oh, I'm a thing that never allocates, or I'm a thing that only allocates, or I'm a thing that might allocate. And then you can have this really complicated code for what vector does. I think a better alternative is to say we have three flavors of vector. We have the three flavors that do those things, and they never deal with an allocator.
+它了解所有这些可能的分配风格，将它们视为替代方案，并且分配器模型有一些静态的东西，它可以检测到，哦，我是一个从不分配的东西，或者我是一个只分配的东西，或者我是一个可能会分配的东西。然后你可以为 vector 的行为编写这段非常复杂的代码。我认为一个更好的替代方案是说我们有三种风格的 vector。我们有做这些事情的三种风格，它们从不处理分配器。
+
+7
+00:03:37.000 --> 00:03:49.000
+And if you want the old allocator stuff, use std vector, and we have the std2 vector that does the right thing, right? Which is it just allocates. That's it. Boom. Use the new, right? Her is it just allocates. That's it. Boom. Use new, right? Heresy, but that's what it does. And then we have another one that's a static vector,
+如果你想要旧的分配器东西，就用 std vector，我们有 std2 vector 来做正确的事情，对吧？也就是它只分配。就是这样。砰。使用新的，对吧？异端邪说，但这就是它的作用。然后我们有另一个是静态 vector，
+
+8
+00:03:49.000 --> 00:04:10.000
+and it just works with a buffer. And then another one's a small vector. And I think if we had a good story for people writing a std vector for a std vector compatible thing of their own, then we would have a good story for standardizing such a thing because we'd have a small interface, and you could just standardize a small interface, and it's not much work to standardize, just like it's not much work to write it as an end user.
+它只与缓冲区一起工作。然后另一个是小 vector。而且我认为如果我们有一个好的方案让人们为他们自己的 std vector 兼容的东西编写一个 std vector，那么我们就会有一个好的方案来标准化这样的东西，因为我们有一个小的接口，你只需标准化一个小的接口，而且标准化不需要太多工作，就像作为最终用户编写它不需要太多工作一样。
+
+9
+00:04:10.000 --> 00:04:37.000
+I think that is the much, much better answer. But the big problem that I have with allocators, the thing that started getting me so dead set against them was when I heard that we added all these constructors to the container adapters. And for those of you who don't know, container adapter is something that takes an existing container and just provides some semantics on it. So like std stack takes by default a vector, but you can also use a deck, any random access thing,
+我认为这是更好得多的答案。但我对分配器的最大问题，让我开始坚决反对它们的事情是，当我听说我们把所有这些构造函数都加到了容器适配器上。对于那些不知道的人来说，容器适配器是获取现有容器并在其上提供一些语义的东西。所以像 std stack 默认采用一个 vector，但你也可以使用 deck，任何随机访问的东西，
+
+10
+00:04:37.000 --> 00:05:02.000
+anything that grows at the end efficiently. So you can push back, push back, push back, pop back, pop back, pop back, and then it acts as a stack. Well, under the covers, it's just a vector. So if you have a vector that has a custom allocator, which is part of the vector's type, that's the way allocators work, you can just stick that into your stack. There's no need for the stack to know about allocation or allocators. It doesn't allocate.
+任何在末尾有效增长的东西。所以你可以 push back, push back, push back, pop back, pop back, pop back，然后它作为一个栈。嗯，在底层，它只是一个 vector。所以如果你有一个带有自定义分配器的 vector，它是 vector 类型的一部分，这就是分配器的工作方式，你可以把它粘进你的栈里。栈不需要了解分配或分配器。它不分配。
+
+11
+00:05:02.000 --> 00:05:20.000
+It just forwards through operations and the like thing. But it has all these constructor parameters that are optional for allocators. So we're polluting these non-allocating things with allocated parameters. Worse yet, we've done the same thing with tuple and pair and now optional. People are trying.
+它只是通过操作和类似的东西进行转发。但它有所有这些作为分配器可选参数的构造函数参数。所以我们正在用分配参数污染这些不分配的东西。更糟糕的是，我们对 tuple、pair 以及现在的 optional 也做了同样的事情。人们正在尝试。
+
+12
+00:05:20.000 --> 00:06:02.000
+All these other things. Yeah, people are trying to add all these interfaces that do this allocating stuff to things that never allocate and that makes me crazy like because there's a non-trivial cost to all these things sorry so what's what's what are these extra constructs constructors that are customized by allocators doing i miss that that's one of the costs explaining it to people teachability is hard right i'm not kidding that's like really like what is that doing i don't understand that interface okay so what it's doing is there is a a notion in the the library part of the standard of uses allocator construction right so all of those things do uses allocator construction on the
+所有这些其他东西。是的，人们正试图将所有这些做分配的东西的接口添加到从不分配的东西上，这让我抓狂，因为所有这些东西都有不小的代价。抱歉，那么这些由分配器定制的额外构造函数在做什么？我漏掉了这一点，这是代价之一，向人们解释它。可教性很难，对吧？我不是在开玩笑，这真的就像，那是在做什么？我不理解那个接口。好吧，所以它在做的是，在标准库部分有一个uses allocator construction（使用分配器的构造）的概念，对吧？所以所有这些东西都在
+
+13
+00:06:02.000 --> 00:06:38.000
+vector that you pass in like the in the stack case, right? You construct it with a vector, let's say, okay? And then you provide an allocator, and it uses that allocator, not the one that comes with the vector, and it uses allocator construction to do the allocation for constructing that vector. Sometimes you might also use the, there's another interface like just basically the um the default constructor you can pass an allocator parameter so like it's now a unary constructor instead of the default constructor and it again does uses allocator construction except you're
+你传入的 vector 上使用 uses allocator construction，就像栈的情况一样，对吧？你用一个 vector 构造它，比方说，好吧？然后你提供一个分配器，它使用那个分配器，而不是 vector 自带的那个，它使用 uses allocator construction 来进行用于构造该 vector 的分配。有时你可能还会使用，还有另一个接口，基本上就像呃默认构造函数，你可以传入一个分配器参数，所以它现在是一个一元构造函数，而不是默认构造函数，它再次进行 uses allocator construction，除了你甚至没有传入一个 vector，你使用的是里面那个，对吧？
+
+14
+00:06:38.000 --> 00:07:20.000
+not even passing in a vector you're using the one inside right so this all begs the question like why do we need any of these things i can just take an existing vector move it into there and then i've got the uses allocator construction because i did allocate construction aside of it why are we why don't we have separation of concerns here the answer is it is a mystery like i've never been able to get a straight answer about why we have those things to those but the the reason for adding them to things like tuple is that, again, the tuple might contain something like a std string. And so it needs to know about uses allocator construction. And so it needs to be allocator aware is the term of art that the allocator folks use. So I find that to be anathema.
+所以这一切都引发了一个问题：为什么我们需要所有这些东西？我可以直接拿一个现有的 vector，把它移动到那里，然后我就有了 uses allocator construction，因为我在它旁边做了分配构造。为什么我们在这里没有关注点分离？答案是一个谜——我从来没有得到过关于为什么我们要把那些东西加进去的直接答案。但是将它们添加到 tuple 之类的东西中的原因在于，同样，tuple 可能包含诸如 std string 之类的东西。因此它需要了解 uses allocator construction。因此它需要是感知分配器的（allocator aware），这是分配器专家使用的专业术语。所以我发现这令人反感。
+
+15
+00:07:20.000 --> 00:07:36.000
+That's something that doesn't allocate. Yeah, that is, you know, I have mixed feelings about allocators. I have very strong opposition to the uses allocator pattern and its viral nature across
+那是不分配的东西。是的，那是，你知道的，我对分配器有复杂的感情。我强烈反对 uses allocator 模式及其在
+
+16
+00:07:36.000 --> 00:08:22.000
+vocabulary types that do not allocate. But so, okay, so your argument for why we shouldn't want allocators in vector, I actually buy that. Yeah. like memory pool that I want to stick into vector, or if I want to have a vector that is backed by some special memory, like GPU memory or some fast memory that's available in my system. Why should I have to write my own vector for that? So this is a classic example of asking the wrong question. You've asked a question that has an obvious answer,
+不分配的词汇类型中的病毒式传播。但是，好吧，所以你关于为什么我们不应该在 vector 中需要分配器的论题，我其实接受了。是的。就像我想塞进 vector 的内存池，或者如果我想拥有一个由某些特殊内存支持的 vector，比如 GPU 内存或系统中可用的某些快速内存。为什么我必须为此编写自己的 vector？所以这是一个问错问题的经典例子。你提出了一个答案显而易见的问题，
+
+17
+00:08:22.000 --> 00:09:02.000
+but the answer feels obvious because the question is wrong. So I think you should turn around and say it this way. We know that the number of template instantiations of std vector that contain an allocator template parameter is less than a percent of a percent, right? Like just the total number of instantiations in the world in user code is somewhere. Let's be gratuitous and say it's about a percent. So the real question is why should that 99% of users have to deal with allocators to support that 1% of users, right? Like we want the standard library to be like useful tools that everybody can make use out of.
+但这个答案之所以显得显而易见，是因为问题本身是错的。所以我认为你应该反过来这样说。我们知道包含分配器模板参数的 std vector 的模板实例化数量不到百分之一的百分之一，对吧？就像用户代码中世界上的实例化总数在某个地方。让我们慷慨一点，说大约是百分之一。所以真正的问题是，为什么那 99% 的用户必须处理分配器来支持那 1% 的用户，对吧？就像我们希望标准库成为每个人都可以使用的有用工具一样。
+
+18
+00:09:02.000 --> 00:09:18.000
+And if there's some squirrely edge cases, then you write your own squirrely edge case code. But here's the crazy part. Like people are doing exactly what you said. They're making pool allocators and they're using with vector and they're getting great results out of it. And that's fine. We already have that. We don't need, if you want to use a vector with an allocator,
+如果有某些古怪的边缘情况，那么你可以编写自己的古怪边缘情况代码。但这里最疯狂的部分是：人们正在做你刚才说的事情。他们正在制作池分配器，并将它们与 vector 一起使用，并从中获得了极好的结果。这很好。我们已经有了这个。我们不需要，如果你想将 vector 与分配器一起使用，
+
+19
+00:09:18.000 --> 00:10:01.000
+hey, go crazy. We support that already. There's another, so we can just keep the existing code and just not write any new allocator-aware stuff. And we've covered most of the people that are doing exactly these things we're talking about. Then we've got other people like EA and Bloomberg where they've re-implemented the SDL and they've re-implemented all their own allocators. And they don't actually need the standard stuff because they do their own thing and so the allocator model has been adapted adopted by lots of organizations that don't even use the actual like code from the standard library because they really like this model and wherever they they find something like well i'm allocating with an allocator here but
+嘿，疯狂去吧。我们已经支持了。还有另一个，所以我们可以保留现有的代码，而不写任何新的感知分配器的东西。我们已经涵盖了大多数正在做我们刚才讨论的这些事情的人。然后我们还有像 EA 和 Bloomberg 这样的人，他们重新实现了 STL，并重新实现了他们自己的所有分配器。他们实际上并不需要标准的东西，因为他们做他们自己的事情，所以分配器模型已经被许多甚至不使用标准库实际代码的组织所采用，因为他们真的很喜欢这个模型，无论在哪里他们发现诸如“嗯，我在这里用分配器分配，但
+
+20
+00:10:01.000 --> 00:10:35.000
+then the value type doesn't use an allocator. I need to be able to pass all that through. They want allocators all the way down. And so they have to have a different organization to their code than what is provided in the standard library. And so to those people, I say, go crazy. Do your thing, right? But don't make everyone else drag that stuff around because you're making use out of it, because you are in the 1% case. I really think it's more like a percent of a percent. We talk about instantiations, but I think if we're talking about in terms of organizations, maybe it's more like, you know, 1% of users. Do, uh, do automotive companies that have to follow MISRA, do they all write their own stuff?
+然后值类型不使用分配器。我需要能够把所有这些传递过去。”他们希望从头到尾都是分配器。因此，他们的代码组织必须与标准库提供的不同。所以对这些人，我说，疯狂去吧。做你们的事，对吧？但不要让其他人拖着那些东西，因为你们在利用它，因为你们处于那 1% 的情况中。我真的认为这更像是百分之一的百分之一。我们谈论的是实例化，但我想如果我们从组织的角度来谈论，也许更像是，你知道，1% 的用户。汽车公司是否必须遵循 MISRA，他们都自己写东西吗？
+
+21
+00:10:35.000 --> 00:11:17.000
+Or, cause I know that I'm not, uh, I haven't read MISRA, but I've heard that they aren't allowed to do like dynamic allocations. And so they, they do a lot of like creating their own memory pools to read from and they have to like yeah meet guarantees do they write their own stuff or do you know so there are now some stand it used to be the case that they couldn't use anything in like the c++ standard library but there are now some um safety certified c++ standard libraries. So like in the, I think in the latest QNX stacks, which is a popular real-time system that's used for various card things. I think in the latest QNX stacks,
+或者，因为我知道我没有，呃，我没有读过 MISRA，但我听说他们不允许做动态分配之类的事情。所以他们做了很多像创建自己的内存池来读取的事情，并且他们必须，是的，满足保证。他们自己写东西，还是你知道的？所以现在有一些标准——过去的情况是他们不能使用 C++ 标准库中的任何东西，但现在有一些呃安全认证的 C++ 标准库。所以在，我认为在最新的 QNX 堆栈中，这是一个用于各种汽车事情的流行实时系统。我认为在最新的 QNX 堆栈中，
+
+22
+00:11:17.000 --> 00:11:52.000
+there's an option to get a safety qualified standard library, but that obviously means, you know, you're not going to be using things like, you know, vector or string without, you know, your own allocator or something like that. It just means that like the base vocabulary types that the vendor has certified them. Yeah. Yeah. And I, so I don't know a lot of the details of MISRA and I don't know a lot of details about how people work in automotive, but I do know that I've heard more general statements from people who do
+有一个选项可以获得安全合格的标准库，但这显然意味着，你知道，你不会在没有你自己的分配器或类似东西的情况下使用諸如 vector 或 string 之类的东西。这只意味着供应商已经认证了基础词汇类型。是的。是的。而且，我不知道 MISRA 的很多细节，我也不知道人们在汽车行业如何工作的很多细节，但我确实知道我从做嵌入式的人那里听到过更普遍的说法，
+
+23
+00:11:52.000 --> 00:11:59.000
+embedded where they say like, yeah, we just don't use the SDL. It's just not there, but they use the algorithms, but they don't use it. And it's like, it's,
+他们说，是的，我们只是不用 STL。它根本不在那里，但他们使用算法，但他们不用它。这就像，这是一个
+
+24
+00:11:59.000 --> 00:12:25.000
+it's an interesting question for like, you know, would, would NVIDIA just use stood vector for GPU stuff? And, you know would um would nvidia just use std vector for um gpu stuff um and you know we have our own version of vector in libraries like thrust um and that's in part because like thrust is a really old library like it has its own version of everything like it has its own version of tuple because like it predates there being a std tuple but um right but the vector that we have in thrust is actually
+有趣的问题，比如，你知道，NVIDIA 会不会只为 GPU 东西使用 std vector？并且，你知道，NVIDIA 会不会只为 GPU 东西使用 std vector，并且，你知道，我们在诸如 thrust 之类的库中有我们自己的 vector 版本，这部分是因为 thrust 是一个非常古老的库——它有自己的所有东西的版本——它有自己的 tuple 版本，因为它早于 std tuple 的出现，但是，
+
+25
+00:12:25.000 --> 00:12:49.000
+subtly different than stood vector in that if you do something like uh construct it from a range of things it does that construction in parallel um so all of the all of the operations of the thrust vector will do things in parallel in the gpu if it can um and uh if you look at it requires a different category of iterator to do that, though, and so it's not... Yes, yeah. Because the vector constructor takes...
+对吧，但是我们在 thrust 中拥有的 vector 实际上与 std vector 有微妙的不同，如果你做诸如从一系列东西构造它之类的事情，它会并行进行该构造。所以 thrust vector 的所有操作都将在 GPU 中并行执行，如果可能的话；并且，呃，如果你看一下，它需要不同类别的迭代器来做到这一点，所以它不是……是的，是的。因为 vector 构造函数接受……
+
+26
+00:12:49.000 --> 00:13:04.000
+Yeah, well, it takes a forward iterator. The thrust vector takes a forward iterator and it dispatches to the thing where it can construct them in parallel. If it knows the iterator category, if it knows it's a random access iterator or one that it can do the clever thing. Oh, okay, that's nice.
+是的，嗯，它接受一个前向迭代器。thrust vector 接受一个前向迭代器，并将其分派到可以并行构造它们的地方。如果它知道迭代器类别，如果它知道它是随机访问迭代器或可以做巧妙事情的迭代器。哦，好吧，这很好。
+
+27
+00:13:04.000 --> 00:13:55.000
+Or at least, let me say this, I hope it takes that code path because that, that code path happened, like exists in thrust. It might also take the code path where it's just like, no, I'm going to require that you have a random access iterator or the code path where it just assumes. But, but, you know, so, so you might think, okay, well, maybe you don't need to have that. But even for the use cases where I don't want the basis operations to be paralyzed, I oftentimes don't find myself reaching for a vector. vector because what I'm often looking for if I'm dealing with GPU memories, like I just want something that's like a buffer where I'm going to be able to like, where it will not try to initialize things because I'm going to create like a whole lot of them. And then I'm going to do something parallel on the device where I'm going to initialize them. And so in like both of those
+或者至少，让我这么说吧，我希望它走了那条代码路径，因为那条代码路径碰巧、就像存在于 thrust 中一样。它也可能走了那种代码路径，比如，不，我将要求你有一个随机访问迭代器，或者假设的那种代码路径。但是，但是，你知道，所以，你可能会想，好吧，也许你不需要有那个。但即使对于我不希望基础操作被并行化的用例，我经常发现自己也不会去寻找 vector，因为我经常寻找的是，如果我在处理 GPU 内存，就像我只想要一个类似缓冲区的东西，我将能够像，它不会试图初始化东西，因为我要创建一大堆它们。然后我要在设备上做一些并行的东西，我要初始化它们。所以在像这两种
+
+28
+00:13:55.000 --> 00:14:38.000
+cases where like on paper, what I really want is the moral equivalent of vector with my own allocator. In reality, I had equivalent of vector with my own allocator. In reality, I had to go and create my own thing because I needed something that was actually different from vector. And so perhaps you do make a compelling case here. And if we lived in a world where it was easier to write vector-like things, where you didn't have to write 64 methods for something to be vector-like, maybe there would be less of a compelling argument for, or maybe people would feel less compelled to insist that things like vector support allocators because it'd be easier for them to write their own.
+情况下，在纸面上，我真正想要的是带我自己的分配器的 vector 的道德等价物。在现实中，我有带我自己的分配器的 vector 的等价物。在现实中，我不得不去创建我自己的东西，因为我需要一些实际上与 vector 不同的东西。所以也许你确实在这里提出了一个令人信服的案例。如果我们生活在一个编写类 vector 东西更容易的世界里，你不需要为了让某个东西像 vector 而编写 64 个方法，也许对于、或者人们可能会觉得不那么被迫坚持诸如 vector 支持分配器之类的事情，因为他们自己写会更容易。
+
+29
+00:14:38.000 --> 00:15:12.000
+Yeah, and that's exactly the kind of thing that I want, I think David Stone wants. And David Stone and I disagree on so many technical things that if you knew the two of us you'd be like wait a minute they agree on this like this is a i think it's a significant agreement that we both want that to be like sort of embarrassingly easy like i want a vector here with how i write a vector and i'm done with you know i it takes me four hours including unit tests or something like this right we want it to be that easy um and you you know, one thing that reminded me of when you started talking there was I would, I mean, obviously you don't have exceptions in the runtime model on CUDA, right?
+是的，这正是我想象的，我想 David Stone 也想要。David Stone 和我在很多技术问题上都有分歧，如果你了解我们俩，你会觉得等一下，他们在这个问题上意见一致——这是一个我认为是重大的共识，我们都希望那就像是令人尴尬地简单——我在这里想要一个 vector，这就是我编写 vector 的方式，我完成了，你知道，这花了我四个小时，包括单元测试或诸如此类的东西，对吧？我们希望它就是那么简单，嗯，而且你，你知道，当我开始说话时，有一件事提醒了我，我想，显然你在 CUDA 的运行时模型中没有异常，对吧？
+
+30
+00:15:12.000 --> 00:15:35.000
+So you probably also have a vector that does two-stage initialization, which is what they do in EA, right? That's another thing, EAS deal, right? So you construct the vector and then you initialize the stuff because the construction is essentially a no-op. It's just a, you know, it's an empty struct at that point doesn't do anything in the constructor because the only way to communicate out of an instructor out of a constructor something wrong is to throw an exception if you can't throw an exception you can't really have real
+所以你可能还有一个分阶段初始化的 vector，这正是他们在 EA 中做的那样，对吧？那是另一回事，EA 的 STL，对吧？所以你构造 vector，然后你初始化东西，因为构造本质上是一个空操作（no-op）。它只是一个，你知道的，它在那个点上是一个空的结构体，在构造函数中什么也不做，因为从构造函数中传出错误东西的唯一方法是抛出异常，如果你不能抛出异常，你就不能真正拥有真正的
+
+31
+00:15:35.000 --> 00:16:00.000
+constructors right so you end up having all these no-op constructors or like pod types when that was still a thing but pod like types like literal types that don't have construction, and then you do some initialization step. And then that can return an error code or something like that that you can check. And so that's another aspect is that a lot of times these, when people talk about, I need to use pool allocation because I'm on embedded, they really don't understand the environment.
+构造函数，对吧？所以你最终拥有了所有这些空操作构造函数，或者像 POD 类型（当那仍然是一回事的时候），但像字面类型这样没有构造的 POD 类类型，然后你做一些初始化步骤。然后可以返回一个你可以检查的错误代码或类似的东西。所以这是另一个方面，很多时候，当人们谈论“我需要使用池分配器，因为我在嵌入式上”时，他们根本不理解环境。
+
+32
+00:16:00.000 --> 00:16:37.000
+They're making an argument that doesn't work with a vector anyway because it can throw up. environment they're making an argument that doesn't work with a vector anyway because yeah like like you like by the same logic that we use to um uh to rationalize a vector having an allocator parameter you could also rationalize vector having a param a template parameter that somehow describes like its error handling policy or like any other number of things um in terms of what what so the thrust vector is one where you have a, you create a host side and then it does the stuff device side. So it can throw an exception. The thing that you use within device code obviously can't.
+他们提出的论据无论如何都行不通，因为 vector 会抛出。环境，他们提出的论据无论如何都行不通，因为，是的，就像——正如我们用来将 vector 拥有分配器参数合理化的逻辑一样，你也可以将 vector 拥有一个某种程度上描述其错误处理策略或其他任意数量事情的模板参数的逻辑合理化，就…… thrust vector 就是一个你创建主机端，然后它在设备端做事情的例子。所以它可以抛出异常。你在设备代码中使用的东西显然不能。
+
+33
+00:16:37.000 --> 00:17:13.000
+And we also, we have a thing internally to thrust that, that does the two phase thing. And that just sort of acts as like an uninitialized set of storage. Yeah. So what is this obsession with ATL? I don't understand. I've heard the – you know, the funny thing is the reason I started listening to this podcast is because Barry told me that he mentioned me by name or one of the podcasts. And so I was like, I want to hear my name. And then I, I started listening to more of the podcast and I found that Tony did the same thing. And then, and then I was like,
+而且我们还在 thrust 内部有一个做两阶段事情的东西。那只是作为一组未初始化的存储来运作。是的。那么这种对 APL 的迷恋是怎么回事？我不明白。我听说——你知道，有趣的是，我开始听这个播客的原因是因为 Barry 告诉我在某个播客中他点名提到了我。所以我当时想，我想听到我的名字。然后我开始听更多的播客，我发现 Tony 也做了同样的事情。然后，然后我就想，
+
+34
+00:17:13.000 --> 00:17:46.000
+but now I've heard like all the ones with interesting titles anyway. I've heard a bunch of them. I haven't heard the whole thing, but now I'm just like, I don't, I don't get the APL obsession. I don't, I don't know enough about APL to know why you're obsessed. I'm really curious though. Like what is it about APL that's so exciting? So wait, one question and one comment before we switch topics here. First, the comment. We've mentioned these now. So I actually wrote a blog September 9th, 2020, which is called C++ STL-like algorithm libraries, which refer to all three of the libraries that we've mentioned. So if you didn't catch,
+但现在我无论如何已经听完了所有标题有趣的剧集。我听了一大堆。我没听完全部，但现在我只是觉得，我不、我不明白对 APL 的迷恋。我、我对 APL 了解不够，不知道你们为什么迷恋。不过我真的很好奇。APL 有什么那么令人兴奋的？等等，在我们转换话题之前，先有一个问题和一个评论。首先是评论。我们现在已经提到了这些。所以我实际上在 2020 年 9 月 9 日写过一篇博客，叫做“C++ 类 STL 算法库”，其中提到了我们提到的所有三个库。所以如果你没有赶上，
+
+35
+00:17:46.000 --> 00:18:10.000
+EA, which is Electronics Arts Gaming Company, is actually based in, I think it's headquartered in Vancouver in Canada. And then Bloomberg and then Thrust. So each of those are like STL libraries. So we'll link in the show notes at the end of this episode. Headquartered in Redwood City, California.
+EA，也就是艺电游戏公司（Electronics Arts Gaming Company），实际上总部设在，我想它的总部在加拿大的温哥华。然后是 Bloomberg，然后是 Thrust。所以每一个都像是 STL 库。所以我们会在本集末尾的节目笔记中给出链接。总部设在加利福尼亚州红木城。
+
+36
+00:18:10.000 --> 00:18:49.000
+Your memory is aspirational. Well, they have a massive campus in Vancouver, technically in Burnaby. And the reason I know that is because I don't actually know if this has come up. So I went to three national science fairs when I was in high school. And every single time you go, it's in a different province. But then it usually happened in like May. And then the next October, in the next school year, they would fly all the students in BC down to Vancouver and put you up in a Fairmont, which is like a very fancy hotel. And then they take you on this like little two day tours of all these different places to like say thank you for representing the province at science fair nationals which is like super nerdy but one of the stops was
+你的记忆很有志向。嗯，他们在温哥华有一个巨大的园区，技术上在本拿比（Burnaby）。我之所以知道这一点，是因为我实际上不知道这是否被提及过。所以我上高中时去过三次全国科学博览会。每次去，它都在不同的省份。但它通常发生在五月左右。然后第二年十月，在下一个学年，他们会把不列颠哥伦比亚省（BC）的所有学生飞到温哥华，把你们安排在费尔蒙（Fairmont）酒店，那是一家非常高档的酒店。然后他们会带你进行为期两天的这些不同地方的小旅行，以感谢你代表该省参加全国科学博览会，这就像超级书呆子气，但其中一站总是
+
+37
+00:18:49.000 --> 00:19:38.000
+always ea games and then they would give you a computer any computer game so i've toured that place like uh three three times and it's uh what's up right it's it's cute that you think that a fair man say all right we get it we get it you've got points first class bryce bryce fancy everyone knows bryce fancy all right anyways so links to the guy with a sweatband and a heather gray t-shirt wants to tell us what's fancy and what's not all right bryce we got it oh my god i might that i might this is gonna probably get cut into three episodes i might i might make that the cold open on every single one of these three. The funny thing is I've known Bryce since he was a student of Hartmut's that was like, I'm recently unemployed and now I work for Hartmut.
+EA 游戏（EA Games），然后他们会给你一台电脑，任何电脑游戏，所以我去那个地方参观过大约、三次，而且它，怎么了，这很可爱，你认为一个费尔蒙，好啦，我们懂了，我们懂了，你有积分，头等舱，布莱斯，布莱斯很fancy，每个人都知道布莱斯很fancy，好啦，无论如何，所以链接到那个戴着运动发带和石楠灰T恤的家伙想告诉我们什么是fancy，什么不是，好啦，布莱斯，我们懂了，哦天哪，我可能，那可能会被剪成三集，我可能会，我可能会把那作为这三集中每一集的冷开场。有趣的是，我认识布莱斯的时候他还是哈特穆特（Hartmut）的学生，就像是，我最近失业了，现在我为哈特穆特工作。
+
+38
+00:19:38.000 --> 00:20:16.000
+And then now he's like, I run everything. Like I run a quarter of the committee. I run this big organization inside NVIDIA. So Zach's actually one of the people I've known the longest in the C++ world because Zach's been to like every – you've been to every BoostCon? Yeah. Yeah, yeah, yeah. Me and Marshall Clow and Jeff Garland are the only three that've been to all and so the first you know right after i got started programming one of the first things that happened was uh within a couple months of me dropping out of college and going to work at louisiana state university with hartman
+然后现在他就像是，我掌管一切。就像我管理委员会的四分之一。我管理着 NVIDIA 内部这个庞大的组织。所以扎克实际上是我在 C++ 世界里认识最久的人之一，因为扎克去过每一个——你去过每一次 BoostCon 吗？是的。是的，我和马歇尔·克劳（Marshall Clow）和杰夫·加兰（Jeff Garland）是仅有的三个去过所有的人，所以第一，你知道，就在我开始编程之后，发生的第一件事是——在我从大学辍学并去路易斯安那州立大学与哈特穆特共事后几个月内
+
+39
+00:20:16.000 --> 00:21:10.000
+i went to boost con 2011 and so that's where i met um marsh Zach, probably like a half a dozen or a dozen other people that I met there who have been sort of the longtime members. But so there's this handful of people who have known me since I was this little squirt. Do you remember my talk from that year? I don't remember that you gave my talk from that year i didn't i don't remember oh that's that's that you gave a talk what was the talk about it was about we actually seen as bryce brought it up we'll send you the link after zach it's uh it got brought up and he's like there's no way you can find that listen listen i'm a i'm a show notes collector uh, and we found that and the slide deck. I thought you were going to say, let's play the clip. We're going to go to the audio right now.
+我去了 2011 年的 BoostCon，那就是我遇到马什——扎克，大概还有其他十几个人，我在那里遇到的那些人一直是长期成员。所以有这么一小撮人从我还是个小不点的时候就认识我了。你还记得我那一年的演讲吗？我不记得你做了那一年的演讲，我没有，我不记得，哦，那、那是——你做了一个演讲，演讲是关于什么的？它是关于——我们实际上看到，既然布莱斯提到了，扎克，我们在事后会把链接发给你，它被提到了，他当时说，你绝对找不到那个，听着，听着，我是一个节目笔记收集者，我们找到了那个和幻灯片。我还以为你要说，播放那个片段吧。我们现在就要听音频了。
+
+40
+00:21:10.000 --> 00:21:38.000
+I gave a talk about this U-tree thing, which was an AST for spirit. Oh, yeah. No, I remember that. Yeah, yeah. I remember liking the idea but not really understanding how to use it you know i've used spirit a bunch but i remember after the talk i was like i gotta i gotta read more on this i don't i don't get it yet i wonder if that code is still around it looked like a really interesting technology i i i wonder if that
+我做了一个关于这个 U-tree 东西的演讲，这是 spirit 的一个抽象语法树（AST）。哦，对。不，我记得那个。是的，是的。我记得喜欢这个想法，但并不是真的很理解如何使用它，你知道的，我用过很多次 spirit，但我记得演讲结束后我当时想，我得、我得多读读这个，我还是、我还不懂。我在想那段代码还在不在，那看起来是一项非常有趣的技术。我、我在想那段
+
+41
+00:21:38.000 --> 00:22:26.000
+code is still around and i really hope not because it was not but but so kind of going back to the science fair thing um and this is also wait i'm gonna cut you off i'm gonna cut you off bryce you said fairmont's not fancy we had very different upbringings we're very similar now in terms of our first programming language was on a ti blah blah blah i you know you said the first time i ever it's not the fourth season when i was in high school i hadn't been in a hotel, I don't think, in grade eight, which was the first time I went, or on a plane. Like when I won that local science fair, maybe I did tell this story. I was so excited. Like when they called my name, I was literally like jumping up and down. Like I'm sitting, I'm standing next to three other people that have won the gold prize.
+代码还在不在，我真的希望不在，因为它不是——但是，但是，回到科学博览会的事情，这也是——等等，我要打断你，我要打断你，布莱斯，你刚才说费尔蒙不fancy，我们有截然不同的成长经历。我们现在在很多方面都很相似，就我们的第一门语言是在 ti 诸如此类上一样，你（指康纳）说我第一次——这不是我上高中的第四个赛季，我甚至没有住过酒店，我想是在八年级，那是我第一次去，或者坐飞机。就像当我赢得那个地方科学博览会时，也许我确实讲过这个故事。我太兴奋了。就像他们叫到我的名字时，我 literalmente 就像在上下蹦跳。就像我坐着、我站在其他三个赢得金奖的人旁边。
+
+42
+00:22:26.000 --> 00:22:53.000
+And I'm this little, like, you know, four foot 11 eighth grader. And, uh, I'm thinking in my head, I've never been on a plane. I've never stayed in a hotel. Like this is like, I've never traveled. Like, this is like, I'm thinking, oh my God, I hope my parents let me go because this is going to be like the best thing in the world. And, uh, and so then like five months or six months later, after we go to nationals and then they fly me down, like everything's plated and go, I was just like this, like ninth grader that had never like explored the world.
+而我这个小不点，你知道的，身高四尺十一寸的八年级学生，呃，我在心里想，我从来没坐过飞机。我从来没住过酒店。这就像，我从没旅过游。这就像，我在想，噢天哪，我希望我父母让我去，因为这将会是世界上最棒的事情。而且，呃，所以大约五六个月后，在我们去了全国赛之后，他们把我飞过去，就像一切都安排好了，我当时就像是个九年级学生，从来没有探索过世界。
+
+43
+00:22:53.000 --> 00:23:15.000
+And it was, it was so fancy to me back then. So like, you know, you're, you're hating, but like grade nine Connor, uh, was just like, I thought I was on top of the world. I was like thinking about retiring then, you know, it's just like, I got it. I got of the world. I was like thinking about retiring then, you know, it's just like, I got to put it all on my head. It's all downhill from here. It's all downhill from here. Anyways, what's your question about the science? Well, we will get back to APO.
+对我来说，当时真是太 fancy 了。所以，你知道的，你在讨厌，但像九年级的康纳，呃，只是觉得自己登上了世界之巅。我当时甚至在考虑退休了，你知道，这就像，我得到了它。我得到了世界之巅。我当时甚至在考虑退休了，你知道，这就像，我必须把它记在脑子里。从这里开始一路走下坡路。从这里开始一路走下坡路。不管怎样，你对科学有什么问题？好吧，我们会回到 APL。
+
+44
+00:23:15.000 --> 00:23:34.000
+We will get back to APO. First, you've reminded me at some point today, I got to talk about my flight's home from the CPPs committee meeting because I just had a very lucky and excellent experience. But we'll get to that later. So did you win a National Science Fair, Connor? I feel like this is a thing that,
+我们会回到 APL。首先，你让我想起今天某个时候，我得谈谈我从 CPPs 委员会会议飞回家的航班，因为我刚经历了一次非常幸运和极好的经历。但我们稍后再说。康纳，你赢得过全国科学博览会吗？我觉得这是一件，
+
+45
+00:23:34.000 --> 00:24:10.000
+this is one of those like Connor facts that I wouldn't at all be surprised by. The best I ever did is I got silver in my category. So there's three different levels, grade eight, no, grade seven and eight, nine and 10, and 11 and 12. So it's like a junior, I don't know, something to senior. And then within each of those three levels are like six or seven categories. And then they give out gold, silver, bronze. And then if you place gold in your category, then you can win your whole level. And if you win your whole level, then it's between you and two other people that
+这是那种我一点也不会感到惊讶的康纳式事实。我做过最好的就是在我所在的类别中获得银牌。所以有三个不同的级别，八年级，不，七和八年级，九和十年级，以及十一和十二年级。所以它就像初级、我不知道，某种级别到高级。然后在每个级别中大约有六到七个类别。然后他们颁发金牌、银牌、铜牌。如果你在你的类别中获得金牌，那么你可以赢得你的整个级别。如果你赢得了你的整个级别，那么就是在你和另外两个
+
+46
+00:24:10.000 --> 00:24:38.000
+won from those levels. And like the monetary prizes are like, I think 1500 for gold in your category, 3000 for winning your whole level and then 10,000 for winning overall. So if you win basically the top prize at nationals, you'd get like 10,000 plus, maybe it was 5,000, 10,000 plus 5,000 plus 1,500. But this is all Canadian dollars. Yes, yes, Bryce. We know they're, they're basically, uh, you know, you can go to McDonald's in America if you win that much money.
+从这些级别中获胜的人之间进行。现金奖励大概是，我记得你类别中的金牌是 1500，赢得整个级别是 3000，然后总冠军是 10000。所以如果你基本上赢得了全国赛的最高奖项，你会得到大约 10000 加元以上，也许是 5000、10000 外加 5000 外加 1500。但这些全都是加拿大元。是的，是的，布莱斯。我们知道它们，基本上，呃，如果你赢得那么多钱，你可以去美国的麦当劳。
+
+47
+00:24:38.000 --> 00:25:15.000
+But, um, uh, and so I, I, I think I got, uh, 800 bucks for silver or something and then managed to buy a laptop. That's still that's still like pretty impressive. What was your what was your project? My first two were called SCI one or it was just SCI and then SCI two, which standard stood for spinal cord injury. And basically they were studies of uh planaria which are these nerve regenerating worms and i was like my theory was you know we'll see what conditions if you cut
+但是，呃，所以我，我想我拿了 800 块钱的银牌什么的，然后设法买了一台笔记本电脑。那仍然、那依然相当令人印象深刻。你的、你的项目是什么？我的前两个被称为 SCI 1，或者它只是 SCI 然后是 SCI 2，标准代表脊髓损伤（spinal cord injury）。基本上它们是对涡虫（planaria）的研究，这些是神经再生的蠕虫，我的理论是，你知道，我们会看看如果在你把
+
+48
+00:25:15.000 --> 00:25:35.000
+these worms in half they grow back faster and then my theory was that you know uh if you because there's a drug called who am i going to remember itylprednisolone, which they have on this. Who made that up? No, no. You can look it up. Methylprednisolone. It's a drug. It's an anti-inflammatory drug that they keep on the sidelines of football games.
+这些蠕虫切成两半时有什么条件它们长得更快，然后我的理论是，你知道，呃，如果你因为有一种叫做——谁会记得——甲基强的松龙（methylprednisolone）的药物，他们有这个。谁编造了这个？不，不。你可以查一下。甲基强的松龙。它是一种药。它是一种抗炎药，他们把它放在橄榄球比赛的场边。
+
+49
+00:25:35.000 --> 00:26:17.000
+Because if you're able to administer it to the site of a spinal cord injury, like within minutes of it happening, you can actually like fully repair the spinal cord. This all happened because one day I was on a walk with my mother and I was just, I was like grade seven. I actually might've been grade six because my grade six, or no, it was grade seven. And my science teacher, Mr. Jackson wouldn't let me do this science fair project because he said it was silly. And then, cause I'd asked my mom, how come when you break your arm, you just go put a cast on it. And then a couple of months, you're good to how come when you break your arm, you just go put a cast on it. And then in a couple months, you're good to go. But you break your back and you're either paraplegic or quadriplegic for the rest of your life. Because I think we had just finished watching one of the Superman movies with Christopher Reeves.
+因为如果你能在脊髓损伤发生后的几分钟内把它施用到受伤部位，你实际上可以完全修复脊髓。这一切都发生是因为有一天我和我母亲在散步，我当时，我大概七年级。我实际上可能是六年级，因为我的六年级，或者不，那是七年级。我的科学老师杰克逊先生不让我做这个科学博览会项目，因为他说这很傻。然后，因为我问我妈妈，为什么你摔断胳膊时，你只需打个石膏，然后几个月后你就好了？为什么你摔断胳膊时，你只需打个石膏，然后在几个月后你就好了？但你摔断了背，你余生就会截瘫或四肢瘫痪。因为我想我们刚刚看完克里斯托弗·里夫（Christopher Reeve）主演的超人电影之一。
+
+50
+00:26:17.000 --> 00:26:49.000
+And he very famously, you know, became paralyzed. And she was like, you should do a science fair project on it. And that led me down this path. The problem is, is that the second time I went to nationals with the follow-up project, which is actually where I got my hands on methylprednisolone because my mom knew a doctor, it's just asked if I could have some, the judges, I ended up getting honorable mention that year. And I realized that the judges thought I was cheating because they, a lot of the students, they work with like university professors or like local colleges. And so when they're talking like,
+而他非常出名地，你知道的，瘫痪了。她说，你应该做一个关于它的科学博览会项目。这引导我走上了这条路。问题是，第二次我带着后续项目去参加全国赛时，正是在那里我通过我妈妈认识的一个医生弄到了甲基强的松龙，只是问我能不能拿一些，裁判们——我那年最终得到了荣誉提名。我意识到裁判们认为我在作弊，因为他们，很多学生他们与大学教授或当地学院合作。所以当他们谈论时，
+
+51
+00:26:49.000 --> 00:27:23.000
+where'd you get the methylprednisolone? I'm this grade nine student at this point saying, oh, like my mom's friend's a doctor. And they're like, yeah, like, so, but who did you work with? And I was like, oh, I just did the experiment in my bedroom. And they're like, they just, they, they had these repeat judges they kept coming to me and basically trying to figure out and i realized it was very odd because usually you get like two sets of judges um two at a time and then they do the judging but they kept on coming back and asking these things like you know are you sure you didn't work with anyone etc etc and the truth is is no my mom just had a friend that was a doctor and asked for some
+“你从哪里弄来的甲基强的松龙？”我当时是一个九年级的学生，说，“哦，我妈妈的朋友是个医生。”他们就像是，“是的，那么，你是和谁一起工作的？”我当时就说，“哦，我只是在我的卧室里做实验。”他们就像是，他们只是、他们有这些重复的裁判，他们不断来找我，基本上试图弄清楚，我意识到这很奇怪，因为通常你会得到两组裁判——一次两个，然后他们进行评判，但他们不断回来问这些事情，比如“你确定你没有和任何人合作吗，等等等等”。事实是，没有，我妈妈只是有个朋友是医生，要了一些
+
+52
+00:27:23.000 --> 00:27:53.000
+methylprednisolone and explained that her son was doing a science fair project. So if I understand correctly, a part of this project was you were cutting worms in half? Yeah, planaria, but they regenerate. And they're like very commonly used in science experiments because they regenerate. You just wanted to cut some worms in half, didn't you? I mean, you're a young kid. It's like an interesting project, you know, watching them grow. Wait, weren't you a i mean you're a young kid it's like a interesting project you know watching them grow weren't you a ninth grader yeah yeah okay at that time i wanted to be a
+甲基强的松龙，并解释说她的儿子正在做一个科学博览会项目。所以如果我没理解错的话，这个项目的一部分是你把蠕虫切成两半？是的，涡虫，但它们会再生。它们在科学实验中非常常用，因为它们会再生。你只是想把一些蠕虫切成两半，对吧？我的意思是，你是个小孩子。这就像一个有趣的项目，你知道，看着它们生长。等等，你以前不是一个——我的意思是，你是个小孩子。这就像一个有趣的项目，你知道，看着它们生长。你以前不是一个九年级学生吗？是的，是的，好吧。那个时候我想成为一个
+
+53
+00:27:53.000 --> 00:28:24.000
+immunologist okay i don't know i think of like you know a young kid wants to cut up frogs i'm thinking like eight i mean this was this was a rigorous science experiment. I had three dishes on top of my, you know, some of them were in the dark, so they were in my closet, and the other ones were in the light, which weren't in the closet. So the methamphetamine stuff, did it make the things grow back together faster? Yeah, those were the winners. I don't think it was methamphetamine, though. Whatever. It's a long word.
+免疫学家，好吧，我不知道，我想就像，你知道，一个小孩子想解剖青蛙，我想大概八岁吧，我的意思是，这是一次严谨的科学实验。我的上面有三个盘子，你知道，有些在黑暗中，也就是在我的衣柜里，其他的在光线充足的地方，也就是不在衣柜里。所以那个安非他命之类的东西，真的能让那些东西更快地长回去吗？是的，那些是赢家。不过，我觉得那不是安非他命。管它呢。那是个长词。
+
+54
+00:28:24.000 --> 00:28:54.000
+Close enough. It's some scientific word. They're all the same. Yeah. My final science fair project, though, in grade 11 was a poker. It was called Project Poker. It's hilarious to look back at what it actually was at the time. But basically, I had written an algorithm that I claimed was better than the WSOP computer game tournament of champions. But like in hindsight, it was garbage. Like the people that were interviewing me just did not
+差不多吧。那是某个科学词汇。它们都一样。不过，我11年级时的最后一个科学展项目是一个扑克程序。它叫做扑克项目。回想一下它当时实际的样子，真是滑稽。但基本上，我写了一个算法，我声称它比世界扑克大赛（WSOP）的电脑游戏冠军赛还要好。但事后诸葛亮来看，这简直就是垃圾。面试我的人简直
+
+55
+00:28:54.000 --> 00:29:42.000
+know how to ask the right questions. Like first of all, I calculated these formulas using my graphic calculator and basically did like manual curve fitting of these like graphs of what your pre-flop odds are given any two pocket pairs there's like 1329 different pocket pair combinations and like you can get little programs that give you you know the stats uh but like i just basically reverse engineered it but like it was just like plugging in different coefficients on this formula which was very silly and then i based my results off of like 10 games or something. And then like the betting had, was absolutely not part of the algorithm. It was only like whether I should fold bet or whatever, but however much I bet that was just completely up to me. So like it was the high, in hindsight, the whole thing was just like garbage. Um, but, uh, it was
+根本不知道该怎么问对问题。首先，我是用图形计算器计算这些公式的，基本上就是对这些图表进行手动曲线拟合，看看在给出任意两张底牌时的翻牌前胜率是多少，一共有1329种不同的底牌组合，你可以找到一些小程序给你提供那些数据，呃，但我就像是逆向工程了它，但它就像是在这个公式中代入不同的系数，这非常愚蠢，然后我的结果是基于10场左右的比赛得出的。而且下注绝对不属于算法的一部分。它只关乎我是否应该弃牌、下注什么的，但无论我下注多少，这完全取决于我自己。所以，事后看来，整件事就是垃圾。嗯，但是，嗯，它
+
+56
+00:29:42.000 --> 00:30:15.000
+good enough to fool the professors that were judging me. Um, so, you know, um, uh, it was good enough to fool the professors that were judging me. So, you know, um, uh, David Stone, like I mentioned before, like he apparently when he was younger, he was like extremely well known for playing a Pokemon online. Like he was like his handle, whatever it was, you know, a super whiz bang 98. I don't know. Some, some idiotic handle that he told me one time. Anyway, like he would meet people and if they found out that like you're Super Whizbang 98, you know, they were just like amazed. They were like, you know, this guy's a god or whatever.
+足以忽悠那些评判我的教授们。所以，你知道，嗯，嗯，它足以忽悠那些评判我的教授们。所以，你知道，嗯，嗯，大卫·斯通，就像我之前提到的，他显然在年轻时就因为在线玩《宝可梦》而极其出名。就像他的网名一样，不管是什么，你知道，超级神童98。我不知道。他有一次告诉我某个愚蠢的网名。总之，他会遇到一些人，如果他们发现你就是超级神童98，你知道，他们就会惊叹不已。他们会觉得，你知道，这家伙简直是个神之类的。
+
+57
+00:30:15.000 --> 00:30:51.000
+So apparently he was like a champion Pokemon player. And one of the things that got him into programming was he wanted to um he wanted to basically make a bot that was he said i it took me a long time to figure out like what the good strategies were and why they worked every time and so i was like i could just make this into a program that does this like that i can automate what i'm doing i'm not doing anything crazy but now that i've done all the hard work of figuring it out and i thought that was really fascinating that fascinating that that was one of the things that got him into programming. Because apparently he had not done much, if any, programming before that.
+所以显然他是一个宝可梦冠军级玩家。促使他走上编程之路的原因之一是，他想——他想基本上做一个机器人，他说我花了很长时间才弄清楚什么是好的策略以及为什么它们每次都管用，所以我想我可以把这个写成一个程序来完成这件事，我可以把我正在做的事情自动化，我没有做什么疯狂的事，但现在我已经完成了弄清楚这一切的所有艰苦工作，我觉得这真的很有趣，这竟然是促使他走上编程之路的原因之一。因为显然在此之前他没有做过多少编程，甚至根本没做过。
+
+58
+00:30:51.000 --> 00:31:26.000
+Yeah. I love those stories. We got to have David on to talk about that. I had a co-op that when Pokemon Go came out, he was very motivated to win that game. And so he wrote a little program that would use the pokemon go api and give send him a text anytime there was a rare pokemon or a pokemon that he didn't have within a 10 minute uh radius of where his desk was at work and so while he was working every once in a while throughout the day his phone would buzz and he would shoot up and be like, I'll be back in 15 minutes.
+是的。我喜欢这些故事。我们得请大卫来聊聊这个。我曾有一个合作学生，在《宝可梦GO》刚出来时，他非常有动力赢得那款游戏。于是他写了一个小程序，利用《宝可梦GO》的API，每当有稀有宝可梦或者他没有的宝可梦出现在他工作桌周围10分钟半径内时，就会给他发短信。所以当他工作时，一天当中时不时地，他的手机就会震动，然后他就会腾地站起来说，我15分钟后回来。
+
+59
+00:31:26.000 --> 00:31:30.000
+It was, uh, he was awesome. Um, I just, you know, it's, uh, yeah.
+这真是，他太棒了。嗯，我只是，你知道，这，嗯，是的。
+
+60
+00:31:30.000 --> 00:31:38.000
+Your passion for certain things, you know, the lengths that they'll take you to, um, to, yeah, program stuff. Thanks for listening.
+你对某些事物的热情，你知道，它们会带你走多远，嗯，去，是的，编写程序之类的东西。谢谢收听。
+
+61
+00:31:38.000 --> 00:31:43.000
+I hope you enjoyed. Stay tuned for part three of this four part interview next week. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+希望你喜欢。敬请期待下周这四部分访谈的第三部分。本集暂无评论。点击文稿中的任意句子即可发表评论。

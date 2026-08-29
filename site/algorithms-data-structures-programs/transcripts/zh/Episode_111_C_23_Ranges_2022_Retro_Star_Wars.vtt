@@ -1,0 +1,271 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:19.000
+2022, I think, will sort of be remembered, at least like in the systems programming languages community and the C++ community, 2022 is like Star Wars Episode IV, A New Hope, the podcast episode 111 recorded on January 4th, 2023. My name is Connor. Today with my co-host Bryce, we talk about C++ 23 ranges, our 2022 retro and the future of C++. Okay, actually, we will start the podcast now. I was going to start off talking about something we need to talk about, which you're probably aware of. But before we just hit the record button, we were talking about ranges. And so I will say, ranges, oh, they're glorious. C++23 ranges, GCC13, which is GCC trunk as of this recording today, I'm sure GCC13 will officially, when it gets released, get uploaded to Godbolt or Compiler Explore, has implemented every single range adapter in factory. The only thing they haven't,
+2022年，我想，会被人们所铭记，至少在系统编程语言社区和C++社区中，2022年就像《星球大战第四部：新希望》，播客第111集录制于2023年1月4日。我叫康纳。今天我和我的联合主持人布莱斯一起讨论C++ 23的ranges、我们的2022年回顾以及C++的未来。好吧，其实我们现在就要开始录制播客了。我本来想先谈谈我们需要讨论的事情，你们可能也意识到了。但在我们点击录音按钮之前，我们一直在谈论ranges。所以我要说，ranges，哦，它们太棒了。C++23的ranges，GCC 13（即写这篇录音时的GCC trunk，我相信GCC 13正式发布时，一定会上传到Godbolt或Compiler Explorer），已经实现了每一个range适配器和factory。他们唯一还没做的是，
+
+2
+00:01:19.000 --> 00:02:01.000
+and I thought Microsoft was leading the charge in terms of implementing ranges. So I was tracking their progress and issues. And they have, I don't know, above 50%, I think, of the range adapters implemented. And then I think I was just bored one day. Or no, actually, this is what happened. There's no support for the format library with MSVC on Compiler Explorer. And so I logged a bug, but then the Compiler Explorer folks said that because of MSVC issues, it's not always possible to get libraries working there, which sure, fair enough. So then I went and downloaded
+我原本以为微软在实现ranges方面处于领先地位。所以我一直在追踪他们的进展和issue。我记得他们大概实现了百分之五十以上的range适配器。然后我想我有一天可能有点无聊。或者不如说，其实情况是这样的：Compiler Explorer上的MSVC不支持format库。所以我提交了一个bug，但Compiler Explorer的工作人员说，由于MSVC的问题，让库在那里正常工作并不总是可能的，这也是情有可原的。所以后来我去下载了
+
+3
+00:02:01.000 --> 00:02:56.000
+the most recent community edition of Visual Studio and tried to, because I want to use Victor's format library until we have C++23 format print. And then when I used the community edition, I used NuGet to fetch, I don't know, whatever the most recent format library is, was like 7.0 something. And that's broken with chunk by so for whatever reason there's some bug that the c++ 23 stood views chunk by doesn't work with the lib format library so compiler explorer doesn't support the format library you mean i'm confused like like you're trying i'm trying to just uh basically use the thumped colon colon print and the ranges header so they have basic c++ 23 comes with the ability to print a range and containers and stuff like that but just very necessary if you want to basically create a little
+最新版本的Visual Studio社区版，并试图——因为我想在拥有C++23的format print之前，先使用Victor的format库。然后当我使用社区版时，我用NuGet获取了，不管是最新的什么format库版本，大概是7.0左右吧。结果它跟chunk by不兼容，无论出于什么原因，C++23的std::views::chunk by存在某个bug，导致它无法与lib format库一起工作，所以Compiler Explorer不支持format库。你是说，我有点糊涂了，就像你正在尝试——我只是想基本上使用fmt::print和ranges头文件，所以它们有基本的——C++23自带了打印range和容器等的功能，但这非常必要，如果你想基本上创建一个小的
+
+4
+00:02:56.000 --> 00:03:36.000
+gobbolt snippet um that prints out some code using some c++ 20 or 23 ranges. So Compiler Explorer with MSVC doesn't support the libformat library. And Visual Studio 2022 Community Edition has some bug either in the format library or the ranges, C++ 23 ranges, chunk by implementation that they are not compatible. And so I was about to say I got bored. So that's why I checked GCC. But what I realized is like, I can just go create the equivalent code using range V3 and lib format, because I know lib format works with GCC. But then when I was doing that,
+Godbolt代码片段，用一些C++20或23的ranges来打印一些代码。因此带有MSVC的Compiler Explorer不支持libformat库。并且Visual Studio 2022社区版在format库中，或者在ranges中，即C++23的chunk by实现中，存在某种bug，导致它们不兼容。所以我正要说我当时觉得无聊。这就是为什么我检查了GCC。但我意识到的是，我可以去用range V3和lib format创建等效的代码，因为我知道lib format可以与GCC协同工作。但随后在做这件事时，
+
+5
+00:03:36.000 --> 00:04:29.000
+I said, I'll just check to see what they've implemented of C++ 23 ranges. And it turns out they've implemented everything, which is just so amazing. So amazing. Chunk by. Yeah, I saw Eric retweeted something that you sent about this. And Eric said that this is great because when you look at what ranges looks like as of C++23, this is a lot closer to what his original vision for ranges was because when ranges was put into c++ 20 um just because the scope and size of it a lot of it had to be paired back a lot of the important uh range adapters were were left out of the initial pass and now a lot of them have been added in 23 yep it's uh it's beautiful that's i've decided for the couple C++ conferences that I'm going to submit to, one of them I already submitted to. Which one?
+我说，我会去看看他们实现了哪些C++23的ranges。结果发现他们实现了所有东西，这简直太棒了。太棒了。Chunk by。对，我看到埃里克转发了你发的一条关于这个的推文，埃里克说这太棒了，因为当你看看C++23中的ranges时，这比他最初对ranges的设想更接近了，因为当ranges被引入C++20时，嗯，由于它的范围和规模，其中很大一部分不得不被缩减，许多重要的，嗯，range适配器被留在了初版之外，现在许多适配器都在23中被加回来了，没错，这，这太美妙了。这就是为什么我决定为我要投稿的几个C++会议——其中一个我已经投稿了。是哪一个？
+
+6
+00:04:29.000 --> 00:05:13.000
+C++ on C. Oh, they're open already. I believe the call for papers is open until January 8th. And this is getting recorded a couple days before that and will get released. When this get released on january 6th so if you're listening to this between january 6th and january 8th i mean there's a chance that the call for papers might get extended but yeah i mean i am this is before they've you know started accepting so it might not get accepted but i plan to submit it to a couple of c++ conference so hopefully one of them it'll get accepted and it's just going to be a talk basically covering everything that's new in C++23 ranges. And also an overview of the algorithm slash range landscape. Because it's actually like hella confusing now.
+C++ on Sea。哦，他们已经开放投稿了。我相信论文征集将持续到1月8日。这期节目是在那之前几天录制的，并且会在——这将在1月6日发布，所以如果你在1月6日到1月8日之间听到这个，我的意思是论文征集有可能延长，但对，我的意思是，这是在他们开始接受投稿之前，所以可能不会被接受，但我计划把它投给几个C++会议，希望其中一个能被接受，这基本上是一个涵盖C++23 ranges所有新内容的演讲。同时也是对算法/range生态系统的一个概述。因为现在这实际上变得非常令人困惑。
+
+7
+00:05:13.000 --> 00:05:50.000
+If you're just coming to C++23, even C++20, there are now basically three different ways to call transform algorithm. There's the iterator overload. There's the range overload. And that's sort of like one vertical. And now there's like range land, which technically, like they don't call those algorithms, they're range adapters and range factories, which I mean, I consider them all under like the algorithm umbrella. But if you're coming to C++ as like a new C++ programmer, and you Google, Google like how do I, you know, map, how do I do a functional map kind of thing, you're potentially going to get like three different answers.
+如果你刚刚接触C++23，甚至C++20，现在基本上有三种不同的方式来调用transform算法。有迭代器重载。有range重载。这算是一条纵向分支。现在还有range-land，虽然从技术上讲，他们不称这些为算法，它们是range适配器和range factory，也就是说，我把它们都归在算法的伞形概念下。但如果你作为一个C++新手来到C++世界，然后谷歌搜索——搜索如何映射，如何做函数式映射之类的事情，你可能会得到三种不同的答案。
+
+8
+00:05:50.000 --> 00:06:13.000
+Anyway, so I think some little like mini lightning talk at the beginning of what's new in C++ 23 ranges that talks about like there's like two different verticals and there's two different overloads in this vertical. But really, if you're trying to do like functional composition kind of things, just stick to this vertical. Anyways, that's all some mini side note. What I really wanted to mention, happy new year, by the way, because it is now 2023. Yeah, happy new year.
+无论如何，我认为在C++ 23 ranges新特性介绍的开头加入一个小型的闪电演讲（lightning talk），谈谈这里有两个不同的纵向分支，并且在这个纵向分支中有两个不同的重载。但实际上，如果你试图做函数式组合之类的事情，就坚持使用这个纵向分支。总之，这只是一个小小的题外话。顺便说一句，我真正想说的是，新年快乐，因为现在已经是2023年了。是的，新年快乐。
+
+9
+00:06:13.000 --> 00:06:39.000
+Did you hear the big news that happened right at the end of the new year in the C++ podcast world, Bryce? Did you hear the big news? I didn't directly hear it, but I saw some tweets that did not directly mention it. And I suspect, based on those tweets, that I know what the news is. There's a certain other podcast. But have we fallen in the rankings? Well, so, yes. I mean, I am both.
+布莱斯，你听到新年伊始在C++播客界发生的大新闻了吗？你听到这个大新闻了吗？我没有直接听到，但我看到了一些没有直接提及它的推文。根据这些推文，我猜我知道这个新闻是什么。有另一个特定的播客。难道我们的排名下降了吗？嗯，所以，是的。我的意思是，我现在心情很复杂。一方面，我很兴奋。另一方面又有点难过，因为——等一下，对于不知情、不在状况的听众来说，CppCast，在所有衡量标准下都是排名第一的播客，也是第一个播客，一度是唯一的播客，但在2022年，比如有两个月内启动了四个播客，其中一个就是我们的播客，它又回来了。这有点让人难过，因为回归主持它的不是罗伯（Rob）和杰森（Jason）。而是两个新主持人，菲尔·纳什（Phil Nash）和蒂穆尔·杜姆勒（Timur Dumler）。我希望
+
+10
+00:06:39.000 --> 00:07:12.000
+I'm conflicted now. I'm both, one, very excited. Kind of sad that it's not. So wait, for the listener that is not informed and not in the know, CppCast, the number one podcast by all measures and the first, and at one point was the only, but then in 2022, like four podcasts started in two months, one of which was ours, is back. It's kind of sad because it's not Rob and Jason that are coming back to host it. It's two new hosts, Phil Nash and Timur Dumler. I hope
+我没有把蒂穆尔的名字读错。非常有趣的是，我其实计划制作一个关于这个的YouTube视频，因为C++播客的生态系统，这技术上是菲尔共同主持的第三个C++播客，因为他最初主持了CPP chat，然后他主持了一个名为《No Diagnostic Required》的播客。现在他接手了名为CppCast的海盗船的——你把它叫什么——方向盘。我的心情很复杂，因为一方面，这显然是我有史以来最喜欢的播客之一。很高兴看到它回归。但另一方面，这对我们意味着什么？你知道，我们本来有望成为——
+
+11
+00:07:12.000 --> 00:07:52.000
+I'm pronouncing Timur's name correctly. And very interestingly, I actually plan on making a YouTube video about this because like the landscape of C++ podcasts, This is technically Phil's third C++ podcast that he's co-hosting because he did CPP chat initially, and then he did a podcast called No Diagnostic Required. And now he's taking the, what do you call it, steering wheel of this pirate ship that is CPP cast. And I'm conflicted because one, obviously it's one of my favorite podcasts of all time. So happy that it's coming back. But two, what does that mean for us? You know, we were on track to be.
+我的意思是，我们是排名第一活跃的C++播客。虽然某种程度上我们是个C++和Rust的双语播客。但现在他们又回来了。而且，还有。所以他们不会每周发布一集。现在它将改为每两周发布一集，这意味着现在我们要花两倍的时间才能在集数上赶上他们。他们已经到了350集，我们大概在111集，也就是差了240集，除以50周大约是——
+
+12
+00:07:52.000 --> 00:08:19.000
+I mean, we were the number one active C++ podcast. Although kind of we're like a C++ slash Rust podcast. But now they're back. And also, too. So they're not going to be releasing episodes every week. It's going to be releasing episodes every week it's going to be every two weeks for now which means that now it's going to take us twice as long to catch up episode wise which they're at 350 we're at like what 111 which is 240 so divided by 50 weeks is roughly
+那本需要五年，现在需要十年了。好吧，问题是他们不是每周更新？不，他们会按双周更新，也就是一个月两次，每两周一次。这不是免费的吗，以前不是——它以前是每周更新的，对吧？我想他们正试图让它——但我们最终还是会赶上的。对，我的意思是，就像你说的，我们要一直做到我们其中一人去世为止。所以只要我们俩能坚持十年，我们在集数上就能追上。无论如何，你的想法和感受是什么？我知道你不是个狂热的播客听众，所以我想你对此可能远没有我那么兴奋，
+
+13
+00:08:19.000 --> 00:08:49.000
+that would have been five years now it's going to take 10 years well is that they're not weekly no they're going to be bi-weekly so twice a month once every two weeks was it free wasn't it previously it was previously weekly yeah i think they're trying to make it but we will we will still eventually catch up yeah i mean we're like you said we're doing this till one of us dies so as long as we can hang on for a decade both of us we will be able to episode wise. Anyways, your thoughts and feelings. I know you're not a big podcast listener, so I guess you're probably much less excited about this than,
+不像我那么激动。好吧，我的意思是，我确实听相当数量的播客，我想，只是不听那么广泛的播客。我的意思是，我觉得这很棒。
+
+14
+00:08:49.000 --> 00:08:58.000
+than I was. Well, I mean, I do listen to a decent number of podcasts, I guess, just not pergurating podcasts. I mean, I think it's great.
+我觉得，CppCast原先的主持人决定是时候前进了，这真的很让人难过，因为它我认为是社区生态系统中非常重要的一部分，而且，你知道，并不是每个人都以相同的方式消费内容。你知道，有些人听播客，有些人听会议演讲。我知道有很多人，
+
+15
+00:08:58.000 --> 00:09:32.000
+I think it's, it was really sad that CPP cast, that the original hosts, you know, were decided that it was time to move on um because it it was i think a an important part of the the ecosystem in the community um and you know not everybody consumes content uh or consumes things the same way. You know, some people for podcasts, some people for conference talks. And I know that there was a lot of people who, you know,
+听了CppCast的每一集。CppCast某种程度上需要一个王牌播客。你知道，这跟他们的播客非常不同，比如CppCast实际上是一个C++播客，涵盖了所有重大发展、重大新闻，而我们只是，你知道，畅所欲言。所以，是的，嗯，曾经出现过一个真空期，我很高兴看到它带着新主持人回归。我认为这是两个非常棒的主持人。看看他们是否会完全改变形式，这将是一件很有趣的事情。
+
+16
+00:09:32.000 --> 00:10:17.000
+listened to every episode of CppCast. And CppCast kind of needs a marquee podcast. You know, this is not, this is a very different podcast than their podcast like cpp cast is actually a c++ podcast and you know covers all the made the latest developments major news we just you know talk about whatever we want so yeah um you know there was a gap and uh i'm glad to see that that uh that it's back with new hosts. And I think those are two great hosts. It'll be interesting to see whether they change up the format at all.
+根据他们在第一集中的表现来看，因为他们在中间插播时，似乎是在互相采访。然后他们做了一个类似于唱片刮擦的动作。然后他们说，让我们从头开始。因为他们现在是新主持人了。他们做了完全相同的引言，讲了一会儿新闻。然后进行采访。但我的意思是，你知道，你显然不会一上来就立即——这倒也是。
+
+17
+00:10:17.000 --> 00:10:42.000
+It seems like based off of what they did in the first episode, because what they did is halfway through, they were sort of interviewing each other. And then they did like a little record scratch. And then like they said, let's start it from the top. Because like they were the new host now. And they did the exact same sort of intro, news for a little bit. And then sort of interview. But I mean, you know, you're obviously not going to come into a thing and just immediately. That's true.
+你知道，改变一切，除非你是埃隆·马斯克。所以，随着时间的推移，也许他们会，也许他们会决定有些事情他们想要改变，或者有些事情他们想要创新。确实如此，如果有一个新的伴奏音乐（jingle）我不会感到惊讶，因为我不知道你可能没看到这个，但C++ on Sea的YouTube频道刚刚发布了一段视频，里面菲尔·纳什唱了一首名为《我塑造我自己》（I Build Myself）的C++歌曲。对，我依稀记得去年我在C++ on Sea时听过类似歌曲的现场表演。哦，你是现场看到的。哇。我想是的。这太厉害了。
+
+18
+00:10:42.000 --> 00:11:24.000
+You know, change everything unless you're elon musk um so but you know over time maybe they'll maybe they'll um decide that there's some things they want to change or there's some things they want to innovate it's true i wouldn't be surprised if there's a new jingle because i'm not you probably didn't see this but uh c plus plus on C's YouTube channel just released a video of Phil Nash singing a C++ song called I Build Myself. Yeah, I seem to recall listening to a live performance of something like this when I was at CPP on C last year. Oh, you saw it live. Wow. I think so. That's impressive.
+说到我们要进入今天的主题——2022年回顾——但关于播客的话题，我们其实在推特（Twitter）上的一些2022年前十名技术编程播客中被提及了。不过对于节目简介，它直接采用了我们播客简介的第一句话，即“我们是一个受到《Magic Read-Along》启发而诞生的播客”，而这个播客目前知道的人比我们的播客还要少。当时我就想，哦天哪！而且他们就只说了这个，别的什么都没说。我就在想，也许这是一个糟糕的简介。所以我去更新了我们的播客简介，让它更能描述我们实际谈论的内容。
+
+19
+00:11:24.000 --> 00:12:11.000
+And speaking of of we're going to get into today's topic which is going to be the 2022 retro but uh on the last on the topic of podcasts and stuff we actually got mentioned um in some top 10 tech programming podcasts of 2022 on some twitter twitter thread but um for the description it just took the first sentence of our podcast description which was we're a podcast inspired by magic read-along which is at this point a podcast that like less people know about than our podcast so then i was like oh snap like and that's all they said like they didn't say anything else and And I was like, maybe that is a bad description. So I went and updated our podcast description. So it is more descriptive of what we actually talk about.
+不管怎样，2022年回顾。首先，假期过得怎么样？你玩得开心吗，有放假吗？是的。家人、朋友？对。我们去了佛罗里达，去看望了我父母。前两三天冷得刺骨，
+
+20
+00:12:11.000 --> 00:12:26.000
+Anyways, 2022 retro. First of all, how was the holidays? You had a good time, time off? Yeah. Family, friends? Yeah. We went to Florida, visited my parents. It was bitterly cold the first two to three days which
+我的意思是，至少它比纽约要暖和。在佛罗里达的前两三天，气温大概在三十到四十华氏度（约零下几度到几度），但后来天气变好了一些。我们在泳池里放松了一会儿，还去坐了船。真不错。是的，我们把所有佛罗里达标志性的事情都体验了一遍。没去海滩，因为不太喜欢佛罗里达的那部分海滩，而且我们本来就不是海滩类型的人。我们都非常非常苍白，很容易晒伤。这就是为什么那里有遮阳伞吧。对，对，对，真有趣，还有阳光和防晒霜。我父母住在坦帕（Tampa）南部一个非常漂亮的封闭式社区里。我是在坦帕出生的，我母亲，她曾是一名破产法务律师，她的本科就读于康奈尔大学。
+
+21
+00:12:26.000 --> 00:13:31.000
+i mean at least it was warmer than than than uh the new york it was like in the in the 30s and 40s the first two to three days here in florida but then it got uh the weather got a bit better um we spent some time chilling out in the pool we went on a boat nice um yeah we did all the all the florida things didn't go to the beach not really that uh that part of florida and also we're just not really beach people um we're all very very pale we uh we burn very easily that's what they have umbrellas for yeah yeah yeah it's it's funny and uh and sun and sunscreen um um my my parents live in uh this very nice uh gated community um just south of tampa um and i i was um uh born in tampa my my mother uh who was a bankruptcy lawyer, she went to Cornell for her undergrad.
+康奈尔大学位于纽约州北部，纽约州的那个地区冬天非常冷，会有大量的雪。她在长岛（Long Island）长大。然后她觉得长岛还不够冷，所以她去康奈尔读本科。然后她觉得，你知道，康奈尔还不够冷，所以她去芝加哥大学读研究生，那里甚至更冷。
+
+22
+00:13:31.000 --> 00:14:03.000
+Cornell was in upstate New York, in that part of New York that gets very cold and gets a ton of snow during the winter. And she grew up in Long Island. And then decided that Long Island wasn't cold enough. So she went to Cornell for undergrad. And then she decided that, you know, Cornell was not cold enough. So then she went to the University of Chicago for graduate school, which isn't even colder.
+还有法学院，那里更冷。在那之后，她讨厌寒冷。所以在那之后，她说：“你知道吗，我受够了寒冷的地方。我要去尽可能最南方的地方。”所以她去了坦帕，在那里开始执业法律。她是一家老派南方律师事务所的第一位女性合伙人。关于这一点有很多有趣又好笑的故事。但这就是为什么他们在佛罗里达的那一部分、坦帕南部的原因，因为她在那里住了好几年。我就是在那里出生的。我通常不喜欢谈论我技术上是个佛罗里达人的事实。我想这是第二次在播客中被提起。
+
+23
+00:14:03.000 --> 00:14:51.000
+And for law school, which is even colder. And then after that, and she hates the cold. So then after that, she's like, you know what, I am done with being in cold places. I'm going to go, you know, as far south as I can. So she went to Tampa, where she started practicing law. And she was the first female attorney at a good old boy's Southern law firm. And there are lots of interesting and amusing stories about that. But that's why they're in that part of Florida and just south of Tampa, because that's where she lived for a number of years. That's where I was born. I don't usually like to talk about the fact that I am technically a Floridian. I think this is the second time it's come up on the podcast.
+是的。而且你每次都要加上一句，我尽量不提这件事。但现在他们住在这样一个非常漂亮的封闭式社区里。这里的门——你已经提到两次了。门在佛罗里达很重要吗？是的。哦，是的。在佛罗里达的这些封闭式社区里，有超级强大的HOA（业主协会），它们规定你的房子必须涂这种颜色。不要让你的车库门开着，因为没有人想看到你车库里面。你不能在草坪上放草坪小矮人这类的东西。
+
+24
+00:14:51.000 --> 00:15:30.000
+Yes. And you always post fix it with, I try not to mention it. But now they're in this very nice little gated community. Are the gates, you've mentioned that twice now. Are the gates important in Florida? Yeah. Oh yeah. But so in these gated communities in Florida, they have these super powerful HOAs, homeowner associations, that tell you your house has to be this color. don't leave your garage door open because nobody wants to see the inside of your garage. You can't put lawn gnomes on your lawn and stuff like that.
+你是认真的吗？所有的房子看起来都差不多。在佛罗里达的这些社区里，他们有一种叫做“Lanai”的东西，我确信这只有佛罗里达的人才知道。你能拼写一下吗？N-I-G-H？我不知道怎么拼。Lanai。
+
+25
+00:15:30.000 --> 00:15:47.000
+Are you serious? All the houses sort of look very similar. In Florida, in these communities, they have this thing that they call lanai, which I'm convinced is something that only people in Florida know about. Can you spell that? N-I-G-H? I have no idea how to spell it. Lanai. Or lanai. Okay. Yeah,. Can you spell that? N-I-G-H? I have no idea how to spell it. Lanai.
+或者Lanai。好吧。对，我想它是以N开头的。它就像是——基本上是一个后院，被一种带有网状结构的建筑覆盖着。所以感觉就像你在户外。你可以晒到太阳。如果下雨，雨会
+
+26
+00:15:47.000 --> 00:16:05.000
+Or Lanai. Okay. Yeah, I think it starts with a N. And it's like this – it's basically like a backyard that's covered in this structure that has like this mesh stuff. And so it's like you're outside. You get the sun. If it rains, the rain comes
+落下来，但网眼可以挡住树叶、虫子之类的东西。你有一个这种覆盖着后院、泳池和热水浴缸的结构。当树叶被这个东西卡住时，你是怎么把树叶弄掉的？
+
+27
+00:16:05.000 --> 00:16:21.000
+through, but the mesh keeps out leaves and bugs and stuff like that. You have one of these that covers your backyard and your pool and your hot tub. How do you get the leaves off of it when the leaves get caught by this thing?
+什么？如果这是一个用来挡住树叶的网状结构，你怎么把树叶弄掉？你得为此请个人。你有一个专门的人，他拿着一根很长的棍子到处走。我想它主要是为了挡住虫子，这样你就不用对付蚊子之类的东西了。好吧。所以住在这些封闭社区里的每个人，他们都有室内厨房，还有室外厨房。在我父母家这很有趣，因为他们的室内厨房在房子的背面。
+
+28
+00:16:21.000 --> 00:16:53.000
+What? How do you get the leaves off of if it's this mesh net kind of thing that's keeping the leaves out you gotta you have a guy for that you have a guy that he just what goes around with a really tall stick i think it's it's mostly like to keep the bugs out so you like don't have to have like mosquitoes and okay stuff like that all right um and so like then everybody who lives in these little gated communities they they have like, you know, they have their indoor kitchen and they have their outdoor kitchen. Which is funny in my parents' house because their indoor kitchen is in the back of the house.
+所以它距离室外厨房只有大约10英尺远。然后他们有室内餐桌和室外餐桌。然后他们有带电视的客厅，在Lanai里也有一台电视，所以你可以在按摩浴缸里看电视。那里的生活方式非常有趣。我有一种瓦力（Wall-E）电影里那种感觉。我不知道为什么，我觉得更像是《复制娇妻》（Stepford Wives）。就像是，你知道的，每个人都在轨道上，没有创造力。你不能让车库门开着。
+
+29
+00:16:53.000 --> 00:17:37.000
+So it's about 10 feet away from their outdoor kitchen. And then they have like their indoor dining table and their outdoor dining table. And then they have their, you know, they have their living room with with their tv and then there's a tv outdoors in the lanai so you can watch tv from the hot tub um it's just it's a very interesting lifestyle down there i've gotten like i'm getting like wally vibes from like, you know, I don't know why. I think more like Stepford Wives. It's like the, you know, everyone's on a track, you know, there's no creativity. You can't keep your, you know, your garage door open.
+你知道，这都一样。每个人的房子都有相同的油漆。社区里有这么一栋房子，被漆成了一种——我认为你知道的——不那么糟糕的淡绿色。显然这引起了很大的争议。淡绿色是你可以给房子粉刷的四五种批准颜色之一，但似乎没有人选择这种颜色。其他人选择的都是三种米色和棕色中的一种。但这对夫妇选择了这种绿色，而其他人——当你选房子时，你不会记住房子的五种不同选项，就会默认“哦，这不是批准的颜色”，然后他们向HOA抱怨，但HOA却说：“不，实际上他们被允许把房子漆成那个颜色。”显然这是一件大事。哇。我妈妈告诉我，曾有一对夫妇搬进来，把他们的房子漆成了红色——一种未经批准的红色。
+
+30
+00:17:37.000 --> 00:18:46.000
+You know, it's the same. Everyone's got the same paint on their houses. And there's this one house in the neighborhood that's painted in this i think you know not awful pale green color and apparently it was a big controversy um the pale green color was one of the like four or five approved colors that you could paint your house but like nobody picked that color Everybody else picked like one of the, you know, one of the three shades of beige and brown. But this one couple picked this green and everybody else, you know, you're not going to remember like the five different options for house color when you pick your house. assumes oh they this is a non-approved color and and so then they complain to the hoa but the hoa is like no actually they're allowed to have their house that color and apparently it's a whole big hubbub wow there was one couple my mom was telling me uh one couple moved in and um they painted their um their house red um like non-approved shade of red and And the HOA is like, Nope, you got to paint it back.
+然后HOA说：“不行，你得把它刷回去。”显然，我们问如果直接拒绝会发生什么。好吧，那HOA就会开始向你开出每日罚款。
+
+31
+00:18:46.000 --> 00:18:54.000
+And apparent. And I, and, and so we asked what would happen if you just said no, well, then the HOA would, uh, uh, start giving you a daily fine.
+如果你不付罚款，最终他们可能会对你的房子实行留置权，并因为你把房子漆成了不同的颜色而收走你的房子。这听起来太不真实了。到底是哪群人把这扇门装上，然后开会说：“好了各位，这里的基本规则是什么？草坪上不能有任何东西。颜色必须统一。”谁会在乎呢？
+
+32
+00:18:54.000 --> 00:19:20.000
+And if you don't pay that, then eventually they could get a lien on your house and take your house because you painted it a different color. This sounds like not real. Like what group of people put this gate up and then had a meeting and they were like, all right, folks, what are the ground rules here? Nothing on the lawn. It needs to be the same color. Like who cares?
+显然这些人会在乎。我的意思是，大门把未经授权的车辆挡在外面，但大门下方有两英尺的缝隙，而且这门也不是很高，如果你想进去的话还是能进去的。好吧，那么——在ADSP播客中你学到的知识。好了，2022年回顾，开始！你的前三名、前五名是什么？好吧，所以我——我要给你我的——我得同时告诉你一部分我关于2023年的预测。好吧，不，我们通常把展望2023年的内容留在单独的一期节目里，所以你得把它们分开，除非它们是交织在一起的，那样的话我们今年可以做点不同的。它们是交织在一起的。好吧，你请便，你来，你来，布莱斯。2022年，我认为在系统编程语言
+
+33
+00:19:20.000 --> 00:20:11.000
+Clearly these people do. I mean, the gate keeps like unauthorized vehicles out but there's like a two foot gap under the gate and like it's not that tall a gate like you could get in if you wanted to yeah all right so let's um the things you learn on adsp the podcast all right 2022 retro go what's your your top three your top five well okay so so uh so i'm gonna give you my i'm gonna i'm gonna i have to tell you part of my 2023 you know predictions at the same time well no we usually we save our uh 2023 looking forward for a separate episode so you gotta split those up unless if they're intertwined in which case we can do something different this year they are intertwined all right you go right ahead you do you do you do you bryce 20 2022 i think will sort of be remember at least like in the systems programming languages
+社区和C++社区中，2022年将被人们铭记，就像《星球大战第四部：新希望》一样。C++的成功语言。我们迎来了Carbon的发布。等等，等等。我得打断一下。阿纳金试图跳过欧比旺的那场戏是怎样的？你知道，你撒谎了。他说什么来着？我占据了高地。
+
+34
+00:20:11.000 --> 00:20:47.000
+uh community and the c++ community 2022 is like star wars episode 4 a new hope the c++ successful languages. We've had, you know, the announcement of Carbon. Wait, wait, wait. I have to interrupt. What is the scene of Anakin trying to jump over Obi-Wan? And, you know, you lie. What does he say? I have the upper ground.
+对。然后他最后双腿被砍断，在旁边燃烧。在你的这个类比中，这对应了什么，布莱斯？我无可奉告，无可奉告。这只是一个典型的C++用户使用编译器的体验。我要插播一段来自那部分内容的真实音频：放弃吧，阿纳金，我占据了高地。你太低估我的力量了。不要尝试。你本是天选之子！说好要消灭西斯，不是加入他们！为原力带来平衡，而不是将其陷入黑暗！我恨你！这就是当你编写一些充斥着糟糕模板的C++代码时发生的事情，编译器会因此惩罚你。
+
+35
+00:20:47.000 --> 00:22:46.000
+Yeah. And then he ends up getting his legs cut off and then he's burning at the side what is uh what is that map to in your analogy here bryce i uh no comment no comment that's just a typical c++ users experience with a compiler i'm gonna cut in i'm gonna cut in uh the actual audio from uh from that part it's over anakin i have the high ground you underestimate my power don't try it You were the chosen one. It was said that you would destroy the Sith, not join them. Bring balance to the Force, not leave it in darkness. I hate you! That's just what happens when you write some bad template heavy C++ code and the compiler punishes you for it.
+也许我会加入TikTok或别的什么平台，创作一个关于欧比旺是编译器、阿纳金是C++开发者的搞笑表情包。就像是，别——而且我觉得像早些时候，在他切断高地之前，他好像说过类似“别试了，我占据了高地”之类的话。这就好比——别试了，你会不开心的。你本是天选之子。好了。
+
+36
+00:22:46.000 --> 00:23:02.000
+Maybe I'll join TikTok or something and create some little meme of Obi-Wan being the compiler and Anakin being the C++ developer. It's like, don't, well, and I think like earlier, before he says I have the high ground, I think he says something like, don't try it. I have the high ground. And that's like the Kamali, like, don't try it. You're going to be unhappy. You were the chosen one. All right.
+我打断你了。抱歉。所以这是继承者语言之年。我认为2022年将被铭记为C++继承者语言之年。有Carbon。我认为人们对Circle的兴趣和发展也越来越大。肖恩（Sean）去年（2022年）在C++ Now上发表关于Circle的主题演讲了吗？我想那是那一年。我想是2022年。对，因为我们和他讨论过——对，我们在本期播客中讨论过。还有戴夫·亚伯拉罕（Dave Abrahams）的语言Vow。
+
+37
+00:23:02.000 --> 00:23:49.000
+I interrupted you. Sorry. So it was the year of successor languages. 2022 is, I think, going to be remembered as the year of the C++ successor languages. There's, you know, Carbon. I think there's been growing interest in developments around Circle. Did Sean give his keynote on Circle at C++ Now last year in 2022? I think that was the year. I think it was 2022. Yeah, because we talked to him about, yeah, we talked about it on this podcast. Yeah. And's also Dave Abraham's language, Vow.
+还有CPP2。我还忘了什么？还有其他的吗？从技术上讲，还有Yoct，这是Serenity OS内部正在开发的语言。但我不认为……我们没有听到太多关于它成为成功语言的消息，但它确实在那个领域。人们对Rust的继承者也有越来越多的兴趣。其中特别的一点，我认为是一个标志性的时刻，就是第一段Rust代码进入了Linux内核。你知道，那是C++尚未涉足的领域。
+
+38
+00:23:49.000 --> 00:24:26.000
+There's CPP2. What else am I forgetting? Any others? I mean, technically, Yoct, which is the language being developed inside Serenity OS. But I don't think... We haven't heard much about that being a successful language, but that is, you know, in the space of. There's also been growing interest in success for Rust. One thing in particular there that I think was sort of a hallmark moment was the first Rust code getting into the Linux kernel. You know, that's a place that C++ has not been.
+所以，如果2022年是《星球大战第四部：新希望》，那么2023年当然就是《第五部：帝国反击战》。我认为明年的主题之一将是，像C和C++这样的语言，对继承者语言做出回应，并对有关它们的批评、关于它们是遗留语言的说法做出回应。
+
+39
+00:24:26.000 --> 00:25:08.000
+So, okay. So if 2022 has been Star Wars Episode IV, A New Hope, then of course, 2023 will be Episode V, Empire Strikes Back. I think that one of the themes of next year will be um uh languages like c and c plus plus um responding to uh uh the successor languages and responding to the criticisms of them, the claims that they are legacy languages.
+2022年发生的另一件事是，一些美国政府机构发布了一些网络安全咨询报告，指出C和C++是不安全的语言或不适合的语言，因为存在内存安全隐患。或者至少有人以这种方式解读了他们发布的咨询报告。那么2023年的帝国反击战会是什么？是NSA。NSA，对。是的，NSA。
+
+40
+00:25:08.000 --> 00:25:50.000
+One of the other things that happened in 2022, there were some U.S. government agency that put out some cybersecurity advisory, which suggested that C and C++ were unsafe languages or unsuitable languages because of the memory safety concerns. Or at least somebody interpreted the advisory they put out in that way. And so what will the empire's strike back be in 2023? It was the NSA. The NSA, yeah. Yeah, the NSA.
+情况是这样的：两件大事是微软Azure首席技术官表示，C++应该作为新项目使用的新语言被弃用；以及NSA站出来表示，内存安全语言才是康庄大道。是的。我不认为他们明确说过不要使用C和C++。他们只是说要使用内存安全语言。有些人将其解读为不要使用C和C++。那么帝国将如何反击？好吧，C++23和C23将于今年发布并推出，我们将看到各种实现开始在今年提供对C++23和C23的支持。我想Fortran也可能会，
+
+41
+00:25:50.000 --> 00:26:44.000
+And it was like the two big things were the Microsoft Azure CTO saying that like C++ should be deprecated as a new language that new projects use. And the NSA came out saying memory safe languages are the way to go. Yeah. I don't think they explicitly said don't use C and C++. They just said use memory safe languages. And some people interpreted that as don't use C and C++. So how will the empire strike back? Well, C++23 and C23 will be published and go out the door this year, and we will see implementations start shipping support for C++23 and C23 this year. I think Fortran may also,
+下一个修订版可能会在今年推出，但不要把这当成绝对的。我不记得具体日期了。但另一件事是，人们重新燃起了对我们在C++中可以做些什么来提高安全性的兴趣，包括一些非常大胆的提案，即我们在一个非常加速的时间表上做一些事情。其中一个有趣的提案来自我的挚友JF·巴斯蒂安（JF Bastion），他是C++演进工作组的主席。他现在在丰田的子公司Woven Planet工作。几年前他写了一篇提案，我记得，提议将具有自动存储持续时间的对象进行零初始化。因为导致导致安全问题的UB（未定义行为）的主要原因之一是读取未初始化的值，这可能会允许攻击者
+
+42
+00:26:44.000 --> 00:28:10.000
+the next revision may go out this year, but don't quote me on that. I don't remember the dates exactly. But the other thing is that there's been a renewed interest in what we could do in C++ to improve safety, including some very bold proposals that we do things on a very accelerated timeline. One of the interesting proposals is from my dear friend, JF Bastian, who is the chair of the C++ Evolution Working Group. He works at Woven Planet now, which is a subsidiary of Toyota. And he wrote a proposal a few years ago, I think, proposing that we zero-initialize objects of automatic storage duration. Because one of the leading causes of UB that leads to security issues is reading uninitialized values, which can allow an attacker
+获取他们本不应该获取的信息，从而控制执行。我认为它是CWE-457。所以这个提案很简单。就是：嘿，我们应该将具有自动存储持续时间的对象进行零初始化。为什么我们今天不这样做呢？好吧，显然存在性能方面的担忧，对吧？好吧，如果我们必须把这些东西设为零，嗯，这需要一些工作。JF的提案实际上对此进行了相当详细的讨论。它既谈到了具体的数字，也谈到了我们为什么会看到性能问题？这不仅是把值设为零的实际成本。
+
+43
+00:28:10.000 --> 00:29:17.000
+to get an information that they shouldn't have been able to, and then thus control execution. And I think it's a CWE457. And so the proposal is pretty simple. It's just like, hey, we should just zero initialize objects of automatic storage duration. And why don't we do this today? Well, there's obviously the performance concern, right? Okay, if we have to settle these things to zero, well, that requires some work. The proposal from JF actually talks about this in a good bit of detail. It both talks about concrete numbers, but also in the, you know, why do we see a performance problem? And it's not just the cost of actually setting
+它还会搞砸编译器的优化。它会破坏依赖关系，从而扰乱各种编译器的优化。它还会干扰你的CPU在调度指令时所做的各种硬件优化。但JF的论文探讨了这些性能影响，并提供了一些数字，表明这些影响如今可以忽略不计。在出现性能退化的情况下，
+
+44
+00:29:17.000 --> 00:30:15.000
+the values to zero. It can also screw up compiler optimizations. It can like break dependencies, which can mess around with various compiler optimizations. And it can also mess around with various hardware, various optimizations that your CPU does when scheduling instructions. But JF's paper sort of explores these performance implications and presents some numbers and suggests that it's pretty negligible these days. That it's, in the case where there are regressions,
+通常小于0.5%。而在某些情况下，代码实际上运行得更快了。而且代码体积的影响也很小。所以看起来并没有强有力的性能理由。我的意思是，有些应用，有些地方，正负1%实际上是一件大事。等等，你刚才从0.05%变成了正负1%？对，我在向上取整。
+
+45
+00:30:15.000 --> 00:30:49.000
+and it's usually like less than 0.5%. And then in some cases, the code actually gets faster. And there's also a pretty small code size impact. So it seems like there's not really a strong performance case. I mean, there are some applications, there's some places where, you know, a plus or minus 1% can actually be a really big deal. Wait, you went from 0.05 to plus or minus 1? Yeah, I'm rounding up.
+好吧。从5个基点到100个。我会——我们在讨论数量级，对吧？我的意思是，这是不同的数量级。但无论如何，我们大致在谈论百分之几，或更少。安德烈·亚历山德雷斯库（Andrei Alexandrescu）几年前在——当他还在Facebook工作时，发表过一次精彩的演讲，他谈到了一些性能优化的影响，这些优化在一些核心的Facebook代码中带来了2%到3%的改进。
+
+46
+00:30:49.000 --> 00:31:31.000
+Okay. From five bases points to 100. I will, I will, we're talking orders of magnitude here, right? I mean, that is a different order of magnitude. But anyways, roughly we're talking about a percentage yeah or less um uh andre alexandrescu uh gave a great talk a few years ago um at uh uh when he was still working at facebook and he talked about the uh the impact of some performance optimizations that got like a 2% to 3% improvement across some like core Facebook code.
+他说，如果你考虑到这段代码是按规模部署的，这实际上是一件非常大的事情，你知道，这实际上为我们节省了数百万美元，允许代码运行速度提高2%到3%。这意味着我们的集群中可以少2%到3%的机器，或者吞吐量增加2%到3%。所以，这，你知道，这可能是一件大事。但我认为JF在这个提案中的论点是，性能成本足够小，以至于好处远远大于坏处，当然，你知道，就像C++中的几乎所有事情一样，会有一些
+
+47
+00:31:31.000 --> 00:32:13.000
+And he was like, that's actually like a really big deal if you look at like this code is deployed at scale and, you know, that actually saves us like millions of dollars, you know, having to like allowing the code to run 2% to 3% faster. That means we can have 2% to 3% less, you know, machines in the fleet or 2% to 3% more throughput. So, like, that can, you know, that can be a big deal. But I think JF's argument in this proposal is the performance cost is small enough that that the the benefits far outweigh it and of course you know like almost everything in c++ there will be some
+编译器标志，你可以选择退出它。是的，我认为这是重要的一部分，虽然是的，我记得JF在他的一次Meetup的YouTube录像中谈到过这一点，他们说，对于那些高频交易公司（HFT）等注重每一个微小周期的人来说，他们不必担心升级编译器，然后因为试图获得安全性而导致性能下降或劣化。我确信他们不——并不是说他们不关心安全性，但老实说，HFT公司关心的光速。除了——
+
+48
+00:32:13.000 --> 00:32:56.000
+compiler flag where you'll be able to opt out of it yeah i think that's the important part is that though yeah i remember jf talked about this in his meetup youtube recording that i saw and they said that there would be for the people like, you know, high frequency trading firms and stuff where every little, you know, cycle matters that, you know, they're not going to have to worry about upgrading their compiler and then having a performance degradation or pessimization because of trying to gain safety for stuff. I'm sure that they don't, not that they don't care about safety, but let's be honest, HFT firms care about, uh, like speed of light. And in addition to a, uh, uh, I'm sure there'll be a compiler optimization to just globally turn
+我确信会有一个编译器优化来全局关闭这个功能。该提案还建议，我们应该添加一个“未初始化”属性（uninitialized attribute），程序员可以将其放在变量上，以指示：嘿，不要对这个进行零初始化。就像双方括号属性（double square bracket attribute）那样？对，对，对。但这里的想法是把默认值搞对，而不是让一个“零初始化”属性变成每个人都必须加在每个变量上的东西，而是通过默认来改变默认行为。如果你想选择退出，你就加上这个属性，这通常不是我们在C++中做事的方式。通常我们的做法是：好吧，让人们自己选择加入新事物。
+
+49
+00:32:56.000 --> 00:33:40.000
+this off there. The proposal also, um, uh, suggests that we should add a, um, an uninitialized attribute, which a programmer can put on variables that'll indicate, hey, don't zero initialize this. Like a double square bracket attribute? Yeah, yeah, yeah. But the idea here is to get the default right to instead of having a zero initialized attribute that becomes something that everybody has to put on every variable, you make the default that we're going to change by default. And if you want to opt out, you add this attribute, which that's not normally how we have done things in C++. Usually we're like, well, make people opt into the new thing.
+但在这种情况下，我认为这里的效用非常有限。所以很高兴看到一个提案实际上建议我们采用正确的默认值。你对C++在这个提案内部/提案之外在未来紧接的一年里的能力有什么看法？我认为这是唾手可得的果实。是吗？我的意思是，我想这就是为什么JF提出了这个建议，因为这是低垂的果实。这是对我们来说相当容易做到的事情，
+
+50
+00:33:40.000 --> 00:34:17.000
+But in this case, that would have, I think, very limited utility here. And so it's nice to see a proposal that actually suggests that we take the right default. And what are your thoughts on C++'s ability within this proposal slash outside of this proposal over the next immediate year? I think this is low-hanging fruit. Yeah? I mean, I think that's why JF has suggested it, because it's low-hanging fruit. It's something that is pretty easy for us to do,
+而且它将解决某一类漏洞。它会使我们的内存安全稍微提高一点。所以我们应该这样做。它不是，它不是一个完整的解决方案。它不会神奇地使C++成为内存安全的语言。C++在许多方面仍然是内存不安全的。但这——
+
+51
+00:34:17.000 --> 00:34:56.000
+and it'll address a certain class of vulnerability. It'll make us a little bit more memory safe. So we should do it. It doesn't, it's not a full solution. It doesn't magically make C++ a memory safe language. There's still many ways in which C++ is memory unsafe. But this is... A lot of the ways in which C++ is memory unsafe,
+C++内存不安全的很多方式，或者C++中漏洞的许多常见原因，来自于语言中具有基本效用的方面，比如指针或引用之类的东西，或者我们不像Rust那样拥有安全的对象所有权模型的事实。所有这些都会导致漏洞，但如果你无法改变它们，因为它们提供了基本的效用。就像，是的，它们可能是潜在的陷阱，但它们也是有用的工具。不对栈变量进行零初始化并没有真正提供任何效用。
+
+52
+00:34:56.000 --> 00:35:52.000
+or a lot of the common causes of vulnerabilities in C++ come from aspects of the language that have fundamental utility, like things like pointers or references or the fact that we don't have a a safe ownership model of objects like rust. All of those lead to vulnerabilities, but those are all things that if you can't just like change them because they're, they provide fundamental utility. Like, yeah, they can be foot guns, but they're also useful tools. Not zero initializing stack variables doesn't really provide any utility.
+我们不初始化它们的原因是为了性能，或者历史上是为了性能。但这并不是，你知道的，一个剥夺了人们某些功能的改变，对吧？对。所以我认为这是低垂的果实。我们应该直接去做。帝国反击战可能会带来一个“未初始化”属性，听起来
+
+53
+00:35:52.000 --> 00:36:27.000
+The reason we don't initialize them is for performance, or historically it's been for performance. But this is not, you know, a change which like takes away some functionality from people, right? Right. So I think it's low-hanging fruit. We should just do it. The empire strikes back with potentially an uninitialized attribute which like uh it sounds
+对我来说有点丑陋，但老实说，我从不写那种代码，所以它——也许没关系，它是丑陋的，你知道，大多数时候你不应该这样做，而且做出一个糟糕的选择是丑陋的——也许不是糟糕的选择，但像大多数时候是个糟糕的选择，我确信在某些情况下，你知道，存在着一整套未初始化算法是有原因的，它们存在是有原因的。是的，谢谢收听，希望你们喜欢，祝大家有美好的一天。这集还没有评论。点击转录中的任何句子来留下评论。
+
+54
+00:36:27.000 --> 00:36:32.000
+ugly to me but to be honest i never write code like that so like it and maybe that's okay that it's ugly that you know most of the times you shouldn't be doing that and making a bad choice ugly maybe not bad choice but like a for the majority of times a bad choice i'm sure there are cases where you know there are there's a reason why there's a whole set of uninitialized algorithms that uh they exist for a reason yeah thanks for listening we hope you enjoyed and have a great day There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+对我来说很难看，但老实说我从来不写那样糟糕的代码，所以也许它很难看也没关系，你知道大多数时候你不应该那样做，那是个糟糕的选择，也许不是糟糕的选择，但对大多数情况来说是个糟糕的选择，我确信在某些情况下，你知道，有理由说明为什么会有一整套未初始化的算法，它们的存在是有原因的，是的，谢谢收听，希望你们喜欢，祝你们有美好的一天。本集还没有评论。点击文稿中的任意句子即可发表评论。

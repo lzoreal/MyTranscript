@@ -1,0 +1,361 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:21.000
+All right, folks. Well, this has been fascinating. We're from this little square in Venice that we're sitting in. We hope you enjoyed our... This is kind of similar to the Lost Reduction series that we did where we went three different iterations, except this one all happened within a three-hour period or four-hour period. A three-hour period in a car and wandering around the streets of Venice.
+大家好。好吧，这真的太迷人了。我们现在正坐在威尼斯的一个小广场上。希望大家喜欢我们的……这有点类似于我们之前做过的“迷失归约”系列，我们经历了三个不同的迭代，不过这次全都是在三个小时或四个小时内发生的。在车里待了三个小时，又在威尼斯的街头闲逛。
+
+2
+00:00:21.000 --> 00:01:14.000
+So I think this is going to be it for the road trip. Welcome to ADSP, the podcast episode 147 recorded on June 21st, 2023. My name is Connor and today with my co-host Bryce, we continue to record live from the Slovenia 2023 road trip, this time while walking through the streets of Venice. In today's episode, we revisit the implementation of our parallel stud unique. All right, folks, we said goodbye on the highway on the way to Venice, but here we are. Live from the streets of Venice. This is a first, folks.
+所以我想这次公路旅行就要到此为止了。欢迎收看 ADSP 播客第 147 期，录制于 2023 年 6 月 21 日。我是康纳，今天我的联合主持人布莱斯和我继续从 2023 年斯洛文尼亚公路旅行中进行现场录音，这次是在威尼斯的街道上边走边录。在今天的节目中，我们将重新审视我们的并行 `std::unique` 的实现。好吧各位，我们在去威尼斯的公路上跟大家道过别了，但现在我们又来了。实况转播自威尼斯的街道。各位，这可是头一遭。
+
+3
+00:01:14.000 --> 00:01:33.000
+We took you on the road. Now we're taking you on a walk. We are headed to Osteria alla Staffa. Something like that, right? Something like that. And we are in the southeasternmost part of Venice, and the restaurant seems to be a lot further west. We've got about 30 minutes of walking.
+我们带你们上了路。现在我们要带你们去散步。我们要去 Osteria alla Staffa 餐厅。差不多是那个名字吧？差不多吧。我们现在在威尼斯的东南部，而那家餐厅似乎在更西边。我们大概还要走 30 分钟。
+
+4
+00:01:33.000 --> 00:01:52.000
+It is fantastically beautiful here. Nice, serene, quiet, peaceful in the area that we're in. There are birds chirping. There's nobody on the streets. It's lovely. We are about to cross a bridge. And we took a boat to get here. We dropped off our rental car,
+这里真的是美得难以置信。我们所在的地方既舒适、宁静、安静又祥和。有鸟儿在歌唱。街上空无一人。太美了。我们正要过一座桥。我们是坐船来这里的。我们退了租车，
+
+5
+00:01:52.000 --> 00:02:11.000
+our trustworthy steed for the past four days. We dropped it off at the entrance to Venice. And then we took a little boat that took us six stops here. And it was a lovely journey, I thought. What did you think? I thought it was fantastic. And now we're going to chat.
+也就是我们过去四天里忠实可靠的“骏马”。我们在威尼斯入口处还了车。然后我们坐了一艘小船，在这里停了六站。我觉得这是一段美妙的旅程。你觉得呢？我觉得棒极了。现在我们要开始聊天了。
+
+6
+00:02:11.000 --> 00:02:36.000
+I don't know why. Well, we're going to chat because we got to the hotel room, we checked in, and Connor, we'd been talking earlier about how to implement unique and parallel, and I came out of the bathroom, and Connor was just sitting there, staring at his suitcase, lost in thought. And he said, I think I figured it out. Yeah, honestly, folks, I apologize. It's going to be interesting to see how we edit this and how much of the original back and forth we keep in.
+我不知道为什么。好吧，我们要聊天是因为我们到了酒店房间，办好了入住，康纳，我们之前一直在讨论如何实现 `unique` 和并行，我从浴室出来时，康纳就坐在那儿，盯着他的行李箱陷入了沉思。他说：“我想我弄明白了。”是的，说实话，各位，我很抱歉。看看我们最后会怎么剪辑，以及保留多少最初的来回讨论，这一定很有意思。
+
+7
+00:02:36.000 --> 00:03:10.000
+But I just realized that adjacent difference, as it exists in Thrust currently, now renamed in the rangeland Adjacent Transform, is really just a map. It's a map looking at two different indices. And it could be a fancy iterator. We don't have a fancy iterator called Adjacent Transform, but you can actually spell it currently in Thrust with the zip. Wait, wait, wait. Okay, with zip? With the zip iterator and with the transform iterator.
+但我刚刚意识到，现有的 Thrust 中的 `adjacent_difference`（现在在 Rangeland 库中已重命名为 `adjacent_transform`）其实就是一个映射。它是一个查看两个不同索引的映射。它可以是一个花式迭代器（fancy iterator）。我们没有名为 `adjacent_transform` 的花式迭代器，但你实际上目前可以用 Thrust 中的 `zip` 来拼凑出它。等等，等等，好吧，用 `zip`？用 `zip` 迭代器和 `transform` 迭代器。
+
+8
+00:03:10.000 --> 00:03:31.000
+Okay, how do you do that? You basically just zip together two iterators, one pointing at the first element, one pointing at the second element. You zip that together, and then your transform iterator is going to be whether or not they are not equal to each other. Perfect. And, ooh, and yeah, and then you're going to have to use, but that is the copy if that is used.
+好吧，怎么做呢？你基本上就是把两个迭代器压缩（zip）在一起，一个指向第一个元素，一个指向第二个元素。你把它们压缩在一起，然后你的 `transform` 迭代器就会判断它们是否不相等。完美。而且，噢，还有，然后你必须使用……但如果用到的话，那是 `copy_if`。
+
+9
+00:03:31.000 --> 00:04:02.000
+It's using the stencil. So you're using the zip iterator, checking whether they're not equal to each other as the stencil, aka the sequence that's going to determine whether we copy elements. And then the sequence that we use to copy elements is the original sequence. So there's an overload there that doesn't exist you should probably explain the stenciled overloads because i don't those are not part of the standard library but you're referring to the stenciled overload that's just in thrust right correct yes this only exists in thrust i think we actually have talked about it two or three times before and the last time or one of the times we talked about it the
+它用到了模板（stencil）。所以你使用 `zip` 迭代器，检查它们是否不相等作为模板，也就是决定是否复制元素的序列。然后我们用来复制元素的序列是原始序列。所以这里有一个重载是不存在的——你可能应该解释一下带模板的重载，因为我不觉得那是标准库的一部分，但你提到的是仅存在于 Thrust 中的带模板的重载，对吧？对的，没错。这只存在于 Thrust 中，我想我们之前其实已经讨论过两三次了，而且我们讨论过的其中一次，
+
+10
+00:04:02.000 --> 00:04:35.000
+closest thing that i can think of um because it doesn't really often exist in too many programming languages or libraries that I've come across but it does exist in Excel in the form of the sum if function where you can basically point at two different ranges and use some a range based on some predicate or you know unary function that evaluates or some condition of another range. So, for example, I use that function a lot in a lot of my accounting spreadsheets where I'm like, sum up all of the values in this column
+我能想到的最接近的例子——因为在我接触过的太多编程语言或库中，它并不常见——但它确实存在于 Excel 中，也就是 `SUMIF` 函数的形式，你基本上可以指定两个不同的范围，并根据某个谓词（predicate，或者说评估某种条件的了一元函数）或另一个范围的某种条件来对某个范围求和。所以，例如，我在很多会计电子表格中经常使用这个函数，比如：将这一列中的所有值相加，
+
+11
+00:04:35.000 --> 00:04:56.000
+if I set another column to true or something. Exactly. And currently, the copy if as it exists in the STL, this is ridiculous, folks. We've got to stop and take a photo here. We're basically on the seawall of Venice here, walking to dinner, recording an episode. I mean, our life is surreal.
+如果我将另一列设为 true 之类的。没错。目前，STL 中现有的 `copy_if`——这太荒谬了，各位。我们得停下来拍张照。我们基本上是在威尼斯的防波堤上，一边走去吃晚饭，一边录制节目。我的意思是，我们的生活太超现实了。
+
+12
+00:04:56.000 --> 00:05:24.000
+Our life is pretty surreal. We are so grateful. We are very grateful to all the conferences that invited us out here to speak in Europe, to our employers. I mean, my employers are not paying. Our employers were generous enough to support us coming to these conferences, even if they weren't paying for the travel. They were supporting us coming here as part of our job function. We didn't have to take off vacation for this.
+我们的生活相当超现实。我们非常感恩。我们非常感谢所有邀请我们来欧洲演讲的会议，以及我们的雇主。我的意思是，我的雇主没有付……我们的雇主慷慨地支持我们来参加这些会议，即使他们没有支付差旅费。他们支持我们来这里作为我们工作职责的一部分。我们为此不需要请假。
+
+13
+00:05:24.000 --> 00:05:39.000
+I'm on vacation right now. I mean, I didn't take off vacation when I was at the conferences two weeks ago before Switzerland. To be fair, this is vacation for me too. I just meant that the parts where I'm at the conferences, that's not vacation. Yes.
+我现在在休假。我的意思是，两周前在瑞士之前的会议上，我并没有请假。公平地说，对我来说这也是度假。我只是说我在会议上的那些部分不是度假。是的。
+
+14
+00:05:39.000 --> 00:05:56.000
+Anyway, super grateful. I mean, it's very amazing that we're doing this podcast live on the seawall of Venice. Very beautiful, very sunny. And, of course, we are thankful to all of you, the listeners, because I don't know that we would necessarily be here without all your support. This is true.
+不管怎样，超级感恩。我的意思是，我们在威尼斯的防波堤上现场录制这个播客，这真的太惊人了。非常美丽，阳光明媚。当然，我们也要感谢你们所有听众，因为如果没有你们所有的支持，我不知道我们是否还能站在这里。这是真的。
+
+15
+00:05:56.000 --> 00:06:18.000
+I mean, the reason for this part of this trip is because we got an email about our podcast statistics that said we were the number eight ranked technology podcast in Slovenia. And so now here we are, just outside Slovenia in Venice. Anyways, thanks to everybody for listening. This is wonderful. I feel very grateful in this moment. Back to the STL. Yes.
+我的意思是，我们这次旅行的一部分原因是因为我们收到了一封关于播客数据的电子邮件，上面说我们在斯洛文尼亚排名第八。所以现在我们就在这里，在斯洛文尼亚门外的威尼斯。无论如何，感谢大家的收听。这太棒了。此刻我感到非常感恩。回到 STL。是的。
+
+16
+00:06:18.000 --> 00:07:00.000
+The copy if and all other algorithms don't have any overloads that take sort of this third sequence, if you will, or second sequence, if you will, that is used. So when you make a call to copy if, and you are evaluating a predicate to like copy the even elements, you're always applying that predicate to the sequence that you were going to copy from. There's no ability to, you know, evaluate that predicate on a different sequence and copy from another sequence. So thrust has that overload. And the point is, is that, you know, this, the zip iterator combined with the transform iterator to make a hand rolled adjacent transform iterator is going to evaluate to trues and falses. So we
+`copy_if` 和所有其他算法都没有任何重载可以接受这种第三个序列（如果你愿意这么叫的话），或者说第二个序列（如果你愿意的话）。因此，当你调用 `copy_if` 并评估一个谓词（比如复制偶数元素）时，你总是将该谓词应用于你将要复制的那个源序列。你没有能力（你知道的）在另一个序列上评估该谓词，然后从另一个序列中进行复制。所以 Thrust 拥有这样的重载。关键在于，你知道的，这个 `zip` 迭代器结合 `transform` 迭代器来制造一个手动的 `adjacent_transform` 迭代器，将会评估出一堆 `true` 和 `false`。所以我们
+
+17
+00:07:00.000 --> 00:07:30.000
+obviously don't want to copy those trues and falses. We want to copy the original sequence, which is going to be the values. Anyways, and so I realized while I was sitting on the bed that I have one realization, is that you, Bryce, mentioned that we didn't need to do the second unique in the original implementation. And I was thinking, yeah, you could have actually just made sure you don't copy when you were doing the merge. So however you implement that merge, you can deal with the edge cases there as well. So there's a couple different ways to make sure you're avoiding that last unique. That's a great point. I didn't think about that. Yeah, but I was thinking, and then I just realized, like, wait a second.
+显然不想复制那些 `true` 和 `false`。我们想要复制原始序列，也就是那些数值。无论如何，当我坐在床上时我意识到，我有一个顿悟，那就是你，布莱斯，曾提到我们在最初的实现中不需要做第二次 `unique`。我在想，是的，你实际上本可以在做归并（merge）时就确保不进行复制。所以无论你如何实现那个归并，你也可以在那里处理边界情况。所以有几种不同的方法来确保避免最后那次 `unique`。这真是个好主意。我没想到这一点。是的，但我在想，然后我突然意识到，等等，
+
+18
+00:07:30.000 --> 00:07:51.000
+This adjacent transform is just basically a modified transform iterator. And transform reduce and other algorithms are just basically transform iterators. You make use of them before you pass them to some final algorithm. And the final algorithm here is copy if. There's no reason you couldn't do that. Anyway, so that's why I was staring. And then I was about to explain to Bryce while I was sitting on the couch. He's like, what's wrong?
+这个 `adjacent_transform` 基本上就是一个修改过的 `transform` 迭代器。而 `transform_reduce` 和其他算法基本上也就是 `transform` 迭代器。你在将它们传递给某个最终算法之前会使用它们。这里的最终算法就是 `copy_if`。没有理由你不能这样做。不管怎样，这就是我当时在发呆的原因。然后我正要向坐在沙发上的布莱斯解释。他说：“你怎么了？”
+
+19
+00:07:51.000 --> 00:08:15.000
+And I was like, no, I'm just thinking about, I think you can do it in a single pass. And then I was about to explain it, and he was like, no, no, no, no. We're going to record a podcast while we go to dinner. And I was like, we're not bringing the mic. And he's like, why not? So often, you and I have a conversation, and it's a great conversation. And then afterwards, we're like, oh, that should have been a podcast episode. And so I was just trying to preempt that.
+我说：“不，我只是在想，我觉得你可以用单遍扫描（single pass）完成它。”然后我正要解释，他却说：“不，不，不，不。我们要一边去吃晚饭一边录播客。”我说：“我们不带麦克风吗？”他说：“为什么不带？”很多时候，你和我聊得很开心，那是一次很棒的对话。然后事后我们会说：“噢，那本该是一期播客的。”所以我只是想先发制人。
+
+20
+00:08:15.000 --> 00:08:34.000
+And it's like sometimes we start to have a conversation, and then we're like, no, no, no. Can't talk about that right now. We've got to save it. Save it for you, the listener. And so maybe I actually will go and open a PR. I mean, it takes forever to build Thrust, but this is actually something, like, I know that this zip iterator
+就像有时我们开始交谈，然后我们会说：“不，不，不。现在不能谈这个。我们得把它留着。留给你们，听众们。”所以也许我真的会去提交一个 PR（Pull Request）。我的意思是，构建 Thrust 需要很长时间，但这确实是一件事，我知道这个 `zip` 迭代器
+
+21
+00:08:34.000 --> 00:08:46.000
+combined with the transform iterator trick, it does exist. I'm not sure other places in Thrust, but I've definitely seen CUDA code, or Thrust code, if you will, that uses this pattern. So I don't think there's actually any reason why it wouldn't work.
+结合 `transform` 迭代器的技巧确实存在。我不确定 Thrust 的其他地方有没有，但我绝对见过使用这种模式的 CUDA 代码，或者说 Thrust 代码。所以我觉得没有任何理由它不能工作。
+
+22
+00:08:46.000 --> 00:09:12.000
+And then we have successfully achieved Bryce's goal of eliminating the linear storage for this. Well, and here's, I have a couple questions. So first of all, when we were in the car, I looked at the CUDA-specific implementation of Unique and confirmed that it was the version that you described. Did you look at that version or did you look at the generic version? And the generic version did that head flags thing too. I was looking at the version in the generic.nil
+然后我们就成功实现了布莱斯的目标：消除了针对这个操作的线性存储需求。好吧，这里我有一些问题。首先，当我们在车里时，我查看了 `unique` 的特定于 CUDA 的实现，并确认它就是你描述的那种版本。你看的是那个版本还是通用版本？通用版本也做了那个头标志（head flags）的事情。我当时看的是 `generic.inl` 文件中的版本。所以如果通用版就是那样的话……
+
+23
+00:09:12.000 --> 00:09:30.000
+file. So if that's what the generic is... It's interesting to me that... And just to fill listeners in, Thrust is built in such a way that there's multiple backends that it can target. So it targets I think Thrust building or thread building blocks from Intel. Anyways, there way that there's multiple backends that it can target. So it targets, I think, Thread building blocks from Intel. Anyways, there's a bunch of different backends, including CUDA.
+让我觉得有趣的是……为了让听众了解情况，Thrust 的构建方式使其可以面向多个后端。所以它面向的是——我想是来自英特尔的 Thread Building Blocks（线程构建模块）。不管怎样，它的设计方式是可以面向多个后端。所以它面向的是，我想，英特尔的 Thread Building Blocks。不管怎样，有许多不同的后端，包括 CUDA。
+
+24
+00:09:30.000 --> 00:10:19.000
+And so when you go and look at the implementations, usually I just check the generic.nil. And one of the key things about the way that Thrust is designed is to implement a backend, you only actually have to implement a couple of functions, like reduce and foreach. And if you implement nothing else, then there are generic versions, generic overloads in that generic folder that will get picked up. And they are implemented in terms of those primitives. So, like, for example, if you didn't want to implement your own, you know, findif, then you could just implement a reduce for your backend. And when somebody calls find if with your backend, it would call the generic version of find if, which is defined in terms of reduce. And then that would call through to your reduce. But maybe on your platform, you wanted to implement your own version of find if because
+所以当你去查看这些实现时，我通常只检查 `generic.inl`。Thrust 设计的关键点之一是，要实现一个后端，你实际上只需要实现几个函数，比如 `reduce` 和 `foreach`。如果你没有实现其他东西，那么那个通用文件夹中就会有通用版本的重载会被选中。它们是根据这些底层原语实现的。所以，举个例子，如果你不想实现你自己的 `find_if`，那么你只需为你的后端实现一个 `reduce`。当有人用你的后端调用 `find_if` 时，它会调用 `find_if` 的通用版本，而该版本是用 `reduce` 定义的。然后那会调用到你的 `reduce`。但也许在你的平台上，你想实现你自己的 `find_if` 版本，因为
+
+25
+00:10:19.000 --> 00:10:47.000
+you wanted to do something that was going to short circuit, or that was otherwise clever, you could then provide your own customized version of Findif, and then that would be found instead of the generic version. However, the generic versions in Thrust are often a good way to look at what is a general purpose, generic, good way to implement this algorithm in parallel. Because oftentimes looking at the specialized version for a particular implementation, it's a lot more code, it's a lot more code. It's a lot harder to understand.
+你想做一些能够提前终止（short-circuit）或者其他比较聪明的事情，那么你就可以提供你自己的定制版 `find_if`，这样就会找到你的版本而不是通用版本。然而，Thrust 中的通用版本通常是了解如何在并行中实现这个算法的通用、泛型且优秀的好方法。因为很多时候，查看针对特定实现的专用版本会包含多得多的代码，多得多的代码。它要难理解得多。
+
+26
+00:10:47.000 --> 00:11:14.000
+And so oftentimes when Connor and I want to figure out how something's done in parallel for a particular algorithm, we'll just go and look at that generic folder in Thrust. Yep. So anyways, I interrupted to explain why we're talking about generic versus CUDA. What was your thought? Or do you recall what you were thinking about? I'm interested as to why this hasn't occurred to anybody else, and whether we're missing something.
+所以很多时候，当康纳和我想要弄清楚某个特定算法是如何并行实现的时候，我们就会去 Thrust 的那个通用文件夹里看看。是的。所以无论如何，我打断是为了解释我们为什么在谈论通用版与 CUDA 版。你刚才在想什么？或者你还记得你在想什么吗？我很好奇为什么其他人没有想到这一点，以及我们是否遗漏了什么。
+
+27
+00:11:14.000 --> 00:11:41.000
+Like, because the... It is a big deal for an algorithm to need ON temporary storage versus needing no temporary storage. And it was actually a much bigger deal earlier in the development of libraries like Thrust because GPUs used to have a lot less memory than they did today. If it takes ON temporary storage to unique your array, then if you had a GPU that had four
+就像，因为……对于一个算法来说，需要 $O(N)$ 的临时存储空间还是不需要临时存储空间，这是一个非常大的区别。在 Thrust 这类库开发的早期，这其实是一个更大的问题，因为过去 GPU 的内存比主要小得多。如果对数组进行 `unique` 需要 $O(N)$ 的临时存储空间，那么如果你有一个只有 4
+
+28
+00:11:41.000 --> 00:12:27.000
+gigabytes of memory, you could only unique array of two gigabytes of memory. And now if you have this algorithm that doesn't require temporary storage, then you could work with a data set that is twice as large as you previously could. That's a huge deal. Yeah, what is also interesting, and one other thing on that point and and oftentimes i would be willing to pay a lot more computationally for a problem that doesn't need temporary storage just so that i can fit the problem size onto the gpu even maybe it would even be slower in some cases and that might be okay just because it lets me run with a larger problem size. Yeah, this is a... I think we should definitely...
+吉字节内存的 GPU，你只能对 2 吉字节内存的数组进行 `unique`。而现在，如果你有了这个不需要临时存储空间的算法，你就可以处理比以前大一倍的数据集。这太了不起了。是的，同样有趣的是，关于这一点的另一件事是——很多时候我愿意在计算上付出更多的代价来解决一个不需要临时存储的问题，只要能把问题规模塞进 GPU 里就行，甚至有时它可能会慢一些，而这也没关系，仅仅因为它允许我用更大的问题规模来运行。是的，这是一个……我觉得我们绝对应该……
+
+29
+00:12:27.000 --> 00:12:45.000
+I mean, we've talked about... I think we were supposed to do some episode on some other thrust algorithm and the implementation of it or some change we could make. But this one is actually pretty easy to do. It's not that hard. And what's even more interesting is a whole other layer on top of this
+我的意思是，我们谈论过……我觉得我们本该做一期关于其他 Thrust 算法及其实现的节目，或者是我们可以做出的一些改变。但这个实际上很容易做到。没那么难。更有趣的是，在它之上还有厚厚的一层，
+
+30
+00:12:45.000 --> 00:13:12.000
+is there is a sibling algorithm that exists right next to unique that doesn't exist in the STL. Do you know what it is, Bryce? I don't. It is unique underscore and then one more word. So it's like a unique prefix. I don't think it's unique sort. Actually, now that I say this out loud, there's actually two unique underscore algorithms.
+那就是在 `unique` 旁边存在一个同胞算法，它在 STL 中并不存在。你知道那是什么吗，布莱斯？我不知道。它是 `unique_` 然后再加上一个词。所以它就像是一个 `unique` 前缀。我觉得不是 `unique_sort`。其实，当我大声说出来时，实际上有两个带有 `unique_` 的算法。
+
+31
+00:13:12.000 --> 00:13:31.000
+Unique sort two? There's not a unique sort. There's a unique underscore. Two different ones. Listener, play along. Can you think of... And also, these don't exist in the C++ standard template library. You are going to have to be creative if you're not familiar with thrust to think is there unique if not unique if
+`unique_sort2`？没有 `unique_sort`。有一个 `unique_`。有两个不同的。听众们，一起来猜猜看。你能想到……而且，这些并不存在于 C++ 标准模板库中。如果你对 Thrust 不太熟悉，你必须发挥创造力去思考：有没有 `unique_if`？如果不是 `unique_if`——
+
+32
+00:13:31.000 --> 00:14:03.000
+good guess though uh although i don't know actually what unique if would do because if underscore if algorithms usually take unary predicates you could change it to take a binary predicate that would replace the default of equal to with something else. Or maybe unique if. That could be the semantics of it. But no, it is not unique if. I don't know. I'm not sure. All right, the one I was thinking of was unique underscore count. And the other one that popped into my head while I was saying this
+不过猜得不错，呃，虽然我其实不知道 `unique_if` 会做什么，因为如果 `if` 算法通常接受一元谓词，你可以把它改成接受一个二元谓词，用来将默认的“等于”替换为其他东西。或者也许叫 `unique_if`。那可能是它的语义。但不是，它不是 `unique_if`。我不知道。我不太确定。好吧，我脑子里想的是 `unique_count`。而在我这么说的时候，另一个弹在我脑海里的算法
+
+33
+00:14:03.000 --> 00:14:50.000
+was unique by key, which is one of the segmented algorithms about that we talked a little bit about the stenciled versions of the thrust algorithms how do they relate if all to the by key versions of the algorithms so I think we should save this for a follow-up because when I was actually giving my gtc i want to say it was 2021 thrust algorithms talk i gave a tuck comparing stl algorithms and the standard library versus thrust algorithms i mentioned all these segmented algorithms yeah but they're actually really really poorly named in my opinion because um of them, like reduce by key, are actually like a segmented reduction, meaning that you, I believe
+是 `unique_by_key`，这是那些分段算法之一。我们之前稍微聊过 Thrust 算法带模板的版本，它们与这些算法的 `by_key` 版本有什么关系吗（如果有的话）？所以我觉得我们应该把这个留到后续节目中，因为当我实际上在 GTC 上做演讲时——我想那是 2021 年的 Thrust 算法演讲——我做了一个对比 STL 算法、标准库与 Thrust 算法的演讲，我提到了所有这些分段算法。
+
+34
+00:14:50.000 --> 00:15:10.000
+provide a unary function or unary predicate and it's going to then not actually materialize segments but it's going to do reductions that basically the unary predicate is going to be the key function that determines where the segments start and end. So for instance, you could do a
+是的，但在我看来，它们的名字起得真的很糟糕、很糟糕，因为……其中一些，比如 `reduce_by_key`，实际上就像是一个分段规约（segmented reduction），这意味着你，我相信
+
+35
+00:15:10.000 --> 00:16:04.000
+reduce by key for once again, like contiguous odd and elements in a row, and then even elements in a row. So your unary function would be odd or even, and then you could do a sum, you could sum those elements up. So like you can mentally think about this as like creating a sub lists of contiguous even elements and odd elements and then you sum up those sub lists yeah however there are by key algorithms such as sort by key and unique by key where these are not segmented algorithms they are algorithms that i believe are the equivalent of the projections that got added in c++ uh 7 20 c++ 20 in the range uh overload algorithms where for instance um if you want to sort based on like the length of your string right your projection is stood colon colon size and you
+提供一个一元函数或一元谓词，然后它不会真正地把分段具现化（materialize），而是会做规约，基本上那个一元函数就是决定分段从哪里开始和结束的键函数（key function）。例如，你可以做一次
+
+36
+00:16:04.000 --> 00:16:35.000
+pass that as one of the arguments, and now instead of having to write your custom binary operator that does a comparison on the sizes of your strings, you are just passing the std colon colon size function, and that is basically the semantics of what the underscore by key mean for unique and sort. You're passing some kind of unary function that is then performing the uniqueness and the sorting after applying that unary function, I believe. And that is a completely different semantics
+`reduce_by_key`，再次以连续的一行奇数元素和一行偶数元素为例。所以你的一元函数将是“奇数”或“偶数”，然后你可以做一个求和，你可以把这些元素加起来。所以你在心理上可以把这想象成创建连续的偶数元素子列表和奇数元素子列表，然后你对这些子列表求和。是的，然而，也有一些 `by_key` 算法，比如 `sort_by_key` 和 `unique_by_key`，这些并不是分段算法，它们是我认为是 C++ 20（呃，7 20，是 C++ 20 范围重载算法中加入的投影（projections）的等价物。在那里，例如，
+
+37
+00:16:35.000 --> 00:17:04.000
+than the segmented reductions. Anyway, so this is why I said we should kind of save it for a whole other episode, because I think it's just like a, that's like the equivalent of, you know, we've got different suffixes and prefixes and then like having two different semantics for them. So like if underscore if meant one thing for copy and one thing for another algorithm that uses it. That second meaning I think is in some way related to the stenciled versions.
+如果你想根据字符串的长度来排序，对吧，你的投影就是 `std::colon::size`（译者注：即 `std::size`），你把它作为参数之一传递，现在你不用编写自定义的二元运算符来对字符串的大小进行比较，你只需传递 `std::size` 函数，这基本上就是 `_by_key` 对 `unique` 和 `sort` 含义的语义。你传递某种一元函数，它在应用该一元函数后执行唯一化和排序，我相信是这样的。这与分段规约具有完全不同的语义。
+
+38
+00:17:04.000 --> 00:17:36.000
+And I think I would have to think more about what that relation is. But I do agree that I think that the current nomenclature is a little bit confusing. So maybe we should do a whole episode on that. Yeah. It is absolutely beautiful here. We are getting to, I think, more of the main part of Venice and it's just gorgeous. It is hot, also. It is very hot. So the reason I brought up unique count is that the first question is, one, how do you think that's implemented? I actually haven't thought. I've kind of thought about it a little bit in my head.
+无论如何，这就是为什么我说我们应该把这个留到另一整期节目中，因为我觉得这就像是，这就好比我们有不同的后缀和前缀，然后对它们有两套不同的语义。所以如果 `_if` 对 `copy` 意味着一回事，而对使用它的另一个算法意味着另一回事。我认为这第二种含义在某种程度上与带模板的版本有关。
+
+39
+00:17:36.000 --> 00:17:53.000
+A reduction, I imagine. Yeah, so Bryce just said a reduction. I would guess the same thing. However, naively, you could just once again allocate the linear memory and then just do a plus reduction on that ideally they don't do that and you hand roll your own now the real question is
+我想我得花更多时间思考这种关系是什么。但我确实同意目前的命名法有点令人困惑。所以也许我们应该专门做一期节目来讨论这个。是的。这里绝对美极了。我们正在走向威尼斯的更核心地带，简直美不胜收。而且也很热。非常热。我提起 `unique_count` 的原因在于，第一个问题是：一，你觉得它是怎么实现的？我其实没想过。我在脑子里稍微想过一点。
+
+40
+00:17:53.000 --> 00:18:15.000
+although actually why do we have a unique count instead of a unique reduce that's generic and that can take like you know a plus operator if you want to do count or something or like not a plus operator but something that would just do a count if you want. I mean... Perhaps there's no real use for it, but...
+我想是一个规约。是的，所以布莱斯刚刚说是规约。我也会猜是这个。不过，天真地讲，你也可以再次分配线性内存，然后在那上面做一个加法规约。理想情况下他们不这样做，而是自己手动实现。现在真正的问题是——
+
+41
+00:18:15.000 --> 00:18:40.000
+No, my guess is that the implementation, I would hope that the implementation doesn't require that linear... Like, it doesn't require, one, the... Actually, the reason that exists has to be that it doesn't require the copy if at the end. But the question is, does it still require the linear allocation for the adjacent difference?
+虽然其实为什么我们有 `unique_count` 而不是一个通用的、可以接受诸如加法运算符来做计数之类操作的 `unique_reduce`？或者不是加法运算符，而是某种如果需要的话只做计数的东西。我的意思是……也许它没有真正的用途，但是……
+
+42
+00:18:40.000 --> 00:19:13.000
+And if it does, that means we can turn that algorithm into not only eliminating the uh linear memory requirement but like uh it's now avoiding the copy f it's kind of weird now because we're in like this uh keep going we're right bryce literally nobody's fixing bryce bryce is american so he doesn't mind uh disrupting everyone else's vacation time. Ooh, it's nice and cool in here. It is nice and cool in here, which is a pleasant difference. So you have internet on your phone. Are you able to check right now the unique count implementation?
+不，我猜其实现——我希望其实现不需要那种线性的……就像，它不需要，第一，其实……它之所以存在，原因一定是不需要在最后做 `copy_if`。但问题是，它仍然需要为 `adjacent_difference` 进行线性分配吗？
+
+43
+00:19:13.000 --> 00:19:52.000
+Because my guess is that it actually makes a call to adjacent difference. So we could actually do two refactors here, and the refactor on unique count would be would be massive like yeah you're changing basically a linear transform into a linear memory transform to an o1 memory reduction that would be pretty pretty awesome while bryce is looking that up I will just Give the Give the listener I wonder if we can get a donut We didn't get a donut in Croatia
+如果需要，那就意味着我们可以将这个算法进行改造，不仅消除对线性内存的需求，而且……它现在避免了 `copy_if`。现在感觉有点怪，因为我们正处于这种……继续走，我们就在这儿。布莱斯，真的没人管布莱斯。布莱斯是个美国人，所以他不介意打扰别人的假期。噢，这里面又好又凉快。这里面确实又好又凉快，这是一个令人愉快的反差。所以你手机上有网。你现在能查一下 `unique_count` 的实现吗？
+
+44
+00:19:52.000 --> 00:20:05.000
+That is true We failed to get a donut We also failed to run a street We did walk a street There could be donuts here Let's check it out I don't want to walk into a store While recording I mean you can follow me Hello There are donuts Are there, are these? There could be donuts here, let's check it out. I don't wanna walk into a store while recording.
+因为我猜它实际上调用了 `adjacent_difference`。所以我们实际上可以在这里做两次重构，而对 `unique_count` 的重构将是巨大的——是的，你基本上是把一个线性内存变换变成了 $O(1)$ 内存的规约，那将是相当相当棒的。在布莱斯查找的时候，我就给听众们……我在想我们能不能买个甜甜圈。我们在克罗地亚没吃成甜甜圈。
+
+45
+00:20:05.000 --> 00:20:17.000
+I mean, you can follow me. Hello. Hello. There are donuts. But, there are donuts. They are filled. No, there's one sugar donut. I don't think you see the sugar donut.
+确实如此。我们没吃成甜甜圈。我们也没在街上跑。我们确实在街上走。这里可能会有甜甜圈。让我们看看。我不想在录音的时候走进商店。我的意思是你可以跟着我。你好。有甜甜圈。这里可能有甜甜圈，让我们瞧瞧。我不想在录音的时候走进商店。
+
+46
+00:20:17.000 --> 00:20:35.000
+Oh, perfect, yeah. Yeah. What's your favorite, what's your favorite? Ah, it's all good, but do you want like a croissant or a pizza? A pita, yeah. For me, this would be the best one with cream and fruit. All right, I'll take one. So healthy, Connor.
+我的意思是你可以跟着我。你好。你好。有甜甜圈。但是，有甜甜圈。它们是夹心的。不，有一个糖霜甜甜圈。我觉得你没看到那个糖霜甜甜圈。
+
+47
+00:20:35.000 --> 00:20:51.000
+Hey, we're on vacation. Vacation calories don't count. And also, I actually am pretty healthy. Bryce trying to make me feel bad about eating a donut. Shame on you, Bryce. I'm just kidding. Donuts are food for the soul. Look at me.
+哦，完美，是的。你最喜欢哪个，最喜欢哪个？啊，都挺好的，不过你想吃牛角面包还是披萨？皮塔饼，是的。对我来说，这个带奶油和水果的会是最好的。好的，我要一个。真健康啊，康纳。
+
+48
+00:20:51.000 --> 00:21:05.000
+And you're in much better shape than that. Thank you. Have a good day. All right, folks. Coke Zero's in hand. Pastry's in hand. We're going to have to find somewhere to sit down now for a second. All right, we're walking to have to find somewhere to sit down now for a second.
+嘿，我们在度假呢。度假的卡路里不算数。而且，实际上我也挺健康的。布莱斯试图让我为吃甜甜圈感到内疚。真羞耻啊，布莱斯。我开玩笑呢。甜甜圈是灵魂的食物。看着我。
+
+49
+00:21:05.000 --> 00:21:24.000
+Alright, we're walking. Bryce did not get to... We got distracted by the donuts and we did not... Alright, we're going to go sit down on this bench. Bryce is going to get back to finding the implementation. This is honestly... If we manage to, while on a road
+你的身材比那好得多。谢谢。祝你有美好的一天。好了，各位。手握零度可乐。手握糕点。我们现在得找个地方坐一会儿了。好吧，我们正在走，得找个地方坐一会儿了。
+
+50
+00:21:24.000 --> 00:21:56.000
+trip, refactor some thrust algorithms to eliminate linear memory requirements, that's pretty, I mean, I feel like at this point we should not be on vacation and we should be being paid for this, you know? All the benches are kind of occupied. Hmm. Do we keep walking? What? We are going to see if there's a bench on this other side.
+好吧，我们在走。布莱斯没能——我们被甜甜圈分心了，没能——好吧，我们要去坐在这张长椅上。布莱斯要回去找实现方式。老实说，如果我们在公路旅行中设法重构一些 Thrust 算法以消除线性内存需求，那真的……我的意思是，我觉得此时此刻我们不应该在休假，我们应该为此拿着薪水，你知道吗？所有的长椅好像都有人了。嗯。我们继续走吗？什么？我们要看看那边有没有长椅。
+
+51
+00:21:56.000 --> 00:22:16.000
+There's not. I mean, we could just sit. We're just going to sit on this wall. It looks clean enough. It doesn't look like it'll kill us. We're just going to sit on this wall. It looks clean enough. It doesn't look like it'll kill us. At least not quickly. Alright, folks.
+没有。我的意思是，我们可以直接坐下。我们就坐在这一堵墙上。看起来够干净的。看起来不会要了我们的命。我们就坐在这一堵墙上。看起来够干净的。看起来不会要了我们的命。至少不会死得那么快。好吧，各位。
+
+52
+00:22:16.000 --> 00:22:34.000
+I'm going to put the mic down for a second while we take a sip of our Coke Zeros, get our donuts. This donut honestly doesn't look as good as the Roman donut I had. First bite. Don't worry, folks. I will record this for posterity. We're recording.
+我要把麦克风放下几秒钟，我们喝一口零度可乐，吃我们的甜甜圈。老实说，这个甜甜圈看起来没有我在罗马吃的好吃。第一口。别担心，各位。我会把这个录下来留作纪念。我们在录音。
+
+53
+00:22:34.000 --> 00:22:46.000
+Yeah, that's a big miss. That's a big miss. Not a good donut. Compared to the Rome donuts, I mean, look at the sugar. There is a lot of sugar. It's all crusty-ed up, you know? Yeah. You know, we're going to suffer through it, though, sugar. There is a lot of sugar. It's all, it's all, it's all crushed it up, you know? Yeah.
+是的，这是一个大失误。这是一个大失误。不是个好甜甜圈。跟罗马的甜甜圈比起来，我的意思是，看看这些糖。有很多糖。全都是脆皮结块的，你知道吗？是的。你知道的，不过我们要咬牙吃完它，糖。有很多糖。全都是，全都是，全都是脆皮结块的，你知道吗？是的。
+
+54
+00:22:46.000 --> 00:23:09.000
+You know, we're going to suffer through it though, folks. Bryce is taking too long. So we're going to go find, we're going to race him. And he's not even trying right now, so I'm probably going to win. Stay, stay tuned, folks. Oh, sorry. So we just came across unique copies, so I guess there's actually, there was three. Unique copies in the standard too, right?
+你知道的，不过我们要咬牙吃完它，各位。布莱斯花的时间太长了。所以我们要去找，我们要跟他比赛。而且他现在甚至都没在努力，所以我很可能会赢。请拭目以待，各位。哦，抱歉。我们刚刚遇到了 `unique_copy`，所以我想实际上，有三个。标准库里也有 `unique_copy`，对吧？
+
+55
+00:23:09.000 --> 00:24:02.000
+I actually don't think it is. Maybe it's all right we're looking it up i'm looking that up all right here we go unique count it is a unique copy is in the standard all right i was wrong wow i just okay so i just look look at this i found the i found the issue on uh adding the unique count algorithm and uh there's a little code snippet that shows a zip iterator and then just count effing on that so it looks like they're actually doing it correctly but this is just a little code snippet it's not actually the source but then a year ago jake hemstad our colleague, says that, or he CCs me, and he CCed me to ask about naming because I always get involved in this stuff. And I said, long story short, I agree with Jake that Unique Count is the correct name. But let's find the PR.
+我其实觉得没有。也许是吧，我们正在查，我正在查。好吧，我们来了：`unique_count`。标准库里确实有 `unique_copy`。好吧，我错了。哇，我刚才——好吧，看看这个，我找到了关于添加 `unique_count` 算法的 Issue。里面有一个小代码片段，展示了一个 `zip` 迭代器，然后对其调用了 `count_if`，所以看起来他们确实做对了，但这只是一个小代码片段，并不是真正的源码。但就在一年前，我们的同事杰克·海姆斯特德（Jake Hemstad）说，或者他抄送了我，他抄送我是为了问命名的事，因为我总是卷入这些事情。我说，长话短说，我同意杰克说的，`unique_count` 是正确的名字。但让我们找到那个 PR。
+
+56
+00:24:02.000 --> 00:24:19.000
+The PR. Also, look at this the third result for unique copy on the internet says stood unique copy can be used to remove all the duplicate elements whether consecutive or not that's not how it works unless if it goes on to say but you need to sort it first yeah
+那个 PR。另外，看看这个，互联网上关于 `unique_copy` 的第三个搜索结果说：“`std::unique_copy` 可以用来删除所有重复的元素，无论它们是否连续。”根本不是这样的，除非——接下来它会说——但你需要先对它进行排序。是的。
+
+57
+00:24:19.000 --> 00:24:54.000
+in which case then you can so to say that you can use it to do that is true but that is not what it does for any arbitrary sequence. 14 files changed. All right, we're getting to it. No, the code example here is just wrong. Maybe they mean that if you have two sets of uniques of the same, like, value that are not sorted, like, it will remove those two uniques as long as they're next to each other. But I think that that's very confusing.
+在这种情况下，你可以这么说，所以说你可以用它来做到这一点是真的，但对于任意序列来说，它并不是那样的。14 个文件被更改。好吧，我们正在接近它。不，这里的代码示例完全错了。也许他们的意思是，如果有两组相同值的、没有排序的 `unique`，比如，只要它们挨在一起，它就会移除那两个 `unique`。但我认为这非常令人困惑。
+
+58
+00:24:54.000 --> 00:25:13.000
+Anyways, people on the internet are wrong. I'm angry. All right, we found the PIN. We have, we're looking at, Right now we're looking at a file called thrust detail unique dot I-N-L. Now we're looking at system slash CUDA slash detail slash
+无论如何，互联网上的人都是错的。我很生气。好吧，我们找到了那个 PR。我们有，我们在看——现在我们正在看一个名为 `thrust/detail/unique.inl` 的文件。现在我们在看 `system/cuda/detail/unique.h`。那个文件，是的，很多。噢。
+
+59
+00:25:13.000 --> 00:25:45.000
+unique dot H. That one's, yeah, a lot. Ooh. There's a struct called zip underscore A-D-J underscore not underscore predicate which is basically exactly what you want yeah and here we go so we are at unique count if first equals last return zero auto size equals the distance between first and last auto it equals thrust colon colon make zip iterator and then you've got your make tuple
+有一个名为 `zip_adj_not_predicate` 的结构体，它基本上就是你想要的东西。是的，我们开始吧：所以我们在 `unique_count_if` 中：`if (first == last) return 0;` `auto size = distance(first, last);` `auto it = thrust::make_zip_iterator(thrust::make_tuple(first, thrust::next(first)));` 所以这正是我说的，你把第一个元素和第二个元素压缩（zip）在一起，然后调用 `1 + thrust::count_if(...)`，
+
+60
+00:25:45.000 --> 00:26:28.000
+first and then thrust colon colon next first so that's exactly what i said you're zipping the first element uh first element and then and the second element and then you're making a call to one plus thrust colon colon count if yeah passing, passing your execution policy, and then passing the struct zip underscore adj underscore not predicate. So interesting that at some point, when was, so we're, this is all very fascinating. This got merged a year ago. Whose PR was this? This looks like it was merged by Allison, but UPSJ who is Tobias Ribizel
+传递你的执行策略（execution policy），然后传递结构体 `zip_adj_not_predicate`。真有趣，在某个时刻——是什么时候？所以我们——这一切都太迷人了。这个在一年前被合并了。这是谁的 PR？看起来是由艾莉森（Allison）合并的，但 UPSJ，也就是托比亚斯·里比泽尔（Tobias Ribizel）——
+
+61
+00:26:28.000 --> 00:26:42.000
+PhD student research software engineer on HPC library for numerical linear algebra it says that sort of this PR for the common count to allocate to fill pattern count if copy if there are some fill algorithms without corresponding count algorithm
+它是 HPC 数值线性代数库的博士生兼研究软件工程师——他说，这个 PR 用于将公共计数分配给填充模式、`count_if`、`copy_if`，有一些填充算法没有对应的计数算法，
+
+62
+00:26:42.000 --> 00:27:00.000
+and so he just suggested it. I would have thought that this was motivated a little bit by the Rapids libraries because I definitely know that these exist in the Pandas and like NumPy libraries but I guess not. I guess
+于是他顺便建议了这一点。我本以为这在某种程度上是受到 Rapids 库的启发，因为我绝对知道这些存在于 Pandas 和 NumPy 库中，但我想并不是。我想
+
+63
+00:27:00.000 --> 00:27:15.000
+we must have hand-rolled our own or maybe when this showed up we replaced it. But the point being is that even though these are sibling algorithms, they weren't implemented at the same time. This was proposed and then merged a year later. You mean unique count and unique? Yeah.
+我们肯定自己手动实现了，或者当这个出现时我们替换了它。但重点是，尽管这些是同胞算法，但它们并不是同时实现的。这个是先被提议，然后一年后才被合并的。你是说 `unique_count` 和 `unique`？是的。
+
+64
+00:27:15.000 --> 00:27:34.000
+Unique existed a long time ago. And because of that, even though they're sibling algorithms, this zip pattern is used in the unique count one, but it's not used in the unique one. So this is basically everything but like 100 confirmation that we can go and do this um anything we're sitting on the ground now we're probably gonna stop recording so we can go to dinner i'm not sure if rob's
+`unique` 很久以前就有了。正因为如此，尽管它们是同胞算法，这种 `zip` 模式被用在了 `unique_count` 中，却没有用在 `unique` 中。所以这基本上除了 100% 的确认之外，意味着我们可以去做了……无论如何，我们现在坐在地上，我们可能要停止录音以便去吃晚报。我不确定罗布（Rob）
+
+65
+00:27:34.000 --> 00:27:56.000
+waiting for us we should have brought our laptops we could we wouldn't have been able to build it on my laptop unfortunately i gotta leave i got leave. We got until 5.30 tomorrow morning when I got a leave for the airport. But I think we can get this done by then. I don't think so. But do you have a box we can build on? I do. Okay.
+是不是在等我们。我们本该带上笔记本电脑。不幸的是，我没法在我的笔记本电脑上构建它，我得走了，我得走了。我们直到明天早上 5:30，那时我得动身去机场。但我想我们到那时能搞定这个。我并不这么觉得。不过你有一个可以用来构建的服务器（box）吗？我有。好的。
+
+66
+00:27:56.000 --> 00:28:10.000
+A box meaning like a box somewhere... Somewhere in the cloud, yeah. Somewhere in the cloud. No, I didn't bring a workstation with me. All right, folks. Well, this has been fascinating. We're from this little square in Venice that we're sitting in. We hope you enjoyed our...
+服务器，意思是像某个地方的服务器……云端的某个地方，是的。云端的某个地方。不，我没随身带工作站。好吧，各位。好吧，这真的太迷人了。我们现在正坐在威尼斯的一个小广场上。希望大家喜欢我们的……
+
+67
+00:28:10.000 --> 00:28:32.000
+This is kind of similar to the Lost Reduction series that we did where we went three different iterations, except this one all happened within a three-hour period or four-hour period. A three-hour period in a car and wandering around the streets of Venice. So I think this is going to be it for the road trip. Well, no, we might talk to Rob. We might talk to Rob. Hey, we have the microphone.
+这有点类似于我们之前做过的“迷失归约”系列，我们经历了三个不同的迭代，不过这次全都是在三个小时或四个小时内发生的。在车里待了三个小时，又在威尼斯的街头闲逛。所以我想这次公路旅行就要到此为止了。好吧，不，我们可能会和罗布聊聊。我们可能会和罗布聊聊。嘿，我们拿着麦克风呢。
+
+68
+00:28:32.000 --> 00:28:54.000
+What's interesting, too, is I talked to Michael Garland, my boss, about this, probably two weeks ago or a month ago, and this is how this whole conversation came up, because we were chatting about the implementation of Unique and about which algorithms could be stream fused or could take advantage of stream fusion. And Unique was not able to do that. Maybe explain what stream fusion is.
+有趣的是，大约两周前或一个月前，我和我的老板迈克尔·加兰（Michael Garland）谈过这件事，这就是整个对话的起因，因为我们当时在聊天讨论 `unique` 的实现，以及哪些算法可以进行流融合（stream fusion）或者可以利用流融合。而 `unique` 无法做到这一点。也许可以解释一下什么是流融合。
+
+69
+00:28:54.000 --> 00:29:12.000
+We're not going to explain what stream fusion is right now, but we'll talk about it in a future episode. So I was talking with Michael, my boss, about this. We talked about, I asked him, do you know how Unique is implemented? We might have mentioned this a couple episodes ago he mentioned the adjacent difference and copy if and then I was like yeah that makes sense but then
+我们现在不会解释什么是流融合，但我们会在以后的节目中讨论它。所以我当时和我的老板迈克尔谈过这件事。我们讨论过——我问他：“你知道 `unique` 是怎么实现的吗？”我们可能在几期节目之前提到过这一点，他提到了 `adjacent_difference` 和 `copy_if`，然后我说：“是的，这说得通。”但
+
+70
+00:29:12.000 --> 00:29:29.000
+at that point in time neither of us thought like oh could we do better here but here we are hey hey hey that's what I'm here for that's what the road trip is all about we are improving algorithm implementations. You heard it here first, folks.
+当时我们两个都没想过：“噢，我们在这里能做得更好吗？”但我们现在就在这里，嘿，嘿，嘿，这就是我来这里的目的，这才是公路旅行的意义所在：我们在改进算法的实现。各位，你们最先在这里听说了这件事。
+
+71
+00:29:29.000 --> 00:29:49.000
+No more linear memory requirements for unique copy. I mean, technically there's a linear requirement for the copy part at the end, but the intermediate storage, not necessary. We're signing off for now. Enjoy your night, folks. Enjoy your night. We will be back soon. Adios.
+`unique_copy` 不再需要线性内存需求了。我的意思是，严格来说最后复制的部分仍然有线性需求，但中间存储是不必要的。我们暂时先录到这里。祝大家有个愉快的夜晚，各位。祝你们有个愉快的夜晚。我们很快就会回来。再见。
+
+72
+00:29:49.000 --> 00:29:54.000
+Be sure to check the show notes either in your podcast app or at ADSPthepodcast.com for links to any of the things we mentioned in today's episode, as well as a GitHub discussion where you can leave questions, comments, or thoughts. Thanks for listening. We hope you enjoyed and have a great day. Low quality, high quantity. That is the tagline of our podcast. thoughts. Thanks for listening. We hope you enjoyed and have a great day. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+请务必查看您的播客应用或 ADSPthepodcast.com 上的节目简介，获取我们今天节目中提到各项内容的链接，以及可供您留下问题、评论或想法的 GitHub 讨论区。感谢收听。希望您喜欢并度过美好的一天。质量不高，数量凑数。这就是我们播客的标语。想法。感谢收听。希望您喜欢并度过美好的一天。本集目前还没有评论。点击文稿中的任意句子即可发表评论。

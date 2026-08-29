@@ -1,0 +1,231 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:08.000
+The Psy Combinator. It's on in Haskell. We love it. You got a unary operation, you got a binary operation, and two arguments incoming. You apply that unary operation to both arguments and then feed it to the binary operation. It's super useful if you're doing chunk buys in Haskell. That's called group or group buy. Welcome to ADSP, the podcast episode 146, recorded on June 21st, 2023. My name is Connor, and today with my co-host Bryce, we continue to record live from Italy on the way to Venice during our Slovenia 2023 road trip. In today's episode, we chat about improvements to our parallel stood unique implementation, essential data structures, our favorite algorithms revisited and BQN superpowers. All right, well, so what am I what am I telling the listener at slash you? Your your idea for a a implementation of unique that does not need temporary storage.
+Psi 组合子。它在 Haskell 中可以使用。我们超爱它。你有一个一元操作，一个二元操作，以及两个传入的参数。你把该一元操作应用到两个参数上，然后将结果输入给二元操作。如果你在 Haskell 中进行分块购买，这超级有用。这叫做 group 或 group buy。欢迎收听 ADSP 播客第 146 期，录制于 2023 年 6 月 21 日。我是康纳（Connor），今天我和我的联合主持人布莱斯（Bryce）继续在意大利进行现场录制，这是我们在 2023 年斯洛文尼亚公路旅行中前往威尼斯的路上。在今天的节目中，我们将讨论对我们并行 std::unique 实现的改进、基本数据结构、重温我们最喜欢的算法以及 BQN 的超能力。好吧，那么，我在向听众——斜杠你——传达什么呢？你关于一个不需要临时存储的 unique 实现的想法？
+
+2
+00:01:08.000 --> 00:01:34.000
+Right. So we will, we'll, we'll do this with a practical example. Say we have a hundred numbers. You're going to chunk this up into 10 chunks of 10 on each of these 10 chunks. You're now going to call a sequential unique. You don't need this one to be in parallel. The parallel in this is the fact that we're doing this 10 different times on 10 different chunks you call unique on each of these chunks then once you've done that you're going to merge them which
+对。所以我们将，我们，我们将用一个实际的例子来做这件事。假设我们有一百个数字。你打算把它切分成 10 个块，每个块有 10 个数。在这 10 个块中的每一个块上。你现在要调用一个顺序的 unique。你不需要这个是并行的。这里的并行性在于我们对 10 个不同的块做了 10 次这件事情你在每个块上调用 unique 一旦你完成了这个，你就要把它们合并，这
+
+3
+00:01:34.000 --> 00:02:09.000
+bryce asked well what does that mean you're basically just going to be copying and you could calculate the indices first if you wanted to perform all the copies in parallel or you could just do them one after another sequentially where basically because you've called unique on each of these chunks you basically have potentially removed some values so you need to shift them all over so the copying is just you know copy the first chunk copy the second chunk over to where the first chunk ends etc and then once you've done this you still need to perform one final unique which is going to potentially be expensive. Yeah, so it doesn't even work.
+布莱斯问，嗯，那是什么意思？你基本上只是在进行复制，如果你想并行执行所有的复制，你可以先计算索引，或者你可以一个接一个地串行执行它们，基本上因为你在每个块上调用了 unique，你基本上可能移除了一些值，所以你需要把它们全部平移过去，所以复制就是，你知道，复制第一个块，把第二个块复制到第一个块结束的地方，等等，然后一旦你做了这个，你仍然需要执行最后一次 unique，这可能会很昂贵。是的，所以它甚至行不通。
+
+4
+00:02:09.000 --> 00:02:52.000
+Like, that's the thing. Yes, this avoids the linear memory storage. But, like, imagine that all your values are unique. So, like, the final unique that you're calling has to be because it can't be the parallel one right because you could yeah like well but but why do you have to do that final unique because if you say in my example of 100 values say value number 10 is 42 and value number 11 is also 42 because those each got sent to a different chunk. There's no looking back at the, at the equal value. And so when you copy them back,
+就像，事情就是这样。是的，这避免了线性内存存储。但是，比如，想象一下你所有的值都是唯一的。所以，比如，你调用的最后的那个 unique 必须是……因为它不能是并行的，对吧？因为你可以，嗯，就像，好吧，但是为什么你必须做最后的那个 unique 呢？因为如果你说在我的 100 个值的例子中，假设第 10 个值是 42，第 11 个值也是 42，因为这两个值分别被发送到了不同的块中。无法回头去查看相等的值。所以当你把它们复制回来时，
+
+5
+00:02:52.000 --> 00:03:48.000
+you're going to end up with those two 40 kills, 42 is still adjacent to each other. But, but all that in that case where you got two chunks and the first chunk has its last value is 42 and the second chunk has its last value is 42 and the second chunk its first value is 42, all that that second chunk needs to know is what was the last value of that first chunk. This is a very similar property to what chunks need to know when you do a scan. And so if you can just, heck, you could use the same, the same down sweep, up sweep technique that you use for a scan, where you have every chunk, do its, its, do its serial unique, and then write to some, um, O chunks array of temporary storage, what its last value was.
+你最终会发现那两个 40 几，42 仍然彼此相邻。但是，但是在那种情况下，你有两个块，第一个块的最后一个值是 42，第二个块的最后一个值是 42，而第二个块的第一个值是 42，那个第二个块唯一需要知道的是第一个块的最后一个值是什么。这与你在做扫描（scan）时块需要知道的属性非常相似。所以如果你能，见鬼，你可以使用与扫描相同的向下扫描、向上扫描技术，让每个块执行其，其，执行其串行 unique，然后将它的最后一个值写入某个，嗯，O(块数) 大小的临时存储数组中。
+
+6
+00:03:48.000 --> 00:04:33.000
+And then you have another parallel pass where each chunk looks at the array and says, hey, what was the last, of the chunk before me, and then it can do, it can, you know, do the fix up that it needs to, that if that last element was the same as the first element, now, that may not work in the face of if I have a, no, I think that, I think it's fine, even if, even if I had, like, chunk one that ended it with a 42, chunk two is all 42s, and chunk three starts with a 42. In that case, chunk one is going to write...
+然后你进行另一次并行遍历，每个块查看该数组并说，嘿，我前面的那个块的最后一个值是什么，然后它可以进行，它（你知道的）可以进行它需要的修正，如果最后一个元素和第一个元素相同的话，现在，如果我有一个，不，我认为，我认为这没问题，即使，即使我有，比如以 42 结尾的块 1，全都是 42 的块 2，以及以 42 开头的块 3。在这种情况下，块 1 将会写入……
+
+7
+00:04:33.000 --> 00:04:53.000
+It'll still work. Yeah, it'll still work. So that, I think, is a workable design. Yeah, that's a lot. Well, a lot. It's a little bit trickier, though, because now you're basically... You have like overlapping tiles or chunks. Yeah, but you have that with a scan, too.
+它仍然会起作用。是的，它仍然会起作用。所以，我认为这是一个可行的设计。是的，这有点多。嗯，很多。不过它稍微有点棘手，因为现在你基本上……你有重叠的瓦片或块。是的，但你在扫描中也有这个。
+
+8
+00:04:53.000 --> 00:05:33.000
+Yeah, but a scan is designed to work that way. Yeah, so yes. The answer is yes. You can avoid your final unique by making use of the last value from each chunk in the next chunk and i and i suspect that that we've just talked about that using the design of the the simpler two-pass uh scan but i suspect that you could implement um that algorithm with the same technique that we used for the single pass decoupled look back scan and get yourself to a, I think at least a single pass unique
+对，但扫描就是设计成那样工作的。是的，所以是的。答案是肯定的。你可以通过在下一个块中使用每个块的最后一个值来避免最后的 unique，我怀疑我们刚刚讨论过使用更简单两遍扫描的设计，但我怀疑你可以用我们用于单通道解耦回看扫描的技术来实现该算法，让自己达到，我认为至少是一个单通道的 unique
+
+9
+00:05:33.000 --> 00:05:49.000
+that only needs O number of chunks temporary storage instead of O N temporary storage. So yeah, I think that's better. So you're going to go implement that and send me a PR for Thrust? No. I'm busy. All right, all right.
+它只需要 O(块数) 的临时存储，而不是 O(N) 的临时存储。所以，是的，我认为这更好。所以你要去实现那个并给 Thrust 发一个 PR 吗？不。我很忙。好吧，好吧。
+
+10
+00:05:49.000 --> 00:06:26.000
+Now that we've bottomed out on that, we can do a proper final episode. All right, what are we chatting about now? I don't know. You got any topics? We could circle back 140-something depending on with this when this comes out and talk about our favorite algorithms now that it's been two and a half years later you know is uh our favorite algorithms still the same well what was what were our answers then mine was out of product i don't know if you remember i think
+既然我们已经把这个问题彻底探讨清楚了，我们可以做一个正式的最后一期节目。好了，我们现在在聊什么？我不知道。你有什么话题吗？我们可以回溯到 140 多期（取决于这期节目何时发布），聊聊我们最喜欢的算法，既然已经是两年半之后了，你知道，嗯，我们最喜欢的算法还是老样子吗？好吧，当时我们的回答是什么？我的是外积（outer product），我不知道你记不记得，我想
+
+11
+00:06:26.000 --> 00:07:07.000
+yours was transform reduce yeah um although you might have chosen something different because you always say transform reduce um i mean i i think today i would simply say reduce because i think that transform reduce is just a simp is is no special thing it It's just a form of reduce, a spelling of reduce. And I mean, but perhaps I would say scan because I think increasingly on these most recent episodes we've found scans and... Okay, I do know what my answer is going to be. My answer is going to be that non-commutative reduce.
+你的是 transform reduce，对吧，嗯，尽管你可能选择了别的东西，因为你总是说 transform reduce，我的意思是，我认为今天我只会说 reduce，因为我认为 transform reduce 只是一个简单的，不是什么特殊的东西。它只是 reduce 的一种形式，是 reduce 的另一种拼写。我的意思是，但也许我会说 scan，因为我认为越来越多的在这些最近的节目中，我们发现 scan 和……好吧，我知道我的回答是什么了。我的回答将是非交换 reduce。
+
+12
+00:07:07.000 --> 00:07:42.000
+The reduce that does not require your operator to be commutative. And the reason that I like that one so much is that it does a reduction, but it lets you propagate information from left to right. And that can be very, very powerful. So I think that that's the reduce that I would pick. And yes, you may pay some performance penalty for using that reduce instead of the commutative reduce, but I still think that that's the...
+不需要你的运算符具有交换性的 reduce。我之所以那么喜欢这个，是因为它进行规约（reduction），但它允许你从左到右传播信息。这可以非常非常强大。所以我觉得这是我会选的 reduce。是的，你可能会因为使用这个 reduce 而付出一些性能代价，而不是使用交换性的 reduce，但我仍然认为那是……
+
+13
+00:07:42.000 --> 00:08:03.000
+If I only had one algorithm tool, I would have that one. Lovely. We love that for you. Great algorithm. Why don't we talk more about data structures on this podcast? Because they're boring. Yeah, that's an inflammatory statement. But, you know, there's that famous quote.
+如果我只有一个算法工具，我就会选那个。太棒了。我们为你感到高兴。伟大的算法。为什么我们在这个播客里不多聊聊数据结构？因为它们很无聊。是的，这是一个煽动性的说法。但是，你知道，有一句名言。
+
+14
+00:08:03.000 --> 00:08:29.000
+But it's something like, you know, 100 functions versus one data structure or 10 functions that work on 10 data structures. Whereas in C++, we have technically 100 functions that work on 10 data structures. But I just like, I, these days, I operate in array land, and there's really only one data structure, and that's the array, the multidimensional array. You know what? Sometimes you need a hash table, but we got those too. Kuko, check it out. Link in the description. Parallelized data structures
+但大概意思是，你知道，100 个函数对阵一个数据结构，或者 10 个函数处理 10 个数据结构。而在 C++ 中，我们技术上有 100 个函数处理 10 个数据结构。但我只是觉得，我，这些天，我在数组领域（array land）工作，这里真的只有一个数据结构，那就是数组，多维数组。你知道吗？有时你需要哈希表，但我们也有那些。Cuckoo，去看看吧。描述中有链接。并行化数据结构
+
+15
+00:08:29.000 --> 00:08:54.000
+if you need a hash map on the GPU. You know, sometimes you need stacks and queues, but like you can implement all those with an array. It's just a couple extra functions. And yeah, you know, I'm just, I understand that there are certain areas that require certain domains that require fancy, you know, probabilistic, you know, what do they call it? Hyper log log and stuff like that.
+如果你在 GPU 上需要一个哈希映射。你知道，有时你需要栈和队列，但你可以用数组实现所有这些。只需几个额外的函数。是的，你知道，我只是，我理解某些领域需要某些需要花哨的、概率性的、你知道的，他们叫什么？HyperLogLog 之类东西的领域。
+
+16
+00:08:54.000 --> 00:09:47.000
+Very interesting stuff. It's just not it's not what I'm focused on right now. I like, there's nothing really, I find it less tantalizing for my brain to think about data structures versus, uh, it's much more tantalizing, uh, to think about algorithms and chunk buys and the missing algorithms and stuff like that. You know, we love chunk buying. We love outer products. We love zip transform. We love, uh, inner product or transform reduce. We love the segmented algorithms. We love them all folks. We love ZipTransform. We love Interproduct or TransformReduce. We love the segmented algorithms. We love them all, folks. We love them all. And, yeah. that data structures are algorithms um and that that you know when you think about like what a
+非常有趣的东西。只是它不是，它不是我目前关注的重点。我喜欢，真的没什么，我发现思考数据结构对我的大脑来说不如，嗯，思考算法、分块购买（chunk buys）以及缺失的算法之类的事情更诱人，嗯。你知道，我们喜欢分块购买。我们喜欢外积。我们喜欢 zip transform。我们喜欢内积或 transform reduce。我们喜欢分段算法。我们大家都很喜欢它们。我们喜欢 ZipTransform。我们喜欢内积或 TransformReduce。我们喜欢分段算法。我们大家都很喜欢它们，各位。我们都喜欢。而且，是的，数据结构就是算法……
+
+17
+00:09:47.000 --> 00:10:29.000
+data structure is it's it's like you know it's some state and maybe some set of invariants and then like operations on that state and when we talk about algorithms here like especially when we talk about like you know reductions or scans like we often talk about like like what is what is the state that we need to propagate what is the state that we need to propagate? What is the information that we need to propagate between, you know, like, with our reduction or scan operators? And, you know, sometimes when we talk about algorithms, like, we talked about Unique and how our parallel implementation thrust currently needs to maintain this ON temporary storage.
+而且，你知道，当你想到像什么是数据结构时，它就像，你知道，它是一些状态和一些不变量的集合，然后是对该状态的操作，当我们在这里谈论算法时，尤其是当我们谈论像规约（reductions）或扫描（scans）时，我们经常讨论像，什么是我们需要传播的状态，什么是我们需要传播的状态？我们需要在（你知道的）我们的规约或扫描运算符之间传播什么信息？而且，你知道，有时当我们谈论算法时，就像我们讨论过的 Unique 以及我们的并行实现 thrust 目前需要维护这种 O(N) 的临时存储。
+
+18
+00:10:29.000 --> 00:10:55.000
+Like that's, you know, that's state two. And so, you know, I think that at the end of the day, data structures are really just persistent algorithms, perhaps. Yeah, I mean, that's a stretch. That's a stretch. But I see what you're trying to say. And I remember back when I was, I was an actuary trying to get a job at a major tech company, and I was doing all these leet code challenges
+就像那样，你知道，那也是状态。所以，你知道，我认为归根结底，数据结构可能真的只是持久化的算法。是的，我的意思是，这有点牵强。这有点牵强。但我明白你想表达什么。我记得当我还是一个精算师，试图去一家大型科技公司找工作时，我一直在做所有这些 leet code 挑战
+
+19
+00:10:55.000 --> 00:11:14.000
+and reading, you know, Cracking the Code, CTCI, whatever it's called, Cracking the Code interview, and reading all these blogs on how to best prepare and like there was this, geez Louise we've got Mr. Mazda riding right up on me tail we're going to have to get into our right hand lane
+并阅读，你知道的，Cracking the Code，CTCI，无论它叫什么，《程序员面试金典》，并阅读所有这些关于如何最好准备的博客，就像有这个，天哪，有辆马自达紧紧贴着我的尾巴，我们得进入我们右边的车道
+
+20
+00:11:14.000 --> 00:11:31.000
+here and I just remember there was this like big onotation.com that had sort of all these different data structures that had the time complexity of all the operations that came with these data structures. And I just think that's so silly.
+这里，我只记得有一个像大 O 记号网站（big onotation.com）的东西，上面有所有这些不同的数据结构，以及这些数据结构附带的所有操作的时间复杂度。我只是觉得这太傻了。
+
+21
+00:11:31.000 --> 00:11:45.000
+Like, you know what, folks? You know what, folks? You're hearing it here first. Here's what you need to know. You need to know your list in Python. We're going to stick with Python, you know? You need to know your list in Python, a.k.a. your vector, something that's dynamically resizable, in uh python we're going to stick with python you know you need to know your list in python aka your
+就像，你知道吗，各位？你知道吗，各位？你在这里听到了第一手消息。你需要知道的是这些。你需要了解 Python 中的列表。我们要坚持用 Python，你知道吗？你需要了解 Python 中的列表，也就是你的向量，一种可以动态调整大小的东西，在 Python 中我们要坚持用 Python，你知道吗？你需要了解 Python 中的列表，也就是你的
+
+22
+00:11:45.000 --> 00:12:24.000
+vector something that's dynamically resizable you can append to etc you need to know that that's your bread and butter everyone's rank one array your vector whatever you want to call it and uh after that you know you really don't need much you need a hash set you need a hash set. You need a hash map. Maybe you need some ordered collections. You know, in Python, you're going to have to import your, I believe it's called the sorted collections module. In C++, it's going to be your map and your set, which is very confusing because, you know, we should have called them ordered map and ordered set,
+向量，一种可以动态调整大小的东西，你可以向其中追加（append）等，你需要知道那是你的衣食父母。每个人的 Rank-1 数组、向量，无论你想怎么称呼它，而且，在那之后，你知道，你真的不需要太多东西。你需要一个哈希集合（hash set）。你需要一个哈希集合。你需要一个哈希映射（hash map）。也许你需要一些有序集合。你知道，在 Python 中，你将不得不导入你的，我相信它叫 sorted collections 模块。在 C++ 中，它将是你的 map 和 set，这非常令人困惑，因为，你知道，我们本该把它们叫做有序 map 和有序 set，
+
+23
+00:12:24.000 --> 00:13:13.000
+and then set and map should have been our hash containers but you know what naming's hard and i really honestly think that's it you know that's uh i think once you've got your your hash set your hash map and your vector or your list whatever you're going to call it every once in a while you need something that's sorted but a lot of times you don't actually need that sort of container you just need you just need a rank one array you know vector or list and then you can just sort that and you're good to go um and you know all these stacks and decks and queues and yeah okay it's good to know them but like are you actually reaching for that stuff and i know there's a few listeners being like i used a queue this one time i use a stack this one time but I used a stack this one time. But, like, I think 95% of problems and stuff are solved with just, you know, a couple hash containers.
+然后 set 和 map 本应是我们的哈希容器，但你知道命名很难，我真的老实说觉得就是这样，你知道，这就是……我觉得一旦你有了哈希集合、哈希映射以及向量或列表（无论你叫它什么），每隔一段时间你需要一些排序的东西，但很多时候你实际上并不需要那种排序容器，你只需要，你只需要一个 Rank-1 数组（你知道的，向量或列表），然后你就可以直接排序，这就搞定了，而且，你知道，所有这些栈、双端队列和队列，是的，好吧，了解它们很好，但像你真的会去用那些东西吗？我知道有几个听众会说“我曾经用过一次队列”、“我曾经用过一次栈”。但我曾经用过一次栈。但是，我觉得 95% 的问题之类的事情只用（你知道的）几个哈希容器就能解决。
+
+24
+00:13:13.000 --> 00:13:34.000
+We're going this way because we've got to pay. Yes, that's right. And we're going to... Ooh, hopefully they take card. I mean, that does seem to be an image of a credit card, right? It did just say Visa, so we're good to go. We're gonna have to talk to someone? Do you think they want to be on the pod? I think we better not get in trouble with European tax laws.
+我们走这边因为我们要交费。是的，没错。我们要去……噢，希望他们收卡。我的意思是，那似乎确实是一张信用卡的样子，对吧？它刚才确实显示了 Visa，所以我们可以走了。我们得和某人说话吗？你觉得他们想上播客吗？我想我们最好不要惹上欧洲税法的麻烦。
+
+25
+00:13:34.000 --> 00:14:11.000
+All right here folks, we're doing it live and the car is unhappy because it thinks we're gonna crash. I guess we don't have to talk to somebody. Are we recording still? I did stop the recording when I thought that this was going to be an incident. We managed to successfully pay the toll on the Italian highway. It's very confusing because we put the ticket in before we selected the language and so all the instructions were in Italian and it was not clear where to put the credit card in at all. Apparently he put it in the same place as the ticket. Would have been nice
+好了各位，我们正在进行现场直播，汽车很不高兴，因为它认为我们要撞车了。我想我们不必跟别人说话。我们还在录音吗？当我认为这会变成一场事故时，我确实停止了录音。我们成功地支付了意大利高速公路的通行费。这非常令人困惑，因为我们在选择语言之前就把票塞进去了，所以所有的说明都是意大利语的，而且根本不清楚把信用卡插在哪里。显然他把它插在和票一样的地方了。如果有
+
+26
+00:14:11.000 --> 00:14:31.000
+if they had a little arrow pointing. They just had visa signs everywhere and looking for a tap and didn't think that there would be a overloading of functions for that little ticket slot yes where were we before we were so rudely interrupted by the highway uh we were talking about data structures
+一个小箭头指着就好了。到处都是 visa 标志，大家都在找感应支付，根本没想到那个小取票口会有函数重载。是的，在我们被高速公路粗鲁地打断之前，我们聊到哪了？我们正在讨论数据结构。
+
+27
+00:14:31.000 --> 00:14:57.000
+oh right and i was just saying you're you got your list in python your set your map and they don't even have uh sets oh no that's true they do have sets in python there's some language that doesn't have sets. And if you want a set, you just use a valueless hash map, which I don't like at all. I don't like at all. Anyways. That sort of seems fine to me. It seems like a simpler model
+哦，对，我刚才在说，你在 Python 中有列表、集合、映射，而且它们甚至没有……哦不，这倒真的，Python 里有集合。有些语言没有集合。如果你想要一个集合，你就只能用一个没有值的哈希映射，我一点也不喜欢这样。我一点也不喜欢这样。总之。这对我来说似乎挺好的。这似乎是一个更简单的模型
+
+28
+00:14:57.000 --> 00:15:27.000
+because then you don't have these two kinds of things. Just to make a special case of a map, then it's one less thing you have to learn and worry about and then like all of your code that's been written to deal with maps will also work with sets um it kind of actually seems like a like a good design to me i think you're completely wrong if you've got no sets and only a hash map, that means you've got a bunch of APIs that are for looking up, you know,
+因为这样你就没有这两种不同的东西了。只是把映射作为一个特例，那么你要学习和担心的东西就少了一样，然后所有编写用来处理映射的代码也可以用来处理集合了。这其实在我看来真的是一个不错的的设计。我觉得你完全大错特错了，如果你没有集合而只有哈希映射，这意味着你有一堆用于查找（你知道的）值之类的 API，它们根本没有意义，因为那里没有值。这也是为什么（你知道的）你在 C++20 范围适配器（range adapter）元素上有别名 keys 和 values 的原因。它们，你知道，虽然很方便，但可能会让人困惑。所以我们不喜欢它。好吧，这或许算合理。总之，我想，嗯……我想这就是为什么我们不喜欢
+
+29
+00:15:27.000 --> 00:15:52.000
+values and stuff like that that just have no meaning because there's no values there. And it's the same reason that, you know, you've got the aliases, keys, and values on the C++20 range adapter elements. They, you know, they're sure it's convenient, but it can be confusing. So we don't like it sure that may be fair anyways i guess uh i guess that's why we don't like
+过多谈论数据结构的原因。我觉得这可能也跟领域有关。可能只是因为我们身处计算领域，并且我们主要专注于并行算法的设计，所以我们，我们花在思考数据结构上的时间就更少，而身处不同领域或从事不同类型应用开发的人可能会花更多时间去思考它。是的。我们离威尼斯还有多远？19 分钟，各位。是的，还有九公里，就要到那种我想专心看威尼斯而不是跟听众说话的时候了。哇。
+
+30
+00:15:52.000 --> 00:16:27.000
+talking about data structures that much i think it also may be a domain thing it may be just that because we're in uh compute and that we mostly focus on the design of parallel algorithms we are um we just spend less time thinking about data structures and maybe people in different domains or working in different types of applications spend more time thinking about it yep how how far we're 19 minutes away from venice folks yeah nine kilometers until the part where i'm gonna want to pay attention to looking at venice and not talking to not talking to the listener. Wow.
+太粗鲁了，布莱斯。我想继续跟听众说话，各位。我可以更粗鲁一点。我可以大声说，我想专心看威尼斯，不想跟你说话。那是，你知道，我觉得当你侮辱听众而不是我时，更让人反感。在跟布莱斯旅行了四天之后，我已经习惯了。所以我们现在要谈论的是那些东西，超能力，数组语言的隐藏宝石。具体来说，我们将聚焦于 BQN，但许多数组语言（如 J 和 APL）也具备这些特性。所以第一项，第一项是可逆函数（invertible functions）。想想看，各位。想想看。比方说我最喜欢的函数之一
+
+31
+00:16:27.000 --> 00:17:16.000
+So rude, Bryce. I want to keep talking to the listener, folks. I could have been ruder. I could have said, I want to pay attention to looking at Venice and not talking to you. That's, you know, I think it was more offensive when you insulted the listener, not me. I'm used to it after four days of traveling with Bryce. So we're now going to talk about the things, the superpowers, the hidden gems of array languages. Specifically, we're going to focus on BQN, but a lot of the array languages, J and APL, have these features too. So the first one, the first one is invertible functions, invertible functions. Think about this folks. Think about this. Say one of my favorite functions
+我其实没提到、但当我提起讨论我们最喜欢的算法时本来想提的算法，叫做 indices（索引）。有时它被称为 where，在 Q 语言中它叫 where，在 APL 中，我相信它也叫 where，但在 J 和 BQN 中，我相信它叫 indices。如果你得到一个布尔列表，一个由 1 和 0 组成的列表，也就是真（trues）和假（falses），它会返回与真相对应的索引。所以给定序列 1 0 1 0 1，你会得到值 1、3 和 5，或者如果你在 BQN 中，你会得到值 0、2 和 4，这取决于你使用的是 1 起始索引语言还是 0 起始索引语言。我更喜欢 1 起始索引的数组语言，或者我只是，我更喜欢那种语言选择，并不意味着我更喜欢这样做的语言。无论如何，但是，所以，那个函数，我们称之为 indices。
+
+32
+00:17:16.000 --> 00:18:07.000
+that I actually are algorithms that I didn't mention that I think I was going to mention when I brought up talking about our favorite algorithms was an algorithm called indices. Sometimes it's called where in Q it's called where, and in APL, I believe it's called where, but in J and BQN, I believe it's called indices. And this is if you're given a Boolean list, a list of ones and zeros, AKA trues and falses, it returns you the indices corresponding to the trues so given the sequence one zero one zero one you get back the values one three and five or if you're in bqn you get back the value zero two and four depending on whether you're a one index language or a zero index i prefer one indexed array languages or i just i prefer that language choice doesn't mean i prefer languages that do that anyways but and so, and so that function, we'll call it indices.
+你在每种语言中拼写它都不一样，但我们在俗称中会把它叫做 indices。但如果你用 indices 逆（indices inverse），也就是右上角的一个小等号，在 BQN 中是一个上标等号，而在 APL 中它是负一次方的幂，或者说它就像是幂，也就是一个星号、分音符、负一。
+
+33
+00:18:07.000 --> 00:18:31.000
+You spell it differently in each of the languages, but we'll refer to it colloquially as indices. But what if you go indices inverse, which is just a little equal sign in the top right-hand corner, a superscript equal sign in BQN, and it's power to the negative one in, or it's like it's the power, which is a star, diuresis, negative one in APL.
+如果你执行 indices 逆，并且给它序列 1 3 5，它会把布尔掩码 1 0 1 0 1 还给你。这难道不神奇吗？这确实很酷。所有函数都是可逆的吗？并非所有函数，但很多函数。有这么多的函数。什么决定了一个函数是否可逆？看它有没有被实现。那可真是个糟糕的回答。好吧，我的意思是，在 J 中，它们实际上有一个连词（conjunction），我相信叫做 obverse，你实际上可以在其中实现函数的逆。所以你确实可以做到这一点。
+
+34
+00:18:31.000 --> 00:19:12.000
+If you do indices inverse, and you give it the sequence 135, it'll give you back a Boolean mask, 10101. Isn't that amazing? That is pretty cool. Are all functions invertible? Not all functions, but a lot of functions. So many functions. What determines whether or not a function is invertible? Whether it is implemented. And that is a bad answer. Well, I mean, so in J, they actually have a conjunction, I believe, called obverse, where you can actually implement your inverse of a function. So you can actually do that.
+而且我认为就像大多数函数都有这个功能一样。所以，你知道，加、减、乘、除等等，诸如此类。但是，是的，你知道，如果它有，它就有。这简直，太棒了。这简直太棒了。你能在什么语言里做到这一点？什么语言？答案是，数组语言，各位。你在任何其他语言里都做不到。所以，但是，我想回到我的问题。就像，什么
+
+35
+00:19:12.000 --> 00:19:36.000
+And I think just like most of the functions have it. So, you know, plus minus, multiplies, divides, et cetera, stuff like that. But yeah, you know, if it's there, it's there. And it's just, it's frigging awesome. It's friggin' awesome. What language can you do that in? What language? The answer is, array languages, folks. You can't do it in any other language. So, but, I want to go back to my question. Like, what
+属性使一个函数可逆？肯定不是所有函数都可逆。我觉得这是一个类似数学的问题。虽然，我隐约记得在大学期间讨论过函数及其可逆性，但我记不清任何细节了。是的，我的意思是，当然。我的意思是，这背后有数学原理。没关系。
+
+36
+00:19:36.000 --> 00:20:00.000
+property makes a function invertible? Surely not all functions are invertible. And I think that this is a sort of a mathematical question. Although, I vaguely recall discussing functions and their invertibility in my college years, but I don't remember any of the details. Yeah, I mean, sure. I mean, there's mathematical stuff behind this. It's fine.
+我们不需要聊这个。重点是存在可逆函数，说到数学，这就把我们带到了第二件棒极了的事情。这不是按特定顺序排列的，各位。我想我们离我们要去的地方已经很近了。女士们先生们，我们将继续聊天，直到我们看到真正美丽的东西，我们还没到那儿。所以第二件事是 under，结构 under（structural under）。
+
+37
+00:20:00.000 --> 00:20:27.000
+We don't need to chat about that. The point is that there are invertible functions, which, speaking of mathematical, brings us to the second awesome thing. This is no particular order, folks. I think we're getting pretty close to where we're going. We're going to continue to chat, ladies and gents, until we see something that's really beautiful, which we're not there yet. So the second thing is under, structural under.
+这类似于函数的可逆性。假设你想在像 BQN 这样的数组语言中做一个反向扫描（reverse scan），写扫描。在 APL 中，你实际上必须先反转你的列表，然后执行扫描，然后再反转一次。J 实际上有一个基元（primitive），使你能够以你想要的任何方向进行操作，但在 BQN 中，他们有 under，其符号是一个圆圈套着另一个圆圈。如果你想做一个反向扫描，你只需写 scan under reverse，这基本上意味着
+
+38
+00:20:27.000 --> 00:21:01.000
+This is similar to the invertibility of functions. So say you want to do a reverse scan, a write scan in an array language like BQN. In APL, you will actually have to sort of just reverse your list, then perform the scan, then reverse it again. J actually has a primitive that enables you to do it whatever direction you want but in bqn they've got under which is one circle with another circle around it for the symbol and if you want to do a reverse scan you just go scan under reverse which basically means
+它将应用一个函数，然后执行该操作，然后执行该函数的逆操作，对于 reverse 来说，逆操作就是 reverse 本身。所以这太绝了。这太绝了，因为有太多次了，你有多少次在做某事时，基本上——另一个例子是当你处理字符时，
+
+39
+00:21:01.000 --> 00:21:21.000
+it will apply a function, then perform the operation, and then perform the inverse operation of that function, which for reverse is just reverse. So that's brilliant. It's so brilliant because there's so many times, how many times have you been doing something where you basically, like another example is when you are dealing with characters,
+但你想对 Unicode 值做一些操作。所以你可以把它转换成整数来对 Unicode 值做一些操作。所以你可以把它转换成整数，做某种数学运算，然后把它转换回字符，可能带有一些求模（modulus）以确保它仍然在正确的范围内。这太梦幻了。
+
+40
+00:21:21.000 --> 00:21:36.000
+but you want to do some operation on like the Unicode values. So you can convert it to like an integer to do some operation on the Unicode values. So you can convert it to an integer, do some kind of math, and then convert it back to a character with probably some modulus to make sure it's still in the right range. It's fantastic.
+但你可以用 Under 来做到这一点。你可以把它转换成……我要走这边。这里要变道几次，各位。Venezia。那是威尼斯的意大利语。无论如何，Under 很棒。
+
+41
+00:21:36.000 --> 00:21:53.000
+But you can do that with Under. You can convert it to... I'm going here. Making a couple lane changes here, folks. Venezia. That's Italian for Venice. And anyways, under is great.
+Inverse 很棒。还有什么很棒的？我是说，组合子（combinators）。组合子太棒了。我们已经谈论过组合子了。不过去看看吧。去看看 B1 组合子。去看看 B 组合子。
+
+42
+00:21:53.000 --> 00:22:04.000
+Inverse is great. And what else is great? I mean, combinators. Combinators are fantastic. We've already talked about combinators. Go check it out, though. Check out the B1 Combinator. Check out the B Combinator.
+去看看 Phi 组合子。去看看 Psi 组合子，去看看 B 组合子，去看看 Phi 组合子，去看看 Psi 组合子，各位。Psi 组合子，它在 Haskell 中可以使用。我们超爱它。你有一个一元操作，一个二元操作，以及两个传入的参数。你把该一元操作应用到两个参数上，然后将结果输入给二元操作。如果你在 Haskell 中进行分块购买，这超级有用。这叫做 group 或 group buy。而且，想象一下你想根据事物列表的某种属性进行分组。所以例如，如果你想，如果你想从一串整数中创建连续奇数元素的块和连续偶数元素的块，但你得到的是一个整数列表，嗯，你想根据其进行分块的是将奇数或偶数应用到列表中的每个整数上所得的值。所以因为 chunk by 或 group by 采用的是二元谓词，而 odd（奇数）是一元谓词。所以
+
+43
+00:22:04.000 --> 00:22:54.000
+Check out the Phi Combinator. Check out the Psi Cominator check out the b combinator check out the phi combinator check out the psi combinator folks the psi combinator it's on in haskell we love it you got a unary operation you got a binary operation and two arguments in common you apply that unary operation to both both arguments and then feed it to the binary operation it's super useful if you're doing chunk buys and haskell that's called group or group by. And like, imagine you want to group by some property of the list of things. So for instance, if you want to, if you want to create chunks of contiguous odd elements and contiguous even elements, but you're given a list of integers, well, what you want to chunk on is the value of applying odd or even to each of your integers in your list. So because chunk by or group by, though, takes a binary predicate, odd is a unary predicate. So
+你想做的是，你希望等号（equal）作为你的二元操作，然后 odd 或 even 作为你的一元操作。所以这就是带有相等性和奇偶校验函数的 psi 组合子。我们超爱它，我们超爱它，各位。Psi 组合子，去看看吧。D2 组合子，你可以通过同时使用（我相信是）sigma 和 delta 组合子来使用。我们超爱它，各位。去看看 BQN 的组合子、逆（inverse）、under 以及秩多态性（rank polymorphism）。我想我们得直行了。我想我们先在这儿暂停一下。
+
+44
+00:22:54.000 --> 00:23:33.000
+what you want to do is you want to do equal is your binary operation, and then odd or even as your unary operation. So it's the psi combinator with uh equality and an odd or even function we love it we love it folks the psi combinator check it out the d2 combinator you can use by using both the uh i believe it's the sigma and delta combinators all at the same time we love it folks check out bqn for combinators, for inverse, for under, and for rank polymorphism as well. I think we need to go straight. I think we're going to sign off here for now.
+是的，我们确实需要直行。是的。好了。我们到威尼斯了，各位。我们马上就要上桥了。我们很快就会到达威尼斯。我们爱死这里了。请务必查看你的播客应用中的shownotes或访问 ADSP the podcast.com 获取今天节目中提到的任何事物的链接，以及
+
+45
+00:23:33.000 --> 00:23:50.000
+Yeah, we do need to go straight. Yeah. All right. We're in Venice, folks. We're about to get on the bridge. We will be in Venice very soon. We love it. Be sure to check the show notes either in your podcast app or at ADSP the podcast.com for links to any of the things we mentioned in today's episode, as well
+一个 GitHub 讨论区，你可以在那里留下问题、评论或想法。谢谢收听。希望你喜欢，祝你有美好的一天。低质量，高质量。这就是我们播客的标语。这不是标语。我们的标语是“带有信息洒花的混乱”。本期节目还没有评论。点击转录文本中的任何句子即可发表评论。
+
+46
+00:23:50.000 --> 00:23:55.000
+as a GitHub discussion where you can leave questions, comments or thoughts. Thanks for listening. We hope you enjoyed and have a great day. Low quality, high quality. That is the tagline of our podcast. It's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+作为GitHub讨论区，您可以在这里留下问题、评论或想法。感谢收听。希望您喜欢，祝您拥有美好的一天。低质量，高质量。这就是我们播客的标语。其实不是标语。我们的标语是“带有零星信息的混乱”。这一集还没有评论。点击文稿中的任意句子即可发表评论。

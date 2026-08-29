@@ -1,0 +1,216 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:56.000
+Like C++ is a copy-by-default language, and Rust is a move-by-default. So if you're not making a copy, bye-bye. Welcome to ADSP The Podcast, episode 102, recorded on October 27, 2022. My name is Connor, and today with my co-host Bryce, we live code some more Rust and more importantly, talk about Rust scans. Now moving on, we're new episode. We're still talking about Rust. We're still live coding. Let me unstash my changes, get stash pop. And let's look at the diff and so if i run this i should get a test failure so there's no way just by looking at this test that you could probably tell what's going on
+就像C++是一种默认拷贝的语言，而Rust是一种默认移动的语言。所以如果你不进行拷贝，那就拜拜了。欢迎收看ADSP播客第102期，录制于2022年10月27日。我是康纳，今天我和我的联合主持人布莱斯一起，继续进行一些Rust的现场编码，更重要的是，我们来聊聊Rust的scan函数。好了，言归正传，我们这是一期新节目。我们还在谈论Rust。我们还在现场编码。让我取消暂存我的更改，使用git stash pop。然后让我们看看差异，所以如果我运行这个，我应该会得到一个测试失败，所以仅仅通过查看这个测试，你可能无法判断发生了什么
+
+2
+00:00:56.000 --> 00:01:12.000
+here but basically i'm trying to implement a generic scan on an arbitrarily ranked array, which in this little toy library, I'm calling a tensor. For those that- Yeah, I saw the tensor thing and I was like, it's kind of doing machine learning stuff because if so,
+这里，但基本上我正试图在一个任意秩的数组上实现一个通用的scan，在这个小玩具库中，我称之为张量（tensor）。对于那些——是的，我看到了张量这个词，当时我想，这有点像在做机器学习的东西，因为如果是这样的话，
+
+3
+00:01:12.000 --> 00:01:24.000
+I'm going to have to break up with him. Well, just, you know, this confused me for a long time. I think I might've even mentioned this before, either on this podcast or the other area cast that I remember one time when I was working at Amazon,
+我要跟他分手了。好吧，只是，你知道的，这困扰了我很长时间。我想我以前可能提到过这一点，无论是在这个播客上还是在另一个我记得的播客里，有一次我在亚马逊工作时，
+
+4
+00:01:24.000 --> 00:02:01.000
+a colleague of mine tried to explain to me what a tensor was. And it was like a 30 minute conversation. And by the end of it, I did not understand what a tensor was. And then at some point, someone just said to me in like, however long it takes to say this sentence, a tensor is just a multidimensional array. And the machine learning people, AI people got tired of saying um multi-dimensional array and technically there's something called tensor algebra which is a slight difference but like they represent basically the same thing it's just an array with an arbitrary amount number of dimensions and uh sometimes i prefer calling it like nd array or md array sometimes i like calling
+我的一位同事试图向我解释什么是张量。那是一场长达30分钟的对话。到最后，我还是不明白什么是张量。然后不知在什么时候，有人对我说——就像说这句话所花的时间一样——张量其实就是一个多维数组。机器学习的人、AI的人厌倦了说“多维数组”，而且严格来说有一种叫做张量代数的东西，它有微小的区别，但它们基本上代表着相同的东西，它只是一个具有任意数量维度的数组，呃，有时我更喜欢叫它nd数组或md数组，有时我喜欢叫它
+
+5
+00:02:01.000 --> 00:02:42.000
+tensor tensor shorter so i decided it for this. Anyways, doesn't really matter. But let's go to the code now. And let's turn this into Zen mode. Maybe somebody should propose that we rename std empty span to std tensor. I mean, I think it's it is definitely sexier, in my opinion, tensor is intimidating in that like, what's a tent like literally, I couldn't and someone tried to explain it to me and all you Have to say is it's just a multi-dimensional array. That's all it is but anyways here we have our scan function and First of all, let me whine about scan I whined about this in a YouTube video that I made once which was the first time that I needed to use a scan
+张量，张量更短，所以我为这个决定了。不管怎样，这其实并不重要。但我们现在来看代码。让我们把它变成禅模式（Zen mode）。也许有人应该提议将 std::empty_span 重命名为 std::tensor。我的意思是，我认为它绝对更性感，在我看来，张量有一种让人敬畏的感觉，就像，什么是张，字面意思，我无法理解，当有人试图向我要解释它时，你所需要做的就是说它只是一个多维数组。这就是它的全部。但不管怎样，这里我们有我们的scan函数，首先，让我抱怨一下scan。我在我曾经制作的一个YouTube视频中抱怨过这一点，那是我第一次需要使用scan的时候
+
+6
+00:02:42.000 --> 00:03:51.000
+so I'm highlighting a row here that Bryce is looking at. And similar to our partial sum function in C++, it takes a binary operation. This version of scan also needs an initial element, which I don't like at all. What's irritating about this scan function is that it needs the binary operation that you pass to scan, needs to return a option, a.k.a. Haskell maybe, a.k.a. a std optional from C++, or a.k.a. optional from c++ or aka optional from swift and that is so that it is able to short circuit if it needs to which i think is silly right explain more so like currently partial sum and reduce and accumulate they always complete their work you know if you're gonna use a oh i understand no that's clever i like that so that it can terminate early right i don't like it i don't like it why do you like
+所以我在这里高亮显示了一行，布莱斯正在看。类似于我们在C++中的partial_sum函数，它需要一个二元操作。这个版本的scan还需要一个初始元素，这让我非常不喜欢。这个scan函数令人讨厌的地方在于，你传递给scan的二元操作需要返回一个option，也就是Haskell的maybe，也就是C++的std::optional，或者说是Swift中的optional，这样它就能在需要时进行短路（short circuit），我认为这很傻，对吧？详细解释一下。所以，目前partial_sum、reduce和accumulate总是会完成它们的工作，你知道的，如果你要使用一个——哦，我明白了，不，这很巧妙，我喜欢这样，这样它就可以提前终止，对吧？我不喜欢它，我为什么喜欢
+
+7
+00:03:51.000 --> 00:04:32.000
+it i don't like it um because there are the definitely use cases for it but i just think it's a different algorithm like one a scan that short circuits should be a different algorithm in my opinion because in the times where you know you're going to traverse the whole sequence, having to return a sum or a none or like an optional type from your binary operation is silly. That is annoying. Yeah. or, you know, multiplies. But I have to basically hand write out a lambda where all I'm doing is performing the binary operation on the accumulator and the current element and then wrapping the result of that in a sum. Like there might be a nicer way to do this
+它？我不喜欢它，呃，因为这确实有使用场景，但我只是认为这是一个不同的算法。在我看来，会短路的scan应该是一个不同的算法，因为在你知道你要遍历整个序列的情况下，要求你的二元操作返回一个sum或none，或者像可选类型（optional type）这样的东西是挺傻的。这很烦人。是的。或者，你知道的，是乘法。但我基本上必须手写一个lambda，而我所做的全部工作就是在累加器和当前元素上执行二元操作，然后将该结果包装在一个sum中。可能有一种更好、更符合习惯的方式来做这件事
+
+8
+00:04:32.000 --> 00:05:04.000
+more idiomatically. Like this is definitely could be done with some kind of like under operation from APL where you, or it's actually, it's very, you know, monadic-ish in that you have to unwrap the optional, perform the binary operation, and then wrap the optional up again. Anyways, kind of irritating. But can you see from staring at this code, Bryce, what the problem I'm having here? And maybe what I'll do is I'll go back and show what I'm expecting from cargo test is 1, 2, 3.
+比如这完全可以通过APL中的某种底层操作来完成，或者实际上，它非常具有单子（monadic）的特征，你必须解包optional，执行二元操作，然后再次将optional包装起来。总之，有点烦人。但是布莱斯，你从盯着这些代码看的时候，能看出我这里遇到的问题吗？也许我会做的是，回到过去，展示我从 cargo test 期望得到的是 1, 2, 3。
+
+9
+00:05:04.000 --> 00:05:16.000
+And what I'm getting is 2, 3. And what I'm getting is 2, 3. Show me again. So, and if we go back to the code, I mean, the listener at this point is not going to be able to see. But once again, I'll put show notes
+而我得到的是 2, 3。而我得到的是 2, 3。再给我看一遍。所以，如果我们回到代码，我的意思是，此时听众将无法看到。但同样，我会把展示笔记（show notes）放出来
+
+10
+00:05:16.000 --> 00:05:35.000
+if people like a permalink to the line of code that we're currently looking at. I hope you aren't listening to this when you're driving. But, so basically the problem that I'm trying to get Bryce to see is that we're using a scan operation and I'm expecting the output to be one, two, three. But the output I'm getting is two, three.
+如果人们想要一个我们当前正在查看的代码行的永久链接（permalink）。我希望你开车时不要听这个。所以，基本上我试图让布莱斯看到的问题是，我们正在使用一个scan操作，我期望输出是 1, 2, 3。但我得到的输出是 2, 3。
+
+11
+00:05:35.000 --> 00:06:00.000
+Just two, three. And so what is the problem with my current code? And if you want a hint, Bryce, if you look at the three commented outlines underneath, that was my first attempt to just hack it so that it would work. What is rev reverses it? Yeah. And the three lines underneath my scan are dot. So you call the scan with the binary operation. And then you call dot rev, paren paren, dot extend first.
+只有 2, 3。那么我现在的代码有什么问题呢？如果你想要个提示，布莱斯，如果你看下面注释掉的三行，那是我为了让它工作而进行的第一次尝试性修改。rev 是什么？rev 会反转它。是的。在我 scan 下面的三行是 dot。所以你用二元操作调用 scan。然后你调用 dot rev, paren paren, dot extend_first。
+
+12
+00:06:00.000 --> 00:06:17.000
+Show me the error again. And then dot rev one final time. Expecting one, two, three, getting back two, three. I'm sure there's a few listeners that have figured out my problem. What is shape? Shape is, so right now I don't, when you're running the tests on these tensors,
+再给我看看错误。然后最后再调用一次 dot rev。期望得到 1, 2, 3，得到的是 2, 3。我相信有一些听众已经发现了我的问题。什么是 shape？shape 是，所以现在我没有，当你在这些张量上运行测试时，
+
+13
+00:06:17.000 --> 00:07:09.000
+it doesn't have a way to pretty print the tensors. So the length of your shape indicates the rank. So in this case, it says shape bracket three bracket. That just means it's a rank one array with three elements. But there's only two elements. I know because there's a problem with my scan operation that works intensively. I don't know what the problem is. So the problem is, and this is something that any Haskell developers that are listening will know, and if you've watched a few of my talks, I have complained about this in different talks, is that there are multiple types of scans indicated by the fact that we have both an inclusive scan and an exclusive scan in our C++17 parallel algorithms. And partial sum, our C plus plus 11 scan, it takes a binary
+它没有一种方法来漂亮地打印张量（pretty print）。所以 shape 的长度表示秩（rank）。所以在这种情况下，它显示 shape 括号 3 括号。这只意味着它是一个包含三个元素的一维数组。但这里只有两个元素。我知道，因为我的 scan 操作在内部工作时出了问题。我不知道问题出在哪里。所以问题在于，任何在听的 Haskell 开发者都会知道这一点，如果你看过我的一些演讲，我在不同的演讲中抱怨过这一点，那就是有多种类型的 scan，这可以从我们的 C++17 并行算法中同时拥有 inclusive scan（包含性扫描）和 exclusive scan（排他性扫描）看出。而 partial_sum，我们的 C++11 scan，它接受一个二元
+
+14
+00:07:09.000 --> 00:07:49.000
+operation. But one of the restrictions of that binary operation, or of that partial sum algorithm, is that it, that output type of your vector has to be the same as the input type of your vector or your sequence. Because it initializes the first value of that open sequence to be the first value of the input sequence. Yeah. Oh, and this one doesn't. This one just... Well, so this one is basically your exclusive scan-ish in that it requires a first element or an initial element and then proceeds
+操作。但是该二元操作或该 partial_sum 算法的限制之一是，你的向量的输出类型必须与你的向量或序列的输入类型相同。因为它将开放序列的第一个值初始化为输入序列的第一个值。是的。哦，这个不是。这个只是……嗯，所以这个基本上类似于你的 exclusive scan，因为它需要一个第一个元素或初始元素，然后继续
+
+15
+00:07:49.000 --> 00:08:32.000
+to do your scan but the problem here is that it doesn't it doesn't encode your initial element to be the first element of your vector so you end up with so like here i'm scanning over a sequence but the first thing i do is i actually have to get the first value from that sequence and then i need to basically do a drop one what they call skip one in rust so that i'm only iterating over the last n minus one elements so i skip the first element do a scan there yeah Yeah, but what... So basically, I just want a scan that operates the same way that... But... Oh, it's because...
+进行你的 scan，但这里的问题是，它没有把你的初始元素编码为向量的第一个元素，所以你最终会得到——比如这里我在遍历一个序列，但我做的第一件事实际上是必须从该序列中获取第一个值，然后我基本上需要做一个 drop_one，他们在 Rust 中称之为 skip_one，这样我只迭代最后的 n 减 1 个元素，所以我跳过第一个元素，在那里做一个 scan，是的。是的，但是什么……所以基本上，我只是想要一个运行方式相同的 scan……但是……哦，是因为……
+
+16
+00:08:32.000 --> 00:09:02.000
+I understand because you don't have like an identity. The scan requires an initial element and you don't have an identity value that you can pass in here. So you're trying to make it scan over all elements except for the first one and then pass the first one as the initial value. I mean, I guess I'm not surprised given that now that I see the skip,
+我明白了，因为你没有像单位元（identity）这样的东西。scan 需要一个初始元素，而你这里没有可以传入的单位元值。所以你试图让它对除第一个元素之外的所有元素进行 scan，然后将第一个元素作为初始值传入。我的意思是，鉴于现在我看到了 skip，我并不感到惊讶，
+
+17
+00:09:02.000 --> 00:09:36.000
+I'm not surprised that you um uh that you get the error that you do also because you did you asked you didn't ask it to scan over n elements you asked us to scan over n minus one elements but so that's the problem is that here let's and we're going to now do something crazy um we are going to switch temporarily to Haskell. So Haskell has the two different... Chris, I just, you know, I was going to say at this point, nobody should be surprised by what happens in this podcast. I was like, is it really going to be that crazy?
+我并不感到惊讶，你呃，呃，你会遇到你得到的这个错误，也因为你问了，你没有要求它对 n 个元素进行 scan，你要求的是对 n 减 1 个元素进行 scan，所以这就是问题所在，这里让我们，我们将要做一件疯狂的事情，我们将暂时切换到 Haskell。所以 Haskell 有两个不同的……克里斯，我只是，你知道的，我本来想在这个时候说，对于这个播客中发生的事情，任何人都不应该感到惊讶。我想，真的会那么疯狂吗？
+
+18
+00:09:36.000 --> 00:09:53.000
+But then you said something that I just didn't expect. I don't know why I didn't expect Haskell. I just didn't expect it. Okay. And I did this wrong. Let's, I guess I can't clear here. So let's break out of this. Go clear.
+但随后你说了我完全没料到的话。我不知道为什么我没料到 Haskell。我只是没想到。好吧，我这里做错了。让我们，我想我在这里不能 clear。所以让我们跳出这个。去 clear。
+
+19
+00:09:53.000 --> 00:10:27.000
+Start GHCI. Come back here. So we're doing a scan L with a plus operation, zero identity element over the numbers one, two, three, and you get back zero one three six and now we're going to change this to call scan l1 and we remove the initial value it only takes a binary operation and you get back one three six and basically so we've got two different scans one that takes a binary operation and initial value,
+启动 GHCI。回到这里。所以我们正在对数字 1、2、3 执行带有加法操作、零单位元的 scanL，你得到的是 0、1、3、6，现在我们将这更改为调用 scanl1，我们去掉了初始值，它只接受一个二元操作，你得到的是 1、3、6，基本上，我们有两个不同的 scan，一个接受二元操作和初始值，
+
+20
+00:10:27.000 --> 00:10:51.000
+both take sequences, and the other one just takes a binary operation, no initial value. But what is the behavior of the one that takes an initial value is that the first element is that initial value, whereas of the output is the initial value, Of the output, you mean, yeah. Of the output is the initial value. Whereas in the Rust version, this is equivalent to a scan L.
+两者都接受序列，另一个只接受二元操作，没有初始值。但是接受初始值的那个的行为是，第一个元素是那个初始值，而输出的第一个元素是那个初始值，你是说输出的，是的。输出的是初始值。而在 Rust 版本中，这相当于一个 scanL。
+
+21
+00:10:51.000 --> 00:11:04.000
+It requests both a binary operation and an initial value, but it doesn't give you back n plus one elements. It doesn't hard code, which is, it's just a design choice. I'm not saying it's the end of the world, but the problem is, so the problem that we,
+它同时请求二元操作和初始值，但它不会给你返回 n 加 1 个元素。它没有硬编码，这，这只是一种设计选择。我并不是说这是世界末日，但问题是，我们遇到的问题，
+
+22
+00:11:04.000 --> 00:11:45.000
+now what we have to live code. But you don't get that in c++ either do you oh no yes you do exclusive scan you were so inclusive scan does not require an initial value exclusive scan does and it does initialize the first element and what's irritating so you might be thinking oh so inclusive scan is the equivalent of scan L1 in Haskell, and exclusive scan is the equivalent of scan L in Haskell, which is true, except for one little tiny asterisk, and that is that exclusive scan actually doesn't return you N plus one elements like scan L from Haskell. It returns you N elements. And why is that? It's because it just chops off
+现在我们必须写现场代码。不过在 C++ 里你也没法这么干，不是吗？哦不，是的，你确实可以。独占扫描（exclusive scan）不需要初始值，而包含扫描（inclusive scan）需要，而且它会初始化第一个元素。烦人的是，你可能会想：哦，所以包含扫描就相当于 Haskell 里的 scan L1，而独占扫描就相当于 Haskell 里的 scan L。这倒没错，除了有一个微小的小星号标记之外——那就是独占扫描实际上并不像 Haskell 的 scan L 那样返回 N+1 个元素。它返回的是 N 个元素。为什么会这样呢？因为这只是截断了
+
+23
+00:11:45.000 --> 00:12:22.000
+the last element that you would expect to see, which Bryce and I have talked about. And Bryce says is totally fine. And I think it's completely. Have we talked about that? Yeah. I pointed that out once and you said, oh, this corresponds to stuff that happens in hardware all the time. So it's totally fine. And I was like, I have zero recollection. Yeah, it was I think years ago when we were both back in California. Well, but the – So the six that Bryce is looking at on screen from this – That's the sum – but like that's one of the more useful elements because it's the reduction of the entire thing. Exactly.
+你期望看到的最后一个元素，这事布莱斯和我讨论过。布莱斯说这完全没问题。而我觉得……我们讨论过这事吗？对啊。我曾经指出来过，然后你说：哦，这对应着硬件里经常发生的事情，所以完全没问题。而我当时心想：我一点印象都没有了。是的，我想那是好几年前我们俩都在加州的时候。不过，布莱斯在屏幕上看到的这六个数字是——那是总和——但这其实是最有用的元素之一，因为它是整个事物的归约（reduction）。没错。
+
+24
+00:12:22.000 --> 00:12:48.000
+Oh, I do seem to recall that conversation. Yeah, I think younger Bryce was wrong. Okay. Younger Bryce is often wrong. The point being is that there's like 16 different flavors of all these scans. And the choice that Rust has made, I definitely disagree with the short-circuiting optional thing being encoded in the binary operation. I think those should be two different functions, but whatever, it's a design choice.
+哦，我好像确实记起那个对话了。对，我觉得当年的布莱斯搞错了。好吧。年轻时的布莱斯经常搞错。重点是，所有这些扫描操作大概有 16 种不同的变体。Rust 所做的选择里，我绝对不同意把短路可选（short-circuiting optional）的东西编码在二元操作中。我觉得这两个应该是两个不同的函数，不过随便吧，这是一种设计选择。
+
+25
+00:12:48.000 --> 00:13:12.000
+The second one of them not encoding the initial value to be the first one, eh, it's not the end of the world. But the point is, now we have to live code to figure out how do we add back the first value to this sequence. And the first thing I tried to do, which I explained a little bit earlier, was reversing the list, extending it, aka what we would call a pushback on a vector in C++,
+第二个没有把初始值编码为第一个元素的选择嘛，倒也不是什么世界末日。但重点是，现在我们必须通过现场写代码来弄清楚，怎么把第一个值重新加回到这个序列中。我尝试做的第一件事——我刚才稍微解释过，就是反转列表，扩展它（也就是我们在 C++ 里对 vector 叫的 pushback），
+
+26
+00:13:12.000 --> 00:13:53.000
+and then reversing it again. And not super efficient, but I was just trying to see if it works. But sure enough, this does not. So let's exit out of Haskell. If we try and do cargo test here and build this, it's not going to build because the bounds required by a reversible iterator are not met on the sequence that we have here. So very sad. What do you think we should do, Bryce? At this point, like literally, my thought was before we were recording this is this is what I was working on. Well, actually, before I was doing a couple things. Can't you just insert at the beginning? Maybe. So let's see how to well i mean like what what what what made why was your first inclination to reverse because i looked up how to insert i think
+然后再次反转。虽然不是超级高效，但我只是想看看它能不能行。不出所料，这根本不行。所以让我们退出 Haskell。如果在这里尝试运行 cargo test 并构建，它是无法通过编译的，因为这里序列所要求的双向迭代器（reversible iterator）约束并没有得到满足。太令人难过了。你觉得我们该怎么做，布莱斯？此时此刻，真的，我在录音之前的想法就是，这就是我一直在捣鼓的东西。不过其实在这之前我在做几件事。你就不能直接在开头插入吗？也许吧。所以让我们看看怎么……我的意思是，到底是什么让你最先倾向于反转？因为我查了一下怎么插入，我想
+
+27
+00:13:53.000 --> 00:14:24.000
+i googled rust how yeah rust iter you literally just saw my google from earlier add rust iter because that's the traits that we're dealing with right now, iter traits, add element to front. And the first result is extend instead iter, which if you read the docs is putting something at the end. Well, let's look at, let's extend. Okay, let's look at just like books. Although it actually says extend one. Should we try extend one? No, because it was reversed.
+我 Google 了一下 Rust 怎么……对，Rust 迭代器。你刚才其实已经看到了我之前的搜索结果：添加 Rust 迭代器，因为这就是我们现在正在处理的 trait——迭代器 trait，向头部添加元素。而第一个结果是 extend 而不是 iter，如果你读文档的话，它会把东西放在末尾。好吧，让我们看看，扩展。好吧，我们只看书。虽然它其实叫 extend one。我们要试试 extend one 吗？不，因为它是反转过的。
+
+28
+00:14:24.000 --> 00:14:38.000
+It didn't work. Maybe read the docs before you try things. one. Should we try extend one? No, because it was reversed. It didn't work. Maybe read the docs before you try things. I didn't read the docs. Everyone's always telling me to read docs. And it's like you can't read... If you spend all your time reading docs, you're never going to get anything. I'm very much a
+它没起作用。也许在尝试各种方法之前先读读文档。one。我们要试试 extend one 吗？不，因为它是反转过的。它没起作用。也许在尝试各种方法之前先读读文档。我没读文档。每个人总是告诉我要读文档。但这就像你没法读……如果你把所有时间都用来读文档，你将永远一事无成。我非常崇尚
+
+29
+00:14:38.000 --> 00:14:55.000
+fan of just go and try things. But like you can at least read what that... I have no idea what extend one might do. I mean, I read this part. It says it extend in a collection with the contents of an iterator. But what we want is, so let's go back to my search result.
+直接动手去尝试。但至少你可以读读那个……我完全不知道 extend one 可能会做什么。我的意思是，我读了这一部分。它说用一个迭代器的内容来扩展集合。但我们想要的是——所以让我们回到我的搜索结果。
+
+30
+00:14:55.000 --> 00:15:31.000
+Like I just, I don't think, yeah, what we want is like a put, so they have a put back. Do they have a put front? Put back? Put back in? I mean, you know, inserting at the beginning is more expensive for certain things like you know a dynamic vector so or a dynamic array rather what would you search for yeah insert element at start of iter rust how do i insert values no's not. Why don't we just look at, like, can you just get a list of all of the things? Of, like, in iter traits?
+就像我只是觉得，对，我们想要的是类似 put 的东西，所以他们有 put back。那他们有 put front 吗？Put back？Put back 进……我的意思是，你知道的，对于某些东西（比如动态 vector 或者动态数组）来说，在开头插入的开销更大。所以你会搜索什么？对，在 Rust 迭代器起始处插入元素，我该怎么插入值？没有，不是这样。我们为什么不直接看一下——你能不能直接拿到所有东西的列表？比如，在 iter traits 里面？
+
+31
+00:15:31.000 --> 00:16:09.000
+So iter traits, I don't really understand how they're totally designed. But, like, every single operation returns, like, a different object. So if you look at, for instance, filter. Filter, if you look at the signature of this it takes a predicate not surprising and then it returns you a filter that is uh generic over self and p and if you click on filter now it goes to struct stood colon colon iter colon colon filter which now it's kind of like ranges proceeds to yes it's very that's what i mentioned earlier it's very similar to ranges and now this proceeds to implement a set of other iter things. So it's like, you can't just
+所以对于 iter traits，我其实不是很理解它们的整体设计。但是，每个操作返回的好像都是一个不同的对象。所以如果你看，比方说 filter。Filter，如果你看它的签名，它接受一个谓词（predicate），这并不奇怪，然后它返回一个 filter，它是关于 self 和 p 的泛型。如果你现在点击 filter，它会跳转到结构体 std::colon::colon::iter::colon::colon::filter，现在这有点像 ranges 里的……对，这就是我刚才提到的，它和 ranges 非常相似。现在它接着实现了一组其他的 iter 相关东西。所以这就好像，你不能直接
+
+32
+00:16:09.000 --> 00:16:35.000
+necessarily go and look at the total list of things that are in iter because each object, which is why we're getting this. How are you supposed to know how to do things? I know it's confusing, but I don't know that, you know, once again, as I said at the beginning of this episode or two episodes ago, I'm not a Rust developer. I'm just, you know, once again, as I said at the beginning of this episode or two episodes ago, I'm not a Rust developer. I'm just, you know, I'm an individual trying to get things to work. But so what are we looking for on the side here? Insert? Insert.
+去查看 iter 中所有东西的完整列表，因为每个对象都是这样的，这也是我们遇到这个的原因。你到底该怎么知道怎么做各种事？我知道这很令人困惑，但我不知道，再次说明，正如我在本集开头或两集前所说的那样，我不是一个 Rust 开发者。我只是……再次说明，正如我在本集开头或两集前所说的那样，我不是一个 Rust 开发者。我只是……我只是一个试图让事情跑起来的个体。不过，我们在这里侧边找的是什么？Insert？Insert。
+
+33
+00:16:35.000 --> 00:16:55.000
+I mean, if there's a putback in there, like that sort of suggests to me that there should be a putfront. Putback was not in iter, though. Putback was in iter tools, which is… Just Google for, like, putfront. Rust. Rust iter though. Put back was in iter tools, which is... Just Google for like put front. Rust. Rust put front. Put front. Yeah, that was not helpful.
+我的意思是，如果里面有一个 put back，那对我来说某种程度上就暗示了应该有一个 put front。不过 put back 不在 iter 里。Put back 在 iter tools 里，也就是……只要 Google 一下诸如 put front 的东西。Rust。不过是 Rust iter。Put back 在 iter tools 里，也就是……只要 Google 一下诸如 put front 的东西。Rust。Rust put front。Put front。对，那没什么用。
+
+34
+00:16:55.000 --> 00:17:20.000
+Well, you know what we can do? This is a pretty good hack. Hack. The result for Rust put front was a bunch of like non-tech things. Put front is just go to GitHub. A lot of times what you're looking for is specific enough. So there is no put front anywhere in all of Rust code. So let's see if we go and look for put back.
+好吧，你知道我们可以做什么吗？这是一个相当不错的 hack。Hack。Rust put front 的搜索结果是一堆非技术性的东西。Put front 就是去 GitHub。很多时候，你寻找的东西足够具体。所以所有的 Rust 代码里根本没有任何地方有 put front。那我们看看如果我们去找 put back
+
+35
+00:17:20.000 --> 00:17:59.000
+It's going to show up probably a couple thousand times. Yeah, 1,362. And what if we go Reverse dot put back rev dot put back hmm not very useful all right Bryce many more suggestions Let's see if we can just I really do like my Attempt to just try and reverse things um method cannot be called on reverse scan skip due to unsatisfied trait bounds does it tell us what we want what we should do though i mean this is probably going to end up working at the end of
+它可能会出现几千次。对，1362 次。如果我们去找 Reverse 点 put back，rev 点 put back，嗯，不太有用。好吧，布莱斯，还有更多建议吗？让我们看看我们是否能——我真的很喜欢我尝试去反转事物的做法，由于未满足的 trait 约束，无法对 reverse scan skip 调用方法。它有没有告诉我们想要什么、我们应该做什么呢？我的意思是，这到头来可能还是会起作用，
+
+36
+00:17:59.000 --> 00:18:24.000
+the day but it's definitely not what you want so So basically I'm collecting the results of the scan. Yeah, it did work. So I'm collecting the results of the scan into a vec, then turning it back into an iter, then calling reverse. No method named extend on the struct reverse. Well, isn't that sad? So that's what I mean is that extend does exist here, but the reverse object that's returned
+但绝对不是你想要的。所以基本上我正在收集 scan 的结果。对，它确实起作用了。所以我把 scan 的结果收集到一个 vec 里，然后把它转回一个 iter，接着调用 reverse。在结构体 reverse 上找不到名为 extend 的方法。好吧，这难道不令人难过吗？这就是我的意思，extend 在这里确实存在，但是由 reverse 函数返回的
+
+37
+00:18:24.000 --> 00:19:11.000
+or the rev object that's returned or the rev object that's returned from the rev function does not implement extend therefore we can't use it yeah i got nothing um i mean like it sort of makes sense to me why you wouldn't have this because there's certain data structures where this is an inefficient operation um well let let's see if we can, if we create just a single, so if we just call this F, we're back in Gobble now. Wait, can't you insert it at the end and like rotate or something? Oh, Bryce. Bryce, that's quite clever. Everyone loves a rotate. So the question is, can we just call extend on this scan object? What is extend even implemented on?
+reverse 对象，或者由 rev 函数返回的 rev 对象并没有实现 extend，因此我们无法使用它。好吧，我没辙了。我的意思是……这对我来说某种程度上是说得通的，为什么你不会有这个，因为有些数据结构上这是一个低效的操作。好吧，让我们看看，如果我们只创建一个单一的——所以如果我们管这个叫 F，我们现在又回到了 Gobble。等等，难道你不能在末尾插入然后做个 rotate 之类的吗？哦，布莱斯。布莱斯，这可太聪明了。每个人都喜欢 rotate。所以问题是，我们能直接在这个 scan 对象上调用 extend 吗？Extend 到底是在什么上面实现的？
+
+38
+00:19:11.000 --> 00:19:30.000
+Well, I mean, it doesn't have storage, the thing that you're extending. It's just this view or... I don't know. No, it is because you're modifying the data. Wait, is this modifying T? What do you mean? What's T? The value T in this code.
+好吧，我的意思是，你扩展的东西并没有存储空间。它只是这个视图，或者……我不知道。不，确实有，因为你在修改数据。等等，这在修改 T 吗？你什么意思？什么是 T？这段代码里的值 T。
+
+39
+00:19:30.000 --> 00:19:48.000
+Is T being modified by this or T.data? We are just essentially destroying T at the end of the day and creating a new tensor. I think that you can't extend because what you're getting back from scan is like a... Is it like a C is it like a, like a C++ view? Is it like lazy?
+T 是被这个修改了，还是 T.data 被修改了？说到底，我们基本上只是销毁了 T，然后创建了一个新张量。我觉得你没法 extend，因为你从 scan 里拿回来的东西就像是一个……它是不是像一个 C++ 的视图？它是懒加载的吗？
+
+40
+00:19:48.000 --> 00:20:14.000
+No, it couldn't be right. Create a hitter from. Okay. Yeah. I want to understand more about what, like you call this scan thing, but is it actually modifying the underlying data? Like is t.data being modified here by the scan it's being destroyed rust is moved by default so if you're not if you're not ever taking a reference
+不，不可能吧？从……创建迭代器。好的。对，我想更多地了解，比如你调用了这个 scan 东西，但它实际上在修改底层数据吗？这里的 scan 有没有在修改 t.data？它被销毁了。Rust 默认是移动（move）的，所以如果你从来不拿一个引用
+
+41
+00:20:14.000 --> 00:20:46.000
+or a mutable reference you're always destroying it which is very odd coming from c++ like you're always forgetting that like c++ is a copy by default language and Rust is a move by default. So if you're not making a copy, bye-bye. And you get so, like, my experience coming from C++, and I don't even fully understand the memory model of Rust yet, but it's that you're constantly accidentally moving from things and then getting the compiler telling you you're trying to use after it's been destroyed, and you can't do that.
+或者一个可变引用，你总是在销毁它，这对于来自 C++ 的人来说非常奇怪。你总是会忘记 C++ 默认是个按值复制的语言，而 Rust 默认是个按移动（move）处理的语言。所以如果你不复制一份，拜拜了您嘞。于是你就会像我这样——我带着 C++ 的背景，而且我对 Rust 的内存模型还没完全理解，结果就是你经常不小心把东西 move 掉，然后编译器就会告诉你，你试图在它被销毁后使用它，而这是不被允许的。
+
+42
+00:20:46.000 --> 00:21:37.000
+So let's try. My next strategy is to create two different iterators, one from just the first element, and then I think you can chain them. And then so if I go.chain and then put everything here and then go collect, will that work? It worked! T worked tests passing i mean that was a shot in the dark i don't have any idea how i got that to work on the first um i mean it wasn't the first shot but the first shot of using a chain so so how did you fix your thing so i ended up so what we were trying to do initially was take our the result of our scan two three in our in our use case yeah and then somehow insert to the front or insert to the end and rotate it but that wasn't even working for any of the cases because you couldn't call extend on any of the objects that we were getting
+所以我们来试试。我的下一个策略是创建两个不同的迭代器，一个只包含第一个元素，然后我想你可以把它们链式连接（chain）起来。然后，如果我去调 .chain，再把所有东西放这儿，接着调用 collect，这能行吗？成功了！T 成功了，测试通过了。我的意思是，那纯属瞎猫碰死耗子，我完全不知道我是怎么让它第一次就成功的。我的意思是，这并不是第一次尝试，但这是第一次尝试使用 chain。那么，你是怎么修复你的问题的呢？所以我最后——我们最初想做的是，在我们的用例中，拿我们的 scan 结果（两个、三个） yeah，然后不知怎么地插入到头部或插入到尾部并旋转它，但这对于任何情况根本都不起作用，因为你没法在我们拿到的任何对象上调用 extend，
+
+43
+00:21:37.000 --> 00:21:42.000
+back the scan return to scan object the reverse return reverse object and extend didn't work on any of those so then i i, my next proposed solution is to create two different iterator sequences, you know, the equivalent of ranges basically, and then to chain those together and then basically flatten them into a single sequence. So it now reads sum of first into iter dot chain, and then the sequence that we had where you skip the first element and then call a scan, and then you're good to go. Well, we should have some rest people on. Thanks for listening. We hope you enjoyed, and have a great day. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+scan 返回 scan 对象，reverse 返回 reverse 对象，extend 在所有这些上面都不起作用。所以然后我——我下一个提出的解决方案是创建两个不同的迭代器序列（基本上就相当于 ranges），然后把它们链式连接起来，接着基本上把它们展平成一个单一的序列。所以它现在的写法是：sum of first 传入 iter.chain，然后是我们之前拥有的那个序列——跳过第一个元素并调用 scan，这样你就大功告成了。嗯，我们应该请一些 Rust 的人来上节目。谢谢收听，希望你们喜欢，祝有个美好的一天。这一集目前还没有评论。点击文稿中的任意句子即可留下评论。

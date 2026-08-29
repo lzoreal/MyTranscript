@@ -1,0 +1,191 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:55.000
+Let's get back to the taxonomy. So there's maps, first category within those, shape preserving, shape destroying. Yeah, the next category you talked about were reductions. So I consider those folds or reduces. In category theory, they're called catamorphisms, things that go from N to 1. Then you said sort of the growing category. I consider those generators. Welcome to ADSP, the podcast episode 123 recorded on March 21st, 2023. My name is Connor, and today with my co-host Bryce, we talk about a taxonomy for algorithms, stood views filter, and more ranges from C++ 20, 23, and 26. Start episode 123. Go.
+我们回到分类法上来。所以有映射，其中的第一个类别，保持形状的，破坏形状的。是的，你谈到的下一个类别是归约。所以我认为这些是折叠或归约。在范畴论中，它们被称为上函子（catamorphisms），即从N到1的映射。然后你提到了所谓的增长类别。我认为这些是生成器。欢迎收听 ADSP 播客第 123 期，录制于 2023 年 3 月 21 日。我是康纳，今天我和我的联合主持人布莱斯一起讨论算法分类法、std::views::filter，以及来自 C++ 20、23 和 26 的更多 ranges 内容。开始第 123 期节目。走吧。
+
+2
+00:00:55.000 --> 00:01:25.000
+You know StoodView's filter? I definitely know StoodView's filter. Tell me what it does. It filters things. In. And some people say, oh, it's ambiguous. No, all filters filters things in and some people say oh it's ambiguous no all filters filters thing in there's no there's no filter that i've ever found that filters things out just describe for me how it operates how it operates yeah i mean i've never looked at the implementation of it but like from a high level point of view you pass it a unary predicate, which is a function that takes a single argument
+你知道 std::views::filter 吗？我当然知道 std::views::filter。告诉我它是做什么的。它过滤元素。留下。有些人说，哦，这很含糊。不，所有的过滤都是过滤元素留下的，有些人说，哦，这很含糊，不，所有的过滤都是过滤元素留下的，我从来没有发现过任何过滤是把元素过滤掉的，只要向我描述它是如何运作的，它是如何运作的，是的，我的意思是，我从来没有看过它的实现，但从宏观角度来看，你向它传递一个一元谓词，它是一个接受单个参数的函数
+
+3
+00:01:25.000 --> 00:01:43.000
+and it will iterate over each of your elements, evaluates the predicate on each of those elements for those that returns true. It keeps that element, AKA filters it in. And the range that you are left with has the same kind of rank, AKA it didn't reduce the rank.
+它会遍历你的每个元素，对这些元素中的每一个评估谓词，对于返回 true 的那些元素，它会保留该元素，也就是将其过滤进来。你最后得到的 range 具有相同的秩，也就是说它没有降低秩。
+
+4
+00:01:43.000 --> 00:02:12.000
+It just potentially reduced the number of elements. So if you've got the numbers one to 10 and you filter in even ones, you.k.a. it didn't reduce the rank, it just potentially reduced the number of elements. So if you've got the numbers 1 to 10 and you filter in even ones, you're left with 5. Okay. That's a good explanation, but we're going to dive a little bit deeper down into it. I think that was a really good way of describing what it is, how it operates. But I really want to get down
+它只是潜在地减少了元素数量。所以如果你有 1 到 10 的数字，并且你筛选出偶数，你……也就是说它没有降低秩，它只是潜在地减少了元素数量。所以如果你有 1 到 10 的数字，并且你筛选出偶数，你会剩下 5 个。好吧。这是一个很好的解释，但我们要深入探讨一下。我认为这是一个很好的方式来描述它是什么，它是如何运作的。但我真的很想深入了解
+
+5
+00:02:12.000 --> 00:02:50.000
+to some of the gritty details, in particular so we can understand how this performs and how compilers see it. So std views filter is a range adapter, right? You call filter with your function and it gives you, sorry, let me put it this way. You have like some range pipe filter F.
+一些细节，特别是为了让我们了解它的性能以及编译器是如何看待它的。所以 std::views::filter 是一个 range 适配器，对吧？你用你的函数调用 filter，它给你，抱歉，让我这样说。你有一些 range 管道 filter F。
+
+6
+00:02:50.000 --> 00:03:14.000
+What does that give you back? That gives you back a filter view, which is a range. Yeah? Correct. That is lazily evaluated. So it itself, until you perform some kind of reduction or take or collecting operation does nothing. Okay, so it's a range. And so a range is basically just a pair of iterators or an iterator and a sentinel.
+这会给你返回什么？这会给你返回一个 filter view，它是一个 range。对吧？没错。这是惰性求值的。所以它本身在执行某种归约或 take 或收集操作之前什么都不做。好吧，所以它是一个 range。所以一个 range 基本上只是一对迭代器或者一个迭代器和一个哨兵。
+
+7
+00:03:14.000 --> 00:03:38.000
+So let's talk about what happens when we get an iterator from this range. Like we call begin on this range. We get back an iterator. What does that iterator do? What does that iterator do? What does that iterator do? I don't understand the question. Yeah, like we've gotten an iterator. We've called begin on our filter view.
+所以我们来谈谈当我们从这个 range 获得迭代器时会发生什么。就像我们在这个 range 上调用 begin 一样。我们得到一个迭代器。那个迭代器做什么？那个迭代器做什么？那个迭代器做什么？我不明白这个问题。是的，就像我们得到了一个迭代器。我们在我们的 filter view 上调用了 begin。
+
+8
+00:03:38.000 --> 00:04:01.000
+And like what happens when we dereference that? Oh, okay, I was going to say like just calling and assigning the result of, you know, range.begin does nothing. If you dereference it, I assume it iterates through the range until it finds a value that returns true for the evaluation of the unary predicate that was passed to the views filter.
+然后当我们解引用它时会发生什么？哦，好吧，我本来想说，仅仅调用并赋值（你知道的）range.begin 的结果是什么也不做。如果你解引用它，我假设它会遍历 range，直到找到一个值，对于传给 views filter 的一元谓词的求值结果为 true。
+
+9
+00:04:01.000 --> 00:04:17.000
+Okay, all right. So let's recap what Connor just said. So, when you call begin on this iterator, that, or when you dereference this call to begin,
+好的，好的。让我们回顾一下康纳刚才所说的话。所以，当你在这个迭代器上调用 begin 时，或者当你解引用对 begin 的这个调用时，
+
+10
+00:04:17.000 --> 00:04:33.000
+when you dereference this first iterator, it's going to go and iterate through the elements. So, it's going to apply some algorithm, right? Correct. And that's, you know, it's going to apply some algorithm, right? Correct. And that's, you know, it's going to do a find if, right? The moral equivalent of that or yes, something like that. Yeah.
+当你解引用第一个迭代器时，它会去遍历元素。所以，它会应用某种算法，对吧？没错。那就是（你知道的）它会应用某种算法，对吧？没错。那就是（你知道的）它会做一个 find if，对吧？这在本质上是等同的，或者是的，类似的事情。是的。
+
+11
+00:04:33.000 --> 00:05:22.000
+So it's, you dereference this filter iterator and it's going to say, hey, I'm going to say hey i'm going to go do a a find if on my underlying range to look for the first element that matches the predicate that i've been given okay and so then you know we go and we increment this iterator and we dereference it again and what happens we rinse, repeat what we just explained? Yeah, we're going to do another find if. Now, and I should put a big caveat here because I'm sure that there are some ranges people right now that are maybe up in arms that... I know that in some cases, some range adapters like this,
+所以它，你解引用这个 filter 迭代器，它会说，嘿，我要说，嘿，我要在底层 range 上做一个 find if，来寻找与给我的谓词匹配的第一个元素，好的，然后呢（你知道的）我们去递增这个迭代器，然后再次解引用它，会发生什么？我们重复刚才解释的步骤？是的，我们要再做一个 find if。现在，我应该在这里做一个大大的警告，因为我确信现在有些 ranges 的拥护者可能会对此感到愤怒……我知道在某些情况下，像这样的 range 适配器，
+
+12
+00:05:22.000 --> 00:05:56.000
+they actually do that searching on the, or they do that lazy operation on the increment versus on the dereference. That's immaterial here. I don't care whether it happens on the increment or decrement operation or on the dereference operation. That particular detail is not important to the conversation that we're having right now. And so what I mean by that is like, you know, instead of doing the find if when you decrement the iterator,
+它们实际上是在递增操作时而不是在解引用操作时进行搜索，或者说进行惰性操作。这在这里无关紧要。我不在乎它发生在递增或递减操作上，还是发生在解引用操作上。这个特定的细节对于我们现在进行的对话并不重要。我的意思是，（你知道的）不是在递减迭代器时做 find if，
+
+13
+00:05:56.000 --> 00:06:27.000
+you could instead do the find if when you call begin, and you could also do the find if whenever you increment the iterator. And then whenever you decrement, you wouldn't have to do the find if. And there's also this whole thing where you can cache the results because obviously if you decrement the iterator twice, you don't want to do that find if twice, right? Like if I call begin on the filter view and I decrement it twice.
+你也可以在调用 begin 时做 find if，也可以在每次递增迭代器时做 find if。然后无论何时递减，你都不必做 find if。这里还有缓存结果的问题，因为显然如果你对迭代器递减两次，你不会想做两次 find if，对吧？就像如果我在 filter view 上调用 begin 并将其递减两次一样。
+
+14
+00:06:27.000 --> 00:06:55.000
+Right. You don't want to do that search twice. Ideally not, correct. Yeah. So ideally you'd have some caching mechanism. I don't care about that. That is immaterial to the conversation we're having. Okay. So now let's imagine that we've got a for loop, a range-based for loop that is iterating the elements of a filter view.
+对。你不会想做两次搜索。理想情况下不想，对吧。是的。所以理想情况下你会有一个缓存机制。我不在乎那个。这与我们正在进行的对话无关。好的。现在让我们想象一下，我们有一个 for 循环，一个基于 range 的 for 循环，正在迭代 filter view 的元素。
+
+15
+00:06:55.000 --> 00:07:29.000
+So what is happening in every iteration of this range-based for loop? The rinse-repeat thing that we talked about? Right. We are calling find if. So we've got this range-based for loop, and inside of it, in the body of that range-based for loop, we essentially have another loop, a nested loop. And that nested loop is doing a find if i mean in my mental model
+那么在这个基于 range 的 for 循环的每次迭代中会发生什么？我们讨论过的重复步骤？对。我们在调用 find if。所以我们有这个基于 range 的 for 循环，在它的内部，在这个基于 range 的 for 循环的主体中，我们本质上还有另一个循环，一个嵌套循环。那个嵌套循环正在做一个 find if，我的意思是，在我对
+
+16
+00:07:29.000 --> 00:08:16.000
+of what's happening here we don't care about your mental model well okay i care about the compiler's mental model all right well tell me how far off my mental model is from what the compiler is doing but i would assume that this is the same thing your nested loops is kind of or maybe i'm wrong but it's uh mischaracterizing in my opinion what would be happening because each of these find ifs when you do a quote-unquote find if to get the first kept value or filtered in value you're going from zero to n where that value exists. And then the second time you do a find if, you're not going back from zero and then finding to N, the second N. You're going from N where you left off to the second N. So even though it's a nested loop,
+这里发生的事情的心智模型中，我们不在乎你的心智模型。好吧，我关心编译器的心智模型。好吧，那么告诉我，我的心智模型和编译器正在做的事情相差多远？但我会假设这是一样的东西。你的嵌套循环有点……或者可能我错了，但在我看来，这错误地描述了将会发生的事情，因为当你做一个所谓的 find if 来获取第一个保留的值或过滤出的值时，这些 find if 中的每一个，你都是从 0 到该值存在的 N。然后第二次做 find if 时，你不是从 0 返回然后找到 N，即第二个 N。你是从你离开的 N 到第二个 N。所以即使它是一个嵌套循环，
+
+17
+00:08:16.000 --> 00:08:43.000
+it is still going to be like an order N operation because it's... That's correct. And that, my friend, is the secret word for today. What? It's still an order in operation. Well, I mean, I also wouldn't call it like a nest... When I hear nested loop, I think quadratic. So I think it's like, like I said, a mischaracterization to call it a nested loop.
+它仍然是一个 O(N)（order N）的操作，因为它……没错。而那，我的朋友，就是今天的秘密词汇。什么？它仍然是一个 O(N) 操作。好吧，我的意思是，我也不想称它为一个嵌套的……当我听到嵌套循环时，我想到了二次方复杂度。所以我觉得，就像我说的，称之为嵌套循环是一种错误的描述。
+
+18
+00:08:43.000 --> 00:09:12.000
+I don't... Well, nested loops are not necessarily quadratic. I don't care about whether you think it's a mischaracterization. But the key thing here is that we are iterating over an underlying range of in elements. Yes. Right? underlying range of n elements. Yes. What filter does is filter takes a range of n elements and it produces a range of n
+我不同意……嗯，嵌套循环不一定是二次方的。我不在乎你是否认为这是一种错误的描述。但这里的关键是，我们正在遍历包含 n 个元素的底层 range。是的。对吧？包含 n 个元素的底层 range。filter 所做的是，filter 接受一个包含 n 个元素的 range，并产生一个包含 n
+
+19
+00:09:12.000 --> 00:09:47.000
+minus m elements where m is the number of elements that have been filtered out. Correct. And is potentially zero. Correct. And the same can be said about drop, take, remove if, a whole variety of different range adapters. They reduce in size the passed in range. I agree with what you are kind of saying,
+减去 m 个元素的 range，其中 m 是被过滤掉的元素数量。没错。而且可能为零。没错。drop、remove if 以及各种各样的 range 适配器也是如此。它们缩小了传入的 range 的大小。我同意你所说的大部分内容，
+
+20
+00:09:47.000 --> 00:10:10.000
+but there is a distinction in that the repetitive find ifs that occur implicitly within a filter do not exist within a drop and a take. That's a single one-time operation that like you're, you're doing that iteration once. And then once you've either taken or dropped, like for in the take situation, you actually don't do any iterations to skip elements, only in the drop case. And that pass happens once.
+但有一个区别，那就是隐式发生在 filter 内部的重复 find if 在 drop 和 take 中是不存在的。那是一个单一的一次性操作，（你知道的）你只做一次迭代。然后一旦你 take 或 drop 了，就像在 take 的情况下，你实际上不做任何迭代来跳过元素，只有在 drop 的情况下才做。而且那个过程只发生一次。
+
+21
+00:10:10.000 --> 00:10:55.000
+And I don't even – I mean, maybe it actually does happen on the dereference. But my point being is that there's this kind of iterative nature of multiple findifs within a filter, whereas that doesn't – Yes, I will certainly give you that this one is more challenging than others, and that's why we start with it. As for the kind of like it's N minus M, yeah, completely they're all in the same category. Yeah. Now, there's a few other categories of these range adapters. And when we say range adapters here, just generally of algorithms like this. If we looked at the taxonomy of the algorithms library,
+而且我甚至——我的意思是，也许它确实发生在解引用上。但我的意思是，filter 内部有多个 find ifs 的这种迭代性质，而这并没有——是的，我当然承认这个比其他的更具挑战性，这就是我们从它开始的原因。至于像 N 减去 M 这样的情况，是的，完全一样，它们都属于同一类别。现在，这些 range 适配器还有其他几个类别。当我们在这里说 range 适配器时，通常是指像这样的算法。如果我们看一下算法库的分类法，
+
+22
+00:10:55.000 --> 00:11:55.000
+there's a family, the remove if family, that takes a thing of n and produces a thing of n minus m. There's also, you know, the transform family, which is things that go from n to n. There's the reduce family, which is things that go from n to 1. There's presumably a family of things that go from m to n plus m or n times m, you can imagine an adapter that repeats every element of the underlying range a certain number of times. So if I have an input sequence of A, B, C, and I pass it through this adapter. The adapter produces a sequence of A, A, B, B, C, C. I'm sure we have one of those.
+有一个系列，remove if 系列，它接受一个大小为 n 的事物并产生一个大小为 n 减去 m 的事物。还有（你知道的）transform 系列，也就是从 n 映射到 n 的事物。还有 reduce 系列，也就是从 n 映射到 1 的事物。推测起来，还有一个从 n 映射到 n 加 m 或 n 乘 m 的事物系列，你可以想象一个适配器，它将底层 range 的每个元素重复一定的次数。所以如果我有一个输入序列 A、B、C，并把它通过这个适配器。该适配器产生一个序列 A、A、B、B、C、C。我确信我们有这样一个适配器。
+
+23
+00:11:55.000 --> 00:12:28.000
+I don't know which adapter that is, but I'm sure there's one in ranges V3, if not in the standard. Do you know what that one is called? You could mess around with repeat. So like your taxonomy that you're describing right now, I actually have names for each of these. So the first one is map, mapping operations. That's why you're here. And it's interesting because I actually consider filter, like there's two categories within mapping operations. There are the shape-preserving ones, which are the transforms that you described, end-to-end. Shape-preserving. And then there are shape-destroying
+我不知道那是哪个适配器，但我确信 ranges V3 中有一个，即使标准库中没有。你知道那个叫什么吗？你可以用 repeat 来折腾。所以就像你现在描述的分类法一样，我实际上为其中的每一个都起了名字。所以第一个是 map，映射操作。这就是你来这里的原因。这很有趣，因为我实际上认为 filter——映射操作中其实有两个类别。一个是保持形状的，也就是你描述的 transforms，从 n 到 n。保持形状的。然后是破坏形状的
+
+24
+00:12:28.000 --> 00:13:14.000
+ones, which are take, drop. And there is the case, the corner case, where you don't actually destroy the shape, but in general, the shape can be destroyed. So if you filter, and like you said, you end up with n elements, technically you didn't destroy the shape but uh it doesn't that's not the case for all circumstances so in the map umbrella there's shape preserving aka the transforms and then shape destroying i'd actually be curious you said there's other ones take drop filter off the top of my head i can't actually think of a third one um um do you know? And it's, it's interesting too, because take and drop, take a sequence and an integer, whereas filter takes a sequence in a unary predicate. There is, um, there is like, uh,
+那些，也就是 take、drop。有一种情况，就是边界情况，你实际上并没有破坏形状，但总的来说，形状是可以被破坏的。所以如果你进行过滤，正如你所说，你最后得到了 n 个元素，严格来说你并没有破坏形状，但……但这并不适用于所有情况。所以在 map 这个大伞下，有保持形状的（也就是 transforms）和破坏形状的。其实我很好奇，你刚才说还有其他的，take、drop、filter，我想不出第三个了……嗯……你知道吗？而且，这也很有趣，因为 take 和 drop 接受一个序列和一个整数，而 filter 接受一个序列和一个一元谓词。有一个……嗯……有一个类似……
+
+25
+00:13:14.000 --> 00:13:59.000
+Oh, actually there is one in range V3 called adjacent remove if. Yeah. And there's like, like there is remove if in range V3 um trying to think about it i mean what's the difference between remove if and filter it's it's not it's just an inversion right yeah so those those are the same algorithm in my opinion um i'm wondering about like what about like what about like what about like chunk no so chunk is in a different category if the listener is thinking in their head i know either go to twitter and comment on this episode or go to discussions because i'm interested if there is actually so so so chunk is an interesting one
+哦，实际上 ranges V3 中有一个叫做 adjacent remove if。是的。还有像 ranges V3 中的 remove if……嗯，我在想，remove if 和 filter 之间有什么区别？这不是……这只是一种反转，对吧？是的，所以在我的看法里，那些是相同的算法……我在想，关于……关于……关于……关于 chunk？不，所以 chunk 是在另一个类别中。如果听众心里在想，我知道，要么去 Twitter 上评论这期节目，要么去 discussions，因为我很感兴趣，实际上是不是有……所以，chunk 是一个有趣的例子，
+
+26
+00:13:59.000 --> 00:14:34.000
+because in the context of what we're discussing today, loop optimization, chunk presents similar problems to filter, which I think we'll get to later. Is there something like chunk but where the size of the chunks is dynamic? Yeah. So wait, let's get back to the taxonomy. So there's maps, first category within those, shape preserving, shape destroying. Then the next category you talked about. Split, split's what I'm thinking. Yeah, the next category you talked about were reductions.
+因为在我们今天讨论的上下文（循环优化）中，chunk 呈现出与 filter 类似的问题，我想我们稍后会讨论到这一点。有没有类似 chunk 但 chunk 大小是动态的？是的。所以等等，我们回到分类法上来。所以有 maps，其中的第一个类别，保持形状的，破坏形状的。然后你谈到的下一个类别是。split，我想到的是 split。是的，你谈到的下一个类别是归约。
+
+27
+00:14:34.000 --> 00:14:58.000
+So I consider those folds or reduces. In category theory, they're called catamorphisms, things that go from N to 1. Then you said sort of the growing category. I consider those generators. So like iota is the simplest example of this where you start just with a single number and then it generates you a sequence yep there's also stood generate uh there's repeat there's a bunch of these in uh rangeland they're actually called factories not generators and that probably is a better name for them considering
+所以我认为这些是折叠或归约。在范畴论中，它们被称为上函子（catamorphisms），即从 N 到 1 的映射。然后你提到了所谓的增长类别。我认为这些 s 是生成器。比如 iota 就是其中最简单的例子，你从一个单一的数字开始，然后它为你生成一个序列。是的，还有 std::generate，还有 repeat，在 rangeland 中有许多这样的东西，它们实际上被称为工厂（factories）而不是生成器（generators），考虑到
+
+28
+00:14:58.000 --> 00:15:22.000
+that in in python and you know coroutines land generators are overloaded in terms of how they're used so actually maybe i should start referring to them as factories, but then factory is also an overloaded term. Anyways. Yeah. And then there's this fourth category of where chunk fits into, and you just said the category name is splits. So you said, is there one where it's a dynamic shape? Yeah. And split, stood views split is the example.
+在 Python 和协程（coroutines）领域中，生成器在它们的用法上被过度加载了（overloaded），所以也许我应该开始把它们称为工厂，但工厂也是一个被过度加载的术语。不管怎样。是的。然后是第四个类别，chunk 适合的类别，你刚才说类别名称是 splits。所以你问，有没有一个是动态形状的？是的。而 split，std::views::split 就是这个例子。
+
+29
+00:15:22.000 --> 00:15:54.000
+Yeah. And well, so what's really interesting is to think about, like similarly to how within the map shape destroying category, think about how do you change the API to get different behavior? Take and drop took integers with a sequence, whereas filter took a sequence and a unary predicate. And the reason that I thought about adjacent remove if, because in my head, I cycled through, okay, you have an integer, you have a unary predicate. The other option is when you have a binary predicate, which is what adjacent remove if has. So the way that I ended
+是的。而且，嗯，非常有趣的是去思考，类似于在 map 破坏形状类别中，思考如何改变 API 以获得不同的行为？take 和 drop 接受带有序列的整数，而 filter 接受一个序列和一个一元谓词。我想到 adjacent remove if 的原因，是因为在我的脑海里，我循环遍历了：好吧，你有一个整数，你有一个一元谓词。另一个选择是当你有一个二元谓词时，也就是 adjacent remove if 所拥有的。所以我最终
+
+30
+00:15:54.000 --> 00:16:25.000
+up thinking about that was answering the question, what do you get when you have a mapping algorithm that is shape destroying that takes a sequence and a binary predicate? And the answer to that is adjacent remove if. So if we flip over now to the splitting category, chunk, what does chunk take? Chunk takes a sequence and an integer. So that ticks the integer box. Then there is, so what do we, so maybe I'll ask you this question. I know the answers to them. What do you get when you have a splitting algorithm?
+思考这个问题的方式是回答这样一个问题：当你有一个映射算法，它是破坏形状的，接受一个序列和一个二元谓词时，你会得到什么？而这个问题的答案就是 adjacent remove if。所以如果我们现在翻转到 splitting 类别，chunk，chunk 接受什么？chunk 接受一个序列和一个整数。所以这勾选了整数框。那么，我们得到什么——所以也许我会问你这个问题。我知道答案。当你有一个分割算法时，你会得到什么？
+
+31
+00:16:25.000 --> 00:16:54.000
+In this case, we'll stick with chunk specifically. And you have a unary predicate. And when you have a binary predicate. Because those are two specific named algorithms that have been discussed in ranges land. And they will be showing up in C++26. I don't know. So the more popular one is chunk that takes a sequence and a binary predicate. And that was originally in range V3 called group by, but it's now been called chunk by.
+在这个例子中，我们专门坚持使用 chunk。并且你有一个一元谓词。当你有一个二元谓词时。因为那是两个在 ranges 领域中被讨论过的具有特定名称的算法。它们将出现在 C++26 中。我不知道。所以更受欢迎的是 chunk，它接受一个序列和一个二元谓词。这最初在 ranges V3 中被称为 group by，但现在它被称为 chunk by。
+
+32
+00:16:54.000 --> 00:17:40.000
+And what that does is it looks at adjacent elements, performs the binary operation, and then based on whether it returns true or false, it'll split and start like a new range inside the range of ranges. And a very related algorithm, but slightly different behavior is when you have chunk with a unary operation or unary predicate. And this is basically does the exact same thing. But instead of looking at adjacent elements, it just looks at individual elements. And then any time that individual evaluation of that unary function returns a different value, it starts a new sequence. And this is what is probably most likely going to be called chunk by key. And if you are familiar with JavaScript or a bunch of other sort of functional libraries,
+它的作用是查看相邻元素，执行二元操作，然后根据它返回 true 还是 false，它会分割并启动像 ranges 的 range 内部的一个新 range。和一个非常相关但行为略有不同的算法是，当你拥有带有单一操作或一元谓词的 chunk 时。这基本上做的事情完全一样。但它不是查看相邻元素，而是只查看单个元素。然后任何时候对该一元函数的单个求值返回不同的值时，它就会启动一个新的序列。而这可能最有可能被称为 chunk by key。如果你熟悉 JavaScript 或许多其他类似函数式的库，
+
+33
+00:17:40.000 --> 00:18:36.000
+a lot of times these functions are called key selectors or selectors because they are, you know, I think in Python in the iter tools library, there is a function called group or group by that does this exact thing, that it takes a unary function. And what's really irritating is that a lot of the times only one of these two flavors exists, the chunking function that takes a unary function or the chunking algorithm that takes a unary function and one that takes a binary function. And when you can – sometimes when you really want the binary function, you can get away with using a unary function. But there are times where you specifically need the binary one that looks at adjacent elements. And there's nothing – if you have access to one that just has a unary function that doesn't do anything for you so like you can implement chunk by key the one that takes a unary function in terms of the one that takes a binary
+很多时候这些函数被称为键选择器（key selectors）或选择器（selectors），因为它们是（你知道的）我认为在 Python 的 iter tools 库中，有一个名为 group 或 group by 的函数，它做的就是这个精确的事情，它接受一个一元函数。而真正令人恼火的是，很多时候这两种风格中只有一种存在，即接受一元函数的 chunking 函数，或者接受一元函数的 chunking 算法，以及一个接受二元函数的算法。而当你可以——有时当你真正想要二元函数时，你可以通过使用一元函数来蒙混过关。但有时你需要专门的二元函数来查看相邻元素。而没有什么——如果你只能访问一个只带有一元函数且对你毫无帮助的东西，那么你就可以通过使用二元函数的那个来实现 chunk by key（接受一元函数的那个）。
+
+34
+00:18:36.000 --> 00:19:26.000
+function and so really that's why i like chunk by i actually submitted a talk once to meeting c++ called chunk by versus zip because i think they're two of the most like useful algorithms that are missing from c++ and uh anyways that's my long so there's there's another one not to stray too far from example but um joins also another interesting case because that's another one of those growers right join takes a sequence of n and gives you something that is you know join is a reduction in my opinion because really join is just a reduction with the binary operation of concatenation applied to a list of things all right well that's going to be a topic for a whole different podcast all right so let's go back to filter.
+所以真的，这就是为什么我喜欢 chunk by，我曾经向 Meeting C++ 提交过一次演讲，叫做 chunk by 与 zip，因为我认为它们是 C++ 中缺失的最有用的两个算法，不管怎样，这是我的长篇大论——所以还有另一个，不要离例子太远，但是……join 也是另一个有趣的例子，因为那是另一个增长者（grower），对吧？join 接受一个 n 的序列并给你一些东西，（你知道的）join 在我看来是一个归约，因为实际上 join 只是一个将连接（concatenation）的二元操作应用于一盘事物的归约。好吧，那将是一个全新播客的话题。好吧，让我们回到 filter。
+
+35
+00:19:26.000 --> 00:19:35.000
+So. Is this going to be a two-part episode? Because we're already. Probably. Okay. I think it's, I think it's at a point where, where it's time for us to start looking at some code. Are we,
+所以。这会是一个分为两部分的剧集吗？因为我们已经……大概吧。好吧。我觉得，我觉得是时候让我们开始看一些代码了。我们在，
+
+36
+00:19:35.000 --> 00:19:40.000
+are we doing the screen share thing? Because we got, we, we got to. Not yet. I, I, you're,
+我们是在做屏幕分享吗？因为我们得，我们得这么做。还没有。我，你，
+
+37
+00:19:40.000 --> 00:19:54.000
+you're, you're not, you're not ready yet to see. I was going to say, we're, we made the decision to try not to share code. No, we're doing it now because we need to. We made the executive decision never to do it, but we need to now, so we will.
+你，你还没有准备好去看。我本来想说，我们做出了尽量不分享代码的决定。不，我们现在就要这么做，因为我们需要。我们做出了永不这样做的执行决定，但我们现在需要，所以我们会这么做的。
+
+38
+00:19:54.000 --> 00:19:59.000
+Of course. Dude, it's a programming podcast. We need to be able to look at it. Should we hit the record button? I'll just upload this to YouTube because every single time people comment, why don't you just post this to YouTube? Be sure to check the show notes either in your podcast app or at ADSP the podcast dot com for links to any of the things that we mentioned in today's episode and for a link to the GitHub discussion section where you can leave questions, comments or thoughts that you had about the episode. Thanks for listening. We hope you enjoyed and have a great day. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+当然。老兄，这是一个编程播客。我们需要能够看到它。我们应该按下录音按钮吗？我只是把这个上传到 YouTube，因为每次都有人评论，为什么不直接把它发布到 YouTube？请务必查看你的播客应用程序中或 ADSP the podcast.com 上的节目shownotes，获取我们在今天的节目中提到的任何事物的链接，以及通往 GitHub 讨论区的链接，你可以在那里留下关于本节目的问题、评论或想法。感谢收听。希望你喜欢，祝你有美好的一天。这期节目还没有评论。点击转录中的任何句子来发表评论。
