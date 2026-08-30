@@ -1,0 +1,311 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:33.000
+What say you Jared? It's always difficult at first glance to find the parallelism in a problem. I will say that. And it usually comes as a surprise when you figure out the solution to the puzzle. Yeah. That is how I often feel. I feel like I keep telling myself that, like keep we've talked regularly on on this podcast about how we so often reach for scans, or reductions or transforms like those like, I
+Jared，你怎么看？乍一看，在一个问题中找到并行性总是很困难的。我得承认这一点。当你找到谜题的解法时，通常会感到惊喜。是的。我经常有这种感觉。我觉得我一直在告诉自己，就像我们在这个播客中经常讨论的那样，我们是多么频繁地使用扫描（scan）、归约（reduce）或变换（transform），比如那些，我
+
+2
+00:00:33.000 --> 00:01:29.000
+think in my mind, the three basis operation is scan, reduce and transform. Welcome to ADSP the podcast episode 241 recorded on May 21st, 2025. My name is Connor and today with my co-host Bryce, we continue part three of our four part chat with Jared Hobrock. In this episode, we chat about a tricky parallel scan problem, parallel rotate and more. All right, so as I mentioned, as I mentioned, NumPy does have some unfortunate warts, like there's a lot of, it's a lot of weird historic quirks in how a bunch of the API's work. And, and you know, it's like object model is not great, where a lot of
+在脑海中认为，这三个基本操作就是扫描、归约和变换。欢迎收听 ADSP 播客第 241 期，录制于 2025 年 5 月 21 日。我是 Connor，今天和我的联合主持人 Bryce 一起，继续我们与 Jared Hobrock 四部分访谈的第三部分。在这一集中，我们讨论了一个棘手的并行扫描问题、并行旋转（rotate）等等。好的，正如我提到的，正如我提到的，NumPy 确实有一些不幸的缺陷，比如有很多奇怪的历史怪癖，关于一堆 API 是如何工作的。而且，你知道，它的对象模型不太好，很多
+
+3
+00:01:29.000 --> 00:01:45.000
+things give you back copies. And then over the years, they've tried to make some things give you back views. But so you never really know with a NumPy API whether you're getting back a view or a copy. But that is not the thing that I'm going to pick on today. I'm going to pick on one very particular thing that's going to be near and dear to our hearts. That is not the thing that I'm going to pick on today. I'm going to pick on one very particular thing that's going
+东西返回的是副本。多年来，他们试图让一些东西返回视图。但你永远不知道 NumPy API 返回的是视图还是副本。但这并不是我今天要挑剔的地方。我要挑剔一个非常具体的问题，它对我们来说意义重大。那不是我今天要挑剔的地方。我要挑剔一个非常具体的问题，它
+
+4
+00:01:45.000 --> 00:02:11.000
+to be near and dear to our hearts. And I get to uniquely pick on both NumPy and something that Connor used to work on, which is RAPID, specifically CoupDF. So one of the first things that I did when I started writing more Python code, which was like a year or so ago. I've always used Python a little bit, but in a very crude way, but I started using it in earnest, you know, one to two years ago.
+对我们来说意义重大。而且我可以独特地挑剔 NumPy 和 Connor 曾经工作过的东西，即 RAPID，特别是 CoupDF。所以，当我开始编写更多 Python 代码时，我做的第一件事就是大约一年前的事。我一直都在使用 Python，但方式非常粗糙，但我真正开始认真使用它是在一到两年前。
+
+5
+00:02:11.000 --> 00:02:31.000
+One of the first things I tried to do was to write a user defined reduction. How do you think I went about doing that, Connor? You read a Mark Harris blog and you implemented that? No, no, no, just like imagine that I have a NumPy array. What do you think I tried to do to write a user defined reduction? Wait, in NumPy?
+我尝试做的第一件事是编写一个用户定义的归约。你觉得我是怎么做的，Connor？你读了一篇 Mark Harris 的博客然后实现了它？不，不，不，就想象我有一个 NumPy 数组。你觉得我尝试怎么写一个用户定义的归约？等等，在 NumPy 里？
+
+6
+00:02:31.000 --> 00:03:00.000
+Yeah. You looked for a generic reducer fold. That's correct. I tried to do NP dot reduce and then pass it a lambda. And you know what happened? It didn't work because there is no such thing there. And as I learn more about like, you know, sort of the NumPy and Python mindset, I discovered that the thing, the reason that this doesn't exist is because in this sort of NumPy worldview,
+是的。你寻找了一个通用的归约器（reducer）或折叠（fold）。没错。我尝试使用 NP dot reduce 然后传入一个 lambda。你知道发生了什么吗？它没起作用，因为那里根本没有那种东西。随着我更多地了解 NumPy 和 Python 的思维方式，我发现这个东西之所以不存在，是因为在 NumPy 的这种世界观中，
+
+7
+00:03:00.000 --> 00:04:02.000
+as far as my best guess is that in this NumPy world view, where you've got this rank polymorphism, if you needed to write a user defined operation, you should really write like a UFUNC, which is a UFUNC is a function that takes things that seem like scalars but then can be applied to tensors. And there's this particular way of doing this application with a uFunk that makes sense for reductions. However, I always find this answer very unappealing that I just want to be able to call dot reduce in place. And also, I think for parallelism, having to write your reduction as a ufunk is a much more general form than writing a purely scalar reduction
+据我猜测，在 NumPy 的这种世界观中，当你拥有这种秩多态性（rank polymorphism）时，如果你需要编写一个用户定义的操作，你真的应该编写一个 UFUNC，即 UFUNC 是一个函数，它接受看起来像标量的东西，但可以应用于张量。并且有一种特定的方式来使用 uFunk 进行这种应用，这对归约是有意义的。然而，我总是觉得这个答案非常没有吸引力，我只是想能够原地调用 dot reduce。而且，我认为对于并行性来说，必须将你的归约写成一个 ufunk 比编写一个纯标量归约
+
+8
+00:04:02.000 --> 00:04:30.000
+operation. And so for serial code, maybe it doesn't matter so much. But if you've got a parallel array API, you would prefer to have the much more closed form of, hey, you just give me purely a scalar thing, purely a scalar operation, and then I do the application of this operation across this whole array. So anyways, NumPy does not have a user defined reduction
+操作要通用得多。所以对于串行代码，也许这没那么重要。但如果你有一个并行数组 API，你会更倾向于拥有更封闭的形式，即，嘿，你只需要给我一个纯标量，一个纯标量操作，然后我就在整个数组上应用这个操作。所以无论如何，NumPy 没有用户定义的归约
+
+9
+00:04:30.000 --> 00:04:56.000
+function, does not have a user defined scan function. And because of that, pandas never had these things either. And then because pandas didn't have them, pandas is this data frame library. For people who don't know what a data frame is, it's just like a 2D, it's a fancy 2D matrix. Okay. It's like a spreadsheet, but like it's really just a fancy 2D matrix. Maybe that's an unfair classification.
+函数，也没有用户定义的扫描函数。正因为如此，Pandas 也从来没有这些东西。而且因为 Pandas 没有它们，Pandas 是这个数据框（data frame）库。对于不知道什么是数据框的人来说，它就像一个二维的，它是一个花哨的二维矩阵。好吧。它就像一个电子表格，但它真的只是一个花哨的二维矩阵。也许这是一个不公平的分类。
+
+10
+00:04:56.000 --> 00:05:21.000
+But anyways, that pandas is how you make these fancy 2D matrices for dealing with tabular data. The primary difference between a NumPy array and a Pandas data frame is that your columns can have different types. NumPy matrix all has the same type, whereas a data frame, the columns can have different types, which makes it much more amenable to, I don't know, data analytics.
+但无论如何，Pandas 就是你如何制作这些用于处理表格数据的花哨二维矩阵的方法。NumPy 数组和 Pandas 数据框之间的主要区别在于你的列可以有不同的类型。NumPy 矩阵全是相同的类型，而数据框的列可以有不同的类型，这使得它更适合，我不知道，数据分析。
+
+11
+00:05:21.000 --> 00:06:13.000
+Yeah. So because Pandas didn't have it, then KudiF doesn't have it. And do you know Bradley Dice, Connor? Of course, he gave me a very nice Jigglypuff sticker when I left the Rapids team. Okay, so good. I was at PyCon last week and me and Bradley were talking about a particular interesting problem. And the basics of the problem was, hey, I've got this data, this time series data, and I want to apply the data in one column into a time series, and I want to apply this recurrence relation to compute some value that depends upon the values
+是的。所以因为 Pandas 没有它，那么 KudiF 也没有它。Connor，你认识 Bradley Dice 吗？当然，我离开 Rapids 团队时，他给了我一张非常可爱的胖丁贴纸。好的，太好了。我上周在 PyCon，我和 Bradley 在讨论一个特别有趣的问题。问题的基本点是，嘿，我有这些数据，这些时间序列数据，我想把一列中的数据应用到时间序列中，我想应用这个递归关系来计算一些依赖于这些值的值
+
+12
+00:06:13.000 --> 00:06:47.000
+in this time series. Specifically, I'm going to share my screen now. I know, I'm sorry. I'll try my best to use words here. Specifically, the operation that I wanted to apply. So if I'm doing something where I'm computing a sum for each value in this time series database, then it should be a scan, right? And essentially, over the course of three days, Bradley and I were discussing
+在这个时间序列中。具体来说，我现在要共享我的屏幕。我知道，我很抱歉。我会尽力在这里用语言表达。具体来说，我想应用的操作。所以如果我正在做一些事情，比如为这个时间序列数据库中的每个值计算一个总和，那么它应该是一个扫描，对吧？本质上，在三天的时间里，Bradley 和我一直在讨论
+
+13
+00:06:47.000 --> 00:07:43.000
+whether or not this scan could be paralyzed. So this is what the operation looks like. So it's a reduction style operation where it takes two inputs, and like if the two inputs I have written here are o and i, and so the result of this operation is O plus k times I minus O. And so this is another way of expressing it as a recurrence relation here where it's like xi equals xi minus 1 plus k times xi minus xi minus one. All right, so wait, just for the listener, because the listener got lost there, guaranteed, because I got lost looking at this code based on your explanation. The relation here is between two adjacent elements. Yes and no.
+这个扫描是否可以并行化。所以这就是这个操作的样子。它是一种归约风格的操作，它接受两个输入，就像如果我在这里写的两个输入是 o 和 i，那么这个操作的结果是 O 加上 k 乘以 I 减去 O。所以这是在这里将其表达为递归关系的另一种方式，就像 xi 等于 xi 减 1 加上 k 乘以 xi 减去 xi 减 1。好的，等等，为了听众，因为听众在那里迷路了，保证，因为我看着你的解释在这个代码上迷路了。这里的关系是在两个相邻元素之间。是也不是。
+
+14
+00:07:43.000 --> 00:08:23.000
+What do you mean yes and no? It says xi minus xi minus one. You have to think about this in the sense of an accumulation here where the left hand side is the already computed value. Like the left hand side is the value of like, you're computing this new column, right? The left-hand side here is the value that's coming from this, like this column. And the right-hand side is the value from the other column that you're using as an input. Are you following Jared? Because I'm lost.
+你说的“是也不是”是什么意思？它写着 xi 减去 xi 减 1。你必须从累加的角度来考虑这个问题，左边是已经计算出的值。就像左边是像，你正在计算这个新列的值，对吧？这里的左边是来自这个，像这一列的值。而右边是来自你用作输入的另一列的值。Jared，你跟上了吗？因为我迷路了。
+
+15
+00:08:23.000 --> 00:08:46.000
+Are you following Jared because I'm lost? It looks like the kind of thing you would write down if you were trying to figure out how to implement a prefix sum. That's what it looks like to me. Is that not what it is? Yeah, yeah, no, it is. It does look like something that is the input to a scan, but I just said you're looking at it. If it's the input to a scan,
+Jared，你跟上了吗？因为我迷路了。这看起来像是如果你试图弄清楚如何实现前缀和（prefix sum）时会写下的那种东西。这就是我眼中的样子。那不是它吗？是的，是的，不，它是。它确实看起来像是扫描的输入，但我刚才说了你正在看着它。如果它是扫描的输入，
+
+16
+00:08:46.000 --> 00:09:04.000
+I should see an accumulator and a current element. What I see is xi and xi minus 1. And then on the top line, I see o and i. Spell this out to us. What's going on here? Let's leave that one alone. Let's just focus on this binary operation here. This is a binary operation.
+我应该看到一个累加器和一个当前元素。我看到的是 xi 和 xi 减 1。而在顶行，我看到 o 和 i。给我们解释一下。这里发生了什么？让我们别管那个。让我们只关注这个二元操作。这是一个二元操作。
+
+17
+00:09:04.000 --> 00:09:29.000
+OK, the op o i, where O and I are the two inputs. This is an operator that you could presumably pass as an operator to a scan. A scan just takes a binary operation. An operation that takes two things. This is a binary operation. Yes? I mean it's definitely a binary operation. Whether it is suitable for a parallel scan is unclear. All right. Is this binary operation...
+好的，操作 o i，其中 O 和 I 是两个输入。这是一个你可以推测作为操作符传递给扫描的操作符。扫描只是接受一个二元操作。一个接受两个东西的操作。这是一个二元操作。是吗？我的意思是它绝对是一个二元操作。它是否适合并行扫描尚不清楚。好的。这个二元操作是……
+
+18
+00:09:29.000 --> 00:10:16.000
+So we understand what this binary operation is. It takes two inputs, O and I, and it returns you O plus K times I minus O. So is this operation associative? I don't remember the rules. I was gonna say it's entirely unclear to me whether it is. Okay well it's simple enough to test right? So it's not simple enough because he copy and pasted some like 56 character duplicate lines of some expansion of this formula it's simple enough to test yeah says the guy who couldn't type it out and had to copy and paste this stuff into his notepad.
+所以我们理解这个二元操作是什么。它接受两个输入 O 和 I，并返回 O 加上 K 乘以 I 减去 O。那么这个操作是结合律的吗？我不记得规则了。我本来想说，它是否是结合律的对我来说完全不清楚。好的，测试一下很简单，对吧？所以它不够简单，因为他复制并粘贴了一些像 56 个字符的重复行，是这个公式的某种展开，测试一下很简单，是的，那个无法打出来，不得不把这些东西复制并粘贴到他的记事本里的人说。
+
+19
+00:10:16.000 --> 00:10:48.000
+I typed it out live when I was talking to Jake earlier you want it fine boom we'll type it out live alright we're gonna type it out. I don't want to type it out live Copy and paste it and walk us through it. Okay, so how do we test for associativity? Well, associativity means that if I do op of a of, or sorry, let me phrase it another way. Associativity means that a plus parens b plus c is the same as parearenz B plus C.
+我之前和 Jake 谈话时现场打出来的，你想要它，好吧，砰，我们现场打出来，好的，我们要打出来。我不想现场打出来，复制并粘贴它，然后带我们过一遍。好的，那么我们如何测试结合律？嗯，结合律意味着如果我做 a 的 op，或者抱歉，让我换一种说法。结合律意味着 a 加括号 b 加 c 等于括号 b 加 c。
+
+20
+00:10:48.000 --> 00:11:33.000
+Or sorry, is this, I'm gonna start that over. I mean, it's parentheses don't matter. I'm gonna leave this in to make sure that you are on record as just absolutely destroying the understandability of this topic. Okay, so A plus open parens B plus C closed parens has to be equal to open parens A plus B closed parens plus C for an associative operator. Was that clear? Associativity means, yeah, you can move the parentheses around and you get the same result.
+或者抱歉，是这个，我要重新开始。我的意思是，括号不重要。我要把这个留下来，以确保你被记录在案，因为你彻底破坏了这个主题的可理解性。好的，所以对于结合律算子，A 加左括号 B 加 C 右括号必须等于左括号 A 加 B 右括号加 C。清楚了吗？结合律意味着，是的，你可以移动括号，得到相同的结果。
+
+21
+00:11:33.000 --> 00:12:10.000
+And the reason why this is useful for parallelism is because when you can do this, when you can arbitrarily move the parentheses around, this allows you to essentially arbitrarily introduce intermediate values. So what this means is if you you have an operator that's associative, it means that you can have one thread go and apply this operator to four values producing a result for that thread. You can have another thread go and apply the operator to its own four values producing a result and want to apply the operator to its own four values producing a result and then you can take those two aggregates from each thread and you can apply the
+而这对于并行性有用的原因是，当你能做到这一点时，当你能随意移动括号时，这允许你本质上随意引入中间值。所以这意味着如果你有一个结合律算子，这意味着你可以让一个线程去把这个算子应用到四个值上，为该线程产生一个结果。你可以让另一个线程去把这个算子应用到它自己的四个值上，产生一个结果，并且想要把这个算子应用到它自己的四个值上，产生一个结果，然后你可以从每个线程中取出这两个聚合，你可以应用
+
+22
+00:12:10.000 --> 00:13:00.000
+operator to combine them and that's why we need associativity for parallelism. Unfortunately however in the case of this particular operation as we can see if we expand out those the two sides of this equation of the the op of a comma op bc and op of op ab comma c this expands out to some you know complex thing which is not going to be equal to each other. And so that means that this is not associative. And so what do we do? Do we just give up on parallelism? Well I started thinking because everybody else in the room at the time with me, including my dear colleague Bradley, was like no, can't be done, can't parallelize
+算子来组合它们，这就是为什么我们需要结合律来实现并行性。然而不幸的是，在这个特定操作的情况下，正如我们所看到的，如果我们展开方程的两边，即 a 逗号 op bc 的 op 和 op ab 逗号 c 的 op，这会展开成某种（你知道）复杂的东西，它们彼此是不相等的。这意味着它不是结合律的。那么我们该怎么办？我们只是放弃并行性吗？好吧，我开始思考，因为当时房间里的其他人，包括我亲爱的同事 Bradley，都说不，做不到，不能并行化
+
+23
+00:13:00.000 --> 00:13:41.000
+this. Just the minus sign is the problem? The minus sign does get to be the problem here, ultimately. If you think about where does the non-associative part comes from, it does, I believe, fundamentally come from the minus. Because if you just had pluses here, because addition is associative, I think you'd be fine in that case. So I like the best way to distract me for a week is to tell me that you think that something can't be
+这个。减号是问题所在吗？最终，减号确实成了问题。如果你考虑非结合律部分来自哪里，我相信，它根本上确实来自减号。因为如果你这里只有加号，因为加法是结合律的，我想在这种情况下你会没事的。所以我喜欢分散我注意力一周的最好方法就是告诉我你认为某件事不能
+
+24
+00:13:41.000 --> 00:14:39.000
+paralyzed. So I started thinking more about this. And then I came up with the idea of, okay, what if we could separate this? We could decompose this operator into two operators, into an associative part and a non-associative part. And that is where we start going down the rabbit hole. Let's see. So I started talking to ChatGPT about this. And we came up with this idea of using an affine map here. So we decompose this operation. So first of all, you can rewrite this operation as being like parens 1 minus k close parens times z plus k
+并行化。所以我开始更多地思考这个问题。然后我想出了一个主意，好的，如果我们能把这个分开呢？我们可以把这个算子分解成两个算子，一个结合律部分和一个非结合律部分。这就是我们开始进入兔子洞的地方。让我们看看。所以我开始和 ChatGPT 谈论这个问题。我们想出了使用仿射映射（affine map）的想法。所以我们分解了这个操作。首先，你可以把这个操作重写为像括号 1 减 k 右括号乘以 z 加上 k
+
+25
+00:14:39.000 --> 00:15:45.000
+times x, which is what it's done here. And so it rewrites it in that form and then the idea is that we can separate this operator into two parts and that we can represent this as an affine map. map, so this little 2 by 2 matrix here, and we represent these terms to 1 minus k, n to k. And it's not important that us or the audience necessarily understand the specifics of the math here. The key thing is that you take your operation and you go and you look at if I apply that law of associativity and it fails Okay, what is the difference? Like what is like when I when I do that a of? B of like a op b op C versus the a op B op C
+乘以 x，这就是这里所做的。所以它以那种形式重写了它，然后想法是我们能把这个算子分成两部分，我们可以把它表示为一个仿射映射。映射，所以这个小的 2 乘 2 矩阵，我们表示这些项为 1 减 k，和 k。我们或听众不一定非要理解这里的数学细节，这并不重要。关键是你采取你的操作，然后你去看看如果我应用那个结合律定律，它失败了，好的，区别是什么？就像当我做 a 的 op，B 的 op，就像 a op b op C 对比 a op B op C
+
+26
+00:15:45.000 --> 00:16:09.000
+opc versus the aopb opc. When I do that comparison and they fail, I just subtract those two out. And then I can figure out what's the correction that's needed. And then I can split this operator into an associative component and a non-associative component. And then what I can do is, going over here to where we have some code, I can do my operation, in this case a scan.
+对比 aopb opc。当我做那个比较，它们失败时，我只是把那两个减去。然后我就可以弄清楚需要什么修正。然后我可以把这个算子拆分成一个结合律组件和一个非结合律组件。然后我可以做的是，转到我们有一些代码的地方，我可以做我的操作，在这种情况下是一个扫描。
+
+27
+00:16:09.000 --> 00:17:20.000
+And what I'm going to do is, I'm going to call scan with a transform iterator as the input. And then a special scan operator. And then a transform output iterator for the output. You with me so far, Connor? I'm hanging on for dear life. I'm not sure if I'm totally with you, but I've been following to the extent that one can say, I think I'm following. Yeah. So what do these transform iterators, transform iterator and transform output iterator do? The basic idea here is that you take your problem and you figure out some associative space, specifically you find some monoid that you can linearly transform your operator to this monoid space and then later you can transform it back. And in particular you want, ideally you want a form where the representation of this
+我要做的是，我将调用带有变换迭代器（transform iterator）作为输入的扫描。然后是一个特殊的扫描算子。然后是一个用于输出的变换输出迭代器。Connor，你跟上我了吗？我正在拼命坚持。我不确定我是否完全跟上了你，但我一直在跟随，在某种程度上可以说，我想我跟上了。是的。那么这些变换迭代器、变换迭代器和变换输出迭代器做什么呢？这里的基本思想是你采取你的问题，然后找出一些结合律空间，具体来说，你找到一些幺半群（monoid），你可以将你的算子线性变换到这个幺半群空间，然后稍后你可以把它变回来。特别地，你想要，理想情况下你想要一种形式，其中这个
+
+28
+00:17:20.000 --> 00:17:45.000
+monoid, of this the function composition of monoid, has a very small state. Like one way you could do this is like for, you could scan where for every element, you just built up the expression that you would apply, but that would be very inefficient. But in this particular case, where it's just this linear like recurrence relation, the only state that you need
+幺半群的表示，这个幺半群的函数组合，有一个非常小的状态。就像你可以这样做的一种方式是，对于，你可以扫描，对于每个元素，你只是构建了你将要应用的表达式，但这会非常低效。但在这种特定情况下，它只是这种线性递归关系，你唯一需要的状态
+
+29
+00:17:45.000 --> 00:18:39.000
+is two elements of this little 2 by 2 matrix. And so our encode function is this little make affine function here, which takes a single number, a float, and transforms it into the two elements of this matrix that we need to store, which is 1 minus k and then k times x. And then we have our compose operation, which is going to do some math, some associative math in this monoid space that we've mapped into. And then later, our transform output function is going to apply the initial element to this matrix
+是这个小的 2 乘 2 矩阵的两个元素。所以我们的编码函数是这个小的 make affine 函数，它接受一个数字，一个浮点数，并将其转换为我们需要存储的这个矩阵的两个元素，即 1 减 k，然后是 k 乘以 x。然后我们有我们的组合操作，它将在我们映射到的这个幺半群空间中进行一些数学运算，一些结合律数学运算。然后稍后，我们的变换输出函数将把初始元素应用到这个矩阵
+
+30
+00:18:39.000 --> 00:19:02.000
+to produce the actual result in the space that we care about. And so this allows us, by splitting this operation into an associative part and a non-associative part and then doing this encoding and decoding, we can paralyze this operation. Details of it, not really super important. I don't know if it generates the graphs. But anyways, it works.
+上，以在我们关心的空间中产生实际结果。所以这允许我们，通过将这个操作拆分为一个结合律部分和一个非结合律部分，然后进行这种编码和解码，我们可以并行化这个操作。它的细节，其实不是特别重要。我不知道它是否生成图表。但无论如何，它有效。
+
+31
+00:19:02.000 --> 00:19:25.000
+It's very cool. Make some nice little diagrams here. The particular algorithm that Bradley and I were talking about here was one that's called the proportional error control. This is what you'd use for if you had an industrial machine that you wanted to keep on a certain target or a self-driving car. You want the car to follow the road. You would use a formula like this.
+这非常酷。在这里做一些漂亮的小图表。Bradley 和我在这里讨论的特定算法被称为比例误差控制（proportional error control）。如果你有一个想要保持在特定目标的工业机器或自动驾驶汽车，这就是你会使用的东西。你想要汽车沿着道路行驶。你会使用像这样的公式。
+
+32
+00:19:25.000 --> 00:20:07.000
+So like imagine that you have a data set where your data set is like time series historical data of like, you know, a car's posi- like, of like a road conditions. And you want to see how well your lane keeping algorithm would work on this historical data. Well, you could use something like this to, in parallel, simulate how well your algorithm would perform. You can also do things like differential equations, stuff like this, using this technique. Going down to the next part of my long conversation with the LLM here, The interesting thing, I think, is
+所以想象一下你有一个数据集，你的数据集就像时间序列历史数据，比如，你知道，汽车的位置，比如道路状况。你想看看你的车道保持算法在这些历史数据上表现如何。好吧，你可以使用像这样的东西来并行模拟你的算法表现如何。你也可以做微分方程之类的事情，使用这种技术。进入我和 LLM 长谈的下一部分，我认为有趣的是
+
+33
+00:20:07.000 --> 00:20:38.000
+this is where it's talking about this encode to a monoid space, do stuff in the monoid space decode pattern. But the interesting thing is the classes of operations that it says that it came up with as being a good fit for this, because they have a small state. So it says things like what we just gave, which is like a, it calls it an exponential moving average, or like a moving average with some factor to it.
+这就是它谈论这种编码到幺半群空间，在幺半群空间做事情，然后解码模式的地方。但有趣的是，它说它想出的作为这种良好匹配的操作类别，因为它们有很小的状态。所以它说像我们刚才给出的东西，比如它称之为指数移动平均，或者像带有某种因子的移动平均。
+
+34
+00:20:38.000 --> 00:21:00.000
+Because the problem that I just described, turns out it's actually just like some fancy form of a moving average. The other one is doing things like polynomial evaluation, which is a trick that we actually have some thrust examples showing this. This is a more common like scan and reduce thing. Things like integer carry, like propagate ads.
+因为我刚才描述的问题，结果实际上只是某种花哨的移动平均形式。另一个是做多项式求值之类的事情，这是一个我们实际上有一些 thrust 示例展示这个的技巧。这是一个更常见的扫描和归约的东西。像整数进位，像传播加法。
+
+35
+00:21:00.000 --> 00:21:37.000
+Things like a running minimum with a dropout, which comes up in like machine learning like layers, and things like a max plus convolution all can be implemented in terms of this. And there's like a couple other classes of algorithms or classes of non-associative operators that you can paralyze using this technique of encoding each input item into like a little state machine or a little state transformer, and then composing those state transformers together,
+像带有丢弃的运行最小值，这出现在像机器学习层中，以及像最大加卷积（max plus convolution）都可以用这个来实现。还有其他几类算法或非结合律算子类别，你可以使用这种将每个输入项编码成一个小状态机或小状态转换器，然后将这些状态转换器组合在一起的技术来并行化，
+
+36
+00:21:37.000 --> 00:22:13.000
+and then scanning through, and then decoding afterwards. The idea here is that instead of applying your operation, like you just store in your state that you're scanning like two or three terms. And then the composition of those terms is associative. And so you build those up. And then at the end, When you do your transform output iterator you apply you actually like piece everything together using those parts that you've accumulated
+然后扫描，然后之后解码。这里的想法是，与其应用你的操作，不如在你的状态中存储你正在扫描的两个或三个项。然后这些项的组合是结合律的。所以你构建它们。然后在最后，当你做变换输出迭代器时，你应用，你实际上像使用你积累的那些部分把一切拼凑在一起
+
+37
+00:22:13.000 --> 00:23:12.000
+Oh, I'm very excited about this kind of I'm sure that not not much of this No, I have to say that this is just very upsetting from an it's very upsetting from a non academic point of view because a lot of what you just explained, I was going to ask Jared if he was following because I am not. But then when you got to the end and you mentioned Horner polynomial evaluation, it's just academic speak for something that's very simple. If people think about a polynomial x squared plus 5x minus 6 or whatever, you can think about evaluating that polynomial as a scan because each term in that polynomial has an x with a coefficient and
+哦，我对这个非常兴奋，我肯定，不是，不是很多这个，不，我必须说，从非学术的角度来看，这非常令人沮丧，因为你刚才解释的很多东西，我本来想问 Jared 他是否跟上了，因为我没有。但当你讲到最后，提到 Horner 多项式求值时，这只是学术用语，用来描述非常简单的东西。如果人们想到一个多项式 x 平方加 5x 减 6 或其他什么，你可以认为评估那个多项式是一个扫描，因为那个多项式中的每一项都有一个带系数的 x，并且
+
+38
+00:23:12.000 --> 00:23:47.000
+You can evaluate that by multiplying the value of x by scanning that kind of sequence where the coefficient is the number in an array which Whether or not you understood my explanation just now is so much simpler than saying, oh, Horner slash polynomial evaluations, scam, blah, blah, blah, blah, blah. Anyways, the point being is that like a lot of this stuff is a lot simpler than it seems. I got lost in Bryce's explanation. I'm not sure maybe Jared. I mean, he is the author, co-author of thrust. I mean, Nathan's still a Google. I'm not sure if maybe Jared, I mean, he is the author, co-author of Thrust. I mean, Nathan's still at Google.
+你可以通过将 x 的值乘以扫描那种序列来评估它，其中系数是数组中的数字，无论你是否理解我刚才的解释，这都比说，哦，Horner/多项式求值，扫描，等等等等，要简单得多。无论如何，重点是很多这些东西比看起来简单得多。我在 Bryce 的解释中迷路了。我不确定也许 Jared。我的意思是，他是 Thrust 的作者，合著者。我的意思是，Nathan 还在 Google。我不确定也许 Jared，我的意思是，他是 Thrust 的作者，合著者。我的意思是，Nathan 还在 Google。
+
+39
+00:23:47.000 --> 00:24:15.000
+I'm not sure if Nathan would've hung on, but I imagine, you know, Jared was sitting there being like, this is basic stuff, why is Bryce so excited? I was sitting there being like, uh, this seems way too off in the weeds. And then it wasn't until that end table that chat GPT showed me where I was like I did I still didn't understand what you were saying but that stuff in that table I do know which is it's not that like Horner
+我不确定 Nathan 是否会坚持听下去，但我可以想象，你知道，Jared 坐在那里心想，这是基础知识，为什么 Bryce 这么兴奋？我坐在那里心想，呃，这似乎太偏离主题了。直到 ChatGPT 向我展示了那个表格，我才意识到，我仍然不明白你在说什么，但那个表格里的东西我确实知道，这不是说像 Horner
+
+40
+00:24:15.000 --> 00:24:45.000
+polynomial evaluation is three words that are you know a dollar to explain something that's quite simple that's all I have to say is that I'm confused, but I probably do understand it in some sense. So I will say, Connor, the reason I went through all that is because I too was quite confused by all the theory. But then once I got to that point of seeing the other, of seeing that table and seeing the other examples, I started thinking about a lot of the problems
+多项式求值是三个词，你知道，花一美元来解释一些相当简单的东西，我只想说我很困惑，但我可能在某种意义上确实理解它。所以我得说，Connor，我经历这一切的原因是因为我也对所有的理论感到非常困惑。但一旦我到了看到那个，看到那个表格并看到其他例子的地步，我就开始思考很多问题
+
+41
+00:24:45.000 --> 00:25:10.000
+that we've talked about here. In particular, a lot of the problems involving scans, and in particular, a lot of the problems where we have built up some sort of custom state for our scanner reduction operator. And then the more, like I went back and looked at some of them, like the chunk buy example that I use in my Think Parallel talk and then like some of the interesting reductions that
+我们在这里讨论过的。特别是，很多涉及扫描的问题，特别是，很多我们为扫描或归约算子构建了某种自定义状态的问题。然后越多，就像我回去看了一些，比如我在 Think Parallel 演讲中使用的 chunk by 示例，然后像一些有趣的归约
+
+42
+00:25:10.000 --> 00:25:46.000
+we talked about on the lost reduction episode. And I realized that all of them fit into this like high level, you know, mathy formulation. And then I think there's some, there's some like general lesson to be taken from here. And I also think that if you had like a high level, like a rape programming language, that where you could do some analysis on your operator and determine some of the properties of your operator,
+我们在丢失的归约那一集中讨论过。我意识到它们都符合这种高级的、你知道，数学化的表述。然后我认为这里有一些，有一些像通用的教训可以吸取。而且我还认为，如果你有一个高级的，像数组编程语言，在那里你可以对你的算子进行一些分析并确定你算子的一些属性，
+
+43
+00:25:46.000 --> 00:26:20.000
+that you could automate this transformation so that you could you could paralyze a non-associative operator. And then that got me thinking more about whether scans actually really require that your operation be associative. And I think I came to the conclusion that that's probably just a convenience requirement that we've put, that I don't actually think that a scan requires this. A scan probably requires that you have some associative component of your operation or
+你可以自动化这种转换，这样你就可以并行化一个非结合律算子。然后这让我更多地思考扫描是否真的需要你的操作是结合律的。我想我得出的结论是，这可能只是我们设置的一个方便要求，我实际上并不认为扫描需要这个。扫描可能需要你拥有你操作的某种结合律组件，或者
+
+44
+00:26:20.000 --> 00:26:56.000
+that your operation can be decomposed into an associative and non-associative part where the associative part is non-trivial. And as long as you can do that, where there's some non-trivial work that you can do in the associative component, then you can paralyze your operation. And so I think that there's actually, like, I keep encountering people who believe that they have a problem that cannot be paralyzed with a scan and a reduction. And I think that a larger class of those problems can be paralyzed than people think. What say you Jared?
+你的操作可以分解为结合律和非结合律部分，其中结合律部分是非平凡的。只要你能做到这一点，在结合律组件中可以做一些非平凡的工作，那么你就可以并行化你的操作。所以我认为实际上，就像，我不断遇到认为他们有一个不能用扫描和归约并行化的问题的人。我认为这些问题中更大的一类是可以并行化的，比人们想象的要多。Jared，你怎么看？
+
+45
+00:26:56.000 --> 00:28:14.000
+It's always difficult at first glance to find the parallelism in a problem, I will say that. first glance to find the parallelism in a problem. I will say that. And it's usually comes as a surprise when you figure out the solution to the puzzle. Yeah. That is how I often feel. I feel like I keep telling myself that, like we've talked regularly on this podcast about how like we so often reach for scans or reductions or transforms like those are like, I think in my mind, the three critical the three basis operation is scan, reduce and transform. And like just last week, I was talking with someone about how we could implement a rotate in this new tile programming thing that we talked about earlier. And in some ways, it's like, oh, that rotate could just, in theory, be a scan on a matrix. And I was like, oh my gosh, you're right.
+乍一看，在一个问题中找到并行性总是很困难的，我得承认这一点。乍一看，在一个问题中找到并行性。我得承认这一点。当你找到谜题的解法时，通常会感到惊喜。是的。我经常有这种感觉。我觉得我一直在告诉自己，就像我们在这个播客中经常讨论的那样，我们是多么频繁地使用扫描或归约或变换，就像那些，就像，我想在我的脑海中，这三个关键的，这三个基本操作是扫描、归约和变换。就像上周，我和某人谈论我们如何在之前谈到的这个新 tile 编程中实现旋转。在某些方面，就像，哦，那个旋转在理论上可以只是矩阵上的扫描。我当时想，哦，天哪，你是对的。
+
+46
+00:28:14.000 --> 00:28:45.000
+How did I not realize that? Why didn't my first reaction should have been, oh, yes, I should try to fit this parallel programming problem into one of these three patterns that I know they almost always fall into But I think it's hard. It's like it's hard for us to to see those connections and then it's like I always had these aha moments Well, I mean, uh, I mean if we haven't mentioned it on this podcast I mean a rotate in parallel which is currently not implemented in thrust is just a permutation iterator plus a gather Yeah, yeah, that's that's the other way. Yeah a thrust is just a permutation iterator plus a gather.
+我怎么没意识到？为什么我的第一反应不应该是，哦，是的，我应该尝试把这个并行编程问题放入我所知道的这三种模式之一，它们几乎总是属于这些模式。但我认为这很难。就像我们很难看到这些联系，然后就像我总是会有这些顿悟时刻。好吧，我的意思是，呃，我的意思是如果我们还没有在这个播客中提到它，我的意思是并行旋转，目前在 Thrust 中没有实现，只是一个置换迭代器（permutation iterator）加上一个收集（gather）。是的，是的，那是另一种方式。是的，Thrust 只是一个置换迭代器加上一个收集。
+
+47
+00:28:45.000 --> 00:29:27.000
+Yeah, yeah, that's the other way, yeah. A gather is just a scan, which is what you just said, so a scan on a matrix. I mean, Jared is, his eyes are pointing up at the ceiling. I'm not sure it's just that, because you're mutating as you're, I think you need to synchronize it carefully. Remind me how rotate works. You want to move part of our array to the beginning. Yeah, basically it's shifting the first n elements to the back. There's technically a rotate left, a rotate right, but take N elements and
+是的，是的，那是另一种方式，是的。收集只是一个扫描，也就是你刚才说的，所以是矩阵上的扫描。我的意思是，Jared 的眼睛正盯着天花板。我不确定仅仅是那样，因为你在变异（mutating），当你正在，我想你需要仔细同步它。提醒我旋转是如何工作的。你想把数组的一部分移到开头。是的，基本上是把前 n 个元素移到后面。技术上有一个左旋转，一个右旋转，但取 N 个元素并
+
+48
+00:29:27.000 --> 00:30:01.000
+shift those to the back and then the other... I mean doing it out with, doing it without like a scratch scratch buffer would take some thought. Yeah, I think if you do, I think that Jared's right that if you, that you can't do it in place with the scan of the permutation iterator, you'd have to write to a new location. But I actually think that that's, in the particular case I was thinking about, it was perfectly fine because you can't do in-place updates anyways. In this tile programming model, everything is a value.
+把那些移到后面，然后其他的……我的意思是，在没有像草稿缓冲区（scratch buffer）的情况下做这件事需要一些思考。是的，我想如果你做，我想 Jared 说得对，如果你，你不能用置换迭代器的扫描原地做它，你必须写到一个新的位置。但我实际上认为，在我想到的特定情况下，这完全没问题，因为无论如何你都不能做原地更新。在这个 tile 编程模型中，一切都是一个值。
+
+49
+00:30:01.000 --> 00:30:31.000
+There's no in- place updates of anything. I was gonna say is pending that you are doing a Gather to a output sequence It definitely works, right? like if you're doing a permutation iterator from an input sequence and then a gather operation to an output sequence You don't have to think hard about it, correct? Yeah, that's right. But I think the interesting case is when you want to rotate in place, which definitely
+没有对任何东西的原地更新。我本来想说的是，假设你正在做一个到输出序列的收集，它绝对有效，对吧？就像如果你正在从输入序列做一个置换迭代器，然后做一个到输出序列的收集操作，你不需要费力思考它，对吗？是的，没错。但我认为有趣的情况是当你想要原地旋转时，这绝对
+
+50
+00:30:31.000 --> 00:31:18.000
+requires some synchronization. We don't implement that in Thrust. We don't even implement a rotate that I was thinking of is imagine that you've got a tensor and you want to do like do like adjacent difference on this thing but you have to work with a tensor of that particular size. You can't make smaller tensors. And so you can't like, you have like an n by n thing. You can't make an n minus 1 by n minus 1 things. You can only make n by n things. And so how do I do adjacent difference?
+需要一些同步。我们没有在 Thrust 中实现这一点。我们甚至没有实现我正在想的旋转，想象一下你有一个张量，你想做像在这个东西上做相邻差分，但你必须使用那个特定大小的张量。你不能制作更小的张量。所以你不能像，你有像一个 n 乘 n 的东西。你不能制作 n 减 1 乘 n 减 1 的东西。你只能制作 n 乘 n 的东西。所以我怎么做相邻差分？
+
+51
+00:31:18.000 --> 00:31:52.000
+Well, in that world the way you could do adjacent difference is you have one n by n thing, and then you create another n by n thing, which is just the first one rotated. And then you can subtract the two together, and then you ignore the last element, which is invalid. But then the first 0 to n minus 1 elements in each dimension have the correct result.
+好吧，在那个世界里，你可以做相邻差分的方法是你有一个 n 乘 n 的东西，然后你创建另一个 n 乘 n 的东西，它只是第一个旋转后的。然后你可以把这两个减在一起，然后你忽略最后一个元素，它是无效的。但然后每个维度中前 0 到 n 减 1 个元素有正确的结果。
+
+52
+00:31:52.000 --> 00:32:17.000
+You see what I'm saying? What would a JSON difference on a tensor mean? Like a stencil operation. Yeah, it just means look at adjacent elements in the same row and take the difference. But I was going to say, as the library that is yet to be released that I've been working on, I mean, I literally ran into this. In the thrust examples is a simple moving average, where the way that they do that is
+你明白我的意思吗？张量上的相邻差分意味着什么？就像一个模板操作（stencil operation）。是的，它只是意味着查看同一行中的相邻元素并取差值。但我本来想说，作为我正在工作的尚未发布的库，我的意思是，我字面上遇到了这个。在 Thrust 示例中是一个简单的移动平均，他们做的方法是
+
+53
+00:32:17.000 --> 00:32:57.000
+they take the, they do a plus scan on your 1D sequence, and then they take the difference between the i-th element and the i-th plus four element. But you need to do an exclusive scan where you prefix it with a zero. I don't technically have a pre-scan or an exclusive scan implemented in my library, but I do have prepend. So I just prepend the zero and then use that to do the differences. So what you're saying is you're saying do a rotate one, a one rotate and then take the differences.
+他们取，他们对你的 1D 序列做一个加法扫描，然后他们取第 i 个元素和第 i 加 4 个元素之间的差值。但你需要做一个排他性扫描（exclusive scan），其中你用零作为前缀。我的库中技术上没有实现预扫描或排他性扫描，但我有 prepend（前置）。所以我只是前置一个零，然后用它来做差值。所以你的意思是你是说做一个旋转 1，一个 1 旋转，然后取差值。
+
+54
+00:32:57.000 --> 00:33:48.000
+But if you had a prepend zero, you can do the same kind of thing where you take the difference. So there's a couple of different ways to do it. I mean, it's all coming back to what Jared said, is that in this day and age, doing this on 1D sequences is just the wrong way to do it. You should be doing this from a multi-dimensional perspective because so many of these things, yeah, don't come out ergonomically. Another interesting thing that I, insight or conclusion I came to from looking at this proportional error control algorithm is, This is the second time in the last couple of months where I've had a sort of scan by
+但如果你有一个前置零，你可以做同样的事情，取差值。所以有几种不同的方法可以做到。我的意思是，这一切都回到了 Jared 所说的，在这个时代，在 1D 序列上做这个是错误的方法。你应该从多维的角度来做这个，因为很多这些东西，是的，人体工程学上不出来。我从看这个比例误差控制算法得出的另一个有趣的结论是，这是过去几个月里我第二次遇到一种
+
+55
+00:33:48.000 --> 00:34:41.000
+key type algorithm where I had a complex aggregate state type that I was working with and where when I move to the next key, I have to reset one of the things in the state. Like, OK, when the key changes, in chunk by, when the key changes, you reset the count of how many things are in the chunk. In this particular algorithm, when the key changes, you reset the initial value to the current value. And whenever these, whenever I've run into these, instead of using scan by key, I just end up using scan and just putting, you know, the key into this aggregate state. And I've also just found myself, instead of using the
+按键扫描（scan by key）类型的算法，我有一个复杂的聚合状态类型，我正在使用它，当我移动到下一个键时，我必须重置状态中的一个东西。比如，好的，当键改变时，在 chunk by 中，当键改变时，你重置块中有多少东西的计数。在这个特定算法中，当键改变时，你将初始值重置为当前值。每当这些，每当我遇到这些时，我不再使用按键扫描，我只是最终使用扫描，只是把，你知道，键放入这个聚合状态。而且我也发现自己，不再使用
+
+56
+00:34:41.000 --> 00:35:29.000
+by key algorithms, I'm more and more I'm just like writing the by key part myself because I almost find it like a little bit cleaner to just expose like all of the state that I care about which is like okay like when am I at the end of a group and then like what am I gonna do once I get the end of the group and I just I don't know I thought that that it was interesting that when I get to these more complex cases I have to switch from scan by key to just Scan and do the do the the the grouping myself Well, I mean the question for Jared is where did the motivation for the reduce by key and
+按键算法，我越来越多地只是自己编写按键部分，因为我几乎觉得把所有我关心的状态暴露出来，比如，好的，什么时候我在一个组的末尾，然后，一旦我到达组的末尾我该做什么，这有点更干净，我不知道，我觉得有趣的是，当我遇到这些更复杂的情况时，我必须从按键扫描切换到只是扫描并自己做分组。好吧，我的意思是，对于 Jared 的问题是，reduce by key 和
+
+57
+00:35:29.000 --> 00:36:05.000
+scan by key algorithms come from? Was it specifically for these kind of matrix operations where you want to do row wise reductions or is it, do you recall where it came from? I think it, I think some people were publishing results on segmented scan at the time that people were interested in and It was clear it was clear it could be useful to have a primitive like that You know do interesting things and the question was how do you? How do you I guess the interesting question is what should the interface be?
+scan by key 算法的动机来自哪里？它是专门为这些你想要做行归约的矩阵操作设计的，还是，你记得它来自哪里吗？我想，我想当时有些人正在发布关于分段扫描（segmented scan）的结果，人们对此很感兴趣，而且很明显，拥有一个那样的原语可能很有用。你知道，做有趣的事情，问题是如何？如何？我想有趣的问题是接口应该是什么？
+
+58
+00:36:05.000 --> 00:36:52.000
+Because you could do it like Thrust does it, or you could do it, Cub does it differently, they use like head flags. Instead of encoding per element which group each element is in, you encode a bit where each run begins, or each group begins in the array. So there's, you know, trade-offs, depending on how you choose to phrase the problem. But I think at the time we already had sort by key, so there was nice synergy with a scan by key to go along with that. You could write nice example codes. Basically if it made for a nice example program, it was probably a good idea.
+因为你可以像 Thrust 那样做，或者你可以像 Cub 那样做，它们使用不同的方式，它们使用像头标志（head flags）。与其为每个元素编码每个元素在哪个组中，你编码一个位，其中每个运行开始，或每个组在数组中开始。所以有，你知道，权衡，取决于你选择如何表述问题。但我认为当时我们已经有了按键排序（sort by key），所以有一个按键扫描来配合它有很好的协同作用。你可以写出很好的示例代码。基本上，如果它能做成一个很好的示例程序，它可能就是一个好主意。
+
+59
+00:36:52.000 --> 00:37:25.000
+So it went in the library. When did the first Thrust sort algorithm come around? Because I think like the sort algorithm is sort of what Thrust is known for, and it's one of the most widely used. There are some projects that they write their own reductions, but the only place that they use Thrust for is for the sort. Right. Michael Garland had a summer intern who published a merge sort.
+所以它进入了库。第一个 Thrust 排序算法是什么时候出现的？因为我认为排序算法是 Thrust 所闻名的，它是使用最广泛的算法之一。有些项目他们编写自己的归约，但他们使用 Thrust 的唯一地方是排序。对。Michael Garland 有一个暑期实习生，他发布了一个归并排序。
+
+60
+00:37:25.000 --> 00:38:11.000
+I remember I inherited that code and tried to make it work and like for real, and in thrust. I don't remember if merge sort preceded radix sort or not. I don't remember. My guess is that, so there was a similar library called CUDPP that Mark Harris worked on with some people at Davis and they published some scan results and I think they also had a radix sort result but I don't remember if we maybe adapted the radix sort code before the merge sort code or what but
+我记得我继承了那段代码，并试图让它真正运行起来，而且是在Thrust中。我不记得归并排序是否先于基数排序。我不记得了。我的猜测是，当时有一个类似的库叫CUDPP，Mark Harris和戴维斯的一些人一起开发过，他们发布了一些扫描结果，我想他们也有基数排序的结果，但我记不清我们是先改编了基数排序代码还是归并排序代码，或者是什么情况。
+
+61
+00:38:11.000 --> 00:38:36.000
+At the time lots of people were publishing how to do X on the GPU so we would just Steal from those results and You know put some polish on them and publish them in the library Be sure to check these show notes either in your podcast app or at adspthepodcast.com for links to anything we mentioned in today's episode, as well as a link to a GitHub discussion where you can leave thoughts, comments and questions. Thanks for listening. We hope you enjoyed and have a great day.
+当时很多人都在发表如何在GPU上实现X的研究，所以我们只是借鉴了这些成果，进行了一些润色，然后发布在库中。请务必查看播客应用或adspthepodcast.com上的节目说明，获取我们今天提到的所有内容的链接，以及一个GitHub讨论链接，您可以在那里留下想法、评论和问题。感谢收听。希望您喜欢，祝您有愉快的一天。
+
+62
+00:38:36.000 --> 00:38:41.000
+Low quality, high quality. That is the tagline of our podcast. It's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+低质量，高质量。这就是我们播客的标语。这不是标语。我们的标语是“混乱中点缀着信息”。这一集还没有评论。点击转录稿中的任何句子即可发表评论。

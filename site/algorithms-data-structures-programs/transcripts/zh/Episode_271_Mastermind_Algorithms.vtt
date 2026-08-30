@@ -1,0 +1,166 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:31.000
+The first thing that should come to mind is an algorithm called adjacent transform, or at least that's what comes to mind for me, because this is one of the most fundamental algorithms for performing transforms. That's not a basic transform. Your basic transformer map is applying a unary operation to a single element at a time. And then you have your binary transforms where you're performing binary operations on two different sequences of the same length, but that was our two-range-stead transform or zip transform that we talked about when calculating exact matches. And the inverse operation that we want here
+首先应该想到的是一种叫做相邻变换（adjacent transform）的算法，或者至少这是我首先想到的，因为这是执行变换最基础的算法之一。那不是基础变换。你基础的变换映射（transformer map）是一次对单个元素应用一元操作。然后是二元变换，即对两个长度相同的序列执行二元操作，这就是我们在计算精确匹配时讨论过的双范围变换（two-range-stead transform）或 zip 变换。而我们这里想要的逆操作
+
+2
+00:00:31.000 --> 00:01:28.000
+is an inverse plus scan. And your plus scan is your partial sum. And so you're getting the inverse of that, which is adjacent difference. So we have the correct algorithm, in my opinion, stencil, adjacent transform, or adjacent map if you're in Haskell. But we also have access to the adjacent difference, which is what we actually want in this case, but we get access to that by inverting a plus scan, which is the whole reason behind adjacent difference in the first place. Welcome to ADSP, the podcast, episode 271 recorded on January 29th, 2026. My name is Connor, and today I chat about the algorithms and combinators behind the mastermind game, including a very beautiful inverse algorithm.
+是逆加法扫描（inverse plus scan）。加法扫描就是你的部分和（partial sum）。所以你得到的是它的逆运算，即相邻差（adjacent difference）。所以在我看来，我们有了正确的算法，模板（stencil）、相邻变换，或者如果你用 Haskell 的话就是相邻映射（adjacent map）。但我们也可以使用相邻差，这正是我们在这种情况下真正想要的，但我们是通过对加法扫描求逆来获得它的，这正是相邻差最初存在的原因。欢迎收听 ADSP 播客，第 271 期，录制于 2026 年 1 月 29 日。我是 Connor，今天我将聊聊“大师密码”（Mastermind）游戏背后的算法和组合子，包括一个非常优美的逆算法。
+
+3
+00:01:28.000 --> 00:02:35.000
+Hello, ADSP listeners. It is currently January 29th at just after 5 p. Eastern Standard Time and was it four hours ago I was outside and minus 12 feels like minus 20 degrees Celsius weather which in Fahrenheit for our American listeners is 10 Fahrenheit feels like minus four Fahrenheit. I was outside running freezing. my hands off and I was listening to a couple podcasts and I realized that I did not have any recorded conversations for tomorrow's episode because I've been so busy. There was an internal conference at NVIDIA this week and there's been a lot on the go. It slipped my mind. I was supposed to
+你好，ADSP 的听众们。现在是 1 月 29 日下午 5 点刚过，东部标准时间。四个小时前我在外面，零下 12 度感觉像零下 20 摄氏度，对于我们的美国听众来说，也就是华氏 10 度感觉像华氏零下 4 度。我在外面跑步，手都冻僵了，我当时在听几个播客，突然意识到我还没有为明天的节目录制任何对话，因为我太忙了。本周 NVIDIA 内部有个会议，事情非常多。我给忘了。我本应该
+
+4
+00:02:35.000 --> 00:03:22.000
+organize a recording with Ben. That did not. happen. And we've only got a couple hours left. So we're back with another solo recording. I mentioned in the last couple episodes that there was going to be a podcast called the podcast purge. But we're going to do that. We're going to record that later. And maybe we won't even record it. But I have something else I want to talk about, which I can't remember if it was with Bryce or with Ben, that in the last month, I was programming the solution to the mastermind game, and I came across a beautiful, beautiful application of an inverse algorithm.
+安排和 Ben 录音。结果没成。我们只剩下几个小时了。所以我们又回到了单人录音模式。我在过去几期节目中提到过会有个“播客清洗”（podcast purge）计划。但我们要晚点再做。也许我们根本不会录它。但我还有别的事情想聊，我不记得是和 Bryce 还是和 Ben 聊过，上个月我在编写“大师密码”游戏的解决方案时，偶然发现了一个非常、非常优美的逆算法应用。
+
+5
+00:03:22.000 --> 00:03:55.000
+And so this episode will be entitled Mastermind Algorithms, and I'll explain the game. If you've seen one of my talks or Amar Shah's talk, you'll already know this game, or potentially I'm assuming, I don't know, in how many countries this game, exists, but probably 50% of folks have played this game at some point. But anyways, that's what today's solo episode is going to be about. We'll see how long this runs for. It'll probably be a shorter episode, but I think it's pretty fantastic when I realized you could use an inverse
+所以这一期节目将命名为“大师密码算法”，我会解释这个游戏。如果你看过我的演讲或 Amar Shah 的演讲，你可能已经知道这个游戏了，或者我假设，我不知道这个游戏在多少个国家存在，但可能有 50% 的人玩过这个游戏。但无论如何，这就是今天单人节目的主题。我们看看这期会录多久。这可能是一期较短的节目，但我认为当我意识到你可以使用逆
+
+6
+00:03:55.000 --> 00:04:39.000
+algorithm to solve this problem a little bit more beautifully. So Mastermind is a game that is played by two people. There is a code maker and a code breaker. And you have eight colors to typically to choose from, but for the purposes of programming this problem, I use the numbers one to eight. Usually it's like red, orange, yellow, blue, whatever, eight colors, but numbers, colors, they work just as well. And in the physical game, you choose a four color code. Now, you can use duplicate colors, so your code can be four reds in a row. You can use all unique colors. It can be red, orange, yellow, green. You can use two reds, two oranges, et cetera. and the goal is that I think there's like 10 or so guesses,
+算法来更优美地解决这个问题时，我觉得非常棒。“大师密码”是一个由两个人玩的游戏。有一个出题者和一个破题者。通常有八种颜色可供选择，但为了编程解决这个问题，我使用了数字 1 到 8。通常是红色、橙色、黄色、蓝色等等，八种颜色，但数字和颜色效果是一样的。在实体游戏中，你选择一个四色代码。你可以使用重复颜色，所以你的代码可以是四个连续的红色。你可以使用所有唯一的颜色。可以是红、橙、黄、绿。你可以使用两个红色、两个橙色等等，目标是，我想大概有 10 次左右的猜测机会，
+
+7
+00:04:39.000 --> 00:05:11.000
+and the code breaker has to guess the code within that number of guesses. So not dissimilar. Honestly, I'm pretty sure wordal was inspired by Mastermind. So instead of having random colors and a random sequence, you have a set of 2,000 plus or minus words and only a certain, it has to be a valid word in order for it to be a wordal possibility. whereas in Mastermind, it can be any combination permutation of those eight colors, including duplicate colors.
+破题者必须在猜测次数内猜出代码。所以并不陌生。老实说，我很确定 Wordle 是受“大师密码”启发的。所以你不是有随机颜色和随机序列，而是有一组 2000 个左右的单词，它必须是一个有效的单词才能成为 Wordle 的可能性。而在“大师密码”中，它可以是那八种颜色的任何组合排列，包括重复颜色。
+
+8
+00:05:11.000 --> 00:05:53.000
+And the information that you get with each guess is the exact same information you get with Wordle. Instead of having green and yellow to indicate correct letters in the correct spot and wrong letters in the wrong spot, you usually have a red and white pin that goes beside your clue. So honestly, yeah, Wordle, I did not think about Wordle when I started talking about this. but Wordle clearly is a, you know, hybrid version of Scrabble and Mastermind. And in the 2014 Strange Loop Talk, which I have referenced in many of my talks and many of my podcast episodes, Amarshaw gave a talk called Point Free or Die.
+每次猜测你获得的信息与 Wordle 获得的信息完全相同。你通常在提示旁边放一个红白针，而不是用绿色和黄色来表示正确位置的正确字母和错误位置的错误字母。所以老实说，是的，我开始谈论这个时并没有想到 Wordle。但 Wordle 显然是 Scrabble 和“大师密码”的混合版本。在 2014 年的 Strange Loop 演讲中，我在我的许多演讲和播客节目中都引用过，Amar Shah 做了一个名为“无点编程或死亡”（Point Free or Die）的演讲。
+
+9
+00:05:53.000 --> 00:06:15.000
+I think the sub-tagline is Tacit Programming and Beyond. And in this talk, he solves the solution to exact, matches using the Blackbird combinator, which is composing a unary function after a binary function. So unary and binary meaning a function that takes one
+我想副标题是“隐式编程及超越”。在这个演讲中，他使用黑鸟组合子（Blackbird combinator）解决了精确匹配问题，即在二元函数之后组合一个一元函数。所以一元和二元意味着一个函数接受一个
+
+10
+00:06:15.000 --> 00:06:31.000
+argument and a function that takes two arguments. So the and the two inputs to this algorithm for exact matches are your code and your guess. And if we're staying in C++ land, a binary operation would be a two
+参数，而另一个函数接受两个参数。这个精确匹配算法的两个输入是你的代码和你的猜测。如果我们留在 C++ 的世界里，二元操作将是一个
+
+11
+00:06:31.000 --> 00:07:03.000
+range stood transfer. If you're in pre-range land, or if you are in range land post-C++20, you have access to something called zip transform. It was called zip width in range V3, I believe. And this takes two ranges in a binary operation and does an element-wise computation of whether or not your elements are equal to each other. So the binary operation is equal. And then once you have this sequence of bullions, your unary operation that follows
+双范围变换。如果你在预范围（pre-range）时代，或者如果你在 C++20 之后的范围时代，你可以使用一种叫做 zip transform 的东西。我相信在 range V3 中它被称为 zip width。它接受两个范围进行二元操作，并对你的元素是否相等进行逐元素计算。所以二元操作是相等。然后一旦你有了这个布尔序列，你随后的一元操作
+
+12
+00:07:03.000 --> 00:07:46.000
+is a summation. So you could do that with a stud accumulate or I believe there's a, you know, stood ranges fold left first that you can use. So this is the solution to exact matches. It's pretty straightforward. You do an element-wise comparison to see if elements are equal to each other and then a summation after that. In array languages, this is just three characters. I covered this in my twin algorithms talk from, I believe it was, CPP North 2020? I can't remember. Sounds about right, though, plus or minus a year. And I didn't cover the algorithm or solution for solving what is called near matches.
+就是求和。所以你可以用 std::accumulate 或者我相信有一个 std::ranges::fold_left_first 可以使用。这就是精确匹配的解决方案。它非常直接。你进行逐元素比较以查看元素是否相等，然后进行求和。在数组语言中，这只需要三个字符。我在我的双胞胎算法演讲中介绍过这一点，我相信是在 CPP North 2020？我不记得了。听起来差不多，正负一年吧。我没有介绍解决所谓“近似匹配”的算法或解决方案。
+
+13
+00:07:46.000 --> 00:08:19.000
+So this is the equivalent of the yellow. So the exact matches is the equivalent of the green and wordle, and the near matches is the equivalent of the yellow. And the naive way to solve near matches is to just remove the letters or numbers that correspond to your exact matches and then do an algorithm that amounts to a frequencies or value counts depending on your language. Closure calls it frequencies. Pandas and libraries, similar to pandas call it value counts.
+这相当于黄色。精确匹配相当于 Wordle 中的绿色，而近似匹配相当于黄色。解决近似匹配的朴素方法是先删除与精确匹配对应的字母或数字，然后执行一个相当于频率或值计数的算法，具体取决于你的语言。Clojure 称之为 frequencies。Pandas 和类似 Pandas 的库称之为 value counts。
+
+14
+00:08:19.000 --> 00:09:07.000
+In Python, there's a collection called counter, which returns you a hash map where the keys are the unique values, and the values attached to those keys are the counts, hence why some languages call this value counts. And this is also referred to as a frequency map. Anyways, there's a bunch of different ways in different languages to kind of get the counts. And then once you have a quote-unquote frequency map or counter-collection, you just do an intersection of the key value pairs, or if you're in an array language, the way that I have solved this is you do a table or an outer product with the values one to eight, and you do this with both your code and your guess, and then that's going to give you an array of eight elements, and if you do a row-wise
+在 Python 中，有一个名为 Counter 的集合，它返回一个哈希映射，其中键是唯一值，附加到这些键的值是计数，这就是为什么有些语言称之为值计数。这也称为频率映射。总之，在不同的语言中有许多不同的方法来获取计数。一旦你有了所谓的频率映射或计数器集合，你只需对键值对进行交集，或者如果你在数组语言中，我解决这个问题的方法是使用 1 到 8 的值进行表或外积运算，你对代码和猜测都这样做，然后你会得到一个八元素的数组，如果你对这个外积进行行归约，
+
+15
+00:09:07.000 --> 00:09:55.000
+reduction on the outer product of this, you end up with the counts corresponding to each of the values, one through eight. And then if you do a element-wise min across the eight-element-element frequency array for both the code and the guess, you're going to end up with the number of elements that are in the wrong location after you've removed the exact matches. And so this is, it's not trivial, but it's not super complicated. And after that, you have your exact matches, your near matches, and you're good to go. You basically just return whatever format the problem requires, you can return these two values. And at some point when I was solving this, in the last month, I realized having to do this filtering or removal of the exact matches
+你最终会得到对应于每个值 1 到 8 的计数。然后如果你对代码和猜测的八元素频率数组进行逐元素最小值运算，你最终会得到在删除精确匹配后处于错误位置的元素数量。所以这并不简单，但也不是超级复杂。在那之后，你有了精确匹配、近似匹配，你就搞定了。你基本上只需要返回问题要求的任何格式，你可以返回这两个值。在过去一个月我解决这个问题时，我意识到必须在
+
+16
+00:09:55.000 --> 00:10:45.000
+before we do this kind of frequency map or outer product frequency array on the remaining letters or characters is a little bit irritating. So what if you, instead of calculating exact and near, you calculate exact and all, meaning both exact and near? And that's just basically a simplified version of the near matches because if you don't remove the exact matches when you do this frequency map, the exact matches are going to be included in the total of the frequency map or frequency array. And so then you have exact all and you can back out the near by subtracting from four the count that you got from your all calculation. And this is where the beauty of this inverse operation that I'm about to talk about.
+我们对剩余字母或字符进行这种频率映射或外积频率数组之前进行这种过滤或删除精确匹配的操作有点令人恼火。那么，如果你不计算精确和近似，而是计算“精确”和“全部”（all），即精确和近似的总和呢？这基本上是近似匹配的简化版本，因为如果你在进行频率映射时不删除精确匹配，精确匹配将被包含在频率映射或频率数组的总数中。所以你有了“精确”和“全部”，你可以通过从 4 中减去你从“全部”计算中得到的计数来推导出“近似”。这就是我即将谈到的逆操作的优美之处。
+
+17
+00:10:45.000 --> 00:11:21.000
+comes in because at the end of the day, what you need is the exact matches, the near matches, and then the misses, because the information that you want to convey is basically a red or a green for an exact match, a white or a yellow for a near match, and then nothing or X's for no matches. So you don't actually need the all number, but it's easier to calculate the all number, and then we can back out the near number from the all number. And I think the way that I initially thought about this is that you just subtract all from four, and then that gives you near.
+因为归根结底，你需要的是精确匹配、近似匹配，然后是未匹配，因为你想要传达的信息基本上是精确匹配的红或绿，近似匹配的白或黄，然后是没有匹配的无或 X。所以你实际上不需要“全部”这个数字，但计算“全部”数字更容易，然后我们可以从“全部”数字中推导出“近似”数字。我想我最初的想法是，你只需从 4 中减去“全部”，然后就得到了“近似”。
+
+18
+00:11:21.000 --> 00:11:52.000
+But that's not nice. That's not nice, folks. So what I ended up doing is if you put the values for all and exact in a three element array. So say we have one exact match, two near matches, so three matches overall for all, you're going to end up with an array that is four, three, and one. But the array that we want backed out of that is we want one miss, two near matches, and one exact match.
+但这不好，这不优雅，伙计们。所以我最终做的是，如果你把“全部”和“精确”的值放在一个三元素数组中。假设我们有一个精确匹配，两个近似匹配，总共三个匹配，你最终会得到一个 4、3、1 的数组。但我们想要从中推导出的数组是，我们想要一个未匹配，两个近似匹配，一个精确匹配。
+
+19
+00:11:52.000 --> 00:12:17.000
+So you're starting off with the array four, three, one, and you want the array one two one two one two near matches and one exact match. And the first thing that should come to mind is an algorithm called adjacent transform, or at least that's what comes to mind for me, because this is one of the most fundamental algorithms for performing transforms. That's not a basic transform. Your basic transformer map is applying a unary operation
+所以你从数组 4、3、1 开始，你想要数组 1、2、1。首先应该想到的是一种叫做相邻变换的算法，或者至少这是我首先想到的，因为这是执行变换最基础的算法之一。那不是基础变换。你基础的变换映射是一次对单个元素应用一元操作。
+
+20
+00:12:17.000 --> 00:12:33.000
+to single element at a time. And then you have your binary transforms where you're performing binary operations on two different sequences of the same length, but that was our two-range-stead transform or zip-transform that we talked about when calculating exact matches. But then after that, there's a third type of transform
+然后是二元变换，即对两个长度相同的序列执行二元操作，这就是我们在计算精确匹配时讨论过的双范围变换或 zip 变换。但在此之后，还有第三种变换，
+
+21
+00:12:33.000 --> 00:13:15.000
+that people don't, some people know about it, but not enough people know about it. It's the adjacent transform. It was initially called adjacent difference in C++98, but that's a terrible name. We've covered that before. Don't encode the name of your binary operation into the name of your algorithm because you can do lots of things with adjacent difference that have nothing to do with subtraction, the default binary operation. The problem with adjacent difference is, there's a bunch of problems, the name we just talked about. But on top of that, the output type, the type of your output sequence is limited to be the type of your input sequence because they copy the first value of your input sequence to be the
+有些人知道，但知道的人还不够多。这就是相邻变换。它在 C++98 中最初被称为相邻差，但那是个糟糕的名字。我们之前讨论过。不要把二元操作的名字编码到算法的名字中，因为你可以用相邻差做很多与减法（默认二元操作）无关的事情。相邻差的问题在于，有一堆问题，名字我们刚才讨论过了。最重要的是，输出类型，你的输出序列类型被限制为输入序列的类型，因为它们复制了输入序列的第一个值作为
+
+22
+00:13:15.000 --> 00:13:58.000
+first value of the output sequence. So you're type constrained. And so really the first value of the output sequence isn't the application of a binary operation to any two elements. It's just, it's just the first value of your input sequence. And then after that, they applied the binary operations. And I talked with Chris DeBella a while ago about this because he's studied Stepanov's algorithms and apparently the motivation for it was round-tripping. The relationship between adjacent difference and partial sum, the scan algorithm in C++-908, was that you were supposed to be able to go back and forth between them. And I never thought that was a good argument because of the fact that you're, you know, type constraining yourself and also too, I think in
+输出序列的第一个值。所以你受到了类型限制。因此，输出序列的第一个值实际上并不是对任意两个元素应用二元操作的结果。它只是输入序列的第一个值。然后在此之后，它们应用了二元操作。我前段时间和 Chris DeBella 谈过这个问题，因为他研究过 Stepanov 的算法，显然其动机是往返（round-tripping）。相邻差和部分和（C++98 中的扫描算法）之间的关系是，你应该能够在它们之间来回转换。但我从来不认为这是一个好的论点，因为你限制了自己的类型，而且我认为
+
+23
+00:13:58.000 --> 00:14:28.000
+general when you are doing an adjacent transform or an adjacent map. You, it just by definition, you end up with one less element. I've talked to Phineas Porter about this, and that's how the prior algorithm works in Q. Same as adjacent difference. Anyways, there's differing camps on what's the correct behavior. But this is all to say that the first algorithm that came to mind was adjacent transform. But adjacent transform returns you n minus one elements. And if you remember the problem, you want to go from 4, 3, 1, 2.
+通常当你进行相邻变换或相邻映射时，根据定义，你最终会少一个元素。我和 Phineas Porter 谈过这个问题，这就是 Q 语言中 prior 算法的工作方式。和相邻差一样。总之，关于什么是正确的行为有不同的阵营。但这都是说，我首先想到的算法是相邻变换。但相邻变换返回给你 n-1 个元素。如果你还记得这个问题，你想从 4、3、1 变成
+
+24
+00:14:28.000 --> 00:15:05.000
+to 1-21. And therefore, you don't actually want adjacent transform here. Otherwise, you have to kind of append some value. So in this case, you actually want adjacent difference. However, in the language I was solving this in Wiiwa, you have the adjacent transform in the form of an algorithm called stencil. And when you provide stencil with a binary operation, it is exactly the adjacent transform in C++23. So it's returning you n-1 elements. However, they have something in Wiiwa, and a lot of array languages have this. We talked about it, I believe, on the way to Venice. It was part of the three amazing things about array languages that you should check out.
+1、2、1。因此，你在这里实际上并不想要相邻变换。否则你必须附加一些值。所以在这个例子中，你实际上想要相邻差。然而，在我解决这个问题的语言 Wiiwa 中，你有一种叫做 stencil 的算法形式的相邻变换。当你为 stencil 提供二元操作时，它正是 C++23 中的相邻变换。所以它返回给你 n-1 个元素。然而，他们在 Wiiwa 中有一些东西，许多数组语言都有。我们讨论过，我相信是在去威尼斯的路上。它是数组语言中你应该查看的三个神奇之处的一部分。
+
+25
+00:15:05.000 --> 00:15:36.000
+And one of them was inverse operations. And so typically in array languages, there's something called a power operator where you can raise an algorithm or a primitive to the power. So if you want to do something two, three times, you just put it to the power of two or three. But you can also put it to the power of negative one, which then turns that operation into an inverse operation. And the inverse operation that we want here is an inverse plus scan. And your plus scan is your partial sum. And so you're getting the inverse of that, which is adjacent difference.
+其中之一是逆操作。所以通常在数组语言中，有一种叫做幂运算符的东西，你可以将算法或原语提升到幂。所以如果你想做某事两三次，你只需把它提升到 2 或 3 次幂。但你也可以把它提升到负 1 次幂，这会将该操作变成逆操作。我们这里想要的逆操作是逆加法扫描。加法扫描就是你的部分和。所以你得到的是它的逆运算，即相邻差。
+
+26
+00:15:36.000 --> 00:16:17.000
+So we have the correct algorithm, in my opinion, stencil adjacent transform or adjacent map if you're in Haskell. But we also have access to the adjacent difference, which is what we actually want in this case, but we get access to that by inverting a plus scan, which is the whole reason behind adjacent difference in the first place because we wanted to be able to round trip. So round tripping, the motivation for designing, in my opinion, a flawed algorithm adjacent difference, we get access to that via the inverse plus scan. You've got an inverse modifier. It's absolutely beautiful, folks. So we're not in Wi-Wa. You don't actually have to put something to the power of negative
+所以在我看来，我们有了正确的算法，stencil、相邻变换，或者如果你用 Haskell 的话就是相邻映射。但我们也可以使用相邻差，这正是我们在这种情况下真正想要的，但我们是通过对加法扫描求逆来获得它的，这正是相邻差最初存在的原因，因为我们想要能够往返。所以往返，在我看来，设计一个有缺陷的算法（相邻差）的动机，我们通过逆加法扫描获得了它。你有一个逆修饰符。这绝对太美了，伙计们。所以我们不在 Wi-Wa。你实际上不必把某物提升到负
+
+27
+00:16:17.000 --> 00:17:00.000
+one. They just have an inverse operation that they call un. So it reads un-plus scan, which is basically adjacent difference. Now, you might be thinking, How does doing an unplus scan on 431 get you one to one to one? You have to reverse the 431 to be 1, 3,4, and then you're going to copy 1 to be your first element. Then 3 minus 1 is 2, then 4 minus 3 is 1, and you end up with 1, 2, 1. So the code actually reads unplus scan reverse of your 3 element array, which you form by coupling 4 and the result of all an exact applied to your code and your guess, and you're having to use the fork, the phi one combinator in this case because you are applying all and exact diatically.
+1 次幂。他们只是有一个他们称之为 un 的逆操作。所以它读作 un-plus scan，基本上就是相邻差。现在，你可能在想，对 4、3、1 进行 un-plus scan 怎么会得到 1、2、1？你必须把 4、3、1 反转为 1、3、4，然后你要复制 1 作为你的第一个元素。然后 3 减 1 是 2，4 减 3 是 1，你最终得到 1、2、1。所以代码实际上读作 un-plus scan reverse 你的 3 元素数组，你是通过耦合 4 和应用于你的代码和猜测的“全部”和“精确”的结果来形成的，你必须在这种情况下使用 fork，即 phi-1 组合子，因为你是二元地应用“全部”和“精确”。
+
+28
+00:17:00.000 --> 00:17:34.000
+A rare use of the Phi-1 diatic fork. A little bit of combinator there for you, folks. So we've got the B-1 combinator in exact. We've got both, which is the psi combinator, aka over in all, because you're doing your frequency map on both of your arrays, your code and your guess. And then we've got the diatic fork, the phi-1 combinator. Fantastic, folks. An un-plus scan, which it just brought joy. It brought joy to me, folks, because I always in the back of my mind think about how I look up to stepping off so much, and I understand
+Phi-1 二元 fork 的罕见用法。给你们一点组合子知识，伙计们。所以我们在“精确”中有 B-1 组合子。我们有“全部”，它是 psi 组合子，也就是 over，因为你正在对你的两个数组（代码和猜测）进行频率映射。然后我们有二元 fork，phi-1 组合子。太棒了，伙计们。还有 un-plus scan，它带来了快乐。它给我带来了快乐，伙计们，因为我脑海中总是想到我是多么敬仰 Stepanov，我理解
+
+29
+00:17:34.000 --> 00:18:07.000
+the motivation of wanting to round-trip. There's a nice kind of symmetry there, but I just fundamentally disagree that the ultimate generic version of a binary operation applied to adjacent elements, you shouldn't be copying that first element to the output sequence. It should be returning you n-1 elements, but you can get access to that round-tripping with an inverse modifier. Call it whatever you want. It's called undo in BQN. It's called un-in-we-we-W. It's called nothing in APL because they just do power, negative one.
+想要往返的动机。那里有一种很好的对称性，但我从根本上不同意将二元操作应用于相邻元素的最终通用版本，你不应该把第一个元素复制到输出序列中。它应该返回给你 n-1 个元素，但你可以通过逆修饰符获得那种往返。随便你怎么叫它。它在 BQN 中被称为 undo。它在 Wi-Wa 中被称为 un。在 APL 中它什么都不叫，因为他们只是做幂，负 1。
+
+30
+00:18:07.000 --> 00:18:20.000
+Fantastic, folks. Absolutely fantastic. We went 20 minutes. We'll see how I edit this down. Hope that gave you something to think about. We got the combinators, check out commendatory logic.com. Go check out Amar Shah's Point Free or Die Talk. If you haven't.
+太棒了，伙计们。绝对太棒了。我们录了 20 分钟。看看我怎么剪辑它。希望这给了你一些思考的东西。我们有了组合子，去看看 combinatorylogic.com。去看看 Amar Shah 的“无点编程或死亡”演讲。如果你还没看的话。
+
+31
+00:18:20.000 --> 00:18:39.000
+You can also check out the twin algorithms talk. Talks about how I fell in love with array languages. Lots to think about folks. Unplus scan is a better version of adjacent difference. And we've got everything we want. We got everything we want. We got the generic adjacent transform in the form of stencil. And we've got adjacent difference in the form of an unpluss scan.
+你也可以看看双胞胎算法演讲。谈论我是如何爱上数组语言的。有很多值得思考的地方，伙计们。Un-plus scan 是相邻差的更好版本。我们拥有了我们想要的一切。我们拥有了我们想要的一切。我们以 stencil 的形式拥有了通用的相邻变换。我们以 un-plus scan 的形式拥有了相邻差。
+
+32
+00:18:39.000 --> 00:18:57.000
+All right, folks. Next week you'll hear from Ben and I together. Until then, have a good one. Be sure to check these show notes, either in your podcast app or at ADSP thepodcast.com for links to anything we mentioned. in today's episode, as well as a link to a get-up discussion where you can leave thoughts, comments, and questions. Thanks for listening. We hope you enjoyed, and have a great day.
+好了，伙计们。下周你们会听到我和 Ben 一起录音。在那之前，祝你们过得愉快。一定要查看这些节目说明，无论是在你的播客应用中还是在 ADSPthepodcast.com 上，获取我们在今天节目中提到的任何内容的链接，以及一个 GitHub 讨论的链接，你可以在那里留下想法、评论和问题。感谢收听。我们希望你喜欢，祝你有美好的一天。
+
+33
+00:18:57.000 --> 00:19:02.000
+Low quality, high quantity. That is the tagline of our podcast. It's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+低质量，高数量。这就是我们播客的标语。这不是标语。我们的标语是“带有信息点缀的混乱”。这期节目还没有评论。点击转录中的任何句子即可发表评论。

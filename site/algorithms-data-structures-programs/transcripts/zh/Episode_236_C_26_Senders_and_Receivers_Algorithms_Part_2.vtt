@@ -1,0 +1,261 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:55.000
+So a couple of other algorithms I have in my implementation. I have repeat. I have repeat and repeat until and that takes a sender and it runs it and when it's done it reconnects it and runs it again. I have retry again retry n and retry until which does the same thing as repeat if the sender ends on the error channel right. When the sender ends on the error channel, right? When the sender completes successfully, retry doesn't do anything. But when the sender completes with an error, retry will retry it. Welcome to ADSP the Podcast episode 236 recorded on May 13th, 2025. My name is Connor and today with my co-host Ben, we finish part two of our conversation about algorithms in C++ 26 senders and receivers.
+在我的实现中还有几个其他的算法。我有 repeat，我有 repeat 和 repeat until，它接收一个发送器（sender）并运行它，完成后重新连接并再次运行。我有 retry，还有 retry n 和 retry until，如果发送器在错误通道上结束，它们的作用与 repeat 相同。当发送器在错误通道上结束时，对吧？当发送器成功完成时，retry 不会做任何事情。但当发送器以错误结束时，retry 会重试它。欢迎收听 ADSP 播客第 236 期，录制于 2025 年 5 月 13 日。我是 Connor，今天和我的联合主持人 Ben 一起，我们完成了关于 C++ 26 发送器和接收器算法讨论的第二部分。
+
+2
+00:00:55.000 --> 00:01:19.000
+Okay, this makes I mean, this makes perfect sense when all when any I'm not sure if you've explored because there are several implementations of senders and receivers out in the wild. Do all of them have? Are there a certain common, like, this is a very logical, like, if you're going to model when all, when any is a very natural step, does this continue to a certain extent of, like, there's
+好的，这非常有道理。我不确定你是否探索过，因为市面上已经有几种发送器和接收器的实现。它们都有吗？是否存在某种共性，比如，这是一个非常合乎逻辑的步骤，如果你要建模“全部（when all）”和“任意（when any）”，这是一个非常自然的步骤，这是否在某种程度上延续了……
+
+3
+00:01:19.000 --> 00:01:54.000
+these logical operations that, even though it's not standardized, everybody's implementing under the same name or a different name. I mean I think when any is a good example I don't I don't know what other people have implemented but I think I think when any is a sort of logical next step. The interesting design when the interesting design decisions about when all and when any is what do you do? So I think the standard requires that you pass at least one sender to when all when any isn't standardized yet but
+这些逻辑操作，即使没有标准化，每个人也都在以相同的名称或不同的名称实现它们。我认为 when any 是一个很好的例子，我不知道其他人实现了什么，但我认为 when any 是一个合乎逻辑的下一步。关于 when all 和 when any 的有趣设计决策是，你该怎么做？所以我认为标准要求你至少传递一个发送器给 when all，when any 还没有标准化，但是
+
+4
+00:01:54.000 --> 00:02:37.000
+my implementation I allow you to pass zero senders to when all and indeed to when any. They're variadic functions they could be they could have zero arguments. If you pass no sender to when all what you get back is just is just in fact it completes immediately right you get back a sender that completes immediately because you've asked it to do when all over zero things and and this also ties back so like the sender that completes immediately is the unit for the monoid of when all. Just like true is the unit for the and monoid, the sender that completes immediately, we would call it just, is the unit for the when all monoid.
+在我的实现中，我允许你传递零个发送器给 when all，实际上也允许给 when any。它们是变参函数，可以有零个参数。如果你没有传递发送器给 when all，你得到的结果实际上是它会立即完成，对吧？你得到的是一个立即完成的发送器，因为你要求它对零个事物执行 when all。这也回到了这一点：立即完成的发送器是 when all 幺半群（monoid）的单位元。就像 true 是 AND 幺半群的单位元一样，立即完成的发送器（我们称之为 just）是 when all 幺半群的单位元。
+
+5
+00:02:37.000 --> 00:03:11.000
+Conversely, if you look at when any, if you pass when any zero arguments, what does it give you back? And the answer in my implementation is it gives you back a sender that never completes. It's equivalent of false, it's the unit for that monoid. Right? If you race that against any other sender, the other sender will always win. How do you actually program that? You just never complete? So it's not an infinite loop. You don't need an infinite loop, right?
+相反，如果你看 when any，如果你传递给 when any 零个参数，它会返回什么？在我的实现中，答案是它返回一个永远不会完成的发送器。它等同于 false，是该幺半群的单位元。对吧？如果你让它与任何其他发送器竞争，另一个发送器总是会赢。你实际上是怎么编程的？你只是永远不完成？所以这不是一个无限循环。你不需要无限循环，对吧？
+
+6
+00:03:11.000 --> 00:03:45.000
+You literally never call setValue. You start your sender and it literally does nothing. It never makes progress. So the question that always arises is when would you want that sender? Right. And, and as it, so as in so many such questions, it's difficult to answer in a vacuum, but as you know, when you start programming with these things, when you start composing these things, you can very well hit situations. So it's the same, it's the same sort of idea as why, why is the identity function useful, right? It's the same sort of idea. why is the identity function useful, right?
+你字面上从不调用 setValue。你启动你的发送器，它什么都不做。它从不取得进展。所以总是会出现的问题是，你什么时候会想要那个发送器？对吧。而且，正如许多此类问题一样，在真空中很难回答，但正如你所知，当你开始用这些东西编程时，当你开始组合这些东西时，你很可能会遇到这种情况。所以这和为什么恒等函数（identity function）是有用的想法是一样的，对吧？
+
+7
+00:03:45.000 --> 00:04:11.000
+It's the same sort of idea. You look at that first and you think, when would I ever want that? But then when you start programming a compositional way, you think, oh, actually, that is useful. I'll plug it in here. And I think it's the same sort of thing with the when any taking zero and the when all taking zero. On the face of it, they really do nothing. But two arguments, one, they could well be useful.
+这是同样的想法。你先看它，心想，我什么时候会想要那个？但当你开始以组合方式编程时，你会想，哦，实际上，那很有用。我会把它插在这里。我认为 when any 接收零个参数和 when all 接收零个参数也是一样的情况。表面上看，它们确实什么都不做。但有两个参数，一个，它们可能很有用。
+
+8
+00:04:11.000 --> 00:04:44.000
+And two, I really don't like putting arbitrary limitations for things that will perfectly well compose. It's sort of like, I don't want to go down the road of singling out like anyone who's done metaprogramming knows that you need to handle void, you know, void is special, void is special handling. I don't want to introduce special cases like that into the compositional framework that is senders in my implementation. Okay, that makes sense. I mean, that's a good analogy, because I, I for one, that's the
+第二，我真的不喜欢为那些可以完美组合的事物设置任意限制。这有点像，我不想走那种挑剔的道路，任何做过元编程的人都知道你需要处理 void，你知道，void 是特殊的，void 有特殊处理。我不想在我的发送器实现这种组合框架中引入这样的特殊情况。好的，这说得通。我的意思是，这是一个很好的类比，因为我，我个人，那是
+
+9
+00:04:44.000 --> 00:05:20.000
+exact thought that I had when I first learned About identity was like what a function that does nothing it just returns you what you gave it like That's the most useless thing ever and now there's been many times where it is exactly. You know you have an algorithm That you know I was trying to think of an example like it might be a bad one But like count if is a thing in C++ but what if you have a vector of a vector of bull a vector of Booleans or a container of Booleans and You want to count how many are true? What is the unary operation that you have to pass to count if right right the projection function on many algorithms
+我第一次学习恒等函数时产生的确切想法，就像是一个什么都不做的函数，它只是返回你给它的东西，就像那是史上最无用的东西。现在有很多次它正是你所需要的。你知道，你有一个算法，你知道，我试图想一个例子，可能是一个糟糕的例子，但比如 count if 是 C++ 中的一个东西，但如果你有一个 vector of vector of bool，或者一个布尔容器，你想计算有多少个 true？你必须传递给 count if 的一元操作是什么？对吧，许多算法中的投影函数
+
+10
+00:05:20.000 --> 00:05:38.000
+The default is going to be the identity Exactly an even better example, right? Yeah. So it does come up. And if my example is not great, there's been a ton of times, not so much in C++, but in other languages, where there is an algorithm that's exactly what you want, but you don't need a transforming unary operation.
+默认值将是恒等函数。完全正确，一个更好的例子，对吧？是的。所以它确实会出现。如果我的例子不太好，有很多次，不是在 C++ 中，而是在其他语言中，有一个算法正是你想要的，但你不需要转换一元操作。
+
+11
+00:05:38.000 --> 00:05:57.000
+You just need to count the booleans or do something with the booleans that are there. And it's more than just identity, right? It's all of the small birds. All of the small birds, right? They make up the ecosystem. Yeah, that's a good point. I mean, first, which is the K Combinator,
+你只需要计算布尔值，或者对现有的布尔值做些什么。这不仅仅是恒等函数，对吧？这是所有的小鸟（small birds）。所有的小鸟，对吧？它们构成了生态系统。是的，这是一个很好的观点。我的意思是，首先，也就是 K 组合子，
+
+12
+00:05:57.000 --> 00:06:25.000
+that one also similarly, like if you think identity, a function that just does nothing and passes you back what you give it, first also kind of seems in that similar boat. You give it two things and it gives you back its first one. But I think that's a lot easier for people to grasp why that's useful, especially if we had a convenience function like that that worked on tuple types and pairs because how often are you trying to do some transformation on a pairatupel and spelling that with a lambda where you're
+那个也类似，如果你认为恒等函数是一个什么都不做并把你给它的东西传回给你的函数，first 也似乎处于类似的境地。你给它两个东西，它把第一个还给你。但我认为这更容易让人理解为什么它有用，特别是如果我们有一个像那样可以在元组类型和对上工作的便利函数，因为你多久尝试对 pair 或 tuple 进行一次转换，并用 lambda 来拼写它，你在
+
+13
+00:06:25.000 --> 00:07:08.000
+doing a dot second or a std colon colon get angle bracket zero zero like a nice convenience combinator that did that for you would be would be very nice which is what other languages often have and I think boost hana louis deon's library which at one point was new but is now a few years old it has all of that stuff because it was modeled after functional libraries and languages. So a couple of other algorithms I have in my implementation. I have repeat, I have repeat and repeat until. You know, they're just variations on repeat. And that takes a sender and it runs it and when it's done it reconnects it and runs it again. You know, they're just variations on repeat. And that takes a sender and it runs it. And when it's done, it reconnects it and runs it again.
+做 dot second 或 std::get<0>，一个为你做这件事的好的便利组合子会非常棒，这是其他语言通常拥有的。我认为 Boost.Hana，Louis Dionne 的库，曾经是新的，但现在已经有几年了，它拥有所有这些东西，因为它是仿照函数式库和语言建模的。所以我的实现中还有几个其他的算法。我有 repeat，我有 repeat 和 repeat until。你知道，它们只是 repeat 的变体。它接收一个发送器并运行它，完成后重新连接并再次运行。
+
+14
+00:07:08.000 --> 00:07:35.000
+You know, keeps going. I have retry, again, retry n and retry until, which does the same thing as repeat if the sender ends on the error channel, right? When the sender completes successfully, retry doesn't do anything. But when the sender completes with an error, ret will retry it okay that makes sense but I think actually I just had a thought and it is that and you can correct me if I'm incorrect
+你知道，它会一直运行。我有 retry，again，retry n 和 retry until，如果发送器在错误通道上结束，它们的作用与 repeat 相同，对吧？当发送器成功完成时，retry 不会做任何事情。但当发送器以错误完成时，retry 会重试它。好的，这说得通，但我认为实际上我刚才有一个想法，那就是，你可以纠正我，如果我不正确的话
+
+15
+00:07:35.000 --> 00:08:06.000
+about this which I might be it sounds like there are buckets of these combinators or operations whatever we want to call them. Some of them take as argument senders, and some of them take as arguments operations or lambdas. And all of them return senders? Yes. All of them return senders. In general they take a sender and maybe some other stuff
+关于这一点，我可能是错的。听起来这些组合子或操作（无论我们想怎么称呼它们）有不同的类别。有些以发送器作为参数，有些以操作或 lambda 作为参数。它们都返回发送器吗？是的。它们都返回发送器。通常它们接收一个发送器和可能其他一些东西
+
+16
+00:08:06.000 --> 00:08:59.000
+and they return the sender. They modify a sender in some way. Some of them take multiple senders like when all, some of them take a single sender like then and then they take other stuff as needed which is according to what they're doing like then takes a lambda to run right. Repeat n takes a to what they're doing, like then takes a lambda to run, right? Repeat n takes a size t, which is the n, right? Right. I'm trying to think, there's this mental model forming in my head where, of these combinators, some of them are used for kind of the computation aspects of your graph and then others are responsible for the composing or path constructing of your graph. And really it seems like so far in my head you have then and you have let value and those
+然后它们返回发送器。它们以某种方式修改发送器。有些接收多个发送器，比如 when all，有些接收单个发送器，比如 then，然后根据需要接收其他东西，就像它们正在做的那样，比如 then 接收一个 lambda 来运行。Repeat n 接收一个 size_t，也就是 n，对吧？对。我在想，我脑子里形成了一个心理模型，关于这些组合子，其中一些用于你的图的计算方面，而另一些负责你的图的组合或路径构建。真的，在我看来，到目前为止你有 then 和 let value，而那些
+
+17
+00:08:59.000 --> 00:09:24.000
+are kind of responsible for the quote unquote computation. And then almost everything else so far has kind of been this graph constructing. When all has got a many to one. When any is a many to one. Repeat is a one to one that kind of creates a linked list, if you will. Repeat n linked list with a defined length.
+有点负责所谓的计算。而到目前为止，几乎所有其他东西都是这种图构建。When all 是多对一。When any 是多对一。Repeat 是一对一，它创建了一个链表，如果你愿意的话。Repeat n 链表具有定义的长度。
+
+18
+00:09:24.000 --> 00:09:55.000
+I'm not sure, is that... Yeah, you know, you can think of it like that. I think that's right, definitely. There's something there. I was gonna say, again, something I've implemented which is not standard is sequence, which is... It's IOTA. No, no, it's sequencing two senders together. So it's like let value except that there is no data exchange from the previous to the subsequent sender, right? In Haskell, bind is spelled greater than greater than equals, right?
+我不确定，那是……是的，你知道，你可以那样想。我认为那是对的，绝对。这里面有些东西。我本来想说，同样，我实现了一些非标准的东西，即 sequence，它是……它是 IOTA。不，不，它是将两个发送器序列化在一起。所以它就像 let value，除了没有从前一个发送器到后一个发送器的任何数据交换，对吧？在 Haskell 中，bind 被拼写为 >>=，对吧？
+
+19
+00:09:55.000 --> 00:10:33.000
+But there's also another operator which is just greater than greater than, and that's what sequence is. So you just want one sender to run after another, but you don't want the second sender to depend on what the first sender sends So does this return you two senders then it would know it returns you a single sender who's which embodies that sequence So it's like let value except that there is no that the function if you like if you pass let value and nullary function Or a funk or a function which just ignores its arguments would be a better way, right? Imagine you want to pass let value a function which ignores its arguments and just returns
+但还有另一个运算符只是 >>，这就是 sequence 的作用。所以你只是想让一个发送器在另一个发送器之后运行，但你不希望第二个发送器依赖于第一个发送器发送的内容。那么这会返回给你两个发送器吗？不，它返回给你一个单一的发送器，它体现了那个序列。所以它就像 let value，除了函数，如果你愿意的话，如果你传递给 let value 一个零元函数，或者一个忽略其参数的函数会是更好的方式，对吧？想象一下你想传递给 let value 一个忽略其参数并只返回
+
+20
+00:10:33.000 --> 00:11:03.000
+the sender you want to run next. And that's what sequence is, right? Because in a sense, the monad is too powerful, right? I don't need all of that power. I don't need all the power of let value. I don't need to make a runtime choice. I just know that I want to run sender B after sender A. Is this for some like side effect thing? Exactly. Yeah, my world everything is side effects. Okay, I was gonna say is the only thing I could imagine that you're trying to write to some screen
+你想运行的下一个发送器的函数。这就是 sequence 的作用，对吧？因为在某种意义上，单子（monad）太强大了，对吧？我不需要所有的那种能力。我不需要 let value 的所有能力。我不需要做出运行时选择。我只是知道我想在发送器 A 之后运行发送器 B。这是为了某种副作用吗？完全正确。是的，在我的世界里，一切都是副作用。好的，我本来想说，这是我能想象到的唯一一件事，你试图写入某个屏幕
+
+21
+00:11:03.000 --> 00:11:25.000
+or something like that. And like, you know, that you want this to write to some screen or something like that, and you know that you want this to happen first, and then the other thing to happen. And the reason why Sequence is useful is because it doesn't have that runtime choice, right? Because effectively, when you have a runtime choice, you are putting a compile time barrier there that you cannot cross with type information because you have the runtime choice.
+或者类似的东西。而且，你知道，你希望这写入某个屏幕或类似的东西，并且你知道你希望这先发生，然后另一件事发生。Sequence 有用的原因是它没有那种运行时选择，对吧？因为实际上，当你有一个运行时选择时，你在那里放置了一个编译时屏障，你无法用类型信息跨越它，因为你有运行时选择。
+
+22
+00:11:25.000 --> 00:11:43.000
+Like downstream with that, you don't know the type information from upstream because it's all changed at runtime. But when you don't have a runtime choice, then you have the opportunity for more type information to propagate across that boundary. Right, that makes a lot of sense, yeah. Okay, so another overload of sequence.
+就像下游那样，你不知道上游的类型信息，因为它在运行时都改变了。但当你没有运行时选择时，你就有机会让更多的类型信息跨越那个边界传播。对，这很有道理，是的。好的，那么 sequence 的另一个重载。
+
+23
+00:11:43.000 --> 00:12:34.000
+So yeah, sequence, and it's just like let value where you ignore the arguments But but the reason it's formulated differently is because of that tight propagation and is there not that Our our C++ listeners care, but is there a name for that in Haskell other than the operator? I don't know how to pronounce the operator, but but the operator? I don't know how to pronounce the operator but I don't know. I think it might be even pronounced seek or sequence one of those two. Okay. And then so we talk about senders. Another important thing to talk about is schedulers, right? Because schedulers produce senders. They're the entry point, apart from just, which is producing a sender. Schedulers are the main way you get your entry point
+所以是的，sequence，它就像 let value，你忽略参数，但它被不同地制定是因为那种类型传播。我们的 C++ 听众可能不在乎，但在 Haskell 中除了运算符之外还有别的名字吗？我不知道怎么读那个运算符，但……那个运算符？我不知道怎么读那个运算符，但我不知道。我想它可能甚至被读作 seek 或 sequence，这两个中的一个。好的。然后我们谈谈发送器。另一个重要的事情是谈谈调度器（schedulers），对吧？因为调度器产生发送器。它们是入口点，除了 just（它产生一个发送器）。调度器是你获得入口点的主要方式
+
+24
+00:12:34.000 --> 00:13:05.000
+into your computation, right? And the scheduler just represents where work is going to happen, or some execution resource, and it can give you a sender. You call schedule and it gives you back a sender. And that sender represents the entry point into computation on that resource. So you can have a thread scheduler, you can have a thread pool scheduler, you can have, in my case, An interrupt scheduler. So I have several.
+进入你的计算，对吧？调度器只是代表工作将在哪里发生，或者某种执行资源，它可以给你一个发送器。你调用 schedule，它会返回一个发送器。那个发送器代表了在该资源上进行计算的入口点。所以你可以有一个线程调度器，你可以有一个线程池调度器，你可以有，在我的例子中，一个中断调度器。所以我有好几个。
+
+25
+00:13:05.000 --> 00:13:43.000
+I have a timer scheduler that hooks up to a time interrupt. I have a priority scheduler, which hooks up to a priority interrupt at a given priority level. And then I have a trigger scheduler, which... So timer is one piece of hardware, priority stuff is another piece of hardware, another more interrupts, but there are tons of other interrupts in general and for the generic style interrupt I have a trigger scheduler. So I can I can give a trigger scheduler a name right and
+我有一个连接到时间中断的定时器调度器。我有一个优先级调度器，它连接到给定优先级级别的优先级中断。然后我有一个触发器调度器，它……所以定时器是一块硬件，优先级的东西是另一块硬件，更多的中断，但通常还有很多其他中断，对于通用类型的中断，我有一个触发器调度器。所以我可以给触发器调度器一个名字，对吧，然后
+
+26
+00:13:43.000 --> 00:14:04.000
+then in an ISR in in the interrupt service routine, when the interrupt is called, I can say, run that trigger scheduler. This is the trigger by name, right? And when that interrupt happens, therefore, that means that now I'm running in that interrupt context, and I'm running whatever sender chain was hooked off of that trigger scheduler.
+在 ISR（中断服务程序）中，当中断被调用时，我可以说，运行那个触发器调度器。这是按名称触发的，对吧？当中断发生时，这意味着现在我在那个中断上下文中运行，并且我正在运行挂在那个触发器调度器上的任何发送器链。
+
+27
+00:14:04.000 --> 00:14:42.000
+So that's the way I can hook up in general. That's the way I can hook up work to interrupts in the sender's model. Do you have an example of where these kinds of things are interacting in some kind of, I guess, embedded context is what you're working in? Trigger scheduler has been just about the most useful thing I ever came across in this sense. So, you know, the time scheduler is one thing where you can say, give me a scheduler for 100 milliseconds in the future, right? And when you start that, when you start that operation state, when you start the computation, it goes away and it sets
+这就是我通常进行连接的方式。这就是我将工作连接到发送者模型中的中断的方式。你有没有在某种嵌入式环境中，这些东西相互作用的例子？这就是你正在做的工作吗？在这种意义上，触发调度器（Trigger scheduler）是我遇到过的最有用的东西。所以，你知道，时间调度器（time scheduler）是一回事，你可以说，给我一个100毫秒后的调度器，对吧？当你启动它时，当你启动那个操作状态时，当你开始计算时，它就会离开并设置
+
+28
+00:14:42.000 --> 00:15:12.000
+the timer interrupt. And when the timer interrupt and when the timer interrupt fires it will run you, right? So that's a timer scheduler. The priority scheduler works very similarly except instead of setting the timer interrupt it sets a priority interrupt which if it's higher than your current priority probably means you get interrupted immediately because the higher priority takes over. Those two are very, very common to think about across a wide range of hardware. Practically every embedded system has those two, right?
+定时器中断。当定时器中断触发时，它会运行你，对吧？所以这就是一个定时器调度器。优先级调度器（priority scheduler）的工作方式非常相似，只是它不是设置定时器中断，而是设置一个优先级中断，如果它高于你当前的优先级，可能意味着你会被立即中断，因为更高优先级接管了。在广泛的硬件范围内，考虑这两个调度器是非常非常普遍的。几乎每个嵌入式系统都有这两个，对吧？
+
+29
+00:15:12.000 --> 00:15:32.000
+Right. We could say, I don't know about practically every, but many, many, many, many people that used to think about those. The trigger schedule is for all other interrupts. So any kind of ad hoc interrupt you have. So if you're in my case I'm working with the hardware architects and we can choose to add in interrupts for various
+对。我们可以说，我不知道是不是几乎每个，但很多很多很多人都考虑过这些。触发调度器是用于所有其他中断的。所以任何你拥有的临时中断。所以如果是在我的情况下，我正在与硬件架构师合作，我们可以选择为各种
+
+30
+00:15:32.000 --> 00:16:09.000
+things right and in fact you know if you pick up any embedded system you'll see it has various other interrupts. All of those are sort of ad hoc and I you know the trigger scheduler takes care of Pretty much all of them. You just make a different name for each one when you instantiate the trigger scheduler and now you've got a Custom scheduler for that interrupt, right? So like you might get in you might you know You might send something off on a bus and get an interrupt when the response comes. You would hook that up to a named trigger.
+事情添加中断，对吧？事实上，你知道，如果你拿起任何嵌入式系统，你会看到它有各种其他中断。所有这些都是临时的，我知道触发调度器几乎处理了所有这些。当你实例化触发调度器时，你只需为每一个创建一个不同的名称，现在你就拥有了针对该中断的自定义调度器，对吧？所以就像你可能在总线上发送一些东西，并在响应到来时得到一个中断。你会把它连接到一个命名的触发器上。
+
+31
+00:16:09.000 --> 00:16:23.000
+And these clearly are essential for putting everything together. Yes. Yeah. You're not going to be able to do much with Just. Right. Right. And the extra thing that Trigger Scheduler does is it allows you to send arguments. Like Just.
+这些显然对于将所有东西放在一起至关重要。是的。是的。你不能只用Just做太多事情。对。对。而触发调度器所做的额外事情是它允许你发送参数。就像Just。
+
+32
+00:16:23.000 --> 00:16:41.000
+You know, Just takes arguments. Ordinarily, when you have a scheduler and you call schedule, it gives you a sender that sends nothing. It just calls set value with no arguments. But trigger scheduler, when you trigger it, you can give it arguments. So it behaves a bit like, it behaves like just,
+你知道，Just接受参数。通常，当你有一个调度器并调用schedule时，它会给你一个什么都不发送的发送者。它只是调用没有参数的set value。但是触发调度器，当你触发它时，你可以给它参数。所以它的行为有点像，它的行为像Just，
+
+33
+00:16:41.000 --> 00:17:38.000
+but in the context of that triggered that trigger resource you know the other interesting part that sort of a synchrony brings into focus for me is that you know it and you can correct me but when when when you're thinking about you know doing computation. even sort of using parallel algorithms or something, typically you are thinking about the computation as somewhat more nullific. You're not thinking about other things happening while you're doing the computation. You might be thinking about splitting it up for parallel use, but even then you're thinking, well, I own the cluster, I own the CPUs that it's running on, whatever. I'm going to split it up for performance. But the other thing to think about in terms of asynchronous, it helps to split tasks up into small pieces, right? Even though there's a little overhead
+但在那个触发资源的环境中，你知道，异步性为我带来的另一个有趣的方面是，你知道它，你可以纠正我，但当你考虑做计算时，甚至使用并行算法之类的，通常你认为计算在某种程度上是更单一的。你不会考虑在进行计算时发生的其他事情。你可能会考虑为了并行使用而拆分它，但即使那样你也会想，好吧，我拥有这个集群，我拥有它运行所在的CPU，无论是什么。我要为了性能而拆分它。但关于异步的另一件事是，它有助于将任务拆分成小块，对吧？即使有一点开销
+
+34
+00:17:38.000 --> 00:18:16.000
+in scheduling the pieces, even though were I able to do this task monolithically, it might finish sooner, right? But by splitting it up, I'm trading off a little bit of time, not a lot of time, but a little bit. But I'm also allowing the computation to be canceled, I'm allowing other things to get in there. I'm being a good citizen in the the wider world of scheduling things right I'm not tying up resources until I'm done and that is also very important in the embedded world.
+在调度这些片段时，即使我能够以单体方式完成这个任务，它可能会更快完成，对吧？但通过拆分它，我牺牲了一点点时间，不是很多时间，但有一点。但我也允许计算被取消，我允许其他事情进入其中。我在更广泛的调度事物世界中做一个好公民，对吧？我不会在完成之前占用资源，这在嵌入式世界中也非常重要。
+
+35
+00:18:16.000 --> 00:19:01.000
+Yeah I mean that makes a ton of sense to me I mean I think about a lot of the code that I written, the topic that comes to mind is my Scrabble game. And there's a lot of like you when you write code, you're writing it in a sense serially on a page, right? But one of the first times I the first pass at, you know, getting the word solver in that game, you've got a 15 by 15 board and you need to explore starting positions for different words. But there's a lot of stuff you can think about like, and that that's what I ended up building into a data structure, but you could have done some kind of asynchronous thing where you're exploring a word try. And you want to you know, at a certain point,
+是的，我的意思是这对我来说非常有意义，我的意思是我想到了我写过的很多代码，脑海中浮现的话题是我的拼字游戏（Scrabble）。当你写代码时，你是在页面上串行地写它，对吧？但在我第一次尝试在该游戏中实现单词求解器时，你有一个15乘15的棋盘，你需要探索不同单词的起始位置。但有很多东西你可以考虑，这就是我最终构建到数据结构中的东西，但你可以做某种异步的事情，在那里你正在探索一个单词树（WordTrie）。你想在某个点，
+
+36
+00:19:01.000 --> 00:19:34.000
+you know, okay, there's there's no more words after this. But like the naive way to do it is just create every single combination and look it up in a dictionary. But that proves to be just a combinatorial explosion that just, you know, halts. And I even tried doing that and then creating some kind of thread pool and dispatching, you know, 64 threads. But even still, it's just absolutely awful. So you end up encoding kind of the asynchronous, you know, if even still, it's just absolutely awful. So you end up encoding the asynchronous. You could code it that way. It probably might end up still being less efficient than using your WordTry at the end of the day.
+你知道，好吧，这之后没有更多的单词了。但天真的做法只是创建每一个组合并在字典中查找它。但这被证明只是一个组合爆炸，导致它停止了。我甚至尝试过那样做，然后创建某种线程池并分派64个线程。但即便如此，它仍然非常糟糕。所以你最终编码了某种异步，你知道，如果即便如此，它仍然非常糟糕。所以你最终编码了异步。你可以那样编码它。归根结底，它可能最终仍然不如使用你的WordTrie高效。
+
+37
+00:19:34.000 --> 00:20:08.000
+But there's a lot of stuff that if you're searching for results, you end up building up that list and then sorting it and whatnot. But you could picture a asynchronous algorithm where it's popping up and dynamically, you know, you have the top five words and then it's inserting them in and you get some live dashboard of like while it's searching the space, it's showing you, you know, incrementally or iteratively when it finds a good solution or good play. But currently, you know, I don't have that any of that built into the game because I don't I don't use asynchronous algorithms in them.
+但如果你在搜索结果，有很多东西你最终会建立那个列表然后排序之类的。但你可以想象一个异步算法，它会弹出并动态地，你知道，你有前五个单词，然后它插入它们，你得到某种实时仪表板，就像当它搜索空间时，它会向你展示，你知道，当它找到一个好的解决方案或好的玩法时，增量或迭代地展示。但目前，你知道，我没有在游戏中内置任何这些，因为我不在其中使用异步算法。
+
+38
+00:20:08.000 --> 00:20:50.000
+Yeah. And when you when you run when you run that regular synchronous algorithm on the desktop, you sort of don't you know, you're running on an OS. So unknown to you, you get you get, you know, underneath under the hood, you get the OS deciding when you can run you get preemption You get you know resource allocation by the OS, but when you're running on bare metal You don't have any of that and so, you know running a monolithic thing means you are tying up resources For that amount of time and this sort of ties back also reminds me of you know, I spent ages in games so a lot of times everything comes back to me mapping it back in my mental model to how games work, you know, and it's
+是的。当你运行那个常规的同步算法在桌面上时，你某种程度上不知道，你在操作系统上运行。所以你不知道，你在幕后，你得到操作系统决定你什么时候可以运行，你得到抢占，你得到操作系统分配资源，但当你在裸机上运行时，你没有任何这些，所以，你知道运行一个单体的东西意味着你在那段时间内占用了资源，这某种程度上也提醒我，你知道，我在游戏中花了很多时间，所以很多时候一切都回到我将它映射回我的心理模型，即游戏是如何工作的，你知道，它是
+
+39
+00:20:50.000 --> 00:21:24.000
+sort of, you know, in games you are trying to hit your 60 FPS or whatever it is, but you're trying to hit the frame rate. You're not, you don't want to tie up resources because that would mean that you overshoot your frame time or whatever. I mean, these days games run on machines that maybe deal with that a bit better, but 20 years ago, this was certainly a concern. I think it's still a concern today. So it's things like if you have a very expensive thing to do, you have to structure your computation so that you can do it over multiple frames.
+某种程度上，你知道，在游戏中你试图达到60帧每秒或无论是什么，但你试图达到帧率。你不想占用资源，因为那意味着你会超过你的帧时间或无论是什么。我的意思是，这些天游戏运行在可能处理得更好的机器上，但20年前，这肯定是一个担忧。我认为今天仍然是一个担忧。所以如果有一些非常昂贵的事情要做，你必须构建你的计算，以便你可以分多帧完成它。
+
+40
+00:21:24.000 --> 00:22:08.000
+You have to make it so you can pick up where you left off. You have to not do it all in one go because that would take half a second or whatever. If you're doing some kind of pathfinding or something computationally intensive like that, you build it so that it can happen piecemeal. It's somewhat the same idea that comes into structuring asynchronous computations at least at least for me I sort of map it to that. Yeah, literally when you were saying that like five seconds before you said the word pathfinding That's what I was thinking in my head too is like another Example is the city stride route run, you and trying to figure out how to do like a Monte
+你必须使它能够在你离开的地方继续。你必须不能一次性完成它，因为那需要半秒钟或无论是什么。如果你正在做某种寻路或类似计算密集型的事情，你构建它以便它可以零星地发生。这在某种程度上与构建异步计算的想法相同，至少对我来说，我某种程度上将其映射到这一点。是的，实际上当你那样说时，在你说出寻路这个词之前的五秒钟，那也是我在脑海中想到的，就像另一个例子是城市步幅路线运行，你试图弄清楚如何做像蒙特
+
+41
+00:22:08.000 --> 00:22:34.000
+Carlo tree search where you set the number of stats that it looks ahead so that you have an efficient algorithm but that is finding an optimal, you can imagine one where you set some condition that as long as one of the paths that is currently being explored hit some threshold, just target now, now reset the search from there. Because I know that in practice, as long as I can find this metric, it goes. But currently, that's not the way my algorithm works.
+卡洛树搜索，你设置它向前看的步数，以便你有一个高效的算法，但那是找到一个最优解，你可以想象一个你设置某种条件的算法，只要当前正在探索的路径之一达到某个阈值，就立即锁定，现在从那里重置搜索。因为我知道在实践中，只要我能找到这个指标，它就行。但目前，这不是我的算法工作的方式。
+
+42
+00:22:34.000 --> 00:23:02.000
+It's just a, I guess it's a breadth first search that does a certain number of steps. But it always completes, regardless of how bad that route is going to be for n steps. And you could imagine, once again, an asynchronous version of this that says, when any of these paths meets this criteria, go from there. I can picture a bunch of different pathfinding stuff.
+它只是一个，我想是一个广度优先搜索，执行一定数量的步骤。但它总是完成，无论那条路线对于n步来说有多糟糕。你可以想象，再一次，一个异步版本的这个算法，它说，当这些路径中的任何一个满足这个标准时，就从那里开始。我可以想象一堆不同的寻路东西。
+
+43
+00:23:02.000 --> 00:23:36.000
+This kind of stuff is very useful. You're already using this on a daily basis. Or is it daily? I'm not sure. Yeah, you could say that Maybe not every day that I have to dip into it, but certainly it is getting used. Yes Yeah, and then other yeah deep mar you mentioned last episode or maybe it was two episodes Yeah, I mentioned him earlier. He gave a talk at super plus now. Yeah, and uh, I mean it sounds like yeah rob's using it As well, so this is slowly even though only it's would you say partially standardized? I guess the foundations are standardized and going forward there's gonna be more algorithms that are standardized I mean sim not not dissimilar to how other
+这种东西非常有用。你已经在日常生活中使用它了。还是每天？我不确定。是的，你可以说也许不是每天我都必须深入研究它，但它肯定正在被使用。是的，还有其他，是的，Deep Mar你在上一集提到的，或者可能是两集前，是的，我之前提到过他。他在Super Plus Now上做了一个演讲。是的，而且，我的意思是听起来Rob也在使用它，所以这正在慢慢地，尽管只有，你会说部分标准化了吗？我想基础是标准化的，展望未来会有更多的算法被标准化，我的意思是，这与其他的没有什么不同
+
+44
+00:23:36.000 --> 00:24:03.000
+Library things like ranges have entered the standard and then the API surface has grown right if folks are listening to this and You know, they're potentially working at a company or have a personal project. Is this, I mean, so you've gone and built your own. At what point, I guess C++26 folks will be able to reach for this. So that means like what C++30 or 2030. It's a library feature.
+像ranges这样的库东西已经进入了标准，然后API表面已经增长了，对吧？如果人们正在听这个，并且你知道，他们可能在一家公司工作或有一个个人项目。这是，我的意思是，所以你已经去构建你自己的了。在什么点，我想C++26的人们将能够使用这个。所以这意味着像C++30或2030。这是一个库特性。
+
+45
+00:24:03.000 --> 00:24:48.000
+So potentially it might actually come quicker than some of the I guess tooling stuff. It's a bit of work, but you know the library implementers are Up to the job. I'm sure not quite sure when they'll get around to implementing it but coming to a standard library Near you soon and also it's is the Intel one is that I see that I see a lot of this stuff on GitHub it's open source so would you say that that is a is designed primarily with embedded in mind or is it generic it's designed with embedded in mind it is non-standard it obviously follows the same ideas as a standard and this of you know the in terms of parts of it, but it's not.
+所以它可能实际上比一些工具方面的东西来得更快。这有点工作量，但你知道库实现者能够胜任这项工作。我不确定他们什么时候会去实现它，但很快就会来到你身边的标准库，而且它也是Intel的那个，我看到我在GitHub上看到很多这种东西，它是开源的，所以你会说它是主要考虑到嵌入式设计的还是通用的？它是考虑到嵌入式设计的，它是非标准的，它显然遵循与标准相同的想法，你知道，就其部分而言，但它不是。
+
+46
+00:24:48.000 --> 00:25:11.000
+At some point it diverges. And I know for that matter, NVIDIA has one as well. Eric wrote it, I believe it's called libstudexec. Yeah, there's a ton of implementations out there. We will also once again link to Rob's talk. And I think I saw that there was also a couple other, and you mentioned there was a couple other senders and receivers if not specifically adjacent talks at C++ Now.
+在某一点上它分叉了。我知道就此而言，NVIDIA也有一个。Eric写的，我相信它叫libstudexec。是的，外面有大量的实现。我们将再次链接到Rob的演讲。而且我想我看到还有其他几个，你提到还有其他几个发送者和接收者，如果不是C++ Now上专门相邻的演讲的话。
+
+47
+00:25:11.000 --> 00:25:48.000
+Yeah there are a few talks out there in the wild already now and more to come I'm sure. Awesome any final words of wisdom for the listeners? Wear sunscreen. It's spring, the sun is out in force especially here in Denver where we've got a bit of altitude. It's important to wear sunscreen. It's funny you mentioned that because my my fiancee might enjoy the LLMs and AIs even more than I do and she's taken she has you know AI assisted everything now including
+是的，外面已经有几个演讲了，我相信未来还会有更多。太棒了，对听众有什么最后的智慧之言吗？涂防晒霜。现在是春天，太阳非常强烈，特别是在我们海拔较高的丹佛这里。涂防晒霜很重要。有趣的是你提到了这一点，因为我的未婚妻可能比我更喜欢LLM和AI，她现在已经有了AI辅助的一切，包括
+
+48
+00:25:48.000 --> 00:26:13.000
+recommendations for skin routines. And she took a photo of me and fed it to ChachiPT and got recommendations. And of course it told her her skin was glowing and fantastic. She looked younger than her age. And for me it said, this is clearly early signs of aging, etc. And so now she has me on a skincare program that involves putting some moisturizer cream with suntan lotion every morning.
+皮肤护理程序的建议。她拍了一张我的照片并喂给ChatGPT，得到了建议。当然，它告诉她她的皮肤容光焕发，非常棒。她看起来比实际年龄年轻。而对于我，它说，这显然是衰老的早期迹象，等等。所以现在她让我进行一个护肤计划，包括每天早上涂抹一些带有防晒霜的保湿霜。
+
+49
+00:26:13.000 --> 00:26:36.000
+Even if I don't plan on going outside, it's, it's, uh, anyways. The fact that you said suntan lotion speaks volumes. Or what did I, or what did I? Suntan lotion is what we used to call it in the 70s, I think. Sunscreen is what... It's not helping... Well, it depends what your point of view is, but... But the idea is less to tan and more to protect yourself, I think, these days.
+即使我不打算出门，它，它，无论如何。你提到防晒乳液（suntan lotion）这一事实说明了一切。或者我说了什么？防晒乳液是我们70年代称呼它的方式，我想。防晒霜（Sunscreen）是……它没有帮助……好吧，这取决于你的观点是什么，但是……但这个想法是少晒黑多保护自己，我想，这些天。
+
+50
+00:26:36.000 --> 00:27:05.000
+I mean, it's a speak-o there. Although I think sun lotion, sunscreen, sunblock, they're all good. But honestly, I'm not... I'm the last person in the world You should ever I put her in charge of my skin routine And if she's not reminding me you know I I forget so she's concerned about my my early aging I we can't all look as young as you been. I don't think You're a programmer way after is just stop going outside. It's very natural.
+我的意思是，那是一个口误。虽然我认为防晒乳液、防晒霜、防晒块，它们都很好。但老实说，我不是……我是世界上最后一个你应该……我让她负责我的护肤程序，如果她不提醒我，你知道，我会忘记，所以她担心我的早期衰老。我们不能都像你一样看起来那么年轻，Ben。我不认为你是一个程序员，之后只是停止出门。这很自然。
+
+51
+00:27:05.000 --> 00:27:25.000
+That's the secret to aging well is just don't go out much. I really like being outside though. It's nice to be outside. But listen to Ben. Listen to my fiance. Wear sunscreen or block or lotion. Be sure to check these show notes either in your podcast app or at adspthepodcast.com for links to anything
+这就是衰老得好的秘诀，只是不要多出门。但我真的很喜欢在外面。在外面很好。但听Ben的。听我未婚妻的。涂防晒霜或防晒块或乳液。请务必在你的播客应用程序中或在adspthepodcast.com上查看这些节目笔记，以获取任何链接
+
+52
+00:27:25.000 --> 00:27:30.000
+We mentioned in today's episode as well as a link to a get-up discussion where you can leave thoughts comments and questions Thanks for listening. We hope you enjoyed and have a great day. I am the anti brace There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+我们在今天的节目中提到的，以及一个GitHub讨论的链接，你可以在那里留下想法、评论和问题。感谢收听。我们希望你喜欢并祝你有美好的一天。我是反括号。这一集还没有评论。点击转录中的任何句子来留下评论。

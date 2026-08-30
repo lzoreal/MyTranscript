@@ -1,0 +1,171 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:30.000
+There are three types of algorithms. There are serial algorithms, and there are parallel algorithms. The third category, the third thing, is a cooperative algorithm. I guess I was in the nascency of my parallel thinking, because before I joined invidia, I was a serial thinker. I only knew about Category 1, and then I joined MVIDIA. And it probably took me a year or two, really to convert to parallel algorithm thinking. But I still have not developed cooperative.
+算法有三种类型。有串行算法，也有并行算法。第三类，第三种东西，是协作算法。我想我当时正处于并行思维的萌芽期，因为在加入英伟达之前，我是一个串行思维者。我只知道第一类，然后我加入了英伟达。我大概花了一两年时间，才真正转变为并行算法思维。但我还没有开发出协作算法思维。
+
+2
+00:00:30.000 --> 00:01:20.000
+algorithm thinking. The beautiful thing about the parallel algorithms level is the seemingly sequential nature. The seemingly sequential nature is key. When I do reach for Cub, I reach for device algorithms. Welcome to ADSP, the podcast, episode 258 recorded on September 23rd, 2025. My name is Connor, and today with my co-host, Bryce, we record live from Norway right before NDC TechTown. In this conversation, Bryce explains his taxonomy of algorithms, parallel, serial, and cooperative. What's your mental model for the taxonomy of algorithms?
+并行算法层面的美妙之处在于其看似顺序的本质。看似顺序的本质是关键。当我使用 Cub 时，我使用的是设备算法。欢迎收听 ADSP 播客，这是 2025 年 9 月 23 日录制的第 258 期节目。我是 Connor，今天我和我的联合主持人 Bryce 在挪威 NDC TechTown 大会前夕进行现场录制。在这次对话中，Bryce 解释了他的算法分类法：并行、串行和协作。你对算法分类的思维模型是什么？
+
+3
+00:01:20.000 --> 00:01:50.000
+Because I guarantee you, because thrust, I feel like our listeners can relate to, even if they've never touched thrust, because a lot of our listeners are C++ people. and even if they're not C++ plus people, they're Russ people, they're Python people. They know the equivalence of a rotate, a copy, or whatever. But then as soon as you drop down into block-aware algorithms, so what's the taxonomy? And we've got to start there because you lost me and probably some of our listeners.
+因为我向你保证，因为 Thrust，我觉得我们的听众会有共鸣，即使他们从未接触过 Thrust，因为我们的很多听众都是 C++ 从业者。即使他们不是 C++ 从业者，他们也是 Rust 从业者，是 Python 从业者。他们知道 rotate、copy 等操作的等价物。但一旦你深入到块感知算法，那么分类法是什么？我们必须从这里开始，因为你把我，可能还有一些听众都绕晕了。
+
+4
+00:01:50.000 --> 00:02:28.000
+Bryce looks excited, folks. There are three types of algorithms. There are serial algorithms in which a single thread calls the algorithm and a single thread performs the algorithm and the result is returned to a single thread. That's what we're all familiar with. Yes. Then there are parallel algorithms in which let's start with cooperative algorithms said. No, we'll start with parallel algorithms. We'll make more sense of people here. Then there are parallel algorithms where you have the appearance of serial execution and a parallel algorithm and in our nomenclature.
+伙计们，Bryce 看起来很兴奋。算法有三种类型。有串行算法，其中单个线程调用算法，单个线程执行算法，结果返回给单个线程。这就是我们都熟悉的。是的。然后是并行算法，其中……让我们从协作算法开始说起。不，我们从并行算法开始。这对大家来说更有意义。然后是并行算法，在我们的命名法中，并行算法具有串行执行的外观。
+
+5
+00:02:28.000 --> 00:03:22.000
+in like thrust and in the C++ standard parallel algorithms you have a single thread that a single caller that invokes the algorithm and the algorithm then creates or acquires parallel execution resources and then runs the result runs the computations on those parallel resources that collection of threads and then that produces a result and then that result is is returned to the caller in thrust and in the C++ standard algorithms, it is returned asynchronously. It's just the return value of the invocation, and so it's completely seemingly sequential. But you could also imagine that this model also could apply to an asynchronous API, something that returns a future or a sender. But the idea is that there's a single caller,
+在像 Thrust 和 C++ 标准并行算法中，你有一个单线程，一个调用者调用该算法，然后该算法创建或获取并行执行资源，然后在这些并行资源（即线程集合）上运行计算，产生结果，然后将结果返回给调用者。在 Thrust 和 C++ 标准算法中，它是异步返回的。它只是调用的返回值，所以它看起来完全是顺序的。但你也可以想象，这种模型也适用于异步 API，即返回 future 或 sender 的东西。但核心思想是有一个单一的调用者，
+
+6
+00:03:22.000 --> 00:03:43.000
+a single thread initiates the operation. The third category, the third thing, is a cooperative algorithm. In a cooperative algorithm, multiple threads decide to participate. So multiple threads call the primitive at the same time.
+一个单线程发起操作。第三类，第三种东西，是协作算法。在协作算法中，多个线程决定参与其中。因此，多个线程同时调用该原语。
+
+7
+00:03:43.000 --> 00:04:06.000
+And no execution resources are created or acquired by a cooperative algorithm. Instead, the calling threads that have called into this primitive, they donate their resources. So, like, examples of this is, like, if people are familiar with MPI programming,
+协作算法不会创建或获取任何执行资源。相反，调用此原语的线程会贡献出它们自己的资源。所以，举个例子，如果人们熟悉 MPI 编程，
+
+8
+00:04:06.000 --> 00:04:24.000
+like MPI collectives, like an MPI reduce, or, you know, an MPI barrier, those are collective algorithms where all of the different ranks call it together. Or in... All of the different processes in a distributed computation, which are called ranks,
+比如 MPI 集合通信，像 MPI reduce，或者 MPI barrier，这些都是集合算法，所有不同的 rank 一起调用它。或者在……分布式计算中所有不同的进程，被称为 rank，
+
+9
+00:04:24.000 --> 00:04:38.000
+in the distributed world or you know if you're doing like shared memory IPC like you've got a you know you have a interprocess communication like you're using shared memory
+在分布式世界中，或者如果你在做共享内存 IPC，比如你有进程间通信，就像你在使用共享内存，
+
+10
+00:04:38.000 --> 00:04:53.000
+to have multiple processes communicate and they're all invoking the same thing they're all participating in some collective operation together that's a cooperative algorithm in the case of CUDA when CUDA you launch these kernels which are parallel functions that are
+让多个进程进行通信，它们都在调用相同的东西，它们都在共同参与某种集合操作，这就是协作算法。在 CUDA 的情况下，当你启动这些内核时，它们是并行函数，
+
+11
+00:04:53.000 --> 00:05:43.000
+executed by all the threads at once, within those kernels, you can invoke a cooperative algorithm, like a reduction, for example, where a bunch of threads all decide to participate in the reduction. Instead of having an input array, the inputs are distributed among the threads, and each thread contributes a value into the reduction, or maybe it's reduced some values locally. But each thread gives one piece of the input. to the reduction, and all of the threads have to contribute their piece of the input and then contribute to the calculation. And these cooperative algorithms are the building blocks that we use to implement the parallel algorithms. And I was speaking in terms of the cooperative level
+由所有线程同时执行，在这些内核中，你可以调用协作算法，例如归约（reduction），一群线程都决定参与归约。与其拥有一个输入数组，不如将输入分布在线程之间，每个线程为归约贡献一个值，或者可能是在本地归约一些值。但每个线程都为归约贡献输入的一部分，并且所有线程都必须贡献它们那部分的输入，然后参与计算。这些协作算法是我们用来实现并行算法的构建块。我刚才是在协作层面上谈论的，
+
+12
+00:05:43.000 --> 00:06:43.000
+because that's how I often think about algorithms these days. I suppose that's always been how I've thought about algorithms, I think that's how I default to thinking about it. You default to thinking about it at the serial or the parallel level. I've been, I always think about it at this level, but then when we converse, I often raise it up to the level that you're used to thinking about it. And you're usually thinking about it at a higher level, a functional level, and then lowering it down for me. Well, so what I'll say, folks, this is an inflection point in the podcast when you i mean actually i don't know when you started listening but back when we started this podcast in 2020 was it 20 was it 19 right 19 i think it was definitely
+因为这就是我这些天思考算法的方式。我想我一直以来都是这样思考算法的，我想这就是我的默认思维方式。你默认在串行或并行层面思考。我一直在这个层面思考，但当我们交谈时，我经常把它提升到你习惯思考的层面。你通常在更高的层面，即函数式层面思考，然后为我将其降低。好吧，那么我要说的是，伙计们，这是播客的一个转折点，当你……其实我不知道你是什么时候开始听的，但当我们 2020 年开始这个播客时，是 20 年还是 19 年？对，19 年，我想绝对是
+
+13
+00:06:43.000 --> 00:07:30.000
+well actually i think we said this before and then we looked it up and it was like oh no it was actually in midst of the pandemic but i thought you we decided we were going to to start it right after we went to Belfast. And that was pre-pandemic. That was 2019. But we're about to find out, folks, 252 episodes. 2020. I was wrong. I knew I was wrong because we've done this before. 2020 November, which was post-pandemic. I think we talked about it at Belfast, but then I didn't start it until a year later. Anyways, when we started recording this, I was, I guess I was in the nascency of my parallel thinking because before I joined invidia I was a serial thinker. I only knew about category one and then I joined invidia and it probably took me a year
+其实我想我们之前说过这个，然后我们查了一下，结果是，哦不，实际上是在疫情期间，但我以为我们决定在去贝尔法斯特之后就开始。那是疫情前。那是 2019 年。但我们马上就会知道，伙计们，252 期节目。2020 年。我错了。我知道我错了，因为我们之前做过这个。2020 年 11 月，那是疫情后。我想我们在贝尔法斯特谈过，但我直到一年后才开始。总之，当我们开始录制这个节目时，我猜我正处于并行思维的萌芽期，因为在加入英伟达之前，我是一个串行思维者。我只知道第一类，然后我加入了英伟达，大概花了一年
+
+14
+00:07:30.000 --> 00:08:23.000
+or two really to convert to parallel algorithm thinking but I still have not developed cooperative algorithm thinking because I primarily work in thrust and when I do work in cub i feel like it's the uh captain morgan you know when i do drink i drink whatever he is the life of parties he has never attended if he were to punch you in the face he would have to fight off the strong urge to thank him sharks have a week dedicated to him he is the most interesting man in the world i don't always drink beer but when i do i find for those sackies. Stay thirsty, my friends.
+或两年才真正转变为并行算法思维，但我仍然没有开发出协作算法思维，因为我主要在 Thrust 中工作，而当我使用 Cub 时，我觉得它就像是……摩根船长，你知道，当我喝酒时，我喝任何酒。他是他从未参加过的派对的灵魂人物。如果他打你的脸，他必须努力克制住感谢他的冲动。鲨鱼有专门为他设立的一周。他是世界上最有趣的男人。我不总是喝啤酒，但当我喝的时候，我喜欢那些萨基酒。保持渴望，我的朋友们。
+
+15
+00:08:23.000 --> 00:08:55.000
+When I do reach for Cub, I reach for device algorithms, which is the equivalent of thrust. The only algorithms I reach for are the device segmented reduce and device fixed segment reduce, et cetera. Bryce has something to have. When we started the podcast, I was at the place that you are currently at. I was a few years into Nvidia, but I was still thinking at the parallel. algorithm level, not at the cooperative algorithm level. Or maybe to some degree I was starting to think at both.
+当我使用 Cub 时，我使用的是设备算法，这相当于 Thrust。我使用的唯一算法是设备分段归约（device segmented reduce）和设备固定分段归约（device fixed segment reduce）等等。Bryce 有话要说。当我们开始这个播客时，我处于你目前所处的位置。我在英伟达工作了几年，但我仍然在并行算法层面思考，而不是在协作算法层面。或者也许在某种程度上我开始两者都思考了。
+
+16
+00:08:55.000 --> 00:09:50.000
+But having, now five years later, I think about things first from the cooperative algorithm level and then from the parallel algorithm level. And I think you are very close to jumping off the deep end because of the project that you're working on, I think that a year or two from now, you're going to be where I am now. Because right now, you are where I was a couple of years ago. I can almost guarantee you that's true, because the cub block primitives are what you use when you're writing kernels. And I am about to start doing that, folks. We've only got segmented scans and reductions, and we need more.
+但现在五年过去了，我首先从协作算法层面思考，然后再从并行算法层面思考。我认为你离跳入深水区已经很近了，因为你正在做的项目，我认为一两年后，你就会达到我现在的位置。因为现在，你处于我几年前的位置。我几乎可以保证这是真的，因为当你编写内核时，你使用的就是 Cub 块原语。伙计们，我正要开始那样做。我们只有分段扫描和归约，我们需要更多。
+
+17
+00:09:50.000 --> 00:10:17.000
+And also, we don't need the segments. We need fixed segments. We need row-wise and column-wise, everything. The way we want people to program is at the parallel algorithm level, because that is the level that's purest and closest to functional programming and array programming. At the cooperative level,
+而且，我们不需要分段。我们需要固定分段。我们需要行向和列向，所有的一切。我们希望人们以并行算法层面进行编程，因为那是纯粹的、最接近函数式编程和数组编程的层面。在协作层面，
+
+18
+00:10:17.000 --> 00:10:54.000
+you have to think about threads in synchronization. At the cooperative level, you're programming threads. And so it's always going to be an implementation detail for the work that we do. It's never going to be the programming model that we expose up to people. And so what you just said, you think that I'm right, that you'll have to do that because you need X, you need Y and Z. That's because you know that you need those things to be able to implement the backend. of, like, to be able to implement the algorithms that you want, not as a programming model that you'd expose to users.
+你必须考虑线程和同步。在协作层面，你是在对线程进行编程。所以对于我们所做的工作来说，它永远是一个实现细节。它永远不会是我们向人们公开的编程模型。所以你刚才说的，你认为我是对的，你必须这样做，因为你需要 X，你需要 Y 和 Z。那是因为你知道你需要这些东西才能实现后端，比如，能够实现你想要的算法，而不是作为一种向用户公开的编程模型。
+
+19
+00:10:54.000 --> 00:11:15.000
+So I think that in terms of this podcast, we will continue to primarily talk about things in terms of the parallel algorithms level, because the beautiful thing about the parallel algorithms level is the seemingly sequential nature. The seameas and the sequential nature is key. I mean, and this is, Bryce just admitted something that he may or may not have wanted to admit,
+所以我认为，就这个播客而言，我们将继续主要从并行算法层面谈论事物，因为并行算法层面的美妙之处在于其看似顺序的本质。看似顺序的本质是关键。我的意思是，这是……Bryce 刚刚承认了一些他可能想承认也可能不想承认的事情，
+
+20
+00:11:15.000 --> 00:11:43.000
+is that he said, you know, We want people to program at the functional or array level. And so he just said, of course, off mic. And this is the point. You know, we are C++, we are Kuda C++ programmers, developers, developers. But the array programming model, the functional programming model, it's just easier to reason about. Everybody that's hate non-all, Haskell, O'Connell, guess what? It's a better model.
+那就是他说，你知道，我们希望人们在函数式或数组层面进行编程。所以他刚才在麦克风外说了。这就是重点。你知道，我们是 C++，我们是 CUDA C++ 程序员，开发者，开发者。但是数组编程模型，函数式编程模型，它只是更容易推理。所有讨厌 Haskell、OCaml 的人，猜猜怎么着？这是一个更好的模型。
+
+21
+00:11:43.000 --> 00:11:58.000
+It's just not performant. But guess what? we hear a promise to the listener is we're going to make the easy way be the efficient way and that's the dream that's the dream and yes there are trade-offs but we're going to make it happen
+只是它性能不够好。但猜猜怎么着？我们对听众的承诺是，我们将让简单的方式成为高效的方式，这就是梦想，这就是梦想，是的，会有权衡，但我们会实现它。
+
+22
+00:11:58.000 --> 00:12:13.000
+bice's got something to add it's not always the case that it's less efficient to write the functional or the array or just the higher level code if you write the lower level code you are baking in certain details and you're making certain assumptions about how the
+Bryce 有话要补充。编写函数式、数组式或仅仅是更高级的代码并不总是效率较低。如果你编写底层代码，你就是在固化某些细节，并且你对你正在执行的环境的本质做出了某些假设。
+
+23
+00:12:13.000 --> 00:12:57.000
+about like the nature of what you're executing on. Like, if you're programming to threads, as you do in a cooperative model, then you're making certain assumptions about quantities of threads and how those threads are going to communicate with each other. Whereas if you express things at the array slash functional level, you're expressing things purely in terms of like the requirements. You're not saying anything about how it needs to be implemented. Right. Like, like it's, it's just it's descriptive versus prescriptive right array and functional is descriptive you're describing what it does whereas cooperative is prescriptive you're saying it must be done this way and
+比如，如果你像在协作模型中那样针对线程进行编程，那么你就会对线程的数量以及这些线程将如何相互通信做出某些假设。而如果你在数组/函数式层面表达事物，你纯粹是根据需求来表达事物。你没有说任何关于它需要如何实现的内容。对。就像……它是描述性的与规定性的，对吧？数组和函数式是描述性的，你在描述它做什么，而协作是规定性的，你在说它必须以这种方式完成，并且
+
+24
+00:12:57.000 --> 00:13:23.000
+I think the history of parallel programming has actually shown that descriptive models tend to win over prescriptive models there it is folks array functional it's the future and we'll probably talk about cooperative and block algorithms, but I currently don't understand them, so I'm here to hold your hand. You've got to talk about your soft max. I know, so I was, Bryce just said off, Mike,
+我认为并行编程的历史实际上已经表明，描述性模型往往胜过规定性模型。就是这样，伙计们，数组、函数式，这就是未来，我们可能会谈论协作和块算法，但我目前还不理解它们，所以我在这里牵着你的手。你得谈谈你的 Softmax。我知道，所以我当时……Bryce 刚才在麦克风外说，
+
+25
+00:13:23.000 --> 00:13:38.000
+we got to talk about your soft max. Guess what? We're at the 47 minute mark. And the next time, Bryce and I are one-on-one recording. Tomorrow night, today is Tuesday, September 23rd. Tomorrow will be September 24th. Actually, wait, I'm making a promise I can't keep.
+我们得谈谈你的 Softmax。猜猜怎么着？我们已经录了 47 分钟了。下次，我和 Bryce 一对一录音。明天晚上，今天是 9 月 23 日星期二。明天将是 9 月 24 日。其实，等等，我做了一个我无法兑现的承诺。
+
+26
+00:13:38.000 --> 00:14:05.000
+The next time where we're going to record is actually probably going to be in person at, uh, under the C in the Netherlands. So once we finished recording there, I mean, maybe we might steal away and talk about softmax, but it might be after C++ under the sea, maybe we'll steal away, find some time to talk about softmax, but I've been working on Ashwin posted internally about a row-wise soft max and numpy and what his aspirations for that were. I tried to do it in, I think I can mention it now.
+我们下次录音的地方可能实际上是在荷兰的 C++ Under the Sea 大会现场。所以一旦我们在那里录制完成，我的意思是，也许我们可以溜出来谈谈 Softmax，但那可能是在 C++ Under the Sea 之后，也许我们会溜出来，找点时间谈谈 Softmax，但我一直在研究 Ashwin 在内部发布的关于 NumPy 中行向 Softmax 的内容，以及他对该功能的期望。我试着去做它，我想我现在可以提一下了。
+
+27
+00:14:05.000 --> 00:14:33.000
+It's... You just heard a record scratch. Bryce made me cut everything I just said. We'll be talking about softmax and a special project that we will be announcing on the pod. Bryce has something to say. Avid listeners will know that I have been hinting and suggesting at least two or three times that eventually on this podcast, where we are clearly obsessed with AI, we are going to have to train some sort of machine learning model.
+那是……你刚刚听到了一声唱片刮擦声。Bryce 让我剪掉了我刚才说的一切。我们将讨论 Softmax 以及我们将在播客上宣布的一个特别项目。Bryce 有话要说。热心的听众会知道，我已经暗示并建议了至少两三次，最终在这个我们显然痴迷于 AI 的播客上，我们将不得不训练某种机器学习模型。
+
+28
+00:14:33.000 --> 00:15:12.000
+We're going to have to go and build something and get under the hoods. And Connor doesn't even realize that he started down this. exploration, because he's gotten nerd sniped into implementing this softmax. Softmax, which is one of the key ML algorithms at the heart of many attention mechanisms, which is the... I'm not saying I nerd snipe. I'm saying Ashwin nerdsnipe you, but softmax is at the key of many attention algorithms, such as flash attention. Four operations. Exponential division. I understand. But, and I told Connor,
+我们将不得不去构建一些东西并深入了解其内部。Connor 甚至没有意识到他已经开始了这次探索，因为他被“书呆子狙击”（nerd sniped）去实现这个 Softmax 了。Softmax，这是许多注意力机制核心的关键 ML 算法之一，它是……我不是说我被书呆子狙击了。我是说 Ashwin 狙击了你，但 Softmax 是许多注意力算法（如 Flash Attention）的核心。四个操作。指数、除法。我明白。但是，我告诉 Connor，
+
+29
+00:15:12.000 --> 00:15:51.000
+this is cool. This will get people very interested in your project if you show them an efficient softmax. But what it'll get people even more interested is if you can show them how to implement flash attention in your thing. And then Connor's going to go and do that. And then next after that, we're going to have to go and implement some sort of open source model, inference for some sort of open source model and his thing. And then we're going to end up talking more and more about this. And before you know it, folks, this is going to be a machine learning podcast. And Connor's going to have implemented some machine learning models in his thing i tell you i predict right now one to two years from now that's where we'll be training will come after the infants though training will come after the
+这很酷。如果你向人们展示一个高效的 Softmax，这会让他们对你的项目非常感兴趣。但更让他们感兴趣的是，如果你能向他们展示如何在你的东西中实现 Flash Attention。然后 Connor 就会去那样做。然后在那之后，我们将不得不去实现某种开源模型，为某种开源模型进行推理，并将其放入他的东西中。然后我们最终会越来越多地谈论这个。在你知道之前，伙计们，这将成为一个机器学习播客。而 Connor 将在他的东西中实现一些机器学习模型。我告诉你，我预测现在一到两年后，那就是我们将要达到的地步。训练会排在推理之后。
+
+30
+00:15:51.000 --> 00:16:23.000
+inference i got nothing to say folks we got a conference to go to tomorrow oh man do you think you have do you think you have the energy for it starting to rally i'm starting to rally i was i was feeling drained over the weekend but now i'm starting to rally today i slept until 730 the day before that i was up at 545. Luckily, my plan tomorrow is also to sleep in a 7.45. So I should be good. I do plan to attend at least the start of the keynote. It's not Hana.
+推理。我没什么可说的了，伙计们，我们明天要去参加一个会议。哦天哪，你觉得你有精力吗？开始恢复了。我开始恢复了。我周末感觉被掏空了，但现在我今天开始恢复了。我睡到了 7:30，前一天我 5:45 就起床了。幸运的是，我明天的计划也是睡到 7:45。所以我应该没问题。我计划至少参加主题演讲的开头。不是 Hana。
+
+31
+00:16:23.000 --> 00:16:45.000
+You predicted it correctly. At one point, was it yesterday, two days ago? You saw that there was a second keynote that had been added. And I kid you not, Bryce said, hmm, I wonder if Hana can't make it anymore. And sure enough, a day later, Hana's keynote was removed and it was replaced by another keynote. Anyways, how are you feeling about the conference tomorrow?
+你预测得很准。在某个时候，是昨天还是两天前？你看到增加了一个第二个主题演讲。我没骗你，Bryce 说，嗯，我想知道 Hana 是不是不能来了。果然，一天后，Hana 的主题演讲被取消了，取而代之的是另一个主题演讲。总之，你对明天的会议感觉如何？
+
+32
+00:16:45.000 --> 00:16:59.000
+You got the energy? I'm relian. I'm relian. All right, folks. You will hear from us in a week on Wednesday, September 24th, live from the NDC Social. Until then. Be sure to check these show notes,
+你有精力吗？我正在恢复。我正在恢复。好了，伙计们。我们会在一周后的 9 月 24 日星期三，从 NDC Social 现场为您带来节目。在那之前。请务必查看这些节目说明，
+
+33
+00:16:59.000 --> 00:17:11.000
+either in your podcast app or at ADSP thepodcast.com for links to anything we mentioned in today's episode, as well as a link to a get-up discussion where you can leave thoughts, comments, and questions. Thanks for listening. We hope you enjoyed. and have a great day.
+无论是在你的播客应用中，还是在 ADSPthepodcast.com 上，获取我们今天节目中提到的任何内容的链接，以及一个 GitHub 讨论链接，你可以在那里留下想法、评论和问题。感谢收听。希望你喜欢。祝你有美好的一天。
+
+34
+00:17:11.000 --> 00:17:16.000
+Low quality, high quantity. That is the tagline of our podcast. That's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+低质量，高数量。这就是我们播客的标语。那不是标语。我们的标语是“混乱中点缀着信息”。本期节目还没有评论。点击转录中的任何句子即可发表评论。

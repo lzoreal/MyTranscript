@@ -1,0 +1,476 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:20.000
+For anybody who's familiar with numpy style broadcasting, where when you're working with two arrays of different already... It's erity, not arty? Oh, screw. Artie sounds like Ariana Grande's cousin. All right, we're cooking here. We might have explained the scatter completely wrong. We're just two men sitting here talking into chat GPT.
+对于任何熟悉 numpy 风格广播的人来说，当你处理两个已经不同的数组时……是 erity，不是 arty？哦，去他的。Artie 听起来像 Ariana Grande 的表亲。好吧，我们正在这儿瞎琢磨。我们可能完全解释错了 scatter（散布）。我们只是两个坐在这里对着 ChatGPT 说话的人。
+
+2
+00:00:20.000 --> 00:00:49.000
+What I should have been saying is gather, but I'm not even confident about that because my confidence is shot because I totally messed up the description of an algorithm. Get how old to yourself, man. we're cooking here. And so once again, I shall tilt it windmills on my quest to figure out whether you can do this on a single-pass algorithm. Is it poorly named? Maybe it's actually, it's actually well-named, and scatter is poorly named. The point being is I don't like the asymmetry between scatter and permutation iterator. When you launch a kuda kernel, you have to specify how many
+我本该说的是 gather（收集），但我甚至对此都没有信心，因为我的自信心已经崩溃了，因为我完全搞砸了算法的描述。别太难为自己了，伙计。我们正在这儿瞎琢磨。所以再一次，我将像堂吉诃德一样挑战风车，去探究你是否可以用单遍算法来完成这个任务。它命名不当吗？也许它实际上命名得很好，而 scatter 命名不当。重点是我不喜欢 scatter 和 permutation iterator（置换迭代器）之间的不对称性。当你启动一个 CUDA 内核时，你必须指定你运行了多少
+
+3
+00:00:49.000 --> 00:01:37.000
+blocks you're running with. This, this microphone's a little bit waterproof, right? I don't know. Okay. It's starting to rain now, folks. We might need to kill it. Welcome to ADSP, the podcast, Episode 256 recorded on September 20th, 2025. My name is Connor, and today with my co-host, Bryce, we continue to record live from the streets of Copenhagen. We continue our conversation from last week about the replicate algorithm and two other algorithms, scattering. and gather. All right, folks, so right off the bat, I do need to apologize.
+个线程块。这个麦克风有点防水，对吧？我不知道。好吧，伙计们，开始下雨了。我们可能需要结束了。欢迎来到 ADSP 播客，第 256 集，录制于 2025 年 9 月 20 日。我是 Connor，今天和我的联合主持人 Bryce 一起，我们继续在哥本哈根街头进行现场录制。我们继续上周关于 replicate（复制）算法以及另外两个算法 scattering（散布）和 gather（收集）的对话。好吧，伙计们，首先我确实需要道歉。
+
+4
+00:01:37.000 --> 00:02:08.000
+In this video, for the majority of it, I refer to the scatter algorithm, when really what I meant was gather, and I got incredibly confused. We rectify this at some point in the conversation. Scatter is an algorithm that exists in thrust, doesn't exist in the C++ standard library, but I'm sure it exists in other libraries and languages. You're given a sequence and, like, your data sequence, which could be, you know, numbers, whatever, any type. And then you're given, I believe it's indices.
+在这个视频中，大部分时间我提到的都是 scatter 算法，但实际上我指的是 gather，我感到非常困惑。我们在对话的某个时刻纠正了这一点。Scatter 是 Thrust 中存在的一种算法，C++ 标准库中不存在，但我相信它存在于其他库和语言中。你得到一个序列，比如你的数据序列，它可以是数字，任何类型。然后你得到，我相信是索引。
+
+5
+00:02:08.000 --> 00:02:29.000
+And I'm going to feel bad if this is incorrect. But I'm almost positive. It's a sequence of integers that correspond to indices that are between zero and one minus the length of your data sequence. And, or that's what the values of the indices have to be. Obviously, it has to be a valid index. and the length of your I believe it's what they call
+如果这是错的，我会感到难过。但我几乎可以肯定。它是一个整数序列，对应于介于 0 和数据序列长度减 1 之间的索引。或者这就是索引值必须满足的条件。显然，它必须是一个有效的索引。而且长度，我相信这就是他们所说的
+
+6
+00:02:29.000 --> 00:02:40.000
+an index map the length of that all right perfect let us sit is this going to be wet though although this is a it's a theater which is not open
+索引映射，它的长度，好吧，太完美了，让我们坐下，这会湿吗？虽然这是一个剧院，但没有开放
+
+7
+00:02:40.000 --> 00:02:54.000
+it's clearly a restaurant but hopefully just no one will come in service although this is wet as well these ones are dry well these can't possibly be wet but these tables are not clean so I think this is totally fine no one's going to come in service here
+这显然是一家餐厅，但希望不会有人来服务，虽然这里也湿了，这些桌子是干的，好吧，这些不可能湿，但这些桌子不干净，所以我认为这完全没问题，不会有人来这里服务
+
+8
+00:02:54.000 --> 00:03:07.000
+a little dark but that's okay we got a nice view so the length of your so you've got your data and you've got an index map that can be any length you want so if the length of our data is three
+有点暗，但没关系，我们视野不错，所以你的长度，所以你有你的数据，你有一个可以是任何长度的索引映射，所以如果我们的数据长度是 3
+
+9
+00:03:07.000 --> 00:03:20.000
+ABC we can have an index map that consists of just a single one and what it does is it scatters the element at index one to your output sequence so if you scatter
+ABC，我们可以有一个仅由单个 1 组成的索引映射，它的作用是将索引 1 处的元素散布到你的输出序列中，所以如果你散布
+
+10
+00:03:20.000 --> 00:03:53.000
+if you so scatter you've got your data and you've got an index map, which is a sequence of indices. And scatter basically goes, it iterates through the indices and then copies them to... So it's like a copy if, except that a copy if just takes a predicate, and then it's a stable copy where the relative orders are the same, obviously, because you're just getting rid of some of the values, and then anything that corresponds...
+如果你散布，你有你的数据，你有一个索引映射，它是一个索引序列。Scatter 基本上是遍历索引，然后将它们复制到……所以它就像一个 copy_if，除了 copy_if 只是采用一个谓词，然后它是一个稳定的复制，相对顺序显然是相同的，因为你只是去掉了其中的一些值，然后任何对应于……
+
+11
+00:03:53.000 --> 00:04:25.000
+This is not how permutation iterator works. I'm getting a permutation iterator. I'm trying to explain that sequence, for those that aren't familiar with, thrust sequence, thrust sequence is the equivalent of stood iota, the algorithm in C++. It generates incrementing integers starting from a value, typically zero. And in C++20, we added the view iota, which does the exact same thing just lazily. In thrust, the two names for these things are thrust sequence and the thrust counting iterator. The same way that there's a relationship between sequence and counting iterator,
+这不是 permutation iterator 的工作方式。我正在搞混 permutation iterator。我试图解释那个序列，对于那些不熟悉 Thrust sequence 的人来说，Thrust sequence 等同于 C++ 中的 std::iota 算法。它生成从某个值（通常为 0）开始递增的整数。在 C++20 中，我们添加了 view::iota，它以惰性方式执行完全相同的操作。在 Thrust 中，这两个东西的名字是 thrust::sequence 和 thrust::counting_iterator。就像 sequence 和 counting_iterator 之间存在关系一样，
+
+12
+00:04:25.000 --> 00:05:23.000
+there's a relationship between scatter and the permutation iterator. So scatter takes your data and an index map and it copies from the indices and the values that correspond to those to an output sequence. So if you've got ABC and 1, you just get the character B. If you've got ABC and 321, you end up reversing your sequence. If you have ABC 1-2-3-2-1, your output sequence is ABC CBA. You're basically, you know, it's pretty straightforward. it. A permutation iterator, potentially better named as the scatter iterator, is the same thing, but you're just bundling an iterator that points to your data and an iterator that points to this index map. That's it. And so if you're trying to do any kind of operation lazily, that is a specialization or some form of permutation, you can do it with a permutation iterator. You need to reverse a sequence.
+scatter 和 permutation iterator 之间也存在关系。所以 scatter 接收你的数据和一个索引映射，它从索引和对应于这些索引的值复制到一个输出序列。所以如果你有 ABC 和 1，你只会得到字符 B。如果你有 ABC 和 321，你最终会反转你的序列。如果你有 ABC 和 1-2-3-2-1，你的输出序列是 ABC CBA。你基本上，你知道，这很简单。permutation iterator，可能命名为 scatter iterator 会更好，是同样的东西，但你只是捆绑了一个指向你的数据的迭代器和一个指向这个索引映射的迭代器。就是这样。所以如果你试图以惰性方式进行任何类型的操作，即某种特化或某种形式的置换，你可以用 permutation iterator 来完成。你需要反转一个序列，
+
+13
+00:05:23.000 --> 00:05:39.000
+you can do that with a permutation iterator. You need to cycle a sequence. You can do that with a permutation iterator. You need to replicate a sequence. You can do that with a permutation iterator. A lot of the times, it's not the most performant way to do this stuff because of the fact that a permutation iterator is so generic. There's some overhead there.
+你可以用 permutation iterator 来完成。你需要循环一个序列，你可以用 permutation iterator 来完成。你需要复制一个序列，你可以用 permutation iterator 来完成。很多时候，这不是执行这些操作性能最高的方法，因为 permutation iterator 太通用了。这其中有一些开销。
+
+14
+00:05:39.000 --> 00:06:19.000
+But the point being is that a permutation iterator, is it poorly named? Maybe it's actually well-named and Scatter is poorly named. The point being is I don't like the asymmetry between scatter and permutation iterator. And anyways, this is all to say that the very first implementation of the replicate integer overload just made a call to the permutation iterator where the index map was just cycling indices, which how do you do cycling indices in thrust? You can just do a counting iterator composed with a transform iterator that does modulus over the length of your sequence.
+但重点是 permutation iterator，它命名不当吗？也许它实际上命名得很好，而 Scatter 命名不当。重点是我不喜欢 scatter 和 permutation iterator 之间的不对称性。总之，这一切都是为了说明 replicate 整数重载的第一个实现只是调用了 permutation iterator，其中索引映射只是循环索引，那么你在 Thrust 中如何进行循环索引呢？你只需要做一个 counting_iterator，并组合一个对序列长度进行取模的 transform_iterator。
+
+15
+00:06:19.000 --> 00:06:57.000
+So you generate the numbers. You know, if you want to replicate it, well, I guess, well, actually, that's a good point. Oh, no, right, because N is the same for everything, right? So if you're trying to replicate everything three times, you do a counting iterator, zero to nine, or zero to eight inclusive, and then you do modulus three, and then you're going to end up with zero one two, zero one two, zero one two as your index map, and that is the equivalent of a replicate when you apply, you know, a copy if using that part. Actually, that's a great way of framing it. Scatter can be implemented and probably is implemented. Actually, I don't know. I don't know that.
+所以你生成数字。你知道，如果你想复制它，好吧，我想，好吧，实际上，这是一个很好的观点。哦，不，对了，因为 N 对所有东西都是一样的，对吧？所以如果你试图把所有东西复制三次，你做一个 0 到 9（或 0 到 8 包含）的 counting_iterator，然后你做模 3，然后你最终会得到 0 1 2, 0 1 2, 0 1 2 作为你的索引映射，当你应用 copy_if 使用该部分时，这等同于 replicate。实际上，这是一个很好的框架方式。Scatter 可以被实现，而且可能就是这样实现的。实际上，我不知道。我不知道那个。
+
+16
+00:06:57.000 --> 00:07:48.000
+As thrust copy if with a permutation iterator. That's just what scatter is. Anyways, I'm going to stop talking. You're doing a good job of explaining it. I would, yeah, for the integer version, I mean, I guess you can just think of it as just being that you're copying from the original. array, but like you've, I have an array of length, you know, in, and then I want to replicate each element m times. Then I've got an array of length n times m. And when I index into that array of length n times m, I'm indexing into the original array of length in, and I'm just moduloing
+作为带有 permutation iterator 的 thrust::copy_if。这就是 scatter 的本质。总之，我不说了。你解释得很好。我会，是的，对于整数版本，我的意思是，我想你可以把它看作是你只是从原始数组中复制，但是就像你，我有一个长度为 n 的数组，然后我想把每个元素复制 m 次。那么我有一个长度为 n 乘以 m 的数组。当我索引到那个长度为 n 乘以 m 的数组时，我是在索引到原始长度为 n 的数组，我只是在取模
+
+17
+00:07:48.000 --> 00:08:21.000
+so that I wrap around and that's that's that's it and that's probably the fastest way to do it except I totally messed up as some of you are screaming in your head right now that doesn't make any sense because it doesn't what I just described is cycling if you're replicating you want to be doing the opposite of modulo which is integer division right so you want to go from zero to eight inclusive not to zero one two zero one two zero one two zero and two because that results in ABC ABC ABC which is cycling you want to have zero zero zero one one two two which is interdivision, and then you end up with AA, B, B, B, CCC.
+这样我就绕回来了，就是这样，这可能是最快的方法，除了我完全搞砸了，正如你们中有些人现在在心里尖叫的那样，这没有任何意义，因为它没有，我刚才描述的是循环，如果你在复制，你想要做的是取模的相反操作，也就是整数除法，对吧？所以你想要从 0 到 8 包含，而不是 0 1 2 0 1 2 0 1 2 0 2，因为这会导致 ABC ABC ABC，这是循环，你想要有 0 0 0 1 1 1 2 2 2，这是整数除法，然后你最终得到 AA, BBB, CCC。
+
+18
+00:08:21.000 --> 00:08:42.000
+Yeah, yeah, yeah, sorry, I should have also called that. You only messed up because I've been. Yeah, but, but, um, but, and permutation iterator should boil down to just being the inner drift division. Although you were saying earlier that you, wait, hit some perfor sheets, right? Permutation iterator doesn't do any of that work for you. You have to give it the index map. So it can be, it can be completely a random sequence, right?
+是的是的是的，抱歉，我也应该叫那个。你搞砸只是因为我一直在。是的，但是，但是，嗯，但是，而且 permutation iterator 应该归结为只是整数除法。虽然你刚才说你，等等，遇到了一些性能问题，对吧？Permutation iterator 不会为你做任何这些工作。你必须给它索引映射。所以它可以是，它可以完全是一个随机序列，对吧？
+
+19
+00:08:42.000 --> 00:09:03.000
+If you want to do a shuffle, uh, so, so for the index map, you're passing in some sort of transform iterator that does the division. Exactly. So the transform, it's a counting iterator with a transfer. So it's counting iterator, piped or whatever, to a transform iterator that does the integer division. And that iterator, that is the composition of those two iterators, you pass to a
+如果你想做一个洗牌，呃，所以，所以对于索引映射，你传入某种执行除法的 transform_iterator。没错。所以 transform，它是一个带有转换的 counting_iterator。所以它是 counting_iterator，通过管道或任何东西，连接到一个执行整数除法的 transform_iterator。而那个迭代器，也就是这两个迭代器的组合，你传给一个
+
+20
+00:09:03.000 --> 00:09:29.000
+permutation iterator. And so if you want, you could just do like a random shuffle by generating a random sequence of indices and then that, you know, call a copy if with that permutation iterator, and that would be a shuffle, right? You can do anything almost with a permutation iterator. You can do a copy with a permutation iterator where your index map is just a counting iterator. You wouldn't want to do it that way because that's ridiculous. But the point being is that the permutation iterator is like the most powerful of the iterators.
+permutation iterator。所以如果你愿意，你可以通过生成一个随机索引序列来做一个随机洗牌，然后，你知道，用那个 permutation iterator 调用 copy_if，那就会是一个洗牌，对吧？你几乎可以用 permutation iterator 做任何事情。你可以用 permutation iterator 做一个复制，其中你的索引映射只是一个 counting_iterator。你不会想那样做，因为那太荒谬了。但重点是 permutation iterator 是迭代器中最强大的。
+
+21
+00:09:29.000 --> 00:09:54.000
+Like if you think we've got constant iterator, we've got counting iterator, we've got transform iterator. To be an important clarification I just realized is we mentioned a replicate iterator before and we mentioned two overloads of replicate. The replicate iterator only exists for the integer version, right? Wait, wait, wait. There's no replicate iterator. There's two overloads of the replicate function. One, they both take the data sequence. One takes an integer, and the other one takes an array.
+就像如果你认为我们有 constant_iterator，我们有 counting_iterator，我们有 transform_iterator。一个重要的澄清我刚刚意识到，我们之前提到了 replicate iterator，我们提到了 replicate 的两个重载。Replicate iterator 只存在于整数版本，对吧？等等，等等。没有 replicate iterator。Replicate 函数有两个重载。一个，它们都接收数据序列。一个接收整数，另一个接收数组。
+
+22
+00:09:54.000 --> 00:10:22.000
+But, sorry, to clarify further, one could imagine writing a replicate iterator for the integer version, because you can do that lazily. I don't think you can do it for the array version. Yes, if I understood what you just said, the integer version is lazy. The array version is not. And the reason for that is because for the array version, it's trivial a priori to know ahead of time, like, the length of the sequence. And so then, thus to know, like, the integer version, you just said the array version. The integer version.
+但是，抱歉，进一步澄清，人们可以想象为整数版本编写一个 replicate iterator，因为你可以惰性地做到这一点。我不认为你可以为数组版本做到这一点。是的，如果我理解了你刚才说的，整数版本是惰性的。数组版本不是。原因是因为对于数组版本，预先知道序列的长度是微不足道的。所以，因此，整数版本，你刚才说了数组版本。整数版本。
+
+23
+00:10:22.000 --> 00:11:00.000
+It's trivial to know ahead of time the length of the sequence, and it's important to know the length of, or not just about knowing the length of sequence. It's trivial ahead of time to know the placement of, you know, of where every element's going to be in the output, whereas when you've got variable size replicates, you don't necessarily, like, it's no longer an independent problem. problem, you know, of where each element is in the output, and that makes it some form of scan, some form of copy-if. And you mentioned earlier running into perf issues with the permutation iterator.
+预先知道序列的长度是微不足道的，而且知道序列的长度很重要，或者不仅仅是关于知道序列的长度。预先知道输出中每个元素的位置是微不足道的，而当你进行可变大小的复制时，你并不一定，就像，它不再是一个独立的问题，你知道，每个元素在输出中的位置，这使得它成为某种形式的 scan（扫描），某种形式的 copy_if。你之前提到过 permutation iterator 的性能问题。
+
+24
+00:11:00.000 --> 00:11:30.000
+Was that the case? Or, I think the implementation you just described should be the optimal implementation. Using the permutation iterator, which is a very generic utility, is a, I have found a lot of the times comes with overhead because we're using a permutation iterator to do something more specific. Yeah, yeah, yeah. What we really want is a custom iterator that doesn't incur the overhead of something so generic.
+是那样吗？或者，我认为你刚才描述的实现应该是最优实现。使用 permutation iterator，这是一个非常通用的工具，我发现很多时候会带来开销，因为我们使用 permutation iterator 来做一些更具体的事情。是的，是的，是的。我们真正想要的是一个自定义迭代器，它不会产生如此通用的开销。
+
+25
+00:11:30.000 --> 00:12:16.000
+And so a lot of the times, things like cycle iterator and cycle iterator, replicate iterator, a couple others, I would always implement in terms of the permutation iterator because that was the utility there. But one time I was profiling my work versus Jacks, which I consider, or anecdotally in my profiling, the Jacks jitting, typically is the best for this kind of stuff. And there was one example that was, Jacks was beating the work that I was working on. And so I started doing some tuning, and I found like three different times switching the cycle iterator to basically implement a bespoke thing that didn't rely on permutation iterator and doing the same. same thing for the replicate iterator. Each of those led to like a performance improvement.
+所以很多时候，像 cycle_iterator 和 cycle_iterator，replicate_iterator，还有其他几个，我总是会用 permutation iterator 来实现，因为那是那里的工具。但有一次我在分析我的工作与 JAX 的对比，我考虑，或者在我的分析中轶事地认为，JAX 的 JIT 通常是这类事情中最好的。有一个例子是，JAX 打败了我正在做的工作。所以我开始做一些调优，我发现有三次不同的切换 cycle_iterator 来实现一个不依赖于 permutation iterator 的定制东西，并对 replicate_iterator 做同样的事情。每一次都带来了性能提升。
+
+26
+00:12:16.000 --> 00:12:47.000
+And I was kind of surprised, but it does, like anytime you're reaching for something that is not in terms of like a generic reduction, because you're just passing a binary operation, but something like a permutation iterator that has to be capable of more, similar to when we talk about using reduced by key if you want to do like a row-wise reduction, reaching for reduced by key, which can handle variable length segments, whereas the row. of a matrix always have the same length. Anytime you're doing that, it shouldn't be surprising that it incurs
+我有点惊讶，但它确实，就像任何时候你伸手去拿不是通用归约的东西，因为你只是传递一个二元操作，而是像 permutation iterator 这样必须有更多能力的东西，类似于当我们谈论如果你想做行归约时使用 reduce_by_key，伸手去拿 reduce_by_key，它可以处理可变长度的段，而矩阵的行总是具有相同的长度。任何时候你这样做，它产生某种开销都不应该令人惊讶。
+
+27
+00:12:47.000 --> 00:13:08.000
+some kind of overhead. But it is weird because it's just this iterator abstraction, it should just melt away. But I'm not shocked to hear that you did run into perf issues with it because we're talking about an operation that,
+但这很奇怪，因为它只是这个迭代器抽象，它应该只是消失。但我听到你确实遇到了性能问题并不感到震惊，因为我们谈论的是一个操作，
+
+28
+00:13:08.000 --> 00:13:52.000
+we're talking about two operations. like the cycle and replicate, both of which boil down to doing integer division or integer modulo. And so it's possible that the kernel ends up being like integer throughput constrained or maybe even register constrained and that some of the abstraction cost of permutation iterator, which again should be able to boil away, may still be present. I guess it's, I think it's maybe also possible that the use of permutation iterator throws off like vectorization and maybe that's causing problems.
+我们谈论的是两个操作。像 cycle 和 replicate，两者都归结为进行整数除法或整数取模。所以内核最终可能受到整数吞吐量的限制，或者甚至受到寄存器的限制，并且 permutation iterator 的一些抽象成本（再次强调，它应该能够消失）可能仍然存在。我想，我认为这也可能是 permutation iterator 的使用打乱了向量化，也许这就是导致问题的原因。
+
+29
+00:13:52.000 --> 00:14:22.000
+But anyways, it would be interesting to look more into that, but I think we digress. Yeah, and I think what will happen here, folks, is we recorded the episode in Horhus last And so I think we've figured out that you were going to be listening to that on October. Let's check the calendar, folks. I've got too many apps. The calendar's way down there. You will have already listened to the Orhus episode on October 5th. We are going to...
+但无论如何，深入研究这一点会很有趣，但我认为我们离题了。是的，我认为会发生什么，伙计们，是我们上次在奥胡斯录制的这一集，所以我认为我们已经弄清楚了你们将在十月份听到它。让我们看看日历，伙计们。我的应用程序太多了。日历在下面。你们已经在 10 月 5 日听过奥胡斯那一集了。我们将要……
+
+30
+00:14:22.000 --> 00:14:45.000
+Actually, so wait, this episode is going to come out on the 12th. So maybe I was going to say, we plan on recording at least once when we're at NDC Techtown. We might do it on the Wednesday night. They've got like a little social afterwards, and our workshops will be done. Your talk will be done. So I think probably... It'll be interesting to see whether either of us still have a voice after two days of eight-hour courses.
+实际上，等等，这一集将在 12 号播出。所以我可能想说，我们计划在 NDC Techtown 时至少录制一次。我们可能会在周三晚上做。他们之后有一个小社交活动，我们的研讨会也会结束。你的演讲也会结束。所以我认为可能……看看我们两人在两天的八小时课程后是否还有声音会很有趣。
+
+31
+00:14:45.000 --> 00:15:11.000
+That's a good point. Pending that we have voices, we will record probably in a couple days on the Wednesday, the first day of NDC Techtown. And so the seven episodes ago when I mentioned that like, oh, remind me that we got to talk about replicate, is that it is, I think, one of the most interesting algorithms that I've implemented because, Because it has such an interest, like the, going from the integer overload, which is pretty
+这是一个很好的观点。如果我们还有声音，我们可能会在几天后的周三，即 NDC Techtown 的第一天录制。所以七集前当我提到，哦，提醒我我们必须谈谈 replicate，是因为它，我认为，是我实现过的最有趣的算法之一，因为，因为它有如此有趣的，就像，从整数重载（这是相当
+
+32
+00:15:11.000 --> 00:15:38.000
+trivially done and not only done but done lazily, to the array overload, it's almost a completely different algorithm because you can't do it lazily or you definitely can't do all of it lazily. And so think about it. You know, Bryce already gave you a hint. A scan is involved, which it's almost become, oh, I guess it's the integer. I think it is just, I think it is strictly just run-length decode. I mean, but run length decoding, though, is cheating.
+微不足道地完成的，而且不仅完成而且是惰性完成的）到数组重载，它几乎是一个完全不同的算法，因为你不能惰性地完成它，或者你绝对不能全部惰性地完成它。所以想想看。你知道，Bryce 已经给了你一个提示。涉及到一个 scan，它几乎已经变成了，哦，我想它是整数。我认为它严格来说只是游程解码（run-length decode）。我的意思是，游程解码，虽然，是在作弊。
+
+33
+00:15:38.000 --> 00:15:55.000
+How's it cheating? It's the same inputs. It's got to be just run-length decoding. I guess it is just run-length decoding. Well, Bryce is currently looking up. Does Cub have a run-length decode? Yeah, what's the API? It takes run value and...
+怎么作弊了？它是相同的输入。它一定只是游程解码。我想它确实只是游程解码。好吧，Bryce 目前正在查找。Cub 有游程解码吗？是的，API 是什么？它接收 run value 和……
+
+34
+00:15:55.000 --> 00:16:21.000
+It takes values as an array of N, and it takes lengths as an array of N. But we're still going to talk about how would you implement this in Thrust if you were limited to using thrust. So run length, decode, and cub, it decodes into like a window of a limited size and then it's repeated until all the runs have been decoded.
+它接收 values 作为 N 的数组，它接收 lengths 作为 N 的数组。但我们仍然要谈谈如果你仅限于使用 Thrust，你会如何在 Thrust 中实现这一点。所以游程解码，在 Cub 中，它解码成一个有限大小的窗口，然后重复，直到所有的游程都被解码。
+
+35
+00:16:21.000 --> 00:16:42.000
+I'm almost certain that the way that Cub does it is not going to be the way that you've implemented it because you described implementing in terms of a scan, which sounds right. But I think what Cub does is Cub does is Cub picks a static fixed size window and it starts with the sequence and it decodes
+我几乎可以肯定，Cub 的做法不会是你实现它的方式，因为你描述的是用 scan 来实现，这听起来是对的。但我认为 Cub 所做的是 Cub 选择一个静态固定大小的窗口，它从序列开始，它解码
+
+36
+00:16:42.000 --> 00:17:02.000
+it starts decoding what it's got until the window is filled and then it must write the window to the output and then it starts doing another window why is this optimal that doesn't sound very parallel That does not sound very parallel.
+它开始解码它所拥有的东西，直到窗口被填满，然后它必须将窗口写入输出，然后它开始做另一个窗口，为什么这是最优的？这听起来不太并行。这听起来不太并行。
+
+37
+00:17:02.000 --> 00:17:27.000
+That sounds very sequential. This is for the block length one. I'm going to have to look at what the... I would guess that using a scan, you can figure out where in the data sequence the beginning of each window decoding starts. Because you can back that out with a operation that I will not reveal here.
+这听起来非常顺序。这是针对块长度为 1 的情况。我得看看……我会猜使用 scan，你可以找出每个窗口解码在数据序列中的起始位置。因为你可以用一个我在这里不会透露的操作来反推。
+
+38
+00:17:27.000 --> 00:17:46.000
+I think we're essentially... Saying the same thing? No, no, no. I think we're essential. So essentially we've come upon how do you implement efficient GPU decompression. So what I just described was for the block run-length decode. All right, you talk about things while I look at what the device-wide one does.
+我想我们本质上是……在说同样的事情吗？不，不，不。我想我们本质上是。所以本质上我们已经遇到了如何实现高效的 GPU 解压缩。所以我刚才描述的是针对块游程解码。好吧，你谈论事情，同时我看看设备范围的那个做了什么。
+
+39
+00:17:46.000 --> 00:18:05.000
+Bryce's deep-reading GitHub code, and it's good to be in Denmark. Had a lovely run today. We did a long run. 30K. Started off a bit rough because I did not eat anything. but then I got a power raid at the 11K mark. Denmark is a very beautiful country. Copenhagen is a very beautiful city.
+Bryce 正在深入阅读 GitHub 代码，在丹麦感觉真好。今天跑得很开心。我们跑了很长一段路。30 公里。开始有点艰难，因为我什么都没吃。但后来我在 11 公里处喝了一瓶 Powerade。丹麦是一个非常美丽的国家。哥本哈根是一个非常美丽的城市。
+
+40
+00:18:05.000 --> 00:18:25.000
+We'll definitely be back. Yeah, a beautiful evening. Good to be alive, folks. Good to be live. Bryce wants the mic. So there's a device-wide run-length encode in-cub. There's no device-wide run-length decode. There's just this block run-length decode
+我们一定会回来的。是的，一个美丽的夜晚。活着真好，伙计们。活着真好。Bryce 想要麦克风。所以 Cub 中有一个设备范围的游程编码。没有设备范围的游程解码。只有这个块游程解码
+
+41
+00:18:25.000 --> 00:18:48.000
+that allows you to retrieve a window from the run-length decoded array, which is, I guess makes sense if you want to, like, do block, if you want to just, like, process, like, a chunk. Like, you want to be able to work with, like, a fixed-sized chunk when you're doing, like, Kuda programming. But, okay, now I want to hear,
+它允许你从游程解码的数组中检索一个窗口，我想如果你想，比如，做块，如果你想只是，比如，处理，比如，一个块。比如，当你进行 CUDA 编程时，你想要能够使用，比如，一个固定大小的块。但是，好吧，现在我想听，
+
+42
+00:18:48.000 --> 00:19:11.000
+I want to hear how you implemented it. Well, I need to, I would need to go back and actually look, because, like I said, the first time I implemented it, it was incorrect, but off the top of my head, whether this is the actual implementation, and this discussion may never see the light of day if it's not, you do a plus scan on the integers in your integer array. Bryce doesn't even listen anymore.
+我想听听你是怎么实现的。好吧，我需要，我需要回去实际看看，因为，就像我说的，我第一次实现它时，它是错误的，但凭我的记忆，无论这是否是实际的实现，如果不是，这个讨论可能永远不会见天日，你对你的整数数组中的整数做一个 plus scan。Bryce 甚至不再听了。
+
+43
+00:19:11.000 --> 00:19:44.000
+I am. I am. What are you doing? He can multitask, he says. You do a plus scan on your integer array, and that gives you the indices where each of your decoded segments start. Yes. That's the first step. And then once you have that, you want to basically create an index map that corresponds to copying the first element at index zero to however many spots the first integer represents.
+我在听。我在听。你在做什么？他说他可以多任务处理。你对你的整数数组做一个 plus scan，这会给你每个解码段开始的索引。是的。那是第一步。然后一旦你有了那个，你基本上想要创建一个索引映射，对应于将第一个元素在索引 0 处复制到第一个整数所代表的那么多位置。
+
+44
+00:19:44.000 --> 00:20:11.000
+So if your sequence is ABC and your index map is one, two, three, you want your resulting index map to be zero, one, one, two, two, two. how do you do this exactly you want to and this is the this is the tricky part so you have your plus scan that is going to give you I mean you can do it with a scan right yeah I mean the plus band gives you one
+所以如果你的序列是 ABC，你的索引映射是 1, 2, 3，你想要你的结果索引映射是 0, 1, 1, 2, 2, 2。你到底是怎么做到的？你想要，这是棘手的部分，所以你有你的 plus scan，它会给你，我的意思是，你可以用一个 scan 来做，对吧？是的，我的意思是 plus scan 给你 1
+
+45
+00:20:11.000 --> 00:20:58.000
+but the index map you can make the index map with a scan I don't you could do a single path hang on I think you just described you need you need to figure out where you're right so you do your plus scan on your integer sequence and that gives you one three six and those are the lengths that's technically the the ending index plus one of each of your segments so if you prefix that plus scan or technically so I mean in thrust this is an exclusive scan but I don't I don't
+但是索引映射，你可以用一个 scan 来制作索引映射，我不，你可以做一个单遍，等等，我想你刚才描述的你需要，你需要找出你在哪里，对吧？所以你对你的整数序列做一个 plus scan，这给你 1, 3, 6，这些是长度，这在技术上是每个段的结束索引加 1，所以如果你前缀那个 plus scan，或者技术上，所以我的意思是，在 Thrust 中这是一个 exclusive scan，但我没有，我不
+
+46
+00:20:58.000 --> 00:21:29.000
+disambiguate I only have one scan and if you want an inclusive scan exclusive scan you just prefix it with a zero so if you add a zero to your one three six so what one three six to repeat and be clear is the result of a one two three plus scan so the first element is just your one your second element is one plus two plus two plus three so one three six add a pre-panda zero so you end up with zero one, three, six. We're not going to need the six, folks. That's a little secret.
+区分，我只有一个 scan，如果你想要一个 inclusive scan，exclusive scan，你只需要在它前面加一个 0，所以如果你给你的 1, 3, 6 加一个 0，所以 1, 3, 6 重复一遍，为了清楚起见，是 1, 2, 3 plus scan 的结果，所以第一个元素只是你的 1，你的第二个元素是 1+2+2+3，所以 1, 3, 6，前面加一个 0，所以你最终得到 0, 1, 3, 6。我们不需要 6，伙计们。那是一个小秘密。
+
+47
+00:21:29.000 --> 00:21:51.000
+And so now what you want to do is you want to do a... Oh, fuck. This is a very weird scan because... Wait, wait, wait. It's expanding. I think we might have explained...
+所以现在你想做的是，你想要做一个……哦，该死。这是一个非常奇怪的 scan，因为……等等，等等。它在扩展。我想我们可能已经解释了……
+
+48
+00:21:51.000 --> 00:22:31.000
+We might have explained this... We might have explained the... scatter completely wrong because all right i'll just think out loud i'm allowed to make mistakes so right now what i'm thinking is that with the n minus one values of your zero prefixed plus scan so zero one three six if we drop the six you want to scatter the indices basically zero one and two two, those indices. You want to scatter zero to the zero index, one to the one index,
+我们可能已经解释了……我们可能已经解释了……scatter 完全错了，因为好吧，我只是大声思考，我被允许犯错，所以现在我想到的是，对于你的 0 前缀 plus scan 的 n-1 个值，即 0, 1, 3, 6，如果我们去掉 6，你基本上想要散布索引 0, 1, 和 2, 2，那些索引。你想要散布 0 到 0 索引，1 到 1 索引，
+
+49
+00:22:31.000 --> 00:22:53.000
+and two to the three index, which is that, those indices, those... You're going to do a pass later that... Then you're going to do a max scan. So if your output sequence is going to be six values in length... So you do two scans. You do two scans. You do a plus scan on the integer sequence. Then you do a scatter.
+和 2 到 3 索引，也就是那些索引，那些……你稍后会做一个 pass……然后你会做一个 max scan。所以如果你的输出序列长度为 6 个值……所以你做两次 scan。你做两次 scan。你对整数序列做一个 plus scan。然后你做一个 scatter。
+
+50
+00:22:53.000 --> 00:23:37.000
+Yeah. To get the initial value of each segment in your output sequence. And then if you do a max scan, so what your output sequence, it starts is six zeros. Then it starts as zero in the first index, one in the second index, and then two in the third index. So it's zero one, zero, two, zero, I believe, if I got that right. And if you do a max scan on that sequence, basically, and you know, that because the values are indices, so they're always increasing, you're going to end up with 0-1-2-2-2. So the 1 basically gets copied to everything up until the 2, and then the max-scan,
+是的。为了得到输出序列中每个段的初始值。然后如果你做一个 max scan，所以你的输出序列，它开始是 6 个 0。然后它在第一个索引处开始是 0，在第二个索引处是 1，然后在第三个索引处是 2。所以它是 0, 1, 0, 2, 0，我相信，如果我没记错的话。如果你对那个序列做一个 max scan，基本上，你知道，因为这些值是索引，所以它们总是增加的，你最终会得到 0-1-2-2-2。所以 1 基本上被复制到 2 之前的所有东西，然后 max-scan，
+
+51
+00:23:37.000 --> 00:24:00.000
+the max kicks in again, and the 1 resets to a 2, and then everything after that is a 2. The thing that I've realized, though, is that I'm pretty sure, well, actually, I'm now I'm confused, a scatter might not scatter indices to a destination. it might scatter the elements to that index. We have to look that up. Actually, by look up, I'm just going to ask Gemini.
+max 再次生效，1 重置为 2，然后之后的所有东西都是 2。但我意识到的是，我很确定，好吧，实际上，我现在很困惑，scatter 可能不会将索引散布到目的地。它可能会将元素散布到那个索引。我们必须查一下。实际上，通过查一下，我只是要问 Gemini。
+
+52
+00:24:00.000 --> 00:24:26.000
+Actually, we'll get Gemini on the pod right now. Write me a kernel that does device-wide, run-length decoding, using cup. What does the algorithm scatter in the Thrust Parallel Algorithms Library do? we're just we're just two men sitting here talking into a chat GPT
+实际上，我们现在就把 Gemini 叫到播客上。给我写一个内核，使用 Cub 进行设备范围的游程解码。Thrust 并行算法库中的 scatter 算法是做什么的？我们只是两个坐在这里对着 ChatGPT 说话的人。
+
+53
+00:24:26.000 --> 00:24:41.000
+I'm a little bit surprised because in the past it usually reads it to me and I guess I click some button that turned off the live reading but it says the thrust scatter algorithm in the thrust parallel algorithm library is a powerful and efficient parallel primitive that reorders a sequence of elements
+我有点惊讶，因为过去它通常会读给我听，我想我按了什么按钮关掉了实时阅读，但它说 Thrust 并行算法库中的 thrust::scatter 算法是一个强大且高效的并行原语，它重新排序元素序列
+
+54
+00:24:41.000 --> 00:24:55.000
+it copies elements from a source sequence to a destination sequence but instead of a one-to-one copy it uses a map to determine the destination index for each element. So, yeah, so I... It's doing the same thing with you. I did...
+它将元素从源序列复制到目标序列，但它不是一对一的复制，而是使用一个映射来确定每个元素的目标索引。所以，是的，所以……它在和你做同样的事情。我做了……
+
+55
+00:24:55.000 --> 00:25:06.000
+No, no, no. I messed it up. So it says the essence is that thrust scatter performs the following. The destination of the map of the Ith Index
+不，不，不。我搞砸了。所以它说本质是 thrust::scatter 执行以下操作。映射的第 I 个索引的目标
+
+56
+00:25:06.000 --> 00:25:18.000
+is equal to the source at the Ith Index. Which means... Write it again, but no comment and make it as concise as possible.
+等于源的第 I 个索引。这意味着……再写一遍，不要注释，尽可能简洁。
+
+57
+00:25:18.000 --> 00:25:44.000
+remove all of the error handling. So what does this mean? Do we have to cancel the whole scatter conversation? I don't know. So I think in most cases, you will do a first pass anyways to determine the size of the decompressed sequence because you need to allocate memory for it.
+删除所有的错误处理。那么这意味着什么？我们必须取消整个 scatter 对话吗？我不知道。所以我认为在大多数情况下，你无论如何都会做一个第一遍来确定解压缩序列的大小，因为你需要为它分配内存。
+
+58
+00:25:44.000 --> 00:26:11.000
+Like I struggle to imagine a use case I struggle to imagine a use case where you want to do the decoding, but where you don't need to know ahead of time how large the thing is going to be when decoded. I mean, of course, but that's just a reduction. Right, right, but I'm saying if you have that in for, or if you're going to do that reduction...
+就像我很难想象一个用例，我很难想象一个用例，你想要进行解码，但你不需要预先知道解压缩后的东西会有多大。我的意思是，当然，但这只是一个归约。对，对，但我的意思是如果你有那个，或者如果你要进行那个归约……
+
+59
+00:26:11.000 --> 00:26:43.000
+And also, it's not even a reduction. It's just the last element of the scam that you have to do on the... Right, that's what I'm getting. That's the point. getting to is that is that if you if you're going to do the scan anyways like the way the way that when I asked chat GPT it did like a reduce first so that it could allocate the temporary storage and then it did a scan to figure out you know the the the where shit's going to go and then it did a third pass to actually move stuff and three passes seems like overkill you don't need that
+而且，它甚至不是一个归约。它只是你必须在……上做的 scan 的最后一个元素。对，这就是我得到的。这就是重点。得到的是，如果你无论如何都要做 scan，就像我问 ChatGPT 时那样，它先做了一个 reduce，这样它就可以分配临时存储，然后它做了一个 scan 来找出，你知道，东西要去哪里，然后它做了第三遍来实际移动东西，三遍似乎太过分了，你不需要那个
+
+60
+00:26:43.000 --> 00:27:49.000
+first reduce you can just do the scan um But I think that this may be a case where you can't get it down to one pass. And the reason you can't get it down to one pass is because I can't imagine it being useful to be like, oh, I want to decode this thing. And here's like, you know, a gigabyte of storage decode it into. But if it's bigger than that, I don't care. Although now that I say it, now that I say it, if I'm, maybe actually I'm wrong about that. maybe like if I've got like some things, some image I'm decoding or something where like I want to decode it into like a fixed size buffer and then I'm going to write it to disk, right? Because like I don't know how large this thing is going to be when I decompress it. But I want to like decompress it in stages and then write it out to disk. And so once again, I shall tilt it windmills on my quest to figure out whether you can do this on a single pass algorithm. I'm almost certain that there's a way to do this with a single pass algorithm. However, it might require the use of some things that, um, that we've never talked about before,
+第一个 reduce，你只需要做 scan，嗯，但我认为这可能是一个你无法将其减少到单遍的情况。你无法将其减少到单遍的原因是因为我无法想象像“哦，我想解码这个东西”这样有用，而这里有，你知道，一千兆字节的存储空间来解码它。但如果它比那个大，我不在乎。虽然现在我说了，现在我说了，如果我，也许实际上我错了。也许像如果我有一些东西，一些我正在解码的图像或类似的东西，我想把它解码成一个固定大小的缓冲区，然后我要把它写到磁盘上，对吧？因为我不知道当我解压缩它时这个东西会有多大。但我想要，比如分阶段解压缩它，然后把它写出来。所以再一次，我将像堂吉诃德一样挑战风车，去探究你是否可以用单遍算法来完成这个任务。我几乎可以肯定有一种方法可以用单遍算法做到这一点。然而，它可能需要使用一些我们以前从未谈论过的东西，
+
+61
+00:27:49.000 --> 00:28:23.000
+in particular a completely different model of GPU computing, which we don't typically think about, which I think may be required in this case, and that would be a cooperative launch, because if we have a bunch of groups of threads that are working on this decoding problem, like at the same time, we either need to be able to have an unknown,
+特别是 GPU 计算的一个完全不同的模型，我们通常不会想到，我认为在这种情况下可能需要，那就是协作启动（cooperative launch），因为如果我们有一群线程组正在同时处理这个解码问题，我们要么需要能够有一个未知的，
+
+62
+00:28:23.000 --> 00:28:43.000
+like an arbitrarily growing number of blocks, like of threads, right? Like each block of thread decodes a known amount. Okay, maybe, okay, all right, all right, all right. Let me, let me, I'm cooking here. So when you launch a kuda kernel, you have to specify how many blocks you're running with. This microphone's a little bit waterproof, right?
+比如任意增长的块数量，比如线程，对吧？比如每个线程块解码一个已知的量。好吧，也许，好吧，好吧，好吧。让我，让我，我正在这儿瞎琢磨。所以当你启动一个 CUDA 内核时，你必须指定你运行了多少个块。这个麦克风有点防水，对吧？
+
+63
+00:28:43.000 --> 00:29:02.000
+I don't know. Okay. I'm going to rain now, folks. We might need to kill this stuff. I just have to say, I don't know how I'm going to edit this because I'm pretty sure every time I said scatter earlier, what I should have been saying is gather, but I'm not even confident about that because my confidence is shot because I totally messed up the description of an algorithm.
+我不知道。好吧。伙计们，现在要下雨了。我们可能需要结束这个了。我只是不得不说，我不知道我该如何编辑这个，因为我很确定每次我之前说 scatter 时，我本该说的是 gather，但我甚至对此都没有信心，因为我的自信心已经崩溃了，因为我完全搞砸了算法的描述。
+
+64
+00:29:02.000 --> 00:29:29.000
+Get how old to yourself, man, we're cooking here. I'm not so I can imagine two different types of implementations. So when you launch a Kuta kernel, you need to, like you need to specify statically how many blocks of threads are going to execute. And the best, there's two different ways that we could approach this problem. Way number one is the way that we typically think about CUDA computing where each block of threads...
+别太难为自己了，伙计，我们正在这儿瞎琢磨。我不是，所以我可以想象两种不同类型的实现。所以当你启动一个 CUDA 内核时，你需要，就像你需要静态指定有多少个线程块将要执行。最好的，有两种不同的方法我们可以处理这个问题。方法一是我们通常认为的 CUDA 计算方式，其中每个线程块……
+
+65
+00:29:29.000 --> 00:29:47.000
+Look at this ice cream. This is... Yes, we're going to go in there. Let me finish my this feel. Each block of threads decodes a fixed chunk of work. Typically when we're talking about these problems, we imagine a world where there's a fixed number of blocks of threads, and each block
+看这个冰淇淋。这是……是的，我们要进去了。让我完成我的这个陈述。每个线程块解码一个固定的工作块。通常当我们谈论这些问题时，我们想象一个世界，那里有固定数量的线程块，每个块
+
+66
+00:29:47.000 --> 00:30:05.000
+does a fixed amount of work and to do that you need to be able to know how much work there is in total in this case we don't know how much work there is in total however we could imagine that we could launch a kernel that where we assume
+做固定量的工作，要做到这一点，你需要能够知道总共有多少工作，在这种情况下，我们不知道总共有多少工作，然而我们可以想象我们可以启动一个内核，我们假设
+
+67
+00:30:05.000 --> 00:30:50.000
+we're trying to get undercover or we're going to the ice cream plate all right here we're doing both but it's too loud now it's all right So we could imagine, one approach I could imagine would be to say we're going to do a fixed amount of work per block, we're going to launch a fixed number of thread blocks, and then if that is not sufficient, we launch a second kernel that continues the decoding. now that might mean that we end up like wildly we might end up using a lot more compute than we planned because maybe the maybe the decoding takes a lot less work than we planned but the second approach
+我们正试图潜入，或者我们要去冰淇淋店，好吧，我们都在做，但现在太吵了，没关系。所以我们可以想象，我能想到的一种方法是说我们每块做固定量的工作，我们启动固定数量的线程块，然后如果这不够，我们启动第二个内核继续解码。现在这可能意味着我们最终会像疯狂地，我们最终使用的计算量可能比我们计划的多得多，因为也许解码所做的工作比我们计划的少得多，但第二种方法
+
+68
+00:30:50.000 --> 00:31:15.000
+the second approach is this cooperative approach in this second approach we launch a much smaller number of blocks of threads but the amount of work that each block of thread does is variable. That is, we don't know ahead of time or how much work they're going to do. They're each going to do roughly the same amount of work, but it's going to be what we sometimes call like a persistent kernel or a cooperative kernel, where it's going
+第二种方法是这种协作方法，在这种第二种方法中，我们启动数量少得多的线程块，但每个线程块所做的工作量是可变的。也就是说，我们不知道预先知道或者他们要做多少工作。他们每个人都要做大致相同的工作量，但这将是我们有时称之为持久内核或协作内核的东西，它将
+
+69
+00:31:15.000 --> 00:31:30.000
+to continue, it's going to work on a chunk of input, it's going to do that chunk of input, and then it's going to load the next chunk of input and start doing that next chunk of input. However, to write that type of kernel, you need to
+继续，它将处理一块输入，它将做那块输入，然后它将加载下一块输入并开始做下一块输入。然而，要编写那种类型的内核，你需要
+
+70
+00:31:30.000 --> 00:32:04.000
+be able to have all of the blocks communicate with each other and synchronize with each other because in this case once you're done with your chunk of work to be able to start in the next chunk of work you need to know where everybody else wrote their chunk of work which would require you to do a scan but in this case we would maybe want to do a a cooperative scan and the advantage of doing that is that we can do the cooperative scan at the same time that we're loading the next chunk of input
+能够让所有的块相互通信并同步，因为在这种情况下，一旦你完成了你的那部分工作，为了开始下一部分工作，你需要知道其他人把他们的工作写在了哪里，这需要你进行一次扫描，但在这种情况下，我们可能想要进行一次协作扫描，这样做的好处是，我们可以在加载下一部分输入的同时进行协作扫描。
+
+71
+00:32:04.000 --> 00:32:23.000
+because while we don't know where the next chunk of output will go, we know we can statically assign where the next chunk of input will come from, which means that we can be loading it concurrently with figuring out that scan. Okay, I think I may have lost some people there,
+因为虽然我们不知道下一部分输出会去哪里，但我们知道可以静态分配下一部分输入来自哪里，这意味着我们可以在计算扫描的同时加载它。好吧，我想我可能在那儿失去了一些听众，
+
+72
+00:32:23.000 --> 00:32:45.000
+but we're going to go get ice cream. Yeah, he lost me, but it's hard to focus after the devastating mess up. I'm just really hoping that gather is, it's possible that everything I said is true for gather and then I can go in and every time I say scatter, I'm just going to cut in, I'm going to cut out scatter and cut and gather. I believe that the thing that you described
+但我们要去吃冰淇淋了。是的，他把我弄糊涂了，但在经历了那场灾难性的混乱之后，很难集中注意力。我只是真心希望 gather 是……有可能我说的关于 gather 的一切都是真的，然后我可以进去，每次我说 scatter 时，我就剪掉它，剪掉 scatter，剪掉 gather。我相信你描述的那件事
+
+73
+00:32:45.000 --> 00:33:04.000
+is an algorithm within thrusting cup. Also, you got to, wait, don't move, don't move. You're going to get rid of this thing off my head? No, I'm just going to take pictures. What is it? It was a little flaw, I think. Don't worry. It's okay.
+是 Thrusting Cup 中的一个算法。还有，你得，等等，别动，别动。你要把我头上的这个东西弄掉吗？不，我只是要拍张照片。那是什么？我想是一个小瑕疵。别担心。没事的。
+
+74
+00:33:04.000 --> 00:33:15.000
+It wasn't anything scary. All right, folks. Hopefully that was audible because we're standing next to a bar with like a dance party. And we're ending this. Goodbye from Copenhagen. We're not done yet. We're not done. Yeah, yeah.
+没什么可怕的。好了，各位。希望刚才的声音能听清楚，因为我们站在一个有舞会的酒吧旁边。我们要结束了。哥本哈根再见。我们还没结束。我们还没结束。是的，是的。
+
+75
+00:33:15.000 --> 00:33:27.000
+We're turning it. No, we're getting ice cream. Then we're going to continue. We're getting ice cream. We're not continuing. And we will pick this up again. That's actually a good question. If we're recording and we might have to record again before Wednesday.
+我们要转过来了。不，我们要去吃冰淇淋。然后我们要继续。我们要去吃冰淇淋。我们不继续了。我们会再捡起来讲的。这确实是个好问题。如果我们正在录音，我们可能不得不在周三之前再次录音。
+
+76
+00:33:27.000 --> 00:33:59.000
+We're going to pick this up again in five minutes. We will not. We will not. This is going on my backpack. It's raining. And a good night from Copenhagen. Maybe we'll record next time. We're not going to have the energy after Monday and Tuesday. This has become very ADSB. No, I'll have energy for this. For this? All right. You'll hear from us. Today is Saturday. Just to be clear, this entire problem we've been talking about is essentially GPU decompression. Yes. Yes. Yes. And it is, am I not correct? It is a very interesting algorithm.
+我们五分钟后再继续。我们不会的。我们不会的。这要放进我的背包里。下雨了。哥本哈根晚安。也许下次我们会录音。周一和周二之后我们不会有精力了。这变得非常 ADSB 了。不，我有精力做这个。做这个？好吧。你们会听到我们的消息。今天是星期六。澄清一下，我们一直在谈论的整个问题本质上是 GPU 解压缩。是的。是的。是的。而且，我没说错吧？这是一个非常有趣的算法。
+
+77
+00:33:59.000 --> 00:34:25.000
+It is a very interesting algorithm. Oh, we didn't, okay, we need to mention the final thing, which is why we were talking about replicate in the first place, which is because of array broadcasting. So imagine that you've got like a vector and a matrix, and you want to, like, apply some operation in, like you want to apply some element-wise operation, like adding or, you know...
+这是一个非常有趣的算法。哦，我们没有，好吧，我们需要提到最后一件事，也就是我们最初为什么要谈论 replicate 的原因，这是因为数组广播。所以想象一下你有一个向量和一个矩阵，你想，比如，应用某种操作，比如你想应用某种逐元素操作，比如加法或者，你知道……
+
+78
+00:34:25.000 --> 00:34:59.000
+You're explaining this incorrectly. It's not when you want to do an element-wise operation, It's when you want to do some kind of binary operation on a matrix and a vector. So the example that we were talking about earlier, Ashwin, who were going to be meeting up with tomorrow in Norway, posted internally something about a row-wise soft max, which is a computation and, I don't know, machine learning stuff. But essentially, you're performing a bunch of binary... The fundamental operation to flash attention, which is fundamental to GPU inference,
+你解释错了。不是当你想要做逐元素操作时，而是当你想要对矩阵和向量进行某种二元操作时。所以我们之前谈到的例子，Ashwin，我们明天要在挪威见他，他在内部发布了一些关于行级 softmax 的内容，这是一种计算，还有，我不知道，机器学习之类的东西。但本质上，你是在执行一堆二元……Flash Attention 的基本操作，这对 GPU 推理至关重要，
+
+79
+00:34:59.000 --> 00:35:17.000
+which pays all of our bills. It's just so sad because they give it a name like softmax and you're just like, like all these things, soft max, Relu. It's just a combination of a couple of binary operations. Like it's nothing fancy. We will do a whole episode about softmax and why it's magical and we'll talk about Argmax too. We'll do that. The three binary, it's three, two binary operations and a unary operation.
+这支付了我们所有的账单。这太可悲了，因为他们给它起了一个名字叫 softmax，你就像，就像所有这些东西，softmax，Relu。这只是一对二元操作的组合。就像没什么特别的。我们会做一整集关于 softmax 以及为什么它很神奇的内容，我们也会谈论 Argmax。我们会做的。这三个二元，它是三个，两个二元操作和一个一元操作。
+
+80
+00:35:17.000 --> 00:35:28.000
+There's max. There's summation. I guess there's division. And then there's also exponentiation. But it's like you do those things in order. You're done. It's like, it's so boring. And like they're like, soft max.
+有最大值。有求和。我想还有除法。然后还有指数运算。但就像你按顺序做这些事情。你就完成了。这就像，太无聊了。他们就像，softmax。
+
+81
+00:35:28.000 --> 00:35:47.000
+You hear soft max. and you're like, ooh, like, how complicated that out? Do you know that there are entire teams that exist in Vida, whose job it is to make softmax run faster? I'm just, I'm just, it's, anyway, I just, like, these names, like, and also RELU, like, I can't remember what RELU is, and there's a couple different versions of it, but, like, I'm pretty sure it's just, like, one over a number, or something like that, or it's, like, capped a...
+你听到 softmax，你会觉得，噢，这有多复杂？你知道在 NVIDIA 有整个团队存在，他们的工作就是让 softmax 运行得更快吗？我只是，我只是，它是，总之，我只是，就像，这些名字，还有 RELU，就像，我不记得 RELU 是什么了，它有几个不同的版本，但是，就像，我很确定它只是，就像，一个数分之一，或者类似的东西，或者它，就像，上限……
+
+82
+00:35:47.000 --> 00:36:27.000
+Anyways, I just, like, as someone who studied actual mathematics, and I suffered through actually, like, difficult stuff, they give all these fancy names, and it's just, like, it's just basic math. Anyways, row-wise softmax involves basically needing to do an operation where you calculate the maximum of each row, and then you divide each of the values in the matrix by the maximum of the corresponding row. Bryce is dancing now. And so that means is that if I've got a matrix, I compute however many rows, maximums, and then I want to divide that maximum into each.
+总之，我只是，作为一个学习过实际数学的人，我受够了那些真正困难的东西，他们给了所有这些花哨的名字，而这只是，就像，这只是基础数学。总之，行级 softmax 基本上涉及需要进行一种操作，即计算每一行的最大值，然后将矩阵中的每个值除以相应行的最大值。Bryce 现在在跳舞。这意味着如果我有一个矩阵，我计算出多少行，最大值，然后我想把那个最大值除以每一个。
+
+83
+00:36:27.000 --> 00:36:41.000
+of the values in each of those rows. So it's not an element-wise operation. It's an element-wise operation on a row-wise basis, which means, like, if I've got a three-by-three matrix and three values for the rows, I want to divide the first row by the first max, the second row. Anyways, I think people get it.
+每一行中的值。所以这不是一个逐元素操作。这是一个基于行级的逐元素操作，这意味着，比如，如果我有一个三乘三的矩阵和三个行值，我想把第一行除以第一个最大值，第二行……总之，我想人们明白了。
+
+84
+00:36:41.000 --> 00:36:59.000
+The point being, though, is you can use replicate to turn that vector into... Not a matrix, but, like, or I guess basically a matrix. For anybody who's familiar with, like, numpy-style broadcasting, Hopefully we've not lost the... We might have blown out the gain a little.
+重点是，你可以使用 replicate 将那个向量变成……不是矩阵，而是，或者我想基本上是一个矩阵。对于任何熟悉 numpy 风格广播的人来说，希望我们没有失去……我们可能稍微把增益调得太高了。
+
+85
+00:36:59.000 --> 00:37:16.000
+That might have been my bad. But for anybody who's familiar with NumPai-style broadcasting, where when you're working with two arrays of different already, the smaller array can be stretched. It's arity, not arty? Already sounds like Ariana Grande's cousin. All right. We're cooking here.
+那可能是我的错。但对于任何熟悉 NumPy 风格广播的人来说，当你处理两个不同维度的数组时，较小的数组可以被拉伸。是 arity（元数），不是 arty？Already 听起来像 Ariana Grande 的表亲。好了。我们正在这里烹饪。
+
+86
+00:37:16.000 --> 00:38:05.000
+Where it can be stretched to the rank of the larger array. And you can use replicate to do that stretch. Catching. Anyways, we're going to go good ice cream now, but that's why we were interested in talking about replicas. It's actually not why we were interested in. I only realized when I was trying to implement the row-wise softmax that, like, oh, replicate's a very convenient thing if you don't have broadcasting in your library language. I had implemented replicate a month before because I was trying to solve some problem that clearly just needed to replicate. And then when it came to implementing, it was like literally some Pearl Weekly Challenge or leak code problem that it was just like, oh, like, clearly what I'm missing. missing here is replicate, which is, it's just an APL primitive, and I hadn't added it. And this library that I've been working on, it's heavily inspired by all the array operations.
+它可以被拉伸到较大数组的秩。你可以使用 replicate 来进行那种拉伸。抓住了。总之，我们现在要去吃冰淇淋了，但这就是我们对谈论副本感兴趣的原因。其实这不是我们感兴趣的原因。我只是在尝试实现行级 softmax 时才意识到，哦，如果你在你的库语言中没有广播，replicate 是一个非常方便的东西。我在一个月前实现了 replicate，因为我试图解决一些显然只需要 replicate 的问题。然后当涉及到实现时，它就像字面上的某个 Pearl Weekly Challenge 或 LeetCode 问题，它只是，哦，就像，显然我在这里缺少的是 replicate，它只是一个 APL 原语，而我没有添加它。而我一直在做的这个库，它深受所有数组操作的启发。
+
+87
+00:38:05.000 --> 00:38:37.000
+We may need to talk to the, like, the, we may need to talk to some of, like, the, like, NVJPEG and, like, the NV comp people, the compression library people. Because they know about compression? Well, yeah, I mean, I think the people make the compression library know about compression, yeah. Do we need to talk to them? No. Where we talk to them? Maybe. I do believe that a single-pass algorithm exists here. I mean, I always believe a single-pass algorithm exists here, but, all right, Connor's fixing his sweater. His tan invidia sweater.
+我们可能需要和，比如，我们可能需要和一些，比如，NVJPEG 和，比如，NV comp 的人，压缩库的人谈谈。因为他们了解压缩？嗯，是的，我的意思是，我认为制作压缩库的人了解压缩，是的。我们需要和他们谈谈吗？不。我们在哪里和他们谈？也许。我确实相信这里存在一种单遍算法。我的意思是，我总是相信这里存在一种单遍算法，但是，好吧，Connor 正在整理他的毛衣。他那件棕褐色的 NVIDIA 毛衣。
+
+88
+00:38:37.000 --> 00:38:58.000
+It's gold. There is no world in which this is gold. It's gold. There is no world in which this is gold. All right, we're going to go to ice cream. And I am dancing now. Very poor. But I did learn some dance moves
+它是金色的。在这个世界上，这不可能是金色的。它是金色的。在这个世界上，这不可能是金色的。好了，我们要去吃冰淇淋了。我现在在跳舞。非常糟糕。但我确实学了一些舞步
+
+89
+00:38:58.000 --> 00:39:16.000
+When I was in Ethiopia They taught me how to do the shoulder thing Which I kind of remember how to do Yeah There we go folks She fixed the sweater My only sweater and my only shorts That I brought to Norway at the middle
+当我在埃塞俄比亚时，他们教我怎么做那个肩膀动作，我有点记得怎么做。是的。好了，伙计们。她整理好了毛衣。我带到挪威的唯一一件毛衣和唯一一条短裤，在中间
+
+90
+00:39:16.000 --> 00:39:30.000
+That's true I do have a He brought shorts to Norway He's going to be cold Have I been cold this whole time But right now we're in Denmark not Norway. It's going to be colder in Norway. I have been in Norway in September. Trust me. It's going to be cold.
+那是真的。我确实有一件。他带了短裤去挪威。他会很冷的。我一直都很冷吗？但现在我们在丹麦，而不是挪威。挪威会更冷。我在九月去过挪威。相信我。会很冷的。
+
+91
+00:39:30.000 --> 00:39:50.000
+I think we're going to be just fine. Was I slightly underdress for a couple of the restaurants we went to? It's not a maybe. It's a most definitely yes. I took this man to the nicest restaurant in Orhus, or however you pronounce it, wearing his Lulu Lemon shorts and a running t-shirt. Yeah. Was it a running t-shirt?
+我想我们会没事的。我去过的几家餐馆我穿得稍微有点不正式吗？这不是可能。而是绝对是的。我带这个男人去了奥胡斯（或者无论你怎么发音）最好的餐馆，穿着他的 Lulu Lemon 短裤和一件跑步 T 恤。是的。那是跑步 T 恤吗？
+
+92
+00:39:50.000 --> 00:40:10.000
+I know. I kept the hoodie on. I kept the hoodie. Yeah, yeah. Listen, you know what? I would have brought nicer clothes if I had thought about the fact that Bryce wanted to eat at fancy places. I need you to say that again with a straight face. Is this what, so that we can put this on the podcast? I don't know what I'm doing with this, but...
+我知道。我一直穿着连帽衫。我一直穿着连帽衫。是的，是的。听着，你知道吗？如果我想到 Bryce 想去高档地方吃饭，我会带更好的衣服的。我需要你面无表情地再说一遍。这就是，为了我们可以把它放在播客上吗？我不知道我在用这个做什么，但是……
+
+93
+00:40:10.000 --> 00:40:47.000
+So, Bryce asked, was it Chatsy B.T or Gemini? Chachy B.T. For some humorous names for Scattering Gather because of my misunderstanding earlier. one of the initial unhumorous was scatter to and gather from which i really like i was already thinking about scatter two but anyways the top humorous one was yeet and yoinck and then bryce thought that was hilarious and that's what we should call it but my response was well that doesn't make any sense because yeat means to like delete to get rid of to toss it you know when they say yeat it means get rid of it and that's not what scatter's doing so the semantically it has nothing
+所以，Bryce 问，是 ChatGPT 还是 Gemini？ChatGPT。因为我之前的误解，为 Scatter 和 Gather 取了一些幽默的名字。最初的非幽默名字之一是 scatter to 和 gather from，我真的很喜欢。我已经在考虑 scatter two 了，但总之，最幽默的一个是 yeet 和 yoink，然后 Bryce 觉得这太搞笑了，我们应该这样叫它，但我的回答是，嗯，这没有任何意义，因为 yeet 的意思是删除、摆脱、扔掉，你知道当他们说 yeet 时，意思是摆脱它，而那不是 scatter 在做的事情，所以从语义上讲它没有任何
+
+94
+00:40:47.000 --> 00:41:12.000
+to do with the actual semantics so i believe you said specifically heat so romantically has nothing to do with the actual operation. Yeah, yeah, something like that. Oh, God, I'm dying. I'm going to read some of the other, some of the other ones. Be sure to check these show notes, either in your podcast app or at ADSP thepodcast.com for links to anything we mentioned in today's episode, as well as a link to a get-up discussion where you can leave thoughts, comments, and questions.
+与实际语义有关，所以我相信你特别说了 heat，所以从浪漫的角度来看，它与实际操作没有任何关系。是的，是的，类似那样。哦，天哪，我要死了。我要读一些其他的，一些其他的。一定要查看这些节目笔记，无论是在你的播客应用程序中还是在 ADSPthepodcast.com 上，获取我们在今天这一集中提到的任何内容的链接，以及一个 GitHub 讨论的链接，你可以在那里留下想法、评论和问题。
+
+95
+00:41:12.000 --> 00:41:17.000
+Thanks for listening. We hope you enjoyed and have a great day. Low quality, high quantity. That is the tagline of our podcast. It's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+感谢收听。我们希望你喜欢并祝你有美好的一天。低质量，高数量。这就是我们播客的标语。这不是标语。我们的标语是带有信息碎片的混乱。这一集还没有评论。点击转录中的任何句子来发表评论。

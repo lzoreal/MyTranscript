@@ -1,0 +1,321 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:03.000
+Continuous lifelong learning, though. Continuous lifelong learning is a fancy way of saying we don't actually know shit. Welcome to ADSP, the podcast, episode 23, recorded on April 17th 2021. My name is Connor and today with my co-host Bryce we talk about anamorphic algorithms and much more. We got a bunch of reactions on Twitter but then one of them was Tristan brindles saying he didn't know what segmented algorithms did um which we explained two videos ago or two two videos two uh podcast episodes ago and so there we could we could go into an explanation of like the the by key algorithms yeah so we could try and restate that just because i think it's important but also too like within that there's a class of algorithms
+不过，持续的终身学习。持续的终身学习是一个时髦的说法，意思是其实我们什么都不知道。欢迎来到 ADSP 播客，第 23 期，录制于 2021 年 4 月 17 日。我是 Connor，今天我和我的联合主持人 Bryce 将讨论变形算法（anamorphic algorithms）以及更多内容。我们在 Twitter 上收到了一堆反馈，其中一条来自 Tristan Brindles，他说他不知道分段算法（segmented algorithms）是做什么的，嗯，我们在两期视频前，或者说两期播客前解释过，所以我们可以在这里深入解释一下，比如“按键”（by key）算法，是的，我们可以试着重述一下，因为我觉得这很重要，而且在其中还有一类算法
+
+2
+00:01:03.000 --> 00:01:23.000
+called anamorphic algorithms, which are the opposite of catamorphic algorithms. So like reductions, aka folds, or the opposite of reductions, aka unfolds, like split group by. But we can save that for another day and we can just sort of chat about. So I think the best intuitive way to understand
+被称为变形算法，它们是催化算法（catamorphic algorithms）的对立面。就像归约（reductions），也就是折叠（folds），或者归约的对立面，也就是展开（unfolds），比如 split group by。但我们可以把这个留到以后再说，我们可以先聊聊。所以我认为理解“按键”算法最直观的方法
+
+3
+00:01:23.000 --> 00:02:37.000
+the by key algorithms is to think about them like they're batched operations. That what I really want to do is a bunch of, like I want to do reductions on a bunch of different things, but I want to batch it into one pass. And that's sort of my mental model for ByKey. Now, I've gotten into plenty of debates with people over this, whether this is a good mental model because batched APIs may look a little bit differently, but truly batched APIs would be a bit different. Like, you know, you'd be able to have different data. But I think the best way to think about it is that like you've got one set of input data and you've got some operations that you want to do on parts of that input data. But instead of doing each one of those operations separately, you can construct a single operation that will operate on those segments in one fell swoop.
+是把它们想象成批处理操作。我真正想做的是一堆操作，比如我想对一堆不同的东西进行归约，但我希望把它们批处理成一次遍历。这就是我心目中“按键”算法的思维模型。现在，我和别人就此进行过很多辩论，讨论这是否是一个好的思维模型，因为批处理 API 看起来可能有点不同，但真正的批处理 API 会有所不同。比如，你知道，你可以有不同的数据。但我认为最好的理解方式是，你有一组输入数据，并且有一些你想对这些输入数据的一部分进行的操作。但你不是分别执行每一个操作，而是可以构建一个单一的操作，一次性地对这些片段进行处理。
+
+4
+00:02:37.000 --> 00:03:17.000
+That makes sense to me, but I could see why some people would disagree that that's a mental model you want to use yeah so i guess what do i want to what do i want to say so i guess we are going to talk about this then um so the first thing like the way that i learned about by key algorithms was by translating haskell code into sort of a c++ thrust solution and I'm almost certain that I told you about by key algorithms, like right after we met. And that was how you first heard about by key algorithms. Yeah, yeah. So I think I mentioned this in two episodes ago was that I gave my talk.
+这对我来说很有道理，但我能理解为什么有些人会不同意这是你想使用的思维模型。是的，所以我猜我想说什么呢？我想我们还是要讨论这个。嗯，所以第一件事，我学习“按键”算法的方式是将 Haskell 代码翻译成某种 C++ Thrust 解决方案，而且我几乎可以肯定，在我们见面后不久我就跟你讲过“按键”算法。那就是你第一次听说“按键”算法的方式。是的，是的。所以我记得我在两期前提到过，我做了我的演讲。
+
+5
+00:03:17.000 --> 00:03:50.000
+And then after that talk, you said, oh, you could probably just use a by key for that one solution that I had written in Haskell. That, listeners, was back when I was clever. And that was 100% correct. And this actually, so it got asked by, so Tristan Brindles, we'll put a link in the show notes. And actually, I'll just get the tweet and forward it to Bryce here so he can stare at it while we're chatting about this.
+在那次演讲之后，你说，哦，你可能可以直接用“按键”算法来解决我用 Haskell 写的那个方案。听众们，那是在我还没那么聪明的时候。而且那是 100% 正确的。这实际上，所以它被问到了，所以 Tristan Brindles，我们会在节目笔记中放一个链接。实际上，我会直接把推文转发给 Bryce，这样我们在聊天时他就可以盯着它看。
+
+6
+00:03:50.000 --> 00:04:16.000
+Copy link. And we paste it to Bryce. Exciting podcast content. On Twitter. So yeah, Tristan, he responded to one of the ADSP tweets and said, just listen to episode 20. Really, really enjoying them so far. Could you use this approach to solve the maximum consecutive ones problem? That's the third problem, right?
+复制链接。然后我们把它粘贴给 Bryce。令人兴奋的播客内容。在 Twitter 上。所以是的，Tristan，他回复了其中一条 ADSP 推文，说，刚听了第 20 期。到目前为止真的很喜欢。你能用这种方法解决最大连续 1 的问题吗？那是第三个问题，对吧？
+
+7
+00:04:16.000 --> 00:04:56.000
+The one that we actually we actually record after that episode. I went off for three hours and tried to solve it in one pass. And then I thought i had it and so i made you get back on for us to record another hour of content where i was very excited because i thought i had the solution then i got off and i tested a little bit more and i realized i didn't have it and i told you throw out that entire so i think i think i still have that recording let me check if i still have that recording and if we do maybe at some point um oh i think he may be right ha my intuition was correct i do think you can do it in a single pass well no no so but this this is a single pass but this is multiple
+那个我们实际上是在那期节目之后录制的。我花了三个小时试图一次性解决它。然后我以为我做到了，所以我让你回来，我们又录了一个小时的内容，当时我很兴奋，因为我以为我有了解法，然后我下线后又测试了一下，发现我并没有解决它，我告诉你把整个方案都扔掉。所以我认为我可能还有那个录音，让我检查一下我是否还有那个录音，如果有的话，也许在某个时候……哦，我想他可能是对的，哈，我的直觉是对的，我确实认为你可以一次遍历完成。好吧，不，不，所以但这虽然是一次遍历，但这是多个
+
+8
+00:04:56.000 --> 00:05:29.000
+algorithms so this doesn't um this is yeah but i'm but i'm no no no because i'm pretty sure that all of these can reduce down into like a single kernel. Potentially. So wait, so let's finish reading the tweet. Okay, okay. Tristan says, can you use this approach? I'm not sure what the thrust segmented algorithms do. And then his code, it's using a library that he's written called Flow, which is similar to ranges but has a couple different design. But basically it's sort of composable algorithm. So it starts off with a group by using a binary equal predicate
+算法，所以这并不……嗯，这是……是的，但我……不，不，不，因为我很确定所有这些都可以归约成一个单一的内核。有可能。所以等等，让我们读完那条推文。好的，好的。Tristan 说，你能用这种方法吗？我不确定 Thrust 的分段算法是做什么的。然后他的代码，它使用了一个他自己编写的名为 Flow 的库，它类似于 ranges，但有一些不同的设计。但基本上它是一种可组合的算法。所以它首先使用一个二元相等谓词进行 group by
+
+9
+00:05:29.000 --> 00:05:53.000
+and then does a map of the sum operation and then just calls a maximum, which basically is if you click on this tweet, you'll see that I responded and my response shows the Haskell solution which is literally the composition of an algorithm called group which is just a shorter way to spell group by
+然后对求和操作进行 map，然后直接调用最大值，这基本上就是，如果你点击这条推文，你会看到我回复了，我的回复展示了 Haskell 解决方案，它实际上就是一个名为 group 的算法的组合，这只是 group by 的简写
+
+10
+00:05:53.000 --> 00:06:16.000
+with the equal predicate and then mapping some over each of those groups and then taking the maximum. So basically you're chunking together all contiguous ones and all contiguous zeros into separate lists. So you end up with a list of lists and then you just sum each of those sub lists. So all of the consecutive zeros are just going to become zero. And then anything with a one is just
+加上相等谓词，然后对每个组进行求和映射，最后取最大值。所以基本上你把所有连续的 1 和所有连续的 0 分块成单独的列表。所以你最终得到一个列表的列表，然后你只需要对这些子列表中的每一个求和。所以所有的连续 0 都会变成 0。然后任何有 1 的地方都
+
+11
+00:06:16.000 --> 00:06:58.000
+going to be equal to the number of ones. So technically you could also map length instead of sum their equivalent in terms of uh the result that they produce a performance will obviously be a bit different and then once you do that you just take a maximum of those values i i hesitate to say this because this could very well turn into my afternoon being consumed by me once again going and trying to implement this algorithm um but i'm pretty sure that this can be done in a single pass then because the map's just a transform and the max is just a reduction. So those two fuse together. It's just a transform reduce.
+会等于 1 的数量。所以从技术上讲，你也可以映射长度而不是求和，它们在产生的结果方面是等价的，性能显然会有点不同，然后一旦你这样做，你只需要取这些值的最大值。我犹豫要不要说这个，因为这很可能会导致我的下午再次被我试图实现这个算法所占据，但我很确定这可以在一次遍历中完成，因为 map 只是一个变换，而 max 只是一个归约。所以这两者融合在一起。它只是一个变换归约（transform reduce）。
+
+12
+00:06:58.000 --> 00:07:43.000
+And then the question is, can you fuse the group by into that transform reduce? And I'm not sure about that, but maybe. That's the thing, though, is and so and so we're sort of skipping around here a bit. So I apologize to the listeners if this is hard to follow. But my journey was from this solution, basically, where it starts off with group, which is just a shortcut. So group is equivalent to the algorithm groupby, where you pass it equal to. So in C++ land, it stood colon colon equal to. In functional languages like Haskell, it's just paren equal equal n paren.
+然后问题是，你能把 group by 融合到那个变换归约中吗？我不确定，但也许可以。这就是重点，而且我们在这里有点跳跃。所以如果这很难跟上，我向听众道歉。但我的旅程是从这个解决方案开始的，基本上，它以 group 开头，这只是一个快捷方式。所以 group 等同于算法 groupby，你传入 equal to。所以在 C++ 世界里，它是 std::equal_to。在像 Haskell 这样的函数式语言中，它只是 (==)。
+
+13
+00:07:43.000 --> 00:08:31.000
+And basically what that's doing is that is an example of an anamorphism. So you're taking a list and then the result is like a list of lists. And that's the opposite of a catamorphism, where you take a list and then you reduce that down into, quote unquote, a single value. So typically like classic reductions or catamorphisms are summing a list of numbers, taking the product of a list of numbers, taking the maximum, taking the minimum. Those are all catamorphisms. And we use those all the time. But especially in C++ land, there's a whole category of algorithms called anamorphisms, which are the opposite of reductions and we don't use those as much because they don't really exist currently in the stl um standard library of algorithms what is the opposite of
+基本上它所做的是变形的一个例子。所以你取一个列表，然后结果就像一个列表的列表。那是催化（catamorphism）的对立面，在催化中，你取一个列表，然后把它归约成，所谓的，一个单一的值。所以通常像经典的归约或催化是列表数字求和、列表数字求积、取最大值、取最小值。这些都是催化。我们一直在使用它们。但特别是在 C++ 世界里，有一整类算法叫做变形，它们是归约的对立面，我们使用得没那么多，因为它们目前在 STL 标准算法库中并不真正存在。什么是
+
+14
+00:08:31.000 --> 00:09:05.000
+a reduction so the easiest example of the anamorphic algorithms is an algorithm like split so you have a string or a range of characters. You go from one to many. And you go from one? And so like classically in Python. Reductions, of course, are going from many to one. I tend to think about these algorithms in terms of communication. Because I tend to think about algorithms in terms of how you would write them in parallel. And so in a reduction
+归约的对立面？变形算法最简单的例子是像 split 这样的算法。所以你有一个字符串或字符范围。你从一变多。你从一变多？所以就像在 Python 中一样。归约当然是从多变一。我倾向于从通信的角度来思考这些算法。因为我倾向于从你如何在并行中编写它们的角度来思考算法。所以在归约中
+
+15
+00:09:05.000 --> 00:09:52.000
+it's about everybody communicating information to one point um and it sounds like in an anamorphism it's about um it's sort of like a um uh a fork it's you've got one input you and you split it out into into multiple inputs yeah and that's the thing is like this type of algorithm doesn't really exist in pre C++ 20 algorithm land. And so that's why we're not, as C++ developers, we're not very familiar with them. But like when I transitioned to Haskell and functional programming, there are like a set, they're basically like several different flavors of these, and they are just so extremely useful. So like the classic one is split, where by default, you know, it splits on a space.
+它是关于每个人将信息传达到一个点，听起来在变形中，它是关于……它有点像一个……分叉，你有一个输入，然后你把它拆分成多个输入。是的，这就是重点，这种类型的算法在 C++20 之前的算法世界中并不真正存在。所以这就是为什么作为 C++ 开发人员，我们对它们不太熟悉。但当我转向 Haskell 和函数式编程时，它们有一套，基本上有几种不同的变体，而且它们非常非常有用。所以经典的例子是 split，默认情况下，你知道，它按空格分割。
+
+16
+00:09:52.000 --> 00:10:37.000
+And you can usually customize that, like if you want to separate a CSV file, a comma separated value file, you can just split on comma. But there's a bunch of other algorithms that are coming in C++, you know, 23, 26 ranges that are other versions of anamorphic algorithms. So group by is going to be one of them. I'll explain that one last because it's the hardest to wrap your head around. The other two that are very popular in other languages go under different names, but typically in Swift and Rust, so I'll use their naming mechanism, are called chunks and windows. Chunks, basically given a list of 20 numbers, if you want chunks of four, you just specify an integer k equal to four, and then it's going to give you a list of lists
+你通常可以自定义它，比如如果你想分隔一个 CSV 文件，逗号分隔值文件，你只需要按逗号分割。但还有一堆其他算法即将进入 C++23、26 的 ranges，它们是变形算法的其他版本。所以 group by 将是其中之一。我最后解释那个，因为它最难理解。在其他语言中非常流行的另外两个有不同的名称，但通常在 Swift 和 Rust 中，所以我将使用它们的命名机制，它们被称为 chunks 和 windows。Chunks，基本上给定一个 20 个数字的列表，如果你想要 4 个一组的块，你只需要指定一个整数 k 等于 4，然后它会给你一个列表的列表
+
+17
+00:10:37.000 --> 00:11:28.000
+where each of the sublists has four elements in it. And so you're going to end up with five sublists because 20 divided by four equals five. So chunk is just take, take N at a time repetitively. Windows is the exact same thing, except instead of having non-overlapping sublists, they're overlapping. So, um, and technically there's usually like a general version of this algorithm called like, uh, it's sometimes it's called windowed. Sometimes it's called sliding. And that generalized version, it has like three different parameters. And the two key ones are a step size, step size equals x, and then window size equals y. And so by specifying the step size and the window size to be the same, you get chunks. And to specify the window size to be whatever x and the window size to be the same, you get chunks. And to specify the window size to be whatever x
+其中每个子列表有 4 个元素。所以你最终会得到 5 个子列表，因为 20 除以 4 等于 5。所以 chunk 只是重复地每次取 N 个。Windows 完全一样，只是它们不是非重叠的子列表，而是重叠的。所以，嗯，从技术上讲，通常有一个这个算法的通用版本，有时它被称为 windowed。有时它被称为 sliding。那个通用版本，它有三个不同的参数。两个关键的是步长，步长等于 x，然后窗口大小等于 y。所以通过指定步长和窗口大小相同，你就得到了 chunks。而指定窗口大小为 x
+
+18
+00:11:28.000 --> 00:11:47.000
+and then the step size to be one, so you're only stepping one at a time, that's the example of windows. And so sliding... Go ahead. And for those who come from the HPC space or the numerical computing space, the idea of window is very similar to the idea of a stencil.
+然后步长为 1，所以你每次只移动一步，这就是 windows 的例子。所以 sliding……你说。对于那些来自 HPC 领域或数值计算领域的人来说，window 的概念与 stencil（模板）的概念非常相似。
+
+19
+00:11:47.000 --> 00:12:27.000
+Yeah. And the idea of chunks is very similar to the idea of tiling up your problem. Yeah. I think literally in certain languages, tiling and stenciling is the exact same thing as windowing. Windowing typically is just in a single dimension, though, and in APL for sure, when you're doing it in more than one dimension. So if you're instead of a list of numbers, you have a matrix of numbers that's classically referred to as a stencil or a tile. And windowing is something that we very commonly do with C++ algorithms today. There's a series of algorithms
+是的。而 chunks 的概念与平铺（tiling）你的问题的概念非常相似。是的。我想在某些语言中，平铺和模板化与窗口化完全是一回事。不过窗口化通常是在单一维度上的，而在 APL 中，当你处理超过一个维度时，它肯定就是这样。所以如果你不是一个数字列表，而是一个数字矩阵，那通常被称为 stencil 或 tile。而窗口化是我们今天在 C++ 算法中非常常用的东西。有一系列算法
+
+20
+00:12:27.000 --> 00:13:18.000
+that take two different input sequences. Like there's an overload of transform that does this. There's a overload of scan that does this. And a common pattern, for example, we used it in that word count example that we talked about two episodes again, a common pattern is to have your two input sequences be from the same actual underlying sequence where the first input sequence is zero to n minus one of your input sequence. And the second input sequence is one to n. And so what that gives you is that at each iteration, you're going to get, you know, like in the first iteration, you'll get element zero and element one. In the second iteration, you'll get element one and element two. That's a window. Yeah. And that technically is,
+它们接受两个不同的输入序列。比如 transform 的一个重载就是这样做的。scan 的一个重载也是这样做的。一个常见的模式，例如，我们在两期前讨论的那个单词计数示例中使用了它，一个常见的模式是让你的两个输入序列来自同一个实际的底层序列，其中第一个输入序列是你的输入序列的 0 到 n-1。第二个输入序列是 1 到 n。所以这给你的结果是，在每次迭代中，你会得到，你知道，比如在第一次迭代中，你会得到元素 0 和元素 1。在第二次迭代中，你会得到元素 1 和元素 2。这就是一个窗口。是的。而从技术上讲，
+
+21
+00:13:18.000 --> 00:14:08.000
+that is implicitly the behavior that's going on between algorithms adjacent difference and adjacent find. They're finding a way to take a window of size two that steps by one. So it's a very common in functional languages. They call it zip tail or like that's the pattern. And there's a number of different names. But so the three anamorphic algorithms that we've talked about so far, split, windows, and chunks, they all have something in common. And that's that they specify a list and then a value. So split specifies, like we were talking about it in the sense of strings, but in Haskell, a string is just a character of arrays.
+这隐含了算法 adjacent_difference 和 adjacent_find 之间发生的行为。它们正在寻找一种方法来获取大小为 2 且步长为 1 的窗口。所以这在函数式语言中非常常见。他们称之为 zip tail 或者类似那样的模式。并且有许多不同的名称。但所以我们目前讨论的三个变形算法，split、windows 和 chunks，它们都有共同点。那就是它们指定一个列表，然后是一个值。所以 split 指定，就像我们讨论字符串时那样，但在 Haskell 中，字符串只是字符数组。
+
+22
+00:14:08.000 --> 00:14:52.000
+So if you've got an algorithm called split, you could have numbers there and you could just split on the number one or the number 10. It would work just the same. Connor meant to say array of characters, not character of arrays. Oh, sorry. A list of characters, yes. And for windows and chunks, you're just specifying an integer value for the number that you want your window size to be. And so these are extremely useful. But then there's a whole other set of anamorphic algorithms that instead of taking values, take either unary or binary predicates. And these are like, in my opinion, what are the truly, truly powerful algorithms. So in the problem maximum consecutive ones, this is where we want an anamorphic algorithm that we can actually use a version of this algorithm that takes a unary predicate or a binary predicate. So group or group
+所以如果你有一个名为 split 的算法，你可以在那里放数字，你可以只按数字 1 或数字 10 分割。它会以同样的方式工作。Connor 本想说字符数组，而不是字符的数组。哦，抱歉。字符列表，是的。对于 windows 和 chunks，你只是为你想作为窗口大小的数字指定一个整数值。所以这些非常有用。但还有一整套其他的变形算法，它们不取值，而是取一元或二元谓词。在我看来，这些才是真正真正强大的算法。所以在最大连续 1 的问题中，这就是我们需要一个变形算法的地方，我们可以实际使用这个算法的一个版本，它接受一个一元谓词或二元谓词。所以 group 或 group
+
+23
+00:14:52.000 --> 00:15:34.000
+by, so group is basically a specialization of group by that already has the binary equal to predicate hardcoded in there. But group by, you can specify that binary predicate to be whatever you want. And in this case, we would want it to be equal equal, which is why we're just using group. But we could actually use a different version of group by that instead of taking a binary predicate, just takes a unary predicate and says, you know, group by some unary function. And whenever it's returning the same value, group those together. And whenever it's returning a different value, you want to start a new sublist. And because we only have ones and zeros, technically, you could just do a group by with a unary operation that sort of groups based on whatever
+by，所以 group 基本上是 group by 的一个特化，它已经硬编码了二元 equal to 谓词。但是 group by，你可以指定那个二元谓词为你想要的任何东西。在这种情况下，我们希望它是 ==，这就是为什么我们只使用 group。但我们实际上可以使用 group by 的另一个版本，它不接受二元谓词，只接受一元谓词，并说，你知道，按某个一元函数 group by。每当它返回相同的值时，就把它们归为一组。每当它返回不同的值时，你就想开始一个新的子列表。因为我们只有 1 和 0，从技术上讲，你只需要做一个 group by，带有一个一元操作，它根据返回的任何东西进行分组。
+
+24
+00:15:34.000 --> 00:16:16.000
+that returns. Here, we can just use a group by and then identity. And so pass it back 11111. So basically, anytime you get the same value, you're going to be grouping them. And this is what makes group by confusing is that there's actually like three different implementations of group by there's the group by from SQL, which is basically not like the two we've been talking about so far. So it doesn't have anything to do with the order in which you are traversing your sort of list of data. It basically is just going to give you a hash table at the end of the day, and you provide it a unary operation, and that any value that returns you some value x based on that unary operation gets put in a bucket in this hash table.
+在这里，我们只需要使用 group by 和 identity。所以传回 11111。所以基本上，任何时候你得到相同的值，你都会把它们分组。这就是让 group by 令人困惑的地方，因为实际上有三种不同的 group by 实现，有来自 SQL 的 group by，它基本上不像我们目前讨论的那两个。所以它与你遍历数据列表的顺序没有任何关系。它基本上只是在最后给你一个哈希表，你提供给它一个一元操作，任何基于该一元操作返回给你某个值 x 的值都会被放入这个哈希表的一个桶中。
+
+25
+00:16:16.000 --> 00:16:43.000
+So the easiest example, or an easy example, is if you have the numbers 1 to 10, and you want to group by, you want to do an SQL group by on whether or not the values are even. And so you're going to end up with basically a hash table with two keys, true and false. And the true one is going to contain all the even numbers, 2, 4, 6, 8. And then the false value is going to, or false key is going to have all the odd numbers.
+所以最简单的例子，或者一个简单的例子，是如果你有 1 到 10 的数字，你想 group by，你想对值是否为偶数做一个 SQL group by。所以你最终会得到一个基本上有两个键的哈希表，true 和 false。true 键将包含所有的偶数，2、4、6、8。然后 false 值，或者 false 键将拥有所有的奇数。
+
+26
+00:16:43.000 --> 00:17:08.000
+If you were to do a group by with a unary operation that actually did care about the order, that's what the Python group by from iter tools does. You would just end up with a list of sublists where every sublist is a single character because the result of applying even to each number in a sequence, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, is going to be true, false, true, false, true, false, true, false. So it's just going to start a new sub list.
+如果你要做一个确实关心顺序的一元操作的 group by，那就是 Python iter tools 中的 group by 所做的。你最终只会得到一个子列表的列表，其中每个子列表都是一个单一的字符，因为将 even 应用于序列 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 中的每个数字的结果将是 true, false, true, false, true, false, true, false。所以它只会开始一个新的子列表。
+
+27
+00:17:08.000 --> 00:17:37.000
+So basically, the SQL group by doesn't care about order. And then there's two types of group bys that do care about order. One takes a unary predicate and only looks at a single element at a time. And then the other one is a binary predicate that looks at adjacent elements. And this brings us full circle back to the by key algorithms, because that's how I think of thrust by key algorithms is that by key algorithms, correct me if I'm mistaken, but all basically look at adjacent elements
+所以基本上，SQL group by 不关心顺序。然后有两种关心顺序的 group by。一种接受一元谓词，一次只看一个元素。另一种是二元谓词，它看相邻的元素。这让我们回到了“按键”算法，因为这就是我思考 Thrust “按键”算法的方式，即“按键”算法，如果我错了请纠正我，但基本上都看相邻的元素
+
+28
+00:17:37.000 --> 00:18:18.000
+to determine the segments. So a reduced by key is doing a basically like a single pass reduction. Obviously, in parallel, it's going to be different, but you can think about it like that. And anytime the binary predicate returns false, you're going to start basically a new segment. And so for the maximum consecutive ones, the default binary predicate once again is equal to, and then we just provide another binary operation to do the reduction, which is the sum in this case. And so we call them segmented algorithms because we're providing each of those algorithms with a binary operation or using the default equal to in order to implicitly create these segments within the list.
+来确定片段。所以 reduce_by_key 基本上是在做一次单次遍历归约。显然，在并行中，它会有所不同，但你可以这样想。任何时候二元谓词返回 false，你基本上就会开始一个新的片段。所以对于最大连续 1，默认的二元谓词再次是 equal to，然后我们只需提供另一个二元操作来进行归约，在这种情况下是求和。所以我们称它们为分段算法，因为我们为每个算法提供了一个二元操作，或者使用默认的 equal to，以便在列表中隐式地创建这些片段。
+
+29
+00:18:18.000 --> 00:19:04.000
+And then on top of that, we're doing a reduction on that list. So in a sense, the thrust by key algorithms are anamorphic behind the scenes, but because we're immediately doing some reduction afterwards, or I guess that's the thing I'm just talking about reduced by key. So maybe it's useful at this point to talk about another you are right that it is when you know, the predicates always binary. Yeah. Yeah. And so that's that's sort of like, you know, the predicate's always binary. Yeah. Yeah. And so that's sort of like, you know, you gave an explanation at the beginning, and I was trying to map that back. So, like, whenever I think of by key, I always think of Haskell or we're going to be getting a group by in C++ 23 ranges, hopefully, if not 23, you know, a later version, a group by algorithm that takes a binary operation.
+然后在这些之上，我们对该列表进行归约。所以从某种意义上说，Thrust 的“按键”算法在幕后是变形的，但因为我们之后立即进行了一些归约，或者我想我只是在谈论 reduce_by_key。所以也许在这一点上谈论另一个是有用的，你是对的，当你知道谓词总是二元的时候。是的。是的。所以这有点像，你知道，你在开头给出了一个解释，我试图把它映射回来。所以，每当我想到“按键”时，我总是想到 Haskell，或者我们希望在 C++23 ranges 中得到一个 group by，如果不是 23，你知道，以后的版本，一个接受二元操作的 group by 算法。
+
+30
+00:19:04.000 --> 00:19:41.000
+And that's what I think of. So basically, in a more composable algorithm library, you're just calling group by or some anamorphic algorithm that does some segmenting or grouping. And then you're doing something after that. And in Thrust, the way that we give you that ability is in these by key algorithms that are reduced by key or inclusive scan by key um so maybe let's think of like what is a i know that there's a unique by key um so let's like just without looking at the docs a unique by key so unique in c++
+这就是我所想的。所以基本上，在一个更可组合的算法库中，你只是调用 group by 或某个进行分段或分组的变形算法。然后你在那之后做一些事情。而在 Thrust 中，我们给你这种能力的方式是在这些“按键”算法中，即 reduce_by_key 或 inclusive_scan_by_key。所以也许让我们想想什么是……我知道有一个 unique_by_key，所以让我们在不看文档的情况下，unique_by_key，unique 在 C++ 中
+
+31
+00:19:41.000 --> 00:20:15.000
+is doesn't doesn't deduplicate it deduplicates adjacent equal elements yeah yeah they unique if you want if you want to get all the unique elements you don't need to sort it first so it it's um uh it's a version in some ways of of an algorithm we have in cub called run length encoding which is basically an algorithm where it goes and it finds all the consecutive elements and it like compresses them. So if it goes and finds 10 elements that are the same, it replaces them with one element in a count of 10.
+是不去重的，它去重的是相邻的相等元素。是的，是的，unique，如果你想，如果你想得到所有唯一的元素，你不需要先排序。所以它……嗯……它在某种程度上是我们 cub 中一个算法的版本，叫做游程编码（run length encoding），它基本上是一个算法，它去寻找所有连续的元素，然后它像压缩它们一样。所以如果它去找到 10 个相同的元素，它用一个元素和一个 10 的计数来替换它们。
+
+32
+00:20:15.000 --> 00:21:10.000
+Right. So it's very similar in practice to what Unique is. You can sort of think of it as like a you know a form of compression almost so yeah i'm at the docks now and the example that's shown on the thrust docks are our keys are one three three three two two one and our values are nine eight seven six five four three so just descending from nine and then when you do a unique by key on those um keys and values and in this example it's passing in the equal to binary predicate but i assume that's the default so technically you can omit makes sense uh i think and then the first four values in b
+对。所以它在实践中与 Unique 非常相似。你可以把它想象成一种，你知道，几乎是一种压缩形式。所以是的，我现在在看文档，Thrust 文档上显示的例子是我们的键是 1 3 3 3 2 2 1，我们的值是 9 8 7 6 5 4 3，所以只是从 9 开始递减，然后当你对那些键和值做 unique_by_key 时，在这个例子中，它传入了 equal_to 二元谓词，但我假设那是默认的，所以从技术上讲你可以省略，有道理。嗯，我想，然后 b 中的前四个值
+
+33
+00:21:10.000 --> 00:22:02.000
+are now nine eight five three interesting is that actually what i would expect so i'm like it's a little it's a little surprising because it um it will discard it's sort of like um it's sort of like having a map where um uh if you if you try to insert an element that already exists you you know you discard the um the new element um or like json has this property too where like i believe where you can have like duplicate um keys and it's sort of unspecified in JSON, which of the values for duplicate keys will be used. And I'm pretty sure that thrust unique by key guarantees that it'll always be the first one in order.
+现在是 9 8 5 3。有趣，这真的是我所期望的吗？所以我有点……这有点令人惊讶，因为它……它会丢弃……它有点像……拥有一个映射，其中……如果你尝试插入一个已经存在的元素，你知道，你丢弃那个新元素……或者像 JSON 也有这个属性，其中……我相信你可以有重复的键，而且在 JSON 中是不明确的，重复键的哪个值会被使用。而且我很确定 Thrust 的 unique_by_key 保证它总是顺序中的第一个。
+
+34
+00:22:02.000 --> 00:22:33.000
+This is interesting though, because this is almost an entirely different class of algorithm. This is really just stood unique or thrust unique with a second range that follows the same mutation. Whereas reduced by key really is two different operations. It's, it's segmenting and then it's doing reductions on those segments. Whereas here, really, you're just doing unique on two different ranges and you're specifying
+但这很有趣，因为这几乎是完全不同的一类算法。这实际上只是 std::unique 或 thrust::unique，带有一个遵循相同突变的第二个范围。而 reduce_by_key 确实是两个不同的操作。它是，它是分段，然后它在这些片段上进行归约。而在这里，实际上你只是在两个不同的范围上做 unique，并且你指定
+
+35
+00:22:33.000 --> 00:23:18.000
+that you want the keys to be the one where we're determining uniqueness from. So maybe let's take a look at a different by key algorithm. We've got reduce by key key scan by key is not going to be easier um yeah what's a sort a sort by key there we go that's yeah sort sort by key is i think more the example that you're looking for or we talk about merge by key but that's a weird one yeah i would assume that sort by key determines the segments based on the binary predicate and then performs a sort operation on each of those segments which is right analogous to the reduced by key so we're just replacing the reduction with a sort our keys are one four two eight five seven and then our
+你想要键作为我们确定唯一性的依据。所以也许让我们看看另一个“按键”算法。我们有 reduce_by_key，scan_by_key 不会更容易……嗯，是的，什么是 sort，sort_by_key，这就对了，那是，是的，sort_by_key 我认为更像是你正在寻找的例子，或者我们谈论 merge_by_key，但那是一个奇怪的算法。是的，我会假设 sort_by_key 根据二元谓词确定片段，然后在每个片段上执行排序操作，这与 reduce_by_key 是类比的，所以我们只是用排序替换了归约。我们的键是 1 4 2 8 5 7，然后我们的
+
+36
+00:23:18.000 --> 00:24:06.000
+values are a b c d e f and keys are now sorted interesting okay my mind's being blown here this is not at all this is this is exactly what unique did well this is this sort sort by key is just saying like like i have a separate data and and separate keys it's it's i think one might argue that naming the scan by key and the reduce by key algorithms, I think are a different class of things than the sort by key. Sort by key. And this has been one of the criticisms of the by key interfaces and thrust in general.
+值是 a b c d e f，键现在已排序。有趣，好的，我的大脑在这里被震撼了，这根本不是……这正是 unique 所做的。好吧，这个 sort_by_key 只是说，就像，我有单独的数据和单独的键，我认为有人可能会争辩说，命名 scan_by_key 和 reduce_by_key 算法，我认为它们与 sort_by_key 是不同类的事物。Sort_by_key。这一直是 Thrust 中“按键”接口以及 Thrust 本身受到批评的地方之一。
+
+37
+00:24:06.000 --> 00:24:41.000
+In Cub, which is the CUDA-specific backend of thrust, there is an explicit notion of segmented algorithms. There's not this notion of by-key algorithms. And in Cub, the version of this sort is not called sort by key. It's just a sort that takes disjoint keys and values. That's what this is. Whereas in Cub, if you want a reduce by key, I believe you need to use a segmented reduction. I could be wrong about that.
+在 Cub 中，它是 Thrust 的 CUDA 特定后端，有一个明确的分段算法概念。没有这种“按键”算法的概念。而在 Cub 中，这个排序的版本不叫 sort_by_key。它只是一个接受不相交的键和值的排序。这就是这个。而在 Cub 中，如果你想要一个 reduce_by_key，我相信你需要使用分段归约。我可能错了。
+
+38
+00:24:41.000 --> 00:25:09.000
+This makes sense, though. Yeah. So this is fantastic. I apologize to the listeners if you all are confused, but I just, I just learned something, um, which I think is extremely important. And it's that it's exactly what Bryce just said is that really the reduce and the scan, um, by key algorithms are actually the only ones that are really following this anamorphic behavior that I've described,
+但这说得通。是的。所以这太棒了。如果你们都感到困惑，我向听众道歉，但我刚刚，我刚刚学到了一些东西，嗯，我认为这非常重要。那就是 Bryce 刚才说的完全正确，即 reduce 和 scan，“按键”算法实际上是唯一真正遵循我所描述的这种变形行为的算法，
+
+39
+00:25:09.000 --> 00:25:36.000
+where we're first identifying segments and then doing either scans or reductions on those segments. So far, we haven't checked them all, but unique by key and sort by key, what they're doing is they're basically just saying, perform this algorithm on the keys and then also perform the same mutation on the values so we're sorting the keys and so basically it's the same behavior um wow wow yeah it's the
+我们首先识别片段，然后在这些片段上进行扫描或归约。到目前为止，我们还没有全部检查过，但 unique_by_key 和 sort_by_key，它们所做的是它们基本上只是说，在键上执行此算法，然后也在值上执行相同的突变，所以我们对键进行排序，所以基本上它是相同的行为。哇，哇，是的，它是
+
+40
+00:25:36.000 --> 00:26:20.000
+same behavior if you basically were to just take a single range put them in pairs yeah and uh building up a std unique that worked on a pair and only checked the first value of that pair, it would be a little bit more complicated to write up. That is essentially what you're doing. You're deleting all adjacent equal elements, but only based on the first. And this actually, this is going to make no sense, but there's something from a combinatory logic called the psi combinator, P-S-I, which is where you perform a unary operation on two different things first and then perform a binary operation. So it's similar to the S combinator, which is what's called forks in APL.
+相同的行为，如果你基本上只是取一个单一的范围，把它们放在对中，是的，并且构建一个作用于对并只检查该对的第一个值的 std::unique，写起来会稍微复杂一点。这本质上就是你正在做的事情。你正在删除所有相邻的相等元素，但仅基于第一个。而且这实际上，这毫无意义，但有一种来自组合逻辑的东西叫做 psi 组合子（psi combinator），P-S-I，它是你先对两个不同的东西执行一元操作，然后执行二元操作的地方。所以它类似于 S 组合子，也就是 APL 中所说的分叉（forks）。
+
+41
+00:26:20.000 --> 00:26:57.000
+And like what I just said made no sense, but when you see the examples, it makes complete sense. So say I want to take the difference between the length of two strings. What do you do in that example? You've got the string cat and the string mouse. You first apply the size or the length operation, which gives you 3 and 5, and then you perform the binary minus operation on three and five, which gives you two. So that is an example of using the psi combinator, where basically if you compose together minus and size with the psi combinator in a language that supports it, you can just automatically
+就像我刚才说的毫无意义，但当你看到例子时，它就完全有意义了。所以假设我想取两个字符串长度之间的差值。你在那个例子中做什么？你有字符串 cat 和字符串 mouse。你首先应用 size 或 length 操作，得到 3 和 5，然后你对 3 和 5 执行二元减法操作，得到 2。所以这就是使用 psi 组合子的例子，基本上如果你在支持它的语言中用 psi 组合子将 minus 和 size 组合在一起，你就可以自动
+
+42
+00:26:57.000 --> 00:27:23.000
+basically feed two arguments cat and mouse to that, and it works, which is basically what sort by key and unique by key are kind of doing. Note that in Haskell, the psi combinator is what's known as on, O-N, from the data.function library. And in APL, we actually have the psi combinator as well. They call it something different. It's beside, I believe. They make names up for things.
+基本上把两个参数 cat 和 mouse 喂给它，它就能工作，这基本上就是 sort_by_key 和 unique_by_key 在做的事情。注意，在 Haskell 中，psi 组合子被称为 on，O-N，来自 data.function 库。而在 APL 中，我们实际上也有 psi 组合子。他们称之为不同的东西。我相信是 beside。他们为事物编造名字。
+
+43
+00:27:23.000 --> 00:28:29.000
+And it's known as like the, uh, big circle with two dots on top of it. Not that anybody cares. Um, are you looking something up? Yeah. So, so I'm looking at what cup does. So cup has a distinct reduced by key and segmented reduced by key. Um, uh, and there's some nuance in the difference between them. And it also, I don't believe it has a segmented sort. It just has the sort and then the sort that takes either disjoint key values or just keys. Um, but, uh, yeah, it's, it's, I, I, I am, I suspect that the, that the device segmented reduce, yeah, yeah. Device, the segmented reduction in Cub, um, uh, I think it can, it can work over disjoint regions of memory, not just one consecutive region of memory.
+它被称为，嗯，上面有两个点的大圆圈。并不是说有人关心。嗯，你在查什么吗？是的，所以，所以我正在看 Cub 做什么。所以 Cub 有不同的 reduce_by_key 和 segmented_reduce_by_key。嗯，嗯，它们之间的区别有一些细微差别。而且我也不认为它有分段排序。它只有排序，然后是接受不相交的键值或仅键的排序。但是，嗯，是的，我怀疑设备分段归约，是的，是的。设备，Cub 中的分段归约，嗯，我认为它可以在不相交的内存区域上工作，而不仅仅是一个连续的内存区域。
+
+44
+00:28:29.000 --> 00:29:12.000
+But I could be wrong about that. Yeah, yeah, because the segmented one in Reduce, it takes like offsets in a number of segments in addition to an input. Yeah. So, I mean, I think I would argue that it's probably reduced by key and sort by key is probably a, and like unique by key, it's probably not a good naming convention because I think they're actually quite different in how they operate.
+但我可能错了。是的，是的，因为 Reduce 中的分段归约，它除了输入之外还接受偏移量和片段数量。是的。所以，我的意思是，我认为我会争辩说，reduce_by_key 和 sort_by_key 可能是一个，而且像 unique_by_key，它可能不是一个好的命名约定，因为我认为它们在操作方式上实际上非常不同。
+
+45
+00:29:12.000 --> 00:30:00.000
+Yeah. Arguably, I think sort by key, unique by key, the ones where they're actually doing something by applying the operation to keys, that makes sense. But for reduce by key and scan by key, basically anything that's not applying a mutation and is doing some sort of reduction or operation, those ones should be called like group by reduce or group by, or like that's the problem is that the fact that there's three different definitions for group by the SQL one, the unary operation one, and then the binary operation one makes it seem that potentially group is not the best name but like identifying the fact that you're doing this like so yeah like a segmented reduce or a segmented scan inclusive scan might be better um because really there's no the fact
+是的。可以说，我认为 sort_by_key，unique_by_key，那些它们实际上通过将操作应用于键来做某事的，这说得通。但对于 reduce_by_key 和 scan_by_key，基本上任何不应用突变且正在进行某种归约或操作的东西，那些应该被称为像 group_by_reduce 或 group_by，或者，这就是问题所在，事实上 group by 有三种不同的定义，SQL 的，一元操作的，然后是二元操作的，这使得 group 可能不是最好的名字，但识别出你正在做这个，所以是的，像分段归约或分段扫描 inclusive_scan 可能更好，因为实际上没有，事实上
+
+46
+00:30:00.000 --> 00:30:47.000
+that you're passing a binary operation to unique by key has nothing to do with segments. It has to do with that's what unique requires. Unique requires and sort by key, if it's taking a binary operation, the only reason it's taking it is because it's for a custom comparator. It's not actually because it's identifying segments. Well, that's fantastic. Well, it's fantastic for me because I learned something. Whether or not our listeners learned anything. So I'm still wondering whether the max consecutive ones can be done in a single pass. And I'm starting to become convinced that it really can't because you sort of need global information before you can make that decision. Like, you sort of need to look at everything
+你传递一个二元操作给 unique_by_key 与片段无关。它与 unique 的要求有关。Unique 需要，而 sort_by_key，如果它接受一个二元操作，它接受它的唯一原因是因为它用于自定义比较器。它实际上并不是因为它在识别片段。好吧，这太棒了。好吧，这对我来说太棒了，因为我学到了一些东西。我们的听众是否学到了什么。所以我仍然在想最大连续 1 是否可以在一次遍历中完成。我开始确信它真的不能，因为在做出决定之前，你需要某种全局信息。比如，你需要看一切
+
+47
+00:30:47.000 --> 00:31:16.000
+before you can decide whether, like, who is the maximum one. But, but... If we had an algorithm called, and literally at one point I wrote this algorithm, I didn't call it segmented reduce-reduce. I called it sliding reduce-reduce because it's such a common pattern. And in APL, it's so easy to build it up because you just do an NY's reduction, which is a segmented reduction.
+在决定谁是最大值之前。但是，但是……如果我们有一个算法叫做，而且实际上我在某一点写了这个算法，我没有叫它分段 reduce-reduce。我叫它滑动 reduce-reduce，因为它是一个非常常见的模式。而在 APL 中，构建它非常容易，因为你只需要做一个 NY 的归约，也就是分段归约。
+
+48
+00:31:16.000 --> 00:31:52.000
+And then you do another reduction on top of that. And like juxtaposition, literally just putting things side by side is basically composition. But like having the sliding reduce, reduce algorithm in pre ranges land is very, very useful, because you're doing a slided reduction, and then a reduction over the results of those reductions on the segments. And that's the thing is in ranges land, this becomes such an easy thing to build up because we have an algorithm called sliding that gives us the segments, then we just map a reduction over those segments. And then we just call another reduction on the result of those reduced segments.
+然后你在上面做另一个归约。而且像并置，字面上把东西放在一起就是组合。但像在 ranges 之前的世界里拥有滑动 reduce-reduce 算法是非常非常有用的，因为你在做滑动归约，然后在那些片段的归约结果上进行归约。这就是重点，在 ranges 的世界里，这变得非常容易构建，因为我们有一个名为 sliding 的算法给我们片段，然后我们只需要在这些片段上映射一个归约。然后我们只需要在那些归约后的片段的结果上调用另一个归约。
+
+49
+00:31:52.000 --> 00:32:28.000
+And so by just, you know, composing three different algorithms together, sliding, transform with a reduction in the lambda, and then a reduction as our final algorithm, you get the behavior that you want. So, okay, here's a question about maximum consecutive ones. When we're doing the reduce by key, within the reduce by key, when we get to the end of a series of consecutive ones, we know it, right? The algorithm knows it, yes. So then, I I mean I think you definitely could do it in a single
+所以通过，你知道，组合三个不同的算法，sliding，带有 lambda 中归约的 transform，然后作为我们最终算法的归约，你就得到了你想要的行为。所以，好的，这里有一个关于最大连续 1 的问题。当我们做 reduce_by_key 时，在 reduce_by_key 内部，当我们到达一系列连续 1 的末尾时，我们知道它，对吧？算法知道它，是的。所以我，我的意思是，我认为你绝对可以在一次遍历中完成
+
+50
+00:32:28.000 --> 00:32:42.000
+pass the simplest solution would be you just have an atomic that would have the maximum length and when you get to the when you get to the end of to a run of consecutive ones you just
+最简单的解决方案是，你只需要一个原子变量来存储最大长度，当你到达连续 1 的运行末尾时，你只需要
+
+51
+00:32:42.000 --> 00:33:30.000
+check that atomic you just check that atomic and you the value in that atomic is less than your length, then you try to set it with your length. And then at the end, you're done that that atomic should have the length of whatever the maximum run was. I do suspect that there's a way to do it without an atomic, though. Isn't that just like you're saying, just have a global variable that I can write to? Yeah, essentially. Isn't that cheating? I don't think it's cheating. So you're calling an algorithm, and then at the end of the day, you don't want any of the output.
+检查那个原子变量，你只需要检查那个原子变量，如果其中的值小于你的长度，你就尝试用你的长度去设置它。最后，当你完成时，那个原子变量应该保存了最大运行长度。不过我怀疑有一种不需要原子变量的方法。这不就像你说的，只要有一个我可以写入的全局变量吗？是的，本质上是这样。那不是作弊吗？我不觉得是作弊。所以你调用了一个算法，但最终你并不想要任何输出。
+
+52
+00:33:30.000 --> 00:34:04.000
+You don't want the keys. You don't want the values. You can discard all that stuff. What you want is some global that you were you're finding the length of these, you're finding the length of who has the longest consecutive sequence. And that iteration is, yes, it's a reduction,
+你不想要键，也不想要值。你可以丢弃所有这些东西。你想要的是一个全局变量，用来找出这些序列的长度，找出谁拥有最长的连续序列。那个迭代过程，是的，它是一个归约（reduction），
+
+53
+00:34:04.000 --> 00:35:04.000
+but it's like a localized reduction. And then once you, like, if you can, once everybody's done their localized reduction and found their maximum in the general neighborhood of where they are, then it's just a matter of um uh reducing globally down to who had the greatest one um yeah yeah definitely that would work but i'm not actually sure you can hook into reduced by key like passing it a custom you might be able to like passing it a custom binary operator that basically does equal to but then in the two different cases does the writing to the atomic um but at that point in time i don't actually yeah your your binary operator that's doing the equal to doesn't have the length well so so when we tried to solve this two weekends ago um we tried to do it with
+但它就像是一个局部归约。一旦每个人都完成了他们的局部归约，并在他们所在的邻域内找到了最大值，那么剩下的就是全局归约，找出谁拥有最大的那个值。是的，这绝对行得通，但我不太确定你是否能通过传递自定义二元运算符来挂钩到 reduce_by_key 中。你可能可以传递一个自定义的二元运算符，它基本上执行相等比较，但在两种不同情况下执行对原子变量的写入。但那时，你的执行相等比较的二元运算符并没有长度信息。所以，当我们两周前尝试解决这个问题时，我们尝试用
+
+54
+00:35:04.000 --> 00:35:35.000
+like a reduce that it was a heterogeneous reduce that accumulated into some state. And that proved to not work because of associativity. But it's sort of in the same way that we have like a transform reduce. I think sort of what we need here is like a reduce reduce by key, sort of a two-phased reduction. That's what I just said. Yeah, like a group by reduce reduce. Yeah.
+一种异构归约（heterogeneous reduce）来累积到某种状态。但由于结合律的问题，这被证明是行不通的。但这有点像我们拥有的 transform_reduce。我认为我们这里需要的是一种 reduce_by_key 的变体，一种两阶段的归约。那正是我刚才说的。是的，就像分组归约再归约（group by reduce reduce）。
+
+55
+00:35:35.000 --> 00:36:12.000
+Group by reduce reduce. That's the thing is it sounds like a silly name, but in terms of like, but that's the thing is like, I'm not knowledgeable enough to know that in thrust 2.0 land where we have composable like parallel composable algorithms is like i would imagine that a group by reduce reduce is going to result in like much more performant code than a composed group by and then a transform of a reduction and then a reduction like i i don't know enough about compiler optimizations my guess is whatever parallel code gets launched behind the
+分组归约再归约。听起来名字很傻，但问题是，我没有足够的知识去了解在 Thrust 2.0 的世界里，当我们拥有可组合的并行算法时，我猜想“分组归约再归约”会比组合式的“分组”加上“归约的转换”再加上“归约”产生性能高得多的代码。我不太了解编译器优化，我猜无论后台启动了什么并行代码，
+
+56
+00:36:12.000 --> 00:36:54.000
+scenes isn't like equivalent to a single algorithm called group by reduce reduce where we can definitely implement that algorithm with like the fewest number of kernels as possible. I mean, I, I, I, I believe that this is something that you can fuse together. Like, like ultimately, ultimately, I think it's just like the underlying kernel is a reduction. And it's just, it's just a question of sort of like, it's just like phase reduction. But yeah, like I think if we were, I think in the future, if we were writing this with like a range-centric thrust,
+都不等同于一个名为“分组归约再归约”的单一算法调用，我们可以肯定地用尽可能少的内核来实现该算法。我的意思是，我相信这是可以融合在一起的。最终，我认为底层的内核就是一个归约。这只是一个分阶段归约的问题。但如果我们在未来用以范围为中心的 Thrust 来编写这个，
+
+57
+00:36:54.000 --> 00:37:16.000
+we might have a way of expressing this more natively. If, I don't know, now that I've had further insight in this, maybe if I had the time this afternoon, I would go back and give it another whirl. Every time we start talking about thrust, we end up realizing, how come there's no parallel fold left?
+我们可能会有一种更原生的表达方式。如果……我不知道，既然我现在有了更深入的见解，也许如果今天下午有时间，我会回去再试一次。每次我们开始谈论 Thrust，我们最终都会意识到，为什么没有并行左折叠（parallel fold left）？
+
+58
+00:37:16.000 --> 00:37:42.000
+Oh, we named these algorithms wrong. It shouldn't be by key. They should be group by group. That's all right, though. Like I said, even if our listeners did yeah i think that i think that reduced by key probably should have been called group by um uh yeah by reduce because i think it's sufficiently different from what um oh yeah yeah like group by reduce or something like that um i think it's sufficiently different
+哦，我们给这些算法命名错了。不应该是 by_key，而应该是 group_by_group。不过没关系。就像我说的，即使我们的听众……是的，我认为 reduce_by_key 可能应该被称为 group_by_reduce 之类的，因为我认为它与……哦，是的，就像 group_by_reduce 之类的，我认为它与
+
+59
+00:37:42.000 --> 00:38:17.000
+from what theuce does. Which is sad because I just gave my GTC talk. And, you know, what is continuous lifelong learning, though? I will say that two of the coolest... Continuous lifelong learning is a fancy way of saying we don't actually know shit. So we got to talk about C++ now a little bit? Well, I will be giving a keynote at C++ now on what belongs in the C++ standard library.
+reduce 的功能有很大不同。这很可悲，因为我刚做完我的 GTC 演讲。而且，什么是持续终身学习呢？我得说，两个最酷的……持续终身学习是一个花哨的说法，意思是其实我们什么都不知道。所以我们现在得聊聊 C++ 了？好吧，我将在 C++ Now 大会上发表关于 C++ 标准库应该包含什么内容的基调演讲。
+
+60
+00:38:17.000 --> 00:38:57.000
+And yeah, it's interesting the act of presenting remotely because for GTC, we had to record our talks. And usually I have like two slides for every minute I'm going to be talking. And I usually end up going a little bit long on content. But I found for like pre-recorded talks, I was like way short on, like I went at a much faster pace through my slides. And I think it's because with prerecorded, you're able to stop yourself from going off on tangents. I think that's it. It's like it's just better discipline and control.
+是的，远程演讲的体验很有趣，因为对于 GTC，我们必须录制演讲。通常我每讲一分钟会有两张幻灯片。我通常最终会在内容上讲得有点长。但我发现对于预先录制的演讲，我讲得太短了，我浏览幻灯片的速度快得多。我认为这是因为有了预录制，你可以阻止自己跑题。我想就是这样。这是一种更好的纪律和控制。
+
+61
+00:38:57.000 --> 00:39:43.000
+But yeah, I think the keynote is going to be interesting. I think that there's going to probably be three pillars to the talk. And those pillars will probably be the question, what belongs in the C++ standard library, and sort of like fundamentals of standardization and the challenges associated with it and what the standard library is. And then I think that there'll be a pillar where we'll talk about um stability versus velocity and we'll talk about what abi is and then i think we'll we'll end up talking about um package management um and then build systems by way of that um so yeah i think that's i think that's what the talk will will be about um
+但我觉得这个基调演讲会很有趣。我认为演讲大概会有三个支柱。这些支柱可能就是“C++ 标准库应该包含什么”这个问题，以及标准化的一些基本原理、与之相关的挑战，以及标准库到底是什么。然后我认为会有另一个支柱，讨论稳定性与开发速度，讨论什么是 ABI，最后我们会讨论包管理，以及由此引出的构建系统。所以是的，我想这就是演讲的内容。
+
+62
+00:39:43.000 --> 00:40:09.000
+yeah you heard you heard that I retired from speaking? You retired from speaking? Yeah, you didn't tweet about it. I tweeted that because Tony's giving one of the keynotes. Yeah. And someone, he tweeted about it. Someone responded to him saying, oh, that means you won't be able to win any awards this year because keynotes aren't eligible and then tony for some reason blamed me and said that i spoke to the committee and obviously changed the
+是的，你听说我退休不再演讲了吗？你退休不再演讲了？是的，你没发推特说这个。我发推特是因为 Tony 要做其中一个基调演讲。是的。有人回复他说，哦，这意味着你今年没法获奖了，因为基调演讲者没有资格，然后 Tony 不知为何怪我，说我跟委员会说了什么，显然改变了
+
+63
+00:40:09.000 --> 00:41:20.000
+rules to get that to happen and then uh so that i could win more awards and i said haven't you heard tony i've retired you've not retired i have a talk you just yeah i know that was my last talk that was my 20th talk in just over two years, of which 55% have been virtual. So I have now spoken more virtually than I have in person. And I've retired at the young age of 30. me like by a by a few months yeah you are you are older than me by a few months yeah i'll be 30 in in july folks which me which means the uh the the jokes about me being young uh can can uh can can terminate well no so that's the other thing that you're gonna have your birthday in canada next year is that right i'm gonna have my birthday in canada next year yeah 2022 cpp north oh yeah yeah yeah i'll come do that yeah we got lots of we got lots of waterfowl here bro i'll take you to the i'll take you to the ponds we got a beaver um we had two beavers but then one of the beaver
+规则才导致这种情况，这样我就可以赢得更多奖项。我说，Tony，你没听说吗？我已经退休了。你没有退休。我有一个演讲。我知道，那是我的最后一次演讲。那是我两年多来的第 20 次演讲，其中 55% 是虚拟的。所以我现在虚拟演讲的次数比面对面演讲的次数还多。我在 30 岁这个年轻的年纪退休了。比我大几个月……是的，你确实比我大几个月。是的，我七月就 30 岁了，伙计们，这意味着关于我年轻的笑话可以终止了。好吧，不，还有一件事，你明年要在加拿大过生日，对吧？我明年要在加拿大过生日，是的。2022 年 C++ North。哦，是的，我会去参加。我们这儿有很多水禽，兄弟。我会带你去池塘。我们有一只海狸……我们本来有两只海狸，但后来其中一只
+
+64
+00:41:20.000 --> 00:41:25.000
+uh was either killed or died and maybe i'll save my um well well should i i have i know the i know a good talk that i would give but should i should i ruin it should i spoil it for the audience sure we always that's the thing i've spoiled my tattoo my my my apl talk we just anyone that listens to this podcast wait remember we're getting the rotate tattoo oh that's right that's right uh i but here's the thing nobody's gonna remember i can spoil it now because it's a year off nobody's gonna remember but i have a talk about naming that i'd like to give and so maybe i'll give that at uh at c plus c plus plus north thanks for listening and have a great day There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+要么被杀了，要么死了。也许我会保留我的……好吧，我应该……我知道一个很好的演讲题目，但我应该说出来吗？我应该给观众剧透吗？当然，我们总是这样。这就是问题所在，我剧透了我的纹身，我的 APL 演讲。任何听这个播客的人……等等，记得我们要去纹 rotate 纹身吗？哦，对了，对了。但我认为没人会记得。我现在可以剧透，因为它还有一年才发生，没人会记得。但我有一个关于命名的演讲想做，所以也许我会在 C++ North 上讲那个。感谢收听，祝你有美好的一天。目前还没有关于这一集的评论。点击转录中的任何句子来发表评论。

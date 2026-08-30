@@ -1,0 +1,261 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:30.000
+what did exist were the old SGI documentation for the original STL. And at some point we came across that and I didn't know what a reduction was at the time. So anytime I would come across those documents about the SGI STL, I thought it was just, you know, gibberish. I didn't know what they were talking about. I didn't know what an iterator was or a functor was. But I knew that like std vector was helpful. I just sort of assumed that this other stuff to the
+当时确实存在的是原始STL的旧版SGI文档。在某个时候我们偶然发现了它，当时我根本不知道什么是归约（reduction）。所以每当我看到那些关于SGI STL的文档时，我都觉得那简直就是胡言乱语。我不知道他们在说什么，也不知道什么是迭代器或函数对象。但我知道像std::vector这样的东西很有用，所以我只是想当然地认为旁边那些其他的东西是给书呆子看的，或者类似的东西。但最终我学会了std::transform的作用，并意识到，哦，这正是我们进行GPU并行计算所需要的东西。在那一点上，我不得不努力掌握STL并弄清楚所有这些东西。事实证明，这些东西实际上非常有用且设计精良，至少在当时是这样。欢迎收听AD SP播客第237集，录制于2025年5月21日。我是Connor，今天我和我的联合主持人Bryce一起，采访了Nvidia Thrust并行算法库的原始作者Jared Hobarock。这是最长可能为四到五集系列的第一部分。你的实际物理背景比大多数人的虚拟背景要好，而且你
+
+2
+00:00:30.000 --> 00:01:36.000
+side was kind of for nerds or something. But eventually I learned what std transform did and realized, oh, that's exactly what that's the kind of thing that we need to do this this GPU parallelism stuff. And at that point, you know, I sort of had to get good with STL and figure all that stuff out. And it turns out that stuff is actually pretty useful and well designed, at least for the time. Welcome to AD SP the podcast episode 237 recorded on May 21st, 2025. My name is Connor and today with my co-host Bryce, we chat with Jared Hobarock, original author of the Nvidia thrust parallel algorithms library. This is part one of a most likely four or five part series. Your actual physical background is better than most folks virtual background and you
+看起来就像是在国家公园的边缘，我其实不知道你的具体情况，但看起来是个不错的地方，你身后有书架，侧面还有窗户。给我们介绍一下吧。如果你不想暴露自己的位置就别说，但当Bryce说那句话时，我也在想，这个布置看起来比大多数CEO在主题演讲中的背景还要好。嗯，事实证明，NVIDIA的薪水在堪萨斯城比在硅谷要经花得多。确实如此。Jared，你住在树林里吗？或者你住的地方有多偏远？不，我住在一个郊区
+
+3
+00:01:36.000 --> 00:02:27.000
+you look like you're at like the edge of a national park with some I don't actually know what your situation is but it looks like a good situation like you've got windows behind your shelves and a window on the side walk us through. Don't dox yourself if you don't want to but it I when Bryce said that I was also thinking this is a this is a setup that looks better than most CEOs in a keynote talk. Well, NVIDIA's salary goes a lot farther in Kansas City than it does in Silicon Valley, as it turns out. That is true. Jared, do you live out in the woods? Or how rural is where you are? No, I live in a I live in a suburb
+那里只有绿化，所以有树，有树，但我没有绿化。你有邻居吗？我的意思是，我假设你肯定有邻居，但看起来你确实有一个巨大的后院或前院，无论背景里那是什么。我有一个邻居。嗯，我有很多邻居。我住在一个小地方，实际上我住在一个《周六夜现场》演员的街对面。我们住在一个中世纪现代建筑风格的小死胡同里。我们都有草坪和看起来很有趣的房子。
+
+4
+00:02:27.000 --> 00:03:12.000
+There's just you know Like greenery, so there's trees and there's trees and I do not have I do not have greenery Do you have neighbors I mean I assume you definitely have neighbors But it does look like you have a massive backyard or front yard Whatever that is in the background I've got a neighbor. Well, I've got lots of neighbors. I live in a little actually I live across the street from a Saturday Night Live cast member We live in a little cul-de-sac of mid-century modern architecture. And we've all got lawns and interesting looking houses.
+一个志同道合的人，我以前不知道这一点。我非常喜欢中世纪现代建筑。所以我们应该和我们的老板谈谈，把我们的下一次研究外地会议安排在堪萨斯城，听起来是这样。我们可以在楼下开会。没错。你们俩有同一个老板。
+
+5
+00:03:12.000 --> 00:03:32.000
+A man after my own heart, I did not know this. I'm a sucker for the mid-century modern architecture. So we should talk to our boss about having our next research offsite in Kansas City then then it sounds like. We could have it downstairs. That is right. You two have the same boss.
+我忘了这一点。那是，好吧，我想我知道这一点，但我没有意识到这可能对播客产生的影响。是的。我的意思是，我们可能应该，现在我觉得这些闲聊中的一些会出现在实际的播客中。不过还是介绍一下我们的嘉宾吧。我们有这位男士，这位传奇人物，我们在这个播客上花费了大量时间讨论的库背后的开发者，来自堪萨斯城的Jared Hobrock。我们花了一整段时间，我们在斯洛文尼亚和意大利的旅行中，一直在谈论unique count算法，我假设那是你当年亲自编写的，结果发现它背后是一个带有zip迭代器的归约。总之，我们现在正在和这位个人交谈，我其实不知道Thrust起源于哪里，是否是你的论文，无论如何，我们现在把它交给你，Jared，我们会从Bryce那里得到一些更新，因为他在美国，不在纽约
+
+6
+00:03:32.000 --> 00:03:55.000
+I forgot about that. That is, well I guess I knew that but I did not realize the possible podcast implications of that. Yes. I mean we should probably, now I feel like some of this banter is gonna make it on to the actual podcast. Let's introduce our guest though. We have the man, the myth, the developer behind the library that we spend an immense amount
+我现在回家了。哦，你回家了吗？好的，好吧，我们稍后会从Bryce那里得到一些更新，但我们都在同一个研究团队工作，把话题交回给你想谈的任何地方。第一台计算机，你第一次遇到并行编程，你第一次遇到GPU，随你回到多久以前，然后带我们了解你现在的进度。你正在开发的Thrust库，你知道，希望比Thrust库更大更好的东西。但是的，交给你了。希望如此。
+
+7
+00:03:55.000 --> 00:04:37.000
+of time talking about on this podcast, the thrust parallel algorithms library, Jared Hobrock from Kansas City. We spent a whole, we had our trip to Slovenia and to Italy where we were talking about unique count and algorithm that I assume you personally authored back in the day, only to realize that it was a reduction with some zip iterators behind the scene. And anyways, we're now talking to the individual that I'm not I don't actually know where thrust originated if it was with with your dissertation anyways we'll throw it over to you now Jared what we'll get some updates from Bryce because he's in the States not in New York
+嗯，看到Thrust仍然被讨论，我总是很惊讶。我很惊讶它能填满足够的内容，我不知道，到目前为止你们播客的一部分。但是的，我想稍微谈谈它的来源，它确实起源于我在研究生院所做的一些工作。所以我来自计算机图形学背景。在研究生院，我正在研究诸如
+
+8
+00:04:37.000 --> 00:05:11.000
+I'm home now oh are you home all right well we'll get a little update from Bryce later but we both work on the same research team and throw it back to wherever you want. The first computer, the first time you encountered parallel programming, the first time you encountered a GPU, take it back however far you want and then bring us up to speed with where you are now. The thrust library you're working on, you know, things that are bigger and better, hopefully, than thrust Library. But yeah, over to you. Hopefully.
+GPU上的路径追踪渲染器，大约在CUDA刚发布的时候。Thrust就是从那个渲染器项目中产生的，因为我需要一些东西。如果你曾经写过CUDA内核，你就知道有很多，嗯，至少在当时，CUDA并没有包含很多现成的功能，所以如果你想用CUDA做任何事情
+
+9
+00:05:11.000 --> 00:05:48.000
+Well, I'm always surprised to see that Thrust still gets talked about. I'm surprised it could fill up enough content for, I don't know, some portion of your podcast so far. But yeah, I guess just to talk a little bit about where it came from, it did originate as part of some work I was doing in grad school. So I came from a computer graphics background. And in grad school, I was working on things like
+它需要付出很多努力，需要很多劳动，在那个项目中，当我正在做这个渲染器时，我只是注意到你，重复某些我需要为内核启动做的事情，一遍又一遍，很明显，我们需要更多的代码重用，最终这个库就整合在一起，用于自动化你编写内核和启动它们时所做的一些事情。随着时间的推移，这演变成了Thrust库。在某个时候，我了解了标准模板库，并意识到这才是我们应该瞄准的目标。这才是我们真正需要的。
+
+10
+00:05:48.000 --> 00:06:15.000
+path tracing renderers on the GPU around the time that CUDA was first released. And Thrust sort of emerged from that renderer project because I needed something. If you've ever written CU... kuda kernels you know that there's a lot of uh... well at the time at least not a lot of batteries were included with kuda so if you wanted to do anything with kuda
+它围绕着这个已经存在的东西融合在一起。太有趣了，所以你开始做Thrust时，Thrust最初并不是受STL启发的。你开始时只是像通用工具的集合，然后你了解了STL，然后从中获得了灵感。是的，在某个时候，所以这可能是在2007年或08年。像cppreference.com这样的东西不存在，对吧？Stack Overflow可能也不存在。但确实存在的是原始STL的旧版SGI文档。在某个时候我们偶然发现了它，我不知道
+
+11
+00:06:15.000 --> 00:06:58.000
+it required a lot of effort it required a lot of labor and during that project while i was working on this render i just noticed that i was you, repeating certain things I needed to do for a kernel launch over and over and over again and it became clear that, you know, we needed some more code reuse and eventually this library sort of came together for automating some of the stuff you do as part of writing kernels and launching them And that sort of evolved to become the Thrust Library over time. At some point, I learned about the standard template library and realized this is what we should be targeting. This is what we actually need.
+当时什么是归约，所以每当我看到那些关于SGI STL的文档时，我都觉得那简直就是胡言乱语。我不知道他们在说什么，我不知道什么是迭代器或函数对象。但我知道像std::vector这样的东西很有用。我只是想当然地认为旁边那些其他的东西是给书呆子看的，或者类似的东西。但最终我学会了std::transform的作用，并意识到，哦，这正是我们进行GPU并行计算所需要的东西。在那一点上，我不得不努力掌握STL并弄清楚所有这些东西。事实证明，这些东西实际上
+
+12
+00:06:58.000 --> 00:07:47.000
+And it sort of coalesced around this thing that already existed. So interesting, so you started off Thrust, Thrust was not originally inspired by the STL. You started off as just a collection of like common utilities and then you learned about the STL and then took inspiration from it. Right, at some point, so this was probably back in 2007 or eight. And things like cpp reference.com didn't exist, right? Stack overflow maybe didn't exist. But what did exist were the the old SGI documentation for the original STL. And at some we came across that and I didn't know
+非常有用且设计精良，至少在当时是这样。但也许最初并没有以最，怎么说呢，当时并不明显为什么它可能有用，因为C++在2008年左右，它并没有真正处于你可以以高效方式使用STL的状态，对吧？那是在lambda表达式出现之前，所以一切对我来说看起来都很陌生，直到最终弄清楚了它的目的，并且在GPU并行计算中有用例，这对我来说才豁然开朗。
+
+13
+00:07:47.000 --> 00:08:33.000
+what a reduction was at the time so anytime I would come across those those documents about the the SGI STL I thought it was just you know gibberish I didn't know what they were talking I didn't know what an iterator was or a a functor was but I knew that like STD vector was helpful. I just sort of assumed that this other stuff to the side was kind of for nerds or something. But eventually I learned what STD transform did and realized, oh, that's exactly what that's the kind of thing that we need to do this GPU parallelism stuff. And at that point, I sort of had to get good with STL and figure all that stuff out. And it turns out that stuff is actually
+你所做的最终导致Thrust的工作，是，其中任何部分是在CUDA之前，还是都在最初的CUDA发布之后？在CUDA出来之前，我们会写，他们称之为GPGPU，对吧？也就是GPU上的通用编程。在那些日子里，这意味着你正在用HLSL或当时OpenGL着色语言之类的东西编写着色器。
+
+14
+00:08:33.000 --> 00:09:10.000
+pretty useful and well-designed, at least for the time. But maybe originally wasn't presented in the most sort of, it wasn't obvious why it might be useful at the time, because C++ in like 2008-ish of it wasn't obvious why it might be useful at the time because C++ in like 2008 ish it wasn't really in a state where you could use the STL in a productive way right that'd be before things like lambdas and so all look very alien to me until eventually sort of figured out what the purpose was and having the use case in GPO parallelism was sort of what made that click for me.
+你有点像是在试图在图形中，在像素着色器中做你想做的事情。所以确实有那么一点情况，但我们真的希望渲染器中的周围代码都是C++，你只是更喜欢用C++编写所有内容，而不必在C++中的渲染器代码和某种伪C++语言中的着色器代码之间切换。
+
+15
+00:09:10.000 --> 00:09:43.000
+Did this work that you're doing on that eventually led to Thrust, was that, was any of that pre-Cuda or was it all like after the initial CUDA release? Before CUDA came out, we would write, they had what was called GPGPU, right? So general purpose programming on GPUs. And in those days, that meant you were writing shaders in something like HLSL or whatever the OpenGL shading language was at the time.
+无论如何，在CUDA出来之前，这就是我们必须满足的。但一旦CUDA出来，C++在当时也算勉强能用。这比试图在着色器、图形着色器中做事情要好得多。所以我在某个时候开始研究基于CUDA的GPU光线追踪器。当然，渲染器是一个C++应用程序，而CUDA的东西在当时已经足够接近C++了。所以无论如何，在某个时候，当CUDA C++真正可用时，Thrust就是从那项工作中演变而来的。在CUDA之前，戴维斯的一些人有一种类似Thrust的东西，他们用图形着色器做，也有同样的想法。你有这些并行原语，但他们是在把它们编译成图形着色器。而且，你知道，当然，
+
+16
+00:09:43.000 --> 00:10:12.000
+You're sort of trying to do what you wanted to do in a graphic, in like a, in a pixel shader actually. So there was a bit of that going on, but we really wanted like the surrounding code in a renderer was all C++, and you just prefer to write it all in C++ and not have to switch between, you know, the renderer code in C++ and then the shader code in some sort of pseudo C++-like
+这只是一个研究项目。没有人用它构建产品之类的。但这个想法已经存在很长时间了。我想甚至Ian Buck在斯坦福的工作也是从着色器开始的，也许当时也有类似的味道。但这都是很久以前的事了，你知道，在CUDA存在之前。所以你曾说在发现STL之前，你并没有真正考虑过归约，如果我错了你可以纠正我，但就像，你知道，Thrust归约，你知道，一个，我不知道你怎么称呼它，一个Thrust库的参数算法。
+
+17
+00:10:12.000 --> 00:11:23.000
+language. And anyway, before CUDA came out, that's sort of what we had to settle for. But once CUDA did come out and C++ sort of, kind of sort of worked at the time. That was just like so much better than trying to do things in shaders, in graphic shaders. So at some point I started working on a GPU raytracer based on CUDA. And of course that would be like the renderer was a C++ application and the CUDA stuff was close enough to C++ at the time. So anyway, at some point, thrust sort of evolved from that work when CUDA C++ actually became available. Before, before CUDA, there was some people at Davis had a sort of a thrust like thing they were doing with graphics shaders, sort of had the same same idea. You had these parallel primitives, but they were sort of compiling them to graphic shaders. And, you know, of course,
+像归约是并行计算的面包和黄油。我知道我想是在2003年或04年Jeff Dean的MapReduce出来了。所以当你正在处理这些重复的CUDA内核模式，并且你正在朝着这个算法库努力，然后你发现了STL，我的意思是，这既是，你知道Bryce和我最喜欢的算法之一。是什么？你在那个时候意识到归约和并行归约了吗？学术文献的状态是什么？
+
+18
+00:11:23.000 --> 00:12:05.000
+it was just a research project. No one was building products with it or anything like that. But the idea has sort of been around for a long time. I think even Ian Buck's work at Stanford was it was all setarting shaders and maybe had some of the same kind of flavor at the time. But this is all like a long time ago, you know, before before CUDA, you know, ever existed. So you said at one point that pre discovering STL, you weren't really thinking about reduces and you can correct me if I'm wrong, but like, you know, the thrust reduces, you know, a, I don't know what you call it, a paramount algorithm of the
+因为你听起来像是偶然发现了STL，那帮助你将其结晶化。那是导致像std::reduce或者不是std::reduce，而是像thrust::reduce的原因吗？还是说在那之前它显然是你算法库的一部分，只是恰好匹配得很好？不，完全不是。所以记住，这是在路径追踪渲染器的背景下。所以我需要为每条射线发射一堆射线，追踪射线。不需要归约。我当时肯定不知道什么是归约。我不知道……
+
+19
+00:12:05.000 --> 00:12:39.000
+thrust library. Like reductions are the bread and butter of parallel compute. And I know that I think it was 2003 or four that the Jeff Dean MapReduce came out. So when you're working on these repetitive CUDA kernel patterns and you're working towards this algorithm library and then you discover the STL I mean, it's both, you know Bryce and my one of our favorite algorithms What is? Were you aware of like reductions and parallel reductions at that point? Like what's the state of the academic literature?
+真的吗？这对我来说，就像我2008年到2014年上学，可能没学过，但就像我在学习编程语言时函数式编程是一回事。所以像归约和折叠。它无处不在。就像你去一种语言，他们有算法。但在你的时代，你说你甚至不知道那不是一个。嗯，记住，它并不无处不在。
+
+20
+00:12:39.000 --> 00:13:17.000
+Because you made it sound like you stumbled upon the STL and that helped you crystallize it. Was that what led to like, stood reduce or not stood reduce, but like thrust reduce? Or was that like clearly a part of your algorithm library before then, and it just kind of matched up well? No, not at all. So remember, this is in the context of a path tracing renderer. So I needed to fire a bunch of rays for each ray, trace array. There was no need for a reduction. I certainly didn't know what a reduction was at the time. I wasn't aware that...
+我们将这个术语引入了C++，所以它不在那种语言中。我在研究生院上过一门编程语言课，那门课是用OCaml教的，这是一种函数式语言。我不明白。我不懂。当时它对我来说没有点击。现在我有点明白了，我更好地理解了函数式编程。但当时，我试图把所有东西都写得好像我在写C代码，它从来没有真正对我产生影响，而且在我职业生涯的后期之前，肯定没有接触过像折叠这样的东西。所以不，在Thrust整合在一起的时候，你知道，我可能
+
+21
+00:13:17.000 --> 00:13:41.000
+Really? And that's like to me, like I went to school 2008 to 2014, maybe didn't learn about it, but like functional programming was a thing while I was learning programming languages. So like reductions and folds. It's everywhere. Like you go to a language, they've got an algorithm. But at your time, you're saying you weren't even aware that wasn't like a. Well, remember, it wasn't everywhere.
+直到有人演示了如何，可能直到Mark Harris演示了如何在CUDA中做它，我才知道归约。这既令人惊讶又令人鼓舞，事实上它是Thrust和CUDA编程中如此重要的一部分，你直到那么晚才发现它。我本来会以为它是Thrust起源的一部分。嗯，当时的并行编程是人们在国家实验室做的事情。他们在英特尔芯片上做。而且我想象他们所做的一切都是临时的。不像2005年有什么并行原语库之类的。也许
+
+22
+00:13:41.000 --> 00:14:27.000
+We introduced the term into C++, so it wasn't in that language. I took a programming languages class in grad school, and that class was taught in OCaml, which is a functional language. And I didn't understand it. I didn't get it. It didn't click for me at the time. Now I sort of get, I understand functional programming a lot better. But at the time, I tried to write everything as if I was writing C code and it just never really clicked for me and certainly wasn't exposed to something like a fold until much later in my career. So no, at the time when Thrust was coming together, you know, I probably
+最接近的东西是线程构建模块（TBB）。我不知道它是什么时候出来的，但他们，TBB当时可能有一个归约，但我从未使用过TBB。这不是我有经验的东西。我只是，就像我说的，我的背景是GPGPU，这意味着用像素着色器做事情，当时在像素着色器中无法进行归约。实际上当时在像素着色器中无法进行通信。
+
+23
+00:14:27.000 --> 00:15:24.000
+didn't learn about a reduction until someone demonstrated how to probably until Mark Harris demonstrated how to do it in CUDA. That is that's both surprising and inspiring that the fact that it's such an essential part of Thrust and CUDA programming in general that you didn't discover that until so late. I would have just assumed it was like part of the genesis of Thrust. Well, parallel programming at the time was something that people did at national labs. And they did it on Intel chips. And they I imagine everything they did was sort of ad hoc. It's not like there were libraries of, you know, parallel primitives in 2005 or anything like that. Maybe
+所以我确实相信术语reduce的原始起源来自APL和Ken Iverson。然后问题是它什么时候成为并行编程中的流行事物？所以我可以想到几个不同的地方。首先，90年代创建的消息传递接口（MPI）有一个归约原语。我认为这肯定是一个广义的、半广义的归约概念作为基本并行操作出现的地方之一。TBB肯定来得更晚，但我确实想知道，我在后台问了ChatGPT，所以它正在寻找答案，但我确实想知道第一个拥有
+
+24
+00:15:24.000 --> 00:16:00.000
+the closest thing there was was threading building blocks. I don't know when that came out, but they, TBB probably had a reduce at the time, but I had never used TBB. It's not something I was experienced in. I was just, like I said, my background was in GPGPU, and that meant doing stuff with pixel shaders and couldn't do a reduction in a pixel shader at the time. It wasn't possible. No communication was possible actually in pixel shaders at the time.
+并行归约操作、广义并行归约操作的编程语言在哪里，我所说的广义是指你可以插入不同运算符的那种。我想知道哪一个是第一个。是的，我不知道。我假设术语reduce来自……它来自APL。是的，我的意思是，所以APL，这本书写于1962年。第一个实现是1966年，但术语reduce来自这些数组语言，当你对矩阵执行归约时，你正在减少维度
+
+25
+00:16:00.000 --> 00:16:58.000
+So I do believe that the original origin of the term reduce comes from APL and Ken Iverson. And then the question is when did it become a popular thing in parallel programming? So I can think of a couple different places. First of all, MPI, the message passing interface, which was created in the 90s, has a reduction primitive. And I think that's certainly one of the places where the notion of a generalized, semi-generalized reduction would have come up as a basic parallel operation. TBB certainly came later, but I do wonder, I asked ChatGPT in the background, so it's looking for answers, but I do wonder where is the first programming language that had
+减少一。所以如果在矩阵上，如果你做列向或行向归约，你最终会得到一个秩为1的数组。如果你在秩为1的数组上做归约，你最终会得到一个秩为1的数组。如果你在秩为1的数组上做归约，你最终会得到一个秩为0的标量。所以很多人认为术语reduce来自你把一堆元素减少到一个元素，但实际上不是这样。这个术语来自你正在将任意秩数组的维度从n减少到n减1。将任意秩数组的维度从n减少到n减1。有趣。
+
+26
+00:16:58.000 --> 00:17:34.000
+a parallel reduction operation, a generalized parallel reduction operation, and by generalized I mean one where you could plug in different operators. I wonder which the first would have been. Yeah, I have no idea. I assume the term reduce comes from... It comes from APL. Yeah, I mean, so APL, the book was written in 1962. The first implementation was 1966, but the term reduce comes from these array languages where when you perform a reduction on a matrix, you are reducing the dimensions
+认为它来自序列减少到标量，我的意思是，这并不错。它在技术上是任意秩数组从n秩到n-1秩的一个子集。但我的意思是，这一切都非常迷人，因为，我的意思是，Thrust今天的状态是一个非常精致、可用的并行算法库，正如你之前提到的，就像你说的那样，你很惊讶人们仍然从中榨取如此多的用处。但就像，我认为thrust::transform_reduce和thrust::reduce以及thrust::inclusive_scan和exclusive_scan是非常基础的原语，如果我要为这个算法库写历史，就像当然那是你开始的东西，但你说根本不是那样。
+
+27
+00:17:34.000 --> 00:18:07.000
+by one. So if on a matrix, if you do a column-wise or a row-wise reduction, you end up with a rank one array. If you are doing a reduction on a rank one array, you end up with a rank one array. If you are doing a reduction on a rank one array, you end up with a rank zero scalar. And so a lot of people think that the term reduce comes from that you're reducing a bunch of elements down to a single element, but that's actually not it. The term comes from you are reducing the dimensions on an arbitrarily ranked array from n to n minus one. the dimensions on an arbitrarily ranked array from n to n minus 1. Interesting.
+就像你正在做光线追踪，这些东西是随着时间演变的。是的。随着时间演变。是的，特别是对于像transform_reduce这样的东西，那种，你知道，它演变成一种在诸如变换和归约之间实现融合的方法，因为你知道，你想避免如果将它们作为两个单独的通道而不是一个融合的通道应用时会发生的内存流量。而且在开始时并不明显，至少对我们来说，这并不是一件真正有用的事情。但现在，就像你说的，也许它是你每当需要做一些有趣的事情时首先会想到的东西之一。当，Jared，花哨的迭代器、惰性迭代器的概念是什么时候出现的？或者换句话说，在什么点上你意识到与其拥有一个特殊的transform_reduce操作，不如拥有一个reduce操作和类似transform_iterator的东西？嗯，最初，我想，在某个时候，合作者Nathan Bell加入进来工作。我们俩在工作，在我们确定SGI STL API是我们需要的目标之前，有一些，比如，甚至不清楚算法的输入应该是什么，对吧？所以甚至不清楚迭代器是应该瞄准的模型。Nathan有Python背景。所以他习惯了像NumPy这样的东西。他建议，我记得他建议，如果这些算法的输入更像生成器会怎样？
+
+28
+00:18:07.000 --> 00:18:56.000
+To think that it comes from a sequence down to a scalar, I mean, it's not wrong. It is technically a subset of the arbitrarily ranked array of n rank to n minus 1 rank. But I mean, this is all very fascinating because, I mean, the state of thrust today is a very polished usable parallel algorithm library, which as you mentioned earlier, like you said, you're surprised that people are still squeezing so much usefulness out of it. But like, I think of thrust transform reduce and thrust reduce and thrust inclusive and exclusive scan as like very fundamental primitives that if I were to write the history for this algorithm library, like of course that is what you started with, but you're saying that that wasn't the case at all.
+所以它们有点像你调用的黑盒函数，它们返回一些东西给你。在某个时候很明显那行不通。C++不像Python，那无法正确工作。所以迭代器可能是我们需要非常了解并瞄准的东西。在那一点上，我意识到我需要提高C++水平，因为Boost迭代器库中发生的事情在当时非常疯狂。所以，你知道，我开始挖掘Boost的想法，你知道，他们有迭代器库，而且，我的意思是，Thrust本质上
+
+29
+00:18:56.000 --> 00:19:41.000
+Like you were working on ray tracing and these things evolved over time. Yeah. evolved over time. Yeah, and especially for something like transform reduce, that sort of, you know, that evolved as a as a as a means to get fusion between, you know, something like a transformer reduction because you know, you want to avoid the memory traffic that would occur if you applied those as two separate passes rather than one fused pass together. And it wasn't obvious, starting out, it wasn't obvious that, at least to us, that that's something that could be really useful to do. But now, like you said, maybe it's one of the first things that you would reach for
+照搬了所有那些东西并把它们都带进来了。我不记得确切了，我相信发布说明准确说明了这是什么时候进来的，但在某个时候很明显，采用那种模型是个好主意，因为它将允许诸如融合、transform_reduce和zip以及所有这类事情。TransformIterator是在TransformReduce之前还是之后出现的，或者你还记得吗？我不记得了。我相信从，
+
+30
+00:19:41.000 --> 00:20:48.000
+whenever you need to do something interesting. When, Jared, when did the notion of the fancy iterators, of the lazy iterators come in? Or let me put it another way, at what point did you realize that instead of having a special transform reduce op that you could have a reduce op and something like a transform iterator? Well, originally, I think, so at some point, collaborator Nathan Bell came on to work on the project. And it was sort of the two of us working and before we had settled on the idea that the SGI STL API was something that we needed to target, there was some like, it wasn't clear what the inputs to the algorithm should even be, right? So it wasn't even clear that iterators were the sort of model to target. And Nathan had a background in Python. So he was used to like NumPy. And he had suggested I remember he suggested, well, what if these inputs to these algorithms were more like generators?
+因为我在这里看到了一点背景信息，我有不幸的荣幸在Thrust上做了大量的版本控制工程，因为我们不得不把它在三个不同的版本控制系统之间迁移。所以我看过所有的提交，至少看过几次所有的提交信息。我相信，如果我没记错的话，transform_reduce是先出现的，而后来
+
+31
+00:20:48.000 --> 00:21:35.000
+So they're sort of just like black box functions that you call and they return something to you. And at some point it was clear that that was not going to work. Like C++ wasn't like Python and that couldn't be made to work correctly. So iterators was probably something that we need to understand really well and target. And at that point, I realized I needed to get better at C++ because the stuff going on in the boost iterator library was pretty wild at the time. So, you know, I started mining booster ideas and you know, they've got the iterator library and that's, I mean, Thrust essentially
+transform，像当前的实现，或者transform_reduce被实现为仅仅是带有transform_iterator的reduce，是后来才出现的。总的来说，就像现在在它生命周期的这一点上，你知道，Thrust是成熟的，它在某种程度上是根据自身实现的，对吧？所以就像一个算法可以通过降低到另一个算法来实现自身。但是，你知道，项目不是那样开始的，对吧？它们开始时就像，你把这个黑客代码放进代码的这一部分来让它工作。但是，你知道，真的，
+
+32
+00:21:35.000 --> 00:22:07.000
+cargo-culted all that stuff and brought it all in. I don't remember exactly, I'm sure the release notes say exactly when this came in, but at some point it became clear that adopting that sort of model would be a good idea because it would allow things like fusion and transform reduce and zip and all that sort of thing. Did Transform Iterator come before Transform Reduce or did it come after or do you recall? I don't remember. I believe from,
+你有点知道它应该只是以不同的方式使用自身，并且是某种自相似的。但所以这并不让我惊讶，也许transform，或者transform在transform_iterator之前？所以Thrust有，我认为它的架构在某些方面是优雅的。在某些方面，有一些黑暗的漏洞。但我认为Thrust最美丽的部分是所谓的通用后端，调度层。所以当你编写一个Thrust后端时，
+
+33
+00:22:07.000 --> 00:22:38.000
+because I saw a little piece of context here is that I had the unfortunate distinction of having to do a significant amount of version control engineering on thrust, because we've had to migrate it between three different version control systems. So I've looked through all the commits, at least all the commit messages a couple of times. And I believe, if I recall correctly, that transform reduce came first and that later
+你可以自定义该后端中的每个函数。你可以自定义reduce如何工作，transform如何工作，sort如何工作，unique如何工作。但有一个通用层，至少，你的后端必须自定义像五或六个基础算法，如果你愿意，你可以自定义更多，但如果你不自定义更多，那么所有其余的算法都是根据那五或六个基础算法实现的，而那些根据基础算法的实现是在
+
+34
+00:22:38.000 --> 00:23:11.000
+transform like the current implementation or transform reduces implemented as just reduce with transform iterators came later. Just in general, like right now at this point in its life cycle, you know, Thrust is mature and it's sort of implemented in terms of itself, right? So like one algorithm can implement itself by lowering onto another. But you know, projects don't begin like that, right? They begin as like, you put in this hack into this, in this part of the code to make it work. But, you know, really,
+这个通用层中，我认为这是Thrust最美丽的部分，实际上如果你喜欢，它是找到如何编写好的Thrust代码示例的最佳地方之一。就像那是你可以去找到像我们在播客之前谈论的unique count实现（根据reduce）或者像根据transform_iterator的reduce实现的地方。它是代码中非常优雅的一部分。我必须不同意。我认为这是一个巨大的意大利面条式代码混乱。
+
+35
+00:23:11.000 --> 00:23:46.000
+you sort of know that it should sort of just use itself in a different way and be sort of self similar. But so it doesn't surprise me that maybe transform, or transform came before transform iterator? So Thrust has, I think its architecture is in some ways elegant. In some ways, there's some dark holes of it. But I think by far the most beautiful part of Thrust is what's called the generic back end, the dispatch layer. So when you write a thrust backend,
+所以我知道你在说什么。就像想法是你想要调用一个算法，如果某个地方没有专门化和后端，也许会得到一个默认实现。我认为我们在2025年的C++中有更好的方法来做到这一点，但在当时，我记得，在当时，对诸如定制点对象以及如何使那些东西工作并没有很好的理解。所以它确实工作的方式，在它确实工作的范围内，是根据C++ 03所使
+
+36
+00:23:46.000 --> 00:24:19.000
+you can customize how each function in that backend. You can customize how reduce works, how transform works, how sort works, how unique works. But there's this generic layer where at minimum, your backend has to customize like five or six basis algorithms and you can customize more if you want but if you don't customize more then all the rest of the algorithms are implemented in terms of those five or six basis algorithms and those implementations in terms of the basis algorithms are in
+可能的方式实现的，因为那是当时的约束。但你得到的是这种混乱。我知道这是一个巨大的意大利面条式混乱，但它确实有效。它有时非常微妙，因为它基于ADL调度原则工作，并且有一定数量的执行策略向上转型。所以有一个标签，执行策略，它被用来将你的调用路由到正确的地方。
+
+37
+00:24:19.000 --> 00:24:57.000
+this generic layer and I think that's the most beautiful part of thrust and actually if you like it's one of the best places To like find examples of how to write good thrust code Just like that's where you can go to find Like the unique count implementation that we've talked about on the podcast before in terms of reduce or like the reduce Implementation in terms of like transform iterators. It's a really, it's a very elegant part of the code. I have to disagree. I think it's a gigantic mess of spaghetti code.
+当它通过所有这些转发层时，转发层必须确保执行策略被正确地转换或向上转型为最派生的执行策略，以便它调度到正确的地方。如果其中任何一个出错，你最终会得到各种各样的问题。我的意思是，你不再需要那样做了。我的意思是，它之所以那样工作，很大程度上是因为当时没有比转发引用更好的东西了。是的，如果你有兴趣，我想这些天你可以做得更好。所以听到Nathan Bell，Thrust的另一位创始人，当他是NumPy人时是一个Python人，这对我来说非常有趣，因为Jared，你知道今天按容量和计算量计算Thrust最大的
+
+38
+00:24:57.000 --> 00:25:35.000
+So I know what you're talking about. Like the idea is you want to call an algorithm and maybe get a default implementation if there's not a specialization and a backend somewhere. I think we have better ways to do that in C++ in 2025, but at the time, I remember, at the time, there wasn't a good understanding of things like customization point objects and how to make that stuff work. So the way it does work to the extent that it does work was sort of implemented in what C++ 03 made
+用户是谁吗？不知道。所以我认为我可以给你一个关于Thrust顶级用户的相当准确的统计，特别是Thrust。我将排除使用大量CUB和一些Thrust的库。我的意思是仅仅是那些严重依赖Thrust的人。按用户计算，我衡量的指标不是像编写的代码行数或使用它的开发者数量，而是我的意思是像此刻正在运行该Thrust代码的GPU数量。
+
+39
+00:25:35.000 --> 00:26:06.000
+possible because that was sort of the constraints of the time. But what you get is this mess. I know it's a gigantic mess of spaghetti, but it doesn't work. It is sometimes very subtle because it works on, it works on the principle of ADL dispatch, and there's some amount of upcasting of execution policies. So there's this tag, the execution policy, and that is used to route your call to the right place.
+我不确定这两个中哪一个是第一和第二，但我认为第一是CuPy，CuPy只是NumPy的CUDA加速版本。所以我认为这里有一些非常优雅的东西，回到过去，Jared和这个NumPy家伙过来写了Thrust，而且，Thrust有一些NumPy的DNA在里面。然后，大约15年后，Thrust是驱动CuPy（GPU加速的NumPy）的东西。
+
+40
+00:26:06.000 --> 00:26:56.000
+And as it goes through all of these forwarding layers, the forwarding layers have to ensure that the execution policy is correctly casted or upcasted to the most derived execution policy so that it dispatches to the right place. And if any of that goes wrong, you end up with all sorts. I mean you don't have to do that anymore. I mean a lot of those a lot of the reasons that it does work like that is because there were no there was nothing better forwarding references at the time. Yeah you could do much better these days I think if someone were so inclined. So it's very interesting to me to hear that Nathan Bell, one of the other founders of Thrust was a Python person when he was a NumPy person because Jared, do you know the largest
+现在，你问了其他的。我认为可能是第二名的那个，同样这是按照我给出的指标，即此刻正在运行的Thrust代码量，将是PyTorch，PyTorch的使用量比CuPy多，但PyTorch在比CuPy更少的地方使用Thrust。CuPy非常非常广泛地使用Thrust来实现大量的不同算法。它也使用CUB，但它使用得相当广泛。至少这是我的理解。所以是的，我会说CuPy、PyTorch是前两名。Rapids可能是第三或第四名。然后我想在那之后，我想很难说，
+
+41
+00:26:56.000 --> 00:27:39.000
+user by volume and compute of Thrust today? No. So I think I can give you a pretty accurate accounting of the top users of thrust, specifically thrust. I'm going to exclude libraries that use a lot of cub and some thrust. I mean just people that will heavily rely on thrust. And by users, the metric I'm measuring by is not like lines of code written or number of developers using it, but I mean like number of GPUs right this moment that are running that thrust code.
+可能还有一两个Python用户，然后可能是最大的C++用户是谁。但绝对Thrust库今天的前三或四个用户是Python框架。这很有趣，因为大约在2009年，有一种关于接下来会发生什么的问题，有一个问题是Thrust接下来会发生什么，我们放弃了做一堆像NumPy那样的数值扩展的计划。如果我们真的做了，那将非常有价值。而且就像事后看来，
+
+42
+00:27:39.000 --> 00:28:18.000
+And I'm not sure which of these two is number one and number two, but I think number one is Kupai and Kupai is just a Kuda accelerated version of numpy. So I think there's something there's something very elegant here that back in the day Jared and this numpy fellow came and wrote thrust and, and Thrust has some of that NumPy DNA in it. And then, like 15 years later, Thrust is the thing that powers Kupai, the GPU accelerated NumPy.
+如果我们真的完成了，情况可能会非常、可能会非常不同。你为什么放弃它？你知道，如果我在一堆人中，Nathan最终去了谷歌，Thrust被产品化并脱离了我们的控制。所以它变成了，你知道，这个产品，并由产品人员维护。所以它开始作为一个研究项目，在某个时候决定我们应该将其产品化，这意味着在产品团队中找到某个人来承担责任。在那个时候，这意味着，你知道，
+
+43
+00:28:18.000 --> 00:29:10.000
+Now, you asked about the other ones. The one that I think is probably number two and again this is by the metric I gave of like number of like amount of thrust code that's running right now would be PyTorch and there's PyTorch is in more use than Kupai but PyTorch uses thrust in fewer places than Kupai does. Kupai uses thrust very very extensively to implement a ton of the different algorithms. It also uses KUB but it uses it pretty extensively. At least that's my understanding. So yeah I would say Kupai, PyTorch are the top two. Rapids is probably like number three or number four. And then I think after that, I think it's hard to say,
+到那时为止一直在研究它的研究人员会找到其他事情做。这基本上就是发生的事情。所以我们没有得到Thrust Numeric，不幸的是，因为那个原因。它本来会像，你知道，像NumPy类事物的表达式模板。像MatEx之类的东西。也许。你说MatEx？
+
+44
+00:29:10.000 --> 00:29:54.000
+there's probably one or two more Python users, and then probably it's whoever the largest C++ user is. But like definitely the top three or four users of the thrust library today are Python frameworks. That's interesting because around 2009 there was sort of a question of what's next there was a question like what was gonna be next for thrust and we had abandoned plans for doing a bunch of like numeric extensions, some very numpy like numeric extensions. And that would have been very valuable if we had actually done that. And like in hindsight,
+是的。大概是那样的东西。我不知道。你可能仍然可以在我的GitHub上找到它。有趣的是，在现在是cccl/thrust/examples的示例子目录中，但曾经是thrust/examples。有几个示例基本上是数组库示例。我不确定Bryce是否添加了这个，但我们有一集，我不知道是10、20、30集前，我们谈论了求和面积表。
+
+45
+00:29:54.000 --> 00:30:31.000
+the landscape might be quite, might have been quite different had we had actually gone through. Why did you abandon it? You know, if I'm in a bunch of, Nathan ended up going to Google and Thrust was productized and sort of left our control. So it became, you know, this product and was sort of maintained by product folks. So it began as a research project and at some point was decided that we should productize it, which meant finding someone in a product team to sort of own responsibility for it. And at that time, that meant that, you know,
+在Thrust示例存储库中有一个Thrust中的求和面积表示例，你可能会认为在Thrust中实现这一点非常困难，它基本上是一个秩为1的数组库，一个单一序列。但他们这样做的方式是他们定义了一个名为transpose的函数，它利用了置换迭代器和gather算法，它只是调用了两次transpose，然后它定义了一个水平扫描，它是根据inclusive_scan实现的，所以它调用了两次，与transpose算法交错。无论如何，重点是，就像技术上你可以
+
+46
+00:30:31.000 --> 00:31:01.000
+the research people that had been working on it to that point would find something else to do. And that's essentially what happened. So we didn't get thrust numeric, unfortunately, because of that. It would have been something like, you know, like expression templates for NumPy like things. Something like MatEx. Maybe. You said MatEx?
+用Thrust做这个。它只是不符合人体工程学，而且我不知道，你添加了吗？这个示例，对吧？虽然我认为它是原始示例之一，虽然我确实计划添加，它是原始示例之一，虽然我确实计划添加另一个。它是原始示例之一。
+
+47
+00:31:01.000 --> 00:31:40.000
+Yeah. Something like that, probably. I don't know. You can probably still find it on my GitHub. What's interesting is that in the example subdirectory of the what is now cccl slash thrust slash examples, but at one point was thrust slash examples. There are several examples that are basically like array library examples. I'm not sure if Bryce added this, but we had an episode, I don't know if it was 10, 20, 30 episodes ago where we talked about summed area tables.
+它叫summed area table。它叫summed_area_table.cu。它利用了inclusive_scan_by_key，这是你可以，你知道，做你的那种行键算法的地方。然后它有一个transform_iterator，我相信它使用了置换迭代器，它获取你的双列索引，然后在最后做一次gather来置换你的序列，这，我想在数组库、机器学习、深度学习的世界里是高度低效的。
+
+48
+00:31:40.000 --> 00:32:26.000
+There is an example in the thrust example repository of a summed area table in Thrust, which you would think is pretty hard to make happen in Thrust, which is a rank one array library basically, a single sequence. But the way that they do that is they define a function called transpose which makes use of a permutation iterator and a gather algorithm and it just it just calls transpose twice and then it defines a horizontal scan which is implemented in terms of inclusive scan and so it calls that twice interleaved with a transpose algorithm. Anyways the point being is that like technically you can
+但我非常好奇前几天偶然发现它，鉴于你说过该库的合著者Nathan。那看起来像Nathan来找我，是的。他总是擅长找出实现它的方法。他比我更擅长弄清楚如何让前缀和做你想要的事情。随着时间的推移我变得更好了，但是嗯……哦，我不想透露太多，但在Jared采访快结束时，哦男孩，我过去两天一直在做一些事情
+
+49
+00:32:26.000 --> 00:32:45.000
+Do this with thrust. It's just non ergonomic and I Don't know Did you add? This example, right? Although I think it was it was one of the original examples Although I do plan on adding it was one of the original examples called although I do plan on adding another. It was one of the original examples.
+我非常兴奋地向你们展示那个方向的东西？请务必在你的播客应用程序或adsp the podcast com上查看这些节目说明，以获取我们在今天这一集中提到的任何内容的链接，以及一个GitHub讨论的链接，你可以在那里留下想法、评论和问题。感谢收听。我们希望你喜欢并祝你有美好的一天。这不是我们的标语，我们的标语是带有信息点缀的混乱。这一集还没有评论。点击转录中的任何句子来留下评论。
+
+50
+00:32:45.000 --> 00:33:25.000
+It's called summed area table. It's called summed underscore area underscore table dot cu. And it makes use of inclusive scan by key, which is where you can, you know, do your kind of row key algorithm. And then it has a transform iterator, which I believe uses a permutation iterator, which gets your kind of bi-column indices and then does a gather at the end of the day to permute your sequence, which is, I imagine, highly inefficient in the world of array libraries, machine learning, deep learning.
+它被称为求和面积表，文件名是summed_area_table.cu。它利用了按键包含扫描（inclusive scan by key），也就是你可以执行行键算法的地方。然后它有一个转换迭代器，我相信它使用了置换迭代器，该迭代器获取你的双列索引，最后进行收集以置换你的序列。我想在数组库、机器学习和深度学习领域，这效率非常低。
+
+51
+00:33:25.000 --> 00:34:02.000
+But I was very curious to stumble across that the other day, given that you said that your co-author of the library, Nathan. That looks like Nathan coming to me, yeah. He was always good at figuring out the way to do it. He was better than me at figuring out how to make the prefix sum do what you wanted. I've gotten better over time but um... Oh I don't I don't want to tease too much but towards the end of the Jared interview oh boy do I have something I've been working on the past two days
+但我前几天偶然发现这个时感到非常好奇，因为你说过该库的合著者内森（Nathan）。看起来是内森向我走来，是的。他总是很擅长找出实现方法。在弄清楚如何让前缀和实现你想要的功能方面，他比我强。随着时间的推移，我有所进步，但是……哦，我不想剧透太多，但在杰瑞德（Jared）访谈的最后，天哪，我过去两天一直在研究一些东西，
+
+52
+00:34:02.000 --> 00:34:07.000
+that I'm very excited to show you guys in that vein? Be sure to check these show notes either in your podcast app or at adsp the podcast com for links to anything We mentioned in today's episode as well as a link to a get-up discussion where you can leave thoughts comments and questions Thanks for listening. We hope you enjoyed and have a great day It's not the tagline our tagline is chaos with sprinkles of information There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+我非常兴奋能在那个方向向你们展示？请务必在你的播客应用程序或adsp the podcast com查看这些节目笔记，获取我们今天节目中提到的任何内容的链接，以及一个GitHub讨论链接，你可以在那里留下想法、评论和问题。感谢收听。我们希望你喜欢并祝你有美好的一天。这不是我们的标语，我们的标语是“混乱中点缀着信息”。本集还没有评论。点击转录中的任何句子即可发表评论。
