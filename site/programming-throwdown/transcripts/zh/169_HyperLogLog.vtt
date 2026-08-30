@@ -1,0 +1,771 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:04.000
+programming throwdown episode 169 hyper log log take it away, Jason. Hey, everybody. So, Patrick, are all your cars electric? Any of your cars electric? Do you have an ICE car? Actually, I have one normal car and one plug-in hybrid we discussed. So it does have a battery, but it also has a regular 12-volt car battery. Oh, yeah, that's what I was going to ask you. So even the hybrids have regular car batteries uh the hybrids for sure i think even electric cars still often have like 12 volt sort of normal car batteries for a variety of purposes i don't know okay it does i mean it's probably better than trying to like convert you know from whatever voltage the the engine battery uses it looks
+Programming Throwdown 第 169 期，HyperLogLog。Jason，开始吧。嘿，大家好。Patrick，你的车都是电动的吗？有哪辆是电动的吗？你有燃油车吗？其实，我有一辆普通车和一辆我们讨论过的插电式混合动力车。所以它确实有电池，但它也有一个常规的 12 伏汽车电瓶。哦，对了，我正想问你这个。所以即使是混合动力车也有普通的汽车电瓶吗？混合动力车肯定有，我想即使是电动汽车通常也经常配备 12 伏的普通汽车电瓶，用于各种用途，我不知道，好吧，确实有，我的意思是，这可能比试图从引擎电池使用的任何电压转换过来要好，看起来
+
+2
+00:01:04.000 --> 00:01:38.000
+like here they do just a quick google says that yeah they have the normal lead acid 12 volt batteries so you know how do you know when your car battery is dead do you just drive until the battery stops working or what do you do i mean in an overall thing i guess yeah the car can't start so i don't know how that works in electric your accessory systems like when you sit in the car before you start it, it probably doesn't turn on. Yeah. So like in my experience until recently, I have never tested my car battery. And so basically what happened is I will just drive until the car won't start.
+这里他们确实做了一个快速的谷歌搜索，显示是的，它们有普通的铅酸 12 伏电池，所以你知道你怎么知道你的汽车电池没电了？你是直接开到电池停止工作，还是怎么做？我的意思是，总的来说，我想是的，车启动不了，所以我不知道在电动车里它是怎么运作的，你的辅助系统，比如你在启动车之前坐在车里，它可能不会打开。是的。所以根据我的经验，直到最近，我从未测试过我的汽车电池。所以基本上发生的情况是，我会一直开，直到车无法启动。
+
+3
+00:01:38.000 --> 00:02:27.000
+And I will have to go and desperately figure out how to replace the car battery. It ends up being this big thing. And it's just gotten worse as like we've gotten busier over the years. So it culminated when we were about to all go camping and the car didn't start. And we've had the same battery for a while. But part of it is, you know, you never totally know without a tester if it's if it's the battery or if you left the lights on or if there was some kind of glitch that caused the energy to drain like uh um we had the key in the car uh like not literally in the ignition but we had the key next to the car and i feel like just having the key so close to the car it somehow got confused and it thought we were in there or something um
+然后我不得不拼命想办法更换汽车电池。这最后成了一件大事。而且随着这些年来我们越来越忙，情况变得更糟了。所以当我们要去露营时，车子启动不了，事情达到了顶峰。我们用同一个电池已经有一段时间了。但部分原因是，你知道，如果没有测试仪，你永远无法完全确定是电池的问题，还是你忘了关灯，或者是有某种故障导致能量耗尽，比如我们把钥匙放在车里，不是真的放在点火装置里，而是把钥匙放在车旁边，我觉得仅仅是因为钥匙离车太近，它不知怎么就搞混了，以为我们在车里或者什么的，嗯
+
+4
+00:02:27.000 --> 00:03:04.000
+because uh you know i'm actually so i guess to answer i'm i'm ordering a car battery tester which is only 20 bucks i thought it was going to be like hundreds of dollars because you know when they they anytime they do anything at the dealership or you call someone to do something it always seems like oh like this must be some amazing device that you know must be manufactured in a laboratory in the middle of the earth or something and so no it's like you can get a car tester or battery tester for like 20 bucks do you have to disconnect the battery not remove it but at least like disconnect the terminals like the rest of the electrical system for it to work because that's a
+因为你知道，我其实，我想回答一下，我正在订购一个汽车电池测试仪，只要 20 美元。我原以为要几百美元，因为你知道，当他们在经销商处做任何事情，或者你打电话给某人做某事时，看起来总是像，哦，这一定是什么了不起的设备，一定是在地球中心的实验室里制造出来的，所以不，就像你可以花 20 美元买到一个汽车测试仪或电池测试仪。你必须断开电池吗？不是拆下来，但至少要像断开端子一样，断开其余的电气系统才能工作，因为那是一个
+
+5
+00:03:04.000 --> 00:03:39.000
+that's an annoying thing if you do yeah i don't think so right because as long as the car is not on it's not drawing it's not drawing any amps so it should it should be an insignificant draw so we're gonna find out i'm gonna get the car battery tester on tuesday tomorrow and um'm going to see what the instructions say. I'll let you know. I'm pretty sure, just putting my engineering hat on, that as long as the car is not on... Well, the car has to not be on and not even on accessory mode.
+那是一件很烦人的事情，如果你这样做的话。是的，我不这么认为，对吧？因为只要车没开，它就不会消耗任何电流，所以它应该是一个微不足道的消耗。所以我们会找出答案，我周二，也就是明天会拿到汽车电池测试仪，我会看看说明书上怎么说。我会让你知道的。我很确定，以工程师的身份来看，只要车没开……好吧，车必须没开，甚至不能处于辅助模式。
+
+6
+00:03:39.000 --> 00:04:15.000
+The keys have to be far away and everything. I could see that. But it's not a voltage thing right so the thing you're describing is can you pull enough amps temporarily to to turn the car over right so it's like measuring like rush current that it can deliver yeah so this $20 thing what it needs to do is draw enough amps for a certain amount of time and make sure the voltage doesn't drop right i think that's but it can also tell you it can actually tell you whether the battery like all the cells are just old or if you have one bad cell i don't know what you would do with that information but it could tell the
+钥匙必须离得很远，一切都要这样。我能理解。但这不是电压的问题，对吧？所以你描述的事情是，你能否暂时抽出足够的电流来启动汽车，对吧？所以它就像是在测量它能提供的浪涌电流。是的，所以这个 20 美元的东西需要做的是在一定时间内抽出足够的电流，并确保电压不会下降，对吧？我想是这样，但它也可以告诉你，它实际上可以告诉你电池的所有电池单元是否只是老旧了，或者你是否有一个坏的电池单元。我不知道你会怎么处理这些信息，但它能告诉你
+
+7
+00:04:15.000 --> 00:04:58.000
+difference this is probably a voltage based thing knowing that all the batteries are made from the same chemicals or whatever so yeah that's right yeah i think if you have one dead cell then you would have you'd consistently pull a certain number of amps but at a lower voltage well you'd have one cell voltage drop missing so you like i don't know how many cells are in a 12 but like you would go to 9.3 and that's like all your cells are good except for one yeah versus if you just had like 10 instead of 12 then okay so that your your mission should you choose to accept it is to crack open the tester to look at the circuitry figure out what it's doing yeah after the last episode where i burnt
+区别。这可能是一个基于电压的事情，知道所有的电池都是由相同的化学物质或类似的东西制成的，所以是的，那是对的。是的，我想如果你有一个坏掉的电池单元，那么你会持续抽出一定数量的电流，但在较低的电压下。好吧，你会有一个电池单元的电压降缺失，所以就像，我不知道 12 伏里有多少个电池单元，但你会降到 9.3 伏，那就是除了一个之外，你所有的电池单元都很好。是的，而如果你只是有 10 个而不是 12 个，那么好吧，所以你的任务，如果你选择接受的话，就是拆开测试仪，看看电路，弄清楚它在做什么。是的，在上一集我烧毁了
+
+8
+00:04:58.000 --> 00:05:58.000
+the raspberry pi and i literally have a imprint on my finger from the SD card. I don't know if I'm going to crack open the battery. But but yeah, I guess, you know, I'd be interested to hear what people out there do. So if you just drive your car until it doesn't turn on, if you have some regiment that works for you and you've never had this happen to you either end of the spectrum let us know um you know i just you know kind of like it didn't ruin our camping trip but it definitely set the camping trip back by like multiple hours so so i kind of feel like i needed to improve this area of my life so we'll see how it goes if you have a way of doing this less though actually patrick do you do anything or do you just drive the car until it doesn't turn on yes that one which is horrible i i think when i take it for its regular oil change i think one of the things in the checkpoint is they hook up their expensive
+树莓派之后，我的手指上真的留下了 SD 卡的印记。我不知道我是否会拆开电池。但，是的，我想，你知道，我很想听听外面的人是怎么做的。所以如果你只是开着车直到它无法启动，如果你有什么适合你的方案，而且你从来没有遇到过这种情况，无论哪种情况，请告诉我们。嗯，你知道，我只是，你知道，这并没有毁掉我们的露营旅行，但它确实让露营旅行推迟了几个小时，所以我感觉我需要改善我生活中的这个领域，所以我们会看看进展如何。如果你有更好的方法，虽然实际上 Patrick，你做过什么吗？还是你只是开着车直到它无法启动？是的，就是那样，这太糟糕了。我想当我去做定期换油时，我想检查点之一就是他们连接上他们昂贵的
+
+9
+00:05:58.000 --> 00:06:50.000
+battery tester to it and then try to convince me to buy their battery um so that's been my i do regularly get the oil changes on schedule um i don't know if that actually actually is super critical but i for whatever reason i just choose to do it that way and so yeah i hope you did the same thing i get the all changes on schedule but i've never as far as i know i've never had a mechanic tell me i need to change the battery it's always just died oh man all right uh on to the news your first up all right so you know we never really talked about this uh this is a news article about you know google continuing to to do layoffs um but you know the particular article isn't what i want to talk about. I want to talk about tech layoffs in general. My view of it, there are layoffs.
+电池测试仪，然后试图说服我买他们的电池。所以这就是我的情况，我确实按计划定期换油。我不知道这是否真的非常关键，但出于某种原因，我只是选择这样做。所以是的，我希望你也做了同样的事情。我按计划换油，但据我所知，我从来没有让机械师告诉我需要更换电池。它总是直接就没电了。哦天哪，好吧，继续新闻。你先来。好吧，所以你知道我们从来没有真正谈论过这个。这是一篇关于你知道谷歌继续裁员的新闻文章，但你知道，特定的文章不是我想谈论的。我想谈谈一般的科技裁员。我的观点是，确实有裁员。
+
+10
+00:06:50.000 --> 00:07:35.000
+There have been layoffs for, what, probably 18 months now. It kind of oscillates. So there's layoffs, and all of a sudden, there's even articles about companies laying people off and then desperately asking them to come back. It's a very volatile situation. You know, my overall take on this is that, you know, I think that it's a really complicated situation because on one hand, I do think people should choose degrees and majors and careers that have an addressable market, right? So if you get a degree, well, depending on what your goal is, but if your goal is to
+裁员已经持续了，大概 18 个月了。它有点波动。所以有裁员，突然之间，甚至有关于公司裁员然后拼命要求他们回来的文章。这是一个非常不稳定的情况。你知道，我对此的总体看法是，我认为这是一个非常复杂的情况，因为一方面，我确实认为人们应该选择有可寻址市场的学位、专业和职业，对吧？所以如果你获得一个学位，好吧，取决于你的目标是什么，但如果你的目标是
+
+11
+00:07:35.000 --> 00:08:45.000
+enter industry and you get a degree in American history, that's going to be really difficult. I mean, there are, you know, you don't need to do what your degree is. But, you know, it's just making things a little bit more difficult. And so someone might say, well, with these all these tech layoffs, maybe we shouldn't get a major in engineering or computer science. I think my overall take of this is, is, you know, engineering is still an extremely strong discipline career-wise relative to the spectrum of degrees or things you could study. And so I wouldn't be really phased by this. If you're a high school student, college student, I would choose engineering if it's something you're interested in and not really be worried about the layoffs. I wouldn't make that a really big factor in which college major you're going to pick. What do you think, Patrick? Yeah, I agree. I mean, I would love to say that if you look back to other periods in time, like 2001 or or other the great financial crisis and that the layoffs were
+进入行业，而你获得了美国历史学位，那将会非常困难。我的意思是，有，你知道，你不需要做你学位相关的工作。但是，你知道，这只是让事情变得稍微困难了一些。所以有人可能会说，好吧，随着所有这些科技裁员，也许我们不应该主修工程或计算机科学。我认为我对此的总体看法是，你知道，工程学在学位或你可以学习的事物的范围内，在职业方面仍然是一个极其强大的学科。所以我不会真的被这个所困扰。如果你是一名高中生、大学生，如果这是你感兴趣的东西，我会选择工程学，而不是真的担心裁员。我不会把它作为你选择大学专业的一个非常大的因素。你觉得呢，Patrick？是的，我同意。我的意思是，我很想说，如果你回顾过去的其他时期，比如 2001 年或其他大金融危机，裁员是
+
+12
+00:08:45.000 --> 00:09:27.000
+completely merit-based but i mean i think the unfortunate truth is when a company goes to lay up when a company hires people hire against different reasons different performance targets they might be over specializing over generalizing hiring less quality than they need overpaying for whatever there's just so many variables that go in i think when a company goes to do layoffs it becomes very difficult to sort of like run some strict merit based thing because also you layoffs normally come from top down right normally the bottom people aren't doing the layoff so it's the top down that hey there's a target to hit and it but bottom up there's this like obfuscation that happens where everyone says their team is overperforming
+完全基于绩效的，但我的意思是，我认为不幸的事实是，当一家公司去裁员时，当一家公司雇佣人员时，他们基于不同的原因、不同的绩效目标进行雇佣，他们可能过度专业化、过度泛化、雇佣的质量低于他们需要的、支付过高等等，有太多的变量参与其中。我认为当一家公司去裁员时，要进行某种严格的基于绩效的事情变得非常困难，因为裁员通常是从上到下进行的，对吧？通常底层的人不会进行裁员，所以是从上到下的，嘿，有一个目标要达到，但在底层，发生了这种混淆，每个人都说他们的团队表现超常
+
+13
+00:09:27.000 --> 00:09:55.000
+because it's sort of a game theory thing right like you don't want to say oh i have a team full of underperformers uh and that's why my you know that sounds bad on the manager right so you get this like information problem and so i think when the layoffs happen it unfortunately it isn't always very fair um but to jason's point i do agree that I think when the layoffs happen, unfortunately, it isn't always very fair. But to Jason's point, I do agree that on a whole, I think the industry is fairly robust and there are other people hiring. But times are exuberant and times are lean.
+因为这是一种博弈论的事情，对吧？就像你不想说，哦，我有一个充满表现不佳者的团队，这就是为什么我的，你知道，这对经理来说听起来很糟糕。所以你得到了这种信息问题，所以我认为当裁员发生时，不幸的是，它并不总是非常公平。但回到 Jason 的观点，我确实同意，我认为当裁员发生时，不幸的是，它并不总是非常公平。但回到 Jason 的观点，我确实同意，总的来说，我认为这个行业相当稳健，还有其他人在招聘。但时代是繁荣的，时代也是萧条的。
+
+14
+00:09:55.000 --> 00:10:25.000
+And I think what often can happen is if you are in the wrong part of the hype cycle when you come out of college, you can have sort of wrong expectations like, oh, you know, I'm going to start out and make X dollars per year. And then if times get lean and you're sort of waiting for a better, better offer, you know, that matches what you heard. It's like, well, unfortunately, the situation is dynamic and like, you know, it's not necessarily true that those offers are still there. And so you got to kind of you know be aware
+而且我认为经常发生的情况是，如果你在大学毕业时处于炒作周期的错误部分，你可能会有错误的期望，比如，哦，你知道，我将开始每年赚 X 美元。然后如果时代变得萧条，你正在等待一个更好的报价，你知道，匹配你听到的。就像，好吧，不幸的是，情况是动态的，而且，你知道，这些报价仍然存在并不一定是真的。所以你必须，你知道，意识到
+
+15
+00:10:25.000 --> 00:11:00.000
+of that but but on the whole i think you know as an industry there's still growth here i i mean people kind of say which they've always said oh ai offshoring whatever there's always some threat to computer science or engineering you know disciplines but i don't i don't i'm not over worried about it myself and i would still encourage people who are interested in it to pursue it. I think there's lots of adjacent jobs you can do if you, you know, if things that really, really lean, there's plenty of other things you could apply the skills you learn in getting an engineering degree to. And so also, though, I will like give a shout out for the finance stuff we talked about
+这一点，但总的来说，我认为，你知道，作为一个行业，这里仍然有增长。我的意思是，人们总是说，他们一直说的，哦，人工智能、离岸外包等等，计算机科学或工程学科总是存在某种威胁，你知道，但我自己并不太担心，我仍然会鼓励对它感兴趣的人去追求它。我认为如果你，你知道，如果事情真的非常非常萧条，有很多相邻的工作你可以做，有很多其他的事情你可以应用你在获得工程学位时学到的技能。所以，虽然，我也会为我们有时谈论的金融方面的事情点赞
+
+16
+00:11:00.000 --> 00:11:39.000
+sometimes, which is the importance of having savings and not, you know, living paycheck to paycheck. And it can be hard when you live somewhere expensive, but making sure that if that does happen, where you have to sort of go a few months before you can land another job and have the freedom to not have to just take the first thing that comes across your desk, then I think that's a huge benefit and gives you a little bit more confidence to kind of seek out the thing you're looking for. But yeah, I agree. I'm not overly concerned about it. I think like this latest round that you're mentioning are a lot smaller. So the news likes to hype it up because everything's dramatic. But, you know, there have been serious cuts. I think the cuts
+那就是拥有储蓄的重要性，而不是，你知道，过着月光族的生活。当你住在昂贵的地方时，这可能很难，但确保如果这种情况确实发生，你必须在找到下一份工作之前度过几个月，并且有自由不必仅仅接受出现在你桌子上的第一件事，那么我认为这是一个巨大的好处，并让你有更多的信心去寻找你正在寻找的东西。但是的，我同意。我并没有过度担心。我认为像你提到的这一轮裁员规模要小得多。所以新闻喜欢炒作它，因为一切都很戏剧化。但是，你知道，确实有严重的削减。我认为削减
+
+17
+00:11:39.000 --> 00:12:35.000
+are tapering off. We're probably seeing the last of them. But you'll always see companies wind down, but new companies start up. And, you know, it's kind of an ebb and flow. And so as a whole, I think the health of the industry in terms of, you know, compensation and stuff is probably steady, probably not as exuberant as it was two, three years ago. But holding steady. Yeah, yeah, I agree with that. Yeah, I think you brought up a really good point, which is, you know, and I know we've talked about this before, but when you start out, let's say you're in college right now, you're looking for different careers. Your goal should be to learn as much as possible. And in fact, like most companies will have source control, will have peer reviews, will have like a lot of different disciplines that will be really important for you to pick up early.
+正在逐渐减少。我们可能正在看到最后的一批。但你总是会看到公司倒闭，但新公司成立。而且，你知道，这是一种起起落落。所以总的来说，我认为这个行业在薪酬等方面是健康的，可能不像两三年前那样繁荣。但保持稳定。是的，是的，我同意这一点。是的，我认为你提出了一个非常好的观点，那就是，你知道，我知道我们之前谈论过这个，但当你开始时，假设你现在在大学，你正在寻找不同的职业。你的目标应该是尽可能多地学习。事实上，大多数公司都会有源代码控制，会有同行评审，会有很多不同的学科，这对你早期学习非常重要。
+
+18
+00:12:35.000 --> 00:13:17.000
+And so you really can't, as far as I know, you really can't go wrong. Obviously, I've only had one first job as one human being. But you really can't go wrong with your, I've only had one first job as one human being. But you really can't go wrong with your first job. You can always find stuff to learn. There's just a huge expanse of things that you need to know to be a professional developer. And you will learn at least 70, 80% of that almost anywhere. I would say that maybe the place that's the most risky would be to join something extremely early. I heard a hilarious story. I don't think I've ever talked about this on a show. This was back when Java was really popular.
+所以你真的不能，据我所知，你真的不能出错。显然，作为一个人类，我只有一份第一份工作。但你真的不能在你的第一份工作上出错。你总能找到学习的东西。作为一名专业开发人员，你需要知道的东西非常多。你几乎可以在任何地方学到其中的 70% 到 80%。我会说，风险最大的地方可能是加入一个非常早期的公司。我听过一个搞笑的故事。我不认为我在节目中谈论过这个。那是在 Java 非常流行的时候。
+
+19
+00:13:17.000 --> 00:13:49.000
+I had a buddy who worked at a really small company. It's only just a handful of engineers. Most of them were straight out of college. There wasn't really anybody who has experienced. And, you know, you know, Java used to have these things called jar files, right, which are basically zip files with some metadata that told you like, which Java file to run first, and I'm probably butchering that, but it's basically what it was. And so most people don't know that jar files under the hood are just zip files, but these folks did.
+我有一个朋友在一家非常小的公司工作。只有少数几个工程师。他们大多数人刚从大学毕业。并没有真正有经验的人。而且，你知道，你知道，Java 过去有这些叫做 jar 文件的东西，对吧，它们基本上是带有元数据的 zip 文件，告诉你先运行哪个 Java 文件，我可能说错了，但基本上就是这样。所以大多数人不知道 jar 文件在底层只是 zip 文件，但这些人知道。
+
+20
+00:13:49.000 --> 00:14:14.000
+And so their continuous deployment strategy was to build the code on their computer, guess at which dot class files changed, based on which Java files they changed, and copy those into the zip, into the jar that was running on the deployment, like on the production server. So there was no source control.
+所以他们的持续部署策略是在他们的电脑上构建代码，根据他们更改的 Java 文件猜测哪些 dot class 文件发生了变化，并将这些文件复制到 zip 中，复制到在部署上运行的 jar 中，就像在生产服务器上一样。所以没有源代码控制。
+
+21
+00:14:14.000 --> 00:14:42.000
+Everyone just copied, you know, source files to each other over like Windows shares. And so when it was your turn to update the code, you would open up this jar file and start dropping Java class files in there. So that's a difficult situation to learn continuous deployment and source control and all of that. So that might be something I'd be concerned about.
+每个人只是通过 Windows 共享将源文件复制给彼此。所以当轮到你更新代码时，你会打开这个 jar 文件并开始把 Java class 文件放进去。所以这是一个学习持续部署、源代码控制和所有这些东西的困难情况。所以这可能是我会担心的事情。
+
+22
+00:14:42.000 --> 00:15:23.000
+But most medium to large size companies most you know medium to large size company actually all medium to large size companies and most small size businesses will be just fine all right well taking a hard hard turn there from the seriousness of that uh but but i agree agree with what you say uh my next news article is my continual stream of shader descriptions, which is in my... I've given up the belief that I'm going to build a killer game. So now I'm just like, I'm going to build a killer shader for making a cool visual demo. So this is real-time dreamy cloudscapes with volumetric ray marching. Ooh, that's a mouthful.
+但大多数中大型公司，你知道，中大型公司，实际上所有的中大型公司和大多数小型企业都会没事的。好吧，好吧，从那个严肃的话题中硬转弯，但但我同意你所说的。我的下一个新闻文章是我持续的着色器描述流，这在我的……我已经放弃了我要制作一款杀手级游戏的信念。所以现在我只是想，我要制作一个用于制作酷炫视觉演示的杀手级着色器。所以这是带有体积光线步进的实时梦幻云景。哦，这真拗口。
+
+23
+00:15:23.000 --> 00:15:42.000
+Check this link out. This is by, I'm guessing by the name of the blog, I think it's by someone named Maxime, Maxime Heckel is what I would guess there. But the, yeah, I think that's right. And they have a article on their blog about doing a couple of things. First of all, rendering clouds,
+看看这个链接。这是由，我猜从博客的名字来看，我认为是由一个叫 Maxime 的人，Maxime Heckel 是我猜的名字。但是，是的，我认为那是对的。他们在他们的博客上有一篇关于做几件事的文章。首先，渲染云，
+
+24
+00:15:42.000 --> 00:16:15.000
+as the name says in real time. So, you know, doing it nice and fast. It's a beautiful thing if you check it out. But also interesting is if you sort of click around through the linked articles, they have a ton of really just interesting examples of doing shaders and how to kind of make them work. And so shader is a code that roughly runs on your GPU and, you know, sort of has instructions per pixel about what to render uh and it's source of a lot of like how do you call like computer generated art demo scene style things which we've alluded to before um but also this discussion of ray marching has come up
+正如名字所说，实时渲染。所以，你知道，做得又好又快。如果你看看它，这是一件美丽的事情。但同样有趣的是，如果你在链接的文章中点击浏览，他们有大量非常有趣的关于制作着色器以及如何让它们工作的方法的例子。所以着色器是大致在你的 GPU 上运行的代码，并且，你知道，对每个像素有关于渲染什么的指令，它是很多，你怎么称呼，计算机生成的艺术演示场景风格的东西的来源，我们之前提到过，但也讨论了光线步进
+
+25
+00:16:15.000 --> 00:17:21.000
+a few times into i feel like those things ebb and flow i think it's the algorithm just like honing in on me but like whatever um so i've seen a lot of youtube videos or whatever about ray marching recently and so it's on my like list of things to look into which is a way of sort of thinking about ray casting and you know understanding how close you are to something uh sign distance functions uh anyways tons of good quality things like a jumping off point so uh i one day aspire to make beautiful like like mellow screensaver like shaders like these articles I keep touting out for everyone. This is amazing. One PSA. Don't look at this in Firefox. It will cause cause all sorts of heartburn. But on Chrome, it works just fine. Do you do this, Patrick? I use different browsers on my work computer for personal and for work things that way it's like the most isolation isolated environments i could think of oh yeah i i do do that but uh it's sort of a more because it's a requirement rather than uh that's okay um
+几次，我觉得这些东西起起落落，我认为这是算法在磨练我，但无论如何，我最近在 YouTube 上看到了很多关于光线步进的视频，所以它在我的待研究列表上，这是一种思考光线投射的方式，你知道，理解你离某物有多近，符号距离函数，无论如何，有很多高质量的东西作为跳板，所以我有一天渴望制作像这些我一直为每个人吹捧的文章那样美丽的、柔和的屏幕保护程序着色器。这太棒了。一个公益广告。不要在 Firefox 中看这个。它会导致各种各样的心痛。但在 Chrome 上，它工作得很好。你这样做吗，Patrick？我在我的工作电脑上为个人和工作事情使用不同的浏览器，这样它就是我能想到的最隔离的环境。哦，是的，我确实这样做，但它更多是因为这是一个要求，而不是，没关系。
+
+26
+00:17:21.000 --> 00:18:03.000
+but yeah on chrome it works just fine. That is so cool. I wonder how many of these things are commodities. Like if you were to use Godot or Unity or one of these things, do they just have volumetric ray marching or is it too cutting edge? Oh, that's a good question. It's like you could probably find out implementations of it and you know pieces but i think this is one of those things that you kind of piece together the sort of almost algorithms into building the look of your game or your your you know demo or whatever so you may do things like compile various ways of doing water rendering and cloud rendering if you're doing
+但在 Chrome 上，它工作得很好。这太酷了。我想知道这些东西中有多少是商品。如果你使用 Godot 或 Unity 或这些东西中的一个，它们是否只是有体积光线步进，还是太前沿了？哦，这是一个好问题。就像你可能可以找到它的实现和，你知道，片段，但我认为这是那种你把某种几乎是算法的东西拼凑在一起，以构建你的游戏或你的，你知道，演示或什么的样子的事情，所以你可能会做一些事情，比如如果你正在做，编译各种做水渲染和云渲染的方法
+
+27
+00:18:03.000 --> 00:18:46.000
+you know this kind of thing and so i think you might be able to pull down certain it's not like shaders i don't think that you know my understanding is it's not like pulling down a model like downloading a model and like you know rendering the model and it's rigged and you do animations like those things i think you have common utilities for the shaders are more like the sort of look and feel and so you can probably have a jumping off point with them but you sort of combine them in your own way to give your game its unique style um you know or realistic you know kind of thing but i think a lot of people make independence are pursuing a very stylistic approach so that kind of looks unique to them or whatever so um rather than you know hyper realistic is a really tough game to play in yeah that totally makes sense um all right my second news
+你知道这种事情，所以我认为你可能能够下载某些，我不认为着色器是，你知道，我的理解是它不像下载模型，比如下载模型，然后，你知道，渲染模型，它是装配好的，你做动画，那些东西，我认为你有通用的着色器实用程序，它们更像是某种外观和感觉，所以你可能有一个跳板，但你以自己的方式组合它们，给你的游戏独特的风格，嗯，你知道，或者现实的，你知道，那种东西，但我认为很多独立开发者正在追求一种非常风格化的方法，所以这看起来对他们来说是独特的，或者什么的，所以，嗯，而不是，你知道，超现实主义是一个非常难玩的游戏。是的，这完全说得通。嗯，好吧，我的第二个新闻
+
+28
+00:18:46.000 --> 00:19:45.000
+is uh i've been diving into okay so what was your first computer patrick first thing with a keyboard it must have been one of those is that like an apple 2e okay yep yep we had those in school i had a commodore 64 and uh you know i also had an apple tv at school and i've just been going down memory lane on old like original games like the first few games ever played um one of them was this game called street beat where you ran around with a boom box uh trying to uh hit people in the face with music notes to make them dance. And so you actually, the way it worked was first you had to find a song and the songs were like in people's houses. So you'd see a glowing door. That was a sign that you, this person had made an awesome song you'd go in his house you
+是，我一直在深入研究，好吧，那么你的第一台电脑是什么，Patrick？第一台带键盘的东西，一定是那些之一，那是像 Apple 2e 吗？好的，是的，我们在学校里有那些。我有一台 Commodore 64，而且，你知道，我在学校也有一台 Apple 2e，我一直在回忆老游戏，比如我玩过的最初的几款游戏。其中之一是这个叫 Street Beat 的游戏，你带着一个音箱到处跑，试图用音符击中人们的脸，让他们跳舞。所以你实际上，它的工作方式是首先你必须找到一首歌，歌曲在人们的房子里。所以你会看到一扇发光的门。那是一个标志，你，这个人制作了一首很棒的歌，你会走进他的房子，你
+
+29
+00:19:45.000 --> 00:20:47.000
+take his song and then you turn on your boom box and hit people in the face with music notes and once you've hit a certain number then the song was like you know i guess like proven to be good or something baked in or whatever it is and then you would take your your baked in song to your house your own personal house and score a point and so i don't remember how many points you have to get but um anyway so that was street beat um i came across one that i played with my my family when i was really little that kind of blew my mind and that it was really a interesting crossover that I don't think I've seen since called Robot Rascals. And so the way Robot Rascals worked is it was a card game and a computer game all in one. So the cards were your private information that no one else could see, and the computer was sort of the community, you know, information. And so you would take turns playing
+拿走他的歌，然后你打开你的音箱，用音符击中人们的脸，一旦你击中了特定数量，那么这首歌就像，你知道，我猜就像被证明是好的或者什么的，被烘焙进去了，或者无论它是什么，然后你会把你烘焙好的歌带到你的房子，你自己的个人房子，得一分。所以我记不清你必须得多少分，但，无论如何，这就是 Street Beat。我偶然发现了一个我小时候和家人一起玩的游戏，它让我大吃一惊，因为它是一个非常有趣的交叉，我不认为我之后见过，叫 Robot Rascals。所以 Robot Rascals 的工作方式是它是一个纸牌游戏和一个电脑游戏合二为一。所以卡片是你的私人信息，其他人看不到，而电脑是某种社区，你知道，信息。所以你会轮流玩
+
+30
+00:20:47.000 --> 00:21:32.000
+this, this game on the computer, but you would have your private information. And, you know, you try to based on what other people were doing, try to guess at what their private information was so that you could exploit it. And I just, yeah, so many good memories of this, but I haven't really seen anything like that. There are some companion apps. So if you're playing Monopoly, for example, there's a companion app where you don't have to pass paper money around. There's things like that, but those are more assisted tools. I haven't really seen a board game app kind of you know crossover like like this um have you patrick have you seen anything like that yeah i mean there are a few so i think
+这个，这个电脑上的游戏，但你会拥有你的私人信息。而且，你知道，你尝试根据其他人正在做的事情，尝试猜测他们的私人信息是什么，以便你可以利用它。我只是，是的，关于这个有很多美好的回忆，但我还没有真正见过类似的东西。有一些配套应用程序。所以如果你在玩大富翁，例如，有一个配套应用程序，你不必传递纸币。有类似的东西，但那些更多是辅助工具。我还没有真正见过棋盘游戏应用程序那种，你知道，像这样的交叉。你见过吗，Patrick？你见过类似的东西吗？是的，我的意思是，有几个。所以我认为
+
+31
+00:21:32.000 --> 00:22:17.000
+you know i've played like a ticket to ride where you know like everyone has their tablet and you know the screen is rendering the common thing but you can also do pass and play or whatever where like the color oh i don't know how people anyway the color of the cards you have you know it shows at your turn there's also i think one for suro um wait hang on i don't know maybe i don't know saying that you're okay so what i'm saying is you have physical cards so so you're playing a physical card game but then the computer has like the other half of the game you know so like the computer doesn't know it's like combined like hybrid so it's not like you're playing the board game as a okay no i missed this okay so like you have like a deck of cards like holding in your physical
+你知道，我玩过像 Ticket to Ride，你知道，每个人都有他们的平板电脑，你知道，屏幕正在渲染共同的东西，但你也可以做传递和玩，或者无论什么，比如颜色，哦，我不知道人们，无论如何，你拥有的卡片的颜色，你知道，在你的回合显示。还有，我想还有一个叫 Suro 的，等等，等等，我不知道，也许我不知道，说你，好吧，所以我说的是你有实体卡片，所以你正在玩一个实体纸牌游戏，但然后电脑有，比如游戏的另一半，你知道，所以电脑不知道，它就像结合在一起，像混合动力，所以它不像你在玩棋盘游戏作为一个，好吧，不，我错过了这个，好吧，所以就像你有一副卡片，比如拿在你的实体
+
+32
+00:22:17.000 --> 00:22:46.000
+hand right right oh wait what how did and so you have to enter information reliably into the computer so yeah so like you could uh like basically like information reliably into the computer? So yeah, so you could basically tell the computer, I have a right to mine this rock. And the computer has no way of knowing that because it doesn't know physically what cards you have. So it just assumes when you say something, you're right. But yeah, you're also playing with other people. If you have a right to mine this rock
+手里，对吧？对，哦，等等，怎么会？所以你必须可靠地将信息输入到电脑中。所以是的，所以就像你可以，嗯，比如，可靠地将信息输入到电脑中？所以是的，所以你可以基本上告诉电脑，我有权开采这块岩石。而电脑没有办法知道这一点，因为它不知道你物理上有什么卡片。所以它只是假设当你这么说时，你是对的。但是是的，你也在和别人一起玩。如果你有权开采这块岩石
+
+33
+00:22:46.000 --> 00:23:06.000
+and someone else is just looking at that card, then he knows you don't have it. So you can't really cheat, per se. But yeah, you need the physical and the virtual in the same space. I think I have heard of something like that, but no, I've never played it. never, I never played it where like, yeah,
+而其他人只是看着那张卡片，那么他就知道你没有它。所以你不能真的作弊，本身。但是是的，你需要实体和虚拟在同一个空间。我想我听说过类似的东西，但没有，我从来没有玩过。从来没有，我从来没有玩过，比如，是的，
+
+34
+00:23:06.000 --> 00:23:16.000
+like the, the engine of the game can be very complex because the, all the accounting is done by the computer, but you still are playing a physical game. Right, right. Exactly. Yeah.
+比如，游戏的引擎可以非常复杂，因为所有的会计工作都是由电脑完成的，但你仍然在玩一个实体游戏。对，对。完全正确。是的。而且这很酷。是的。而且这是一个很老很老的游戏，对吧？所以看起来你是在说它就像，我绝对是在很小的时候玩的，它是在 1986 年出来的，所以我出来的时候其实才四岁，我的意思是，我玩它的时候我可能
+
+35
+00:23:16.000 --> 00:23:32.000
+Yeah. And that's cool. Yeah. And this was like an old, old game, right? So it looks like you were saying it's like, I definitely played it as a very little child it came out uh 1986 so i was actually four when it came out i mean i played it i was probably
+大概八岁，但我玩过它，但非常酷。哇，那很好。是的，所以外面的人，如果你在游戏开发领域，这将是一个有趣的领域，我不知道它是否就像，你知道，失去了它的用处，但我只是觉得那里可能有一些很酷的东西。我们会看看，也许有人可以写信来说什么是当代等价物。好吧，我的意思是，你提议的替代方案是你可以进入虚拟现实，游戏可以只是放在你面前的桌子上，如果你想要，嗯，某种新发布的虚拟现实头显，你可以使用新的 Meta Quest 3。不，我不，我不，但我只是提出来，因为我觉得它是那种，一对，比如，嗯，你知道，太空旅行，随机金融线程，虚拟现实。我觉得在过去的几年里，我们一直在我们的播客中穿插一些事情。
+
+36
+00:23:32.000 --> 00:24:29.000
+like eight when i played it but very cool wow that's nice yeah so folks out there if you're in game development this would be like a interesting area i don't know if it's sort of like just you know past its usefulness but i just i feel like there might be something cool there we'll see maybe someone could write in and say what some contemporary equivalent is well i mean an alternative to what you're proposing is you could go into virtual reality and the game could just be sitting on the table in front of you and if you wanted uh sort of a newly released virtual reality headset you could use the new meta quest 3. no i don't i don't but i just bring it up because i feel like it's one of those a couple like uh you know space travel uh random finance threads uh virtual reality. There's like a few things I feel like we keep weaving through our podcast over the years.
+所以我们的播客足够老，我们已经看到其中一些东西成熟了。所以有趣的是，MetaQuest 3 就像某种，我猜它是最新发布的硬件。当然，你知道，我认为有 Vision Pro，人们正在谈论明年从苹果出来，我想这就是他们所说的，但嗯，对于 Meta Quest 3，这是出来的，你可以买它，而且，你知道，它做很多事情，对吧？它只是加速了一切，但透视，你前面的摄像头，它们是某种眼睛距离分开，传递给你在里面，这样你就可以做混合现实，这是
+
+37
+00:24:29.000 --> 00:25:05.000
+And so our podcast is old enough that we've seen some of these things mature. And so interesting that MetaQuest 3 is like a sort of, I guess it's the latest released hardware. Of course, you know, I think there's the Vision Pro, which people are talking about coming from Apple next year, I think is what they're saying but um for the meta quest 3 this is out you can buy it and the the sort of like it does a lot of things right like it just revs everything but the pass through where your cameras on the front that are sort of eye distance apart passing through to you on the inside so that you can do the mixed reality this is the thing
+你知道每个人都真正想实现的事情是增强现实，混合现实，所以你正在看到，这有点有趣，当 Google Glass 出来时发生的事情，也就是人们在公共场合在奇怪的地方使用他们的头显，你知道，录制立体视频，是的，但也为了，你知道，去某个地方，但也不在那个地方，所以它有点，嗯，这个有趣的，嗯，我猜，你知道，在这个成为真实事情的区域之间，你只是戴上眼镜并看到它，因为你仍然戴着头显，人们非常清楚你在做什么，但是是的，我，我知道我确实仍然玩我的，我有一个 Quest 2，我想叫它 Oculus Quest，但他们弃用了那个，但要清楚，它就像在我的盒子的品牌上
+
+38
+00:25:05.000 --> 00:25:51.000
+that you know everyone really wants to make happen is the augmented reality the mixed reality uh and so you are seeing which is kind of the funny thing the what happened when google glass was coming out which is like people sort of out in public using their headsets in weird places to you know record record stereo video yes but also to like be somewhere but also not be in that place and so it's sort of uh this interesting uh i guess you know zone between this being a real thing where you just put on glasses and see it because you're still wearing a headset people are very aware of what you're doing um but yeah i i know i do play still my i have a quest two i i want to call it an oculus quest but they deprecated that but to be clear it was like on the branding of
+我觉得我仍然那样称呼它，无论如何，Quest 2，我真的很喜欢它，我觉得他们某种程度上弄清楚了一些东西，游戏，你知道，我们玩，我们继续玩，而且我们之前在节目中谈论过那个，你知道，在游戏中锻炼，以及总体上它是多么身临其境，我一直在玩，我猜我可以把它作为我的节目工具，我没有，哦好吧，也就是 I Expect You to Die 3，我告诉了某人，他们非常奇怪地看着我，什么样可怕的游戏你在玩，它就像，不不不，它就像一个轻松的益智房间，所以无论如何，I Expect You to Die 3，我觉得你知道，人们已经有点弄清楚了公式，对于一些
+
+39
+00:25:51.000 --> 00:26:25.000
+my box i feel like i still call it that uh anyways the quest two and i've really enjoyed it i feel like the they sort of figured some stuff out the games you know we play we keep playing and and we've talked about that before on the show you know getting exercise in the game and just generally how immersive it is i've been playing the i guess i could have made that my tool of the show i didn't oh well uh which is i expect you to die number three um which i told to someone and they looked at me very funny like what kind of horrible game are you playing it's like no no no it's like a light-hearted puzzle room uh so anyways i expect you to die number three i feel like you know people have kind of figured out the formula a bit for some of
+这些工作的事情，它可能是你的菜，也可能不是，但很高兴继续看到这个领域的东西出来。我不知道它要去哪里。我不知道这是否是下一个大事件，但绝对很高兴继续看到它是如何形成的。而且至少，你知道，对我来说，你知道作为一个参与这里的休闲人士，你知道享受一些好的游戏和娱乐，随着这些东西成熟。是的，我的意思是，我也是那些玩 Oculus，Oculus Quest 2 的人之一，至少每周一次，有时
+
+40
+00:26:25.000 --> 00:26:58.000
+these things that work and it may be your cup of tea or not, but excited to continue to see stuff coming out in this area. I don't know where it's going. I don't know if this is like the next big thing or not, but definitely excited to continue to see how it shapes up. And at least, you know, for me, you know being a casual uh person involved here uh you know enjoying some good games and entertainment as these things mature yeah i mean i'm one of those people too that plays the the oculus the the oculus quest to um at least once a week sometimes
+甚至像每周多次，而且，嗯，你知道，有些事情，比如，嗯，这有点有趣，你知道，我基本上玩我从一开始就有的那两款游戏，所以，嗯，你知道，我不知道它在商业上有多成功，但它创造了大量的价值，而且基本上对我来说，我只是玩拳击和剑术。而且，你知道，最初，我得到它时，我是在越来越难的难度级别上玩拳击。但我意识到两件事。第一，你知道，我真的不是，比如，在反应时间方面很快。所以第二点是，比如，当你开始猛烈地转动你的头时，它真的不是很舒服。所以我认为，好吧，我可以增加重量来让它变得更难，因为我知道拳击手在现实生活中这样做，对吧？他们有像非常重的
+
+41
+00:26:58.000 --> 00:27:49.000
+even like multiple times a week and uh but you know something that like uh it's kind of interesting you know i i play basically the same two games that i've had almost since the beginning and so um you know i don't know how much of a commercial success it is um but but it creates a ton of value um and basically for me i just play boxing and sword fighting. And, you know, originally, I got it to where I was playing boxing on the harder and harder difficulty levels. But I realized two things. Number one, you know, I'm not really very, like, fast in terms of reaction time. And so number two is like, when you start whipping your head around, it's just not very comfortable. So I thought, okay, I can make this more difficult by adding weight, because i know boxers do this in real life right they have like really weighted
+手套在他们训练时等等，所以我得到了这些，嗯，手腕重量，我一直在某种程度上只是增加越来越多的重量，并以正常难度玩这些游戏，只是增加了重量，这太神奇了，比如，第一，即使每个手腕上有 1 磅的重量，它有多难，你会感到惊讶，是的，你会惊讶于，比如，你出拳有多慢，以及你把手放回防守位置有多慢，所有这些，而且我得到了这个，这有点荒谬，但我每个手臂上增加了大约 5 磅的重量，所以我有了这些，嗯，它们是为你的脚踝准备的，但我把它们戴在我的手腕上，我还有另一个有拇指环的。所以我有这些，基本上
+
+42
+00:27:49.000 --> 00:28:31.000
+gloves when they train and stuff and so i got these uh wrist weights and i've been kind of just adding more and more weight and playing these games on the normal difficulty just with more weight um it is amazing like number one how much harder it is even with one pound of weight on each wrist you'll be amazed yeah you'll be amazed at like how slow you punch and how slow like you get your hands back in a guard and all that um and i got this is kind of ridiculous but i'm up to like five pounds of weight on each arm so i have these uh they're meant for your ankle, but I put them around my wrist and I have another one that has a thumb loop. And so I have these like basically
+每个手臂上有两个重量，我正在做拳击，这就像一个地狱般的锻炼。我的意思是，这只是，你会汗流浃背。你做它。它，它非常有趣。所以你准备好街头斗殴了，这就是我听到的。是的，我和我的一个朋友谈过，他做，他是一个业余铁匠，他告诉我，嗯，我一直认为，我一直认为剑有 30 磅重，但不，像，像剑，你知道，在现实生活中，像一把阔剑或什么的，只有大约 6 磅重，所以，嗯，现在你知道，有一个更大的悬臂效应，因为剑的重量是，你知道，离你的身体不近，但，但，但我开始接近拿着一把真剑的感觉了，而且，它，它，它
+
+43
+00:28:31.000 --> 00:29:21.000
+two weights on each arm and I'm doing boxing and it is like a heck of a workout. I mean, it's just, you'll be sweating bullets up. You do it. It's, it's a ton of fun. So you're ready for a street brawl is what i'm hearing yeah i'm talking to a friend of mine who does he's kind of a hobby blacksmith and he told me that um i always thought and i always thought that that swords were like 30 pounds uh but no like like swords you know in real life like a broad sword or whatever is only like six pounds and so um now you know granted there's even more of a of a cantilever effect because the sword's weight is you know not even close to your body but but but i'm starting to approach what it feels like to hold a real sword um and uh it's it's it's
+非常有趣。所以如果你被困在那些时间漩涡之一中，或者什么的，而你最终到了中世纪，你就会准备好了。你准备好摇滚了。是的，我认为挑战是，你知道，我习惯于穿过人们。我不习惯人们实际上存在于物理平面上。所以只要它是光剑，你就没问题。是的，只要没有人打我。每个计划都是好的，直到你被打。是的，Mike Tyson，对吧？
+
+44
+00:29:21.000 --> 00:29:48.000
+a ton of fun so if you get stuck in one of those time vortexes or whatever, and you end up in medieval times, you'll be ready to go. You're ready to rock. Yeah, I think the challenge is, you know, I'm used to moving through people. I'm not used to people actually existing in a physical plane. So as long as it's a lightsaber, you're fine. Yeah, as long as nobody hits me either. Every plan is good until you get punched. Yeah, Mike Tyson, right?
+是的。是的，随机侧轨。好吧，我想回到你刚才说的一件事，我不知道我们是否在节目中谈论过，所以我很快提一下，因为我们之前谈论过它。但当 Activision 受审时，那是在今年早些时候，我相信，
+
+45
+00:29:48.000 --> 00:30:03.000
+Yeah. Yeah, random sidetrack. Okay, I wanted to go back to one thing you were saying, which I don't know if we talked about on the show, so I'll mention this just really quick, because we've talked about it before. But when Activision was on trial, that was earlier this year, I believe,
+对。对，跑题了。好的，我想回到你刚才说的一点，我不确定我们是否在节目中讨论过，所以我很快提一下，因为我们之前讨论过。但在动视暴雪受审时，那是在今年早些时候，我想是这样，
+
+46
+00:30:03.000 --> 00:30:32.000
+it came out that there are a million PlayStation users who literally only play Call of Duty. Literally nothing else. They have their PlayStation and they only play one game. And something like there was 6 million who spent 70% or more of their time playing a Call of Duty. And so you're like, I only play one or two games i'm the same i feel bad if i just keep playing the same game you know factoria um but uh you know if you
+有数据显示，有一百万PlayStation用户真的只玩《使命召唤》。真的什么都不玩。他们有PlayStation，但只玩这一款游戏。还有大约600万人把70%以上的时间都花在玩《使命召唤》上。所以你会觉得，我只玩一两款游戏，我也一样，如果我一直玩同一款游戏，比如《异星工厂》，我会觉得不好意思，你知道的，但是……
+
+47
+00:30:32.000 --> 00:30:56.000
+just sit there and play all your but actually i think you know this is quite normal is what is is what the statistics show is people just end up really liking one game and for very long periods of time they just play a single game. Yeah, that's wild. I mean, it's very hard for the industry to make money if they have to sell those units. I think they sell the units at a loss. And if someone only buys one game, it's just really difficult.
+你只是坐在那里玩你所有的游戏，但实际上我认为这很正常，统计数据表明，人们最终确实非常喜欢一款游戏，并且在很长一段时间内只玩这一款游戏。是的，这太疯狂了。我的意思是，如果行业必须卖出这些设备才能赚钱，那就太难了。我认为他们是亏本销售这些设备的。如果有人只买一款游戏，那就真的很难办了。
+
+48
+00:30:56.000 --> 00:31:11.000
+Yeah, no clue. All right, time for book of the show. All right, so I'm going to go fast because mine's a cop out. Mine is the paper we're about to talk about today. So we're talking about an algorithm, HyperLogLog. Stay tuned. And so my book of the show, which isn't a book, it's a paper.
+是的，不知道。好了，节目推荐书的时间到了。好吧，我要快点，因为我选的有点敷衍。我选的是我们今天要讨论的论文。我们要讨论的是一种算法，HyperLogLog。敬请期待。所以我的节目推荐书，其实不是书，是一篇论文。
+
+49
+00:31:11.000 --> 00:31:46.000
+And it's a paper by Google Research, which is where HyperLogLog was sort of written up. So check that out. If you're not a fan of reading papers, I know Jason reads a lot of papers, but I don't. I find them very difficult. I don't prefer them. I don't like the way that they're presented. I think they're pretentious, but whatever. Anyways, all the PhD people are coming after me soon. Anyways, but I find that they're not written for clarity, but written to sort of affect a certain style. This paper is no different, but there is some good stuff in here. There are, you know, good graphs.
+这是Google Research的一篇论文，HyperLogLog就是在那儿被写出来的。所以去看看吧。如果你不喜欢读论文，我知道Jason读过很多论文，但我没有。我觉得它们很难读。我不喜欢它们。我不喜欢它们的呈现方式。我觉得它们很自命不凡，但无所谓。总之，所有博士都要来找我麻烦了。总之，我发现它们写得并不清晰，而是为了营造某种风格。这篇论文也不例外，但里面确实有一些好东西。有，你知道的，很好的图表。
+
+50
+00:31:46.000 --> 00:32:01.000
+And even just, I've just given up that you don't have to understand every line of a paper, or even like the notation. Just kind of like doing it once or twice. And if you sort of go through a couple of papers and people will often reinterpret a previous paper. So for papers that are sort of seminal,
+甚至，我已经放弃了必须理解论文的每一行，甚至包括符号。只要读过一两次就行。如果你读过几篇论文，人们通常会重新解读之前的论文。所以对于那些开创性的论文，
+
+51
+00:32:01.000 --> 00:32:35.000
+you can kind of read a later paper and get a better description. And so anyways, don't feel bad if you're not a paper reader. You know, I would say as part of like, you know, some small percentage of your education, if you're not a sort of master student or PhD student or PhD graduate, still don't shy away from looking at papers every so often when they come up and just sort of like reading. You can occasionally glean really interesting tidbits or or insights not always there's a lot of junk uh you know anyways hyperlog log paper that's my that was a weird rant for a book of the show but
+你可以读读后来的论文，得到更好的描述。所以，总之，如果你不是论文读者，不要觉得不好意思。我想说，作为你教育的一小部分，如果你不是硕士生或博士生或博士毕业生，当论文出现时，不要回避去看看，只是读一读。你偶尔能收集到非常有趣的知识点或见解，虽然不总是这样，里面有很多垃圾，你知道的，总之，HyperLogLog论文，这就是我的节目推荐书，虽然有点奇怪的咆哮，但
+
+52
+00:32:35.000 --> 00:33:00.000
+there we go no i think it was really important i mean we must be on the same wavelength because my book of the show is also a research paper and i didn't know this. I saw it in there and I thought it was an actual book. Yeah, I went into today's show thinking, man, I've read so many research papers but made zero progress on my Audible books. I'm just going to talk about a research paper and then here we are. I'll go pretty quick too
+就这样吧。不，我觉得这真的很重要，我的意思是，我们一定在同一个频道上，因为我的节目推荐书也是一篇研究论文，我之前不知道。我在那儿看到了，以为它是一本真正的书。是的，我今天来的时候想，天哪，我读了这么多研究论文，但在我的Audible书上却毫无进展。我只是要谈论一篇研究论文，然后我们就到这儿了。我也会很快讲完，
+
+53
+00:33:00.000 --> 00:34:00.000
+because I want to get to the content. But basically, NVIDvidia has this really interesting thing where they're using large language models to try to fabricate goals for this uh reinforcement learning robot so for example they'll ask chat gpt and but i'm just starting to get into this paper, so I'm not going to do it justice right now. But they'll basically ask ChatGBT for, like, what are certain things that we can do to show that we kind of have good ambulation? And then they'll kind of just keep riffing on that. So I do feel like one thing that's always missing with reinforcement learning is you have to train from scratch versus, you know, for example, if you're driving a car or writing something down or whatever, you're starting from this base of all this common
+因为我想讲内容。但基本上，NVIDIA有一个非常有趣的东西，他们正在使用大语言模型来尝试为这个强化学习机器人编造目标，例如，他们会问ChatGPT，但我才刚开始研究这篇论文，所以现在还不能完全讲透。但他们基本上会问ChatGPT，比如，我们可以做哪些事情来证明我们有良好的行走能力？然后他们会不断地在那基础上进行发挥。所以我确实觉得强化学习总是缺少的一点是，你必须从零开始训练，而例如，如果你在开车或写东西什么的，你是从所有这些常识推理的基础上开始的。
+
+54
+00:34:00.000 --> 00:34:32.000
+sense reasoning. So, okay, here's a good example. So good example. So we have the AI to play Atari. And so the way it works, if you want to play Pong, is you start off just moving the paddle randomly and losing. But then sometimes you just randomly hit the ball and you get a point. And so that creates a target. And then you start marching towards that target. This becomes a really big problem in something like an RPG.
+所以，好吧，这是一个很好的例子。很好的例子。我们有AI来玩雅达利游戏。所以它的工作方式，如果你想玩《乒乓》，就是你从随机移动球拍并输掉比赛开始。但有时你会随机击中球，然后得一分。这就创造了一个目标。然后你开始向那个目标迈进。这在RPG之类的游戏中就成了一个非常大的问题。
+
+55
+00:34:32.000 --> 00:35:11.000
+So if you want to play a role-playing game with AI, you're going to have to like try every spell randomly, move around randomly because you're not drawing from a common sense reasoning bank like like you don't the ai doesn't know that well forests usually have more dangerous enemies than roads because roads are generally guarded or or fire works well if the enemy looks like he's made of ice like these are all things that you could just do on the first try but the the AI has to trial and error its way through.
+所以如果你想用AI玩角色扮演游戏，你必须像随机尝试每一个法术，随机四处走动，因为你不是在利用常识推理库，比如AI不知道森林里的危险敌人通常比道路上的多，因为道路通常有守卫，或者如果敌人看起来像冰做的，火就很有效。这些都是你第一次尝试就能做到的事情，但AI必须通过反复试验来完成。
+
+56
+00:35:11.000 --> 00:36:08.000
+And that's why you don't see AI playing Dragon Warrior, for example, because there's just too much common sense that has to be learned from scratch. And so this interested me because I feel like maybe we can somehow draw from the common sense that's been accumulated in something like chat gpt um or gpt4 i think there's something to that like imagine if you somehow just fed the visual and the textual content to some type of embedding and then trained on that then maybe you know like fire one and fire two would go into this embedding and you would just learn in general some things about fire the fire spell or whatever um so i feel like there's something there but it's it's very early days that's interesting so rather than like combinatorially exploring the space and finding out that like, if the attribute ice or whatever is attached to a enemy,
+这就是为什么你没看到AI玩《勇者斗恶龙》之类的游戏，因为有太多的常识需要从零开始学习。所以这引起了我的兴趣，因为我觉得也许我们可以以某种方式利用像ChatGPT或GPT-4中积累的常识。我觉得这很有道理，想象一下，如果你以某种方式将视觉和文本内容输入到某种嵌入中，然后进行训练，那么也许，你知道，比如火一和火二会进入这个嵌入，你就会大致学到一些关于火、火球术之类的东西。所以我感觉这儿有点门道，但还处于非常早期的阶段。这很有趣，所以与其组合式地探索空间，发现如果属性冰或什么东西附着在敌人身上，
+
+57
+00:36:08.000 --> 00:36:19.000
+then use a fire spell. I guess I could use a Pokemon. Maybe it's a good example. Like, Oh, visually this thing looks like it's frozen or, you know, has an ice type associated with it.
+那就使用火球术。我想我可以用宝可梦举例。也许这是一个很好的例子。比如，哦，视觉上这个东西看起来是冰冻的，或者，你知道，与它关联了一个冰属性。
+
+58
+00:36:19.000 --> 00:36:56.000
+Or I've memorized that. Like I should use a fire spell. Like you said, that's done that way, even though it's an abstract concept, there just rock paper scissors right but that transitive is encoded to you as a human because it maps to something you understand which is like you know if i have something made of wood something with fire will destroy it and would have a very hard time fighting something made out of fire and so you're sort of saying you could kind of like get that understanding by combining two approaches something that understands the context being given to the human and then the normal you know sort of yeah
+或者我已经记住了。我应该使用火球术。就像你说的，它是那样完成的，即使它是一个抽象概念，它只是石头剪刀布，对吧？但这种传递性对你作为一个人类来说是编码好的，因为它映射到你理解的东西，比如，你知道，如果我有木头做的东西，火会摧毁它，而木头很难对抗火做的东西。所以你是在说，你可以通过结合两种方法来获得那种理解，一种是理解给予人类的上下文，另一种是正常的，你知道，那种……是的。
+
+59
+00:36:56.000 --> 00:37:34.000
+interesting yeah exactly exactly like i mean of course you could well i don't know of course i mean you could theoretically cheat if somehow you could read the game's ram and figure out like okay this this character has this you know ice attribute right but like that's not how humans do it like humans are just looking at the picture and so to really play final fantasy or dragon warrior these other games barely like to show it that an ai that is really representative of solving the problem it has to be able yeah to just look at things and and infer based off what it knows about the universe
+有趣，是的，完全正确，完全正确。我的意思是，当然你可以……好吧，我不知道，当然，我的意思是，如果你能以某种方式读取游戏的内存并弄清楚，比如，好吧，这个角色有这个冰属性，理论上你可以作弊，对吧？但人类不是那样做的，人类只是看着图片。所以要真正玩《最终幻想》或《勇者斗恶龙》这些其他游戏，几乎要向它展示一个真正代表解决问题的AI，它必须能够，是的，只是看着事物，并根据它对宇宙的了解进行推断。
+
+60
+00:37:34.000 --> 00:38:22.000
+so i guess the equivalent would be if a computer designed a game that it thought was interesting based on the rules of the game and then presented to as a human you would be like i this is not fun this is just like some abstract concepts uh the ai would be okay you would be on a more equal footing but because game designers are humans designing for humans yeah you kind of you got to cross that chasm before or you put a computer on equal footing yeah i mean imagine like a poco they actually have these where it's like uh they randomize the game have you heard of these game randomizers yes yes yes yeah and so they you know imagine a game randomizer for pokemon where it just randomized all of the strengths and weaknesses of all the pokemon it would be just terrible because it's like oh this
+所以我猜等同于，如果一台计算机根据游戏规则设计了一个它认为有趣的游戏，然后呈现给人类，你会说，这不好玩，这只是一些抽象概念。AI会觉得没问题，你们会处于更平等的地位，但因为游戏设计师是为人类设计游戏的人类，是的，你必须先跨越那道鸿沟，否则你就把计算机放在了平等的地位。是的，我的意思是，想象一下像宝可梦，他们实际上有这种随机化游戏，你听说过这些游戏随机化器吗？是的，是的，是的。所以他们，你知道，想象一个宝可梦的游戏随机化器，它只是随机化了所有宝可梦的强项和弱点，那会非常糟糕，因为就像，哦，这个
+
+61
+00:38:22.000 --> 00:38:52.000
+the turtle that shoots water is actually you know know, a fire, you know, entity. And it would just it would just be really frustrating. Like, that's how the AI feels. Am I supposed to empathize and feel bad for the AI, Jason? Help me out here. Yeah, I mean, you know, it only makes billions of dollars, controls the stock market. I mean, you should feel bad for this thing. If you like takes like that,
+喷水的乌龟实际上是一个火属性实体。那会非常令人沮丧。就像，AI就是这种感觉。我是应该同情AI并为它感到难过吗，Jason？帮帮我。是的，我的意思是，你知道，它只赚了数十亿美元，控制了股市。我的意思是，你应该为这个东西感到难过。如果你喜欢这样的观点，
+
+62
+00:38:52.000 --> 00:39:07.000
+you should subscribe to us on Patreon. If you're not an AI, you should subscribe to our Patreon. We really appreciate it. If you are an AI, you can also subscribe to our Patreon and fund this very important source of training
+你应该在Patreon上订阅我们。如果你不是AI，你应该订阅我们的Patreon。我们非常感谢。如果你是AI，你也可以订阅我们的Patreon，并资助这个非常重要的训练数据来源。
+
+63
+00:39:07.000 --> 00:39:23.000
+data that's right so yeah thanks to all the patreons we had a lot of people stick around for a very long time so it's always an encouragement and you know thankful for the support yeah definitely alright it's time for the tool of the show
+没错，所以，是的，感谢所有的Patreon支持者，我们有很多支持者陪伴了很长时间，所以这总是一种鼓励，你知道，感谢你们的支持。是的，绝对的。好了，节目工具时间到了。
+
+64
+00:39:23.000 --> 00:39:41.000
+well I'm returning to form and giving another game. This is, I mentioned Factorio earlier, this is in the style of, I guess it's closer to Satisfactory if you've played Satisfactory, which is, you know, there was a kind of a lot of stuff routed up around the Minecraft culture,
+好吧，我回归本色，再推荐一款游戏。这是，我之前提到了《异星工厂》，这是那种风格的，我想它更接近《Satisfactory》，如果你玩过《Satisfactory》的话，你知道，在Minecraft文化周围有很多东西，
+
+65
+00:39:41.000 --> 00:40:07.000
+you know, sort of Terraria and several others. And I think we're seeing kind of the same thing with i don't know what you call them i guess factory building games i'm not sure what the official i think that's right like base building plus factory building uh and so tectonica is a new one i've been playing on my steam deck actually um many of these games like satisfactory actually don't really have very good sort of controller support and people do play it so someone's going to write in and be like, I use the touchpads for the 37 shortcuts
+你知道，比如《泰拉瑞亚》和其他一些。我认为我们在……我不知道你怎么称呼它们，我想是工厂建造游戏，我不确定官方叫法，我想是对的，比如基地建设加工厂建设。所以《Tectonica》是我最近在Steam Deck上玩的一款新游戏。其实，这些游戏中的许多，比如《Satisfactory》，并没有很好的控制器支持，但人们确实在玩，所以有人会写信说，我用触摸板来操作那37个快捷键。
+
+66
+00:40:07.000 --> 00:40:24.000
+that you need. You know, it's not something you would sit down and expect to play on your Xbox. Recently, Factorio added that. That was actually when I picked it up and started playing on my Steam Deck. But I've been playing this one Tectonica. And so all these add a twist. So this one is 3D,
+你知道，这不是你会坐下来期望在Xbox上玩的东西。最近，《异星工厂》增加了这个功能。那其实是我拿起它并开始在Steam Deck上玩的时候。但我一直在玩这个《Tectonica》。所以所有这些都增加了一个转折。所以这个是3D的，
+
+67
+00:40:24.000 --> 00:41:06.000
+which adds an interesting dimension to your ability to one tectonica and so you know all these add a twist so this one is 3d which is uh you know adds an interesting dimension to your ability to uh you know build your factory and and how to align things because it's in a first person sort of 3d 3d thing uh and then the second thing is that uh you're underground so you're in caves and caves of course like limit how you can sprawl your factory even kind of more than normal. But you're also given, you know, drilling equipment, basically. So you can carve out, you know, paths to, you know, extend your factory line or add stuff. And, you know, you need plants to fuel some of your, you know, combustible uh like smelters and uh so you need to you know to hydroponic
+这为你的能力增加了一个有趣的维度……《Tectonica》，所以你知道所有这些都增加了一个转折，所以这个是3D的，这增加了你构建工厂和如何对齐事物的有趣维度，因为它是第一人称的3D视角。然后第二件事是，你在地下，所以你在洞穴里，洞穴当然限制了你扩张工厂的方式，甚至比平时更甚。但你也得到了，你知道，钻探设备，基本上。所以你可以开辟路径来扩展你的工厂线或添加东西。而且，你知道，你需要植物来为一些可燃的冶炼炉提供燃料，所以你需要进行水培
+
+68
+00:41:06.000 --> 00:41:33.000
+growing because uh you know it's a pain to run around and mine mine all the mine gather harvest harvest yeah bring on the walls uh so anyways uh tectonica it's still early access so i guess in theory it's buggy i did i did actually hit one bug on my computer um but in general very playable i've not hit like some nasty crashes or anything. And a lot of these games, interestingly, are satisfactory. I think it's the same thing. Still technically early access,
+种植，因为到处跑去挖掘、收集、收获真的很麻烦。所以，总之，《Tectonica》还处于抢先体验阶段，所以我猜理论上它有bug，我确实在我的电脑上遇到了一个bug，但总的来说非常可玩。我没有遇到什么严重的崩溃之类的。而且很多这些游戏，有趣的是，《Satisfactory》，我认为也是一样。技术上仍然是抢先体验，
+
+69
+00:41:33.000 --> 00:41:54.000
+early release, whatever it's called. And so it's not formally done yet, but very, very playable with beginning and end game and all of that. And so Tectonica also is nice because it has a... I mean, you may not like the story. It's not an rpg level story but there's definitely like a story to it about what's going on and sort of like accomplishments to work your way through that
+早期发布，不管叫什么。所以它还没有正式完成，但非常非常可玩，有开始和结束游戏以及所有这些。所以《Tectonica》也很不错，因为它有一个……我的意思是，你可能不喜欢这个故事。它不是RPG级别的故事，但绝对有一个关于正在发生什么的故事，以及某种可以努力完成的成就，
+
+70
+00:41:54.000 --> 00:42:48.000
+that are sort of very specific to unlock a narrative that goes along with it so i'm enjoying it tectonic i checked out oh on pc very cool as far as i know i think xbox pc i don't know about playstation oh very cool check it out yeah i love factorio and satisfactory so this is right up my alley i'm gonna give it a shot all right my tool this show is uh the esp32 development board have you heard about this patrick yes you have okay i'm gonna say what I think it is. I literally just got one. I have it. I've actually two of them right here. I'll hold it up for the audience to not see because we don't record video. But actually, that was useful because I was wondering which development board you have. So I have a tiny, tiny one. Yeah, it's like the size, maybe the size of a stick of gum, basically. Okay.
+这些成就非常具体，可以解锁随之而来的叙事，所以我很喜欢它。《Tectonica》，我查了一下，哦，在PC上，很酷。据我所知，我想Xbox、PC都有，不知道PlayStation有没有。哦，很酷，去看看吧。是的，我喜欢《异星工厂》和《Satisfactory》，所以这正合我意，我要试一试。好了，我的节目工具是ESP32开发板。你听说过这个吗，Patrick？是的，你听说过。好的，我要说一下我认为它是什么。我刚买了一个。我有它。我实际上手头有两个。我会把它举起来给观众看，虽然他们看不到，因为我们不录视频。但实际上，这很有用，因为我很好奇你有什么开发板。所以我有一个非常非常小的。是的，它的大小，也许就像一根口香糖的大小，基本上。好的。
+
+71
+00:42:48.000 --> 00:43:18.000
+And yeah, and it's, you know, the thing that caught my attention was that it has Wi-Fi. So it's, you know, the Raspberry Pi Pico W, I have a couple of those. Those also have Wi-Fi. Those were significantly more expensive. This is like extremely reasonably priced. I have a link to the actual one I bought and I bought, yeah, I bought two of these for $12.74 US. So it was like $6.20 a piece or $6.70
+是的，而且，你知道，引起我注意的事情是它有Wi-Fi。所以它是，你知道，Raspberry Pi Pico W，我有几个。那些也有Wi-Fi。那些要贵得多。这个价格非常合理。我有一个我买的那个的链接，我买了，是的，我买了两个，花了12.74美元。所以大约是6.20美元一个，或者6.70美元
+
+72
+00:43:18.000 --> 00:43:47.000
+a piece. So yeah, very reasonable. And I haven't tried it yet. They're still in their vacuum sealed bag or static bag, whatever it is. But I definitely want to give it a shot. It supports Arduino and MicroPython, which is pretty cool. So you can use either of those. Yeah, the Raspberry Pi and Arduino, they only support their own thing. This one supports either. I'm generally a little leery of things that are just so open-ended
+一个。所以，是的，非常合理。我还没试过。它们还在真空密封袋或防静电袋里，不管是什么。但我一定要试一试。它支持Arduino和MicroPython，这很酷。所以你可以使用其中任何一个。是的，Raspberry Pi和Arduino，它们只支持自己的东西。这个支持两者。我通常对那些太开放的东西有点怀疑，
+
+73
+00:43:47.000 --> 00:44:03.000
+that maybe it won't do any of those well. The instructions that came with it walk you through how to set this up for Arduino, so I might just stick with that. But yeah, just the fact that I can get Wi-Fi in a small form factor is
+可能它哪样都做不好。随附的说明书引导你如何为Arduino设置它，所以我可能会坚持用那个。但，是的，仅仅是我能在小尺寸中获得Wi-Fi这一点就
+
+74
+00:44:03.000 --> 00:44:53.000
+really neat. I think next year what I might do is I have a one of my Eero, you know, Eero is a mesh Wi-Fi thing. One of my Eero capsules is pretty close to the front of the house. And so I'm thinking I can actually have robots in the trees next year for Halloween. And they'll get this wi-fi packet and when they get the green when they get some wi-fi packet they'll swing swing from the tree like some giant ghost or something so um that's my plan um uh last halloween which was you know just a week ago from when we're recording this um you know i i actually went down a step i i only did about half of it um things have just been really crazy for me so i didn't have a lot of time to invest in it but i'm gonna try and make
+非常棒。我想明年我可能会做的是，我有一个Eero，你知道，Eero是一个网状Wi-Fi系统。我的一个Eero胶囊离房子前面很近。所以我正在考虑明年万圣节我可以在树上放机器人。它们会收到这个Wi-Fi数据包，当它们收到Wi-Fi数据包时，它们会像巨大的鬼魂一样从树上摇摆，所以，这就是我的计划。上个万圣节，也就是我们录制这个节目的一周前，你知道，我实际上退了一步，我只做了一半，事情对我来说太疯狂了，所以我没有太多时间投入其中，但我会尝试在
+
+75
+00:44:53.000 --> 00:45:36.000
+up for it next halloween i'm gonna bring back all the robots i didn't do this halloween and add some more in the trees if i can very cool yeah so i guess like the commentary i have there is the uh company i think it's expressive is develops a little uh chip that does like all the wi-fi and has i believe their arm cores um on them and so all of that to i guess like what jason is saying is it's kind of irrelevant unless you're doing embedded programming directly um but they're very, very cheap and common. And so a big community has sprung up around them. So Amazon's a good source if you want them quickly. If you are willing to wait for overseas from AliExpress,
+下一个万圣节弥补它，我会带回所有我这个万圣节没做的机器人，如果可以的话，再在树上加一些。非常酷。是的，所以我猜我对此的评论是，那家公司，我想是Espressif，开发了一个小芯片，它处理所有的Wi-Fi，并且我相信它们上面有ARM核心，所以所有这些，我猜就像Jason所说的，除非你直接进行嵌入式编程，否则它是无关紧要的，但它们非常非常便宜且常见。所以一个庞大的社区围绕着它们兴起。所以如果你想快速获得它们，亚马逊是一个很好的来源。如果你愿意等待来自AliExpress的海外发货，
+
+76
+00:45:36.000 --> 00:45:55.000
+you can get the original version, or at least the original one I came into, which is ESP8266, which is a 16-bit microcontroller, I believe. Again, maybe not important depending on what you're doing, if you're just sort of controlling a few servos and also has the library associated with it. And that one's like $2. Wow.
+你可以买到原始版本，或者至少是我接触到的原始版本，即ESP8266，我相信它是一个16位微控制器。同样，这可能不重要，取决于你在做什么，如果你只是控制几个伺服电机，它也有相关的库。那个大约是2美元。哇。
+
+77
+00:45:55.000 --> 00:46:32.000
+For an ESP8266 for like $3. So you can search like, they're kind of like all cloned, but Wemos, W-E-M-O-S, is a very common like dev board you can kind of look up and they have esp 8266 versions and esp 32 versions the esp 32 is a you know 32-bit processor faster so if you're needing to you know do more computation they have variations of it with you can attach a camera even and do some minimal image image processing on or use as webcam of course if you're just going to need a webcam it's better to normally just go buy one but then you normally you know pulling the data down and
+ESP8266大约3美元。所以你可以搜索，它们有点像都被克隆了，但Wemos，W-E-M-O-S，是一个非常常见的开发板，你可以查一下，它们有ESP8266版本和ESP32版本。ESP32是一个32位处理器，速度更快，所以如果你需要做更多的计算，它们有变体，你可以连接一个摄像头，甚至做一些最小的图像处理，或者用作网络摄像头。当然，如果你只是需要一个网络摄像头，通常最好直接买一个，但通常你是在拉取数据，
+
+78
+00:46:32.000 --> 00:47:11.000
+doing processing rather than being able to handle it sort of device side itself and they all have you know we talked about that last time with the raspberry pi it has the sort of headers for doing i squared c or spi and know, a lot of example code. And like Jason mentioned, you can use the Arduino, I guess you'd call it like middleware, but basically like the libraries and the interfaces associated with that. They do need to be for like hardware stuff. They have to be ported to ESP32. So you can't run the sort of Arduino libraries directly in some cases if their software is fine but for you know things like i squared c handling for a specific something you know you may you may
+而不是能够在设备端处理它。它们都有，你知道，我们上次谈到Raspberry Pi时提到的，它有用于I2C或SPI的引脚，而且有很多示例代码。就像Jason提到的，你可以使用Arduino，我想你会称之为中间件，但基本上是与之相关的库和接口。它们确实需要为硬件东西服务。它们必须移植到ESP32。所以有些情况下你不能直接运行Arduino库，如果它们的软件没问题，但对于像特定东西的I2C处理，你知道，你可能
+
+79
+00:47:11.000 --> 00:47:36.000
+need some variants but it's relatively straightforward much easier than sort of building your own pcb and doing it from scratch but they also support micropython as i mentioned and lua as well are pretty commonly seen as ways to sort of control these. And the big win, like Jason mentioned, which you don't normally see in a bog-standard Arduino, or at least not at this price for sure, is the ability to connect to your Wi-Fi network.
+需要一些变体，但它相对简单，比自己构建PCB并从零开始做要容易得多。但它们也支持MicroPython，正如我提到的，Lua也是常见的控制方式。最大的赢家，就像Jason提到的，你在普通的Arduino中通常看不到，或者至少在这个价格下肯定看不到，就是连接到Wi-Fi网络的能力。
+
+80
+00:47:36.000 --> 00:48:02.000
+So you'll see a lot of home-controlled devices actually use these as well. And there's a lot of firmware floating out for reflashing sort of, you know, the light bulbs that screw into your roof will have one of these chips inside. And that's how they connect to your network so that you can control them from the app. And so I figured out that a lot of these run very, very similar chips. And so there's various from easy to hard ways of sort of flashing your own stuff onto them.
+所以你会看到很多家庭控制设备实际上也使用这些。而且有很多固件在流传，用于重新刷写，你知道，拧进你屋顶的灯泡里会有这些芯片中的一个。这就是它们连接到你的网络的方式，这样你就可以从应用程序控制它们。所以我发现其中很多运行着非常非常相似的芯片。所以有各种从简单到困难的方法来刷写你自己的东西。
+
+81
+00:48:02.000 --> 00:48:23.000
+And in many cases, the other cool thing is rather than having it hooked up to your computer, there often is the ability to update firmware over the air. So you can just send a new update to your bat in the tree and change its behavior without having to bring it back inside and hook up cables. Oh, that is awesome. Yeah, I'm really excited about this. I'm going to have to...
+而且在很多情况下，另一个很酷的事情是，与其把它连接到你的电脑上，通常还有通过无线方式更新固件的能力。所以你可以直接发送一个新的更新到树上的蝙蝠，改变它的行为，而不必把它带回室内并连接电缆。哦，那太棒了。是的，我对此非常兴奋。我得……
+
+82
+00:48:23.000 --> 00:48:54.000
+I bought a... This is probably just really amateur to you to uh i bought a this is like uh probably just really like amateur to you but i bought a crimper i've never crimped anything before but i wanted to like basically have this thing control the servo but i need to have a wire come out of this thing and go into the servo and it can't't be just a DuPont cable because of the way this thing is set up. And so I actually bought a crimper. I'm going to try doing my first crimp at some point.
+我买了一个……这对你来说可能真的很业余，我买了一个压线钳，我以前从来没压过任何东西，但我想要这个东西基本上控制伺服电机，但我需要有一根电线从这个东西出来并进入伺服电机，它不能只是杜邦线，因为这个东西的设置方式。所以我实际上买了一个压线钳。我打算在某个时候尝试做我的第一次压接。
+
+83
+00:48:54.000 --> 00:49:25.000
+Yeah, I don't do a lot of crimping. I do a lot of soldering, but not too much crimping. And a correction, the 8266 was actually still 32 bits, just less powerful less purple devices do you have to buy like a thousand of them if you're buying it from aliexpress or can you still buy like five or ten you can buy like one or two yeah oh nice shipping has caught up it used to be a much better arbitrage or however you say that but now uh yeah normally you know they want
+是的，我不怎么做压接。我做很多焊接，但不怎么做压接。纠正一下，8266实际上仍然是32位的，只是功能较弱。如果你从AliExpress购买，你必须买一千个吗，还是可以只买五到十个？你可以买一两个。是的，哦，不错。运输已经跟上了，过去这曾经是一个更好的套利，不管你怎么说，但现在，是的，通常你知道，他们希望
+
+84
+00:49:25.000 --> 00:50:15.000
+you to buy a few to basically amortize the cost of shipping but it's not like hundreds um you know if you're buying a tape a tape of them uh you know the actual chips you probably get to buy 500 or something but most people are buying a dev board so you're only buying a couple uh makes sense very cool all right well it's time to talk about HyperLogLog. So Jason has warned me that he has been willing to play foil to my explanation here. For more broad topics, I do have some other specific algorithms in mind. So if this goes okay, maybe we'll do some others in the same style. But let me kind of like set up and walk it through. And Jason, ask away the questions. Represent the average person out there or the everyone else or even me
+你买几个来分摊运费，但不是成百上千。你知道，如果你买一盘，你知道，实际的芯片，你可能得买500个左右，但大多数人买的是开发板，所以你只买几个。有道理，非常酷。好了，是时候谈谈HyperLogLog了。所以Jason警告我，他愿意为我的解释充当陪衬。对于更广泛的主题，我确实还有一些其他具体的算法。所以如果这次进行得顺利，也许我们会以同样的风格做一些其他的。但让我先铺垫一下，带大家走一遍。Jason，尽管问问题。代表外面的普通人，或者其他人，甚至是我，
+
+85
+00:50:15.000 --> 00:50:59.000
+because normally I'm the one asking you these questions. The algorithm here arrives from a difficulty that probably most people haven't really thought about. In fact, I really hadn't thought about it until it was sort of posed, which is how do you count the number of unique items in a set? And so if you sort of imagined the classical example, we'll just use this one. You know, everyone's pretty technically oriented here. Imagine you're a website and you don't want you know you see that visitor account right and your mom goes and visits your website and then she just like keeps refreshing and the counter just keeps going up yeah i have a popular website most people will sort of give
+因为通常是我在问你这些问题。这里的算法源于一个大多数人可能没真正想过的问题。事实上，我真的没想过，直到它被提出来，那就是：你如何计算集合中唯一项的数量？所以如果你想象经典的例子，我们就用这个。你知道，这里每个人都很有技术头脑。想象你是一个网站，你不想，你知道，你看到那个访问者计数，然后你妈妈去访问你的网站，然后她就一直刷新，计数器就一直往上涨。是的，我有一个受欢迎的网站，大多数人会给出
+
+86
+00:50:59.000 --> 00:51:45.000
+this number instead as you know unique visitors so you know you could say oh okay i'm gonna you know store a cookie and tell if you've been there before or or whatever right there's various ways but just imagine you know it's sort of being written to a log let's say the ip address or you know a unique identifier for a user and you want to count up how many of them there are so you know like the first first blush you know sort of like the naive answer is you sort of you look through your list of all the visitors and you keep track of which ones you've seen. And then every time you go to the next one, you look through the list. And if you see that user, you throw it away and then you count the size of the list at the end and then boom. And that that is correct. That actually will produce the correct answer, the so-called
+这个数字作为，你知道，唯一访问者。所以，你知道，你可以说，哦，好的，我要存储一个cookie，看看你以前是否来过，或者其他什么，对吧？有各种方法，但只要想象，你知道，它被写入日志，比如IP地址，或者用户的唯一标识符，你想计算有多少个。所以，你知道，第一印象，你知道，天真的答案是，你查看所有访问者的列表，并跟踪你见过哪些。然后每次你进入下一个，你查看列表。如果你看到那个用户，你就把它扔掉，然后在最后计算列表的大小，然后砰。这就是正确的。这实际上会产生正确的答案，所谓的
+
+87
+00:51:45.000 --> 00:52:31.000
+cardinality, the number of unique visitors that was in your set of consideration. And so you may say, well, that's pretty obvious to improve. If this was a programming interview, that would be a suitable first answer. And then your interviewer would normally up the challenge a bit, which is ask you, well, how efficient is that? Could you do better? And so of course you can do better than searching through a list for unique items and you could use a tree, right? That would be one option. And the other option is you could use a hash map, right? So you could have a hash map of all the unique identifiers and then every time you, you know, get a unique id in you hash it or maybe it's already you know you randomized enough but normally you want a really really rigorous hash
+基数，即你考虑的集合中唯一访问者的数量。所以你可能会说，嗯，这很容易改进。如果这是一个编程面试，那将是一个合适的第一个答案。然后你的面试官通常会增加一点挑战，问你，嗯，那效率如何？你能做得更好吗？所以当然你可以比搜索唯一项列表做得更好，你可以使用树，对吧？那是一个选择。另一个选择是你可以使用哈希映射，对吧？所以你可以有一个所有唯一标识符的哈希映射，然后每次你得到一个唯一ID，你哈希它，或者也许它已经足够随机化了，但通常你想要一个非常非常严格的哈希，
+
+88
+00:52:31.000 --> 00:52:58.000
+and so you mix up all the bits you get essentially a random number but a repeatable one and you go to a set of buckets and you is that one present or not if it's present you throw it away and if it's not you insert it and we've talked throw it away. And if it's not, you insert it. And we've talked about hash charts on the show before. If not, you can go listen to them if you don't know what they are. And so at the end, you count how many entries you have. And this will also work. Yeah, I mean, the limit of what I,
+所以你混合所有的位，你本质上得到一个随机数，但是一个可重复的随机数，然后你去一组桶，那个存在吗？如果存在，你就把它扔掉，如果不存在，你就插入它。我们之前在节目中谈过哈希表。如果没有，如果你不知道它们是什么，你可以去听听。所以最后，你计算你有多少个条目。这也行得通。是的，我的意思是，我能想到的，
+
+89
+00:52:58.000 --> 00:53:21.000
+off the top of my head, would do just to scale up is have a distributed hash table where basically you do the hash and then each, it's like if the hash starts with a one, send it to computer one. If the hash starts with a two, send it to computer two. And so then you have a computer for each possible value of the first digit of the hash.
+为了扩展，我会做一个分布式哈希表，基本上你做哈希，然后每个，就像如果哈希以1开头，发送到计算机1。如果哈希以2开头，发送到计算机2。所以你为哈希的第一位数字的每个可能值都有一台计算机。
+
+90
+00:53:21.000 --> 00:54:26.000
+And so then now if there's, I don't know, 56 different characters for the first digit of the hash and so then you know now like if there's i don't know 56 different you know characters for the first digit of the hash then like you have 56 computers and you get 56 way parallelism um but yeah i guess we're gonna hear about way even better than that no no no no so so this is great so you know i i had a same kind of like thought process in my head. And I think that works great for live, right? So if these if you wanted to sort of like, what I was mentioning, you know, these visitors are coming in and you sort of counting them, but it doesn't work like after the effect, or sort of analytic purposes. So imagine you like I was mentioning, you have this is a log and you want to cut it by day, by month, by, you know, people that came from Europe, by people who ended up buying something, by whatever, you know, these kind of filters. and so they have a distributed system for querying the column score and and this was developed
+所以现在如果有，我不知道，哈希的第一位数字有56个不同的字符，所以现在就像，如果有56个不同的字符，那么你就有56台计算机，你得到56路并行。嗯，但我想我们会听到比那更好的方法。不，不，不，不。所以这太棒了。所以，你知道，我脑子里也有同样的想法。我认为这对于实时来说非常有效，对吧？所以如果这些，正如我提到的，这些访问者进来了，你计算它们，但这在事后，或分析目的上不起作用。所以想象你，就像我提到的，你有一个日志，你想按天、按月、按从欧洲来的人、按最终买东西的人、按任何东西来切分，你知道，这些过滤器。所以他们有一个用于查询列分数的分布式系统，这是开发的，
+
+91
+00:54:26.000 --> 00:55:02.000
+because they went and looked and people doing analytic queries or i forget what it said in there i won't quote it because i'll get it wrong but a very large number of count distinct so you write this sort of sql query and you say hey i want the distinct number of these but they're over arbitrary input so what you say will work jason but the issue is sort of like that's like if you only really want you know a handful of Jason, but the issue is sort of like, that's like, if you only really want, you know, a handful of them live, and you're not sort of like infinitely slicing them later. So not not not an off approach, we'll come back in a second, I think you're heading in a good direction. But the sort of first, there's many algorithms have been done to sort of solve this. And the paper even references one and to be clear,
+因为他们去看了，人们在做分析查询，或者我忘了里面怎么说的，我不会引用它，因为我会弄错，但有大量的不同计数。所以你写这种SQL查询，你说，嘿，我想要这些的不同数量，但它们是任意输入的。所以你说的会起作用，Jason，但问题是，这就像，如果你真的只想要少数几个实时数据，而你不是在以后无限地切分它们。所以不是一种离线方法，我们一会儿会回来，我想你的方向是对的。但是，第一，已经有很多算法被用来解决这个问题。论文甚至引用了一个，明确地说，
+
+92
+00:55:02.000 --> 00:55:20.000
+they even recommend this one, if you're sort of not going to have very many. If you don't believe that there's a lot of unique items, this one will work. And I want to talk about this one because it references something else. And we already kind of mentioned hashing unique identifier and then trying to put it in a bucket.
+他们甚至推荐这个，如果你不会有很多的话。如果你不相信有很多唯一项，这个会起作用。我想谈谈这个，因为它引用了别的东西。我们已经提到了哈希唯一标识符，然后尝试把它放进桶里。
+
+93
+00:55:20.000 --> 00:55:38.000
+So this first one is linear counting. So if you hash it and you put it in a bucket, but rather than in a normal hash it and you put it in a bucket, but rather than in a normal hash map, you would store the identifier. And one way is store a linked list of identifiers. So the first thing in the bucket is the head node. And then it points to the next thing and you have a linked list, right?
+所以第一个是线性计数。所以如果你哈希它并把它放进桶里，但不是在普通的哈希映射中，你会存储标识符。一种方法是存储标识符的链表。所以桶里的第一件事是头节点。然后它指向下一件事，你就有一个链表，对吧？
+
+94
+00:55:38.000 --> 00:56:07.000
+Until you sort of grow the hash map number of buckets. In this case, what we're going to do is actually only store a single bit and not store the actual ID. So you just insert the value. And if it goes in a bucket, you just mark that bucket as having seen something, you know, Boolean equals true, and all the other buckets are Boolean equals false. So now you have an issue is when you have a hash collision, you're losing some information, right? You're losing the information that there were actually, potentially, it was the same item,
+直到你增加哈希映射的桶数量。在这种情况下，我们要做的实际上只存储一个位，而不存储实际的ID。所以你只是插入值。如果它进入一个桶，你只是标记那个桶为已见过东西，你知道，布尔值等于真，所有其他桶是布尔值等于假。所以现在你有一个问题，当你发生哈希碰撞时，你丢失了一些信息，对吧？你丢失了实际上有，潜在地，它是同一个项目的信息，
+
+95
+00:56:07.000 --> 00:56:24.000
+but potentially it was two different items. And so you are getting this sort of probabilistic structure. But this is going to turn into an advantage and the rest of this is going to talk about this. And the reason why I think this is an interesting topic for the show is my background before kind of coming across a few of these was always like,
+但潜在地它是两个不同的项目。所以你得到了这种概率结构。但这将变成一个优势，剩下的部分将谈论这个。我认为这是一个有趣的节目主题的原因是，在我接触到其中一些之前的背景总是，
+
+96
+00:56:24.000 --> 00:57:05.000
+you would definitely not want a probabilistic answer you would want an exact answer uh and so it would not be acceptable to be even off by one right that's an off by one error and so you yeah exactly what you have but if you're willing to give up an exact answer the design space widens dramatically, not only for the number of solutions you can have, but also for things like being able to tune your trade off, because you can say how reliable can I trade space or processing for more reliability. And an example that you see a lot recently with machine learning is approximate K nearest neighbors. So we've talked about k nearest neighbors
+你绝对不会想要一个概率答案，你会想要一个精确答案，所以即使差一也不可接受，对吧？那是一个差一错误，所以你，是的，完全是你有的。但如果你愿意放弃一个精确答案，设计空间会大大拓宽，不仅对于你可以拥有的解决方案数量，而且对于能够调整你的权衡的事情，因为你可以说我能如何可靠地用空间或处理来换取更多的可靠性。最近在机器学习中看到的一个例子是近似K近邻。所以我们谈论过K近邻，
+
+97
+00:57:05.000 --> 00:57:46.000
+before i think maybe if not maybe that's a good one to talk about i think we have yeah okay okay good um but what if you were willing to accept an approximate answer then you can kind of approach it differently so this first one that i'm mentioning is called linear accounting so you you hash it you keep track and in cases, when you produce this random number, and you go to insert it in a bucket, you're going to collide. And like I mentioned, sometimes that's you want it, you want to throw away because it's the same ID, and every one of the same IDs will collide. But sometimes another ID could probabilistically collide. And that's the second bit of this is using statistics to say, when you're done done don't just count the number of buckets that have
+之前，我想也许如果没有，那也许是一个很好的讨论话题，我想我们谈过。是的，好的，好的。但如果你愿意接受一个近似答案，那么你可以以不同的方式处理它。所以第一个我提到的叫线性计数。所以你哈希它，你跟踪，在某些情况下，当你产生这个随机数，你去把它插入一个桶时，你会碰撞。就像我提到的，有时那是你想要的，你想要扔掉，因为它是同一个ID，每一个相同的ID都会碰撞。但有时另一个ID可能会概率性地碰撞。这就是这部分的第二点，使用统计数据来说，当你完成时，不要只计算有
+
+98
+00:57:46.000 --> 00:58:38.000
+an entry in them which would be an approximation but you can do better which is look how many of the buckets like the percentage full your hash map is and use that to estimate what the likelihood is that you may have seen extra insertions that miss and so this this is like this like clever unlock right for me was um we don't know how many of the same item and how many you had duplicate uh hashes or portions of the hashes that you used are actually different ids but if your you know hash map is only 10 full only 10 only 10% of the buckets had values, that's, it's pretty unlikely, like, you can just say 10 of the buckets had items. So I'm just going to guess 10. But if you know, 90% of your buckets, you had 10 buckets, and nine of them
+条目的桶的数量，那是一个近似值，但你可以做得更好，那就是看看你的哈希映射有多少百分比是满的，并用它来估计你可能见过额外插入而错过的可能性。所以这就像这个聪明的解锁，对我来说是，我们不知道有多少相同的项目，以及你有多少重复的哈希或你使用的哈希部分实际上是不同的ID，但如果你的哈希映射只有10%满，只有10%的桶有值，那，这不太可能，就像，你可以直接说10个桶有项目。所以我只是猜10。但如果你知道，90%的桶，你有10个桶，其中9个
+
+99
+00:58:38.000 --> 00:59:16.000
+had it, then the chance that the next thing being inserted being random, 90% chance that it's going to collide, right? And so you sort of take that into account. Now there is some balance there, right? If you had 10 buckets and 10 million unique items, you're going to get like a terrible guess, right? Because you fill it up and then everything will collide and you can't, the information is lost. So you do need to have an understanding of kind of the approximate number for this example, the sort of approximate number of items that you would have. So this one's called linear counting. And when I was reading about this, the thing that comes up here, which I don't know if you've used these before, Jason,
+有了它，那么下一个插入的东西是随机的概率，有90%的可能性会发生碰撞，对吧？所以你得把这一点考虑进去。这里面存在某种平衡，对吧？如果你有10个桶和1000万个唯一项，你会得到一个非常糟糕的猜测，对吧？因为你填满它之后，所有东西都会发生碰撞，你无法区分，信息就丢失了。所以你确实需要对这个例子中大概的项目数量有一个了解，也就是你可能会拥有的项目的大致数量。所以这个叫做线性计数（linear counting）。当我读到这个的时候，出现了一个问题，我不知道你以前是否用过这些，Jason，
+
+100
+00:59:16.000 --> 00:59:52.000
+bloom filter, have you ever used a bloom filter before? I've used it, I don't remember exactly how it works. Okay, so this is very similar to a bloom filter in a bloom filter uh the idea is you're trying to have us what things are members of the set and you query the bloom filter and say via the same mechanism basically you hash it you look in the bucket and if you normally do a couple different buckets um and you say if every one of those buckets has an item in it, then the thing I'm looking for, I'm going to do a more expensive query or check or actually go to the database.
+布隆过滤器（bloom filter），你以前用过布隆过滤器吗？我用过，但我不太记得它具体是怎么工作的了。好的，这和布隆过滤器非常相似。在布隆过滤器中，想法是你试图了解哪些东西是集合的成员，你查询布隆过滤器，基本上通过相同的机制，你对其进行哈希处理，查看桶，通常你会使用几个不同的桶，然后你说如果每一个桶里都有一个项目，那么我正在寻找的东西，我就去做一个更昂贵的查询或检查，或者直接去数据库查找。
+
+101
+00:59:52.000 --> 01:00:17.000
+But if any of the things that should be present aren't, then I know with 100% certainty that this item is not in my set. So if I'm looking up the username Jason, and I do this operation, and it comes back that one of the buckets that should have had a bit set don't, then I know Jason isn't in, he's not a user. So I don't actually have to query my backend database. And the advantage is... So let me see if I understand this right.
+但如果任何应该存在的东西不在那里，那么我就能100%确定这个项目不在我的集合中。所以如果我正在查找用户名Jason，我执行了这个操作，结果显示其中一个本该设置了位的桶没有被设置，那么我就知道Jason不在里面，他不是用户。所以我实际上不必查询我的后端数据库。而它的优势是……让我看看我是否理解正确。
+
+102
+01:00:17.000 --> 01:01:01.000
+So the idea is like, I mean, you just created an example. So there would be sort of a bit for every letter and position pair. And so it's like, you know, if you don't have the, so JSON is J-A-S-O-N. If you don't have the, you know, A at position two bit, or you don't have the O at position four bit, if you're using any of these, then you know that the word JSON just can't be there. But if you have, you know, J1, A2, S3, O3 o4 and 5 then like you're still not 100 sure you have to do some extra step but but like you're you're confident enough that you've eliminated so many other things that's still like a huge time save yes so if you took each of those like j in the
+所以这个想法是，我的意思是，你刚刚创建了一个例子。所以对于每个字母和位置对，都会有一个位。所以就像，你知道，如果你没有那个，所以JSON是J-A-S-O-N。如果你没有那个，你知道，位置二的A位，或者你没有位置四的O位，如果你使用了这些中的任何一个，那么你就知道JSON这个词根本不可能在那里。但如果你有，你知道，J1, A2, S3, O4和N5，那么你仍然不能100%确定，你必须做一些额外的步骤，但你足够自信，你已经排除了这么多其他东西，这仍然是一个巨大的时间节省。是的，所以如果你把每一个，比如j在
+
+103
+01:01:01.000 --> 01:01:38.000
+first position a in the second position and you you know basically hash them and then put them in the bucket and the probability of all those things you said right the probability of false positive is controllable if you say i think i'm gonna have this many true entries i want to use this many bits and there's calculators online for sort of fine tuning your parameters and if you have lots and lots and lots of buckets, you can decrease your false positives. But if you, you know, shrink it down, the really nice thing is, say, you know, on the edge node, you can't store that you have, you know, 10 million usernames, but you could store a megabyte or whatever.
+第一个位置，a在第二个位置，然后你基本上对它们进行哈希处理，然后把它们放进桶里，你说的所有这些东西的概率，对吧，假阳性的概率是可控的。如果你说我想我有这么多真实条目，我想用这么多位，网上有计算器可以用来微调你的参数。如果你有非常非常多的桶，你可以减少假阳性。但如果你，你知道，把它缩小，真正好的地方是，比如，你知道，在边缘节点上，你不能存储你有，你知道，1000万个用户名，但你可以存储一兆字节或类似的东西。
+
+104
+01:01:38.000 --> 01:01:58.000
+And in that megabyte, you could store, you know, this Bloom filter and give you a reduction of... And it's only worth it if you think there's lots of users going to try to log on who don't actually have usernames in the database or whatever you're trying to do. But if they do, then you can sort of not have to go to the backend.
+而在那一兆字节里，你可以存储，你知道，这个布隆过滤器，给你一个减少……而且只有当你认为有很多用户试图登录，但他们的用户名实际上并不在数据库中，或者无论你在做什么时，它才值得。但如果他们确实在，那么你就可以不用去后端了。
+
+105
+01:01:58.000 --> 01:02:33.000
+So if you imagine for something like a spatial index and you're trying to query for an area on your computer, like your video game, you're looking into this portion of space, and most of the portions of space are empty, and you just have entries of where there are things, then you could filter out the expensive sort of collision detection and all of the other things by basically knowing up front which things are present or not. Now, there are other ways of handling that as well, but you're right, it doesn't give you a 100% answer. But it prevents you from doing an expense query by filtering out many of them. Got it. And that's a bloom filter. Or did what is it called a bloom
+所以如果你想象一下像空间索引这样的东西，你试图在你的电脑上查询一个区域，比如你的电子游戏，你正在查看这部分空间，而大部分空间是空的，你只有哪里有东西的条目，那么你就可以通过预先知道哪些东西存在或不存在，来过滤掉昂贵的碰撞检测和所有其他东西。现在，还有其他处理方法，但你是对的，它不能给你一个100%的答案。但它通过过滤掉许多查询，防止你进行昂贵的查询。明白了。这就是布隆过滤器。或者它叫什么，布隆
+
+106
+01:02:33.000 --> 01:03:21.000
+filter? Do you know? That's a great question. I think because you do this multiple hashes, so you don't just do a single entry into a bucket, you normally bloom I would, this is my imagination, because it blooms out and you normally bloom. I would, this is my imagination because it blooms out and you normally do a couple different buckets by taking portions of it. Okay. I have a really funny, true answer. So, so the, well, that might be true, but also it's called it because it was created by Burton Howard Bloom. That's a true story in 1970. But, but i mean uh that's uh um that's really interesting man i can't believe that you know that this this uh someone in 1970 was thinking about this problem that just blows my mind you know so this one was the first this bloom filter was the first one i
+过滤器？你知道吗？这是一个很好的问题。我想是因为你做了多次哈希，所以你不只是对一个桶进行单次输入，你通常布隆……这是我的想象，因为它会散开，你通常会布隆。我……这是我的想象，因为它会散开，你通常通过取它的部分来做几个不同的桶。好的。我有一个非常有趣、真实的答案。所以，嗯，那可能是真的，但它之所以这样命名是因为它是由Burton Howard Bloom创建的。这是一个真实的故事，发生在1970年。但是，我的意思是，嗯，那真的很有趣，伙计，我不敢相信你知道这个，1970年有人在思考这个问题，这真的让我大开眼界，你知道，所以这个是第一个，这个布隆过滤器是第一个我
+
+107
+01:03:21.000 --> 01:03:46.000
+came across that was this it's okay to be wrong. And in fact, it's just a tunable parameter. This is sort of weird. Sometimes you get this if you do like DSP work or filtering or something, you know, or you talk about floating point math. But for something that was like a data structure, a data structure that's like meant to be somewhat broken, it's like intentional that it sometimes gets the wrong answer. It's by design.
+遇到的，它是可以出错的。事实上，它只是一个可调参数。这有点奇怪。有时如果你做数字信号处理（DSP）工作或滤波或类似的事情，你知道，或者你谈论浮点数学时，你会得到这个。但对于像数据结构这样的东西，一个旨在某种程度上被破坏的数据结构，它有时会得到错误的答案是故意的。这是设计使然。
+
+108
+01:03:46.000 --> 01:03:58.000
+So Bloom filter and linear counting, at least in my mind, pretty similar. So moving on from linear counting to the next step, we're going to go to the tail end of HyperLogLog and talk about LogLog. So LogLog does something
+所以布隆过滤器和线性计数，至少在我看来，非常相似。所以从线性计数进入下一步，我们要进入HyperLogLog的尾声，谈谈LogLog。所以LogLog做了一些
+
+109
+01:03:58.000 --> 01:04:17.000
+really interesting that if we were talking about the Bloom filters taking, you know, Jason was talking about taking the J and hashing that and taking the A and hashing that, right? So instead, if you just hashed JSON, the string JSON, you have a really good hash function. You could just use the first couple bits,
+非常有趣的事情，如果我们谈论的是布隆过滤器，你知道，Jason在谈论取J并对其进行哈希处理，取A并对其进行哈希处理，对吧？所以相反，如果你只是对JSON进行哈希处理，字符串JSON，你有一个非常好的哈希函数。你可以只使用前几个位，
+
+110
+01:04:17.000 --> 01:04:40.000
+the first however many bits you want to determine, you know, the bucket that you're going to go in. And then instead of scoring just a single bit of I had something in this bucket or not, you go to that bucket and you look at the rest of the hash. Say your hash was 32 bits and you had five buckets.
+前多少位你想要用来确定，你知道，你要进入的桶。然后，与其只记录一个位，即我是否在这个桶里有东西，你进入那个桶并查看哈希的其余部分。假设你的哈希是32位的，你有五个桶。
+
+111
+01:04:40.000 --> 01:04:52.000
+So, oh, did I pick bad numbers? 27 bits left. And those remaining 27 bits, you could either use the first or the last. It doesn't really matter. Count the number of sequential zeros. Now, this part was really, really weird to me. I didn't understand this.
+所以，哦，我选了糟糕的数字吗？剩下27位。而剩下的那27位，你可以使用前几个或后几个。这其实没关系。计算连续零的数量。现在，这部分对我来说真的非常非常奇怪。我不明白这一点。
+
+112
+01:04:52.000 --> 01:05:18.000
+So take the number of, let's say starting from the left to the right, count the number of zeros in a row that are in the next 27 bits. And then instead of storing one or zero in the bucket, store the number of zeros so if the first digit was a one you would put zero if the first digit was a zero and then a one you would put one because there's one zero but you could have four zeros in a row and you would store that
+所以取数字，假设从左到右，计算接下来的27位中连续零的数量。然后，与其在桶里存储1或0，不如存储零的数量。如果第一个数字是1，你会放0；如果第一个数字是0，然后是一个1，你会放1，因为有一个0。但你可能有四个连续的零，你会把那个存储
+
+113
+01:05:18.000 --> 01:05:46.000
+in the bucket now if you were like me that number of leading zeros in a row. Okay, got it. The number of leading zeros in a row. And the clever probabilistic thing about this is that if you imagine that there... So your hash needs to be very good. So it needs to have a 50% chance of a zero and a 50% chance of a one in every bit position or as close to that as you can manage. Then what you would say is if you're going
+在桶里。现在，如果你像我一样，那一连串的前导零。好的，明白了。一连串的前导零。而关于这个的巧妙概率论是，如果你想象有……所以你的哈希需要非常好。所以它需要在每个位位置有50%的机会是0，50%的机会是1，或者尽可能接近这个。那么你会说的是，如果你要
+
+114
+01:05:46.000 --> 01:06:37.000
+to look at a stream of unique ids you would expect that the length of sequential zeros that you would get is a function of the number of items you've looked at the length okay let me say if if i said you're only going to play the game once you're going to generate one hash and look at it and i asked you to derive like what what is what would you be the expected number of zeros you would see it's much more likely to see one zero or two zeros in a row than to see 16 zeros in a row on the very first time yeah it's like it's like a coin toss right it's like how many times can you toss the coin and get all heads well like as the number of tosses go up that that probability goes down that's exactly the key to this so if you look at a given bucket and let's
+查看一个唯一ID流，你会期望你得到的连续零的长度是你所查看的项目数量的函数。长度，好的，让我说，如果我说你只会玩一次游戏，你会生成一个哈希并查看它，我让你推导，比如，你会期望看到的零的数量是多少？在第一次尝试时，看到一个零或两个零连续出现的可能性，远大于看到16个零连续出现。是的，这就像抛硬币，对吧？这就像你可以抛多少次硬币并得到全正面。嗯，随着抛掷次数的增加，那个概率会下降。这正是关键所在。所以如果你看一个给定的桶，让我们
+
+115
+01:06:37.000 --> 01:07:16.000
+say you only kept one bucket that's fine you could just have one bucket and you keep track of this then at the end of seeing all of the items you look at what the sort of like longest run of zeros you now and you say that i i believe that i've seen one over two to that many number of zeros that's the probability so then i've seen two to that many number of zeros items is my guess so yeah let me let me see if i can can rephrase it, paraphrase it, see if I have it right. So you flip a coin. There's a 50-50 chance you get heads. If you get tails, you're done.
+说你只保留一个桶，那没关系，你可以只有一个桶，然后你跟踪这个。那么在看到所有项目之后，你查看你现在拥有的最长零序列，然后你说，我相信我已经看到了1除以2的那么多次方个零，这就是概率。所以那么我已经看到了2的那么多次方个项目，这是我的猜测。所以，是的，让我看看我是否能重述一下，意译一下，看看我是否理解正确。所以你抛硬币。有50-50的机会得到正面。如果你得到反面，你就结束了。
+
+116
+01:07:16.000 --> 01:07:51.000
+And, you know, that's a zero. You get zero points. If you get heads, that's a point. And then you try again. You know, you keep going until you keep accumulating points or you're out, right. And so, you know, 50% of the time, you'll get you'll get zero points. 75% of the time, you'll get zero or one point. And so it just keeps going up like this, this hyperbolic ramp. And so like, you know, 99% of the time, you're going to get less than 10 points or something, right. And so what that means is, what you're saying is, you're going to get less than 10 points or something. And so what that means is what you're saying is if you did get 10 points ever,
+而且，你知道，那是一个零。你得到零分。如果你得到正面，那是一分。然后你再试一次。你知道，你一直继续，直到你不断积累分数或者你出局了，对吧。所以，你知道，50%的时间，你会得到零分。75%的时间，你会得到零分或一分。所以它就这样一直上升，这种双曲线斜坡。所以，你知道，99%的时间，你会得到少于10分之类的，对吧。所以这意味着什么，你所说的是，你会得到少于10分之类的。所以这意味着什么，你所说的是，如果你确实得到了10分，
+
+117
+01:07:51.000 --> 01:08:29.000
+then there's probably like 99% of the other trials there that you just didn't record because all you did was record the best score. It's like if you go to the arcade and the high score on pac-man like maybe they just rebooted like reflashed all the machines yep yeah and the high score of pac-man or actually this happened to me where um you know i'm obviously not super mr athletic or anything but i went to chucky cheese with my kids and i always play the football game you have have you seen this at chucky cheese you I always play the football game. You have you have you seen this at Chuck E. Cheese, you have to throw the football through the holes. Yeah. So I played the football
+那么可能有99%的其他试验是你没有记录的，因为你所做的只是记录了最高分。这就像你去游乐场，吃豆人（Pac-Man）的最高分，就像他们刚刚重启，重新刷了所有机器一样。是的，是的，吃豆人的最高分，或者实际上这发生在我身上，嗯，你知道，我显然不是什么运动健将，但我带我的孩子们去了查克芝士（Chuck E. Cheese），我总是玩那个足球游戏。你有，你见过这个在查克芝士吗？我总是玩那个足球游戏。你，你见过这个在查克芝士吗？你必须把足球扔进洞里。是的。所以我玩了那个足球
+
+118
+01:08:29.000 --> 01:09:10.000
+game. And I won the high score of the day. And I felt like for a moment, like, wow, like I should have like, you know, played in the NFL or something. And then like five minutes later, like some guy behind me, like, you know, got the high score of the day. That's because they just reflash the machines, right? So the high score, you know, there wasn't a lot of samples. know got the high score of the day that's because they just reflash the machines right so the high score you know there wasn't a lot of samples uh and so the high score was easy to beat um conversely if you go to like uh you know some other arcade or if you go later on in the day the high score will be super high and you can't even get to it and so you're using the high score as a approximation for how many people have played the game yes that's the yes that's the key and so i guess we didn't talk about that part here but you you caught on
+游戏。我赢得了当天的最高分。我感觉有一瞬间，哇，我应该，你知道，去NFL打球之类的。然后五分钟后，我身后有个家伙，你知道，拿到了当天的最高分。那是因为他们刚刚重新刷了机器，对吧？所以最高分，你知道，没有很多样本。你知道拿到了当天的最高分，那是因为他们刚刚重新刷了机器，对吧？所以最高分，你知道，没有很多样本。嗯，所以最高分很容易被打破。嗯，相反，如果你去，你知道，其他一些游乐场，或者如果你在一天晚些时候去，最高分会非常高，你甚至无法达到它。所以你正在使用最高分作为有多少人玩过这个游戏的近似值。是的，这就是，是的，这就是关键。所以我猜我们在这里没有谈论那部分，但你抓住了
+
+119
+01:09:10.000 --> 01:10:07.000
+to it which is you want to record the maximum you've seen so in this bucket you record the maximum and as you said as the number of attempts goes up and unlike your example where it's skill based every one of these should be random so right it's just like slot machine and it's the whatever anyways and so yeah so the higher that number that you've recorded you're going to make your guests go up now you could get really lucky unlucky however you call it and they vary you see only a single number and that number happens to have you know 100 leading, we said 32 bits, it has 27 zeros in it. And so you think you've seen two to the 27 items, but you really only ever seen one. And so this is, this is not good, right? This, this would make you have a very, you know, a high chance of getting an error because of this one problem. And so the second thing, which I started off with there,
+它，那就是你想记录你所见过的最大值。所以在这个桶里，你记录最大值。正如你所说，随着尝试次数的增加，不像你的例子那样是基于技能的，所有这些都应该是随机的，所以对，这就像老虎机，无论如何。所以，是的，你记录的那个数字越高，你就会让你的猜测越高。现在你可能会非常幸运或不幸，无论你怎么称呼它，它们各不相同。你只看到一个数字，而那个数字恰好有，你知道，100个前导，我们说是32位，它有27个零。所以你认为你已经看到了2的27次方个项目，但你实际上只见过一个。所以这，这不好，对吧？这，这会让你有非常，你知道，很高的出错概率，因为这一个问题。所以第二件事，我一开始提到的，
+
+120
+01:10:07.000 --> 01:10:19.000
+is by having multiple buckets and then averaging them together, you take the first few bits, the first five, and you choose your bucket. And you use the last 27 and you do this thing I'm mentioning that we've talked about recording the high score.
+是通过拥有多个桶然后将它们平均起来，你取前几个位，前五个，然后你选择你的桶。你使用最后27位，然后你做我提到的这件事，我们谈论过记录最高分。
+
+121
+01:10:19.000 --> 01:10:29.000
+And then by averaging all of the buckets together, if you've only seen one, sure, you're going to have this really large number in a single bucket, but all the other buckets are going to seen one, sure, you're going to have this really large number in a single bucket, but all the other buckets are going to say zero. And so you're going to pull it back down
+然后通过将所有桶平均起来，如果你只见过一个，当然，你会在单个桶中得到这个非常大的数字，但所有其他桶都会看到一个，当然，你会在单个桶中得到这个非常大的数字，但所有其他桶都会说零。所以你会把它拉回来
+
+122
+01:10:29.000 --> 01:10:46.000
+to try to correct. And we're setting up for the second thing here in a minute, but this is called, I guess, like log log. I don't see a ton of evidence that this was really rolled out or used because there's some pretty easy ways to improve it here we'll talk about in a second. But this idea of recording multiple max scores
+试图纠正。我们马上要为第二件事做准备，但这被称为，我猜，像LogLog。我没有看到太多证据表明这真的被推出或使用，因为这里有一些非常简单的方法可以改进它，我们一会儿会谈到。但这种记录多个最高分
+
+123
+01:10:46.000 --> 01:11:13.000
+and then looking at the end and taking an average allows you to sort of approximate it in a very small way. So the other thing we didn't mention with log log and linear counting in both cases is you kind of measured, well, in linear counting, you measure this amount and log-log. You have these coefficients as well because you just sort of know on average you're likely to kind of see these things.
+然后查看最后并取平均值的想法，允许你以一种非常小的方式近似它。所以我们没有提到的关于LogLog和线性计数的另一件事是，在两种情况下，你都测量了，嗯，在线性计数中，你测量这个量，而在LogLog中。你也有这些系数，因为你只是大概知道平均而言你很可能会看到这些东西。
+
+124
+01:11:13.000 --> 01:11:39.000
+So you run some simulations and you kind of tune some constants to accommodate for kind of like edge effects, I guess you would sort of call it. So hyperlog-log improves on log-log. Well, one thing actually before before you jump into hyper log log i want to double click on something you said earlier which is you know i also went through this where um you know i felt like even just hashing i kind of felt like you
+所以你运行一些模拟，你调整一些常数来适应，我猜你会称之为边缘效应。所以HyperLogLog改进了LogLog。嗯，有一件事，实际上在你跳进HyperLogLog之前，我想双击你之前说的一件事，那就是，你知道，我也经历了这一点，嗯，你知道，我觉得即使只是哈希，我也觉得你
+
+125
+01:11:39.000 --> 01:12:10.000
+know how do you trust the hashing you know and, and even like, what happens if your data set is biased in a way where, you know, because you're maybe your data set all starts with HTTP colon that now like your hash function isn't pure and you know, you have more collisions or even like Mac addresses, you know, I'm pretty sure Mac addresses are, well, actually I, I don't have no idea, but I'm assuming that there's some kind of randomness there there's no way all you are pre-determined it's by like it's hardware vendor
+知道你怎么信任哈希，你知道，甚至像，如果你的数据集以某种方式有偏差会怎样，你知道，因为你可能你的数据集都以HTTP冒号开头，现在你的哈希函数就不纯了，你知道，你有更多的碰撞，甚至像MAC地址，你知道，我很确定MAC地址是，嗯，实际上我，我不知道，但我假设那里有某种随机性，不可能所有这些都是预先确定的，它是通过，比如硬件供应商
+
+126
+01:12:10.000 --> 01:12:41.000
+sets the first few bytes okay got it but then within a hardware vendor at some point there's probably a collision right or are there there can't be like a global count of mac addresses while they're the factories like churning out tons of these. Yeah, maybe there is. I think there's not supposed to be, but probably there is. But, oh yeah. So whenever I see hashes or all these things, I used to feel like, well, this isn't kind of pure.
+设置前几个字节。好的，明白了。但在硬件供应商内部，在某个点上可能存在碰撞，对吧？或者有没有可能，工厂在大量生产这些东西时，不可能有一个MAC地址的全局计数。是的，也许有。我想应该没有，但可能确实有。但是，哦，是的。所以每当我看到哈希或所有这些东西时，我过去常觉得，嗯，这不纯。
+
+127
+01:12:41.000 --> 01:13:29.000
+It's not going to work out. And how do you even know if you have a problem, right? And it turns out that, yeah, at scale, you know, you can't do anything very precisely. And so what you do instead is you try to measure, you know, the bounds statistically of some issue. And then you're constantly correlating between other things. Like, for example, maybe there's, you know, a one out of 10,000 chance that you overestimate your unique visitors by 10x, right? And so, and so one out of 10,000, you know, that means, you know, Google has been around for like 15 years or something so it's probably like a 50 50 chances it happened once right but what they're doing is they're
+它不会奏效。你甚至怎么知道你是否有问题，对吧？事实证明，是的，在规模上，你知道，你不能非常精确地做任何事情。所以你取而代之的是尝试测量，你知道，统计上某个问题的界限。然后你不断地在其他事物之间进行关联。比如，也许有，你知道，万分之一的机会你高估了你的唯一访问者10倍，对吧？所以，所以万分之一，你知道，这意味着，你知道，谷歌已经存在了大约15年左右，所以它可能像50/50的机会发生过一次，对吧？但他们正在做的是
+
+128
+01:13:29.000 --> 01:14:20.000
+constantly correlating that with other things so you know if the viewer count goes up by 10x but the revenue doesn't move well then you know that might be an error that day in the viewer count and so you're constantly trying to cross correlate between different data sets, different signals, and then also auto regress, you know, correlate across time for a signal. And so it really just becomes about reducing the error and trying to reduce the bias and the variance of these signals. And so when you start thinking about it in those terms, then it becomes okay to kind of say, well, yeah, all of these errors are there. We're just going to measure them all in gross and try and get that measurement to be as accurate as possible. And so as they're making changes to
+不断地将其与其他事物关联，所以你知道，如果观看次数增加了10倍，但收入没有变动，那么你就知道那天的观看次数可能是一个错误。所以你不断地尝试在不同的数据集、不同的信号之间进行交叉关联，然后也进行自回归，你知道，跨时间关联一个信号。所以它真的只是变成了关于减少错误，并试图减少这些信号的偏差和方差。所以当你开始用这些术语来思考它时，那么说，嗯，是的，所有这些错误都在那里，这就变得可以接受了。我们只是要粗略地测量它们，并尝试使该测量尽可能准确。所以当他们对
+
+129
+01:14:20.000 --> 01:15:29.000
+these filters, they're comparing the correlation to, again, just using our example, to revenue. And they're seeing, oh, the new value is much more correlated to revenue, which is what I would expect. As unique visitors go up, revenue goes up, and all of that. So you can actually measure all of these things and get better in an incremental way, even though it feels like a very helpless situation. That's a great call out. I will say also, I think a lot of these techniques we're talking about time and a place. So like your financials, you wouldn't want to do this. You probably do a different sort of way of the expensive query, but you can't maybe do that in real time. And then as you said, not only comparing it with other metrics, but even just also running, maybe like a second method that is less reliable or different parameters and checking that as well. So maybe it's less accurate, but it gives you a coarser bound, right? And says, you know, hey, at least I know that like, if I get a 10x measurement, I need to throw it out,
+这些过滤器进行更改时，他们正在将相关性与，再次使用我们的例子，与收入进行比较。他们看到，哦，新值与收入的相关性要高得多，这正是我的预期。随着唯一访问者的增加，收入也会增加，所有这些。所以你实际上可以测量所有这些东西，并以增量方式变得更好，即使它感觉像是一个非常无助的情况。这是一个很好的呼吁。我还要说，我认为我们谈论的很多这些技术都有时间和地点。所以像你的财务数据，你不会想这样做。你可能会用另一种昂贵的查询方式，但你可能无法实时做到这一点。然后正如你所说，不仅将其与其他指标进行比较，甚至只是运行，也许像第二种不太可靠或参数不同的方法，并检查它。所以也许它不太准确，但它给了你一个更粗略的界限，对吧？并说，你知道，嘿，至少我知道，如果我得到一个10倍的测量值，我需要把它扔掉，
+
+130
+01:15:29.000 --> 01:16:20.000
+like that's, that's going to be wrong. So it can give me an order of magnitude kind of kind of swag. Yep, makes sense. Okay, so moving from log log to hyper log log, it's not a big jump. So the first one is for any buckets. So it's basically what happens with, you know, kind of very high numbers, like when you're starting to get very dense filled buckets, or very low numbers where you have a lot of empty buckets. In the case of very low numbers, we have a lot of empty buckets. You may consider, instead of taking the max counts and doing the average, where, like I mentioned, you have five buckets, you happen to get one that was 27 zeros, you're going to way overestimate it. If you have a lot of empty buckets, instead, maybe just estimate the probability of having that many empty buckets so what is the chance that you saw you know in the case your estimate there would be very high like a million or something rather than estimating a million what is the chance that you saw a million
+那，那将是错误的。所以它可以给我一个数量级的估算。是的，有道理。好的，所以从LogLog移动到HyperLogLog，这不是一个大的跳跃。所以第一个是针对任何桶。所以它基本上是发生了什么，你知道，有点非常大的数字，比如当你开始得到非常密集的桶，或者非常小的数字，你有许多空桶。在非常小的数字的情况下，我们有很多空桶。你可能会考虑，与其取最大计数并进行平均，就像我提到的，你有五个桶，你碰巧得到一个有27个零的，你会大大高估它。如果你有很多空桶，相反，也许只是估计拥有那么多空桶的概率，所以你看到的机会是什么，你知道，在你的估计中，那会非常高，比如一百万之类的，而不是估计一百万，你看到的机会是什么，你看到了
+
+131
+01:16:20.000 --> 01:16:50.000
+numbers and had nine empty buckets this is going to be very low. And so you use that for sort of some corrections, as well as very dense, just like in linear counting, we're talking about the more buckets sort of like have bigger numbers in them, the more chance that you're sort of seeing these collisions and you're sort of seeing a different behavior of the numbers. And so handle those as well. And a lot of that, you just end up running by either computing the statistics or running simulations
+一百万个数字并且有九个空桶，这将是非常低的。所以你用它来进行一些修正，以及非常密集的情况，就像在线性计数中，我们谈论的是更多的桶，某种程度上在它们里面有更大的数字，你越有可能看到这些碰撞，并且你某种程度上看到了数字的不同行为。所以也要处理这些。而其中很多，你最终要么通过计算统计数据，要么运行模拟
+
+132
+01:16:50.000 --> 01:17:08.000
+or sort of handling that rather than kind of a single formula that you run, you kind of have a sort of set of, if you meet this condition or that condition or the other condition, apply a slightly different formula, but roughly the same thing. And that gives you hyperlog log.
+或者某种程度上处理它，而不是你运行的单一公式，你有一种，如果你满足这个条件或那个条件或另一个条件，应用稍微不同的公式，但大致相同的事情。这就给了你HyperLogLog。
+
+133
+01:17:08.000 --> 01:17:25.000
+So this hyperlog log allows you to perform these analytics, get an approximate answer. I think the number that I was sort of seeing in the paper is like for the majority of cases with these corrections, you see like 2% error. So if that is important, like in the case of maybe financials or something, you don't want to use it. But for the case of maybe financials or something, you don't want
+所以这个HyperLogLog允许你执行这些分析，得到一个近似答案。我认为我在论文中看到的数字是，对于大多数带有这些修正的情况，你看到大约2%的误差。所以如果这很重要，比如在财务或类似的情况下，你不想使用它。但在财务或类似的情况下，你不想
+
+134
+01:17:25.000 --> 01:18:32.000
+to use it. But for the case of like counting how many visitors in a day, you know, if you don't want to be lying to people, if it's like a court thing, so like you wouldn't run it. But if it's just, you know, keeping track from day to day or hour to hour, as an example, you could run something like this and know that you're going to be generally close most of the time and of course a lot of those uh things are tunable no very cool it makes a ton of sense the final trick and the sort of like second thing that kind of like i don't know melted my mind a little uh and there's a variety of these problems and this one's going to get to jason's example so here we are at the very end and you foreshadowed by talking about, you know, sending it to different computers and having each of the computers handle it. So let's imagine we chop up our logs and send all of our log, you know, one tenth of each of our logs to 10 computers. And each of the 10 computers does the thing we just described with hyperlog log. What do you do at the end? Well, you can't sum the 10 results, right? Because if you sum the 10 results, now if you divided them like Jason said, where I looked at their username and sent them to a
+使用它。但对于像计算一天中有多少访问者这样的情况，你知道，如果你不想对人们撒谎，如果它像法庭案件，所以你不会运行它。但如果它只是，你知道，从一天到另一天或一小时到一小时进行跟踪，作为一个例子，你可以运行这样的东西，并知道你大部分时间都会大致接近，当然很多那些嗯东西是可调的。不，非常酷，这非常有道理。最后的技巧和某种像第二件事，某种程度上像，我不知道，融化了我的大脑一点，而且这些问题有各种各样，而这个将要达到Jason的例子。所以我们在这里，在最后，你通过谈论，你知道，发送到不同的计算机并让每台计算机处理它来预示了这一点。所以让我们想象我们切碎我们的日志，并发送我们所有日志的，你知道，十分之一到10台计算机。而这10台计算机中的每一台都用HyperLogLog做了我们刚才描述的事情。最后你做什么？嗯，你不能对这10个结果求和，对吧？因为如果你对这10个结果求和，现在如果你像Jason说的那样划分它们，我查看了他们的用户名并把它们发送到一台
+
+135
+01:18:32.000 --> 01:18:57.000
+computer based on their username, you could. But if I just chopped the first 10% of the logs, the second 10%, and I sent each of those, some people will have two different computers will have seen the same user potentially. And so you don't want to just add up, hey, each of them, so 10 times whatever number each of them, just kind of add them up. That won't work. That's not a good estimate. You need to dedupe them again. Well, the sort of mind-blowing thing, or at least for me,
+计算机，基于他们的用户名，你可以。但如果我只是切碎了日志的前10%，后10%，并且我发送了每一部分，有些人会有两台不同的计算机可能看到过同一个用户。所以你不想只是加起来，嘿，它们中的每一个，所以10乘以它们中的每一个的任何数字，只是加起来。那行不通。那不是一个好的估计。你需要再次去重。嗯，某种程度上令人震惊的事情，或者至少对我来说，
+
+136
+01:18:57.000 --> 01:19:29.000
+is if you look at those buckets we talked about, and everyone's running the same algorithm, you can just transmit the final counts of the buckets and just run the same max operation. So if you run the same max operation across all of the buckets, and then do your final calculation, that actually works perfectly fine and is incredibly cheap. So if computer one says my first bucket has eight zeros, and computer two says, oh, my first bucket only has five zeros, then your final count for the first bucket is eight zeros. And it's the same answer you would have gotten
+是如果你看我们谈论的那些桶，每个人都在运行相同的算法，你可以只传输桶的最终计数并运行相同的最大值操作。所以如果你在所有桶上运行相同的最大值操作，然后进行最终计算，那实际上工作得非常好，而且非常便宜。所以如果计算机一说我的第一个桶有8个零，而计算机二说，哦，我的第一个桶只有5个零，那么你第一个桶的最终计数就是8个零。而这和你本来会得到的答案是一样的
+
+137
+01:19:29.000 --> 01:19:49.000
+if you had sent all of the queries to only a single computer because of this, you know, counting, keeping only the max. So this max for individual computers is, if you take the max across all computers, the same as if they had seen them because everything- Oh, right. This was not, this is like, what?
+如果你把所有的查询只发送到一台计算机，因为这个，你知道，计数，只保留最大值。所以这个针对单个计算机的最大值是，如果你取所有计算机的最大值，和如果它们见过它们是一样的，因为一切——哦，对。这不是，这就像，什么？
+
+138
+01:19:49.000 --> 01:20:14.000
+No, this isn't going to work. It was my first inclination here. But it's this aggregating by Macs is the unlock. Because you're aggregating them all together by Macs, you can just run it at the end across all the computers and you have it distributed as many ways as you want but wait what was wrong with your idea of saying well just just adding up all of the
+不，这行不通。这是我最初的倾向。但这种通过最大值聚合是解锁的关键。因为你通过最大值将它们全部聚合在一起，你可以在最后跨所有计算机运行它，并且你可以根据需要以任意多种方式分发它。但等等，你关于说，嗯，只是把所有的
+
+139
+01:20:14.000 --> 01:21:25.000
+oh because there's duplicates across the computer so imagine the entire log one million entries is all username jason and i send each to 10 different computers each computer is going to estimate one let's say and then my final result say 10 the answer is actually only one right right so again for something like visits to google you may know on general how many times a given person visits in a day maybe you could do this via other means but if you're using this for an analytical engine that doesn't know how likely repeats are or not then this is a very difficult you know thing to solve a priori with sort of like specialized knowledge yeah that makes sense um yeah that's totally mind-blowing you know another thing that this benefits from is that each bit doubles the count. And so the difference between seven and eight bits is so large that if one says five bits and the other says eight bits, by throwing away the five-bit one, you're not throwing away that much because it's as i said it's it's uh it's
+哦，因为计算机之间有重复，所以想象整个日志一百万个条目都是用户名Jason，我把每一个发送到10台不同的计算机，每台计算机将估计一个，假设，然后我的最终结果说10，答案实际上只有一个，对吧？对，所以再次对于像访问谷歌这样的事情，你可能大致知道一个人一天访问多少次，也许你可以通过其他方式做到这一点，但如果你正在为分析引擎使用这个，它不知道重复的可能性有多大，那么这是一个非常困难的，你知道，先验地用某种专门知识解决的问题。是的，这有道理，嗯，是的，这完全令人震惊。你知道，这个受益的另一件事是，每一位都会使计数加倍。所以7位和8位之间的差异是如此之大，以至于如果一个说5位，另一个说8位，通过扔掉5位的那个，你并没有扔掉太多，因为正如我所说，它是，它是
+
+140
+01:21:25.000 --> 01:22:10.000
+hyper logarithmic or whatever its contribution is irrelevant yeah right wow that is super cool i guess a couple things slipped over so one is that um moving from log log to hyper log log you also move from taking an average to tape to taking a harmonic mean so you take the harmonic mean of the buckets which helps now what is the harmonic mean harmonic mean is one over two to the n time and then you sum those up for each bucket and then you multiply by n at the end um and so that's used for rates uh so i try to look it up as well it's sort of it's like one step past my intuition about probability so I'll keep I'll keep noodling on that one and maybe have to get back to you
+超对数的，或者无论它的贡献是什么，都是无关紧要的。是的，对。哇，那太酷了。我猜有几件事漏掉了，所以一个是，嗯，从LogLog移动到HyperLogLog，你也从取平均值移动到取调和平均值。所以你取桶的调和平均值，这有帮助。现在什么是调和平均值？调和平均值是1除以2的n次方，然后你为每个桶把它们加起来，然后在最后乘以n。所以这用于比率。所以我试着查了一下，它某种程度上是，它就像超过我对概率直觉的一步，所以我将继续思考那个，也许不得不回到你身边。
+
+141
+01:22:10.000 --> 01:22:28.000
+but they see it by moving from the sort of normal averaging that we would think about you know just sum them all up and divide by the count and instead moving to this harmonic mean instead they see improvements there and again I mentioned these coefficient factors and you would run simulations and so they give estimates for what they see for these
+但他们看到，通过从我们认为的某种正常平均值移动，你知道，只是把它们全部加起来并除以计数，而是移动到这个调和平均值，他们看到那里的改进。而且我再次提到了这些系数因子，你会运行模拟，所以他们给出了他们看到的这些估计
+
+142
+01:22:28.000 --> 01:22:54.000
+correction factors for high, low offset, these kinds of things. So definitely read the paper. But I would also say that day to day life, are you going to implement this? Yeah, don't. I mean, maybe if you have good, but one, we mentioned a bunch of things along the way here. Bloom filters, probabilistic counting, knowing to go reach for one of these if you don't need an exact answer. Second thing is a lot of databases have already like Redis and other things
+修正因子，用于高、低偏移，这些类型的事情。所以一定要读那篇论文。但我也会说，在日常生活中，你会实现这个吗？是的，不要。我的意思是，也许如果你有好的，但第一，我们在这里沿途提到了很多事情。布隆过滤器，概率计数，知道如果不需要精确答案就去伸手拿其中一个。第二件事是很多数据库已经像Redis和其他东西
+
+143
+01:22:54.000 --> 01:23:28.000
+have already implemented this under the hood for these kinds of operations. So you're likely already using it. And it's just for me, one of those mental like aha moments where the chance that this specific solution is what I need to reach for is very low. But understanding a bit more about the space I feel helps me sort of know when to go to the Internet to search for something I don't know. Yeah, so I mean, as far as using it, there must be some way in sql to say like approximate count distinct oh interesting i didn't
+已经在底层为这些类型的操作实现了这一点。所以你很可能已经在使用了。对我来说，这只是那种心理上的“啊哈”时刻之一，即我需要伸手拿这个特定解决方案的机会非常低。但对这个空间多了解一点，我觉得有助于我某种程度上知道什么时候去互联网搜索我不知道的东西。是的，所以我的意思是，就使用它而言，SQL中一定有某种方法可以说，比如近似计数不同（approximate count distinct）。哦，有趣，我没有
+
+144
+01:23:28.000 --> 01:24:29.000
+look at so every sql is different so let's let's see postgres this is this is fascinating awesome type postgres oh man same wavelength all right wavelength i mean it looks like there's a uh some add-ons you can kind of do to to kind of distribute a distinct count with hyperlog log on postgres i see i see a lot of articles about this so uh again yeah it looks like uh yeah i agree it looks like a plug-in so oh yeah this is so you install this plug-in in postgres and then you do hll underscore cardinality and so uh but i remember i think this is sawzall uh i remember there was some i do remember in my life typing select a prox count distinct like i did like that for some reason it is like just radiating through my mind so there's definitely some system that has it built in. Yeah, I mean, I think they're like probably in Hadoop
+看，所以每个SQL都是不同的，所以让我们看看Postgres，这是，这是迷人的。太棒了，输入Postgres，哦天哪，相同的波长。好的，波长，我的意思是，看起来有一个，嗯，一些插件你可以某种程度上做，以某种程度上分发一个带有HyperLogLog的Postgres的不同计数。我看到，我看到很多关于这个的文章。所以，再次，是的，看起来，嗯，是的，我同意，看起来像一个插件。所以，哦，是的，这就是，所以你在Postgres中安装这个插件，然后你做hll_cardinality。所以，嗯，但我记得，我想这是Sawzall，我记得，我记得在我生命中输入过select approx count distinct，就像我因为某种原因那样做了，它就像只是在我的脑海中辐射。所以肯定有某种系统内置了它。是的，我的意思是，我想它们就像可能在Hadoop中
+
+145
+01:24:29.000 --> 01:24:54.000
+or this sort of very distributed processing of things. So unlike when you have it on a single computer, but you have it across multiple computers, doing large analytics, column data. I would imagine like Apache Arrow or something. Yeah, exactly. PySpark and and pi spark have a prox count distinct that's where i've done it um that's amazing i had no idea that that was
+或者这种非常分布式的处理事物的方式。所以不像你在单台计算机上拥有它，但你在多台计算机上拥有它，进行大型分析，列数据。我会想象像Apache Arrow之类的。是的，完全正确。PySpark和PySpark有approx count distinct，那是我做过的地方。那太神奇了，我完全不知道那是
+
+146
+01:24:54.000 --> 01:25:31.000
+doing that under the hood that's like totally mind-blowing i don't know so so maybe right in if you uh like this detailed singular algorithm exploration. I mean, I guess we touched on a bunch of stuff. So maybe it's not that dissimilar as I thought it might be in my head. But Jason had to play along here. So he's at least acting like he walked away understanding this a bit more. No, this is amazing. I definitely learned a ton. No, we should definitely do more of this. Yeah, please write in, let us know, plus or minus. But I actually learned a ton. This is really satisfying. Another thing is, you know,
+在底层做那个，那简直完全令人震惊。我不知道，所以也许写信进来，如果你喜欢这种详细的单一算法探索。我的意思是，我猜我们触及了很多东西。所以也许它不像我在脑海中想的那样不同。但Jason不得不在这里配合。所以他至少表现得好像他走开时对这个理解得更多了。不，这太神奇了。我绝对学到了很多。不，我们绝对应该多做一点这个。是的，请写信进来，让我们知道，加号或减号。但我确实学到了很多。这真的令人满意。另一件事是，你知道，
+
+147
+01:25:31.000 --> 01:25:54.000
+you know, when people get a CS degree and they learn about quicksort and merge sort and all of these things, they might say to themselves, well, like, you know, okay, like we figured out how to sort, you know, we're done. Like why even teach this to me? Like, why are you teaching me a one-liner in any modern programming language? And, and what you've kind of shown folks here today is that like, this doesn't end,
+你知道，当人们获得计算机科学学位并学习快速排序和归并排序以及所有这些东西时，他们可能会对自己说，嗯，就像，你知道，好的，就像我们弄清楚了如何排序，你知道，我们完成了。就像为什么还要教我这个？就像，为什么你在任何现代编程语言中教我一行代码？而且，你今天在这里向大家展示的是，就像，这并没有结束，
+
+148
+01:25:54.000 --> 01:26:37.000
+you know, like sometimes you need probabilistic things. Sometimes you're working in very limited environments. You know, there's all sorts of different types of counts and things you do and so and so computer science you can do it all day as your job and and like literally the science part of computer science and and there's a lot of fun stuff well i think that brings us to the end of another episode 169 wow. Wow. Yeah, pretty wild. Thanks everyone for sticking around. Yeah, we should definitely do something for our long-term patrons. I'm gonna do some digging on my end,
+你知道，就像有时你需要概率性的东西。有时你在非常有限的环境中工作。你知道，有各种各样不同类型的计数和事情你做，所以，所以计算机科学，你可以整天做它作为你的工作，而且，就像字面上的计算机科学的科学部分，而且有很多有趣的东西。嗯，我想这把我们带到了另一集的结尾，169，哇。哇。是的，相当疯狂。谢谢大家坚持到底。是的，我们绝对应该为我们的长期赞助人做点什么。我会在我这边做一些挖掘，
+
+149
+01:26:37.000 --> 01:27:16.000
+figure out if I can get that number of months subscribed and all of that. But thank you so much for supporting us all of these years. You've been able to continue to grow the community. I actually, I'm considering using some of the community money to buy Twitter ads. It does feel like our Twitter presence is growing pretty good organically. And so, you know, at the end of the day, you know, we try to get as many folks interested in programming computer science as possible. We couldn't do that without all of your help. And so we do put, you know, every dollar that you donate towards trying to accomplish
+弄清楚我是否能得到那个订阅的月数以及所有这些。但非常感谢你们这些年来一直支持我们。你们已经能够继续发展社区。我实际上，我正在考虑使用一些社区资金来购买Twitter广告。我们的Twitter存在感确实感觉在有机地增长得很好。所以，你知道，归根结底，你知道，我们尽量让尽可能多的人对编程计算机科学感兴趣。没有你们所有人的帮助，我们无法做到这一点。所以我们确实投入了，你知道，你们捐赠的每一美元都用于尝试完成
+
+150
+01:27:16.000 --> 01:27:39.000
+that goal. Yes. Thank you to all the people who have stuck with us for, oh, I always forget how long it's been, but a very long time, including Jason. Thank you, Jason, for all your hard work. Thank you. Someone commented asking, we did two shows on Bitcoin. One was episode seven or something, and another show a few years later.
+那个目标。是的。感谢所有一直陪伴我们的人，哦，我总是忘记已经过去多久了，但确实是很长一段时间，包括杰森。谢谢你，杰森，感谢你所有的辛勤工作。谢谢。有人评论问，我们做了两期关于比特币的节目。一期是第七集左右，另一期是几年后。
+
+151
+01:27:39.000 --> 01:28:31.000
+And they were asking if we bought Bitcoin at those times. And I'm sad to say the answer is no, we did not buy Bitcoin at I think they said 50 cents, or $500. We didn't buy Bitcoin at either of those prices. I didn't. But after that show, I did install I got some Bitcoin out of a faucet. But unfortunately, it was like point oh one Bitcoin or something. So that was the only bitcoin i had left from that so yeah we we close we we answered the that's definitely the most asked question i think i think about once a month we get asked that someone asked it on discord last week but i do get a lot of email hey are you guys did you guys buy a bunch of bitcoin. We didn't do that. All right. That wound has been sufficiently salted.
+他们问我们当时是否买了比特币。我很遗憾地说答案是否定的，我们没有在我想他们说的50美分或500美元时买入比特币。我们在这两个价格点都没有买。我没有。但在那期节目之后，我确实安装了它，我从一个水龙头（faucet）里得到了一些比特币。但不幸的是，那大概只有0.01个比特币左右。所以这就是我从那以后剩下的唯一比特币，所以是的，我们回答了这个问题，这绝对是问得最多的问题，我想大概每个月都会有人问，上周Discord上也有人问，但我确实收到了很多邮件问，嘿，你们有没有买一大堆比特币。我们没那样做。好了，伤口已经被撒了足够的盐了。
+
+152
+01:28:31.000 --> 01:28:46.000
+But thank you so much, folks. It's awesome that we have such an outpouring of support. A bunch of folks asking for different languages. We will definitely get to that. But I also want us to cover algorithms. This was a really exciting kind of new branch
+但非常感谢大家。我们能得到如此多的支持真是太棒了。很多人要求提供不同的语言版本。我们一定会去做的。但我也希望我们能涵盖算法。这是一个非常令人兴奋的新分支
+
+153
+01:28:46.000 --> 01:29:27.000
+for the podcast. And so thanks, Patrick, for doing the background homework on this. All right. All right. Catch everyone later. music by eric barn dollar programming throwdown is distributed under a creative commons attribution share alike 2.0 license you're free to share copy distribute transmit the work, to remix and adapt the work, but you must provide attribution to Patrick and I
+对于播客来说。所以感谢帕特里克为此做的背景功课。好了。好了。回头见。音乐由埃里克·巴恩·多拉（Eric Barn Dollar）创作，编程抛弃（Programming Throwdown）根据知识共享署名-相同方式共享2.0许可协议发布，您可以自由分享、复制、分发、传输作品，以及重新混合和改编作品，但您必须注明我和帕特里克的署名
+
+154
+01:29:27.000 --> 01:29:32.000
+and share alike in kind. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+并以相同方式共享。本集还没有评论。点击转录稿中的任何句子即可发表评论。

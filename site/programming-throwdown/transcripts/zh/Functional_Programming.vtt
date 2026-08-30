@@ -1,0 +1,556 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:00.000
+programming throwdown episode 91 functional programming part two take it away jason hey everyone so we we uh got a lot of feedback on our interview with Jonas Bonaire a few months back. And a lot of you really wanted to know more about functional programming and really dive deep. And I'm really excited that we have Adam Bell, engineering manager and podcaster. He's been an engineer for about 15 years. He's done a lot of functional programming in his career. And yeah, we're going to sit down and have a chat about functional programming, about Scala, about a lot of these different concepts. And really kind of dive deep, start from the basics, and get people kind of ramped up onto functional programming.
+Programming Throwdown 第 91 期，函数式编程（第二部分）。Jason，请开始你的表演。嘿，大家好，我们几个月前对 Jonas Bonaire 的采访收到了很多反馈。你们中很多人都想深入了解函数式编程。我很高兴今天请到了工程经理兼播客主 Adam Bell。他从事工程工作大约 15 年了，职业生涯中编写过大量的函数式编程代码。我们将坐下来聊聊函数式编程、Scala 以及各种相关概念。我们将深入浅出，从基础开始，帮助大家快速上手函数式编程。
+
+2
+00:01:00.000 --> 00:01:47.000
+So welcome to the show, Adam. Yeah, I'm glad to be here. Cool, cool. Yeah, so what is functional programming? So at its simplest level, it just means that you would construct programs only using pure functions. And a pure function would be something that, like a function in the mathematical sense. So it takes in inputs and it produces outputs and nothing else. So that means, you know, no modifying of global state, no, you know, modifying data structures in place, no throwing exceptions. And maybe the more tricky requirement is like no reading of user input, no writing of things into the outside world.
+欢迎来到节目，Adam。很高兴来到这里。太棒了。那么，什么是函数式编程？简单来说，它意味着你只能使用纯函数来构建程序。纯函数就像数学意义上的函数：它接收输入，产生输出，除此之外不做任何事。这意味着：不修改全局状态，不原地修改数据结构，不抛出异常。可能更棘手的要求是：不读取用户输入，不向外部世界写入任何内容。
+
+3
+00:01:47.000 --> 00:02:26.000
+So that is kind of a high level of what pure functional programming is. Yeah, yeah, that makes sense. I think one of the things that I always found really tricky was exactly what you said. I mean, at the end of the day, a program is going to interact with its environment. That could be reading from a file, that could be writing to the network buffer or something like that. And I found that to be one of the hardest things to grasp when you join it with functional programming. So it's sort of like, how do you, you know, a file is kind of inherently stateful and it seems very natural to have this global file because you only have one of these files on your hard drive, right?
+这就是纯函数式编程的高层定义。没错，这很有道理。我觉得我一直觉得很棘手的一点正是你所说的。毕竟，程序最终还是要与环境交互。比如从文件读取，或者向网络缓冲区写入数据等。当我将其与函数式编程结合时，我发现这是最难掌握的事情之一。所以，文件本质上是有状态的，而且硬盘上只有一个这样的文件，所以拥有一个全局文件似乎非常自然，对吧？
+
+4
+00:02:26.000 --> 00:03:21.000
+And how do you get people from thinking in that way where they just have all of these globals for all of these environmental things that are literally global? How do you get them from that mindset to this functional mindset? Yeah, I mean, I think you can think of it as a design constraint that you place upon yourself. So I think a common pattern you might see is having a very functional core of your program, and then kind of an imperative shell around it. So if you're, if you have the file, as you're saying, and you need to do a lot of transformations on it, you know, you may have, like, functions that are ostensibly pure that take in, you know, lines of that file and do some sort of transformation. So they meet the definition. But somewhere at the outside, you have some imperative layer that, you know, does the actual IO. And I think that it's a really
+你如何引导人们改变这种思维方式？他们习惯于为所有这些本质上是全局的环境事物设置全局变量。你如何让他们从那种思维转向函数式思维？我认为你可以把它看作是给自己设定的设计约束。一个常见的模式是：程序的核心是纯函数式的，而外层包裹着一个命令式的外壳。如果你有一个文件，并且需要对其进行大量转换，你可能会有一些表面上是纯的函数，它们接收文件的行并进行某种转换。它们符合定义，但在最外层，你有一个命令式层来处理实际的 IO。我认为这是一个非常
+
+5
+00:03:21.000 --> 00:04:11.000
+useful design constraint, because what you end up up with if you limit that imperative side effect D stateful code to the edges is a system that's very testable. Like all the parts except that imperative stuff can be tested quite easily. They just have, you know, for this defined output, do I get this? For this defined input, do I get this defined output? And so testing is easy. Reasoning can be a lot easier in that world where you're kind of pushing towards functions. So I think that it's a challenge, but it's certainly one that has a lot of value in my opinion. Yeah, that's actually a really good way of looking at it. You know,
+有用的设计约束，因为如果你将那些具有副作用的命令式状态代码限制在边缘，最终得到的系统将非常易于测试。除了那些命令式代码外，所有部分都可以很容易地测试。它们只是：对于这个定义的输入，我是否得到了这个定义的输出？所以测试很容易。在那种倾向于函数的世界里，推理也会容易得多。所以我认为这是一个挑战，但在我看来，它绝对非常有价值。是的，这确实是一个很好的视角。你知道，
+
+6
+00:04:11.000 --> 00:04:51.000
+I think when I started working in industry, you know, through my, if you can actually go and look at my PhD code, it's, I'm not proud of it at all, but, you know, it didn't really have any tests or anything like that because you're just kind of writing it by yourself and so one of the real challenges when i got into um you know more of an industry role was was uh kind of realizing that oh we have to really write tests because we're really depending there's other people who are sort of depending on our code to behave in a certain way we can't really use a lot of our own intuitions and spread those through osmosis to the rest of the team. And sometimes you find that after you've written something,
+当我在工业界开始工作时，如果你去看我博士期间的代码，我一点也不引以为傲。它没有任何测试，因为你只是一个人在写代码。当我进入工业界角色时，真正的挑战之一是意识到我们必须编写测试，因为有其他人依赖我们的代码以某种方式运行。我们不能再仅仅依靠自己的直觉，并通过潜移默化传达给团队。有时你会发现，在你写完代码后，
+
+7
+00:04:51.000 --> 00:05:17.000
+you go to test it and you realize it's impossible. It can't be tested. The only thing you could do is just test main, right? Yeah. And then you say, oh, well, I have to modularize this. I have to break this down. And while you're doing that, you say, oh, well, I have to modularize this. I have to break this down. And while you're doing that, you say, okay, I'm going to pull this function out and test it in isolation. But to do that, it needs to be context-free, right? If you go to test that file,
+你去测试它，却发现它根本无法测试。你唯一能做的就是测试 main 函数，对吧？然后你会说，好吧，我必须模块化它，我必须把它拆解。在做这件事的过程中，你会说，我要把这个函数提取出来并单独测试。但要做到这一点，它必须是上下文无关的，对吧？如果你去测试那个文件，
+
+8
+00:05:17.000 --> 00:05:47.000
+that function, and it calls a global and crashes, you say, oh, okay, now I need to take that global and pass it into the function so that I could pass in a dummy or something, a dummy object. And what you're doing is basically you're learning functional programming. So I think, yeah, a good way to get started, if you've been going through some tutorials, you're learning how to program and you feel pretty proficient at procedural language, maybe C, C++, Java, I think testing your code, even if, you know,
+那个函数，结果它调用了一个全局变量并崩溃了，你会说，好吧，现在我需要把那个全局变量作为参数传给函数，这样我就可以传入一个模拟对象。你所做的本质上就是在学习函数式编程。所以，如果你正在学习编程，并且觉得自己对过程式语言（如 C、C++、Java）很精通，那么测试你的代码将是一个很好的软件架构练习。在这个过程中，你会被迫以某种方式发现函数式编程。
+
+9
+00:05:47.000 --> 00:07:08.000
+you might be the only person who will ever use it, testing it will be a really good exercise in software architecture. And along the way, you'll be forced to discover functional programming in one way, shape, or form. Yeah, no, I totally agree. And I think that it's been thrown at me before, like this statement. Hey, this, if your code isn't easy to test, then it's not good code. So I've, you know, people, especially like people who are really keen on test driven development will say this, but the problem I have with this statement is like, it doesn't really tell you what to do, right? It's just like, hey, this code is bad. So I think that some of these functional principles can guide you in that direction to say, no, I mean, you can even have things that are well-tested that just aren't good code because you have crazy mocks and stub services and whatever. It's all pound defines, compiler macros. Yeah, exactly. So, I mean, to think about things as being pure functions as much as you can, I think really guides you in the right direction. Yeah. Yeah, that totally makes sense. So what are the functional programming languages that you use the most? So I spend my time in my day job writing Scala, which is kind
+是的，我完全同意。我以前也听过这种说法：“如果你的代码不容易测试，那它就不是好代码。” 那些热衷于测试驱动开发的人会这么说，但我对这个说法的困扰在于：它并没有告诉你该怎么做，对吧？它只是说“这代码很烂”。所以我认为一些函数式原则可以引导你走向正确的方向。你可以拥有测试良好的代码，但它依然不是好代码，因为你充斥着疯狂的 Mock、Stub 服务、各种宏定义和编译器指令。是的，正是如此。所以，尽可能地将事物视为纯函数，真的会引导你走向正确的方向。是的，这完全说得通。那么你最常使用哪些函数式编程语言？我的日常工作主要写 Scala，它算是一种
+
+10
+00:07:08.000 --> 00:07:50.000
+of, I guess, a multi-paradigm language. It supports like, you know, Java style object-oriented stuff, as well as functional programming. And so that's where I spend most of my time. Huge fan of the language. And then, you know, I am guilty of of playing with a lot of other languages so i spent time teaching myself haskell and um that was certainly a great experience and yeah yeah we had we had a lot of haskell at a place i used to work and um it's it's it's interesting i actually really enjoyed it. But part of the challenge was we were building a software library
+多范式语言。它既支持 Java 风格的面向对象，也支持函数式编程。这就是我大部分时间花的地方。我是这门语言的忠实粉丝。当然，我也喜欢尝试其他语言，所以我花时间自学了 Haskell，那绝对是一次很棒的经历。是的，我以前工作的地方也用了很多 Haskell，这很有趣，我其实很喜欢它。但挑战在于，我们当时正在为公司内部其他人构建一个软件库，
+
+11
+00:07:50.000 --> 00:08:08.000
+for other people to use at the company. And so what that meant is anyone who wanted to use this library had to learn Haskell. We found that to be really difficult. And so we ended up having to rewrite the whole thing in Python, which is pretty sad because it looked pretty elegant in Haskell.
+这意味着任何想使用这个库的人都必须学习 Haskell。我们发现这非常困难。所以我们最终不得不把整个东西用 Python 重写了一遍，这很令人难过，因为在 Haskell 中它看起来非常优雅。
+
+12
+00:08:08.000 --> 00:08:38.000
+But this is just the way of the world. Yeah, I think that Scala, because it is multi-paradigm, it can be used as sort of a better Java. And so that maybe makes it more palatable. And also, if you were building a library, in your specific case, there's nothing saying you couldn't use that from any other JVM language. So there's some benefits there.
+但这就是现实世界。是的，我认为 Scala 因为是多范式的，它可以被用作“更好的 Java”，这可能让它更容易被接受。而且，如果你在构建一个库，在你的特定情况下，没有什么能阻止你从任何其他 JVM 语言中使用它。所以这有一些好处。
+
+13
+00:08:38.000 --> 00:09:10.000
+I mean, the trade-offs are, Haskell is a very hard line. This is a pure functional programming language there's no or very few like escape hatches i guess um whereas you know if you're trying to apply an fb style in a language that doesn't enforce it um i think that requires you know like obviously if the language isn't enforcing it then that's kind of up to the team to say this is a goal you know yeah exactly i think if you're building a service you can get away with it because you can write a protocol and um and yeah you know but if you're
+我的意思是，权衡在于：Haskell 是一条非常硬的底线，它是一门纯函数式编程语言，几乎没有“逃生舱”。而如果你试图在一种不强制执行它的语言中应用 FP 风格，那需要团队达成共识，说“这是我们的目标”。是的，完全正确。如果你在构建一个服务，你可以避开它，因为你可以编写协议。但如果你在
+
+14
+00:09:10.000 --> 00:09:39.000
+building a library then yeah i mean the lesson i learned from that experience is is or really i guess i wasn't the tech lead at the time but the lesson the tech lead learned is to really know their audience um i think that part that that's kind of a universal truism So you said you're doing Scala I've seen Scala applied in many different ways So it's used in Spark Which is this big data compute platform There's the Play framework
+构建一个库，那么我从那次经历中学到的教训，或者说技术负责人学到的教训，就是一定要了解你的受众。我认为这是一种普遍的真理。所以你说你在用 Scala，我见过 Scala 以多种方式应用。它被用于 Spark，这是一个大数据计算平台；还有 Play 框架，
+
+15
+00:09:39.000 --> 00:10:16.000
+Which is kind of a web service Are you using any of those? What's sort of the scaffolding you Are you using any of those or what are you, what's sort of the scaffolding you're using on top of Scala? So we have one project that is a play project, but we, I mean, it's more of our legacy product. So we're building, I guess, web services. And the main library that we're building i guess uh web services um and the you know the main library that we're using is called uh http 4s and it kind of is very much in the paradigm of of using scala to be uh
+它是一种 Web 服务框架。你在使用这些吗？你在 Scala 之上使用了什么样的脚手架？我们有一个项目是 Play 项目，但它更像是我们的遗留产品。我们现在主要构建 Web 服务，我们使用的主要库叫做 http4s，它非常符合使用 Scala 进行
+
+16
+00:10:16.000 --> 00:11:16.000
+for functional programming and uh like it provides a really nice metaphor on top of of working with a web service so a like if i'm writing a code to respond to some route that returns uh like some user information um that maybe gets aggregated from somewhere um in http 4s with this kind of functional model i have a function that uh gets in a data structure that represents a http request. And then the thing I return at the end of the day is a data structure representing an HTTP response. So it kind of fits this function model, data in, data out. What about contextual things like cookies? are they in the request object um yeah i mean cookies do come in the request object and i don't think that i don't think that violates the uh like you're still getting everything and you need basically yeah that makes sense so basically so the request
+函数式编程的范式，并且在处理 Web 服务时提供了一个非常好的隐喻。比如，如果我正在编写代码来响应某个返回用户信息的路由，在 http4s 中，我有一个函数，它接收一个代表 HTTP 请求的数据结构，最后返回一个代表 HTTP 响应的数据结构。它非常符合这种“数据进，数据出”的函数模型。那像 Cookie 这样的上下文信息呢？它们在请求对象里吗？是的，Cookie 确实在请求对象中，我不认为这违反了原则，你仍然是在获取所有你需要的东西。这说得通，基本上请求
+
+17
+00:11:16.000 --> 00:12:06.000
+is sort of this uh multiplexer or this this this structure that has cookies as headers probably has the then it also has the body with the actual if it's a post request it has the body and then you can return some response that maybe has the status code and the the body as well or something like that yeah and then you may further subdivide this right because you probably want to take some sort of structured data out of that request and return some structured data and have ways to format it. But at the high level, it's a very simple metaphor. A long time ago, I worked in ASP.NET and they had this like page lifecycle model. And I remember like, you know, I wanted to return that, you know, the status code was whatever, 409 or something,
+是一个多路复用器，或者说是一个结构，它有 Cookie 作为 Header，如果是一个 POST 请求，它还有 Body。然后你可以返回一个响应，可能包含状态码和 Body。然后你可以进一步细分，因为你可能想从请求中提取某种结构化数据，返回结构化数据，并有格式化它的方法。但在高层面上，这是一个非常简单的隐喻。很久以前，我用过 ASP.NET，他们有页面生命周期模型。我记得我想返回一个状态码，比如 409，
+
+18
+00:12:06.000 --> 00:12:32.000
+and you write the code to return it, but in fact, behind the scenes, there's some page lifecycle, and it's already returned a response code where you are at, right? So you had to understand this like, oh, it's not just that I'm writing the things that return the body. There's this lifecycle that lives outside of my code. Oh, geez. And so that's the body. There's this life cycle that lives outside of my code. Oh, geez. And so that's very confusing. And I think, I mean, most web frameworks don't work this way
+你编写了返回它的代码，但实际上在后台，存在某种页面生命周期，它在你所在的地方已经返回了一个响应码。所以你必须理解这一点：不仅仅是我在写返回 Body 的东西，还有一个存在于我代码之外的生命周期。天哪，这非常令人困惑。我认为大多数 Web 框架现在不这样工作了，但这表明这种函数式模型（你获取所有输入，然后输出所有结果）比那种有无关信息（比如在这种情况下，Header 是通过重载框架中的其他方法发送的）的模型要简单得多。
+
+19
+00:12:32.000 --> 00:13:13.000
+nowadays, but I think it shows how like this functional model where you kind of get in all your inputs and then get out all your outputs is much simpler than something where there's some sort of, you know, extraneous information, like in this case, that the header is sent, you know, by overloading some other method in the framework or etc. Yeah, yeah, that totally makes sense. I think, you know, a lot of people might say, well, you could do functional programming in any language. And, you know, ostensibly, that's true. I mean, you could you could fit the paradigm. It might not look that pretty. So in the case of Java, all of your functions would have to be objects that contain one method. But it's doable.
+是的，这完全说得通。我想很多人可能会说：“你可以在任何语言中进行函数式编程。” 从表面上看，这是真的。你可以套用这个范式，尽管它可能看起来不那么漂亮。在 Java 的情况下，你所有的函数都必须是包含一个方法的对象，但这是可行的。
+
+20
+00:13:13.000 --> 00:14:07.000
+But the nice thing about a functional language is that, as you said, it might not completely restrict you, but it makes it very easy to write functional programming and it makes it more difficult to write this um sort of the procedural programming where you're or just pure um yeah pure like recipe-based programming where you have all just global variables and so it's like you can do anything almost anything in almost any language but it's really you know the it's almost like being a an artist right i mean you could paint almost anything with any paintbrush if you had the dexterity but certain paintbrushes will make it very easy for you to do certain strokes and And so like any art, certain languages and certain frameworks
+但函数式语言的好处在于，正如你所说，它可能不会完全限制你，但它让编写函数式代码变得非常容易，而让编写那种过程式编程（或者纯粹基于配方的编程，到处都是全局变量）变得更加困难。这就像成为一名艺术家，你可以用任何画笔画出任何东西，只要你有技巧。但某些画笔会让你更容易画出特定的笔触。所以像任何艺术一样，某些语言和框架
+
+21
+00:14:07.000 --> 00:14:51.000
+will make it very easy to craft your design in a certain way. And the functional programming way is extremely powerful as long as you aren't too dependent on, as I said, a lot of these environmental things. So a web service is a great example because effectively bits come in, bits go out. And the only thing you really have to interface with from a real world standpoint is the network card. But that's going through so many layers of abstraction that functional programming is a no-brainer there i think this a lot of this big data transformation logic is also a really good candidate for functional programming which is why
+会让你更容易以某种方式构建你的设计。只要你不依赖于太多的环境因素，函数式编程的方式就极其强大。Web 服务就是一个很好的例子，因为本质上是比特进来，比特出去。你唯一真正需要从现实世界接口的地方是网卡，但那已经经过了太多的抽象层，所以我认为函数式编程在那里是理所当然的。很多大数据转换逻辑也是函数式编程的绝佳候选，这就是为什么
+
+22
+00:14:51.000 --> 00:15:47.000
+you know sql and and scala now with spark and a lot of these languages are are functional because they really excel in these environments yeah and uh like with spark and and data processing i think one reason it's a really good fit is just like a you know if we talk about immutability that you're kind of um not changing the data in place but kind of uh transforming it into a new uh into a new format uh that's very like easy to split up and and and distribute across machines and stuff um yep how do you deal with things like uh databases where you know database is this is this inherently sort of mutable object yeah i mean so if you talk about like you you were talking about haskell um and haskell has like this concept of like io where they kind of wrap anything that has an effect
+SQL 和现在的 Scala（配合 Spark）以及许多这些语言都是函数式的，因为它们在这些环境中表现出色。是的，对于 Spark 和数据处理，我认为它非常契合的一个原因是：如果我们谈论不可变性，即你不是原地改变数据，而是将其转换为一种新的格式，这非常容易拆分并分发到多台机器上。
+
+23
+00:15:47.000 --> 00:16:17.000
+in this IO type. And then instead of actually performing the action, right? The action is, it's not actually run until the end of kind of the, like until you fall off the end of main, right? It's kind of building, we're building up a program that doesn't get run until the very end of main right it's kind of building we're building up a program that doesn't get run until the very end of the world um and so that is a way i don't know if that characterization makes sense but that's kind of a way to encapsulate uh making changes to the outside world while still
+你如何处理数据库之类的事情？数据库本质上是一种可变对象。是的，如果你谈论 Haskell，它有 IO 的概念，它们将任何有副作用的操作封装在这个 IO 类型中。然后，动作不是立即执行的，它直到 main 函数结束时才真正运行。我们是在构建一个程序，直到最后才运行。
+
+24
+00:16:17.000 --> 00:16:55.000
+living in this kind of uh pure function world and so um what we do on our team is very similar. So we use like an effect type called cats IO, I believe what it's called. So methods that perform an action upon the outside world, like instead of having something that instead of having something that goes out from a web service, let me think of an example. So I call a web service and get back an integer, let's say, and then I need to use that in some further computation. So clearly, there's some sort of interacting with the outside world there.
+这是一种在仍然生活在纯函数世界的同时，封装对外部世界进行更改的方法。所以我们团队的做法非常相似。我们使用一种叫做 Cats IO 的效果类型。所以，执行外部世界动作的方法，比如从 Web 服务中获取数据，而不是直接返回一个整数，我需要用它进行进一步计算。显然，这里涉及与外部世界的交互。
+
+25
+00:16:55.000 --> 00:17:19.000
+So how we would handle that is we have this IO type. So instead of having this function that returns an integer, it returns IO integer. And this is somewhat similar to kind of like the async await pattern that you see in a lot of languages. Yeah, or a promise, I guess. Yeah, so the key thing is that it doesn't actually run until you tell it to run.
+我们处理它的方式是使用 IO 类型。函数不再返回整数，而是返回 IO 整数。这有点类似于许多语言中看到的 async/await 模式。是的，或者 Promise。是的，关键在于它直到你告诉它运行之前都不会真正运行。
+
+26
+00:17:19.000 --> 00:17:41.000
+So what we end up returning is, yeah, like a promise that hasn't been started yet. And so you kind of compose these. Let's say we need to call out to a bunch of web services, like, you know, call, get an hint from this one and feed that into this one, so on and so forth. So we return these IO wrappers and we compose them together to say like,
+所以我们最终返回的是一个尚未启动的 Promise。你可以组合这些操作。假设我们需要调用一堆 Web 服务，从这个获取一个整数，喂给那个，以此类推。我们返回这些 IO 包装器并将它们组合在一起，说：
+
+27
+00:17:41.000 --> 00:17:58.000
+okay, when this one's done running, feed that value into here. And it's very easy to compose. And then at the end of the world, like at the end of our request chain, we say, okay, now run this. And so that lets us kind of encapsulate the dealing with the outside world
+“当这个运行完成后，把那个值喂给这里。” 它非常容易组合。然后在世界的尽头，也就是我们的请求链末端，我们说：“好吧，现在运行它。” 这让我们能够将处理外部世界的工作封装到这个类型中。
+
+28
+00:17:58.000 --> 00:18:22.000
+into this type that we wrap the results in. Yeah, that makes sense. Actually, one thing you mentioned is a really good point. Functional programming, because each function is isolated, it lends itself really nicely to parallelism. For example, you might write a simple script.
+是的，这说得通。其实你提到的有一点非常重要：函数式编程因为每个函数都是隔离的，所以非常适合并行化。例如，你可能写一个简单的 Python 脚本进行文本转换，你有一个巨大的文本块。也许是你从 Excel 表格中拉出来的 CSV，有几千行。你要对每一行进行
+
+29
+00:18:22.000 --> 00:18:38.000
+Maybe you write a simple Python script that does some text transformation, and you have this huge block of text. Maybe it's some comma-separated value that you pulled out of this Excel spreadsheet you've been working on that has thousands of rows. And you're going to do
+一些转换。如果你只用 Python，你可以做到。代码行数可能不多。你只需要一个 for 循环遍历每一行，进行替换，对吧？但它会一行一行地处理。但没有理由必须这样做。你可以有一个进程从磁盘加载这些行，另一个进程将它们写入磁盘。两者都可以尽可能快地运行。
+
+30
+00:18:38.000 --> 00:19:12.000
+some transformation on all of the on each line. If you just do Python, you could do it. It might not take that many lines of code. You just do a for loop for each line, do your replacement, right? But it's going to go through each line one at a time, right? But there's no reason it has to do that. You could have one process loading these lines from disk and then another process writing them to disk. And both of them can be going as fast as possible.
+用 Python，这需要设置线程池。它可能必须是多进程线程池。你必须创建所有这些任务，生成所有这些任务。你必须自己做很多繁重的工作。而在函数式语言中，它们的设计使得它们为你做了很多工作。所以对于许多这些语言来说，现在这已经开始进入不仅仅是函数式编程语言的领域了。但是的，整个 Future/Promise/Async/Await 模式确实源于函数式编程。例如，你可以写一个解决游戏搜索的代码，
+
+31
+00:19:12.000 --> 00:19:58.000
+With Python, that's going to require setting up a thread pool. It'll probably have to be a multi-processing thread pool. You have to create all of these, spawn off all of these tasks. You have to have a feature. You have to do a lot of work yourself, a lot of the heavy lifting. With a functional language, they've designed it so that they do a lot of that work for you. So for many of these languages, and now this is starting to make its way into a lot more than just functional programming languages. But yeah, this whole future promise async await pattern, that really came out of functional programming. And for example, you can write something that solves a game search,
+比如在 Lisp 中解决跳棋游戏，它会自动使用你所有的核心。你不需要自己去摆弄线程池之类的东西。完全正确。有趣的是，你说这些东西正在渗透到其他语言中。因为如果你想想，在某个时候，
+
+32
+00:19:58.000 --> 00:20:21.000
+like solves a checkers game or something like that in Lisp, and it will automatically use all of your cores. You don't have to be fuddling around with thread pools and all of that yourself. Totally. It's interesting what you're saying about how this stuff is kind of feeding out into other languages. Because if you think about, you know, at some point,
+Python 拥有 map 和 filter 被认为是函数式编程，仅仅是因为这是一个渗透出来的想法。参数多态最初来自 Haskell，然后被引入 Java。显然，Lambda 现在非常流行。所以我感觉有一条传送带，不断地将这些想法带回其他语言，因为它们确实有很多价值。是的，尤其是 Web 服务器是一个很好的例子。可能有人在手机上，他们向你发送请求说：“嘿，给我天气。” 你的服务尝试返回天气，
+
+33
+00:20:21.000 --> 00:21:18.000
+Python having map and filter and stuff was considered functional programming, just because that was an idea kind of feeding out. parametric morphism that originally came from Haskell and then was brought to Java. And, you know, like lambdas obviously are quite popular now. So I feel like there is, you know, a conveyor belt of taking these ideas and feeding them back to other languages because there is a lot of value in them. Yeah. I mean, especially, I mean, a web server is a great example where you might have one person who they, maybe they're on their phone, and they send you a request saying, hey, get me the weather. And your service tries to return the weather,
+但那个人走进了一个隧道，现在没有信号了。所以你一直在 ping 那个人说：“嘿，我有你的天气，我有你的天气，快来拿你的天气。” 如果其他人（也许你有 10 万用户）都被阻塞了，你的网站就无法正常工作了，对吧？（双关语）。
+
+34
+00:21:18.000 --> 00:21:39.000
+but that person goes under a tunnel, and now they have no reception. And so you're just pinging this person saying, hey, I have your weather, I have your weather, come get your weather. And if everyone else, maybe you have 100,000 users on this site, if they're all blocked because of that, your website just, it's not gonna be functional, right? I know, pun intended.
+但这就是函数式语言真正闪光的地方，因为这实际上可能非常棘手。即使你有 8 个线程，现在你也只能支持 8 个人。如果 8 个人失去信号，你的网站就挂了。如果你的网站有成千上万的用户，那是不合理的。函数式语言非常擅长拥有管理这些任务的执行器。
+
+35
+00:21:39.000 --> 00:22:09.000
+But that's where, again, a functional language is really shying because that actually can be really tricky to get right. Even if you have eight threads, now you can support eight people. If eight people lose reception, your website goes down. And if your website has thousands and thousands and thousands of people, that's not unreasonable. Functional languages are really, really good at having these executors that sort of manage a lot of this.
+所以如果有一个函数在等待硬件设备或 IO，那没关系。语言底层的引擎知道只需将那个挂起，去处理另一个。这就是那种非常难以做对的事情。所以当我们谈论这些概念进入其他语言时，请记住，函数式语言中还有许多高级技术，使它们在处理这些任务时仍然非常出色。
+
+36
+00:22:09.000 --> 00:23:01.000
+So if there's a function that's waiting on some hardware device or some IO, that's okay. The language, the engine underneath the language knows to just put that one on hold, pick up a different one. And that's the kind of thing that can be really, really difficult to get right. So as we talk about a lot of these concepts making their way into other languages, keep in mind that there's a lot of advanced techniques in the functional languages that still make them really, really good for much better at doing these kind of tasks. Yeah, totally. Um, there was an example I remember from, from when I was learning this, um, that, that kind of made a lot of sense to me where somebody had like this, okay, here's like a, a service that, that processes, uh, coffee,
+是的，完全正确。我记得我在学习这个的时候有一个例子，非常有意义。有人有一个处理咖啡的服务，
+
+37
+00:23:01.000 --> 00:24:02.000
+like you're buying coffee. So it takes in, takes in um like a a credit card and then you know it returns like some you know something representing a cup of coffee and then you know in the body of this it goes out and charges your credit card it seems like a reasonable solution right and then so but obviously it doesn't kind of of meet this functional aspect we were talking about. So if you could transform it, so you take in the credit card and you return both a coffee cup and then something that kind of encapsulates this effect. So let's say it's just like a data structure that says, you know, charge this card so much money. And then somewhere, you know, obviously you have to actually have to apply this charge. But the interesting thing is if you start thinking about adapting this, now what happens if like, you know, we say you make the one solution, I make the other. And then, you know, requests come in like we want to buy, you know, a whole bunch of coffees, like we're going to buy five coffees.
+比如你买咖啡。它接收一张信用卡，然后返回代表一杯咖啡的东西。在函数体中，它会去扣除你的信用卡费用。这看起来是一个合理的解决方案，对吧？但显然它不符合我们谈论的函数式方面。所以如果你能转换它：你接收信用卡，返回一个咖啡杯和一个封装了这种效果的东西。比如一个数据结构，上面写着“从这张卡扣除多少钱”。然后，显然你必须在某个地方真正应用这个扣款。但有趣的是，如果你开始考虑适配它，现在如果我们要买五杯咖啡会怎样？
+
+38
+00:24:02.000 --> 00:24:53.000
+In the system where we're going out and like like, charging the card for every coffee that comes in, I mean, that's not what people expect when they buy a coffee. Where the system that kind of returns these charge objects, you could imagine just a process that kind of merges them before it actually, you know, sends off the request and is able to like batch the effects, right? So this idea of making the effects, making the side effects you're going to do in the world, like an explicit thing in the domain of your software. I mean, I think that's one of the kind of ideas, if that makes any sense. Yeah, totally. I mean, I think this will also be revealed when people try to test things. So let's say you have some service that configures your router and you try to test it.
+在那种每来一杯咖啡就去扣款的系统中，那不是人们买咖啡时所期望的。而在那种返回扣款对象的系统中，你可以想象一个进程在发送请求之前将它们合并，并能够批量处理这些效果。所以这种将副作用显式化为软件领域一部分的想法，我认为这就是其中的核心思想之一。是的，完全正确。我认为当人们尝试测试时，这一点也会显现出来。假设你有一个配置路由器的服务，你尝试测试它。
+
+39
+00:24:53.000 --> 00:25:32.000
+So if you have a unit test, which literally is going to go and configure your router and you're going to run it hundreds of times and people will be running it with bugs, well, you're going to have a really bad router, right? That's a scary network to be on. So what you really want is to mock that out. And by not allowing, let's say, globals, for example, or by discouraging globals, you kind of force people to say, okay, this global router object that points to some driver that i got from cisco um you know i can't i can't rely on that always being there or i can't rely on globals at all
+如果你有一个单元测试，它真的会去配置你的路由器，而且你要运行它几百次，人们会在有 Bug 的情况下运行它，那你的路由器就惨了，对吧？那是一个可怕的网络。所以你真正想要的是 Mock 掉它。通过不允许全局变量，或者不鼓励使用全局变量，你迫使人们说：“好吧，这个指向 Cisco 驱动程序的全局路由器对象，我不能依赖它总是存在，或者我根本不能依赖全局变量。”
+
+40
+00:25:32.000 --> 00:25:58.000
+let's say so maybe the first step is let's pass that in and well as soon as i pass it in now i could pass in something else as long as it has the same signature and that's kind of how people can, that's sort of how, I guess, well-tested or professional software works. Yeah. What about in terms of typing? So a lot of the early functional languages weren't typed. I mean, I'm thinking Lisp.
+所以也许第一步是把它传进去。一旦我把它传进去，只要它有相同的签名，我就可以传别的东西。这就是所谓的测试良好或专业的软件工作方式。关于类型系统呢？很多早期的函数式语言是没有类型的。我在想 Lisp。
+
+41
+00:25:58.000 --> 00:26:32.000
+I don't think Scheme is typed. They're all weakly typed. Now Scala is strongly typed. They have all weakly typed. Now Scala is, you know, strongly typed. They have the type inference engine. Do you feel like there's, you know, what sort of side of the coin are you on? I'm definitely on the side of types. And when I think about the value that I get out of this proposition, I was saying earlier, like, you know, a function takes some inputs and gets some outputs. A lot of the value I get is that the types kind of constrain what those inputs and outputs are. So I think types are super powerful.
+我不认为 Scheme 是有类型的。它们都是弱类型的。现在 Scala 是强类型的。它们有类型推断引擎。你觉得你是站在哪一边的？我绝对站在类型这一边。当我思考我从这个命题中获得的价值时，正如我之前所说，函数接收输入并获得输出。我获得的大部分价值在于类型约束了那些输入和输出。所以我认为类型非常强大。
+
+42
+00:26:32.000 --> 00:27:36.000
+And, like, I think that functional programming in Scala, in Haskell, in, you know, more researchy languages, or two languages um pushing the type system to be able to better encode um the constraints of what you're doing is is like a huge win in terms of software maintenance so yeah sorry go ahead oh i just i definitely agree yeah i mean i've been burned so many times by weekly type languages that yeah i'm kind of done with that yeah and like um if you look at like scala or let's say kotlin or even rust or swift like one thing you're seeing is kind of using uh like a result type or an option type or something rather than like a null pointer um and like that so that is another idea that's kind of you know moving out into the ether of other languages from functional programming and just that thing is so so valuable right just to say like hey you're not going to get a null pointer here you have to explicitly handle like
+我认为在 Scala、Haskell 或更偏研究的语言中，推动类型系统以更好地编码约束，在软件维护方面是一个巨大的胜利。是的，我绝对同意。我被弱类型语言坑过太多次了，所以我已经受够了。如果你看看 Scala、Kotlin 甚至 Rust 或 Swift，你会发现一件事：使用 Result 类型或 Option 类型，而不是空指针。这是另一个从函数式编程渗透到其他语言的想法，这非常有价值。仅仅是说：“嘿，你在这里不会得到空指针，你必须显式处理如果这个值未定义的情况。”
+
+43
+00:27:36.000 --> 00:28:05.000
+if this is you know possible that this value is not defined that's an explicit thing you need to handle yeah i think i agree with you. It's so, so useful. There was an issue the other day I saw at work where there's basically a function that was meant to return some information and it didn't support null. And so we ended up getting a crash at some point saying that someone tried to pass in a null. And it turned out that there were some circumstances
+这是一种你需要显式处理的事情。是的，我同意你的看法。它非常有用。前几天我在工作中看到一个问题，基本上有一个函数本应返回一些信息，但它不支持 null。结果我们在某个地方崩溃了，因为有人试图传入一个 null。事实证明，在某些情况下，
+
+44
+00:28:05.000 --> 00:28:28.000
+where that object that we were returning, it couldn't be retrieved. So I mean, think about like a double delete scenario where two people are trying to look up an item and delete it at exactly the same time. And the second process that arrives goes to get the item to delete it and it's not there but because we explicitly
+我们返回的那个对象无法被检索。想想双重删除场景，两个人试图同时查找并删除同一个项目。第二个到达的进程去获取要删除的项目，但它不在了。但因为我们在这个特定函数中显式禁止了 null，我们得到了一个错误。而在其他语言中，最坏的情况是你返回了 null，你以为它不会是 null，然后你开始使用它，如果程序在很久之后才崩溃，那你算走运了。
+
+45
+00:28:28.000 --> 00:28:45.000
+banned nulls in this particular function we got an error whereas in other languages I mean at worst you return the null you don't think it's going to be null and then you start using it and then you're lucky if the program crashes like much further down the line. I mean,
+那是最好的情况。情况可能会更糟，你只会得到数据损坏之类的东西。是的，所以我认为很多这些东西，正如你之前所说，正在渗透进来。比如 C++17 有了 optional。Optional 不是语言的一部分，所以你可以做 `optional foo = bar`，默认情况下 bar 是 null。但还没有支持... 我不知道 Patrick 是否知道，在 C++ 中是否有办法直接报错。
+
+46
+00:28:45.000 --> 00:29:16.000
+that's the best case scenario. It could even get worse than that. You just get corruption and things like that. Yeah, so I think a lot of that stuff, and as you said earlier, it is making its way. Like now with C++ 17, there's the optional. Optional is not part of the language so you could do optional foo equals bar and then by default bar is null but yeah there isn't support for there isn't support yet for I wonder if there's a way to, Patrick might
+在新的 C++ 中，如果你访问一个缺失值的 optional，它默认会抛出异常。但有办法... 你应该在做之前检查它，或者说“给我这个值，否则用这个默认值”。
+
+47
+00:29:16.000 --> 00:29:30.000
+know this, if there's a way in C++ to just blow up, I guess you could have an optional where if you tried to, actually I guess optional have an optional where if you tried to... Actually, I guess optional will do that. If you try to access it, it will kind of blow up.
+是的，这是一个常见的模式，你在 Scala、Haskell 或 Swift 中也会看到同样的东西。我认为...
+
+48
+00:29:30.000 --> 00:29:42.000
+So in the new C++ one, if you access an optional where the value is missing, it throws an exception by default. But there are ways... You're supposed to check it before you do that or say, give me this value
+这是一个伟大的想法，它与代数数据类型有关，一些语言开始拥有它，而 FP 语言一直都有。但你可以把这些类型想法推得更远，对吧？OCaml 领域的一句话是：“让非法状态无法表示。”
+
+49
+00:29:42.000 --> 00:30:27.000
+or this default. Yeah. So this is a common pattern like you'll see the same thing in scala or haskell or swift i assume um and i think that go ahead oh i was just gonna say do you feel actually you finish your thought because i have a kind of tangent so so i think like it so this is a great idea um and it ties in with kind of algebraic data types, which some languages are starting to get, and generally, you know, FP languages have always had. But you can push these type ideas even further, right? Like the phrase that I think comes from like OCaml land is like, make illegal states unrepresentable. Unrepresentable? Yeah,
+是的，就是这样。使用类型系统来强制执行代码中的不变性。拥有更丰富的类型允许你更容易地做到这一点。你能举个例子吗？是不是像说你不能做“3 + 狗”之类的？这就是你的意思吗？那是一个超级简单的例子。但如果你有和类型（Sum Types），也就是可以是多个值之一的类型。
+
+50
+00:30:27.000 --> 00:31:08.000
+let's say it that way. Okay. And so to use the type system so that, you know, you can't, like that you could enforce invariance in your code using the type system. And having richer types allows you to do this more easily. Can you give an example? Is it sort of like saying you can't do three plus dog or something like that? Is that, is that where you're going with this? So that's a super, uh, simple one. But so, um, if you have, um, some types, if you have, um, if you have a, a some type, which is like a type that can be one of several values, right?
+在 Scala 中，我会有一个密封特质（Sealed Trait）叫 Animal，然后我有 Dog、Cat 和 Parakeet。然后在其他地方，我有代码进行模式匹配并处理每种情况。如果我添加了一个新值叫 Goat，编译器会告诉我：“嘿，你没有处理这种情况。这个类型有四个可能的值，而你没有处理那个情况。”
+
+51
+00:31:08.000 --> 00:31:40.000
+So in Scala, I would have like, let's say I have like a sealed trait called animals, and then I have a dog cat and parakeet or something, right? And then somewhere else, I have some code that does some pattern matching and pulls those apart and handles each case. And then if I add a new value called goat or something, the compiler will tell me, hey, you have not handled this case. This type has four possible values and you are not handling that case.
+所以在Scala中，假设我有一个名为animals的密封特质（sealed trait），然后我有狗、猫和长尾小鹦鹉之类的子类，对吧？然后在其他地方，我有一些代码进行模式匹配，将它们拆解并处理每种情况。如果我添加了一个名为山羊的新值，编译器会告诉我，嘿，你还没有处理这种情况。这个类型有四种可能的值，而你没有处理那种情况。
+
+52
+00:31:40.000 --> 00:32:25.000
+Oh, I've seen that. Yeah, you're talking about the case classes classes is that the right word the case classes yeah and so I think this concept of like so that that's like totality checking and some languages take it much further but so when you're when you're writing that actually I think that I'm trying to think of another example uh maybe i'll maybe i'll think of one but yeah using the type system to kind of uh make it more apparent when you are doing something wrong i guess is kind of the concept uh hey jason not to interrupt you but before you go off on that tangent uh do you want to take a minute to tell people about o'reilly os con oh that's right yeah Yeah, OSCon is coming up.
+哦，我见过那个。是的，你说的是 case classes，这个词对吗？case classes，是的。所以我认为这个概念，比如，那就是所谓的穷举检查（totality checking），有些语言会走得更远。但当你编写代码时，其实我在想另一个例子，也许我能想到一个，但确实，利用类型系统来让你在做错事时更明显地察觉到，我想这就是这个概念。嘿 Jason，不是要打断你，但在你跑题之前，你想花点时间跟大家介绍一下 O'Reilly OSCon 吗？哦，对了，是的。是的，OSCon 即将到来。
+
+53
+00:32:25.000 --> 00:33:10.000
+There's going to be a bunch of superstars there that you can listen to. They're going to talk about actually a lot more than open source software is going to be there. There's going to be blockchain. There's going to be AI. There's going to be cloud computing, distributed computing, be a bunch of different talks from people all over the world you can go to oscon.com slash pt for programming throwdown if you go there you can uh you'll get a special deal which uh which is which is really cool um definitely check it out there's going to be a lot of really interesting people do you know who else is signed up to uh speak so i actually would advise people to just go look at the the website because there a ton of people. But I know that there's Holden Crew from Google, Rupa Deshir from CodeChicks,
+届时会有很多大咖到场，你可以去听他们的演讲。他们讨论的内容实际上远不止开源软件。会有区块链、人工智能、云计算、分布式计算，来自世界各地的人们会带来各种各样的演讲。你可以访问 oscon.com/pt（代表 Programming Throwdown），如果你去那里，你会得到一个特别优惠，这真的很酷。一定要去看看，会有很多非常有趣的人。你知道还有谁报名演讲了吗？其实我建议大家直接去网站看看，因为人太多了。但我知道有来自 Google 的 Holden Karau，来自 CodeChicks 的 Rupa Dachere，
+
+54
+00:33:10.000 --> 00:33:49.000
+Julian Simon from AWS, Allison McCauley from Unblocked Future. I mean, the list is really big. Like I was starting to like, I'm going to read. Oh, wait, I'm not going to read all these people. There are a ton of talks. So actually, I've never been to a conference where I know we were talking about this last episode. And, you know, you were talking about it about what it is kind of like to go to a conference. And I feel like going and talking to my boss about trying to be able to attend one, because I think it'd be really cool to be surrounded by people talking about the kinds of things I'm super interested in. Yeah, I mean, also, one really interesting thing that this conference is doing is pretty unique is they have sort of speed networking. They have book signings. They give
+来自 AWS 的 Julian Simon，来自 Unblocked Future 的 Allison McCauley。我的意思是，名单真的很长。我刚才开始想读，哦等等，我不会把这些人全读出来的。演讲非常多。其实，我从来没参加过那种我知道我们在上一集讨论过的会议。你知道，你当时在谈论参加会议是什么感觉。我正考虑去跟我的老板谈谈，争取能参加一次，因为我觉得被一群讨论我超级感兴趣的话题的人包围，那会非常酷。是的，而且这次会议做的一件非常有趣且独特的事情是，他们有类似快速社交（speed networking）的环节。他们有新书签售。他们给了
+
+55
+00:33:49.000 --> 00:34:29.000
+you a really good opportunity to meet other people. I've been to conferences in the past where it's just very, very technical. And it was designed for you to go. It's designed for one-way communication, right? For you to go and listen to some talks. But this is really designed for you to interact and meet other professionals, which is really cool. So definitely check it out. You can get 25% off your pass if you use the code PT25. I believe if you use the link, oscon.com slash PTt. You'll also get the discount, but put the code in just in case. And yeah, hope to see you there.
+你一个很好的机会去结识其他人。我过去参加过一些会议，它们非常非常技术化。那是为你去听讲座而设计的，是单向沟通，对吧？就是去听一些演讲。但这次会议的设计初衷是让你互动并结识其他专业人士，这真的很酷。所以一定要去看看。如果你使用代码 PT25，你的门票可以打 75 折。我相信如果你使用链接 oscon.com/pt，你也能得到折扣，但为了保险起见，还是输入一下代码吧。是的，希望能在那见到你。
+
+56
+00:34:29.000 --> 00:34:57.000
+Yeah, so with all of these languages, you know, adopting a lot of these principles from functional programming, where do you see the whole ecosystem going? Like, do you see some of these languages sort of collapsing together? Or do you see there of these languages sort of collapsing together? Or do you see there's maybe going to be, you know, sort of an explosion of new ideas? You know, I always kind of wonder if there be some type of contraction, because a lot
+是的，那么随着所有这些语言都采用了函数式编程的许多原则，你认为整个生态系统会走向何方？比如，你认为其中一些语言会融合在一起吗？或者你认为会有某种新思想的爆发？你知道，我总是想知道是否会发生某种收缩，因为很多
+
+57
+00:34:57.000 --> 00:35:38.000
+of the features will just, you know, things will just become homogeneous over time. Yeah, I don't know. I don't see it becoming more homogeneous like i only see it becoming more heterogeneous i guess like uh just um like the the number of people developing software continues to grow and like i don't know if this has to do with with functional programming at all but like as you were saying before like if you're writing a service that that other people are calling and some sort of grander architecture, you could write it in whatever language you want as long as you agree on the protocol. So in some ways, we're in the Cambrian explosion of languages.
+特性会随着时间的推移变得同质化。是的，我不知道。我不认为它会变得更加同质化，我只觉得它会变得更加异质化。我的意思是，开发软件的人数在持续增长，我不知道这是否与函数式编程有关，但就像你之前说的，如果你正在编写一个被其他人调用的服务，作为某种更宏大架构的一部分，只要你们在协议上达成一致，你可以用任何你想要的语言编写它。所以在某种程度上，我们正处于语言的寒武纪大爆发时期。
+
+58
+00:35:38.000 --> 00:36:00.000
+And I mean, I don't see that going away. Certainly, the table stakes are higher for a new programming language, right? Like you can't just write like a compiler. You know, people expect package managers and they expect like code linters. That's a really good point. Yeah. Is there, I guess Scala has SBT, right?
+我的意思是，我不认为这种情况会消失。当然，新编程语言的门槛更高了，对吧？你不能只是写个编译器就完事了。人们期望有包管理器，期望有代码检查工具（linter）。这是一个很好的观点。是的。我想 Scala 有 SBT，对吧？
+
+59
+00:36:00.000 --> 00:36:21.000
+For the package management? Yes, yeah. Yeah, there's still not a good... Patrick, you can correct me if I'm wrong here, but I don't think there's a good package manager for C++. I know there's Hunter, but it's not even that popular. There are a few, but they don't... I've never found one that had enough critical mass of packages to be useful.
+用于包管理？是的，没错。是的，仍然没有一个好的……Patrick，如果我说错了你可以纠正我，但我不认为 C++ 有一个好的包管理器。我知道有 Hunter，但它甚至没那么流行。确实有几个，但它们……我从来没发现哪个拥有足够的关键用户群而变得实用。
+
+60
+00:36:21.000 --> 00:36:58.000
+Yep, exactly. There's Conan. There's actually one from microsoft it's i think it's like vc i don't remember but but um yeah you're right none of them um can really get everyone on board i mean it seems like i can understand i mean it sounds incredibly difficult i think like maybe you guys uh disagree or something but like so c++ just existed before the idea that like languages should have should have a package manager um like was an important idea right and i think that there's these stops along the road right like i think go kind of put down its feet on like having
+是的，完全正确。有 Conan。其实微软也有一个，我想是叫 vc 什么的，我不记得了，但……是的，你是对的，它们中没有一个能真正让所有人都接受。我的意思是，这听起来确实非常困难。我想也许你们不同意，但 C++ 在“语言应该有包管理器”这个概念出现之前就已经存在了，这在当时是个重要的想法，对吧？我认为沿途有这些里程碑，比如我认为 Go 在“拥有一个轻松格式化代码的方法”上站稳了脚跟，之后的语言都会有这个功能，这真是个好主意。但在那之前的语言，人们太忙于争论，他们的 PR（拉取请求）都在争论你应该这样格式化还是那样格式化。是的，没错。是的，我很好奇，我真的很想知道会发生什么。我确实认为，好吧，回到你关于 Docker 和服务导向架构的观点，这确实给了人们编写任何语言的灵活性。但我感觉这个系统本质上也是赢家通吃的。再说一次，我认为总会有很多语言，我只是想知道这种分布集中度是否会偏向少数几种语言，比如我认为 Python，你知道
+
+61
+00:36:58.000 --> 00:37:52.000
+a way to format your code easily and that like languages you know after go are all going to have that like it's such a good idea but but you know languages before that people are too busy fighting and their pr is about whether you should format it this way or that way yeah that's right yep yeah i wonder uh um i really wonder what's going to happen i do think that okay so to your point with Docker, with services, service-oriented architecture, that really gives people flexibility to write any language they want. But I feel like the system is inherently winner-take-all as well. And again, I think there's always going to be a lot of languages i just wonder whether the distribution concentration will just you know favor a few languages like i think you know python you know
+我现在工作的地方主要用 Python，我们使用了 typing 模块等等，但确实，有更好的语言，但我感觉有一种赢家通吃的效应。尽管为了反驳这一点，TensorFlow 最近增加了对 Swift 的支持，我认为这对很多从事机器学习和 AI 的人来说是一个转折点。是的，我在我的播客上采访过 Brian Cantrell，他做了一个很棒的演讲，我们讨论了软件价值观，我想是叫这个名字。他是 Node.js 生态系统的坚定支持者，但后来与他们闹翻了。他对此思考了很多，并认为编程语言重要的是
+
+62
+00:37:52.000 --> 00:38:46.000
+we do mostly python at where i work now um you know we use the typing module and all of that um but yeah i mean there's definitely better languages um but i feel like there's this sort of winner take all effect um although although to to sort of playdell's advocate against that um tensorflow recently added support for swift and so that i think is a game changer for a lot of people um you know doing machine learning and people in ai yeah um i had on my podcast uh, Brian Cantrell, and he did this great presentation, and we talked about it about software values, I think it was called. So he was a big proponent of like the Node.js ecosystem and had kind of a falling out with them. And he kind of thought about this a lot and decided that like like what matters with programming languages is sort of
+它们把价值观放在哪里，这会导致不同的系统。所以 Node.js 把很多重点放在了可访问性上，即人们能够轻松上手。而当他想要更多……认为应该有一些
+
+63
+00:38:46.000 --> 00:39:02.000
+like where they put their values and that it leads to like a different system so like Node.js kind of put a lot of importance on just being accessible like people being able to pick it up and I think when he wanted some more you know thought that there should be some
+更复杂的特性来构建更健壮的软件时，他们会说，那当然很好，但这会牺牲可访问性，对吧？我从事 Scala 开发，它以非常复杂而闻名。我认为 Rust 和 Haskell 也是如此。所以，我觉得这就是决策空间，作为一种语言，对吧？你是想成为一种让人们容易上手的语言，还是倾向于成为一种更可靠或
+
+64
+00:39:02.000 --> 00:39:29.000
+more complex features that would build more robust software then they were like well that, that would be great, but that would take away from accessibility, right? And I work on Scala, which has a reputation for being very complex. And I think Rust also has and Haskell. So like, I feel like that's the decision space, like as a language, right? Do you want to be like, do you favor this being an easy language for people to take up do you favor that this is language that's that's more reliable or
+更安全的语言？我的意思是，性能可能是另一个方面，但所有这些都是价值观，对吧？我认为语言会根据自己的定位进行选择。C++ 显然有一些非常具体的性能和内存使用限制，这些比任何其他东西都重要。是的，这很有道理。那么在函数式编程领域，是否存在某种帕累托前沿（Pareto front）？比如，使用 Haskell 而不是 Scala 是否有涉及性能的原因？或者 Haskell 是否有什么特别擅长的领域？
+
+65
+00:39:29.000 --> 00:40:14.000
+more secure i mean performance is probably another um aspect but there's all these values right and i think languages kind of pick and choose uh where they fall like c++ obviously has some very specific you know performance and memory usage constraints on it that will be more important than anything else. Yeah, that makes sense. So in the functional programming landscape, is there sort of a Pareto front there? Like, are there reasons to use Haskell versus Scala that involve, I guess, performance? Or is there some speciality that Haskell is particularly good at?
+是的，关于 Haskell 有趣的一点是它是惰性的。它有一个惰性求值模型。我不知道还有什么其他语言有这个特性，所以除了它所有的函数式方面，它还有这个惰性方面，这可能具有挑战性，但在某些情况下有好处。我认为 Scala 很棒，当你想要使用 JVM 时，因为你不会遇到那种……嘿，我以前在 Haskell 中确实遇到过这个问题，我需要与某个 SOAP Web 服务交互，他们说“别那样做”，如果是在
+
+66
+00:40:14.000 --> 00:40:57.000
+Yeah, so one thing that is interesting about Haskell is that it is lazy. It has a lazy evaluation model. And I don't know any other languages that have that so besides all its its functional aspects it has this lazy aspect which um can can be challenging but has uh benefits in certain cases scala i think is great um when you want to use the jvm um because like you're not going to run into like hey like I literally had this problem with Haskell before where I needed to interact with this like soap web service and they're like yeah don't do that like that was there where if you're in in
+Java 中，如果你在 JVM 上，那永远不会是个问题。是的，已经写了几十亿行代码了。是的，我不知道这是否回答了你的问题。是的，这很有道理。是的，我想……关于惰性求值，为了让大家更深入地了解，因为实际上它在……它在 Python 中根本不是一部分，但如果你使用 TensorFlow 或 PyTorch 或任何这些 GPU 张量处理库，它们都在进行惰性求值。
+
+67
+00:40:57.000 --> 00:41:31.000
+Java like if you're on the JVM that's never going to be a problem yeah it's just so much so many billions of lines of code that have been written yeah i don't know if that answers your question though yeah that makes sense yeah i think um yeah the lazy evaluation just to kind of give people more depth on that um because actually it's supported in in um it's it's not it's not part of python by any means but if you're using tensorflow or pytorch or any of these uh g means, but if you're using TensorFlow or PyTorch or any of these GPU tensor processing libraries, they're doing lazy evaluation.
+这意味着，想象一下你有一个程序，它从命令行读取一个数字，加 4，翻倍，然后返回它，对吧？所以它把它打印到屏幕上。当你做加 4 和翻倍时，那并没有真正改变什么。
+
+68
+00:41:31.000 --> 00:41:53.000
+And what that means is, imagine you have a program that it reads a number from the command line, it adds four, it doubles it, and then it returns it, right? So it prints it to the screen, let's say. So when you do the add four and the double, that doesn't really change.
+我的意思是，它改变了你电脑上的一些内存，但在你对那个数字做点什么（比如打印它）之前，你并没有真正注意到任何东西。所以程序可以做的是，它只是保留一份你告诉它应该做什么的账本。所以你说，哦，你想……我忘了我说了什么。我想是加 4。你想加 4？
+
+69
+00:41:53.000 --> 00:42:13.000
+I mean, it changes some memory on your computer, but you don't really notice anything until you do something with that number, like print it. So what a program could do is it could just keep kind of like a ledger of what you said it should do. So you said, oh, you want to, I forgot what I said. I think add four. You want to add four?
+好的，我会记下来。你想把这个数字翻倍？好的，我会记下来。然后当你去把它打印到屏幕上时，它就会回过头来查看它的账本。它说，好的，我需要执行什么操作？所以，你知道，这是一个非常简单的例子，但想象一下，如果你对两个数字执行了该操作，却只打印了其中一个。那么，它就不必对另一个数字执行该操作，因为那个数字会被丢弃。它只需要做一半的工作。使用账本的一个重要原因是修剪（pruning），但到目前为止最大的原因是
+
+70
+00:42:13.000 --> 00:42:45.000
+Okay, I'll make a note of that. You want to double this number? Okay, I'll make a note of that. And then when you go to print it to the screen, then it goes back through its ledger. And it says, okay, what operations do I need to do? And so, you know, this is a very simple example, but imagine if you did that operation to two numbers and only printed one of them. Well, then it doesn't have to do that operation on the other number, which is just going to get thrown away. It only has to do half of the work. That's a big reason to use ledgers is the pruning but by far the biggest reason is
+存在很大的延迟，特别是如果你在 GPU 上做任何事情，你必须获取主板上的信息并将其发送到 PCI 卡上，这需要时间。所以你可以发送大量信息，但到达那里需要时间。因此，通过将所有这些命令打包，你可以发送 100 个命令而不是 1 个
+
+71
+00:42:45.000 --> 00:43:14.000
+that there's a lot of latency especially if you're doing anything on the GPU you have to take information that's on your motherboard and you have to send it over to this PCI card and that takes time so you can send a ton of information but it just takes time to get there. And so by batching up all of these commands, you can send, you know, 100 commands instead of one
+命令。即使要做的事情多了 100 倍，再说一次，这是延迟问题，而不是带宽问题。所以通过这样做，你可以获得巨大的速度提升，而 Haskell 基本上把这个内置在语言中了。是的，Scala 也有惰性，他们称之为“按名称调用”（call by name），但它不是默认的。所以正如你所说，这是一个非常强大的范式。把它作为默认设置，我认为对于不熟悉它的人来说会很困惑。这不是你所期望的，你期望程序从第一行开始，然后一直执行到底部。而你描述的在惰性世界中，它有点像是一直运行到底部，建立起它的计算，然后通过
+
+72
+00:43:14.000 --> 00:44:02.000
+command. And even though there might be 100 times as many things to do, again, it's a latency issue, not a bandwidth issue. So you get a huge speed up by doing that and haskell has that has that basically baked into the language yeah and like so scala has laziness as well and like a uh call by name is what they call it but it's not the the default so it is a very powerful paradigm as you're saying um having it as the default um, I think that's confusing for people who aren't familiar with it. That is not, you expect a program to work by starting with the first line and then executing through the bottom. Whereas you're describing in a lazy world, it's kind of like, it goes all the way to the bottom, building up its computation and then kind of runs it by
+回溯它需要做什么来运行它。是的。是的。所以很多这些语言或平台会有某种即时模式（immediate mode），例如，假设你正在开发，你需要知道数值。也许你有一个变量，你只是用调试器逐步执行，但你甚至没有真正使用它。你仍然需要在代码的每一行都知道那个值是多少。也许你只是有所有这些计算，最后你得到了一个非数字（NaN），对吧？这很难调试。所以通过即时模式，你可以逐步执行并说，哦，这就是
+
+73
+00:44:02.000 --> 00:44:40.000
+backtracking through what it needs to do. Yep. Yep. And so a lot of these languages or platforms will have sort of a immediate mode where, for example, let's say you're developing and you need to know the value. Maybe you have a variable that you're just stepping through with the debugger, but you're not actually even using it. You still need to know kind of at every line of the code what that value is. Maybe just you have all this computation and at the end you get not a number, right? That's really hard to debug. So with immediate mode, you can kind of step through and say, oh, this is the exact line
+事情出错的确切行。所以这完全有可能。所以从某种意义上说，你得到了两全其美的效果。所以这完全有可能。所以从某种意义上说，你得到了两全其美的效果。当你需要时，你得到这种即时模式，它稍微慢一点。把它想象成某种特性，我们还没谈到，但我们会谈到的，它们会立即得到解决。
+
+74
+00:44:40.000 --> 00:44:58.000
+where things kind of went south. So it's totally possible. And so in a way, you kind of get the best of both worlds. So it's totally possible. And so in a way, you kind of get the best of both worlds. You get this immediate mode when you need it, which is a little slower. Think of it as sort of features, which we didn't talk about yet, but we get to, that are resolved right away.
+然后你还有这种惰性模式，它快得多。是的，我认为从理论计算机科学的角度来看，惰性求值模式在最坏的情况下总是和急切模式（eager mode）花费一样的时间，因为它……但它可能更快，因为步骤可能被认为是不必要的。但它可能会有巨大的内存开销。比如如果你在 Haskell 中，你想……也许他们会说别这样做，但假设你正在对一大堆数字求和，但由于你编写它的方式，
+
+75
+00:44:58.000 --> 00:45:36.000
+And then you also have this lazy mode, which is much faster. Yeah, and I think from like a theoretical cs perspective like the lazy evaluation mode will always be at worst take as much time as the eager mode um because it's you know it can but it can be faster because steps could be deemed unnecessary but um it can have a tremendous memory overhead. Like if you're in Haskell and you want to, you know, maybe they would say just don't do this, but let's say that you're like summing a whole bunch of numbers, but because of the way you did
+它遵循了默认的惰性风格，并且你在传递那个结果数字。但结果数字实际上不是一个整数的内存位置。它实际上是一个巨大的计算，比如加 1 加 2 加 3 加 4。所以计算结果最终是一样的。但在那被求值之前，你知道，它们有这种空间泄漏（space leaks），你最终会占用一大堆内存而并没有真正打算这样做。是的，这是一个非常非常好的观点。总的来说，这些高阶语言会有各种陷阱。所以我更倾向于把它看作是……你可以把它想象成使用砍刀或使用电锯，对吧？电锯可以做更多的事情，可能非常快，但你也必须培养更多的技能才能使用它。我认为这是一种很好的学习方式，就是深入其中。你编写了这个程序，然后意识到，哦，为什么这需要一个小时才能运行？然后，你知道，所有这些语言都有很多非常好的工具来逐步执行并说，哦，我明白为什么会这样了，因为我正在构建这个巨大的计算图，包含我应用的所有数学运算，而实际上我应该在某个时候……我只是意识到所有这些计算，我想他们称之为检查点（checkpointing），应该对计算进行检查点设置，以便它折叠整个调用图，然后你可以重新开始。
+
+76
+00:45:36.000 --> 00:46:44.000
+it, it is following kind of the default lazy style and you're passing around that result number. But the result number, in fact, it's not a memory location of an int. It's actually a giant computation of like add one plus two plus three plus four. So the calculations will end up being the same. But until that's evaluated, you know, they have these kind of space leaks where you end up holding on to a whole bunch of memory without really meaning to yeah that's a that's a really really good point um just in general these higher order languages um will will have sort of traps so i think of it more like uh you can think of it as like using a machete or using uh you know like a chainsaw right like the chainsaw can do a lot more it could could be really quick, but also you kind of have to develop some more skill to use it. And I think that's, it's a good way to sort of learn is to dive in there. You write this program and you realize, oh, why is this taking, you know, an hour to run? And then there's, you know, there's a bunch of really good tooling for all
+是的，我所描述的可能是一个非常初级的错误，没有意识到你在链式传递这个计算。是的，这很有道理。
+
+77
+00:46:44.000 --> 00:47:18.000
+of these languages to step through and say, oh, i see why it's happening because i'm building this huge computation graph of of uh all of this mathematics i'm applying when really i should at some point um i just realize all of that computation i think they call that checkpointing should checkpoint the computation so that it collapses that whole call graph and then you can start again. Yeah, and what I'm describing is probably like a very much a beginner mistake to not realize that you're chaining around this computation. Yeah, that makes sense.
+是的。关于……哦，顺便说一下，你问我，嘿，什么时候应该选择哪种函数式编程语言？所以我得说，你知道，总是选择 Scala，因为那是我的最爱。但我认为在实践中，像 Haskell 这样的语言是学习所有这些 FP 概念的好地方。但如果你需要做现实世界的事情，就像我说的，如果你需要与某个 SOAP 之类的东西交互，你知道，JVM 是一个很好的地方。
+
+78
+00:47:18.000 --> 00:47:48.000
+Yeah. What about... Oh, so by the way, you asked me like, hey, when should you choose which functional programming language? So I'm going to say, you know, always choose Scala because that's my favorite. But I think in practicality, like, you know, a language like Haskell or something is a great place to learn about all these FP concepts. But if you need to do real world stuff, like I said, if you need to talk to some soap thing or something, you know, the JVM is a good place to be.
+是的，这很有道理。如果你在一家公司，或者你现在正在用不同的语言执行某项软件任务，每个人从这个播客中能带走的一件事就是，意识到如何在那种语言中进行函数式编程。为了列举这些，我的意思是，如果你在 C++ 中，你可以使用 Folly Future。其实 Patrick，你可能知道其他替代方案。我唯一用过的是 Folly Future，但可能还有一百种其他方案，它们基本上为你提供了这种 async/await 类型的范式。
+
+79
+00:47:48.000 --> 00:48:24.000
+Yeah, that makes sense. And if you're at a company or you're doing some software task now in a different language, one thing everyone can take away from this podcast is to, you know, realize how to do functional programming in that language. And so just to enumerate a lot of this, I mean, if you're in C++, you can use Folly Future. Actually, Patrick, you might know of other alternatives to that. The only one I've ever used is Folly Future, but there's probably a hundred other ones that basically give you this async await type paradigm.
+你知道，如果你在 Scala 或 Haskell 之类的语言中，那是很自然的。如果你在 Java 中，肯定有一些好的库，但你会创建很多对象。所以准备好迎接大量的对象吧。其他语言？哦，是的。如果你在做任何像 Node.js
+
+80
+00:48:24.000 --> 00:48:46.000
+You know, if you're in Scala or Haskell or something like that, that's very natural. If you're in Java, there's got to be some good libraries, but you're going to be creating a lot of objects. So get ready for a ton of objects. Other language? Oh, yeah. If you're doing anything like Node.js
+或者即使你在浏览器中做 React 或 JavaScript，一定要看看 Node 中的 await async 库。我想浏览器里有 RxJS。在我们列举所有这些之前，搜索一下，无论是响应式编程还是函数式编程，每种语言都有实现它的方法，根据你试图完成的任务，它可能非常强大。所以，一定要深入研究一下，这是非常值得理解的。还有类型，对吧？如果你在做 React 的东西，我不知道，也许
+
+81
+00:48:46.000 --> 00:49:25.000
+or even if you're doing React or JavaScript in the browser, definitely look at the await async libraries in Node. I think there's RxJS in the browser. Before we enumerate all of them, look up like it would either either be you know reactive programming functional programming um there's there's a way to do it in every language and depending on the task you're trying to do it could be really powerful so um definitely you know dive into that um and and it's something really good to understand and and types, right? If you're doing React stuff, I don't know, maybe
+TypeScript 或 Flow，或者，你知道，另一个我会提到的关键词是代数数据类型（algebraic data types），越来越多的语言开始支持它，但这是构建数据结构的一种很好的方式。是的，有一件事让我对 TensorFlow 和 PyTorch 感到非常疯狂，那就是它们只有张量（tensor）数据类型。所以如果我有一个张量，有时我这样做过，我有一个张量，我得确保我没弄错。是的。是的。好的。所以我有一个张量。假设是 5x1。所以它是一个向量。对吧。然后我乘以另一个 5x1 的张量。所以它要做的是将这两个向量相乘，那将进行点积。
+
+82
+00:49:25.000 --> 00:50:13.000
+TypeScript or Flow or, you know, and another keyword I'd call it is like algebraic data types, which more languages are getting support for, but is a nice way to kind of build data structures. Yeah, that's one thing that drives me absolutely crazy about TensorFlow and PyTorch is they just have the tensor data type. So if I have a tensor that's sometimes I've done this where I have a tensor that's I'm going to make sure I get this right. Yeah. Yeah. OK. So I have a tensor. Let's say five by one. So it's a vector. Right. And then I multiply by another tensor that's 5 by 1. So what that's going to do is it's going to multiply those two vectors, and that's going to do a dot product.
+所以在底层，它会按分量相乘，把它们全部加起来，我会得到一个单一的数字。所以也许我做这个向量乘以向量，或者他们称之为张量乘以张量，或者这个，你知道，他们称之为张量乘以张量，我的输出是 3，对吧？但如果我弄错了维度，比如，假设其中一个向量被转置了。所以现在我有一个 5x1 的矩阵乘以一个 1x5 的矩阵。好吧，TensorFlow 要做的是进行外积。所以我的结果不会是 3 或 10 或 100。它将是一个 5x5 的矩阵。
+
+83
+00:50:13.000 --> 00:50:52.000
+So under the hood, it's going to multiply component-wise, add that all up, and I'll get a single number out. So maybe I do this vector times vector, or they're calling it tensor times tensor, or this, you know, they're calling it tensor times tensor, and my output is three, right? But if I get the dimensions wrong, like, let's say one of those two vectors is transposed. So now I have a five by one matrix multiplied by one by five matrix. Well, what sensor flow is going to do is it's going to do the outer product. So my result isn't going to be 3 or 10 or 100. It's going to be a 5 by 5 matrix.
+而且没有任何东西会警告你。所以你很容易就会崩溃，因为有时我们有这些巨大的向量，我们把它们乘在一起。也许是一百万个项目。我们期望它们输出一个数字，但最终发生的是它输出了这个百万乘百万的矩阵。它甚至装不下那个矩阵。所以你的显卡就炸了。
+
+84
+00:50:52.000 --> 00:51:17.000
+And nothing warns you about that. So you could just easily get blown up because sometimes we have these huge vectors and we multiply them together. Maybe it's a million items. And we expect them to output a number, but what ends up happening is it outputs this million by million matrix. And it can't even fit that matrix. So your graphics card blows up.
+对吧？这真的让我非常疯狂。TensorFlow 中有一个叫 Named Tensors 的东西。它还没出来，但让我疯狂的是……有一个叫 Named Tensors 的东西要出来了，它还没出来，但……你知道，我认为回到你的观点，我的意思是，它正朝着代数类型的方向发展。所以，我认为那里的圣杯是拥有单位类型，你可以定义，比如你可以说“秒 s = 10 微秒”，它会自动进行转换，诸如此类。
+
+85
+00:51:17.000 --> 00:51:46.000
+Right? That just absolutely drives me crazy. There is something coming out in TensorFlow called Named Tensors. It's not out yet, but drives me crazy they are uh there is something coming out in tensorflow called named tensors it's not out yet but um you know i think to your point i mean it's it's moving in the direction of sort of algebraic types so i mean i think the holy grail there is where you have unit types you can define like you could say seconds s equals 10 microseconds and it would do the conversion automatically stuff like that
+是的，呃，所以另一个圣杯是，如果你实际上能把矩阵的大小编码到类型中。所以我见过这个，我见过这个在几种语言中实现。Idris 编程语言中的一个例子实际上是，他有这个转置矩阵的函数。他定义矩阵的方式是，它就像矩阵，并且有两个类型参数，即 n 乘 n 的大小，对吧？所以他有一个函数，接收一个矩阵
+
+86
+00:51:46.000 --> 00:52:24.000
+yeah uh so like a different holy grail is like if you've actually would encode the size of your matrix into the type so i've seen this i've seen this uh done in a couple languages. So an example in the Idris programming language is actually like he has this function to transpose a matrix. And the way he defines a matrix is it's like matrix and it has two type parameters that is like the n by n size, right? So he has a function that takes in a matrix
+大小为 n 乘 m。也许这些在音频中很难说清楚。假设是 i 乘 j。然后它返回 j 乘 i，对吧？所以通过将那种维度编码到类型中，你实际上可以理解那是一个转置函数，甚至不需要理解它的主体，对吧？你仅从那一点就能看出这两个变量移动了，它实际上是在旋转矩阵。是的，是的，如果你做……你知道，如果你把这些向量相乘，并将结果设置为一个浮点数，那么类型系统就能知道，好的，只有特定的乘法，
+
+87
+00:52:24.000 --> 00:53:07.000
+that is size n by m. Maybe those are hard to say over audio. I by j, let's say. And then it returns it like j by i, right? So by encoding that kind of dimension into the type, you can actually understand that that is a transpose function, like without even understanding the body of it, right? You can see just by that that these two variables move that it's actually kind of rotating the matrix Yeah, yeah, and if you do You know if you multiply these vectors and you set that equal to a floating num point number then the type system could know Okay, there's only certain multiplication,
+矩阵乘法运算才能产生一个数字，对吧？是的。所以它会在编译时捕获它。是的。而你的例子，是的，完全正确。返回一个巨大的矩阵而不是浮点数。如果类型系统有那个信息，是的，那将是一个编译时错误。你甚至永远不会把它发送去运行。是的。是的。是的。我，呃，也是
+
+88
+00:53:07.000 --> 00:53:30.000
+matrix multiplication operations that can yield just one number, right? Yeah. And so it would catch that compile time. Yeah. And your example of, yeah, exactly. Returning like instead of a float, some giant matrix. If the type system had that information, yeah, it would be a compile time error. You would never even send it off to run. Yep. Yep. Yeah. I, uh, I'm also a huge fan
+TypeScript 的超级粉丝。嗯，有一件事，呃，它真的很难设置。但是，公平地说，我当时是在追求圣杯。我最终确实做到了。但我得到的是我想要的，呃，基本上是运行 Express 的服务器和 TypeScript。客户端运行 React，也是用 TypeScript，而且它们都支持热重载（hot reloading）。所以这意味着你可以编辑一个源文件，点击保存，你的服务器就会在后台更改。在客户端，每次你点击保存，它都会刷新浏览器，并且是最新的。我两三个月前发过，我从 Hacker Moon 发了一篇关于如何做到这一点的文章。这绝对花了很多功夫，但完全值得。我认为如果你要构建一个网站，那就是最好的方法。而且正如你所说，你得到了类型安全，这实际上非常重要，它
+
+89
+00:53:30.000 --> 00:54:25.000
+of TypeScript. Um, the one thing, uh, it was, it was really hard to set up. Uh, but, but to be fair, I was trying to go for the Holy grail. I did get it eventually. Uh, but what I got was what I wanted was, um, basically the servers and TypeScript running Express. The client was running React, also in TypeScript, and both of them support hot reloading. So what that means is you can edit a source file, hit save, and your server changes underneath. On the client side, every time you hit save, it refreshes the browser and it's up to date. I posted two or three months ago, I posted from Hacker Moon an article on how to do it. It was definitely a lot of work, but it was totally worth it. I think if you're going to build a website, that is the way to go. And as you said, you the type safety which is which is actually really important it's it
+救了我好几次。是的，我听到的每一个谈论将大型 JS 代码库迁移到 TypeScript 的人，都谈到了“哦，有一些我们不知道的 bug，它直接指出来了”。显然它们不是非常明显的 bug，因为它们本来就会被发现，但就像，你知道，如果你是在 TypeScript 中开发的，它们甚至永远不会存在。是的。是的。没错。而且它也帮助了新加入的人，他们正在查看代码库。
+
+90
+00:54:25.000 --> 00:54:54.000
+saved me multiple times yeah everybody who everybody who whom i've heard talk about move a large js uh code base to typescript has talked about like oh there was a couple bugs that we didn't know about that it just called out and like obviously they're not very prominent bugs because they would have already got to them but But like, you know, if you were developing it in TypeScript, they never would have even been there. Yep. Yep. That's right. And it just helps new people too, who are looking at the code base.
+深入代码库中间并了解发生了什么非常困难。但类型系统确实是你的字典，当你深入研究所有代码时，你可以随身携带它。是的，我喜欢那样，就像，你知道，当你有很多类型时的可维护性，就像，你知道，我们在 Scala 代码库中非常广泛地使用类型，可能以一种对人们来说不寻常的方式，但当你能进去说“我想把这个移到这里”
+
+91
+00:54:54.000 --> 00:55:23.000
+It's very hard to dive into the middle of a code base and know what's going on. But the type system is really sort of your dictionary that you can kind of carry with you as you're kind of diving through all of the code yeah i love that like you know uh maintainability when you have a lot of types like you know we use types quite extensively in our scala code bases probably in ways that would be unusual to people but like when you can go in and say i want to move this here
+然后你就可以移动它，然后看看什么坏了，然后慢慢地，你知道，把这些更改处理完。而不是像，你知道，某些 Ruby 或 Python 代码库，你最好有良好的代码覆盖率和一些很棒的审查。这种差异是惊人的。所以，在我们跳过之前，我想跳进去谈谈你的播客和你正在做的其他事情。但很快，你是如何防止你团队中的人创建那种疯狂的 Scala 操作符的？因为我在我们的代码库中见过一些令人难以置信的操作符。我真的以为它们是那些 Animoji，你知道，
+
+92
+00:55:23.000 --> 00:56:02.000
+and you kind of can move it and then see what breaks and then slowly, you know, work those changes through. As opposed to like, you know, some Ruby or Python code base where you better have good code coverage and some great reviews. Like the differences are astounding. So one thing before we jump, I want to jump in and talk about your podcast and other things that you're working on. But real quick, how do you keep people from your team from creating like crazy Scala operators? Because I've seen in our code base some unbelievable operators. I honestly thought they were those Animoji, you know,
+那些五个字母长的，呃，你知道，像表情符号，或者他们在翻桌子之类的。是的，你是如何防止人们滥用语言的？好吧，我想那是两个不同的问题。我们没有遇到过操作符问题，也许这与团队的个人品味有关。我想有一段时间确实发生过这种情况。在 Scala 社区中，为很多事情编写自定义操作符是很常见的。我想现在可能不是这样了。但我也认为，如果你习惯了一个操作符，
+
+93
+00:56:02.000 --> 00:56:41.000
+those five-letter long uh you know like emojis or they're flipping the table or something yeah how do you keep people from abusing the language well i guess those are two different questions we haven't had the operator uh the operator problem um maybe that has to do with personal uh tastes of on the team. I think that there was a while where that happened. In the community of Scala, that it was common to write custom operators for a lot of things. And I think that maybe that's not the case anymore. But I also think it's a case where if you get used to an operator,
+那么你就会喜欢它。你会发现它比一个单词更容易理解，但如果你不习惯它，它会非常令人困惑。我觉得它有点像 Vim，我在 IntelliJ 中使用 Vim 键绑定，呃，现在我知道了绑定和所有东西，就像，它太棒了，但你知道，在我知道它之前，它超级令人困惑，我当时想，为什么会有人用这个？是的，没错，我也经历过同样的事情。你知道，作为一个机器学习人员，我知道 Emacs，因为那是他们在 AI 课程中教我们的，但……但是的，我记得教授第一次强迫我们所有人使用 Emacs 时，你在对我们做什么？它是 Ctrl+S 来搜索，发生了什么？但
+
+94
+00:56:41.000 --> 00:57:20.000
+then you love it. You find it easier to understand than than a word or but but if you're not used to it it's very confusing i feel like it's a little bit like like vim like i use vim key bindings and intellij and uh like now that i know the bindings and everything like it's like amazing but you know before i knew it it was like super confusing and i was like why would anyone use this yeah right i went through the same thing uh you know being a machine learning person I know emacs because that's that's what they taught us in in AI class but but yeah I remember the first time the professor forced us all to use emacs what are you doing to us it's like ctrl s to search what's going on but
+随着时间的推移，你意识到，不把手从键盘上移开是相当不错的。是的。所以我认为操作符，能够进行操作符重载是很棒的。你真的应该只在它会像那样的时候才这样做。就像你只是要……你不需要去查它是什么。如果它会成为你团队的肌肉记忆，就像，“哦，是的，当然，这意味着将两个列表合并在一起，然后将所有内容加 1”。我不知道。是的，没错。
+
+95
+00:57:20.000 --> 00:57:44.000
+then over time you realize uh not taking your hands off the keyboard is pretty nice. Yeah. So I think that operators, like it's great that you can do operator overloading. You should only really do it if it's something that's going to be like that. Like you're just going to, you're not going to have to look up what it is. Like if it's going to be muscle memory for your team, like, oh yeah, of course, this means combine two lists together and then increment everything by one. I don't know. Yeah, that's right.
+是的。然后将所有内容加 1。我不知道。是的，没错。有一件事也会让人们绊倒，那就是用于无关紧要参数的下划线。所以为了给人们一些背景，如果你有一个函数，并且——让我确保我没弄错。一个函数接收某种，假设，说两个参数，但第一个参数你没用到，你可以放一个下划线，只是为了说“嘿，我知道这里应该有东西，但它无关紧要”，而不是放单词“dummy”之类的。但随后可能发生的是，你可以
+
+96
+00:57:44.000 --> 00:58:16.000
+Yeah. and then increment everything by one. I don't know. Yeah, that's right. One thing that trips people up to is the underscore for arguments that don't matter. So just to give people some context, if you have a function and – let me make sure I get this right. A function takes sort of, let's say, say two arguments but the first argument you're not using you can put an underscore just to say hey I know there's supposed to be something here but it's irrelevant instead of putting the word dummy or something like that but then what can happen is you can
+最终得到像“左括号 下划线 加 下划线 右括号”这样的东西，人们看到它会认为那是一个完整的操作符，对吧？是的，这与你的另一个问题有关，对吧？就像你怎么……人们看到它会认为那是一个完整的操作符，对吧？是的，这与你的另一个问题有关，对吧？就像你怎么……Scala 是一种非常灵活的语言，那么你如何限制人们做什么？因为你可以用下划线做更多的事情，
+
+97
+00:58:16.000 --> 00:58:38.000
+end up with like open paren underscore plus underscore close paren and people look at that and think that that's one whole operator right yeah which ties into your other question right like how do you like and people look at that and think that that's one whole operator, right? Yeah, which ties into your other question, right? Like how do you, like Scala is a very flexible language and then so how do you restrict, you know, what people do? Because you can do more than that with underscore
+因为你可以引用它，对吧？所以你可以有一个函数，就像“方括号 下划线 逗号 下划线 方括号”，然后是箭头，然后是“下划线 点 1”和“下划线 点 2”，就像……那是对的。我的意思是，呃，所以我认为这是一个更难的问题，对吧？就像你怎么……我的意思是，我认为 C++ 在更大程度上也是如此，语言太大了，你必须作为一个团队达成某种共识。但在 Scala 中，我们使用 linter 和代码格式化程序，并在构建中强制执行某些事情，这很棒。就像，与其争论代码格式，不如
+
+98
+00:58:38.000 --> 00:59:20.000
+because you can refer to it, right? So you could have a function that is like bracket underscore comma underscore bracket and then like arrow and then underscore dot one and underscore dot two like that's right i mean uh so i think that that is a harder question right like how do you uh i mean i think the same is probably true of c++ to an even greater extent like the language is so large you have to kind of as a team uh reach kind of some sort of consensus but in scala like we use linters and code formatters and kind of enforce things in the build and that that's great like uh something like instead of arguing about code formatting like
+在 PR 中，我们有一个配置，它规定了我们的代码格式看起来是什么样的。如果你想争论它，你可以直接对它进行更改，然后在那个 PR 中争论，它会将所有内容重新格式化为新标准，这在消除关于代码格式的争论方面非常棒。是的。我的意思是，我记得人们争论空格之类的事情的日子。我的意思是，那真是令人难以置信。现在，我的意思是，即使是 C++，每种语言都有某种自动格式化的方法。这把许多这些争论都从桌面上移除了。就像，如果你不喜欢这种格式，你甚至可以重新格式化整个代码库，然后在提交时再格式化回来
+
+99
+00:59:20.000 --> 01:00:01.000
+nprs we have a config that that kind of dictates what our code formatting will look like. And if you want to argue about it, you could just make a change to that and then argue in that PR where it reformats everything to the new standard, which is just great at removing the diversion of arguing about code formatting. Yeah. I mean, I remember the days of people arguing over spaces and things like that. I mean, it was just unbelievable. And now, I mean, even C++, every language has some type of way to automatically format. And that takes so many of these arguments off the table. It's like, if you don't like the formatting, you could even reformat the whole code base and then just format it back when you go to submit
+你的 PR。我的意思是，如果你那么投入的话。但……但……是的，我同意你的观点，我认为一些更语义化的东西是在同行评审中处理的。所以我们有这种我们称之为“小丑镇”（clown town）的梗，它来自《辛普森一家》，但我没看过《辛普森一家》，所以有人得纠正我。但是的，基本上我们有一个 Krusty 小丑的表情符号。所以当事情变得有点“小丑化”时，我们就给它贴上 Krusty。如果有人定义了一个在 C++ 中创建类的宏，他们就会得到 Krusty，这就是我们强制执行的方式。当人们开始为愚蠢的事情争吵时，我们有一个“自行车棚”（bike shed）表情符号。等等，什么是自行车棚？我甚至不知道。嗯，我想它
+
+100
+01:00:01.000 --> 01:00:54.000
+your PR. I mean, if you're that into it um but but uh yeah i agree with you i think some of the more semantic uh things are just handled in the in the peer review so we have this we have this sort of meme we call clown town and so it comes from the simpsons but i don't watch the simpsons so so someone will have to correct me on that. But yeah, there's basically this emoji we have of Krusty the Clown. And so when something's getting kind of clowny, we put Krusty on it. So if someone has a pound to find that creates a class in C++, they get Krusty, and that's the way we sort of enforce it. We have a bike shed emoji for when people start fighting about dumb things wait what is a bike shed i don't even know um i think it
+可以追溯到那个古老的故事，说他们正在建造一个核反应堆，他们有一个委员会来监督所有的计划，然后委员会把所有的时间都花在争论自行车棚的颜色上，因为这个想法是，委员会里的人对核反应堆一无所知，但他们了解自行车棚。所以他们就像，这就是他们关注和争论的焦点。这有点像你错过了，
+
+101
+01:00:54.000 --> 01:01:17.000
+goes back to this old story that says like you know that they were building a nuclear reactor and they had a committee to like oversee all the plans and then the committee spent all their time arguing about the color of the bike shed because like the idea was that the people on the committee didn't know anything about nuclear reactors, but they understood bike sheds. So they're like, that's what they focused on and argued about. It's kind of like you're missing the,
+你在这里关注错了重点。是的，是的。这太神奇了。我注意到，嗯，你知道，发明整个框架或库甚至编程语言需要某种个性。所以你必须对现状足够不满，对吧？所以当你把很多编程语言发明者或平台发明者聚在一起时，你最终会得到很多反向的意见。是的，我想我需要借用那个自行车棚表情符号。
+
+102
+01:01:17.000 --> 01:01:52.000
+you're focusing on the wrong thing here. Yeah, yeah. That's amazing. I noticed that, well, you know, it takes a certain personality to invent an entire framework or library or even programming language. And so you have to be sufficiently dissatisfied with the status quo, right? And so when you get a lot of programming language inventors or platform inventors together, you end up with a lot of contrarian opinions. And yeah, I think I need to borrow that bike shed emoji.
+你在这里关注的重点错了。是的，是的。这太棒了。我注意到，嗯，你知道，发明一个完整的框架、库甚至编程语言需要某种特定的人格。所以你必须对现状足够不满，对吧？因此，当你把许多编程语言发明者或平台发明者聚集在一起时，最终会产生很多反主流的观点。是的，我想我需要借用那个自行车棚的表情符号。
+
+103
+01:01:52.000 --> 01:02:11.000
+Yeah, it's true. You can have too many divas or I don't know what the right word is. Yeah. So tell us about your podcast. So it's co-recursive. Do you, is it purely recursive programming or is it just, is it more general? What's the sort of topic?
+是的，确实如此。你可能会有太多的“天后”或者我不知道该用什么词来形容。是的。那么给我们介绍一下你的播客吧。它是叫“Co-recursive”（共递归）吗？它是纯粹关于递归编程的，还是更广泛一些？主题大概是什么？
+
+104
+01:02:11.000 --> 01:02:43.000
+So it is not purely about recursion. So the show is an interview format. And so it is a software development podcast. And if I'm curious about a subject, say, similar to this episode, or if I want to know about TensorFlow or some new programming language, I find an expert in that area and bring them on and kind of have them explain that area to me. And I ask questions and I'm hopefully not afraid to say,
+它并不完全是关于递归的。这个节目是访谈形式的，是一个软件开发播客。如果我对某个主题感到好奇，比如类似于这一集，或者如果我想了解 TensorFlow 或某种新的编程语言，我会找到该领域的专家，邀请他们上节目，让他们为我讲解那个领域。我会提出问题，而且我希望自己不害怕说，
+
+105
+01:02:43.000 --> 01:03:34.000
+like, I don't understand. Could you explain that again? And so that is the format. It's kind of a deep dive onto a technical area, an interview at a time. There's been a lot of shows on areas of functional programming, shows on building your own programming language, shows on Rust, incident response, kind of a wide swath of topics. But I just picked the name because, well, a co-recursive function is something that kind of produces a stream of values. So it's kind of like a pun in that I'm producing a stream of episodes. But really, it's just the name that's distinctive distinctive so what inspired you to get into podcasting um so i was uh listening to a lot of tech podcasts and i i thought that there was
+比如，“我不明白，你能再解释一遍吗？”这就是节目的形式。它有点像对某个技术领域的深度挖掘，一次访谈一个主题。节目涵盖了很多函数式编程、构建自己的编程语言、Rust、事件响应等领域，主题非常广泛。我之所以选这个名字，是因为共递归函数是一种能产生一系列值的函数。所以这就像是一个双关语，因为我正在制作一系列的剧集。但实际上，这只是一个独特的名字。那么是什么启发你开始做播客的呢？嗯，我当时在听很多技术播客，我觉得有
+
+106
+01:03:34.000 --> 01:04:16.000
+certain topics that i would love to have covered that i didn't really see being covered and originally i reached out to this podcast se daily to see if he would cover some of these topics and he said well why don't you try like just doing guest hosting for the show and uh i did that once or twice and then i just found that it's a lot of fun um like i like to be able to talk to people about software and so uh yeah can't can't stop now oh that's awesome i'll have to make you a trade and i think i can come on your show if you want to talk about any machine learning stuff that would be awesome cool and can people catch you on uh like what sort of social media are you uh you know most
+一些我非常想听的主题，但我并没有看到有人在讲。最初我联系了“Software Engineering Daily”这个播客，看看他是否愿意涵盖这些主题，他说：“那你为什么不尝试为节目做客座主持呢？”我做了一两次，然后发现这真的很有趣。我喜欢和人们谈论软件，所以，是的，现在停不下来了。哦，那太棒了。我得和你做个交易，如果你想谈论任何机器学习方面的内容，我可以上你的节目。那太棒了。酷。人们可以在什么样的社交媒体上找到你？你最
+
+107
+01:04:16.000 --> 01:05:07.000
+prevalent on yeah so definitely you know check out the podcast at co-recursive.com uh if you you know google adam gordon bell you'll find me i'm on twitter at at adam gordon bell and also at co-recursive and uh yeah cool so if people want to reach out to you they uh do you support uh dms on twitter or should they email you through the website how can people get a hold of you yeah you can You can DM me through Twitter. You can email me, uh, Adam at co-recursive.com and, uh, yeah, check out the podcast. I think it's super interesting. If you liked this episode, uh, and you need more podcasts, I think it's probably a good fit. Cool. Yeah. I mean, we, uh, we get a lot of people saying, Hey, why don't you do more episodes? Um, um, but, uh, but you know, I think that there's, there's a lot of really good producers
+活跃在哪里？是的，一定要去 co-recursive.com 查看我的播客。如果你在谷歌上搜索 Adam Gordon Bell，就能找到我。我在 Twitter 上的账号是 @adamgordonbell，还有 @corecursive。是的，酷。如果人们想联系你，你支持 Twitter 私信吗？还是应该通过网站给发邮件？人们怎么联系你？是的，你可以通过 Twitter 私信我。你也可以给我发邮件，地址是 adam@co-recursive.com。是的，去看看那个播客吧。我觉得它非常有意思。如果你喜欢这一集，并且需要更多的播客，我觉得它应该很适合你。酷。是的，我的意思是，我们收到很多人说：“嘿，你们为什么不多做几集？”但是，你知道，我觉得有很多非常优秀的制作人
+
+108
+01:05:07.000 --> 01:05:37.000
+out there creating a lot of great content. And, and Patrick and I also have a lot of kids. So one episode a month. And, and, and yeah, if you're interested in knowing more about really a lot of these topics that, you know, that we're all interested in, but especially recursion, functional programming, things like that. Adam does this literally every day. He's very passionate about it. You should check out his podcast and hit him up on Twitter.
+在外面创作了很多很棒的内容。而且，Patrick 和我都有很多孩子。所以我们一个月出一集。是的，如果你有兴趣了解更多关于我们大家都感兴趣的这些主题，特别是递归、函数式编程之类的内容，Adam 每天都在做这些。他对此非常有热情。你应该去看看他的播客，并在 Twitter 上联系他。
+
+109
+01:05:37.000 --> 01:05:51.000
+All right. So thanks a lot for coming on the show, Adam. I really appreciate it. This is an awesome episode. I think we really dove deep on functional programming if people still have questions don't hesitate to email us you can also ping Adam you can email both of us
+好的。非常感谢你来到我们的节目，Adam。我真的很感激。这一集太棒了。我觉得我们真的深入探讨了函数式编程。如果大家还有问题，请随时给我们发邮件。你也可以联系 Adam，你可以给我们俩发邮件。
+
+110
+01:05:51.000 --> 01:06:27.000
+but I think we will hopefully we cleared up you know a lot of the mystery around functional programming because it is something that's really difficult to dive into yeah this was a lot of fun thank you so much. The intro music is Axo by BinarPilot. Programming Throwdown is distributed under a Creative Commons Attribution ShareAlike 2.0 license. You're free to share, copy, distribute, transmit the work, to remix, adapt the work,
+但我希望我们已经解开了关于函数式编程的许多谜团，因为它确实是一个很难深入研究的领域。是的，这真的很有趣，非常感谢。片头音乐是 BinarPilot 的《Axo》。《Programming Throwdown》是在知识共享署名-相同方式共享 2.0 许可协议下发布的。你可以自由分享、复制、分发、传输作品，以及重新混合、改编作品，
+
+111
+01:06:27.000 --> 01:06:32.000
+but you must provide attribution to Patrick and I and sharealike in kind. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+但你必须注明我和 Patrick 的署名，并以相同方式共享。这一集目前还没有评论。点击转录稿中的任何句子即可发表评论。

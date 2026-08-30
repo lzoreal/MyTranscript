@@ -1,0 +1,646 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:57.000
+programming throwdown episode 94 search at etsy take it away jason hey everybody we have a pretty awesome episode here we have an interview episode with Liang Ji, who's Director of Engineering, Data Science, and Machine Learning at Etsy. And Liang Ji's going to tell us all about kind of how search works when you type a search query into that box, what actually happens under the hood. Liang Ji, why don't you talk about, like introduce yourself and talk about kind of what led you to the path that took you to where you are now? Yeah, sure. First of all, thank you for having me here. So I'm Liangji Hong. I'm a director of engineering, data science, and machine learning here at Etsy.
+Programming Throwdown 第94期，Etsy 搜索专题。Jason，交给你了。大家好，我们这期节目非常棒，我们采访了 Etsy 数据科学与机器学习工程总监梁吉（Liang Ji）。梁吉将为我们详细介绍当你输入搜索词时，搜索功能是如何运作的，以及幕后到底发生了什么。梁吉，不如你先介绍一下自己，并谈谈是什么经历让你走到了今天的位置？好的，没问题。首先，谢谢你们邀请我。我是梁吉·洪（Liangji Hong），目前在 Etsy 担任数据科学与机器学习工程总监。
+
+2
+00:00:57.000 --> 00:01:39.000
+So I'm managing the organization of applying machine learning to a lot of different products here at Etsy. So currently we have a mix of data scientists and machine learning engineers here at Etsy working on problems like search, which is kind of a major topic we are going to talk about today, as well as other domains like recommendations, advertising as well. We have engineers present in both our headquarter, New York City office, as well as San Francisco office, and we are hiring and growing teams there as well.
+我负责管理将机器学习应用于 Etsy 众多产品的团队。目前，Etsy 有一支由数据科学家和机器学习工程师组成的混合团队，致力于解决搜索（这是我们今天讨论的主要话题）以及推荐、广告等其他领域的问题。我们的工程师分布在纽约总部和旧金山办公室，我们也在这些地方招聘并扩大团队规模。
+
+3
+00:01:39.000 --> 00:02:28.000
+Before coming to Etsy in 2016, I worked in Yahoo Research in California. So I first joined as a research scientist and later as a senior research scientist and later promoted to managing a group of researchers focusing on personalization recommendation, as well as some of the mobile search innovations back then. So that is a path that lead me to figuring out how to best fulfill this, providing the most relevant result to users, and then find Etsy is a place that I can grow the team and grow my career. Yeah, so that's pretty much of that. Cool. That's quite a move.
+在 2016 年加入 Etsy 之前，我在加州的雅虎研究院工作。我最初是一名研究科学家，后来晋升为高级研究科学家，之后又负责管理一个专注于个性化推荐以及当时移动搜索创新的研究小组。那段经历让我找到了如何最好地满足用户需求、提供最相关结果的方法，后来我发现 Etsy 是一个我可以拓展团队并发展职业生涯的地方。是的，大概就是这样。酷，这真是个大动作。
+
+4
+00:02:28.000 --> 00:02:58.000
+I mean, that's probably the furthest move you can make, right? From Northern California to New York. I guess you could technically go from, I guess, Miami to Alaska or something, but that's still a pretty far move. Yeah, that's in the end, yeah. Cool. That's awesome. So kind of, you know, for someone who doesn't have a background in machine learning or in search and relevance,
+我的意思是，这可能是你能做的最远距离的搬迁了，对吧？从北加州到纽约。我想从技术上讲，你也可以从迈阿密搬到阿拉斯加之类的，但这仍然是一次相当遥远的搬迁。是的，最终确实如此。酷，太棒了。那么，对于那些没有机器学习或搜索与相关性背景的人来说，
+
+5
+00:02:58.000 --> 00:03:24.000
+what actually happens when someone types in, you know, new shoes in Etsy and hits enter? Like what actually happens behind the scenes? someone types in new shoes in Etsy and hits enter? What actually happens behind the scenes? Yeah, that's a great question. So a lot of things happen back in the scene and within that, I would say 100 milliseconds, we need to figure out how to present
+当有人在 Etsy 输入“新鞋”并按下回车键时，到底发生了什么？幕后究竟发生了什么？当有人在 Etsy 输入“新鞋”并按下回车键时，幕后究竟发生了什么？是的，这是一个很好的问题。在幕后，在那 100 毫秒内，我们需要弄清楚如何为你呈现
+
+6
+00:03:24.000 --> 00:03:56.000
+the best result for you. So I would vaguely, on a very high level, divide that into three phases. One is that we need to understand what is the user intent or what do you really mean to type a query like wedding dress or new shoes. So that is the first one, what we call query understanding, or user intent understanding. So then with that understood, we need to go to our inventory.
+最好的结果。我会非常笼统地将其分为三个阶段。第一，我们需要理解用户的意图，或者说你输入像“婚纱”或“新鞋”这样的查询词时，你真正想表达的是什么。这就是我们所说的查询理解或用户意图理解。理解了这一点后，我们需要去查看我们的库存。
+
+7
+00:03:56.000 --> 00:05:02.000
+We have more than 60 million items in our inventory so then we need to figure out how we can quickly boil down to you know around 1,000 items that seems promising from that inventory through search index after that you, we have roughly 1,000-ish candidates, and then we apply a sophisticated machinery model to re-rack that according to many things. For instance, how likely you are going to click on that, how likely you are going to buy that, and so forth, and mixing a lot of signals to get the best result, let's say the best top 48 result, which is the first page. So then we apply additional kind of business rules or ideas, say, hey, you know, there
+我们的库存中有超过 6000 万件商品，因此我们需要弄清楚如何通过搜索索引，迅速将范围缩小到大约 1000 件看起来有希望的商品。在那之后，我们大约有 1000 个候选结果，然后我们应用复杂的机器学习模型，根据许多因素对它们进行重新排序。例如，你点击它的可能性、购买它的可能性等等，并将许多信号混合在一起，以获得最佳结果，比如前 48 个结果，也就是第一页。然后，我们应用额外的业务规则或想法，比如，嘿，你知道
+
+8
+00:05:02.000 --> 00:05:35.000
+are certain things are free shipping, or there's certain things are in some promotion. So then we would like to pop them up further up. So then we'll apply that. So then we present the final result to the users. So everything I just described should happen within 100-ish kind of millisecond and really provide us a very speedy result to users. Yeah, that's amazing. So going through that kind of line by line,
+有些商品是免运费的，或者有些商品正在促销。那么我们希望把它们排在前面。所以我们会应用这些规则。然后我们将最终结果呈现给用户。我刚才描述的一切都应该在 100 毫秒左右完成，并真正为用户提供非常快速的结果。是的，这太神奇了。那么，逐行分析一下，
+
+9
+00:05:35.000 --> 00:06:07.000
+so what do you mean by intent? So what are the different intents that someone has on something like Etsy? Yeah, that's also a great question. So intent or core understanding, basically, we want to understand what are you really looking for. And, you know, like the users would like to use search for the things they have specific idea in mind. Oh, I want to buy a gift card for my mother.
+你所说的“意图”是什么意思？在 Etsy 这样的平台上，人们会有哪些不同的意图？是的，这也是一个很好的问题。所以意图或核心理解，基本上就是我们想了解你到底在寻找什么。而且，你知道，用户使用搜索是因为他们心中有具体的想法。哦，我想给妈妈买一张礼品卡。
+
+10
+00:06:07.000 --> 00:07:05.000
+I want to purchase certain things for my wedding. All the way to a very strong shopping intent or shopping ideas such that we can help them quickly on their purchase path or they are in some kind of discovery mode where they don't know exactly what they are looking for, but they have some vague ideas. So in that scenario, how we could help them in discovery mode as well. So shopping intent is a way we kind of categorize like how strong, how weak your intent or your ideas are and so forth. We provide a different kind of mechanisms to surface different items and so forth.
+我想为我的婚礼购买某些东西。这涵盖了从非常强烈的购物意图或购物想法（我们可以帮助他们快速完成购买路径），到某种发现模式（他们不确定自己在找什么，但有一些模糊的想法）。在那种情况下，我们如何帮助他们进行发现模式。所以购物意图是我们用来分类你意图或想法强弱的一种方式。我们提供不同的机制来展示不同的商品等等。
+
+11
+00:07:05.000 --> 00:07:32.000
+Yeah, that makes sense. I think there's a huge difference between searching for something specific like iPhone 16 gigabyte versus putting something in like funny. If you put in funny, you don't really want something with funny in the title. I mean, that's not the requirement. Right. How do you know that? So in other words, how can you tell, like what sort of happens maybe in advance?
+是的，这很有道理。我认为搜索像“iPhone 16GB”这样具体的东西，和输入像“有趣”这样的词之间有巨大的区别。如果你输入“有趣”，你并不真的想要标题里带有“有趣”这个词的东西。我的意思是，那不是要求。对。你怎么知道这一点？换句话说，你是怎么判断的，或者说提前发生了什么？
+
+12
+00:07:32.000 --> 00:08:25.000
+Like what sort of processing can you do to figure out, okay, these words correspond to something very specific, and these other words are just abstractions or generalities. Yeah, that's probably the core of the challenge of e-commerce search in general. I mean, Etsy is definitely specifically one such example. So comparing to generic search, like generic web search, specifically like Google, Bing, or in the past, Yahoo, where I worked in the past. E-commerce search, there is a tremendous of ambiguity and also personalization in terms of that. There is no kind of a standard ground truth of relevance, so to speak.
+你可以进行什么样的处理来弄清楚，好的，这些词对应于非常具体的东西，而其他词只是抽象或概括。是的，这可能是电子商务搜索面临的核心挑战。我的意思是，Etsy 绝对是一个具体的例子。与通用搜索（如谷歌、必应，或者我过去工作的雅虎）相比，电子商务搜索存在巨大的歧义和个性化问题。可以说，没有所谓的标准相关性基准。
+
+13
+00:08:25.000 --> 00:08:51.000
+So a lot of things we are trying to figure out is what the people are looking for and what kind of thing they would like to buy now, what kind of thing they would like to buy in six months down the line. And how do we define relevance, quote unquote relevance on top of that so that is definitely you know one of the challenges that we are facing and
+所以我们试图弄清楚的很多事情是人们在寻找什么，他们现在想买什么样的东西，以及六个月后他们想买什么样的东西。在此基础上，我们如何定义相关性（所谓的“相关性”），这绝对是我们面临的挑战之一，而且
+
+14
+00:08:51.000 --> 00:09:33.000
+where I think you know in my opinion we're at the very early stage FC is part of that but I think in general in the e-commerce search if you try things in numbers and others you can easily see easily see the search experience is not there yet. We are not at the stage where we can easily figure out all these intents in the current technology framework. Yeah, that makes sense. I mean, my guess is there would be just a very wide distribution over something like funny. So if someone puts in iPhone 16 gigabyte, and I guess I'm using Amazon as an example here,
+在我看来，我们还处于非常早期的阶段。Etsy 是其中的一部分，但我认为总的来说，在电子商务搜索中，如果你在其他地方尝试搜索，你可以很容易地看出搜索体验还不够好。在当前的技术框架下，我们还没有达到可以轻松弄清楚所有这些意图的阶段。是的，这很有道理。我的猜测是，像“有趣”这样的词会有非常广泛的分布。所以如果有人输入“iPhone 16GB”，我想这里以亚马逊为例，
+
+15
+00:09:33.000 --> 00:10:07.000
+they're going to look for exactly that iPhone, they're going to buy it, and the precision is going to be pretty high. But if someone puts funny, there's probably a huge distribution of of of content that people will will visit based on that search and from that you can kind of guess that okay funny is one of these things that isn't tied to any particular product yeah so this is a great example right so like that would uh really differentiate uh you versus Amazon to some degree because for Amazon,
+他们会寻找那款确切的 iPhone，他们会买下它，精度会非常高。但如果有人输入“有趣”，基于该搜索，人们会访问的内容分布可能非常巨大，从中你可以猜到，好的，“有趣”是这些不与任何特定产品挂钩的东西之一。是的，这是一个很好的例子，对吧？所以这在某种程度上确实会将你与亚马逊区分开来，因为对于亚马逊来说，
+
+16
+00:10:07.000 --> 00:10:23.000
+iPhone 64 gigabyte or iPhone 11 Pro is kind of a standardized kind of commodity if you wish. So there is a standard answer to that and to some degree there is one source of truth
+“iPhone 64GB”或“iPhone 11 Pro”是一种标准化的商品。所以有一个标准的答案，在某种程度上，亚马逊提供的大量商品都有一个单一的事实来源。然而，我们是一个独特的全球商品市场。所以有很多东西我们可以量化为“有趣”。有很多东西我们可以量化为“适合送给妈妈的礼物”。所以没有标准答案。至少很难说有一个标准答案。
+
+17
+00:10:23.000 --> 00:10:56.000
+of a wide range of the things Amazon is offering. At the Harvard, we are the global marketplace for unique goods. So there's a lot of things we can quantify as funny. There's a lot of things we can quantify as could be appropriate for a gift for your mother. So there is no standard answer. So it's at least very hard to say there is a standard answer.
+所以我们严重依赖用户数据、用户行为，来弄清楚你可能在寻找什么好的东西，以及你目前不感兴趣的东西。这就是我们与亚马逊那种商品化电子商务搜索相比所面临的挑战之一。是的，这很有道理。那么在这种情况下，你已经弄清楚了意图。假设此人有一些具体的购物意图，并且他们输入了几个关键词，但并不是那么具体，我们不能直接把他们带到那款 iPhone。它是像“给妈妈的心形吊坠”之类的东西。然后你说下一步是你从 1700 万的库存中
+
+18
+00:10:56.000 --> 00:11:46.000
+So we heavily rely on user data, user behavior, and figure out what is a good thing you might be looking for and what is a thing that you feel you don't have interest in for the moment. So that is one of the challenges we have versus Amazon's kind of commodity e-commerce search. Yeah, that makes sense. So in this case, you've figured out the intent. Let's say the person has some specific shopping intent and they've put in a couple of keywords, but it's not something so specific. We can just take them right to that iPhone. It's something like, you know, heart pendant for mom or something like that. And then you said the next step is you take your inventory of I think 17
+缩小到 1000 个候选者。这实际上是如何运作的，这个过程是什么样的？是的，我们获取商品，然后，抱歉，我们获取查询词，对吧？然后我们将其转化为某种意图，然后在我们的搜索索引中匹配这些东西。以一种非常非常天真的方式，你可以认为，至少我们匹配查询词，好的，“有趣”，或者我们弄清楚了，好的，“有趣”，在圣诞节期间。所以我们也把“圣诞节”、“有趣”发送到后端。然后我们匹配与圣诞节和有趣相关的商品。
+
+19
+00:11:46.000 --> 00:12:38.000
+million and you narrow it down to a thousand candidates. How does that actually work and what is that process like? Yeah, so we take the item and we, you know, sorry, we take the query, right? So then we translate to some intent, and then we match those things in our search index. In a very, very naive way, you can think, at least we match with query, okay, funny, or we figured, okay, funny, which during period of time of, let's say, Christmas time period. So then we also send Christmas funny into the backend. So then we match things related to Christmas and related to funny.
+基本上我们有一个倒排索引，可以匹配这些词或这些意图或类别，然后我们有一些非常基础的评分，基本上代表了这些商品有多大可能，或者说有多受欢迎，或者你有多感兴趣，这样我们对它们进行排序，并挑选出前 1000 个。然后我们返回到第二阶段。明白了。那么，对于那些从未上过数据库课程的人，你能描述一下吗？我们有成千上万的听众是高中生或刚上大学。什么是倒排索引，它如何让你在不到
+
+20
+00:12:38.000 --> 00:13:26.000
+So basically we have an inverted index that we could match these terms or these kind of intent or categories and then we have some very rudimentary scores that basically representing how likely or how you know how popular or how you know how interested these items are so that we sort them and we pick the top, let's say 1,000. Then we return to the second phase. Got it. So could you describe, for folks who have never taken, say, a database class, we have plenty of thousands of people listening who are high school students or just starting college. What is an inverted index and how does that let you go through all 17 million of these items in less
+100 毫秒内遍历所有 1700 万件商品？是的，这是一个很好的问题。倒排索引，基本上你可以认为，你知道，你拥有键作为非常天真、简单的词，对吧？所以“有趣”是一个词，“圣诞节”是另一个词。所以我们构建这些键，然后我们将每个键
+
+21
+00:13:26.000 --> 00:13:53.000
+than 100 milliseconds? Yeah, that's a great question. So inverted index, basically you can think that is like, you know, you have the keys as you know, very naive, simplistic terms, right? So like funny is one term, Christmas is another term. So we build these keys and then we associate each key
+与产品列表关联起来。在我们的例子中，每个列表，每个商品，每个商品 ID 都是一个这样的值。所以我们说，嘿，“有趣”这个词，商品 ID 260、40 等等。这 200 万件商品都有“有趣”这个词。所以我们将这些商品与该键关联起来。
+
+22
+00:13:53.000 --> 00:14:27.000
+with a list of product listings. In our case, like each listing, each item is one, each item ID is one such kind of value. So then we say, hey, funding term, item ID 260, 40, and blah, blah, and so forth. These two million items have a campaign term funding. So then we associate these items with that key.
+然后我们应用某种机制来排序。我们说，嘿，对于这个“有趣”的词，对于所有商品，有些商品似乎比其他商品更重要。所以我们构建这种键值对的关联。我们为所有的词、所有的意图、所有的类别构建索引。所以你可以想象这是一个巨大的键值映射。然后当我们进行检索时，我们基本上进入这些键，说，好的，我们要命中多少个键？
+
+23
+00:14:27.000 --> 00:15:05.000
+And then we apply certain mechanism to sort that. We say, hey, you know, for this funny term, for all the items, you know, there are certain items seems more important than the others. So then we build this key value kind of pair of associations. and we build for all the terms, all the intents, all the categories. So then you can imagine it's a huge kind of a key value kind of a, you know, mapping. And then when we do the retrieval, we basically, you know, go to the keys and say, okay, how many keys we're going to hit?
+然后我们取回每个键的前几名商品，然后我们将它们混合在一起。然后我们说，嘿，我们要应用这个受欢迎程度或兴趣评分，然后我们对它们进行排名。所以这基本上就是倒排索引如何工作的高层描述。明白了。明白了。所以这个想法是，对于每一个，有人输入“给妈妈的有趣鞋子”，而“有趣”、“鞋子”和“妈妈”，它们都在这个数据库中，有一组文档，
+
+24
+00:15:05.000 --> 00:15:42.000
+And, you know, then we get back the top items for each key, then we blend them, right, we mix them together. And then we say, hey, you know, we want to apply this popularity or interest score, and then we rank them. So that's basically the very, very high level describing how the inverted index works. Got it. Got it. So the idea is like for every, so someone types in, you know, funny shoes for mom, and funny shoes and mom, they all are in this database with a set of documents that are
+或多或少与这些词中的每一个相关。然后你可以做的是取所有这些文档的并集，然后以某种方式组合分数，你可以把它们压缩成一个分数。所以如果有一个文档里有“有趣”、“鞋子”和“妈妈”，那么你可以把所有这些分数加起来，或者以某种方式组合分数；如果有一个文档里只有“妈妈”，也许它不会得分那么高，因为它没有其他的词。是的，在某种程度上是的，这在很大程度上就是所发生的事情。酷，这很有道理。你们是否在做任何关于嵌入（embeddings）的工作来处理，例如，有人输入“鞋子”，也许有这个产品，但它是“靴子”，但你可以使用某种数学嵌入，某种向量空间，其中“鞋子”和“靴子”非常接近。是的，这是我们正在积极研究的一个领域。今年早些时候，我们发表了一篇论文，关于我们应用嵌入技术并构建相似性，
+
+25
+00:15:42.000 --> 00:16:17.000
+more or less relevant to each of those words. And then what you could do is you can take the union of all of these documents and then combine the scores in some way where you can kind of crush it down into one score. So if there was a document that had funny shoes and mom in it, then you could add up all those scores or in some way you could combine the scores if there's a document that only had mom in it maybe you wouldn't it wouldn't score as highly because it didn't have the other ones yeah to some degree yes that's a pretty much on a
+试图理解商品之间的相似性。正如你所说，有些东西，你不知道确切的关键词，但它们或多或少对应于相同的概念或相同的意图。所以我们利用嵌入技术来平滑商品，这样即使你没有完全匹配，我们仍然
+
+26
+00:16:17.000 --> 00:17:00.000
+very high level with what happens cool that makes sense is there any sort of are you doing any work with embeddings or anything like that to handle, like, for example, someone types shoes and maybe there's this product, but it's boots, but then you could use some sort of mathematical embedding, some vector space where shoes and boots are really close together. Yeah, this is an area that we are actively investigating. And earlier this year, we published a paper regarding, like, we apply, you know, embedding techniques and building the similarity,
+能得到可能与查询相关的商品。所以这也是我们保持密切关注的一个领域，即如何在我们的搜索统计中进一步利用这一点。酷，这很有道理。那么这 1000 个商品，我想现在你有资源去做更多的事情，
+
+27
+00:17:00.000 --> 00:17:28.000
+you know, trying to understand the similarities between items. And exactly like you say, say, there are certain things, you don't know exactly the keywords, but they more or less correspond to the same concepts or same kind of intent. So then we utilize embedding techniques to smooth out the items such that even though you don't have exactly matching, we still
+我们无法对 1700 万个商品做这些工作。这就是你所说的所有这些业务逻辑发挥作用的地方。所以你有这些假设，你有这些模型生成假设，比如“这个人会买吗”，我相信你说过“这个人会点击它吗”。但是，当有这么多不同的东西都有价值时，你如何进行排序？是的，这是一个很好的问题。这也是电子商务搜索或电子商务的核心挑战之一。所以我认为这个问题有两个层面。一个是短期，一个是长期。短期来看，我们至少，对于 Etsy 来说，
+
+28
+00:17:28.000 --> 00:17:54.000
+get items that are possibly relevant to the query. And so this is one area that we also keep a very active eye on how to utilize this further in our search stats. Cool. That makes sense. So then these thousand items, I guess now you have the resources to say, let's do a lot more work with these thousand items
+我们有一个业务目标和我们想要推动的业务指标，包括搜索，这被称为广义商品价值（GMV），以及广告收入。所以我们基本上用它作为北极星，来指导我们需要构建什么样的模型，我们需要应用什么样的排序机制。我们也用它作为指导，来推导机器学习流水线和评估框架。所以你可以认为，如何排序，如何加权，比如点击多一点，收藏多一点。如何加权你没有点击任何东西，你在这个网站上花了多少时间。所有这些都是参数。
+
+29
+00:17:54.000 --> 00:18:22.000
+that we couldn't do with the 17 million. And that's where, as you said, all of this sort of business logic comes in. So you have these sort of hypothetical, you have these models that generate hypotheticals like will the person i believe you said like will the person buy it will they click on it um but then how do you sort of take you know there's this thing is highly multi-modal right so someone can do all these different things um they might spend a lot of time looking at
+我们正在寻求，理想情况下，最优的参数设置，以优化我们的北极星指标，即 GMV。然后我们启动 A/B 测试，对吧？我们启动 A/B 测试，并在真实流量、真实用户上衡量模型，然后我们看到，哦，这个模型确实优于对照组，
+
+30
+00:18:22.000 --> 00:19:01.000
+something and they might spend a little bit of time but then buy it. How do you, at the end of the day, sort when there's so many different things that have value? Yeah, that's a great question. And also it's another core of the challenges of e-commerce search or e-commerce in general. So I think, you know, this question has two layers. You know, one is short-term and long-term. The other is long-term. So short-term-wise, we have at least, you know, for Etsy,
+对照组可能是使用旧版本的模型，或者有时根本不使用模型。然后 A/B 测试产生了真正的差异，比如，嘿，在这两周的 A/B 测试中，比如有 100 万美元或 200 万美元，这些是真实的美元，是对照环境之间的差异。所以我们可以得出结论，嘿，无论这个参数设置是什么，我们通过一些在北极星指标方面表现良好的候选者弄清楚了。
+
+31
+00:19:01.000 --> 00:20:08.000
+we have a business goal and we're business metrics we would like to drive for a lot of our products, including search, which is called generalized merchandise value, GMV, and also for revenue for advertising as well. So we basically use that as a north star to kind of guide us like what kind of a model we need to build, what kind of, in your knowledge of what sorting mechanism we need to apply. And we also use that as a guidance for us to derive, you know, machine learning pipelines and evaluation kind of a framework. So you can think that, you know, how to sort, how to way, let's say, clicks a little bit more, favorite a little bit more. How to way that you don't click anything, you know, you spend how much time on the site. All these are the parameters.
+所以这是我们正在做的短期事情。我们将其应用于搜索、推荐等各个方面。但当然还有一个挑战，因为你可以说，当然，这听起来很合理，但有顾客来到 Etsy，他们只是想进行发现，他们可能在这两周内不会购买任何东西。那么他们是否仍然对业务目标做出了贡献？我们如何评估？是的，我刚才就在想这个问题。
+
+32
+00:20:08.000 --> 00:20:43.000
+And we are seeking, I mean, ideally, the optimal parameter setting such that we optimize this, you know, our North Star metric, which is GMV, or GM, you know, generalized merchandise value. And then we launch A-B testing, right? So we're launching, like, you know, generalized merchandise value. And then we launched A-B testing, right? So we're launching A-B testing and we measure the model of real traffic, of real users, and then we see, oh, this model indeed outperformed the control,
+如果你做一个为期两周的实验，每两周至少来一次 Etsy 的人都会被代表。但在来的人中，如果有人每四周来一次，他们有 50% 的机会甚至不会出现在数据集中。对，对。所以这是挑战之一，即我们需要弄清楚长期价值。
+
+33
+00:20:43.000 --> 00:21:22.000
+which is maybe using the older version of the model or maybe sometimes not using the model at all. And then there's a real difference from the A-B testing, say, hey, within these two weeks of time we do the A-B testing, let's say there's $1 million or $2 million, these are real dollars, the difference between the control environment. So then we could conclude, say, hey, we are, whatever this premise set up, we kind of figure out through some of the candidates that are really doing good in terms of our non-star metric.
+长期意味着比 A/B 测试的时间段更长。那有什么价值？这通常是我们所说的长期客户价值（LTV），我们需要评估和调查我们的算法对 LTV 的影响。有时比两周长，有时是六个月，甚至有时我们想了解一年，非常长期，价值是什么，我们甚至如何优化我们的模型以实现长期价值。
+
+34
+00:21:22.000 --> 00:21:55.000
+So this is a short-term kind of thing we are doing. And we apply this across the board for search for our recommendations and so forth. But then of course there's one more challenge because you could say, sure, this sounds reasonable, but there are customers come to Etsy, they just want to do discovery, they may not purchase anything within these two weeks of period time. So are they still contributing to the business goal? How do we evaluate? Yeah, I was actually just thinking that.
+所以我认为这是更大的挑战，也是正在进行的工作。但在高层面上，我们通过启动实验，通过指导机器学习模型，利用 GMV 作为目标，来弄清楚短期的情况。是的，这很有道理。是的，我认为长期价值的东西
+
+35
+00:21:55.000 --> 00:22:16.000
+If you do a two-week experiment, everyone who comes to Etsy at least once every two weeks will be represented. But of the people who come, if someone comes once every four weeks, there's a 50-50 chance they won't even be in the data set. Right, right. So that is one of the challenges, which is, okay, so we need to figure out the long-term value.
+非常迷人，因为它几乎必须是反事实的。换句话说，要么是这样，要么你需要进行运行时间极长的实验，才能真正看到，好的，我做了这个改变，它以这种方式影响了长期价值。你要么必须等待很长时间，要么必须进行一些非常聪明的分析。是的，这是一个很好的观点。事实上，我们正在考虑这一点。所以 A，我们确实在进行一些更长时间的实验，以衡量我们推出的很多东西的影响，特别是聚合的影响。我们这周推出一个东西，下周推出另一个，它们每个都有一个大测试，但它们是否聚合，加起来对整体产生影响等等。所以我们正在做很多长期实验。但当然我们也需要分析，因为有些事情我们真的无法进行实验。例如运行多年，运行多个季度，或者有些事情，有业务需求等。我们无法进行实验。所以当然我们需要做很多反事实的分析研究来衡量影响。酷。是的，这真的很迷人。所以
+
+36
+00:22:16.000 --> 00:22:54.000
+Long-term meaning like longer than A-B testing time period. So what's the value of that? That's usually we call long-term customer value, LTV in some sense, that we need to assess and investigate what is the impact of our algorithms with LTV. Sometimes longer than two weeks or sometimes six months, or even sometimes we want to understand for one year, very long term, what is the value and how can we even optimize our model towards long term value.
+现在我们进行排名，然后我想在那一点上，排名，是的，排名后的商品列表会返回给请求者。所以我想这会是一个 Web 请求，它会发送到另一个服务器，我想，它会处理前端流量。是的，所以我们可以将其概念化为前端，作为 PHP 层或 iOS 或 Android 或应用程序，将该东西发送到后端服务器。然后，在这个后端服务器内，我们合成并组合我刚才提到的倒排索引的结果。
+
+37
+00:22:54.000 --> 00:23:19.000
+So that is more larger challenges and more working progress, I would say. But in the very high level, we figure out for the short term in terms of launching experiments, in terms of guiding machinery models, utilizing GMOV as a target. Yeah, that makes sense. That makes sense. Yeah, I think that the long-term value stuff
+然后我们应用所有这些机器学习算法来优化 GMV。然后我们还应用额外的业务规则，正如我提到的，比如，嘿，我们可能想推广免运费商品，我们想推广其他类型的商品，比如营销活动想展示的商品，然后这些结果会返回到前端层，比如 PHP 或 iOS，然后他们会以他们需要的任何格式渲染这些结果。明白了。我们刚刚在上一期节目中邀请了《程序员修炼之道》的 Andy 和 Dave。
+
+38
+00:23:19.000 --> 00:23:59.000
+is fascinating because it almost has to be counterfactual. In other words, either that or you need to have experiments that run for an extremely long time to really see, okay, I took this, I made this change, and it affected the long-term value in this way. You either have to wait a long time, or you have to do some really clever analysis. Yeah, that's a great point. And in fact, we're thinking about that. So A, we are indeed running some of the longer experiments to measure the impact of a lot
+他们给工程师的一个建议是，如果你只懂一种语言，或者你的整个工作只是用一种语言，那就学习另一种语言。这是他们的大建议之一。听起来从你描述的情况来看，即使我们去掉应用程序和网站设计，即使是这个后端过程也涉及许多不同的语言和技术。
+
+39
+00:23:59.000 --> 00:24:58.000
+of the things we roll out, especially aggregated. We roll out one thing this week and another thing next week and each of them have a big test, but do they aggregate, add up to the overall impact and so forth. So we are doing a lot of long-term experiments. But of course we need analysis as well because certain things we cannot really run experiments for. So for instance running for years, running for multiple corners, or there are certain things, there are business requirements, etc. We couldn't be able to run experiments. So then sure we need to do a lot of counterfactual, you know, preservation studies to style type of investigation to measure the impact. Cool. Yes, it's really fascinating. So
+绝对是。所以我们在 Etsy 使用各种各样的东西。与其他一些科技公司类似。所以我们有离线处理，我们在那里生成想法、验证想法、尝试编写机器学习算法等等。在那里我们利用 Hadoop 风格的技术，包括 Spark。我们也在 Google Cloud 上，所以我们也大量利用了 Google 的很多产品。然后我们有服务器，索引和我提到的任何后端服务器。在那里我们使用 Java、Scala 和其他语言来编写高效的代码，这样东西可以在一毫秒内返回。而在我们进行数据分析时，例如，当我们谈论反事实分析时，我们有数据科学家使用 RStudio 和 Python 来进行很多其他数据处理。
+
+40
+00:24:58.000 --> 00:25:48.000
+now we do the ranking, and then I guess at that point, the ranking, yeah, the ranked list of items goes back to whoever requested it. So I guess this would be a web request that would go to, it would probably go to some other server, I guess, that would handle the front-end traffic. Yeah, so like, you know, so we can sort of conceptualize this as a front-end, as a PHP layer or iOS or Android or apps, sending that thing to a backend server. And then, within this backend server, we synthesize and combine a result from the inverted index I just mentioned.
+所以团队正在使用各种工具和语言来提高生产力。酷。你觉得最缺乏的技能是什么？不一定是语言，但对于那些在大学里的人来说，有什么是大学没有教的，或者你觉得人们应该多加注意的？对，这是一个很好的话题。我认为总的来说，目前很多大学，顺便说一下，我偶尔会和纽约市的大学交流，比如哥伦比亚大学、纽约大学，他们正在提供数据科学和机器学习的学士或硕士课程。所以我有很多与教职员工、潜在学生的联系和互动。我认为目前很多这些课程，很多这些学位提供的，在技能层面，在语言或工具方面，确实正在跟上步伐。所以如果你想知道，比如 Python，如果你想知道 NumPy、SciPy，
+
+41
+00:25:48.000 --> 00:26:36.000
+And then we apply all this ML algorithm to optimize GMV if we wish. So then we also apply additional business rules, as I mentioned, like, hey, we want to maybe promote free shipping you know items we want to promote other sort of items that are kind of let's say marketing campaigns want to show so then those results would return to the front-end layer like PHP or you know or iOS and certain things, then they will rent those IP results in whatever the format they need to rent. Got it. We just had Andy and Dave from the Pragmatic Programmer on the show on the past episode.
+或者一些 TensorFlow，所有这些工具，好的，你可以通过充分理解这些工具，轻松地在课程中获得培训。我认为目前面临的挑战之一是，应用机器学习，将人工智能应用于很多产品领域，需要对该产品领域有深刻的理解，比如业务用例，以及你需要从端到端的角度看待一切。所以我们刚才谈到，好的，查询来了，我需要理解查询，我需要理解如何从索引中获取东西。我甚至需要理解什么是倒排索引。
+
+42
+00:26:36.000 --> 00:27:03.000
+And one of the things they were suggesting for engineers is they're saying, if you only know one language or if your whole job is just one language, learn another language. That was one of their big suggestions. And it sounds like from what you've described that even if we take away the app and the website design, that even this backend process involves many different languages and technologies.
+然后我需要理解为什么我们需要根据 GMV 对东西进行排名，而不是根据点击率或其他东西。所以理解那种整体的业务场景，并开始发展想法，发展直觉，我认为我们仍然需要大量的培训，并真正动手解决这些问题，并致力于这些事情。
+
+43
+00:27:03.000 --> 00:27:43.000
+Absolutely. So there is a variety of things we're using here at Etsy. I mean similar to some other tech companies as well. So we have offline you know processing which where we you know generating ideas, validating ideas, and trying to write imaginary algorithms and so on and so forth. So there we utilize Hadoop-style technologies, including Spark. We are also on Google Cloud, so we are also heavily utilizing a lot of offerings from
+粗略地说，我们过去两年里有几位硕士和博士水平的优秀毕业生加入我们的团队，粗略地说，他们在至少六到十个月甚至更长时间后才能跟上步伐，真正能够在该领域发挥作用。所以我认为在教育方面最缺乏的是这种差距，或者学生可以在哪里在很多现实世界的问题上获得更多实践，同时学习这些工具。是的，我完全同意。
+
+44
+00:27:43.000 --> 00:28:24.000
+Google as well. And then we have the servers, right? So server environment index and whatever this backend server I mentioned. There we use Java, we use Scala and other languages as well to write efficient code such that things can return within one or like a millisecond. And then other times when we do data analysis, for example, as we talk about counter-factual analysis, we have data scientists use RStudio and Python to do a lot of other data processing
+我认为推理总是被遗漏的部分。例如，你看到这么多机器学习训练营。他们会做的是，给你一组图像，然后带你通过 TensorFlow，说明这是猫还是狗。但你最终得到的是一个预测猫的概率、狗的概率的模型。但你并没有真正用它做任何事情。所以例如，我的意思是，这是一个有点牵强的例子。但如果你在一个方向上贴错了标签，比如你说
+
+45
+00:28:24.000 --> 00:29:08.000
+as well. So there is a variety of tools and languages that the teams are using to get it productive. Cool. What is the skill that you feel is most lacking? It doesn't have to be a language, but for folks out there who are in college, what is something that the universities aren't teaching per se, or something where you find it's something that people should pay more attention to? Right, that's a very good topic. I think in general, currently a lot of universities and by
+它是猫，但它是狗。假设没有人真的那么在意。但如果你在另一个方向上贴错了标签，你知道，人们就停止使用 Etsy 了。好吧，那就会极大地改变你基于这些概率所做的决定。所以即使你认为它是狗的概率是 1%，如果你说它是狗，而你错了，那会有巨大的后果，那么即使 99% 也不够好。另一方面，如果有人处于发现模式，也许你想展示
+
+46
+00:29:08.000 --> 00:29:56.000
+the way like you know I occasionally talk to university here at New York City like a Columbia University in your university they are offering you know bachelor bachelor program or master level program in data science and machine learning. So I have a lot of contacts and interactions with faculty, with prospective students and so forth. I think currently a lot of these programs, a lot of these degrees offering, I think, on the skill level, in terms of languages or in terms of tools, are really kind of getting up to speed. So if you want to know, let's say, Python, if you want to know, let's say, NumPy, SciPy,
+你没有把握的东西，几乎是故意的，因为你想了解更多。所以，是的，实际上用机器学习模型做事情并对发生的事情做出反应，那是我觉得完全被遗漏的部分。是的，绝对，我同意你的看法。我认为在 Etsy，我们使用机器学习，机器学习不是代码块技术。我们知道它们有现实世界的影响。所以推荐、搜索结果确实是
+
+47
+00:29:56.000 --> 00:30:46.000
+or some of the TensorFlow, all these tools, okay, you can get training and programs easily with a sufficient understanding of those tools. I think one of the challenges for the moment is that applying machine learning, applying AI to a lot of product domains requires a deep understanding of that product domain, like a business use case, as well as you're looking into everything from an end-to-end perspective. So we just talk about, okay, query coming, I need to understand the query, I need to understand how to get the things from the index. I even need to understand what inverted indexes are.
+呈现给数以百万计的客户，他们正在使用这些结果来决定他们要为父母买什么礼物，他们为他们的对手买什么东西等等。所以糟糕的推荐结果肯定会赶走那些用户，并产生非常真实的业务影响。这些东西不仅仅是准确率或精度方面的 1% 或 2% 的数字。我们一直在研究
+
+48
+00:30:46.000 --> 00:31:17.000
+And then I need to understand why we need to rank things according to GMV, not according to, let's say, the cliff rate or some other things. So understanding that holistic business kind of scenario and also start to develop ideas, to develop intuitions into that, I think we still require tremendous training and really get hands-on into those problems and work on those things.
+我们如何真正评估我们的结果，不仅仅是谈论准确率水平，而是人们是否真的满意？人们是否因为我们提供了更相关的结果而回到 Etsy 等等？是的，这很有道理。那么深入研究机器学习，所以你提到了那部分，
+
+49
+00:31:17.000 --> 00:32:04.000
+So roughly speaking, we have a couple of master level know master level and phd even phd level uh really good uh you know graduates join our teams in the past you know two years uh roughly speaking they you know they get up to speed after you know at least the six to ten mile if not even longer really being able to like you know get productive in the field so that's i I think the most lacking in terms of education piece is where this gap or where the students could get more hands-on in a lot of real-world problems, but at the same time studying those tools. Yeah, I totally, totally agree.
+你已经将其缩小到大约 1000 个候选者，你想知道，假设 1000 个候选者，你想知道某人点击其中一个候选者的概率，你是怎么知道的？所以我的意思是，模型里有什么，模型是怎么创建的？是的，这是一个挑战，或者众多挑战之一。简而言之，我们可以认为我们需要将其表述为监督学习问题的机器学习概念。通过监督，我们的意思是，我们有一个目标或指标，然后我们想使用该目标或指标来指导我们的模型训练或指导我们的模型学习
+
+50
+00:32:04.000 --> 00:32:46.000
+I think the reasoning is always the part that seems to be left off the table. Like, for example, you see so many of these machine learning boot camps. And what they'll do is they'll, you know, give you a set of images, and they'll walk you through in TensorFlow, how to say whether this is a cat or a dog. But then what you end up with is this model that predicts probability of cat, probability of dog. But you don't actually do anything with it. So for example, I mean, this is a bit of a contrived example. But if you mislabeled in one direction, like you said,
+过程，这样我们优化，在我们的例子中，最大化某些东西。现在在我们的例子中，我刚才提到的目标，我们可以认为它是 GMV 的一种形式，或者你可以赚多少钱，非常简单的方式，你可以认为它是我们将要获得的钱。这就是我们的目标。然后我们说我们为我们的每个商品形成属性或特征。所以我们收集信息，比如，哦，过去有多少人点击了这个东西？
+
+51
+00:32:46.000 --> 00:33:25.000
+it was a cat and it was a dog. Let's say hypothetically, nobody really cared that much. But if you mislabeled in the other direction, you know, people just stopped using Etsy. Well, then that massively changes, you know, the decisions that you should make based on those probabilities. So even if you think it's a 1% chance it's a dog, if you say dog and you're wrong and that has huge ramifications, then even 99% isn't good enough. On the flip side, if someone is, let's say, in discovery mode, maybe you want to show
+过去有多少人购买了这个东西？以及，你知道，这些人来自哪个地区，背景是什么，一天中的什么时间，或者一个月中的哪一周，这是圣诞节季节还是不是，对吧？所以有很多来自历史上这个商品表现好坏的信息，来自这个商品拥有的文本信息，比如标题、描述、评论等等，从尽可能多的其他数据源中，我们形成我们所说的这些属性和特征。
+
+52
+00:33:25.000 --> 00:34:00.000
+things that you're not confident about, almost on purpose, because you want to learn more. And so, yeah, actually doing things with the machine learning models and reacting to what happens, that's the part that I feel is completely left out. Yeah, absolutely, I think I agree with you. I think here at Etsy, we use machine learning and machine learning are not a code block technologies. We know that they have real-world impact. So recommendations, set results are really
+我们实际上正在收集数以百万计的这些属性。然后收集这些属性后，我们有了我们的目标，比如 GMV 或金钱，然后我们将这些问题的两面，对吧？特征或属性。这是一面。另一面是目标，交给通用的机器学习算法，比如逻辑回归、决策树。
+
+53
+00:34:00.000 --> 00:34:40.000
+presented to millions and millions of our customers, and they are using those results to determine what gifts they are going to buy for their parents, what things they get for their adversaries and so forth. So the battery recommendation result definitely would drive those users away and also have a very real business impact. Those things are not just 1% or 2% numbers in terms of accuracy or precision. We're constantly looking into
+呈现给数以百万计的客户，他们利用这些结果来决定为父母购买什么礼物，为对手准备什么东西等等。因此，电池推荐结果肯定会赶走这些用户，并产生非常实际的业务影响。这些不仅仅是准确率或精确度方面的1%或2%的数字。我们一直在研究
+
+54
+00:34:40.000 --> 00:35:00.000
+how are we really evaluating our results, not just talking about the accuracy level, but actually are people satisfied? Are people really returned to Etsy because we provide more relevant results and so forth? Yeah, that makes sense. So diving into the machine learning, so there's that part you mentioned
+我们如何真正评估我们的结果，不仅仅是谈论准确率，而是人们是否真的满意？人们是否因为我们提供了更相关的结果而真正回到Etsy等等？是的，这很有道理。那么深入探讨机器学习，你提到的那部分
+
+55
+00:35:00.000 --> 00:35:56.000
+where you've narrowed it down to about 1,000 candidates and you want to know, let's say, thousand candidates and you want to know let's say the probability someone's going to let's say click on one of these candidates like how do you actually know that so I mean kind of what what goes into the model how's the model you know created yeah so that's a you know that's definitely challenge, or one of the many challenges. So in a nutshell, we can think we need to formulate in a machine learning kind of concept of a supervised learning problem. By supervised, we mean that we have a target or a metric, then we want to use that target or metric to guide our model training or guide our model learning
+你已经将其缩小到大约1000个候选对象，你想知道，比如说，这1000个候选对象，你想知道某人点击其中一个候选对象的概率是多少，那么你实际上是如何知道的呢？我的意思是，模型中包含了什么，模型是如何创建的？是的，这是一个挑战，或者说是众多挑战之一。简而言之，我们可以认为我们需要将其表述为机器学习概念中的监督学习问题。所谓监督，是指我们有一个目标或指标，然后我们希望利用该目标或指标来指导我们的模型训练或指导我们的模型学习
+
+56
+00:35:56.000 --> 00:36:39.000
+process such that we optimize, in our case maximize certain things. Now in our case the target I just mentioned earlier, we can think that is a form of GMOV or how much money you can, very simplistic way you can think that is how much money we are going to gain. That is our target. And then we say we form attributes or features for each of our items. So then we gather information like, oh, in the past, how many people are clicking on this thing?
+过程，以便我们进行优化，在我们的案例中是最大化某些东西。在我们的案例中，我刚才提到的目标，我们可以认为它是商品交易总额（GMV）的一种形式，或者你可以赚多少钱，用非常简单的方式来理解，就是我们将获得多少钱。这就是我们的目标。然后我们说，我们为我们的每一件商品形成属性或特征。所以我们收集信息，比如，哦，在过去，有多少人点击了这个东西？
+
+57
+00:36:39.000 --> 00:37:23.000
+In the past, how many people are purchasing this thing? And how, you know, these people are from which region and what is the context which what time of day or what week of the month is this a Christmas season or not right so there's a lot of a lot of information from historically how good or how bad this item is performing, from text information that this item has, like title, description, reviews, and so on and so forth, from many other data sources as much as possible we could together, and we form what we call these attributes and features.
+在过去，有多少人购买了这个东西？以及，你知道，这些人来自哪个地区，背景是什么，比如一天中的什么时间，或者一个月中的哪一周，现在是不是圣诞节期间等等。所以有很多关于这个项目在历史上表现好坏的信息，来自这个项目所拥有的文本信息，比如标题、描述、评论等等，尽可能多地从其他数据源收集信息，我们形成了我们所说的这些属性和特征。
+
+58
+00:37:23.000 --> 00:38:00.000
+We are gathering literally millions and millions of these attributes. And then after gathering these attributes, and then we have our target, like, you know, the GMV or the money, then we give these, you know, two sides of the problem, right? So features or attributes. That's one side. Another side is target to generic machine learning algorithms, things like logistic regression, decision trees,
+我们实际上正在收集数以百万计的这些属性。在收集了这些属性之后，我们有了我们的目标，比如，你知道，GMV或金钱，然后我们将这些，你知道，问题的两个方面，对吧？所以特征或属性。这是一方面。另一方面是通用机器学习算法的目标，比如逻辑回归、决策树，
+
+59
+00:38:00.000 --> 00:38:51.000
+deep learning models, and so on and so forth. And let the model try to figure out what is the best you know the mechanism such that we can associate with we can associate you know features with the target then we learn that long get the model arm those are learning algorithms so this is this is a very high level how we figure out, you know, to rank things, to optimize our business metric. Cool. That makes sense. What about how do you sort of capture somebody's, you know, style? Like, for example, if I like blue shirts or let's say I don't like shirts with buttons, which is actually kind of true. I almost never try to wear things with buttons because I feel like I'll become a product manager if I wear too many shirts with buttons.
+深度学习模型等等。让模型去尝试找出最佳机制，这样我们就能将特征与目标关联起来，然后我们学习这些，让模型掌握这些，这些就是学习算法。所以，这就是我们如何找出对事物进行排序、优化业务指标的高层级方法。太酷了，这很有道理。那么，你们是如何捕捉某人的风格的呢？例如，如果我喜欢蓝色衬衫，或者假设我不喜欢带扣子的衬衫，这其实是真的。我几乎从不穿带扣子的衣服，因为我觉得如果我穿太多带扣子的衬衫，我就会变成产品经理。
+
+60
+00:38:51.000 --> 00:39:38.000
+How do you sort of capture, there's so many different contexts, so many different aspects to someone's style, and the information you have is kind of what they've looked at how can you sort of compose all of that to to figure out someone's style so next time someone types in blue shirt they get the the polo right so hey we need to understand right for each item what styles or what kind of styles each item is belong to. So that is step one. So there we have machine learning experts from my team
+你们是如何捕捉的？因为一个人的风格有太多不同的背景和方面，而你拥有的信息只是他们浏览过的内容，你如何将所有这些组合起来去弄清楚某人的风格，以便下次有人输入“蓝色衬衫”时，他们能得到马球衫呢？所以，嘿，我们需要理解每件商品属于什么风格或哪种风格。这是第一步。所以我们团队有机器学习专家，
+
+61
+00:39:38.000 --> 00:40:12.000
+and we also partner with domain experts inside Etsy. So then we come up with 43 styles to categorize all the listings, all the items here at Etsy. So then we develop basically machine learning classifiers that we can classify one of our 60 million items into those 43 styles. So then each listing you could think belong to this space of styles.
+我们也与 Etsy 内部的领域专家合作。然后我们提出了 43 种风格来对 Etsy 上的所有商品列表进行分类。接着，我们开发了机器学习分类器，可以将我们 6000 万件商品中的每一件分类到这 43 种风格中。这样，你就可以认为每个商品列表都属于这个风格空间。
+
+62
+00:40:12.000 --> 00:40:49.000
+And this might be 80% to mid-central modern and another thing belong to another styles. So we first get this information. Then we need to understand user preference. So as a user comes to the site, depending on their past behaviors, what is the preference distribution over these styles? Each user would have a distribution over styles.
+这件商品可能是 80% 的中世纪现代风格，而另一件属于其他风格。所以我们首先获取这些信息。然后我们需要了解用户偏好。当用户来到网站时，根据他们过去的各种行为，他们对这些风格的偏好分布是什么？每个用户都会有一个风格偏好分布。
+
+63
+00:40:49.000 --> 00:41:15.000
+So after these two steps, right, so we get the style category for each item. We get a style profile preferences for each user. Wait, can you dive into a little bit on that second part? I'm not totally clear on how do you know. Do you ask the users like a survey? Well, in our current way, we basically look at what kind of styles,
+所以在完成这两个步骤后，我们得到了每件商品的风格类别，也得到了每个用户的风格偏好概况。等等，你能深入讲讲第二部分吗？我不太清楚你们是怎么知道的。你们会通过问卷调查来询问用户吗？嗯，在我们目前的方式中，我们基本上是观察你点击、购买、搜索了什么样的风格，
+
+64
+00:41:15.000 --> 00:41:28.000
+things you click, you purchase, you search. Oh, I see. Oh, that makes sense. Yeah. Then we aggregate that, right? We build a model on top of that. We do the profiling, and then we get the user preference over that.
+你搜索了什么。哦，我明白了。哦，这很有道理。是的。然后我们汇总这些信息，在上面构建一个模型。我们进行画像分析，然后得到用户对这些风格的偏好。
+
+65
+00:41:28.000 --> 00:42:01.000
+And then the third step, which is basically matching your profile versus this database of all the styles, all the items with styles. So then we match that, right? So then we get, let's say, oh, these are top 100 scenes matching your you know pasta style kind of behaviors in the past then we you know further apply you know all the you know mechanics that I mentioned okay but within this 100 right which one you know you would like to purchase you know most
+第三步基本上是将你的画像与这个包含所有风格、所有带风格商品的数据库进行匹配。然后我们进行匹配，这样我们就能得到，比如说，哦，这些是根据你过去风格行为匹配出的前 100 个场景，然后我们进一步应用我提到的所有机制，好的，但在这一百个结果中，哪一个是你最想购买的，
+
+66
+00:42:01.000 --> 00:42:41.000
+and so on so forth so then we you know apply those subtle things again so that's basically the very high level of process how to apply style cool yeah that totally makes sense and then that that has to somehow make its way back into that that reverse index so that you can you can index on the styles yes exactly right so like all these are additional information we get to help us understand user behaviors. Because user behavior is very, very complex. There might be certain users who always stick to their styles.
+等等。所以我们再次应用那些微妙的方法，这就是应用风格的高层级流程。太酷了，这完全说得通。然后这必须以某种方式回到那个反向索引中，这样你才能根据风格进行索引。是的，完全正确。所以所有这些都是我们获得的额外信息，用以帮助我们理解用户行为。因为用户行为非常、非常复杂。可能有些用户总是坚持自己的风格。
+
+67
+00:42:41.000 --> 00:43:28.000
+But there are certain users, they buy gifts for their friends. They may not look for things for themselves so oh that's true yeah so there are a lot of variations so like how to understand users and how to understand like all the behaviors uh is very complex yeah that's really fascinating you know i mean it's funny uh netflix i don't know how this came to my mind but netflix is very explicit it says hey who's watching the netflix right now and so if my son is watching uh he knows to switch over to his name but but for something like this it's it's there's still that multi-modality but you just it's it's not explicit so you there's etsy doesn't pop up and say hey are you shopping for yourself? You have to kind of figure that out based on what the person is doing.
+但也有一些用户，他们是为朋友买礼物。他们可能不是在为自己寻找东西。哦，那确实是真的。所以有很多变化，因此如何理解用户以及如何理解所有行为是非常复杂的。是的，这真的很迷人。你知道，这很有趣，Netflix——我不知道我怎么会想到这个——Netflix 非常明确，它会说“嘿，现在是谁在看 Netflix？”所以如果我儿子在看，它知道切换到他的名字。但对于像这样的事情，它仍然存在多模态，但它并不明确。所以 Etsy 不会跳出来说“嘿，你是为自己购物吗？”你必须根据此人的行为来弄清楚这一点。
+
+68
+00:43:28.000 --> 00:44:23.000
+Yeah right, so hypothetically we would love to have customers telling us what mission they are on and how we could help. But we're in a much more implicit way. So we have to figure out from user how they interact with the site and a lot of contextual information we get and trying to guess or trying to best guess what is your intent and how to do that. So it's a very, very big challenge. Yeah, this sounds like an enormous effort. I mean, I don't know if you feel to be really rough with these numbers, but roughly, how many people are involved in this effort, and what's the growth trajectory been like, and how are you expecting this team to grow?
+是的，没错。所以假设我们很乐意让客户告诉我们他们的任务是什么以及我们如何提供帮助。但我们处于一种更隐晦的方式。所以我们必须从用户与网站的互动方式以及我们获得的许多上下文信息中找出答案，并试图猜测或尽量猜测你的意图。所以这是一个非常、非常大的挑战。是的，这听起来是一项巨大的工程。我的意思是，我不知道你是否觉得这些数字很粗略，但大约有多少人参与了这项工作，增长轨迹是怎样的，你预计这个团队会如何发展？
+
+69
+00:44:23.000 --> 00:44:47.000
+It seems like it's a huge effort. Yeah, that's also a great question. So when I joined Etsy in 2016, we had roughly five folks working in machine learning kind of space. Five very busy people. So we grew from there. space. There's just five very busy people. Yeah, very, very busy. So we grew from there.
+这看起来是一项巨大的工程。是的，这也是一个很好的问题。当我 2016 年加入 Etsy 时，我们大约有 5 个人在机器学习领域工作。五个非常忙碌的人。所以我们从那里开始成长。空间。只有五个非常忙碌的人。是的，非常、非常忙。所以我们从那里开始成长。
+
+70
+00:44:47.000 --> 00:45:45.000
+So right now, we're in between 30 and 40, and of course, we're going to grow. But having said that, I want to emphasize is that, A, we probably are not going to do something like big companies where solving problems is basically scaling up teams, so hiring hundreds and hundreds of machine learning engineers, data scientists, every single problem. So we probably are not on that trajectory, which also opened up the door where we could look at things holistically and come up with better technical solutions. So, for instance, we are the single team trying to figure out how to provide the best result for search desktop, search mobile, search in-app.
+所以现在，我们有 30 到 40 人，当然，我们还会继续增长。但话虽如此，我想强调的是，A，我们可能不会像大公司那样，通过扩大团队规模来解决问题，即为每一个问题都雇佣成百上千名机器学习工程师和数据科学家。所以我们可能不会走那条路，这也为我们从整体上看待问题并提出更好的技术解决方案打开了大门。例如，我们是一个单一的团队，试图找出如何为桌面搜索、移动搜索和应用内搜索提供最佳结果。
+
+71
+00:45:45.000 --> 00:46:06.000
+I do know that in some of the other companies, these are different teams. Now, in our case, we are the same team. So we have the opportunity to provide a model, a framework, such that could work the best in three different contexts, but without like saying I was saying, scaling up the team, right?
+我知道在其他一些公司，这些是不同的团队。但在我们这里，我们是同一个团队。所以我们有机会提供一个模型、一个框架，使其能够在三种不同的背景下发挥最佳作用，而无需像我刚才说的那样扩大团队规模。
+
+72
+00:46:06.000 --> 00:46:31.000
+So each individual could work on more technical challenge problems, similar to our recommendation problems. Like we have more than 50 pages and modules require recommendations, right? But we do not have that number of people. Versus some companies, each team working on one page, one module, we have the opportunity to work out a framework such as,
+所以每个人都可以处理更具技术挑战性的问题，类似于我们的推荐问题。比如我们有 50 多个页面和模块需要推荐，对吧？但我们没有那么多人。相比之下，有些公司每个团队只负责一个页面、一个模块，而我们有机会制定一个框架，使得
+
+73
+00:46:31.000 --> 00:46:57.000
+you know, let's say one model or one type of model could power multiple modules and power multiple pages. So that's where we would like to really use technology, use innovations to scale up the opportunity to really meet the needs. Yeah, that makes sense. I think another part of it, which you mentioned earlier, is that you're using the Google Cloud
+比如说，一个模型或一种类型的模型可以驱动多个模块并支持多个页面。这就是我们真正想利用技术、利用创新来扩大机会以真正满足需求的地方。是的，这很有道理。我想其中另一个部分，正如你之前提到的，是你正在使用 Google Cloud，
+
+74
+00:46:57.000 --> 00:47:31.000
+and it's similar, I believe Netflix uses AWS. A lot of the companies are relying on cloud services. And I think from the purpose of someone who's looking for a career, it really encourages people, again, to just try and be polymaths. So if you have to build the entire cluster from the ground up, and on day one you're trying to write a distributed file system, then you need, as you said, just a huge army of people.
+而且我相信 Netflix 使用的是 AWS。很多公司都依赖云服务。我认为对于寻找职业发展的人来说，这确实鼓励人们尝试成为博学家。所以如果你必须从零开始构建整个集群，并且在第一天就尝试编写分布式文件系统，那么正如你所说，你需要一支庞大的队伍。
+
+75
+00:47:31.000 --> 00:48:01.000
+And you could be the distributed file system person who's writing C message 0MQ code all day. But at Etsy, if you have 30 people handling all of search, then every one of those people, each one of those people needs to be a true polymath. And that's something where, again, just learning a lot of languages, learning a lot of technologies, and probably trying to build one of these systems. I mean, if you're running on the cloud,
+你可能成为那个整天编写 C 语言 0MQ 代码的分布式文件系统专家。但在 Etsy，如果你有 30 个人处理所有的搜索工作，那么这些人中的每一个，都需要成为真正的博学家。这就是为什么学习多种语言、学习多种技术，并可能尝试构建其中一个系统。我的意思是，如果你在云端运行，
+
+76
+00:48:01.000 --> 00:48:30.000
+then anybody out there listening could also build something like this on the cloud and kind of play around with it. Yeah, absolutely. Cool. So what is next? Like, I know, I mean, there's, you know, AI, machine learning, obviously still hot topics. I don't know if we're at, I really don't think we're at peak machine learning, although it's really, really high up there. We might be peak big data,
+那么任何听众也可以在云端构建类似的东西并尝试一下。是的，绝对可以。太酷了。那么接下来是什么？我的意思是，你知道，人工智能、机器学习显然仍然是热门话题。我不知道我们是否处于机器学习的巅峰，尽管它确实非常、非常高。我们可能处于大数据的巅峰，
+
+77
+00:48:30.000 --> 00:48:49.000
+but there's still a lot of ground to cover on machine learning. What is Etsy doing in the future? What are some really cool search ideas that we should see coming out? Yeah, so I think I agree with you. I think we are, as I mentioned earlier, in multiple fronts,
+但在机器学习方面还有很多领域需要探索。Etsy 未来在做什么？我们应该期待看到哪些非常酷的搜索想法？是的，所以我认为我同意你的观点。我认为正如我之前提到的，在多个方面，
+
+78
+00:48:49.000 --> 00:49:07.000
+we are in a very early stage. Not only us, I also believe ML or AI for e-commerce are also in a very early stage. So we definitely need to keep investing in search,
+我们还处于非常早期的阶段。不仅是我们，我也相信电子商务的机器学习或人工智能也处于非常早期的阶段。所以我们绝对需要继续投资于搜索，
+
+79
+00:49:07.000 --> 00:49:41.000
+like searching in a narrow kind of context, meaning like we discussed primarily in today's program, where your type of keywords, let's say we want to provide the most relevant or most promising results, we would like to buy quickly. So that's kind of a narrow sense of the search. So we definitely need to keep doing that and providing better service on that. But I also want to highlight that there is also an equivalent, more or less equivalent
+比如在狭窄的背景下进行搜索，这意味着就像我们在今天的节目中主要讨论的那样，你输入关键词，假设我们想提供最相关或最有希望的结果，我们希望快速购买。所以这是一种狭义的搜索。所以我们绝对需要继续这样做，并在此方面提供更好的服务。但我还要强调，还有一种相当、或多或少相当
+
+80
+00:49:41.000 --> 00:50:21.000
+amount of effort we are seeking is discovered. So we briefly talk about that a little bit. It's like, okay, I don't know what to look after, and I don't even have a query in my head. But I like to come to Etsy and browse a little bit and go from page to page. How can I discover my needs? So such kind of thing. Can you dive into that a little bit from then you know go from page to page how can i you know discover my needs right so like you know such kind of thing can you dive into that a little bit from the ui experience like what what does that is that just when people go to etsy.com without a without a query yeah we we definitely have a lot of people come to etsy.com without a query we have a home page
+大的努力是我们正在寻求的，那就是发现。所以我们简短地谈论了一点。就像，好的，我不知道要找什么，我脑子里甚至没有查询。但我喜欢来到 Etsy 随便逛逛，从一个页面跳到另一个页面。我如何才能发现我的需求？所以这类事情。你能从 UI 体验的角度深入谈谈吗？比如，当人们在没有查询的情况下访问 etsy.com 时，是这样吗？是的，我们确实有很多人在没有查询的情况下访问 etsy.com，我们有一个主页，
+
+81
+00:50:21.000 --> 00:51:08.000
+we you know there's a lot of modules and help you. So, hey, these are the things that might be interesting. These are the things from the shop you purchased in the past, and so forth and so forth. There's a lot of mechanisms we help you to discover new things. And there are a lot of other pages, other than the search page, serving the functionality of discovery and trying to speed up that process. Yeah, if you have time, it would be really interesting to dive into that. How do you sort of handle that where there's no – because now you still have that 17 million. Was it 17 or 70 million?
+我们有很多模块来帮助你。所以，嘿，这些可能是你感兴趣的东西。这些是你过去购买过的商店里的东西，等等等等。有很多机制可以帮助你发现新事物。除了搜索页面之外，还有很多其他页面可以实现发现功能并试图加快这一过程。是的，如果你有时间，深入探讨一下会非常有趣。当没有查询时，你们是如何处理的？因为现在你们仍然有那 1700 万。是 1700 万还是 7000 万？
+
+82
+00:51:08.000 --> 00:51:39.000
+60, sorry, 60. So you have that 60 million sized inventory and now you don't have any query. How are you able to still meet that SLA and get results quickly? Right. That's another, like I mentioned, almost another half of our effort, which is what we call discovery or slash recommendation. So basically you can think recommendation is kind of the process without query.
+60，抱歉，60。所以你有 6000 万规模的库存，而现在你没有任何查询。你们是如何做到仍然满足 SLA 并快速获得结果的？对。这是另一个，正如我提到的，几乎是我们一半的工作量，我们称之为发现或推荐。所以基本上你可以认为推荐就是没有查询的过程。
+
+83
+00:51:39.000 --> 00:52:11.000
+A lot of other companies and apps are doing the so-called queryless, kind of a search queryless push or recommendation. So there we heavily utilize your past behaviors. So they say, hey, you purchased the things from this shop, and it seems like there are similar things from the same shop. Are you interested? And also, you purchase things in this style, and there are other things,
+许多其他公司和应用程序正在做所谓的无查询搜索推送或推荐。所以在这里，我们大量利用了你过去的行为。所以他们会说，嘿，你从这家商店购买过东西，看起来同一家商店还有类似的东西。你感兴趣吗？而且，你购买过这种风格的东西，还有其他东西，
+
+84
+00:52:11.000 --> 00:52:53.000
+seems from the same style, also from similar kind of categories, are you interested? So we harvest heavily on your past behaviors to give you a recommendation, to guess what you are looking for without even asking, without you providing a query. We also provide a recommendation when you do the browsing. You go to the listing page, and then on the listing page, there are modules showing other similar listings. Like sometimes it's similar from the same shop, meaning like same shop might offer other things you would like to buy.
+看起来是同一种风格，也来自类似的类别，你感兴趣吗？所以我们大量利用你过去的行为来给你推荐，在不询问、你也不提供查询的情况下猜测你在寻找什么。当你在浏览时，我们也提供推荐。你进入商品详情页，然后在页面上，有模块显示其他类似的商品。比如有时是同一家商店的类似商品，意思是同一家商店可能提供其他你想买的东西。
+
+85
+00:52:53.000 --> 00:53:17.000
+Or like, you know, visually similar, right? So, okay, so you are interested in this painting with a bear. And, you know, there are other paintings with a bear there. So how about you browse that a bit? So we utilize that quite a bit and then trying to do the recommendation for them. That makes sense. Yeah, I mean, bears are awesome.
+或者像，视觉上相似，对吧？所以，好的，你对这幅有熊的画感兴趣。而且，那里还有其他有熊的画。那么你浏览一下怎么样？所以我们利用这一点相当多，并试图为他们做推荐。这很有道理。是的，我的意思是，熊太棒了。
+
+86
+00:53:17.000 --> 00:53:56.000
+So what about, how do you prevent, so let's say someone puts in bear, or let's say, let's take this to the back. Let's say someone makes a bear or let's say let's take a step back let's say someone makes a bear i don't know coffee mug on etsy right and so um well maybe something more esoteric than let's say hypothetically there aren't any bear content there isn't any bear content on etsy someone makes the first bear mug um someone types bear and they find that bear mug. And then that person kind of becomes the source of truth for bear. And then they end up with a lot of clicks.
+那么，你们如何防止，假设有人输入“熊”，或者让我们退一步。假设有人在 Etsy 上制作了一个熊咖啡杯，对吧？所以，嗯，也许比这更深奥一些。假设假设 Etsy 上没有任何熊的内容。有人制作了第一个熊马克杯，有人输入“熊”，他们找到了那个熊马克杯。然后那个人就成了“熊”的真理来源。然后他们最终得到了很多点击量。
+
+87
+00:53:56.000 --> 00:54:41.000
+And then because they have a lot of clicks, they're the number one result. And then because they're number one result, they have a lot of clicks. And there's this sort of like winner-take-all phenomena where now if I try to make my own bear mug, I can't compete with these people who have already been on the site for a long time yeah that's a really really great question so Etsy is a two-sided marketplace right so we have buyers we have sellers we constantly look into how to optimize. A lot of things we talk about today are primarily from a buyer perspective, but we do care and care very much about our sellers, right? So like whoever are entrepreneurs and, you know, these folks are making goods and then, you know, creating
+然后因为他们有很多点击量，他们就是第一名的结果。然后因为他们是第一名的结果，他们有更多的点击量。这就产生了一种“赢家通吃”的现象，现在如果我自己尝试制作一个熊马克杯，我就无法与这些已经在网站上待了很长时间的人竞争。是的，这是一个非常、非常好的问题。所以 Etsy 是一个双边市场，对吧？所以我们有买家，我们有卖家，我们不断研究如何优化。我们今天谈论的很多事情主要是从买家的角度出发的，但我们确实关心，而且非常关心我们的卖家，对吧？所以，无论谁是企业家，这些人都在制造商品，然后为买家提供服务。
+
+88
+00:54:41.000 --> 00:55:12.000
+things, you know, and offering for the buyers. Growing that audience is also very, very important and retaining that audience is also very, very important. This is not an easy problem. So in a lot of scenarios, yes, there might be a phenomenon of winner takes all because the things you are selling are good, you're performing very well, and there's a reason your things are
+发展这些受众也非常、非常重要，留住这些受众也非常、非常重要。这不是一个简单的问题。所以在很多情况下，是的，可能会出现赢家通吃的现象，因为你销售的东西很好，你的表现非常好，而且你的东西表现良好的原因是有道理的，
+
+89
+00:55:12.000 --> 00:55:45.000
+performing very well, and the system kind of remembers that and is trying to promote the same type of thing. But we also are very cautious of this kind of winner-takes-all kind of phenomenon and trying to help boost new servers or new items. In recommendations, we call it a cold start, because we don't have data. But we cannot assume they are bad or they are not performing. It's just mal-reg. We haven't shown that before.
+系统会记住这一点，并试图推广同类型的东西。但我们也对这种赢家通吃的现象非常谨慎，并试图帮助提升新的卖家或新的商品。在推荐中，我们称之为“冷启动”，因为我们没有数据。但我们不能假设他们不好或表现不佳。这只是因为我们以前没有展示过。
+
+90
+00:55:45.000 --> 00:56:33.000
+So we are constantly testing different algorithms, ideas to combat this co-start and trying to promote new centers and new items to accommodate this situation. But this is not an easy problem. How we serve the buyers in the most relevant way, at the same time keep a very viable marketplace such that everybody or let's say a lot of folks in the server side have a share. That's definitely one of the strategies. Yeah, it seems as if there's... It's very empirical, right? I mean, it's almost impossible to come up with some kind of closed form
+所以我们不断测试不同的算法和想法来应对这种冷启动，并试图推广新的卖家和新的商品来适应这种情况。但这并不是一个简单的问题。我们如何在最相关的方式服务买家的同时，保持一个非常有活力的市场，让每个人，或者说让卖家端的很多人都能分一杯羹。这绝对是我们的策略之一。是的，这看起来……非常经验主义，对吧？我的意思是，几乎不可能得出一个封闭式的公式，
+
+91
+00:56:33.000 --> 00:57:03.000
+that will tell you how to trade off learning more about some new item versus showing the best thing you've ever seen. It seems like that's always going to come down to some sort of empirical analysis. Yeah, that's true. That's true. We also have other channels, right? So like sellers, if they are willing, they can participate in our promoted listing program.
+来告诉你如何在了解新商品与展示你见过的最好的东西之间进行权衡。这似乎总是归结为某种经验分析。是的，那是真的。那是真的。我们还有其他渠道，对吧？所以，如果卖家愿意，他们可以参加我们的推广列表计划。
+
+92
+00:57:03.000 --> 00:57:50.000
+It's like an outside advertising program where they could spend some budget to significantly boost their listings within our system. We do offer such opportunities and in those scenarios, we also utilize machine learning in various places to determine how to best show your thing. So a lot of servers, in fact, are utilizing our program to show their things and to boost their things through their reach and through, of course, using some budget. So yeah, we're definitely looking into various other channels to accommodate the issue.
+这就像一个外部广告计划，他们可以花费一些预算来显著提升他们在我们系统内的商品列表。我们确实提供这样的机会，在这些情况下，我们也利用机器学习在各个地方来确定如何最好地展示你的商品。所以事实上，很多卖家都在利用我们的计划来展示他们的商品，并通过使用一些预算来提升他们的触达范围。所以是的，我们绝对在研究各种其他渠道来解决这个问题。
+
+93
+00:57:50.000 --> 00:58:30.000
+Yeah, that makes sense. It gets into some really deep economic analysis that they would have to do and I'm sure you would help them with. It's like, if I show this advertisement to my product with the expected value of my campaign or my lifetime on Etsy Go Up, if so, then you'd spend the money on the advertisement to sort of build the brand. And it becomes this sort of short-term, long-term thing again. Yeah, yeah, that's true. Cool. So what about, you know, one thing I've noticed is there's a ton of companies getting on board with open source and with academia.
+是的，这很有道理。这涉及到一些非常深入的经济分析，我相信你会帮助他们。就像，如果我向我的产品展示这个广告，我的营销活动的预期价值或我在 Etsy 上的生命周期是否会提高？如果是这样，那么你就会把钱花在广告上以建立品牌。这又变成了这种短期和长期的事情。是的，是的，那是真的。太酷了。那么，你知道，我注意到的一件事是，有大量的公司开始拥抱开源和学术界。
+
+94
+00:58:30.000 --> 00:59:14.000
+I think even some companies are usually like pretty closed doors. They're starting to publish papers and do open source. What is Etsy's sort of, how do they feel about the whole open source thing and information sharing and sort of what do you folks do there and why do you do it? Yeah, this is a good question. So if you look at GitHub, XE has, you know, repositories on GitHub and, you know, publicly available with a wide range of repositories there. And we have blog posts constantly publishing some of the interesting things,
+我想即使是一些通常比较封闭的公司，也开始发表论文并进行开源。Etsy 对整个开源和信息共享有什么看法，你们在那里做什么，为什么这样做？是的，这是一个好问题。如果你看 GitHub，Etsy 在 GitHub 上有存储库，并且有广泛的公开可用存储库。我们有博客文章不断发布一些有趣的发现、
+
+95
+00:59:14.000 --> 00:59:59.000
+learnings, and experiences that our engineering teams, including my teams, are having here at ETSI. And in terms of my team specifically, we go to a lot of different conferences, meetups, conferences including academic conferences, industry conferences, and we do talks and we sometimes publish papers. We do presentations, and we have a very open and collaborative attitude, I would say, towards the open source community, towards the tech
+学习和经验，这些都是我们的工程团队，包括我的团队，在 Etsy 这里获得的。就我的团队而言，我们参加许多不同的会议、聚会，包括学术会议、行业会议，我们进行演讲，有时还会发表论文。我们进行演示，并且对于开源社区、对于科技公司，我们持有一种非常开放和协作的态度，
+
+96
+00:59:59.000 --> 01:00:53.000
+companies in general to be part of that, to contribute and also facilitating a lot of things. I think, you know, in terms of reasons, there are two major reasons I think are very important. One is, like I mentioned, right, so machine learning, AI for e-commerce, I think it's a very early stage. The more people in general, you know, are interested in that, the better solutions in terms of technology, in terms of the solutions we are building can build on larger communities. Recommendation kind of system, community only exists after Netflix competition, almost like 10 years ago. And also people get excited about deep learning and so forth, well because AlphaGo kind of
+总的来说，我们愿意参与其中，做出贡献，并促进许多事情。我认为，就原因而言，我认为有两个主要原因非常重要。一个是，正如我提到的，机器学习、电子商务的人工智能，我认为它处于非常早期的阶段。对它感兴趣的人越多，我们在技术方面、在我们正在构建的解决方案方面的解决方案就越好，就能建立在更大的社区之上。推荐系统社区只有在 10 年前的 Netflix 竞赛之后才存在。而且人们对深度学习等感到兴奋，是因为 Google DeepMind 发表了 AlphaGo，
+
+97
+01:00:53.000 --> 01:01:48.000
+a related thing published from DeepMind from Google. So there is a larger impact of getting, evolving a community and being able to talk about technical solutions and getting excited about that. So that is one. Second is, of course, the hiring and getting talents are super, super critical for us to work on those exciting problems. When we go out and talk to candidates, they value we are part of the larger community and they also value that we could talk about a lot of things like today we discussed. Now if we say hey everything is just a priority, we can't talk, then it's very unlikely we can really stir the interest from our candidates.
+这是一个相关的事情。所以，发展一个社区并能够谈论技术解决方案并对此感到兴奋，会产生更大的影响。这是其一。第二，当然，招聘和获取人才是我们从事这些令人兴奋的问题的关键。当我们出去与候选人交谈时，他们重视我们是更大社区的一部分，他们也重视我们可以谈论很多事情，就像我们今天讨论的那样。如果我们说“嘿，一切都是机密，我们不能谈论”，那么我们很难真正激发候选人的兴趣。
+
+98
+01:01:48.000 --> 01:02:15.000
+So by really being open enough and playing a big role or trying to play some bigger role in this community would help us to establish reputation and would help us to attract the top talent. Yeah, that makes sense. I think I saw something recently that said one of the best things someone can do from their career is to build sort of a personal brand.
+所以，通过真正保持足够的开放，并在社区中发挥重要作用或试图发挥更大的作用，将有助于我们建立声誉，并有助于我们吸引顶尖人才。是的，这很有道理。我想我最近看到一些东西说，一个人能做的最好的事情之一就是建立个人品牌。
+
+99
+01:02:15.000 --> 01:02:56.000
+And when you look at academics, they could go into university and become a professor and they'll have extremely strong personal brand. They'll teach the courses under their own name. They'll write papers under their own name. And so if industries such as Etsy keep everything closed off, then someone will say, well, you know, why would I not go into academia where I can represent myself? So yeah, I think it's hugely important. Speaking of hiring folks from academia, what sort of positions do you have?
+当你看看学者时，他们可以进入大学成为教授，他们会有非常强大的个人品牌。他们会以自己的名义教授课程。他们会以自己的名义撰写论文。所以如果像 Etsy 这样的行业把一切都封闭起来，那么有人会说，好吧，为什么我不去学术界，在那里我可以代表我自己？所以是的，我认为这非常重要。说到从学术界招聘人才，你们有什么样的职位？
+
+100
+01:02:56.000 --> 01:03:23.000
+Where are the offices where there are search folks? And are you guys hiring? What kind of roles? Yeah, yeah. So like I mentioned a little bit earlier, we are growing and we are hiring data scientists and machine learning engineers both here at New York City office as well as our San Francisco office. So
+搜索人员在哪些办公室？你们在招聘吗？什么样的角色？是的，是的。正如我刚才提到的，我们正在成长，我们正在纽约市办公室以及旧金山办公室招聘数据科学家和机器学习工程师。所以
+
+101
+01:03:23.000 --> 01:04:10.000
+we have constant openings in these two offices. And in general, like, at C Engineering, we're hiring in these two offices as well as Toronto office and we have Dublin office as well. So, like, we are growing in these couple of different locations. In terms of roles, we are generally hiring folks with machine learning background, and we're vaguely divided into two types of roles. One is called data scientists, and the other is called machine learning engineers. Basically, we are looking for folks with a lot of modeling background,
+我们在这两个办公室有持续的空缺。总的来说，Etsy 工程部在这两个办公室以及多伦多办公室和都柏林办公室也在招聘。所以，我们在这些不同的地点都在成长。就角色而言，我们通常招聘有机器学习背景的人，我们大致分为两类角色。一类叫数据科学家，另一类叫机器学习工程师。基本上，我们正在寻找有丰富建模背景的人，
+
+102
+01:04:10.000 --> 01:04:32.000
+really interested in pushing the last couple of miles of our model performance and thinking about the new methodologies, thinking about the new ideas as a data scientist, and we would like somebody with a very strong system level engineering design
+真正有兴趣推动我们模型性能的最后几英里，并思考新的方法论，作为数据科学家思考新的想法，我们希望有人具备非常强的系统级工程设计，
+
+103
+01:04:32.000 --> 01:04:50.000
+as well as pretty much equally understanding of machine learning to help us build offline pipelines, serving systems, as we mentioned as backends, as we mentioned, as backends, as machinery engineers. So these are the two,
+以及对机器学习有相当程度的理解，以帮助我们构建离线管道、服务系统，正如我们提到的后端，作为机器学习工程师。所以这些是我们在布鲁克林、纽约市办公室和旧金山办公室招聘的两个高层级角色。太酷了。所以我们经常收到的一个问题是来自那些
+
+104
+01:04:50.000 --> 01:05:03.000
+on a very high level, two kind of roles that we're hiring in Brooklyn, New York City office, and San Francisco office. Cool. So one question we get a lot is from people who
+他们想知道如何最好地获得这些工作之一，对吧？所以他们可能获得了石油工程学位，所以他们是第一次接触编程。他们甚至可能有非常强的数学背景，但可能没有编程背景。我们收到的问题是，你应该回去再拿一个四年制学位吗？你应该做 Coursera 或 Udacity 或这些其他 MOOC 并获得一些纳米学位吗？
+
+105
+01:05:03.000 --> 01:05:39.000
+they want to know how to best get one of these jobs, right? So they might have got a degree in, let's say, petroleum engineering, and so they're coming to programming for the first time. They might even have a very strong mathematical background, but maybe not a programming background. And the questions we get are, you know, should I go back and get another four-year degree? Should I do the, you know, Coursera or Udacity or these other MOOCs and get sort of some of these nano degrees?
+你应该跳进这些面对面的训练营吗？你知道，你的感觉是什么？我的意思是，显然，对于这些面对面的训练营，你的感觉是什么？我的意思是，显然，对于其中一些非常注重数学的角色，你知道，拥有数学和计算机科学博士学位会是首选，但还有什么其他方式可以让人们获得这些技能呢？是的，这是一个很好的问题。我认为这其中的一部分也呼应了我们之前关于硕士项目和学士项目的讨论。
+
+106
+01:05:39.000 --> 01:06:17.000
+Should I jump into one of these in-person boot camps? You know, what's your feeling there? I mean, obviously, for one of these in-person boot camps you know what's your feeling there i mean obviously for some of these uh um very mathematically oriented roles um you know having a let's say a phd in math and computer science would be preferred but um what are sort of like you know other ways uh that people can sort of get those skills? Yeah, that's a great question. I think some part of this also echoes, you know, a little bit earlier discussion on the, you know,
+总的来说，我会说没有适合所有人的标准答案。我要提到的一点是，我们目前在团队中拥有非常多元化的背景。比如，这 30 多个人中，一半人拥有博士学位，一半人拥有硕士学位。如果我们看他们的背景，我们当然有来自计算机科学的人，但我们也有来自电气工程、运筹学、统计学、经济学、物理学的人。我们在背景和学位来源方面确实有相当广泛的多样性。这就是为什么我会说没有一个简短的答案。在面试中，我们实际上撒了一张相当大的网，因为我们希望
+
+107
+01:06:17.000 --> 01:07:17.000
+some of the master programs and bachelor programs. So in general, I would say there is no well answer to everybody. So one thing I will mention that we have, you know, currently in our teams, we have a very diverse background. Like, you know, these 30-ish people, half of the folks have PhD degrees, half of the folks have master degrees. And if we look at their backgrounds, we have folks, of course, from computer science, but we also have folks from electrical engineering, operational research, statistics, economics, physics. We have actually a pretty wide diversity in terms of backgrounds and where their degrees are coming from. So that's why I would say there is no one short answer. And from interviews, we are actually interviewing a pretty wide net because we would like to
+具有包容性，试图找到最好的人，而不仅仅是看你的简历，看那一行教育经历。所以我们实际上面试过政治学、核物理、天体物理学，你懂的，很多不同类型的教育背景。所以目前的情况就像我们之前谈到的，很难说“最好的办法就是回去读硕士项目或参加这个 12 周的强化培训”，因为在那之后，每个人因为个人的经历而仍然不同。所以我认为总的来说，如果我们真的想给个人一些建议，我们倾向于说，看看你自己的经历，
+
+108
+01:07:17.000 --> 01:08:15.000
+be inclusive in trying to find the best people, not just looking at your resume, like one line of education. So we actually interviewed like, you know, political science, you know, nuclear, you know, physics, you name it, like astrophysics, like a lot of, you know, different kind of education background. So the current situation is like we talked about earlier, it's hard to say, oh, the best shot is just go back to your master program or just do this 12-week intense training because after that, each person still differs because of their individual's kind of experience. So I would say in general, if we really want to give some advice to individuals, we tend to say just look at your own experience and
+然后我们可以考虑你在三到五年后会在哪里，并真正开始构建或开始思考通往那里的路径。比如，“我只是一个没有机器学习背景的子工程师，但我对此非常感兴趣。”好的，如果我的目标是在三到五年内成长为一名硬核机器学习工程师，这是我可能采取的步骤。
+
+109
+01:08:15.000 --> 01:08:41.000
+then we can think about where you are in three to five years and really start to build or start to think about the path to that. So like, hey, I'm just a sub-engineer without a machine learning background, but I'm really interested in that. Okay, so if my goal is to grow into a hardcore machine learning engineer in three to five years, here are the steps I might take.
+或者我说我甚至没有编程背景，但我数学很好，我有数学学位。我想成为那种做应用研究的人。好的，那么在三到五年的时间框架内，我可以采取哪些步骤？所以我认为这，无论好坏，目前必须是个性化的。这样每个人都可以走自己的路。是的，这完全说得通。太酷了。如果有人面试，那是什么样的体验？是的，面试是什么样的体验？是的，我们有一种标准化的
+
+110
+01:08:41.000 --> 01:09:30.000
+Or I say that I have zero even coding background, but I'm strong in math, I have a math degree. I want to be this kind of person to do some applied research. Okay, so in the three to five years time frame, what are the steps I could take? So I think that's that, you know, fortunately or unfortunately, currently has to be kind of personalized. So then each person can take their own path. Yeah, that totally makes sense. Cool. What is, you know, if someone interviews, like, what is that experience like? Yeah. interviews like what what is that experience like yeah so we have a kind of a standardized
+面试流程，这与大多数典型的科技公司非常相似。我们有两轮电话面试。第一轮是测试你是否有基本的编程背景。不一定是解决编程难题，而是，嘿，你了解数据结构吗？你了解基本概念吗？很多很多基本想法。第二轮电话面试，我们倾向于看你是否了解机器学习基础知识，对吧？因为信不信由你，在当前人工智能和机器学习的炒作中，有
+
+111
+01:09:30.000 --> 01:10:22.000
+interview process uh which like you know very very similar to you know most of the typical kind of tech companies so we have two rounds of phone interviews. The first one is to test whether you have some basic coding background. Not necessarily solving coding puzzles, but like, hey, do you understand data structure? Do you understand formal brand? Many, many kind of basic ideas. The second phone interview, we tend to look at whether you understand machine learning basics, right? Because believe it or not, in the current hype of AI and machine learning, there's a
+大量的人了解深度学习，但他们不了解逻辑回归。他们不知道什么是监督学习。他们不了解线性回归。所以我们回到基础，我们询问教科书级别的概念。好的，你了解这个吗？所以这是我们的第二轮电话筛选。在两轮电话筛选之后，
+
+112
+01:10:22.000 --> 01:10:46.000
+huge amount of people who sort who understand deep learning, but they don't understand logistic questions. They don't know what supervised learning is. They don't understand linear regression. So we go to the basics, and we're asking textbook level concepts. Okay, do you understand this? So that is our second phone screen. After two rounds of phone screens,
+我们把人带到现场，对吧？所以在现场面试中，我们有几个环节。我们再次有编码，白板式的编码环节，基本上是典型的编码问题。然后我们有所谓的应用机器学习环节。所以基本上我们向你展示一个现实世界的问题，从 Etsy 的现实业务中抽象出来。然后我们说，好的，这是一个场景。
+
+113
+01:10:46.000 --> 01:11:18.000
+we bring people on site, right? So in the on-site interview, interviews, we have a couple of slots. We have again coding, you know, whiteboard-ish coding kind of slot basically, typical coding questions. And then we have so-called applied machine learning kind of a slot. So basically we present you a real-world problem, kind of abstract a little bit from AXS's real-world business. And then we say, okay, here's a scenario.
+想象一下你与产品经理合作，这是产品经理提出的事情。作为数据科学团队的新成员，你想找出解决方案，你如何展示解决方案，你如何思考这个问题？所以在那 60 分钟的环节中，候选人会与我们团队的数据科学家一起梳理解决方案。我们有两个这样的环节。然后我们还有一个系统设计环节。所以基本上我们看，好的，太棒了，
+
+114
+01:11:18.000 --> 01:11:54.000
+Imagine that you work with a product manager and this is the things that the product manager come up. You as a new member in data science team want to figure out what is the solution, how do you present the solution, so how do you think about this problem? So then we in that 60 minutes kind of a slot, the candidate would walk through a solution with our data scientists in the team. So we have two such sessions. Then we also have a system design slot. So basically we look at, okay, great,
+你有这个想法，对吧？但我们如何能在 100 毫秒内得到结果？所以你需要在线处理哪些流程，你需要离线处理哪些流程，你需要把东西缓存在某个地方，你把这些东西存在哪里，等等。你能画一个非常简单的系统图来谈谈你刚才提到的事情吗？
+
+115
+01:11:54.000 --> 01:12:18.000
+so you have this idea, right? But how can we get the result back within 100 milliseconds? So like which process you need to do online, which process you need to do online, which process you need to do offline, like you need to cache things somewhere, like where do you store those things, and so forth. Like can you draw a very simple system diagram to talk about the things you just mentioned.
+我们也有一场这样的环节。所以，这就是我们典型的现场面试流程。所以我们有两轮电话筛选和几个现场面试环节。非常酷。是的，我想回顾一下我们之前说的一些事情，尝试自己构建这些东西，我认为是为这样的面试做准备的最好方法之一。当然，我们并不是所有人都有一个拥有 6000 万件商品的网站之类的东西。我的意思是，它可以只是一堆合成数据。但所有这些都是人们现在可以在模拟中体验的问题。所以有人可以创建一组 6000 万个随机向量，然后尝试找到最近邻，并意识到他们需要构建一些数据结构之类的东西。
+
+116
+01:12:18.000 --> 01:12:40.000
+So we have one such session as well. So then, this is our kind of a typical unsigned kind of interview process. So then we have two rounds of full screen and a couple of slots outside interviews. Very cool. Yeah, I think just to recap some of
+显然，你可以在互联网上找到的课程和东西也会有所帮助。但是的，听起来获得一些实践经验是真正能帮助人们的事情。是的，这实际上是我在与候选人交谈时提到的事情，因为我刚才说，问一个非常相似的问题，我们开始这个节目时的问题，那就是，你能想象一个流程，你必须输入关键词到亚马逊、到 Etsy，
+
+117
+01:12:40.000 --> 01:13:22.000
+the things we said earlier, trying to actually build these things by yourself, I think is one of the best ways to get prepared for an interview like this. Now, of course, not all of us have a site with 60 million items in it or anything like that. I mean, it could be just a bunch of synthetic data. But all of these are problems that people could experience in simulation right now. So someone could create a set of 60 million set of random vectors and then try to find the nearest neighbor and realize that they need to build some data structures and things like that.
+我们如何得到结果？这就像一个思维练习，一个思想实验。你如何做到这一点？你如何分解系统？你如何谈论每个组件？几家公司会说，哇，是的，我从来没想过那个。我们从来没有真正尝试过那样推理。所以事实上，你可以对很多事情做那个思想实验。所以想象一下如何为亚马逊的规模做到这一点，或者在 Netflix 或 Google 搜索的规模下进行推荐。
+
+118
+01:13:22.000 --> 01:13:56.000
+Obviously, the kind of courses and things you can find Obviously the kind of courses and things you can find on the internet will help as well. But yeah it sounds like you know getting some hands-on experience is something that could really help people. Yeah that's actually you know one thing I actually mentioned to some candidates when we talk because you know I just said you know ask a very similar questions we you we started this program, which is like, can you imagine a process where you have to type the keyword to Amazon, to Etsy,
+显然，你在互联网上能找到的课程和资料也会有所帮助。但确实，听起来获得一些实践经验是真正能帮助人们的事情。是的，这实际上是我在与候选人交谈时提到的事情，因为你知道，我刚才说，你知道，问一个非常相似的问题，就像我们开始这个项目时一样，那就是，你能想象一个过程，你必须在亚马逊、Etsy上输入关键词，
+
+119
+01:13:56.000 --> 01:14:29.000
+how do we get the result back? That's like a mind exercise, like a thought exercise. How do you do that? How do you break down the system? How do you talk about each component? And several companies will say, wow, yeah, I never thought about that. We never really tried to reason along that. So any fact, you could do that thought exercise to a lot of things. So imagine how to do that for the scale of Amazon or do recommendation in the scale of Netflix or Google search.
+我们是如何得到结果的？这就像一个思维练习，一个思想实验。你是怎么做到的？你是如何分解系统的？你是如何谈论每个组件的？一些公司会说，哇，是的，我从来没想过这个问题。我们从来没有真正尝试过沿着这个思路去推理。所以事实上，你可以对很多事情进行这种思维练习。所以想象一下如何为亚马逊的规模做这件事，或者在Netflix或谷歌搜索的规模下做推荐。
+
+120
+01:14:29.000 --> 01:15:05.000
+So how do you propose a system or how do you think about that? I think building some cases and exercise, some thought exercise, and also like you mentioned, generating some synthetic data, playing around are really good steps to get some intuitions into these moments. Yeah, absolutely. Totally agree. So the Etsy blog, there's an Etsy machine learning blog, correct? We do not have a separate one for the moment.
+那么你建议建立什么样的系统，或者你是怎么考虑这个问题的？我认为建立一些案例和练习，进行一些思维训练，还有像你提到的那样，生成一些合成数据，进行尝试，这些都是获得这些时刻直觉的非常好的步骤。是的，绝对同意。那么Etsy博客，有一个Etsy机器学习博客，对吧？我们目前还没有单独的博客。
+
+121
+01:15:05.000 --> 01:15:17.000
+It's part of the engineering blog? Yes. Got it. Okay, cool. I'll search that up and put a link in the show notes. Cool. And you're on Twitter.
+它是工程博客的一部分吗？是的。明白了。好的，太棒了。我会搜索一下，并在节目笔记中放一个链接。酷。你在Twitter上。
+
+122
+01:15:17.000 --> 01:15:34.000
+It's Hong Liang Ji on Twitter, right? And we'll put a link to that also in the notes. Okay. Cool. This was super, super interesting. I think, you know, this is one of those things that, you know, Google is probably one of the first things that people do when they get a computer today.
+Twitter上是Hong Liang Ji，对吧？我们也会在笔记中放一个链接。好的。太棒了。这真的非常非常有趣。我想，你知道，这是人们今天拿到电脑后可能做的第一件事之一，就是谷歌搜索。
+
+123
+01:15:34.000 --> 01:16:14.000
+I mean, when I got my first computer, I didn't have Internet. But, you know, today that's probably one of the first things people do is search, right? And so it just seems kind of, for many people, just magical that they type things into Etsy and get results. It just, it seems like there might even be, I mean, there's probably people who think that there's some human in the loop, just because it is one of these things that is just so incredibly remarkable how, how, how it can search through so much content so quickly. And I think you did an amazing job of kind of breaking it down into those components. You know,
+我的意思是，当我拿到第一台电脑时，我还没有互联网。但是，你知道，今天这可能是人们做的第一件事就是搜索，对吧？所以对许多人来说，他们在Etsy上输入内容并获得结果似乎有点神奇。这看起来甚至可能，我的意思是，可能有人认为其中有人工参与，仅仅因为它就是这样一件事情，它能如此迅速地搜索如此多的内容，真是太了不起了。我认为你做得非常出色，把这些部分拆解开了。你知道，
+
+124
+01:16:14.000 --> 01:16:46.000
+talking about like the sublinear ranking of the reverse indexing and all of that. And hope, I really hope that people and believe that people at the end of this have kind of now a holistic understanding and and now if they want to deep dive into any of these topics like uh you know if they want to find out like what it actually is a reverse index how can i code one myself um they have all of the right terminology and they have the right mental model to really dive deep on these topics.
+谈论像反向索引的次线性排序等等。希望，我真的希望人们，并且相信人们在听完这些之后，现在已经有了一种整体的理解，如果他们想深入研究这些主题中的任何一个，比如，你知道，如果他们想找出什么是真正的反向索引，我该如何自己编写一个，嗯，他们拥有所有正确的术语，并且拥有正确的思维模型来真正深入研究这些主题。
+
+125
+01:16:46.000 --> 01:17:09.000
+So I really appreciate you coming on and explaining a lot of this to people. And it's been really exciting. I've learned a lot about Etsy and their processes and how the whole thing is organized. Yeah, yeah, sure. So absolutely. So I also feel this is a really, really great opportunity for us to explain
+所以我非常感谢你来这里并向大家解释这么多。这真的很令人兴奋。我学到了很多关于Etsy及其流程以及整个事情是如何组织的知识。是的，当然。所以绝对是这样。我也觉得这是一个非常非常好的机会，让我们解释
+
+126
+01:17:09.000 --> 01:17:18.000
+how, you know, Etsy search works and also lay out the challenges that we have and talking about, like, you know, a lot of interesting things we're working on
+Etsy搜索是如何工作的，同时也列出我们面临的挑战，并谈论，你知道，我们正在研究的许多有趣的事情
+
+127
+01:17:18.000 --> 01:17:40.000
+and how we could to move forward. So, you know, I also appreciate the opportunity to chat with you two. one one last question are there internship opportunities or is it only full-time yes we do have interns so last couple of years we have interns coming here working on projects and you know people
+以及我们如何才能向前迈进。所以，你知道，我也很感谢有机会与你们两位聊天。最后一个问题，有实习机会吗，还是只有全职？是的，我们有实习生，所以过去几年我们有实习生来这里从事项目，你知道人们
+
+128
+01:17:40.000 --> 01:18:00.000
+get excited about that so we are hiring interns. Actually, just go to our career page. So we are hiring interns in the same location, New York City and as well as San Francisco office for data science interns. Cool. So folks out there, if you're
+对此感到兴奋，所以我们正在招聘实习生。实际上，直接去我们的职业页面就行。我们正在招聘实习生，地点相同，纽约市以及旧金山办公室，招聘数据科学实习生。酷。所以各位，如果你在
+
+129
+01:18:00.000 --> 01:18:05.000
+in university, this is an amazing opportunity. Definitely check it out. And thank you again, L langji for for coming on the show thank you yeah thank you thank you the intro music is axo by biner pilot. Programming Throwdown is distributed under a Creative Commons Attribution Sharealike 2.0 license. You're free to share, copy, distribute, transmit the work, to remix, adapt the work, but you must provide attribution to Patrick and I and sharealike in kind. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+上大学，这是一个绝佳的机会。一定要去看看。再次感谢你，L langji，来到节目。谢谢，是的，谢谢，谢谢。片头音乐是Biner Pilot的Axo。Programming Throwdown是在知识共享署名-相同方式共享2.0许可下分发的。你可以自由分享、复制、分发、传播作品，进行重混、改编作品，但你必须注明Patrick和我的署名，并以相同方式共享。本集目前还没有评论。点击转录中的任何句子即可发表评论。

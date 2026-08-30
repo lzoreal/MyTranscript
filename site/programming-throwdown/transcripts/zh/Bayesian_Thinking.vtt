@@ -1,0 +1,661 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:53.000
+programming throwdown episode 102 bayesian thinking with max squire take it away jason hey everybody so this is uh this is gonna an awesome episode. I know so many people have asked for more content on AI and on machine learning. And today we have Max Sklar, who's an engineer at Foursquare's Innovation Lab. He's going to talk to us about Bayesian thinking, Bayesian inference, and this whole universe. So thanks so much for coming on the show. Thank you so much for having me. I love talking about this stuff. So let's get into it. I'm excited. Cool. Awesome. How are you doing? How are you handling the COVID situation?
+Programming Throwdown 第 102 期：与 Max Sklar 探讨贝叶斯思维。Jason，交给你了。嘿，大家好，这期节目一定会非常棒。我知道很多人都要求提供更多关于人工智能和机器学习的内容。今天我们请到了 Foursquare 创新实验室的工程师 Max Sklar。他将和我们聊聊贝叶斯思维、贝叶斯推理以及整个相关领域。非常感谢你来到节目。非常感谢邀请我。我非常喜欢谈论这些话题。那我们开始吧。我很兴奋。太棒了。你好吗？你如何应对新冠疫情的情况？
+
+2
+00:00:53.000 --> 00:01:33.000
+Well, as reasonably as one can expect, I guess, you know, every week on the podcast, people can hear my mood going up and down and have commented as such. But I also experience mood swings. There's something about, you know, being in the same place for everything that causes you to have these ups and downs. Yeah, it seems to be a universal thing. I feel like I was mentioning this to someone yesterday. Like, do you ever, like, go through your Apple photos or Google photos or whatever? And, you know, just go through your past, like the last five years, 10 years and just scroll. I'm like, what's it going to be like scrolling through these months? It's like all of a sudden
+嗯，我想说，在目前的情况下，我已经尽可能保持理智了。你知道，在播客里，大家每周都能听到我的情绪起伏，也有人对此发表过评论。但我自己也会经历情绪波动。你知道，所有事情都在同一个地方处理，这会让你产生这种起伏。是的，这似乎是一个普遍现象。我觉得昨天我还在跟别人提到这一点。比如，你会不会翻看你的 Apple Photos 或 Google Photos 之类的照片？然后回顾过去五年、十年的经历，只是简单地滚动浏览。我在想，滚动浏览这几个月会是什么样子？突然之间，
+
+3
+00:01:33.000 --> 00:02:32.000
+I'm living my life. And then, oh, it's a bunch of pictures in my room. And then a bunch of pictures of sirens going by and then more pictures of my room than a bunch of wires. And I'm like, oh, let's skip this. Let's skip this part. Yeah, it's so true. Yeah. What I heard the other day, which was really resonated, was that 2020 is kind of like when you get bored at SimCity and you just turn on all the disasters at once. It's kind of like what things have degenerated to. to it's it's funny i i read like a full review of one of the things that um i wasted my time on during during this pandemic which unfortunately i feel like i'm not alone when i feel like i could be getting so much done but i wasted so much time was watching like a review of the original sim city on on youtube so okay i found out i was i was reading an article that there's a game called Sim Refinery that Maxis made, I think, for Chevron and further employees. And someone was able to get a copy of it. And you can actually
+我还在过我的生活，然后，哦，是一堆我在房间里的照片。接着是一堆警笛声经过的照片，然后又是更多我在房间里的照片，接着是一堆电线。我就想，哦，跳过这一段吧，跳过这一段。是的，太真实了。我前几天听到的一个说法非常有共鸣：2020 年就像你在玩《模拟城市》(SimCity) 时感到无聊，于是把所有灾难同时打开一样。事情就是这样恶化到这种地步的。这很有趣，我读了一篇关于我在疫情期间浪费时间做的事情的完整评论，不幸的是，我觉得我并不孤单，因为我本可以完成很多事情，但我却浪费了太多时间在 YouTube 上看关于初代《模拟城市》的评论。所以我发现，我读到一篇文章说有一款叫《Sim Refinery》的游戏，我想是 Maxis 为雪佛龙 (Chevron) 及其员工制作的。有人设法弄到了一份副本，你实际上可以
+
+4
+00:02:32.000 --> 00:03:31.000
+download it and play it in an emulator. I haven't tried it yet. Cool. So the topic is something that we need to really attack kind of from the surface because there's sort of a lot of layers to it. And so I feel like maybe one good way to, you know, get started on it is just to talk a little bit about uncertainty. I mean, there's a lot of challenges. You know, everyone knows software, at least most software is deterministic. You say one plus one and you expect it to be two every time. But when you're doing anything from you're trying to make some kind of prediction or you're getting data from some analog device or some sensor, the world around you or even just behaviors of people is full of uncertainty.
+下载并在模拟器中运行它。我还没试过。酷。所以这个话题我们需要从表面入手，因为它的层次很多。我觉得一个好的切入点是先谈谈不确定性。我的意思是，这里有很多挑战。你知道，每个人都知道软件，至少大多数软件是确定性的。你说 1 加 1，你每次都期望它是 2。但当你做任何事情，比如试图进行某种预测，或者从模拟设备或传感器获取数据时，你周围的世界，甚至仅仅是人们的行为，都充满了不确定性。
+
+5
+00:03:31.000 --> 00:04:21.000
+And just in general, like how do people deal with that kind of stuff when they're writing code in this very rigid way? Yeah, well, one one thing that I've learned even over the past couple of years, as I've been doing this for many years, is how deep the rabbit hole goes in terms of the different kinds of uncertainty and risk and probability and the different definitions around it. People don't even agree on what uncertainty means or what probability means. I kind of tend to take the subjective view that it's sort of your degree of belief that something is true. But then there are the cases where, you know, hey, we're at a casino and we're flipping a coin and I know reasonably well, you know, what the probability is. Everybody agrees that like a coin flip is 50 percent and the die roll is a six, a six, a six, et cetera.
+总的来说，当人们以这种非常死板的方式编写代码时，他们是如何处理这类事情的呢？是的，即使在我从事这一行多年之后，过去几年我学到的一件事是，在不同类型的不确定性、风险、概率及其定义方面，这个兔子洞有多深。人们甚至对“不确定性”或“概率”的含义都没有共识。我倾向于采取主观的观点，即它某种程度上是你对某事为真的信念程度。但也有一些情况，比如，嘿，我们在赌场掷硬币，我知道概率是多少。每个人都同意掷硬币是 50%，掷骰子是六分之一等等。
+
+6
+00:04:21.000 --> 00:05:10.000
+But in the real world, it's not like that. You often have cases where, you know, you don't even know what, you know, it's sort of a subjective on what the probability is of certain events. And the best you could do is try to estimate it or try to figure out, okay, what are the different possibilities that I want to consider here? And that's where Bayesian inference really shines. So I think the first step is just it's a dive into a problem and maybe it'll help to go over some examples and try to figure out, you know, what type of uncertainty am I dealing with exactly? And kind of having that discussion with your team is usually very fruitful. Yeah, it totally makes sense. I mean, I think one of the one way that sort of has both of those probability and uncertainty in one is the is the classic multi armed bandit,
+但在现实世界中，情况并非如此。你经常会遇到这种情况，你甚至不知道某些事件的概率是多少，这在某种程度上是主观的。你所能做的最好的事情就是尝试估计它，或者试着弄清楚：我在这里要考虑的不同可能性是什么？这就是贝叶斯推理真正大放异彩的地方。所以我认为第一步是深入研究一个问题，也许回顾一些例子会有所帮助，试着弄清楚：我到底在处理哪种类型的不确定性？与你的团队进行这种讨论通常是非常有成效的。是的，这完全说得通。我的意思是，我认为有一种既包含概率又包含不确定性的经典例子，就是多臂老虎机问题 (multi-armed bandit)，
+
+7
+00:05:10.000 --> 00:05:57.000
+which is this idea where, you know, imagine you go to Las Vegas and imagine now, you know, in the real world, you know, slot machines are highly regulated. And so you could go to any casino and I think you could even look up the probabilities. They're all posted publicly. But but, you know, let's suspend belief on that for a moment and just assume that every hotel had their own rules. Maybe some hotels are brand new and so they make the slot machines really generous. Some of them are very strict, but you don't know what any of those probabilities are. And so you you have, you know, maybe, you know, a thousand dollars worth of quarters in your pocket and you or in a bucket or something and you want to basically make as much money as possible. And so you're kind of
+这个想法是这样的：想象你去拉斯维加斯，在现实世界中，老虎机是受到严格监管的。所以你可以去任何一家赌场，我想你甚至可以查到概率。它们都是公开张贴的。但是，让我们暂时搁置这一点，假设每家酒店都有自己的规则。也许有些酒店是全新的，所以他们把老虎机设置得非常慷慨。有些则非常严格，但你不知道这些概率是多少。所以你口袋里可能有价值一千美元的 25 美分硬币，或者在一个桶里，你想尽可能多地赚钱。所以你有点
+
+8
+00:05:57.000 --> 00:06:37.000
+torn because you don't you don't know any of the information, but you don't want to waste a lot of money finding out either. You want to quickly kind of dial that in and then choose the best slot machine for the rest of the day. And so you could see how you're sort of balancing, you know, reducing uncertainty and, you know, becoming more certain about your world with, in this case, I guess, profit. Yeah, exactly. And another, one of the things that I like to talk about is sometimes you talk about, okay, what's the implications in terms of building a machine learning model at work? But sometimes there's also the question of what does this mean for my everyday life?
+纠结，因为你没有任何信息，但你也不想浪费很多钱去寻找答案。你想快速锁定目标，然后在余下的一天里选择最好的老虎机。所以你可以看出，你是在平衡减少不确定性，让你对世界更加确定，与在这种情况下，我猜是利润之间的关系。是的，完全正确。我喜欢谈论的另一件事是，有时你会谈论：在工作中构建机器学习模型意味着什么？但有时也会有这样的问题：这对我的日常生活意味着什么？
+
+9
+00:06:37.000 --> 00:06:59.000
+And the multi-armed bandit example is the question of what is the cost of getting information? And oftentimes we don't consider what the cost of getting information. And oftentimes we don't consider what the cost of getting information to get the right answer is, because it's not zero. And so people often either go into rabbit holes and try to get as much information as possible when it kind of freezes them in place,
+多臂老虎机例子提出了获取信息的成本问题。通常我们不考虑获取信息的成本。通常我们不考虑获取正确答案所需信息的成本，因为那不是零。所以人们要么陷入死胡同，试图获取尽可能多的信息，这让他们停滞不前，
+
+10
+00:06:59.000 --> 00:07:37.000
+or people will throw up their hands and just make a decision because they don't know. But taking a second to think about, what's the cost of getting information and what does that get me is another way to kind of dig into a problem. Yeah, yeah, totally makes sense. Yeah. And so, you know, imagine, you know, if you're writing, if you're writing something that's going to do any kind of forecasting, you're invariably going to have some type of probability and then some type of uncertainty around that. So, I mean, this is something that I think really gets neglected in a lot of these kind of coding boot camps or these tutorials online. Like if you've seen the
+要么人们会放弃，因为他们不知道而直接做出决定。但花点时间思考一下：获取信息的成本是多少？它能给我带来什么？这是深入研究问题的另一种方式。是的，完全说得通。所以，想象一下，如果你正在编写某种要做预测的东西，你总是会遇到某种概率，以及围绕它的某种不确定性。所以，我的意思是，我认为这在很多编码训练营或在线教程中确实被忽视了。就像如果你看过
+
+11
+00:07:37.000 --> 00:08:26.000
+show Silicon Valley, where I have not seen the last season, but you can spoil me if you want. Oh, you know, I haven't either. So we're both in the same boat. OK, we're both in the same boat. So, Patrick, try not to spoil it for us. But but basically the person I think Gian makes makes a hot dog, not hot dog app. Right. Right. And so just taking that example, you know, if you build a model to do that, it's not going to say thumbs up or thumbs down it's going to give you a probability and if you build a Bayesian model it's also going to give you a distribution which we can which we can talk about but but you have to then you know turn that into an action so so that really is context dependent so for, for example, you know, maybe the hot dog, not hot dog app.
+《硅谷》(Silicon Valley) 这部剧，我还没看过最后一季，但如果你想剧透我也可以。哦，你知道，我也没看过。所以我们俩处境相同。好的，我们处境相同。所以，Patrick，尽量别给我们剧透。但基本上，我想是 Jian-Yang 制作了一个“热狗，不是热狗”的应用程序。对吧。所以，以这个例子为例，如果你构建一个模型来做这件事，它不会说“赞”或“踩”，它会给你一个概率。如果你构建一个贝叶斯模型，它也会给你一个分布，我们可以谈谈这个，但你必须将其转化为行动。所以这确实取决于上下文。例如，也许对于“热狗，不是热狗”应用程序，
+
+12
+00:08:26.000 --> 00:09:15.000
+You should only say hot dog if it's really confident because you're going to notify someone or send an email and you really don't want to be wrong. But then on the flip side, imagine something a little more serious like you're doing cancer screening. Well, maybe if you're 10 percent sure you should say yes, because yes means running an additional test. Right. And so so you really can't you can't do anything in machine learning without, you know, dealing with probability and sort of philosophy or economics of whatever you're trying to build and trying to marry those two together. Yeah. Oftentimes you're ultimately after making a decision, but you don't want to just go right away to the yes or no. You want to come up with the probability or the distribution and then use that to help make the decision. So kind of breaking it up into two
+只有在非常有把握时才应该说“是热狗”，因为你要通知某人或发送电子邮件，你真的不想出错。但另一方面，想象一些更严肃的事情，比如癌症筛查。嗯，也许如果你有 10% 的把握，你也应该说“是”，因为“是”意味着进行额外的检查。对吧。所以，如果不处理概率以及你试图构建的任何东西的哲学或经济学，并将两者结合起来，你就无法在机器学习中做任何事情。是的，你最终往往是为了做出决定，但你不想直接跳到“是”或“否”。你想得出一个概率或分布，然后用它来帮助做出决定。所以，将其分为两部分。
+
+13
+00:09:15.000 --> 00:09:52.000
+parts. If I could give an example from my work that this is, we'll probably bring this up again, but this is sort of this example. It might not be the most fun example, but it's definitely one of my favorites because it's just one of the projects that I've done that just brought so much value, which was in ad attribution. That was a product I worked on for Foursquare a few years ago. A lot of people in data science, you're going to run into attribution at some point in your life trying to figure out whether ads work or not. Big data problem, you know, lots of people trying to solve it.
+如果我可以举一个我工作中的例子，我们可能会再次提到这一点，但这确实是我的最爱之一，因为它是我做过的项目中最有价值的一个，那就是广告归因。这是我几年前为 Foursquare 工作时做的一个产品。数据科学领域的很多人在生活中的某个时刻都会遇到归因问题，试图弄清楚广告是否有效。这是一个大数据问题，很多人都在试图解决它。
+
+14
+00:09:52.000 --> 00:10:18.000
+And Foursquare was kind of, we were trying to figure out whether people, whether ads were driving people into stores. And we had some visit data and we had some data on who saw the ads. And it was really hard to untangle what the clients were asking for because they wanted to know lift. They wanted to know, okay, what percent more likely is someone to visit one of my stores if I give them an ad? Is it 10 percent? Is it 20 percent?
+Foursquare 当时试图弄清楚广告是否在引导人们进入商店。我们有一些访问数据，还有一些关于谁看了广告的数据。要理清客户的要求真的很难，因为他们想知道提升度 (lift)。他们想知道：如果我给某人投放广告，他们访问我商店的可能性会增加百分之几？是 10% 吗？是 20% 吗？
+
+15
+00:10:18.000 --> 00:10:54.000
+Is it 5 percent? And no one asked for a probability distribution over that. They just wanted a number, an exact number. And then they wanted to tell us either an exact number or we don't have enough information to say. And originally, the team was kind of just taking that at face value, being like, okay, let's try to just calculate this number. But it led to so many problems with, you know, how accurate do we know? How accurate is this number, you know, when can we report it, when can we not report it, and then to untangle that, we took a step
+是 5% 吗？没有人要求提供关于这个的概率分布。他们只想要一个数字，一个确切的数字。然后他们想让我们要么给出一个确切的数字，要么说我们没有足够的信息来判断。最初，团队只是照单全收，心想：好吧，让我们试着计算这个数字。但这导致了许多问题，比如：我们知道的准确度如何？这个数字有多准确？我们什么时候可以报告它，什么时候不能？为了理清这一点，我们退后一步，
+
+16
+00:10:54.000 --> 00:11:38.000
+back and said, wait a minute, wait a minute, we don't know what the lift value is for an ad, but let's try to turn this into a Bayesian model, and we could talk about, like, I don't know if we want to kind of go and dive into like the intro to Bayesian theory, maybe after this. But we said instead of talking about what is the lift of an ad, let's say, hey, we don't know what the lift of an ad is, but there's some uncertainty around it. There is it could be anything. And then as we have some probability distribution there. And then as we gather more and more data, we update our probability distribution and it gets taller and skinnier over time. And then we could come up with like a confidence range or sort of a Bayesian confidence range, which is, you know, hey, your lift is somewhere in there.
+说：等一下，我们不知道广告的提升度值是多少，但让我们试着把它变成一个贝叶斯模型。我们可以谈谈，我不知道我们之后是否想深入了解贝叶斯理论的入门知识。但我们说，与其讨论广告的提升度是多少，不如说：嘿，我们不知道广告的提升度是多少，但它周围存在一些不确定性。它可能是任何值。然后我们在这里有一个概率分布。随着我们收集越来越多的数据，我们更新我们的概率分布，它会随着时间的推移变得更高、更窄。然后我们可以得出一个置信区间，或者说贝叶斯置信区间，即：嘿，你的提升度就在这个范围内。
+
+17
+00:11:38.000 --> 00:12:23.000
+And then we could use that to help the clients make decisions. And it's sort of, even though some clients didn't understand what we were doing, it sort of made it a lot easier on the engineering and staff side, where we could be like, okay, we now all agree on what we're doing and what we're doing makes sense. And it was just amazing to see how it just detangled a lot of our issues. Yeah, yeah, totally. Yeah, I think you touch on a lot of things there. So we'll try and unpack that. I mean, one is, I think probability distributions have to be one of the most foreign things. Let's say foreign entry level things in mathematics, right? Because I mean, there's a lot of things that, you know, string theory, there's a lot of things that are very complicated. But I would say PDFs are probably one of the things that
+然后我们可以用它来帮助客户做出决定。虽然有些客户不明白我们在做什么，但这在工程和员工方面确实容易多了，我们可以说：好吧，我们现在都同意我们在做什么，而且我们所做的事情是有意义的。看到它如何理清了我们许多问题，真是太神奇了。是的，完全正确。是的，我认为你提到了很多事情。所以我们会尝试拆解它。我的意思是，我认为概率分布一定是数学中最陌生的入门级事物之一，对吧？因为我的意思是，有很多事情，比如弦理论，有很多非常复杂的事情。但我会说 PDF（概率密度函数）可能是
+
+18
+00:12:23.000 --> 00:13:04.000
+they're fundamental, foundational but they're also like really abstract and complicated. Yeah, can you take a crack at sort of explaining what a probability density function is to folks out there? Yeah, yeah. I mean, I guess one thing you could start with is if a PDF is blowing your mind, why not just start with the discrete case? Because, and I find this too, sometimes when I'm dealing with continuous data, if I think about it in a discrete way, it's a lot easier to start. So just think of what a regular probability distribution is. You have a number of potential events. In the case of Bayesian
+它们是基础的，但它们也非常抽象和复杂。是的，你能试着向大家解释一下什么是概率密度函数吗？是的，我想你可以从这里开始：如果 PDF 让你感到困惑，为什么不从离散情况开始呢？因为，我也发现，有时当我在处理连续数据时，如果我以离散的方式思考，开始会容易得多。所以，想想什么是常规的概率分布。你有一系列潜在的事件。在贝叶斯
+
+19
+00:13:04.000 --> 00:14:01.000
+inference, you're usually talking about several hypotheses that you're trying to decide, OK, which which one of these is the is the true one. Sometimes you're trying to figure out, you know, trying can kind of say, OK, this is what it is. It's just going to be a bunch of numbers that add up to one. Right. So each things have a probability. And then, you know, you could update those values as more data comes in. A PDF is a little more complicated because it's continuous data. So instead of having it on, let's say, 10 possibilities or 30 possibilities or two possibilities, actually, a lot of times it's two possibilities, you're dealing with a space that it's like, okay, this is a number. This is like a real number. In the case of attribution, we're trying to find the ad lift. This is a
+推理的情况下，你通常是在谈论几个你试图决定的假设，即：好吧，其中哪一个是真的？有时你试图弄清楚，试图说：好吧，就是这样。它只是一堆加起来等于 1 的数字。对吧。所以每件事都有一个概率。然后，你可以随着更多数据的到来更新这些值。PDF 稍微复杂一点，因为它是连续数据。所以，与其让它有 10 种可能性、30 种可能性或两种可能性（实际上，很多时候是两种可能性），你处理的是一个空间，就像：好吧，这是一个数字。这就像一个实数。在归因的情况下，我们试图找到广告提升度。这是一个
+
+20
+00:14:01.000 --> 00:14:50.000
+positive number greater than zero. It's where usually it's greater than one because one means that the ad was not effective. So although there are exceptions to that. So it's it's now you don't have you don't have some a bunch of numbers that like a bunch of values that add to one. You have a continuous space that if you know calculus, it integrates to one. You can kind of break up the continuous space in different one. You have a continuous space that if you know calculus, it integrates to one. You can kind of break up the continuous space in different ways. You could break it up into sections like, hey, I could bucket it. What's the chance it's, you know, greater than five or less than five? Well, both of those have to add to one. But, you know, essentially, you're just searching a space of numbers. And you could even make it more complicated than numbers still. You could make it into, you know, R2, R3, you know, a space of vectors, but then that
+大于零的正数。通常它大于 1，因为 1 意味着广告无效。虽然也有例外。所以现在你没有一堆加起来等于 1 的数字。你有一个连续空间，如果你懂微积分，它积分后等于 1。你可以用不同的方式分割连续空间。你可以把它分成几个部分，比如：嘿，我可以把它分桶。它大于 5 或小于 5 的几率是多少？这两者加起来必须等于 1。但是，本质上，你只是在搜索一个数字空间。你甚至可以把它变得比数字更复杂。你可以把它变成 R2、R3，一个向量空间，但那样
+
+21
+00:14:50.000 --> 00:15:29.000
+gets even more abstract. So depending on, I'm pretty sure you probably have listeners who are comfortable with levels of abstraction on a high level and not so much, but, you know, essentially you're just trying to figure out the relative probability of different possibilities. That's all of this stuff is trying to answer that one question. And I and then and yeah, you know, it's your hypothesis. Yeah. It's your depending on how complicated you want your hypothesis space to be. Yeah, it totally makes sense. You basically you have this function.
+会变得更加抽象。所以，取决于，我很确定你们的听众中有些人对高层次的抽象感到舒适，有些人则不然，但本质上，你只是在试图找出不同可能性的相对概率。所有这些东西都是为了回答那个问题。而且，是的，这是你的假设。取决于你想让你的假设空间有多复杂。是的，这完全说得通。你基本上有这个函数。
+
+22
+00:15:29.000 --> 00:16:14.000
+And when the function is high, like you could imagine in your mind just just any type of function you'd, you know, graph on your graphing calculator or something. Right. And when that function is high, you know, has a high Y value that for those values of X, they're just more likely. And when the function is low, those values are really really unlikely so if you imagine like a coin toss um and and you're you're getting the pdf of this of this coin uh you know it could be you toss the coin three times and get three heads it's possible but it's much it's much more likely that you're going to get at least one tails and so you could imagine you know the y at one third being being higher than the y at zero but yeah the thing is really weird is as imagine, you know, the Y at one third being being higher than the Y at zero. But, yeah, the thing is really weird is, as you said, you know, if you pick a single point, it actually doesn't really mean anything.
+当函数很高时，你可以想象在你的脑海中，任何类型的函数，你在图形计算器上绘制的函数，对吧。当该函数很高时，你知道，对于那些 X 值，它们更有可能发生。当函数很低时，那些值就非常非常不可能。所以如果你想象掷硬币，你得到了这个硬币的 PDF，你知道，你掷硬币三次得到三个正面，这是可能的，但你更有可能至少得到一个反面。所以你可以想象，三分之一处的 Y 值比零处的 Y 值更高。但，是的，最奇怪的事情是，正如你所说，如果你选择一个点，它实际上并没有什么意义。
+
+23
+00:16:14.000 --> 00:17:26.000
+It's really just when you integrate over a range, because, for example, yeah, like you never in a continuous phase, like you never have exactly 33, you know, 0.333. It's always going to be there's always going to be some uncertainty there. And so you have to deal in terms of these of these ranges. And yeah. And so it's kind of more like a pie chart that's been kind of unrolled in a sense. Yeah. There are a number of different ways of looking at it. Another one I think of it is relative probabilities. Like, let's suppose you have just a standard Gaussian function that peaks at zero, right? So the zero value is the highest probability. number has a probability of zero of landing on exactly that number. But you can actually compare, hey, what's the chance of me landing on zero versus the chance of me landing on one? And you can kind of compare relatively what those two are, even though they're both zero, which is kind of mind blowing until you're comfortable with calculus and differentials and all that. But sometimes you could just understand what the graph means, like,
+它只有在你对一个范围进行积分时才有意义，因为，例如，是的，在连续空间中，你永远不会正好得到 33，即 0.333。总是会有一些不确定性。所以你必须用这些范围来处理。是的。所以它更像是一个展开的饼图。是的。看待它的方式有很多种。我想到的另一种方式是相对概率。假设你有一个在零处达到峰值的标准高斯函数，对吧？所以零值是最高概率。数字落在那个确切数字上的概率为零。但你实际上可以比较：嘿，我落在零上的几率与我落在 1 上的几率相比如何？你可以相对地比较这两者，即使它们都是零，这在你不熟悉微积分和微分之前是令人难以置信的。但有时你只需要理解图表意味着什么，比如：
+
+24
+00:17:26.000 --> 00:18:17.000
+hey, I'm going to be somewhere under this graph. And so I'm much more likely to be in the high sections than the low sections. And that's sort of where my mind goes when I read a simple PDF. And then every once in a while, I want to get into like really abstract, like what's going on here. And I, you know, sometimes I do read into this stuff. I read into like topology and, and, and measure theory. And you could really get into, yeah, you could get into like some really abstract. I was reading the other day about, I can't believe I'm bringing this up. I was reading the other day about something called pointless topology. And it's this idea that in a in a in a space like real numbers, the point is not the fundamental unit. You actually can only talk about, you know, places of finite extent.
+嘿，我将处于这个图表下的某个位置。所以我更有可能处于高位部分而不是低位部分。这就是我阅读简单 PDF 时脑海中浮现的想法。然后偶尔，我想深入研究一些非常抽象的东西，比如这里发生了什么。我，你知道，有时我确实会读这些东西。我读过拓扑学和测度论。你真的可以深入研究一些非常抽象的东西。我前几天在读，我不敢相信我提到了这个。我前几天在读一种叫“无点拓扑学”(pointless topology) 的东西。它的想法是，在像实数这样的空间中，点不是基本单位。你实际上只能谈论有限范围的地方。
+
+25
+00:18:17.000 --> 00:19:08.000
+So you have to be able to move a little bit to the right and a little bit to the left. And I mean, think about it in terms of like electricity. Like if you're doing if you're an electrician, like you never say, OK, exactly one hundred and twenty point zero zero zero zero volts is coming out of this socket like like no house has that kind of tolerance. Yeah. And so you're always thinking about things in terms of tolerance. And so you're always thinking about things in terms of hopefully small ranges of numbers. Yeah. And the scary thing is, is oftentimes the infinite precision number really has no meaning, you know, because what does it mean to if I said there was 120 volts, but it was, you know, zeros all the way down. Exactly. Like, is that even possible if you go deep down?
+所以你必须能够向右移动一点，向左移动一点。我的意思是，从电力的角度来考虑它。如果你是一名电工，你永远不会说：好吧，这个插座里正好流出 120.0000 伏特，没有房子有那种公差。是的。所以你总是从公差的角度来思考问题。所以你总是从希望是小范围数字的角度来思考问题。是的。可怕的是，无限精度的数字往往没有意义，因为如果我说有 120 伏特，但它是零一直到底，那意味着什么？确切地说，如果你深入研究，那甚至可能吗？
+
+26
+00:19:08.000 --> 00:19:42.000
+It's like quantum physics. Oftentimes the numbers that you you're talking about stop having meaning anymore. It's one example that I give is like how many water molecules are in the Atlantic Ocean? Could probably come up with a reasonable estimate to that. But is there an exact integer that represents that that value? Probably not. No. And I mean, with with evaporation and everything, you'd never be able to count it. So another thing that I think, you know, talking about Bayesian and statistics really helps people is with generative, let's say models, but even more generically generative systems, right? I mean, I think when people write, for example, when I write unit tests,
+这就像量子物理学。通常你谈论的数字不再有意义了。我给出的一个例子是：大西洋里有多少个水分子？可能可以得出一个合理的估计。但有一个确切的整数代表那个值吗？可能没有。不。而且，随着蒸发和一切，你永远无法数清它。所以，我认为谈论贝叶斯和统计学确实能帮助人们的另一件事是生成式模型，甚至更通用的生成式系统，对吧？我的意思是，我认为当人们编写代码时，例如当我编写单元测试时，
+
+27
+00:19:42.000 --> 00:20:27.000
+I typically, you know, ideally, I to make a unit test that's generative. So, for example, so, for example, let's say I write my own sort. Maybe, you know, I could have a unit test where I take some some canonical inputs. I know what the sorted outputs are and I run my sort and then I make sure it matches. But another way to do that would be to have a validation function. So I have, let's say, the STL quick sort, which I can't use for whatever reason, but I have it. And my unit test could be generate some data, run the STL sort, run my new sort, and maybe my new one's faster. You know, that could be part of the test.
+我通常，理想情况下，我会编写一个生成式的单元测试。所以，例如，假设我编写了自己的排序算法。也许，我可以有一个单元测试，我取一些规范的输入。我知道排序后的输出是什么，我运行我的排序，然后确保它匹配。但另一种方法是拥有一个验证函数。所以我有 STL 的快速排序，虽然我因为某种原因不能使用它，但我有它。我的单元测试可以是：生成一些数据，运行 STL 排序，运行我的新排序，也许我的新排序更快。你知道，这可以是测试的一部分。
+
+28
+00:20:27.000 --> 00:21:04.000
+And then compare the results, right? So that's just an example of this sort of generative unit test. So some people hate that idea or they tell you you need to fix the random seed, and there's kind of a whole rabbit hole there. But, you know, you can imagine a lot of testing as being sort of generative. And I think to really understand Bayesian inference and how to build these Bayesian models, you have to think in terms of, you know, you have some phenomena. What generated that phenomena? And can I, you know, artificially, how much of that phenomena can I generate artificially?
+然后比较结果，对吧？所以这只是这种生成式单元测试的一个例子。有些人讨厌这个想法，或者他们告诉你需要固定随机种子，这里有一个完整的兔子洞。但是，你可以想象很多测试都是生成式的。我认为要真正理解贝叶斯推理以及如何构建这些贝叶斯模型，你必须从以下角度思考：你有一些现象。是什么产生了这种现象？我能人工生成多少这种现象？
+
+29
+00:21:04.000 --> 00:21:59.000
+And so, you know, people who want to do, let's say, game design, you know, have to deal with this kind of thing. And so in general, it's really good for really any engineer to know how to build sort of a generative system to model some problem. Yeah. A couple of points on that. First of all, the the the idea that the first step in kind of a Bayesian inference is, once you've defined the problem, I guess I would say that's the first step, is then you have to figure out what your hypothesis space is. You know, what are the possible mechanisms that I'm going to consider that could have generated the data that I'm seeing or that i'm about to see and um one of the well i guess you could say it's like a pitfall of bayesian uh thinking or bayesian analysis is that there is no guarantee that um you know one of the hypotheses that you come up with is is true or that works
+所以，想要做游戏设计的人必须处理这类事情。所以总的来说，任何工程师知道如何构建某种生成式系统来建模问题都是非常好的。是的，关于这一点有几点。首先，贝叶斯推理的第一步是，一旦你定义了问题，我想我会说这是第一步，然后你必须弄清楚你的假设空间是什么。你知道，我将考虑的可能机制是什么，这些机制可能产生了我也许正在看到或即将看到的数据？而且，嗯，我想你可以说这是贝叶斯思维或贝叶斯分析的一个陷阱，即没有保证
+
+30
+00:21:59.000 --> 00:22:39.000
+particularly well um and so that's why you often need to throw in like a dummy hypothesis and say oh this is actually just random data uh or something like that. And then if that beats everything, then, you know, OK, I either it either is random or I don't understand the mechanism. And so and I know we're talking kind of abstractly here, but if we can go back to I'm trying to get trying to figure out where we were in the conversation. If we go back to the unit test, like that's always very interesting. Like I remember like writing a unit test for the sword is one thing. Like I've written some to check if a logistic regression is coming up with the right answer.
+你提出的假设之一是正确的或特别有效的。所以这就是为什么你通常需要加入一个虚拟假设，说：哦，这实际上只是随机数据，或者类似的东西。然后，如果那个假设击败了所有其他假设，那么，好吧，要么它是随机的，要么我不理解这个机制。而且我知道我们在这里谈论得比较抽象，但如果我们能回到——我正在努力弄清楚我们在对话中的位置。如果我们回到单元测试，那总是非常有趣的。就像我记得为排序编写单元测试是一回事。我写过一些来检查逻辑回归是否得出了正确的答案。
+
+31
+00:22:39.000 --> 00:23:34.000
+And it's often – you often have to kind of tell the rest of the organization, my unit tests run differently. I either have to set the random number generator in stone, in which case I don't know if I'm necessarily getting what I want. My unit tests pass 95 percent of the time, but the other five percent, it doesn't pass. So every once in a while when you're doing this stuff, you run into problems with the organization with unit tests where I don't necessarily know the answer other than in some cases I just have unit tests that I run offline that aren't part of our automated testing whenever I change something that's probabilistic. Yeah, that totally makes sense. Yeah, I mean, and this is true in general. You have a generative system, especially one that's probabilistic. Yeah, that totally makes sense. Yeah, I mean, and this is true in general is, you know, you have a generative system, especially one that's, let's say, generating data for a test. There's always going to be that one chance that it generates,
+而且你经常不得不告诉组织的其他成员：我的单元测试运行方式不同。我要么必须将随机数生成器固定下来，在这种情况下，我不确定我是否一定得到了我想要的。我的单元测试 95% 的时间通过，但另外 5% 不通过。所以偶尔当你做这些事情时，你会遇到组织中关于单元测试的问题，我并不一定知道答案，除非在某些情况下，我只是运行离线单元测试，每当我更改概率性内容时，它们不是我们自动化测试的一部分。是的，这完全说得通。我的意思是，这在一般情况下也是如此。你有一个生成式系统，特别是概率性的。
+
+32
+00:23:34.000 --> 00:23:58.000
+like, really degenerate data, like maybe all the X's are the same. I mean, that could happen one out of, you know, a billion times or a million times. And there are unit test systems that are going to run your test a million times, maybe even a million times a day. So that could happen. Yeah, yeah, exactly. It happens all the time. One in a million.
+我的意思是，这在一般情况下也是如此，你有一个生成式系统，特别是正在为测试生成数据的系统。总会有那么一次机会，它生成了非常退化的数据，比如也许所有的 X 都是一样的。我的意思是，这可能在十亿次或一百万次中发生一次。有些单元测试系统会运行你的测试一百万次，甚至一天一百万次。所以这可能会发生。是的，完全正确。它一直都在发生。百万分之一。
+
+33
+00:23:58.000 --> 00:24:38.000
+I'm not surprised by one in a million things anymore. Yeah, I saw something. This is a pretty old quote, but it was from the lady who is the head of security at Twitter many years ago. And she basically said something to the effect of, yeah, if there's a if there's a one in a million chance that it happens, you know, 20 times an hour on Twitter or something like that. Yeah. You guys are going to take a little break to talk about University of California, Irvine's Division of Continuing Education. So this is a pretty cool program. They have a variety of different kind of certificates that you could acquire. They have things like Python, they have data science, they have machine learning.
+我对百万分之一的事情不再感到惊讶了。是的，我看到了某样东西。这是一个很老的引言，但它来自多年前 Twitter 的安全主管。她基本上说的是：是的，如果有一百万分之一的机会，它在 Twitter 上每小时发生 20 次，或者类似的事情。是的。你们要休息一下，谈谈加州大学欧文分校的继续教育部。这是一个非常酷的项目。他们有各种各样的证书可以获得。他们有 Python、数据科学、机器学习等课程。
+
+34
+00:24:38.000 --> 00:25:28.000
+And these are things where, you know, if you didn't necessarily get, let's say, a degree in machine learning or you haven't worked as a machine learning engineer for a bunch of years, this is a way to sort of get a lot of that knowledge, a lot of that expertise. And, you know, I know Patrick and I, we've both done a bunch of courses online. And so it's a really good way to sort of boost your knowledge and your skills in a particular area. Yeah, I mean, I did tons of online classes when I first started working. And, you know, for me, being part of a class, I mean, it's always interesting. But the curriculum, the self-paced stuff, it works great sometimes. But sometimes having a here's what we're doing each week, marching through their curriculum and going through it, it's very similar to how, you know, just a normal university class works.
+这些课程是，如果你没有获得机器学习学位，或者你没有作为机器学习工程师工作多年，这是一种获得很多知识和专业技能的方法。而且，我知道 Patrick 和我都参加过很多在线课程。所以这是一个提升你在特定领域知识和技能的好方法。是的，我刚开始工作时参加了大量的在线课程。而且，对我来说，成为班级的一部分，总是很有趣。但是课程，自定进度的东西，有时效果很好。但有时有一个“我们每周做什么”的课程，按照他们的课程大纲进行，这非常类似于普通大学课程的工作方式。
+
+35
+00:25:28.000 --> 00:26:18.000
+In fact, you know, feeling like it's almost exactly the same is just a comfortable thing, a good way to learn and learning from professors who, you know, that's that's their thing. That's they teach. They help others to learn and having access to it, doing the assignments, it really helped me go from, you know, where my undergraduate left off to, you know, to just kind of bootstrapping into more specifics, higher level things, things that were more pertinent to my job at the time. You know, I hardly recommend people taking classes, continuing education from a college. Yep. Yep. Yeah. i think getting it through a university is is actually a really really stellar i mean it's really awesome that universities are starting to get into this and um you know that there's going to be sort of quality lectures and
+事实上，感觉它几乎完全一样，这是一种舒适的事情，一种很好的学习方式，向那些教授学习，你知道，那是他们的专长。他们教学。他们帮助别人学习，并且能够接触到它，完成作业，这真的帮助我从本科毕业的地方，引导到更具体、更高级的事情，那些与我当时的工作更相关的事情。你知道，我强烈推荐人们参加大学的继续教育课程。是的。是的。我认为通过大学获得它实际上是非常棒的。我的意思是，大学开始涉足这个领域真是太棒了，而且，你知道，会有高质量的讲座和
+
+36
+00:26:18.000 --> 00:26:50.000
+professors there's there's you know there's a very strong brand behind any any sort of major university and you know uc reminds one of the top universities for CS. So they've been around since about 1962, I think. And they've been around a long time. They've been teaching a long time. They've been teaching online a long time. And so it's a good place to go and get this kind of education. Yeah, if you're interested, I think they're still doing enrollment for some late classes for spring,
+教授，任何主要大学背后都有一个非常强大的品牌，你知道，加州大学欧文分校是计算机科学领域的顶尖大学之一。所以他们从 1962 年左右就开始存在了，我想。他们存在了很长时间。他们教学了很长时间。他们在线教学了很长时间。所以这是一个去获得这种教育的好地方。是的，如果你感兴趣，我想他们还在为春季的一些后期课程进行注册，
+
+37
+00:26:50.000 --> 00:28:05.000
+but summer is upcoming. And as we've been talking about this whole episode, I mean, I think everyone has extra time at home these days. And if you're interested, you can check it out at ce.uci.edu slash programming throwdown. And we'll put the link in the show notes, of course. But once again, that's ce.uci.edu slash programming throwdown. Yeah. And if you do sign up and take any courses, you know, we'd love to get feedback. You know, please write us in. Tell us what you think of it. You know, we could pass it on to them. But also for us, it's really good to know, you know, what you thought about that. You know, folks out there who are listening. So. All right. Back to the show. So. So. So, yeah. So what makes something Bayesian or one of the one way to explain it is, you know, when you're building when you're building that generative system, if you build it on top of random numbers right now, you have kind of a generative model. So, for example, so, for example, if if if we go to our to our sort example, so we're generating some random numbers to sort and to compare the outputs of them.
+但夏季即将到来。正如我们这整期节目所谈论的，我的意思是，我认为每个人现在在家都有额外的时间。如果你感兴趣，可以在 ce.uci.edu/programmingthrowdown 查看。当然，我们会把链接放在节目说明中。但再说一次，那是 ce.uci.edu/programmingthrowdown。是的。如果你注册并参加了任何课程，我们很乐意得到反馈。请写信告诉我们你的想法。我们可以把它转达给他们。但对我们来说，知道你对那个课程的看法也非常好。那些正在收听的听众们。好的。回到节目。所以。所以。所以，是的。那么是什么让某事成为贝叶斯的？或者解释它的一种方式是，当你构建那个生成式系统时，如果你在随机数之上构建它，现在你就有了一个生成式模型。所以，例如，如果我们回到我们的排序例子，我们正在生成一些随机数来排序并比较它们的输出。
+
+38
+00:28:05.000 --> 00:28:53.000
+If we know the function that's generating those numbers. So, for example, the numbers that we're sorting, we're generating them from a Gaussian distribution. Right. If we have the getting back to our earlier topic, if we have the probability density function for this generator, now we have, instead of needing, when we do analysis, instead of needing the list of numbers, we could just think about it in terms of, okay, this is the distribution that I'm sorting. And then all of the models and the math afterwards could be done on the distributions. And your output could also be another probability density function. Yeah. So I'm not sure I'm following exactly. So you're generating a bunch of random numbers from from, let's say, a Gaussian and you still want to sort it.
+如果我们知道生成这些数字的函数。例如，我们正在排序的数字，我们是从高斯分布中生成的。对吧。如果我们有，回到我们之前的话题，如果我们有这个生成器的概率密度函数，现在我们有了，而不是在做分析时需要数字列表，我们可以只从以下角度思考：好吧，这就是我正在排序的分布。然后之后所有的模型和数学都可以在分布上完成。你的输出也可以是另一个概率密度函数。是的。所以我不太确定我是否完全理解。所以你从高斯分布中生成了一堆随机数，你仍然想对它进行排序。
+
+39
+00:28:53.000 --> 00:29:54.000
+Are you saying, oh, yeah. Yeah. Yeah. Well, I'm saying let's say we just want to do some analysis on the sort. So, yeah, the actual sort is going is not going to be a Bayesian system because it's it's it's kind of a deterministic thing. But which is in general, I think if you start with sort of random numbers and then you instead of applying things on each of those elements that we've drawn from the distribution, you could also imagine, you know, doing functions on the distribution itself. So let's take this this Gaussian distribution and let's maybe multiply it by a constant and add it to this other Gaussian distribution. And if you do that enough times, you get some kind of linear regression. And so that that output then of that process also becomes a distribution. Yeah. I mean, I think the the main point is you can actually recapture the distribution from the random numbers.
+你是说，哦，对。对。对。嗯，我的意思是，假设我们只是想对排序做一些分析。所以，是的，实际的排序过程不会是一个贝叶斯系统，因为它是一种确定性的东西。但总的来说，我认为如果你从随机数开始，而不是对我们从分布中抽取的每个元素应用某些东西，你也可以想象对分布本身进行函数运算。所以，让我们取这个高斯分布，也许把它乘以一个常数，然后把它加到另一个高斯分布上。如果你这样做足够多次，你就会得到某种线性回归。因此，该过程的输出也变成了一个分布。是的，我的意思是，我认为重点在于你实际上可以从随机数中重新捕获分布。
+
+40
+00:29:54.000 --> 00:30:27.000
+And that's always very interesting. I was I've been reading like a lot of well, a few months ago, I was reading a whole bunch of the the covid papers, you know, the coronavirus papers. And the one that I was really interested in on March, you know, March 10th was how long does it take for someone to get it? Because I walked into the Foursquare office on March 6th and no one was there. And I was like, what's going on? Is it a weekend? Did I screw up? And haven't you heard somebody got the COVID and we all have to quarantine for two weeks.
+这总是非常有趣的。我一直在读很多，嗯，几个月前，我读了一大堆关于新冠的论文，你知道，冠状病毒的论文。在3月10日那天，我真正感兴趣的是一个人感染它需要多长时间？因为我在3月6日走进Foursquare办公室时，那里一个人也没有。我就想，怎么回事？是周末吗？我搞错了吗？难道你没听说有人得了新冠，我们都得隔离两周吗？
+
+41
+00:30:27.000 --> 00:31:07.000
+And that was back then. Nobody was quarantining. So I was like it was kind of like I felt like I was personally being punished. But but after five days, you know, I was like, OK, I'm not sick. None of my co-workers are sick. And what's the probability that that probability that we got it or any of us got it? And as I looked into the number, I found one paper that was really good, which, you know, took the discrete data of, okay, these are example of people who know when they were exposed, know when they started exhibiting symptoms. And so they construct the probability distribution on, you know,
+那是当时的情况。没人隔离。所以我当时觉得我好像是在被个人惩罚。但是五天后，你知道，我想，好吧，我没生病。我的同事们也没人生病。那么我们感染或我们中任何人感染的概率是多少？当我研究这个数字时，我发现了一篇非常好的论文，它采用了离散数据，即：这些是知道自己何时暴露、知道何时开始出现症状的人的例子。因此，他们构建了一个概率分布，关于……
+
+42
+00:31:07.000 --> 00:31:57.000
+when you start exhibiting symptoms from when you were exposed. And I noticed in the paper, which I liked, which gave me confidence in the paper, which, you know, a lot of the papers that I've read over the last three months in this topic did not inspire as much confidence. But one of the things that they did was they checked a lot of forms for the distribution. So they checked they they checked to see if it was a Gaussian, but they also checked many, hey, you have a median of getting this thing in like five days and set 97 percent chance it'll come at you in 14 days. So that that sort of inspired confidence from the from the data they got.
+你从暴露到开始出现症状的时间。我在论文中注意到，我喜欢这一点，这让我对这篇论文产生了信心，你知道，我在过去三个月里读过的关于这个主题的很多论文并没有激发那么多的信心。但他们做的一件事是，他们检查了很多分布形式。所以他们检查了它是否是高斯分布，但他们也检查了许多，嘿，你得到这个东西的中位数大约是五天，并且有97%的几率它会在14天内出现。所以这从他们得到的数据中激发了信心。
+
+43
+00:31:57.000 --> 00:32:32.000
+And yeah, nobody at work at least got sick from work. So that was good. I was pretty confident after five days, but my co-workers were still not so confident. Yeah, I mean, I think the statistics, especially when it's rather early and there hasn't been enough time, it's just very hard to get that right. I think a lot of people learned the hard way that fractions have denominators, right? And so you might have a thousand cases, but if you tested a hundred times as many people as the next place,
+是的，至少在工作中没有人因为工作而生病。所以那很好。五天后我很有信心，但我的同事们仍然不太确定。是的，我的意思是，我认为统计数据，特别是在早期且时间不够的情况下，很难做到准确。我认为很多人通过惨痛的教训学到了分数有分母，对吧？所以你可能有1000个病例，但如果你测试的人数是下一个地方的100倍，
+
+44
+00:32:32.000 --> 00:33:08.000
+then that obviously has a huge impact. Yeah, I mean, one thing that I like about Bayesian inference is it sort of tells me what my certainty is as I go. So if I'm like, quote unquote, allowed to draw an inference early on, I'll know that. And because, you know, there'll be less uncertainty around my data. If I already have enough data, if I don't have enough data and my my probability is still spread all over the place, then I'll know I still have to wait. Yeah. And one thing you touched on is is this idea that we have to fit distribution.
+那么这显然会有巨大的影响。是的，我的意思是，我喜欢贝叶斯推理的一点是，它在进行过程中告诉了我我的确定性。所以如果我被允许在早期做出推断，我会知道这一点。因为，你知道，我的数据周围的不确定性会更小。如果我已经有足够的数据，如果我没有足够的数据，我的概率仍然分散在各处，那么我就知道我仍然必须等待。是的。你提到的一个点是我们需要拟合分布的想法。
+
+45
+00:33:08.000 --> 00:34:08.000
+So so, you know, we talked about the probability density function, but there's there's a variety of different functions that have really nice properties. Right. So, for example, as we talked about, there's the Gaussian distribution or the normal distribution. And that is this symmetric distribution that has a whole bunch of really nice properties. Now, as we talked about the electricity example, you know, the real world, in the same way as the real world will never give you exactly 120 volts, it's also not going to give you exactly a Gaussian distribution either, right? And so, and it could give you a distribution that is, and it probably will give you a distribution that is unlike any of the mathematical distributions. So, you know, a lot of work usually does. Yeah. A lot of work has to go into sort of how do we sort of fit the data that we have to, you know, one or more or some
+所以，你知道，我们谈到了概率密度函数，但有各种各样的函数具有非常好的属性。对吧。所以，例如，正如我们所讨论的，有高斯分布或正态分布。这是一个对称分布，具有很多非常好的属性。现在，正如我们讨论电力例子时所说，你知道，现实世界，就像现实世界永远不会给你精确的120伏电压一样，它也不会给你精确的高斯分布，对吧？所以，它可能会给你一个分布，而且它很可能会给你一个与任何数学分布都不同的分布。所以，你知道，很多工作通常都是这样。是的。很多工作必须投入到我们如何拟合我们拥有的数据到，你知道，一个或多个或某种
+
+46
+00:34:08.000 --> 00:34:52.000
+composition of distribution. So that actually is itself a really difficult problem. Yeah. One of the topics that I like talking about on this is conjugate priors. I don't know if you've run into that, but an example of a conjugate prior is a beta distribution. A beta distribution is an uncertainty over a probability. So let me say it in a way that might make sense, might make more sense intuitively. Like you have a coin, a weighted coin, and you don't know if the coin is weighted 0% on heads or 100% on heads. It's somewhere in between or equal to those two things. It's somewhere on a value from 0 to 1, and we don't know exactly where it is.
+分布的组合。所以这本身就是一个非常困难的问题。是的。我喜欢讨论的话题之一是共轭先验。我不知道你是否遇到过，但共轭先验的一个例子是贝塔分布。贝塔分布是对概率的不确定性。所以让我用一种直观上可能更有意义的方式来说明。就像你有一个硬币，一个加权的硬币，你不知道这个硬币是0%正面还是100%正面。它介于两者之间或等于这两个值。它在0到1之间的某个值上，我们不知道它确切在哪里。
+
+47
+00:34:52.000 --> 00:35:26.000
+And weighted means it's cheated. It's cheating in some way, but you don't know. Right, right. So, I mean, you could think of it as a coin, or you could think of it as any event that's repeated, where I don't really know what the probability of this event, like I don't know what the probability of this event is. All I know is that it's repeated over and over and it's somewhere between zero and one. And so a beta distribution represents an uncertainty over that. And a beta distribution like a Gaussian distribution, it has, you know, has two parameters and, you know, you can say it has a mean and it has a variance and all that. And a beta distribution like a Gaussian distribution, it has two parameters
+加权意味着它被动了手脚。它以某种方式作弊，但你不知道。对，对。所以，我的意思是，你可以把它看作一枚硬币，或者你可以把它看作任何重复发生的事件，我真的不知道这个事件的概率，就像我不知道这个事件的概率是多少。我只知道它一遍又一遍地重复，并且它在0和1之间。所以贝塔分布代表了对此的不确定性。贝塔分布就像高斯分布，它有两个参数，你可以说它有一个均值和一个方差等等。贝塔分布就像高斯分布，它有两个参数
+
+48
+00:35:26.000 --> 00:35:42.000
+and you can say it has a mean and it has a variance and all that. But the really cool thing about the beta distribution is that if you have a beta distribution to represent the uncertainty over the weight of the coin,
+你可以说它有一个均值和一个方差等等。但贝塔分布真正酷的地方在于，如果你有一个贝塔分布来表示硬币权重的不确定性，
+
+49
+00:35:42.000 --> 00:35:59.000
+if you flip the coin a bunch of times and then run through Bayes' rule and then calculate the updated distribution, the updated distribution is also a beta distribution just with updated parameters. And it's actually very easy. You just add the number of heads to one parameter and number of tails to the other parameter.
+如果你掷硬币很多次，然后通过贝叶斯规则计算更新后的分布，更新后的分布也是一个贝塔分布，只是参数更新了。这实际上非常容易。你只需要把正面的次数加到一个参数上，把反面的次数加到另一个参数上。
+
+50
+00:35:59.000 --> 00:37:09.000
+So the math all works out and you don't even need any complicated calculations. You don't even need to use a computer. You can just figure out what the need is. And so sometimes those are really good to look at. There's beta Dirichlet, which I've written a bunch about and Gamma. And then, like you said, oftentimes you want to, you know, in some cases you want to check, you know, hey, could this be some pathological distribution? And you should often throw that into the mix to check because some of the biggest mistakes, not mistakes, but like errors that people can make is like, you know, sort of trying to fit your data into a certain distribution when it doesn't fit. And sometimes you have to for simplicity. So you have to kind of get like an intuition for when this is going to be a problem. But it's usually a problem for instances where you have data where, you know, one day it could blow up and everything is affected. I'm trying to think of an exact answer.
+所以数学上完全行得通，你甚至不需要任何复杂的计算。你甚至不需要使用计算机。你只需要算出需求是什么。所以有时这些看起来真的很好。有贝塔狄利克雷分布，我写过很多关于它的文章，还有伽马分布。然后，就像你说的，通常你想，在某些情况下你想检查，嘿，这会不会是某种病态分布？你应该经常把它加入混合中进行检查，因为人们可能犯的最大错误，不是错误，而是像，试图将你的数据拟合到某个分布中，而它并不适合。有时为了简单起见，你必须这样做。所以你必须对什么时候会出现问题有一种直觉。但这通常对于你有数据的情况是一个问题，你知道，有一天它可能会爆发，一切都会受到影响。我正在尝试想出一个确切的答案。
+
+51
+00:37:09.000 --> 00:37:48.000
+And you get an intuition for which is which. For example, the attribution, I'm not worried about one ad all of a sudden. Well, I don't know. There could be an ad that could be extremely effective. But I don't expect it to be out of a range of like an order of magnitude. Yeah, exactly. And the other thing is, you know, these distributions are shaped by what we call hyper parameters. So, for example, looking at the normal distribution, it's symmetric. So so that's you can't vary that, but you can still vary basically how much you want to, let's say, stretch it.
+你会对什么是哪一个产生直觉。例如，归因，我不担心一个广告突然出现。嗯，我不知道。可能有一个广告会非常有效。但我不指望它会超出数量级范围。是的，完全正确。另一件事是，你知道，这些分布是由我们所谓的超参数塑造的。所以，例如，看看正态分布，它是对称的。所以你不能改变它，但你仍然可以改变你想要拉伸它的程度。
+
+52
+00:37:48.000 --> 00:38:22.000
+And so we call that the variance of the distribution. And you can also vary where the top of it is. We call that, I guess, the basis or the base. There's different words for that. But the center of the distribution, the mean of the distribution works. And so those are hyperparameters, right? So let's say you have some data and you can fit a normal distribution. Let's say the data is bimodal, which means you actually see two normal distributions in your data.
+所以我们称之为分布的方差。你也可以改变它的顶部在哪里。我们称之为，我想，基数或基础。对此有不同的词。但分布的中心，分布的均值是有效的。所以这些是超参数，对吧？所以假设你有一些数据，你可以拟合一个正态分布。假设数据是双峰的，这意味着你在数据中实际上看到了两个正态分布。
+
+53
+00:38:22.000 --> 00:39:06.000
+So imagine it has sort of these two hops, right? Right. So now you can say, well, there's a Gaussian distribution that's generated this data, but sometimes the mean is this or sometimes the mean is that. And so you can have another distribution which tells you when you should use one mean or the other. Right. So you could have, let's say, a Bernoulli distribution. And when it's heads, you use the one mean and when it's tails, use the other mean. And so then in this way, it becomes kind of this chain or this this this. You could look at it as a graph where distributions are informing other distributions. And so you can even introduce, you know, external data.
+所以想象它有这两个跳跃，对吧？对。所以现在你可以说，好吧，有一个高斯分布生成了这个数据，但有时均值是这个，有时均值是那个。所以你可以有另一个分布，它告诉你什么时候应该使用一个均值或另一个。对吧。所以你可以有，比如说，一个伯努利分布。当它是正面时，你使用一个均值，当它是反面时，使用另一个均值。所以通过这种方式，它变成了一种链条或这个。你可以把它看作一个图，其中分布在为其他分布提供信息。所以你甚至可以引入外部数据。
+
+54
+00:39:06.000 --> 00:39:41.000
+So, for example, yeah, when it's sunny outside, it's much more likely to be this distribution, this normal distribution. When it's raining outside, it's more likely to be this other one. And it's just that the data you have was a combination of sunny and rainy. And so that's why you have this bimodal distribution. But it turns out if you add this extra feature, now you can explain it in a much better way. That's predictive. Yeah, yeah. And that's how these things kind of chain together. You can have, hey, which group am I in?
+所以，例如，是的，当外面阳光明媚时，它更有可能是这个分布，这个正态分布。当外面下雨时，它更有可能是另一个。只是你拥有的数据是晴天和雨天的组合。所以这就是为什么你有这个双峰分布。但事实证明，如果你添加这个额外的特征，现在你可以用更好的方式来解释它。这是预测性的。是的，是的。这就是这些东西如何串联在一起。你可以有，嘿，我在哪个组？
+
+55
+00:39:41.000 --> 00:39:58.000
+Am I in group A or group B? And that's the first distribution between A and B. And then within A, okay, we have a Gaussian. Within B, we have a Gaussian. There's a whole field called hierarchical models that's kind of based on that. And it's sort of like, okay,
+我在A组还是B组？这是A和B之间的第一个分布。然后在A内，好吧，我们有一个高斯分布。在B内，我们有一个高斯分布。有一个完整的领域叫做分层模型，它是基于此的。这有点像，好吧，
+
+56
+00:39:58.000 --> 00:40:32.000
+I'm in a subgroup, and then I'm in a larger group. And there are certain properties I'm in a subgroup and then I'm in a larger group. And there are certain there are certain, you know, there's there's certain properties that the larger group has. And there's certain properties that each subgroup has. And as I get data, how do I figure out what those properties are? And a good example of that is in election forecasting. I interviewed on the Local Maximum, Alex Andorra. I think that was episode 99, if I remember correctly.
+我在一个子组中，然后我在一个更大的组中。并且有一些属性，我在一个子组中，然后我在一个更大的组中。并且有一些，你知道，有一些属性是更大的组所拥有的。并且每个子组都有某些属性。当我获得数据时，我如何弄清楚这些属性是什么？一个很好的例子是选举预测。我在Local Maximum采访了Alex Andorra。如果我没记错的话，那应该是第99集。
+
+57
+00:40:32.000 --> 00:40:47.000
+Yeah, so basically, he does election forecasting. He's in France. He's kind of like the 538 blog for France. Oh, cool. Yeah. And so what... I try to go to localmax radio slash ninety nine to make sure.
+是的，所以基本上，他做选举预测。他在法国。他有点像法国的538博客。哦，酷。是的。所以什么……我试着去localmax radio slash 99确认一下。
+
+58
+00:40:47.000 --> 00:41:29.000
+But I don't know. It's not not responding right now. But he we talked about hierarchical models. And the question is, OK, let's say I do a poll from a single town and I get a crazy outlier on that poll. And the way I talk about there's three things that could be going on. One, you could have just gotten a bad sample or you could have just gotten like a random, just it just happened to be that the random people you hit, it just fell in a weird way. That's like that one in a million or maybe not even one in a million shot where it's just it just randomly was an outlier and that does not reflect the data.
+但我不知道。它现在没有响应。但他我们谈到了分层模型。问题是，好吧，假设我从一个城镇进行民意调查，我在那个民意调查中得到了一个疯狂的离群值。我谈论的方式有三件事可能正在发生。第一，你可能只是得到了一个糟糕的样本，或者你可能只是得到了一个随机的，碰巧你碰到的随机人，它只是以一种奇怪的方式发生了。这就像那百万分之一，或者甚至不是百万分之一的机会，它只是随机地成为了一个离群值，这并不反映数据。
+
+59
+00:41:29.000 --> 00:41:42.000
+Two, it could be that that town, something is going on in that town and people are really changing their minds. And three, it could be that this is a broader national trend. And so when you get that data, how do you tell? How do you tell which case it is?
+第二，可能是那个城镇，那个城镇正在发生一些事情，人们真的在改变主意。第三，可能是这是一个更广泛的全国性趋势。所以当你得到那个数据时，你如何判断？你如何判断是哪种情况？
+
+60
+00:41:42.000 --> 00:42:49.000
+Or maybe it's a combination of those cases. And a hierarchical model, a hierarchical Bayesian model does a very good job of kind of disambiguating between these and trying to figure out, OK, where does this fit in? Yeah, totally makes sense. Yeah. I mean, so so you could actually have a distribution over all three of those hypotheses, like I guess in this case, a traditional distribution. And and over time and with more surveys and more samples, you would become more and more confident about about some mixture of those hypotheses. Yeah. Yeah. This episode 98, by the way, but not 99. But it's it's yeah, it's oftentimes I mean, one of the things that I might think of it is, OK, let's say each town has a and again, you could break it up by by town. You could break it up by age and gender and demographics and all these things. But to be, you know, to to to simplify, let's say each town, let's say it's two candidate election and you just have a beta distribution over what the probability for each person is in those towns.
+或者也许是这些情况的组合。一个分层模型，一个分层贝叶斯模型在区分这些方面做得非常好，并试图弄清楚，好吧，这适合哪里？是的，完全有道理。是的。我的意思是，所以你可以实际上对所有这三个假设都有一个分布，就像我猜在这个例子中，一个传统的分布。随着时间的推移，随着更多的调查和更多的样本，你会对这些假设的某种混合越来越有信心。是的。是的。顺便说一句，这一集是98集，而不是99集。但它，是的，它通常，我的意思是，我可能想到的事情之一是，好吧，假设每个城镇都有一个，同样，你可以按城镇划分。你可以按年龄、性别和人口统计数据以及所有这些事情来划分。但为了简单起见，假设每个城镇，假设它是两名候选人的选举，你只是对这些城镇中每个人的概率有一个贝塔分布。
+
+61
+00:42:49.000 --> 00:43:25.000
+Then the county, you say, OK, each town in that county, we're going to have a different beta distribution. And the the hyper parameters for the data beta distribution are are drawn from another distribution for that county and then so on and so forth. And you go up to the state level. And so that's, yeah, and that sort of disambiguates. And oftentimes in these cases, it can be very intractable because, like, do I want to break it up by geography? Do I want to break it up by demographics? Do I want some combination? And that's where a lot of kind of trial that that's where you're getting into you know the
+然后是县，你说，好吧，那个县的每个城镇，我们将有一个不同的贝塔分布。并且数据贝塔分布的超参数是从该县的另一个分布中抽取的，依此类推。然后你上升到州一级。所以那是，是的，这在某种程度上区分了。在这些情况下，它通常可能非常棘手，因为，比如，我想按地理位置划分吗？我想按人口统计数据划分吗？我想要某种组合吗？这就是很多那种试验，这就是你进入的地方，你知道，
+
+62
+00:43:25.000 --> 00:44:06.000
+machine learning curse of dimensionality i'm just trying to um you know trying to include trying to figure out which variables are best to include yeah i mean it's kind of it kind of ties into the multi-armed bandit stuff again where where you know just to give an example if you if you flip a coin once and you get heads, there's just a lot of uncertainty there. If you flip it 10,000 times and it is roughly 50-50, then you're much more certain. And so you have what's called tighter bounds, right? And so as you try to come up with more and more features to explain some phenomena. So, you know, the phenomena is the survey results.
+机器学习的维度诅咒，我只是试图，你知道，试图包括，试图弄清楚哪些变量最适合包括。是的，我的意思是，它有点与多臂老虎机的东西再次联系在一起，你知道，举个例子，如果你掷一次硬币得到正面，那里有很多不确定性。如果你掷它10000次，它大约是50-50，那么你就更确定了。所以你有所谓的更紧的界限，对吧？所以当你试图想出越来越多的特征来解释某种现象时。所以，你知道，现象是调查结果。
+
+63
+00:44:06.000 --> 00:45:05.000
+And as you come up with more and more features to better explain that phenomena, you also are adding more and more uncertainty because, you know, maybe you've only surveyed one 18-year-old from, you know, the Lyon province, from Nice. And so now you've gotten so specific that you've blown up the variance. And so you're constantly kind of struggling with this, we'll call it bias variance tradeoff, right? And so that's one of the reasons why acquisition functions are really important. And so we could kind of dive into that. I mean, a lot of these a lot of these systems and one really cool thing about Bayesian in general is it's because it comes from kind of the signal processing world. You know, a lot of it is designed to be iterative. So it's not like collaborative filtering and some of these other methods where they're just concerned about this one shot.
+当你提出越来越多的特征来更好地解释这种现象时，你也增加了越来越多的不确定性，因为，你知道，也许你只调查了一个来自里昂省尼斯的一个18岁的人。所以现在你变得如此具体，以至于你炸毁了方差。所以你一直在与这种，我们称之为偏差方差权衡作斗争，对吧？所以这就是为什么获取函数非常重要的原因之一。所以我们可以深入探讨一下。我的意思是，很多这些系统，贝叶斯的一个非常酷的地方是，因为它来自信号处理世界。你知道，它很多是被设计为迭代的。所以它不像协同过滤和其他一些方法，它们只关心这一次。
+
+64
+00:45:05.000 --> 00:46:02.000
+Like you generate this probability of hot dog and then that's it, you're done. But in this case, you can actually have an acquisition function which says, you know, who should I survey next to get the most possible signal? And going back to the casino example, right, like which which casino should I visit to either learn more about it or or make make the most money? And so so actually, you know, Bayesian, a lot of Bayesian methods directly address the acquisition function, which is another thing that isn't isn't covered really well but is also really important yeah to expand on that a little bit a real world example from uh four square attribution uh well in this case it wasn't so much an acquisition function where we're trying to decide who to survey because we have our panel of data but it was more like trying to decide which data to throw out because we had too much
+就像你生成这个热狗的概率，然后就这样，你完成了。但在这种情况下，你实际上可以有一个获取函数，它说，你知道，我接下来应该调查谁以获得尽可能多的信号？回到赌场例子，对吧，我应该访问哪个赌场来更多地了解它或赚最多的钱？所以实际上，你知道，贝叶斯，很多贝叶斯方法直接解决了获取函数，这是另一件没有被很好覆盖但也非常重要的事情。是的，稍微扩展一下，来自Foursquare归因的一个现实世界例子，嗯，在这种情况下，它不是一个获取函数，我们试图决定调查谁，因为我们有我们的数据面板，但它更像是试图决定扔掉哪些数据，因为我们有太多
+
+65
+00:46:02.000 --> 00:46:40.000
+it was very expensive to put all of it in our model. And we were trying to figure out, let's use Starbucks as an example. I don't think Starbucks is a client, but let's use Starbucks as an example. We're trying to figure out, okay, what is the probability that any given user or for every user and their data and information about them, or what is the probability that they're going to visit Starbucks on this particular day. And we have that probability set up for every person in our system. And so that was a pretty big model to train. And we had examples of days where people did visit Starbucks
+把所有这些放入我们的模型非常昂贵。我们试图弄清楚，让我们以星巴克为例。我不认为星巴克是客户，但让我们以星巴克为例。我们试图弄清楚，好吧，任何给定用户或每个用户及其数据和关于他们的信息，访问星巴克的概率是多少，或者在这一天访问星巴克的概率是多少。我们为系统中的每个人设置了该概率。所以那是一个相当大的模型来训练。我们有人们确实访问星巴克的日子的例子
+
+66
+00:46:40.000 --> 00:47:30.000
+and days where people didn't visit Starbucks. And as you can imagine, there are a lot of examples of a person days where Starbucks was not visited. There are a lot of examples where Starbucks was visited, but there's a huge multiple of days where Starbucks wasn't visited. And so we did a bunch of stuff where we threw away some of that data so that we got less, you know, that we can then calculate our probability function, which was kind of a logistic regression on a smaller data size. And we, again, use Bayesian inference to say, okay, how do I get these original parameters from the original data set, given that we probabilistically threw away a bunch of this data
+以及人们没有访问星巴克的日子。正如你可以想象的那样，有很多星巴克没有被访问的人日的例子。有很多星巴克被访问的例子，但有大量的日子星巴克没有被访问。所以我们做了一堆事情，我们扔掉了一些数据，这样我们就得到了更少，你知道，我们可以计算我们的概率函数，这有点像在较小数据大小上的逻辑回归。我们再次使用贝叶斯推理说，好吧，鉴于我们概率性地扔掉了一堆数据，我如何从原始数据集中获得这些原始参数
+
+67
+00:47:30.000 --> 00:48:11.000
+and we were able to calculate that as like a bias-corrected logistic regression. It's a very interesting problem to tackle. And again, save a lot of money, save a lot of calculation time and programming cycles and AWS costs and all that. Yeah, yeah, true. It's true. And even if you had infinite of those, you run into this other issue where the model will spend energy based on the loss. So, for example, the example you gave is great. You know, the odds that someone goes to Starbucks specifically, you know, if you look at everyone on Foursquare, including all the folks who have never been to a Starbucks, the odds that someone goes to
+我们能够将其计算为偏差校正的逻辑回归。这是一个非常有趣的问题。而且再次，节省了很多钱，节省了很多计算时间和编程周期以及AWS成本等等。是的，是的，真的。这是真的。即使你有无限的那些，你也会遇到另一个问题，即模型会根据损失消耗能量。所以，例如，你给出的例子很棒。你知道，某人专门去星巴克的几率，你知道，如果你看Foursquare上的每个人，包括所有从未去过星巴克的人，某人去
+
+68
+00:48:11.000 --> 00:49:08.000
+Starbucks is probably way less than 1%. Yeah. And so if the model, let's say, doesn't isn't a very, very large model, it doesn't have a lot of free parameters, then the model is just going to say no one goes to Starbucks ever. And it's going to be 99 percent accurate. Right. And so and so so typically, you know, that's one of the big challenges on the modeling side is is how do we respect the sort of economics of the problem? Right. Like like why is saying no one ever goes to starbucks bad the reason is because it's a lot more valuable to predict when someone's going to starbucks and get it right than it is to predict that this person is not going to starbucks right because if you know someone's going to starbucks you could send them let's say a coupon and you could get maybe three dollars worth of value out of that um if you know that someone's not going to Starbucks, that's kind of useless. Right.
+星巴克的几率可能远低于1%。是的。所以如果模型，假设，不是一个非常非常大的模型，它没有很多自由参数，那么模型只会说没有人去星巴克。它将有99%的准确率。对。所以，通常，你知道，这是建模方面最大的挑战之一，即我们如何尊重问题的经济学？对。就像为什么说没有人去星巴克很糟糕，原因是因为预测某人什么时候去星巴克并做对，比预测这个人不去星巴克更有价值，对吧？因为如果你知道某人要去星巴克，你可以给他们发送，比如说，一张优惠券，你可能从中获得价值三美元的东西，嗯，如果你知道某人不去星巴克，那有点没用。对。
+
+69
+00:49:08.000 --> 00:50:01.000
+Yeah. And so and more importantly, it was which which people are going to be swayed by the ads, too, because we wanted to know who was going no matter what. Yeah, that's right. Yeah. You need the uplift. Right. So so the so so you do all this, all these various tricks to to make sure the model is as useful as possible. But because you've done that now, it's it's uncalibrated. So now the model thinks that an average person goes to Starbucks, you know, every other day because it's been given data that's skewed. Right. And so then you have to do this calibration step where you build a another kind of simpler model on top of that model, which is which is given unbiased data and you freeze that that first model so that the first model is biased on purpose and you freeze that. But now you train this unbiased one afterwards. And, you know, I think a lot of this, you know,
+是的。更重要的是，哪些人会被广告左右，因为我们想知道无论如何谁会去。是的，那是对的。是的。你需要提升。对。所以，所以你做所有这些，所有这些各种技巧来确保模型尽可能有用。但因为你已经这样做了，它现在没有校准。所以现在模型认为一个普通人每隔一天去一次星巴克，因为它被给予了倾斜的数据。对。所以然后你必须做这个校准步骤，你在那个模型之上构建另一个更简单的模型，它被给予无偏数据，你冻结那个第一个模型，这样第一个模型是故意有偏差的，你冻结它。但现在你之后训练这个无偏的模型。而且，你知道，我认为很多这个，你知道，
+
+70
+00:50:01.000 --> 00:50:58.000
+between sort of this bias variance trade off and all the things downstream of that and this question of like, how do you subdivide the data and how do you gather new features? That's probably 90 percent of what a data scientist will do in their day job. Yeah. Yeah, I agree. It's some of this stuff can get quite, quite involved. And oftentimes, you have to take a deep breath and say, Okay, let's, let's start at the beginning. And let's, let's do this step by step. Because, well, in my case, and I think a lot of cases, you often have sort of, you know, a problem of explaining to the organization all of these issues, which can be intractable as well, you know, management. Yeah. So what is, how do you deploy, you know, something like this reliably? You know, and how do you know if you've deployed a bad
+在某种偏差方差权衡和下游的所有事情之间，以及这个关于如何细分数据和如何收集新特征的问题。这可能是数据科学家在日常工作中做的90%的事情。是的。是的，我同意。其中一些东西可能会变得非常非常复杂。而且通常，你必须深呼吸并说，好吧，让我们从头开始。让我们一步一步地做。因为，嗯，在我的情况下，我认为很多情况下，你经常有，你知道，向组织解释所有这些问题的难题，这也可能非常棘手，你知道，管理层。是的。那么什么是，你如何可靠地部署，你知道，像这样的东西？你知道，你怎么知道你是否部署了一个糟糕的
+
+71
+00:50:58.000 --> 00:52:06.000
+Apple? I mean, let's say that, let's say there's a data corruption. How do you kind of keep that from getting to people? And how do you build sort do you kind of keep that from getting to people? And how do you build sort of protection in case it does get out to people? Well, that's I'm trying to think if I have some good examples of that. You know, we definitely have a bunch of like, you know, data sanity checks in all of our pipelines to make sure things don't shrink or grow considerably between runs. But honestly, sometimes they're more, sometimes they cause us more problems than they help. And other times, other times things have blown up anyway. But in terms of models, you know, I think you just look, there's nothing that you can do if the data coming in is is just horrible, just completely like zeroed out or something, unless you sort of just have a check that the new that the new model is completely, you know, completely 180 degrees different from the old model.
+应用？我的意思是，假设，假设有一个数据损坏。你如何防止它传给人们？你如何构建，你如何防止它传给人们？你如何构建某种保护以防它传给人们？嗯，我正在尝试想出一些好的例子。你知道，我们肯定在所有的管道中都有很多，你知道，数据完整性检查，以确保事情在运行之间不会大幅缩小或增长。但老实说，有时它们更多，有时它们导致的问题比它们解决的问题多。而其他时候，其他时候事情无论如何都爆发了。但就模型而言，你知道，我认为你只是看，如果进来的数据只是可怕的，只是完全像归零或什么的，除非你有一种检查，即新模型与旧模型完全，你知道，完全180度不同，否则你无能为力。
+
+72
+00:52:06.000 --> 00:52:50.000
+Oh, that's a really good point. Yeah. So sanity smoke checks help a lot. One thing that I talk about a lot that's been running on Foursquare for the last, like, six years in its current form, but really eight years, is the rating system. So if you go to Foursquare City Guide, you can search for venues and restaurants and bars and stuff. Remember, we used to go to bars, movie theaters and things like that. Yeah. Yeah. So they had a one to ten rating. And the algorithm in that is one of the biggest signals is sentiment analysis on the Foursquare tips, which are like these mini reviews that people write. And I built this in 2012 and then kind of revamped it in 2014 with Stephanie Yang,
+哦，那是一个非常好的观点。是的。所以完整性冒烟测试很有帮助。我经常谈论的一件事是，在过去六年里以目前的形式，但实际上是八年，一直在Foursquare上运行，那就是评分系统。所以如果你去Foursquare City Guide，你可以搜索场所、餐馆和酒吧之类的东西。记住，我们过去常去酒吧、电影院之类的地方。是的。是的。所以他们有一个一到十分的评分。其中的算法是最大的信号之一是对Foursquare提示的情感分析，这些提示就像人们写的这些迷你评论。我在2012年构建了这个，然后在2014年与Stephanie Yang一起进行了改进，
+
+73
+00:52:50.000 --> 00:53:29.000
+who I had on my show in episode three. And basically the sentiment analysis algorithm is based on people who have liked and disliked a venue explicitly, but also left a tip. And so we trained language models on that. And the reason why this is my favorite example is that this thing has been getting retrained every week for the last six years. And it probably, I don't know, Foursquare isn't growing by a big percentage now, but back in the day, like it used to get better over time. Like it would be better at doing new languages because, uh, a certain language maybe didn't have enough data.
+我在第三集节目中邀请了她。基本上，情感分析算法是基于明确喜欢和不喜欢某个场所，但也留下了提示的人。所以我们对此训练了语言模型。我喜欢这个例子的原因是，这个东西在过去六年里每周都在重新训练。而且它可能，我不知道，Foursquare现在增长的百分比不高，但过去，它随着时间的推移变得更好。就像它在处理新语言方面会更好，因为，嗯，某种语言可能没有足够的数据。
+
+74
+00:53:29.000 --> 00:54:04.000
+But then when more people, that language started using four square, uh, it got better and better at figuring out, uh, whether something was positive or negative in that language. And so sometimes you can deploy something where it actually gets better over time instead of drifting. Um, yeah, which is really interesting. It's it's you have to a certain number of things have to align. You have to be training on your own data. And sometimes like, you know, it has to be something that doesn't change like that, that fast. I don't think I don't think language language does change. But in terms of what we were looking for, it doesn't change that much.
+但当更多人，那种语言开始使用Foursquare时，它在弄清楚某种语言中某事是积极还是消极方面变得越来越好。所以有时你可以部署一些东西，它实际上随着时间的推移变得更好，而不是漂移。嗯，是的，这非常有趣。它，你必须，一定数量的事情必须对齐。你必须在自己的数据上进行训练。有时，你知道，它必须是那种变化不那么快的东西。我不认为，我不认为语言语言会改变。但就我们寻找的东西而言，它变化不大。
+
+75
+00:54:04.000 --> 00:54:46.000
+Or if it does change, it's the introduction of new terms that it could easily learn and not, you know, completely going opposite. But, yeah, it's always an interesting, I don't know if I have a clear answer for you, but it's always an interesting architecture problem. Like, how do I build this thing to last? Yeah, I mean, I think it's it's definitely an open problem. I think, as you said, though, you know, comparing to yesterday's model, having some expectation about drift and and sort of A.B. testing or I guess A.A. testing, you know, this version versus the previous one is really the best you can do. I mean, there are some sort of counterfactual evaluation techniques,
+或者如果它确实改变了，那是新术语的引入，它可以很容易地学习，而不是，你知道，完全走向相反。但是，是的，这总是一个有趣的问题，我不知道我是否有明确的答案给你，但这总是一个有趣的架构问题。就像，我如何构建这个东西以持久？是的，我的意思是，我认为这绝对是一个开放的问题。我认为，正如你所说，你知道，与昨天的模型进行比较，对漂移有一些期望，以及某种A.B.测试，或者我猜A.A.测试，你知道，这个版本与前一个版本相比，真的是你能做的最好的事情。我的意思是，有一些反事实评估技术，
+
+76
+00:54:46.000 --> 00:55:35.000
+but it's very, very hard to dial those in. Yeah, especially something like venue ratings where how good they are is very subjective. And then if you want to dial, yes, there's no ground truth there. And then I guess we were using our own data for, even though it seems like they've worked pretty well and they've held up over the years, you know, people still say, oh, we enjoy these, you know, better than some of the other services that that rate places. But it I was trying to think of what like if you go if you go to the sentiment analysis, like, yes, we have we have training data that we have kind of ground truth there with people self-reporting. But it's not really always truth. So and, you know, there's spam and all that.
+但要调整这些非常非常困难。是的，特别是像场所评分这样的东西，它们有多好是非常主观的。然后如果你想调整，是的，那里没有基本事实。然后我猜我们正在使用我们自己的数据，即使它们看起来工作得很好，并且多年来一直保持着，你知道，人们仍然说，哦，我们喜欢这些，你知道，比其他评价地方的服务更好。但我在尝试想，如果，如果你去情感分析，就像，是的，我们有训练数据，我们在那里有某种基本事实，人们自我报告。但这并不总是真相。所以，你知道，有垃圾邮件等等。
+
+77
+00:55:35.000 --> 00:56:26.000
+So there's a whole bunch of things that could go wrong. Yeah, totally makes sense. What do you think about, you know, I used to do Patrick and I both used to do a lot of image processing. This is probably like a decade ago. You know, and back then, as before, deep learning was a thing. And so it was a lot of kind of, you know, SVM or sorry, SVD and these other sort of unsupervised like these decompositional models, a whole bunch of human engineering. And and then deep learning came and just ate all of it. Right. like these decompositional models, a whole bunch of human engineering. And and then deep learning came and just ate all of it. Right. And so I remember when I was at NYU, I took a class in machine learning and the professor was Jan LeCun.
+所以有很多事情可能会出错。是的，完全有道理。你觉得，你知道，我过去和Patrick都做过很多图像处理。这大概是十年前的事了。你知道，那时，在深度学习成为一件事之前。所以它有很多那种，你知道，SVM或抱歉，SVD和其他那种无监督的，像这些分解模型，一大堆人类工程。然后深度学习来了，把这一切都吃掉了。对。像这些分解模型，一大堆人类工程。然后深度学习来了，把这一切都吃掉了。对。所以我记得我在纽约大学时，我上了一门机器学习课，教授是Jan LeCun。
+
+78
+00:56:26.000 --> 00:57:16.000
+I didn't know who he was, but now he's at facebook and all that and uh he showed us i think it was the first day uh he showed us like a a camera that like a little eyeball shaped camera that he pointed at things and then on the screen it said what he was pointing at like it would be like keys phone uh desk you know and i'd be like and it was just uh it was just amazing and now that technology um is is everywhere yeah yeah yeah and so and so deep learning kind of just ate all that feel like And it was just it was just amazing. And now that technology is everywhere. Yeah. Yeah. Yeah. And so and so deep learning kind of just ate all that feel like no one has to know about Gabor filters or his Gaussian pyramid models or a lot of these color contrast models. I mean, they just take the raw pixels, throw it into this deep net. And so you're starting to see this emergence, and it's been going on for a few years now, of sort of this deep Bayesian models where we're basically, you know, it'll be some deep learning where the last layer is a Gaussian process
+我不知道他是谁，但现在他在Facebook等等，他给我们展示了，我想那是第一天，他给我们展示了一个，像一个小眼球形状的相机，他指向东西，然后在屏幕上它说他指向什么，就像它会是钥匙、手机、桌子，你知道，我会觉得，这真是太神奇了，现在那项技术到处都是。是的，是的，是的。所以深度学习有点把所有这些都吃掉了，感觉就像没有人需要知道Gabor滤波器或他的高斯金字塔模型或很多这些颜色对比模型。我的意思是，他们只是取原始像素，扔进这个深度网络。所以你开始看到这种出现，而且已经持续几年了，某种深度贝叶斯模型，我们基本上，你知道，它将是一些深度学习，其中最后一层是高斯过程
+
+79
+00:57:16.000 --> 00:57:58.000
+that has just priors that nobody knows. Or you start to see, like another example is, you know, you start to see variational inference pop up everywhere, like this reparameterization trick pop up everywhere. And so there are all these sort of black box models where nobody really knows what these distributions are in the same way that nobody really knows what's going on in the deep learning system. But it can handle enormous amounts of data. And so do you think that that sort of deep learning is going to eat a lot of the kind of, you know, Bayesian math and it's just going to become deep learning?
+它只有没人知道的先验。或者你开始看到，另一个例子是，你知道，你开始看到变分推理到处弹出，像这种重参数化技巧到处弹出。所以有所有这些黑盒模型，没人真正知道这些分布是什么，就像没人真正知道深度学习系统中发生了什么一样。但它可以处理大量数据。所以你认为那种深度学习会吃掉很多那种，你知道，贝叶斯数学，它只会变成深度学习吗？
+
+80
+00:57:58.000 --> 00:58:34.000
+Well, so first of all, I think some parts of deep learning are based on Bayesian math. So you have to some degree or another. So it's not necessarily that it's going to eat it. But I think that there is always going to be a market for the simpler models. You're never going to reach a point where people are like, oh, linear regression and logistic regression. Don't even learn about those. Those are obsolete. No, I think those types of things are always going to be kind of the bread and butter, you know, first step to try to wrap your
+嗯，首先，我认为深度学习的某些部分是基于贝叶斯数学的。所以你在某种程度上。所以它不一定会被吃掉。但我认为总是会有更简单模型的市场。你永远不会达到人们说，哦，线性回归和逻辑回归。甚至不要学习那些。那些已经过时了。不，我认为这些类型的东西总是会成为某种面包和黄油，你知道，尝试去理解问题并弄清楚的第一步
+
+81
+00:58:34.000 --> 00:59:16.000
+head around the problem and figure out and to be interpretable and try to figure out, you know, what is really going on, what the causal mechanisms are that a deep model can't necessarily tell you. And deep learning is really good at something like image recognition or speech recognition, where you just have such complicated levels of abstraction that it can do really well. But I don't think it eats everything. I think these complex models are very important, and they're going to do a lot of things, but eats everything, no. Yeah, I totally agree with you.
+头脑围绕问题并弄清楚，并且是可解释的，并尝试弄清楚，你知道，到底发生了什么，深度模型不一定能告诉你的因果机制是什么。深度学习在图像识别或语音识别方面非常擅长，在那里你只是有如此复杂的抽象层次，它可以做得很好。但我认为它不会吃掉一切。我认为这些复杂的模型非常重要，它们会做很多事情，但吃掉一切，不。是的，我完全同意你的观点。
+
+82
+00:59:16.000 --> 01:00:17.000
+Yeah, I think, yeah, I mean, if you think about it, actually, I mean, imagine you have, let's say, a click probability model that's a deep model. It's still a logistic regression at the last layer. It just has this sort of this embedding, this composition that sort of transforms the data into something that can be learned in a linear space. Right. And so it might just be that, you know, we do this composition and we have to just cross our fingers there. But but what comes out of that, that embedding that comes out of that, it could still be we could still do some interpretable ML on top of that. Right. And sometimes sometimes these click models or this marketing data is not as deeply complex with layers of abstraction as is image recognition. So sometimes you can throw deep learning at it and you can get small, small wins, but not always.
+是的，我想，是的，我的意思是，如果你考虑一下，实际上，我的意思是，想象你有一个，比如说，点击概率模型，它是一个深度模型。它在最后一层仍然是一个逻辑回归。它只是有这种嵌入，这种组合，它将数据转换成可以在线性空间中学习的东西。对。所以可能只是，你知道，我们做这个组合，我们只需要在那里交叉手指。但从那个嵌入中出来的东西，它仍然可以是，我们仍然可以在此之上做一些可解释的ML。对。有时有时这些点击模型或这些营销数据不像图像识别那样具有深层抽象层次的复杂性。所以有时你可以向它扔深度学习，你可以获得小的，小的胜利，但不总是。
+
+83
+01:00:17.000 --> 01:01:15.000
+They're often small wins and not big wins. But for for for lots of effort. But, hey, I'm sure Google will use it to kind of squeeze extra point one percent efficiency out of their out of their clicks and, you know, get translates to some huge amount of money. But it might not might might not be practical on the scale of like a small business. Yeah. I mean, I think it's probably worth mentioning the reparameterization tricks. It's something that most people could do with really any data without having to fit distributions. And the idea is, you know, as we talked about, the distributions are defined by these hyperparameters. And so you could imagine, like, if you imagine, just let's take the logistic regression example. You have a set of labels. So you have a set of, you know, coin tosses,
+这些通常是小胜而非大胜，但却需要付出巨大的努力。不过，嘿，我相信谷歌会利用它从点击量中挤出那0.1%的额外效率，你知道，这会转化为巨额资金。但这对于小企业规模来说可能并不实用。是的，我认为有必要提一下重参数化技巧。这是大多数人无需拟合分布就能对任何数据进行的操作。正如我们所讨论的，其核心思想是分布由这些超参数定义。所以你可以想象，比如，让我们以逻辑回归为例。你有一组标签，也就是一组抛硬币的结果。
+
+84
+01:01:15.000 --> 01:02:00.000
+and you want to have some function that takes in, I don't know, the wind and some other parameters and decides whether the coin tosses will be biased in one way or the other. But that's going to give you a single probability or the hot dog, not hot dog, for example. It's going to give you a single probability like point nine or something. If you want a distribution, one way to do it is to say, OK, instead of trying to get the actual answer so so the way that 0.9 comes about is when we train the model you know we give it a picture of a hot dog and we say this is one we give it a picture that doesn't have a hot dog and we say this is zero and so over time it it trains on that
+你想要一个函数，输入风向和其他一些参数，来决定抛硬币的结果会偏向哪一方。但这只会给你一个单一的概率，比如热狗或非热狗。它会给出一个单一的概率，比如0.9之类的。如果你想要一个分布，一种方法是说，好吧，与其试图得到确切的答案——0.9的由来是我们训练模型时，给它看一张热狗的照片，我们说这是1，给它看一张没有热狗的照片，我们说这是0，所以随着时间的推移，它就在这些数据上进行训练。
+
+85
+01:02:00.000 --> 01:03:07.000
+but you could also you could give it you know of pictures and say, you know, in this batch of pictures, 90 percent of them are hot dogs and not necessarily tell them tell the model, you know, which which which ones are which. You know, you could do that and it will still learn. It will take longer because it will have to sort of, you know, tease apart from these batches which ones are actual hot dogs. But it would work. Does it have does it have multiple such batches like to say in this batch, 90 percent are hot dogs in this batch, 10 percent are hot dogs? Exactly. Yeah. Oh, OK. Yeah. So so if we give it enough of these batches and let's say we shuffle in between the batches, it'll still learn even though we only have one loss or one, you know, bit of feedback for the entire batch, right? And so if you can follow that, then you could imagine saying this batch has this distribution and Mr. Model, I want you to match this distribution. So instead of saying this batch has a 0.9,
+但你也可以给它一堆图片，说，在这批图片中，90%是热狗，而不必告诉模型具体哪一张是哪一张。你可以这样做，它仍然会学习。这需要更长的时间，因为它必须从这些批次中分辨出哪些是真正的热狗。但这行得通。它有多个这样的批次吗？比如在这个批次中，90%是热狗，在那个批次中，10%是热狗？没错。哦，好的。所以，如果我们给它足够多的这些批次，并且在批次之间进行洗牌，即使我们对整个批次只有一个损失或一点反馈，它仍然会学习，对吧？所以如果你能理解这一点，你就可以想象说这个批次有这个分布，模型先生，我希望你匹配这个分布。所以与其说这个批次是0.9，
+
+86
+01:03:07.000 --> 01:03:34.000
+you could say this batch has this Gaussian distribution, you know, match it. And the next batch will have a different Gaussian distribution. And over time, you know, it will start to fit all of these different distributions over all these batches. And so this is a nice little trick you can use. It's called the reparameterization trick. And so you can actually get a distribution out of pretty much any model.
+你可以说这个批次符合这个高斯分布，去匹配它。下一个批次会有不同的高斯分布。随着时间的推移，它会开始拟合所有这些批次中的所有不同分布。这是一个你可以使用的小技巧，叫做重参数化技巧。所以你实际上可以从几乎任何模型中得到一个分布。
+
+87
+01:03:34.000 --> 01:04:15.000
+And I feel like that's kind of, you know, lesson 101. You know, we could do much better than that. But that's one way where anyone can get into models that output distributions. Yeah, I haven't heard of the reparameterization trick. I'll have to look into it. has been mixed and matched and filtered and all that. And so long as I know how it was done or I have some hypothesis as to how it was done, you could always come up with a Bayesian model on that and learn something.
+我觉得这算是入门课程吧。我们可以做得更好，但这是一种任何人都可以接触到输出分布模型的方法。是的，我还没听说过重参数化技巧。我得研究一下。它经过了混合、匹配、过滤等等。只要我知道它是怎么做的，或者我对它是怎么做的有一些假设，你总是可以据此建立一个贝叶斯模型并学到一些东西。
+
+88
+01:04:15.000 --> 01:04:39.000
+Yeah, yeah, totally. Yeah, I think having the uncertainty lets you do some really, really cool things. Like imagine, yeah, against problems dependent. Like Foursquare is actually a good example. Let's say we're recommending restaurants to somebody. And let's say we don't know whether they like Thai food or not. Well, maybe we should do what's called the upper confidence bounds,
+是的，完全正确。我认为拥有不确定性让你能做一些非常非常酷的事情。比如想象一下，针对依赖问题的场景。比如Foursquare就是一个很好的例子。假设我们正在向某人推荐餐厅。假设我们不知道他们是否喜欢泰国菜。好吧，也许我们应该做所谓的“置信上限”，
+
+89
+01:04:39.000 --> 01:05:29.000
+which is just a fancy way of saying, you know, if the distribution is really wide, we want to be more likely to choose this item. So so Foursquare doesn't know if I like Thai food. They show me an advertisement or they suggest a Thai food restaurant is nearby. And if I cancel it or if I tell them, don't show me this again, well, that tightens the balance. Now they know something. And so next time, maybe they'll try Chinese food. Right. On the flip side, it could be that I really love Thai food, but I always go to the same place. And so I haven't looked for Thai food on Foursquare. And so by taking that chance, Foursquare, if I do, maybe I click on it and I go to that restaurant. That really opens up this huge array of possibilities that that didn't exist before.
+这只是一种花哨的说法，你知道，如果分布非常宽，我们希望更有可能选择这个项目。所以Foursquare不知道我是否喜欢泰国菜。他们向我展示广告，或者建议附近有一家泰国餐厅。如果我取消它，或者告诉他们不要再给我看这个，好吧，那就收紧了界限。现在他们知道了一些东西。所以下次，也许他们会尝试推荐中餐。另一方面，可能我真的很喜欢泰国菜，但我总是去同一家店。所以我没有在Foursquare上搜索过泰国菜。通过冒这个险，如果我点击了它并去了那家餐厅，这确实开启了以前不存在的巨大可能性。
+
+90
+01:05:29.000 --> 01:06:02.000
+Right. So that's where, you know, showing the upper confidence bound of something can can can give you this nice mix of learning. But at the same time, you know, using the information you learned at the same time. Yeah. Lots of ways to slice and dice the data. Yeah, totally. If I could put it one way. Yeah, exactly. I mean, I think having the probability and the uncertainty opens up tons of opportunities. I feel like this is something that a lot of even big companies like Google and Facebook
+没错。所以这就是为什么展示某物的置信上限可以给你带来这种很好的学习组合。但同时，你也在利用你学到的信息。是的，有很多方法来切分数据。是的，完全正确。如果我能用一种方式表达的话。是的，完全正确。我的意思是，我认为拥有概率和不确定性开启了大量的机会。我觉得这是很多大公司，比如谷歌和Facebook，
+
+91
+01:06:02.000 --> 01:06:48.000
+and these other large companies are just starting to get their hands around this. They have these very, very complicated models, but then they all output a single number. And you're kind of limited in what you can do with that. Yeah. Yeah. That's that's a constant struggle of, you know, the the data scientists often have more information than the product managers or the customers want to use. And, yeah, I get it. Maybe like in a consumer app, you don't necessarily want to start teaching people probability, but you want to be ready with all of the probabilities so that you can then make the changes to the, you know, you could then make product decisions as you go, I guess.
+以及其他大型公司才刚刚开始掌握的东西。他们有非常非常复杂的模型，但它们都只输出一个数字。你在处理这些数字时会受到限制。是的。这是数据科学家经常面临的持续斗争，他们拥有的信息往往比产品经理或客户想要使用的要多。是的，我明白。也许在消费类应用中，你不一定想开始教人们概率，但你想要准备好所有的概率，这样你就可以在进行过程中做出改变，做出产品决策。
+
+92
+01:06:48.000 --> 01:07:22.000
+Yeah, that makes sense. Like I want to increase or like maybe I want an indication that we're uncertain or maybe I want an indication that maybe you'll like this place because of this or, you know, all the different possibilities that we've been over a lot over the last many years at Foursquare, for sure. So in Foursquare, do you have, you know, like these, let's say, clear box or these like very interpretable models and you have sort of the heavy hitting deep learning model that squeezes the extra one percent? Do you do both of that or do you just focus on the clear box or like how do you sort of strike that balance?
+是的，这很有道理。比如我想增加某种不确定性的指示，或者我想暗示你可能会因为这个原因喜欢这个地方，或者我们过去几年在Foursquare讨论过的所有不同可能性，确实如此。那么在Foursquare，你们是否有，比如说，透明的盒子或者这些非常可解释的模型，同时还有那种能挤出额外1%性能的重型深度学习模型？你们两者都做，还是只专注于透明模型？或者你们是如何平衡的？
+
+93
+01:07:22.000 --> 01:07:56.000
+So let's try to figure out which product we want to talk about, the consumer product or attribution. So we can talk about attribution for a bit. Attribution was, you know, we had a bias-corrected logistic regression, like I said, which sort of tried to figure out what the likelihood of someone visiting a place, given what day it is and given information about them and when they visited before and all that. And then we compared what happens when they didn't see the ads, when they did see the ad. And then we use a Bayesian model to come up with ad lift. That was a few years ago.
+让我们试着弄清楚我们要谈论哪个产品，是消费产品还是归因分析。我们可以谈谈归因分析。归因分析是，你知道，我们有一个偏差校正的逻辑回归，正如我所说，它试图弄清楚某人访问某个地方的可能性，考虑到当天的日期、关于他们的信息以及他们之前访问的时间等等。然后我们比较了他们没看到广告和看到广告时的情况。然后我们使用贝叶斯模型来得出广告提升效果。那是几年前的事了。
+
+94
+01:07:56.000 --> 01:08:46.000
+More recently, last year, Foursquare bought a company placed, which only did location-based attribution. And so we found that we kind of did it the same way, but now the Foursquare attribution team is like, I don't know, 20 data scientists. And I've sort of – when I was doing it, it was like me and two other people. And now we're like, okay, well, we've got this group in Seattle who are very good doing it. So I don't have as much insight into it, but I assume it's I assume it's similar. But some of the models we had a logistic regression model on the top layer, but some of the bottom layers were actually a bit more complicated. So, for example, one of the things that might affect whether you visit a place or not is
+最近，去年，Foursquare收购了一家名为Placed的公司，它只做基于位置的归因分析。我们发现我们做的方式差不多，但现在Foursquare的归因团队大约有20名数据科学家。我做的时候，只有我和另外两个人。现在我们有西雅图的团队，他们非常擅长做这个。所以我对它的了解没那么深入，但我假设它是相似的。但我们的一些模型在顶层有一个逻辑回归模型，但一些底层实际上稍微复杂一些。例如，可能影响你是否访问某个地方的事情之一是
+
+95
+01:08:46.000 --> 01:09:18.000
+your age and gender. You know, wouldn't you agree? But we didn't have everyone's age and gender. And what we did was for the people who we did have their age and gender, we built a model to predict what it was given the places that we visited. And I did this fun thing where I revealed to the company like everyone's everyone's gender, probabilistic gender. And I was nice. I had to be very careful. Like, you know, it's just a model. This is not, you know, telling you which gender you actually are.
+你的年龄和性别。你知道，你同意吗？但我们并没有每个人的年龄和性别。我们所做的是，对于我们拥有其年龄和性别的人，我们建立了一个模型来预测他们基于所访问地点的特征。我做了一件有趣的事，向公司揭示了每个人的性别，概率性别。我当时很谨慎。就像，你知道，这只是一个模型。这不是在告诉你你实际上是什么性别。
+
+96
+01:09:18.000 --> 01:09:43.000
+It turned out that most of the people who are misgendered by the model were married people who were doing things with their spouse. Oh, that makes sense. Yeah. And I found out like I was 99 percent male. But I also found that interesting things like it wouldn't be so much if I didn't go to Best Buy, which is like across the street all the time. Then it would be more like 70 percent. Does going into a Best Buy make you more male? Of course not.
+结果发现，大多数被模型误判性别的人是已婚人士，他们和配偶一起活动。哦，这很有道理。是的。我发现我被判定为99%的男性。但我也发现了一些有趣的事情，比如如果我不去百思买（Best Buy），它就在街对面，我经常去。如果不去那里，概率可能更接近70%。去百思买会让你变得更像男性吗？当然不会。
+
+97
+01:09:43.000 --> 01:10:07.000
+It's just a model. It's not causation a model, guys. It's not causation. It's correlation. Yeah, yeah, exactly. But no, then we were able to use the output of this model as an input to the attribution model. We didn't just say, which gender are you? We actually used the percentage output from the model and plugged it into the new model directly. So we had these layers. And the age and gender it into the new model directly. So we had these layers.
+这只是一个模型。这不是因果关系，伙计们。这不是因果关系。这是相关性。是的，是的，完全正确。但后来我们能够将这个模型的输出作为归因模型的输入。我们没有直接问“你是哪种性别？”，我们实际上使用了模型输出的百分比，并直接将其插入到新模型中。所以我们有这些层。年龄和性别模型直接输入到新模型中。所以我们有这些层。
+
+98
+01:10:07.000 --> 01:10:45.000
+And the age and gender model was a little more complicated. I don't think it was deep learning, but it was like it was gradient-boosted trees, so something a little bit a lot more nonlinear than just, you know, a logistic regression. Yeah, totally makes sense. Yeah, I mean, I think from what I've seen, it's it's it's always this struggle. You know, you have you have the super complicated model squeezes out the extra percent, but no one can interpret it. And so you build all these simple models. But then, you know, if there's any skew or bias at all, then you're kind of you're informing your product managers based on one model,
+年龄和性别模型稍微复杂一些。我不认为它是深度学习，但它是梯度提升树，所以比简单的逻辑回归要非线性得多。是的，完全有道理。我的意思是，据我所见，这总是一场斗争。你知道，你有超级复杂的模型挤出了额外的百分点，但没有人能解释它。所以你构建了所有这些简单的模型。但是，如果存在任何偏差或偏见，那么你就是基于一个模型来通知你的产品经理，
+
+99
+01:10:45.000 --> 01:11:18.000
+but then your actual system is using a different one. And that that's that's always difficult. Right. Sometimes it's sort of it's sort of evens itself out. So, for example, the the gender model, we're using the output of that to predict whether you're going to visit a place. And so the the visit prediction algorithm is just using this input. It doesn't know that it's a gender prediction. It just knows that it's a feature. And so it could use it however it wants. And even if the gender prediction is off, the layer on top of it,
+但你的实际系统使用的是另一个模型。这总是很困难。没错。有时它会自我平衡。例如，性别模型，我们使用它的输出来预测你是否会访问某个地方。所以访问预测算法只是在使用这个输入。它不知道这是一个性别预测。它只知道这是一个特征。所以它可以随心所欲地使用它。即使性别预测有偏差，它上面的那一层，
+
+100
+01:11:18.000 --> 01:11:59.000
+the visit prediction kind of takes what it can from that. And so we don't have to worry about whether it's entirely accurate on predicting gender or not. Yeah, yeah, totally. And if you have the uncertainty of the gender, that could also go into the model. So it could say if the gender isn't certain, then it doesn't matter what number it is, we'll just throw it out or something. Yeah, that's exactly what we did. Or in our case, if it was like 50 50, I think we have a few. I don't know what there's a number of things you could do. You could just, you know, input a point five as a real number. That's the feature. Or you could just say, you know, pick if it's whatever the probability is,
+访问预测会从中获取它能获取的信息。所以我们不必担心它在预测性别方面是否完全准确。是的，是的，完全正确。如果你有性别的不确定性，那也可以进入模型。所以它可以说，如果性别不确定，那么它是哪个数字并不重要，我们直接扔掉它或者做点什么。是的，这正是我们所做的。或者在我们的例子中，如果是50/50，我想我们有几个。我不知道，有很多事情你可以做。你可以直接输入0.5作为一个实数。这就是特征。或者你可以说，你知道，选择概率是多少，
+
+101
+01:11:59.000 --> 01:12:56.000
+sample from that and give me the sample value, either one or zero, and do that a few times. There's a lot of things you could do. So what are you doing now? So you've worked on so many different parts of Foursquare. I mean, we've talked about several of them just in the show alone. And now you're at the Innovation Lab. What do you do there? Right. So every once in a while, I get to do a statistical model. But right right now I'm really just working with our founder, Dennis Crowley, and we're trying to use Foursquare's core tech to put out new apps that sort of inspire, show off the company's technology. And so it's a nice change of pace to be able to essentially work on the fun stuff. We had a really great product ready to go, and it was called Marsbot Audio, where you would walk around the city, and one of the things that Foursquare can do is it can tell
+从中采样并给我采样值，要么是1要么是0，多做几次。有很多事情你可以做。那么你现在在做什么？你已经在Foursquare的这么多不同部门工作过了。我的意思是，仅在节目中我们就讨论了其中的几个。现在你在创新实验室。你在那里做什么？没错。所以每隔一段时间，我就会做一个统计模型。但现在我真的只是在和我们的创始人丹尼斯·克劳利一起工作，我们正试图利用Foursquare的核心技术推出新的应用程序，以激励和展示公司的技术。所以能够本质上从事有趣的事情是一个很好的节奏变化。我们有一个非常棒的产品准备就绪，它叫Marsbot Audio，你可以在城市里走动，Foursquare能做的事情之一就是它可以告诉你
+
+102
+01:12:56.000 --> 01:13:19.000
+whether you're walking past a store, like when you walk right past a place. And so we can trigger an audio file to play when you walk past something. So we have like sound effects. We have text speech and we have you could even upload your own audio. And then, you know, whenever someone with the app walks by the place you set it at, they'll hear it. And so that was really cool. It was ready to go for March 11th. And we're like, are we going to be finished?
+你是否正走过一家商店，就像你走过某个地方时一样。所以我们可以在你走过某物时触发播放音频文件。所以我们有音效。我们有文本转语音，你甚至可以上传自己的音频。然后，你知道，每当有该应用的人走过你设置的地方时，他们就会听到。这真的很酷。它在3月11日准备就绪。我们当时想，我们会完成吗？
+
+103
+01:13:19.000 --> 01:14:07.000
+Are we going to be finished? And on March 10th, we were like, it looks like we're going to finish for tomorrow. And then the country shut down. So so we kind of pushed that back six months or so. I really, really hope to get this out, though, as soon as we can, because the tech is ready and it's really cool. But that's awesome. One of the things I've been thinking a lot about is I think what you're working on falls right into this, is how to sort of reboot people's habits, right? So imagine someone is in the habit of going to the movie theater once a week. There has to be some way to sort of reboot that habit when things open back up. And I think something like this could be pretty cool where, you know, if it could kind of um you know kind of like encourage uh almost like a
+我们会完成吗？在3月10日，我们想，看起来我们明天就能完成了。然后国家封锁了。所以我们把那个推迟了大约六个月。不过，我真的非常希望尽快把它发布出来，因为技术已经准备好了，而且真的很酷。但这太棒了。我一直在思考的一件事是，我认为你正在做的事情正好属于这一类，那就是如何重启人们的习惯，对吧？所以想象一下某人有每周去电影院一次的习惯。当事情重新开放时，必须有一种方法来重启那个习惯。我认为像这样的东西可能会很酷，你知道，如果它能以某种方式……
+
+104
+01:14:07.000 --> 01:14:42.000
+like a fitness tracker but for fun you know like just to help people kind of recover their social life i know i know it's um it's been a little i'm not happy with the way the industry has gone i i feel like a lot of these consumer apps, one of the things that attracted me to Foursquare was how positive it was as a social network and as a tool to be present and do things in the real world. Foursquare is not one of the big tech companies right now, and I feel like a lot of consumer technology
+就像一个健身追踪器，但为了乐趣，你知道，只是为了帮助人们恢复他们的社交生活。我知道，我知道，我对行业的发展方向不太满意。我觉得很多这些消费类应用，吸引我加入Foursquare的原因之一是它作为一个社交网络以及作为一个在现实世界中存在和做事的工具是多么积极。Foursquare现在不是大科技公司之一，我觉得很多消费技术
+
+105
+01:14:42.000 --> 01:15:15.000
+has gone in a darker direction that maybe we don't like. And now over the next three months, I feel like I want people to get out again. I want people to have a good life again. And I feel like people are saying, oh, no, no, that's evil. We have to work on contact tracing apps. We have to work on apps to tell you which friends are out to kill you. And I'm not too happy with that. I'm really hoping I feel like I'm my thinking is against the grain here. But well, I think it's a
+已经走向了一个我们可能不喜欢的更黑暗的方向。现在在接下来的三个月里，我觉得我想让人们再次走出去。我想让人们再次过上美好的生活。我觉得人们在说，哦，不，不，那是邪恶的。我们必须致力于接触者追踪应用程序。我们必须致力于告诉你有哪些朋友出来会杀了你的应用程序。我对此不太高兴。我真的希望，我觉得我的想法在这里是逆流而上的。但是，好吧，我认为这是一个
+
+106
+01:15:15.000 --> 01:15:54.000
+great place. It's a great it's a great thing for an innovation lab to be working on because it's it's sort of the next frontier. Right. I mean, getting through covid is is frontier one. But but trying to rebuild, you know, the social infrastructure, I mean, that's going to have to happen. And so thinking about that now is really good. Yeah. Yeah. So over the last few months, we've been working more on, you know, data sets for, you know, coronavirus, essentially not for the virus itself, but to see which places are coming on and offline at different times. You know, there's a Foursquare recovery index at visitdata.org.
+很棒的地方。对于创新实验室来说，这是一个很棒的事情，因为它算是下一个前沿领域。我的意思是，度过新冠疫情是第一个前沿。但试图重建社会基础设施，我的意思是，那必须发生。所以现在考虑这个问题真的很好。是的，是的。所以在过去的几个月里，我们一直在更多地研究，你知道，冠状病毒的数据集，本质上不是为了病毒本身，而是为了看看哪些地方在不同时间上线和下线。你知道，visitdata.org上有一个Foursquare恢复指数。
+
+107
+01:15:54.000 --> 01:16:36.000
+But, yeah, pretty soon we'll return to these, I hope. Cool. And so working at Foursquare, can you kind of walk us through, I mean, we have a lot of folks who are, let's say, in college right now. They are looking for internships. They're looking for jobs. But even more than that, they want to know kind of what it's like to work at a company like Foursquare. Could you kind of like walk us through kind of what a day in your life is like? Yeah, well, one of the things that I've learned over the last 10 years is don't get too comfortable because once you are, things are going to shift under your feet pretty quickly. And that's, you know, so whatever the day in my life is now is, well, it sure is.
+但是，是的，很快我们就会回到这些，我希望如此。酷。那么在Foursquare工作，你能带我们了解一下吗？我的意思是，我们有很多现在正在上大学的人。他们正在寻找实习机会。他们正在寻找工作。但更重要的是，他们想知道在像Foursquare这样的公司工作是什么感觉。你能带我们了解一下你的一天是什么样的吗？是的，好吧，我在过去10年里学到的一件事是，不要太舒服，因为一旦你舒服了，事情就会很快在你脚下发生变化。这就是，你知道，所以无论我今天的生活是什么样，好吧，它确实是。
+
+108
+01:16:36.000 --> 01:17:19.000
+It certainly isn't the same as what the day in my life was four months ago back in February. And it certainly wasn't what it was, you know, two years ago. I'd say the best case for Foursquare was when we were, you know, when we're working on these labs projects and it's just three or four people talking every day, working on the whiteboard, trying something out, making progress, you know, building something into the app and then returning and then trying to go out and use it and then returning and then, you know, trying it again. Attribution, yeah, the things that I enjoyed was actually like coming out with these models
+它肯定和四个月前二月份我的一天不一样。它肯定和两年前也不一样。我想Foursquare最好的情况是当我们，你知道，当我们从事这些实验室项目时，每天只有三四个人在交谈，在白板上工作，尝试一些东西，取得进展，你知道，把一些东西构建到应用程序中，然后返回，然后尝试出去使用它，然后返回，然后，你知道，再试一次。归因分析，是的，我喜欢的事情实际上是提出这些模型
+
+109
+01:17:19.000 --> 01:18:10.000
+and selling these models to the company and even going on some sales calls and trying to explain, you know, how they work and why, you know, certain ads are seeing lifts and certain aren't. There was a lot of issues, you know, but sometimes, you know, there are issues on those teams when, you know, certain companies wanted custom things done that we as engineers didn't really think made a lot of sense and you're kind of kind of pressured by the sales team into that. That stuff happens as well. Sometimes, you know, you run into cases where the the the company is kind of reaching. You're excited about a product, but the company kind of reaches a dead end or deprioritizes your product. And for someone, well, even for someone who's been in the industry for a long time, but also for someone new, like that's always a very disappointing point, part of working in this field.
+并将这些模型推销给公司，甚至参加一些销售电话，试图解释，你知道，它们是如何工作的，为什么，你知道，某些广告看到了提升而某些没有。有很多问题，你知道，但有时，你知道，当某些公司想要完成我们作为工程师认为没有太大意义的定制化需求时，那些团队会出现问题，你会被销售团队施加压力。这种情况也会发生。有时，你知道，你会遇到公司有点力不从心的情况。你对一个产品很兴奋，但公司陷入了死胡同或取消了你的产品优先级。对于某人，好吧，即使对于在行业工作了很长时间的人，对于新人来说，这也是在这个领域工作非常令人失望的一点。
+
+110
+01:18:10.000 --> 01:18:31.000
+I don't know if you'd agree. Yeah, totally. Yeah. That is the number one complaint. I'm on a research team, like an applied research team. And the number one source of frustration is when, you know, we have something that all of the math looks great and it's headed in all the right direction, but the product changes and the
+我不知道你是否同意。是的，完全同意。是的。那是头号抱怨。我在一个研究团队，就像一个应用研究团队。最大的挫败感来源是，你知道，我们有一些数学上看起来很棒的东西，而且它正朝着所有正确的方向发展，但产品变了，
+
+111
+01:18:31.000 --> 01:19:29.000
+demand disappears. Yeah, yeah. Sometimes that happens. Sometimes the leadership doesn't see, it doesn't, you know, sometimes it is very valuable, but the leadership in the company either doesn't see it or is a focused elsewhere. And then sometimes but, you know, there's a plus side to that, too, is when you do ship something and you get something out. And either it's, you know, either it's on the back end business to business that, you know, is bringing a lot of value or it's on the consumer side. And people are loving it and telling you about it like there's nothing better than that yeah yeah totally agree so is foursquare hiring like full-time are they doing internships with with the whole covid thing are they going to do fall internships things are a little bit up in the air at foursquare because again you know we bought uh we bought placed in last year, and this year we bought or merged another company called Factual.
+需求消失了。是的，是的。有时会发生这种情况。有时领导层看不到，它不，你知道，有时它非常有价值，但公司领导层要么看不到它，要么专注于其他地方。然后有时，但是，你知道，这也有积极的一面，就是当你确实发布了某些东西并把它推出去时。无论是，你知道，无论是后台的B2B业务，你知道，带来了很多价值，还是在消费者端。人们喜欢它并告诉你，没有什么比这更好的了。是的，是的，完全同意。那么Foursquare在招聘全职员工吗？他们有实习机会吗？随着新冠疫情的影响，他们会做秋季实习吗？Foursquare的情况有点悬而未决，因为再次，你知道，我们去年收购了Placed，今年我们收购或合并了另一家名为Factual的公司。
+
+112
+01:19:29.000 --> 01:19:53.000
+So there's a lot of integrating these companies. There's a lot of moving pieces at Foursquare right now. So I don't exactly know what the internship situation at Foursquare is like. But Foursquare.com slash jobs you can go to. If I were looking for a job, I'd also like Union Square Ventures is one of the VC companies that funds Foursquare, and they
+所以整合这些公司有很多工作要做。Foursquare现在有很多变动。所以我不太清楚Foursquare的实习情况。但你可以去Foursquare.com/jobs。如果我在找工作，我也会看Union Square Ventures，它是资助Foursquare的风险投资公司之一，他们
+
+113
+01:19:53.000 --> 01:20:19.000
+have a job board for all of their companies, and they invest in a lot of cool companies, so I often go to their job board. Sometimes I first show people, this is the Foursquare job board. Let's see if your job is here. If it's not there, then I jump to the USV job board because there's a lot of cool. There's a lot of cool companies in there as well that are kind of a similar size, similar philosophy.
+有一个针对他们所有公司的招聘板，他们投资了很多很酷的公司，所以我经常去他们的招聘板。有时我先向人们展示，这是Foursquare的招聘板。看看你的工作是否在这里。如果不在那里，我就跳到USV的招聘板，因为那里也有很多很酷的公司，它们规模相似，理念相似。
+
+114
+01:20:19.000 --> 01:21:00.000
+So is Foursquare on this remote work bandwagon or are most of the folks in New York? We are remote right now and I don't know where we're going. Yeah, that's true. Personally, I really hope to get back into the office. I just feel like some of the creative work that we do has to be face to face. I don't need the open office with 300 people. But having like a small group of, you know, three to seven to ten people get together and solve problems is way more efficient than everyone in their apartment with either, you know, delivery people come in or their kids screaming at them or whatever, their dog,
+那么Foursquare是在远程办公的潮流上，还是大多数人在纽约？我们现在是远程办公，我不知道我们要去哪里。是的，那是真的。就我个人而言，我真的希望回到办公室。我只是觉得我们所做的一些创造性工作必须是面对面的。我不需要300人的开放式办公室。但让一小群，你知道，三到七到十个人聚在一起解决问题，比每个人都在他们的公寓里，要么，你知道，送货员来了，要么他们的孩子对他们尖叫，或者无论什么，他们的狗，
+
+115
+01:21:00.000 --> 01:21:36.000
+whatever is happening in the background. It doesn't, in my opinion, it's not working as well, or at least in order for it to work as well, we'd have to – like none of us have our apartments, particularly in New York City, like optimized for this. So it's not – I really hope to get back. I don't know what the situation is going to be. There are people who are saying, let's never go back. I don't know who's going to win uh yeah honestly it's it's it's i don't think anyone does i think i mean i mean honestly when twitter uh jack dorsey from twitter said uh no one has to come back uh that was
+无论背景中发生了什么，都要高效得多。在我看来，它工作得并不好，或者至少为了让它工作得一样好，我们必须——我们没有人，特别是在纽约市，把我们的公寓优化成这样。所以它不是——我真的希望回去。我不知道情况会怎样。有些人说，永远不要回去。我不知道谁会赢。是的，老实说，我不认为有人知道。我认为，我的意思是，老实说，当Twitter的杰克·多西说没有人必须回来时，那真是
+
+116
+01:21:36.000 --> 01:22:20.000
+absolutely shocking to to the entire industry i mean that was seismic. I mean, that probably like Zillow stock price probably tanked when he tweeted that. Right. I mean, I mean, it's just unbelievable. And I totally agree with you that at least for now, there hasn't been the right mechanism for a while. Actually, this is way before covid when most of us were in the office, we do have another team that's in Seattle. And what we did is we set up a television and they did the same where, where when you look at the television, you see their, their desks. It's kind of weird, you know, it's, it's kind of like a, like literally, like some kind of portal.
+对整个行业来说绝对是令人震惊的，我的意思是那是地震级的。我的意思是，那可能让Zillow的股价在他说那句话时暴跌了。没错。我的意思是，这简直令人难以置信。我完全同意你的观点，至少目前为止，还没有合适的机制。实际上，这远在新冠疫情之前，当大多数人在办公室时，我们确实有另一个在西雅图的团队。我们所做的是设置了一台电视，他们也做了同样的事情，当你看着电视时，你会看到他们的办公桌。这有点奇怪，你知道，它有点像，字面上，像某种门户。
+
+117
+01:22:20.000 --> 01:22:59.000
+I don't, I don't know if we need to see in everybody's homes either. I mean, there's a lot of personal things in people's homes. And it's not. And it's it's I don't see how people don't recognize that. Yeah, exactly. I think there needs to be. Yeah, there needs to be a new modality. I mean, like one way to do it is maybe, you know, we have some on the clock time where everyone's there. And, you know, that is a time where the mic is always on or something. I honestly don't know. It's a totally uncharted territory, but we'll have to see how that all goes.
+我不知道我们是否也需要看到每个人的家里。我的意思是，人们家里有很多私人的东西。而且它不是。而且它——我不明白人们怎么没有意识到这一点。是的，完全正确。我认为需要有一种新的模式。我的意思是，一种方法可能是，你知道，我们有一些工作时间，每个人都在那里。而且，你知道，那是麦克风一直开着的时间之类的。我老实说不知道。这是一个完全未知的领域，但我们必须看看这一切如何发展。
+
+118
+01:22:59.000 --> 01:23:55.000
+But, yeah, I think if folks out there listening are interested, it'ssquare.com slash jobs or what was the other one union union something oh usv.com slash jobs oh usv.com slash jobs i think that's what it is let me check and so uh yeah we'll put it in the show notes and we'll correct it either way cool this was this was awesome um is there oh we should talk about your podcast um so your podcast is called the local maximum every week which is which is awesome for every week we reach a new local maximum hopefully higher than the previous local maximum but not always yeah i think the name is great yeah i think uh uh yeah hopefully there's some uh uh you have some kind of mini batch going on or something where you can eventually reach a global maximum. You don't just get stuck. That will be the last. If there is a last episode, it will be called the global maximum.
+但是，是的，我认为如果听众中有感兴趣的人，是Foursquare.com/jobs或者另一个是什么，Union something，哦，usv.com/jobs。哦，usv.com/jobs，我想是那个。让我查一下。所以，是的，我们会把它放在节目说明中，无论如何我们都会纠正它。酷，这太棒了。嗯，我们应该谈谈你的播客。所以你的播客叫“局部最大值”（The Local Maximum），每周一期，这太棒了。每周我们都达到一个新的局部最大值，希望比之前的局部最大值更高，但不总是这样。是的，我认为这个名字很棒。是的，我认为，嗯，是的，希望有一些，嗯，你有一些小批量处理正在进行，或者类似的东西，你可以最终达到全局最大值。你不会只是被困住。那将是最后一集。如果有一集是最后一集，它将被命名为“全局最大值”。
+
+119
+01:23:55.000 --> 01:24:33.000
+Yeah, that's right. Exactly. Very cool. And so what do you talk about there? So I I generally talk about things that are interesting to me. I I'd say about 50 percent of% of my episodes are guest interviews. And so a lot of the guests are technology related, but I do branch out a little bit. I branch out to, you know, professors, probability and statisticians, of course, then pull more on like the data engineering side. But then I've also like talked to historians and and other podcasters and comedians and things like that. So I am kind of all over the place there. One of the things that
+是的，没错。完全正确。太酷了。那么你在那里谈论什么？所以我通常谈论对我来说有趣的事情。我会说大约50%的剧集是嘉宾访谈。所以很多嘉宾与技术相关，但我确实稍微扩展了一下。我扩展到，你知道，教授、概率论者和统计学家，当然，然后更多地转向数据工程方面。但我也和历史学家、其他播客主持人、喜剧演员等谈过。所以我有点无处不在。其中一件事情
+
+120
+01:24:33.000 --> 01:25:04.000
+I like to do is take the concepts in sort of machine learning and Bayesian analysis and just like apply them to either the news or to your everyday life. And so, and by the way, if you've made it this far, but you kind of are interested in Bayesian inference and you kind of want to look at it from, you kind of want the 101, the more basic ones, I have a lot of really good episodes for you to listen to. Like, I think in the hundreds, I've got, let me check my archive for a second,
+我喜欢做的是把机器学习和贝叶斯分析中的概念应用到新闻或你的日常生活中。所以，顺便说一句，如果你已经听到了这里，但你对贝叶斯推理感兴趣，并且你想要了解入门知识，更基础的东西，我有很多非常好的剧集供你收听。比如，我想在一百多集里，让我查一下我的档案，
+
+121
+01:25:04.000 --> 01:25:39.000
+but I know episode 105, I've got, let me check my archive for a second. But I know episode 105, I talked to a mathematician, Sophie Carr, talks a lot about Bayes rule. And then I had a few episodes after that about like, what is probability? And so we do go into the philosophical side of things. But also, I try to make it relevant to someone who is not a data scientist and not in tech. Like I can explain what overfitting and underfitting is. And then I ask, OK, who in your life do you know who is always overfitting? And people people tend to have an answer for that. So everyone's got that one uncle, right?
+但我知道第105集，我采访了一位数学家，索菲·卡尔，谈了很多关于贝叶斯定理的内容。然后在那之后我有几集关于什么是概率的内容。所以我们确实进入了哲学层面。但我也尽量让它与非数据科学家和非技术人员相关。我可以解释什么是过拟合和欠拟合。然后我问，好吧，你生活中认识谁总是过拟合？人们往往有答案。所以每个人都有那个叔叔，对吧？
+
+122
+01:25:39.000 --> 01:26:23.000
+Yeah, exactly. And well, I think the example we have is often like, you know, toddlers can can overfit. Not always. Yeah. But or and sometimes older people tend to tend to underfit. But we can their their examples is interesting to just have these prompts and come up with these these examples. Or sometimes I just kind of, you know, take a bunch of news stories that day and try to distill it down into a theme like what's what's Occam's razor or what is expected value or something like that. What inspired you to I mean, it's a huge, huge undertaking to do a podcast. I mean, you do one show a week, which is which is just it takes an extraordinary amount of
+是的，完全正确。嗯，我认为我们有的例子通常是，你知道，幼儿可以过拟合。不总是这样。是的。但或者有时老年人倾向于欠拟合。但我们可以，他们的例子很有趣，只是有这些提示并想出这些例子。或者有时我只是，你知道，拿当天的一堆新闻故事，试图把它们提炼成一个主题，比如什么是奥卡姆剃刀，或者什么是期望值之类的。是什么激励你——我的意思是，做一个播客是一项巨大巨大的工程。我的意思是，你每周做一个节目，这需要非凡的
+
+123
+01:26:23.000 --> 01:26:56.000
+time. And so what inspired you to really start it and what kind of keeps you motivated? Well, I, I was trying to do, well, I had a, um, uh, radio show in college. This was back in like 2004 to 2006. And that was like the best part of my week was when I was doing that radio show. So, um, I knew I would enjoy it. I was trying to put more content out there. And at the same time, you know, I, you know, I had spent a summer kind of at NYU Future Lab talking to entrepreneurs. And I was like, well, you know what?
+时间。所以是什么激励你真正开始它，又是什么让你保持动力？嗯，我，我试图做，嗯，我在大学有一个广播节目。那是在2004年到2006年左右。那是我一周中最棒的部分，当我做那个广播节目时。所以，嗯，我知道我会喜欢它。我试图发布更多内容。与此同时，你知道，我，我花了一个夏天在纽约大学未来实验室与企业家交谈。我当时想，好吧，你知道吗？
+
+124
+01:26:56.000 --> 01:27:37.000
+I think I would enjoy this. No matter what project I do, I'm going to want to have like an audience to discuss it with and kind of a forum to learn about, you know, learn about new concepts and learn about issues and talk to people who I'm interested in, like authors. And so I tried it. I did like a 10 episode challenge. Let's put on 10 episodes and see how it goes. And then after that, I just kept going. It was just a lot of fun. Every week is, you know, some weeks are easy. Some weeks it's a little bit challenging where I have to do a solo show where the solo shows always take the most research and thought, even though it should be simple.
+我想我会喜欢这个。无论我做什么项目，我都想有一个听众来讨论它，并有一个论坛来学习，你知道，学习新概念，学习问题，并与我感兴趣的人交谈，比如作者。所以我尝试了。我做了一个10集挑战。让我们发布10集，看看进展如何。在那之后，我就一直坚持下去了。这真的很有趣。每周都是，你知道，有些周很容易。有些周有点挑战性，我必须做一个单人节目，单人节目总是需要最多的研究和思考，尽管它应该很简单。
+
+125
+01:27:37.000 --> 01:28:40.000
+Right. I could just edit whatever I want. No one will ever know. But it's I feel like the the solo shows are the hardest for me because when I'm interviewing someone, at least I could ask for their content, their information. But one week seems to be the sweet spot where if it's two weeks and I had something to say, it would take too long for me to get the time to say it. But if it was more than one week, it would just be completely overwhelming. Yeah, totally makes sense. Yeah, totally makes sense. I think Patrick and I originally were doing it biweekly and we switched to monthly. But yeah, I totally agree that, you know, if you find a piece of news early in the month, sometimes you have to you have to kind of throw it out. And because because, you know, two weeks go by, things become irrelevant really quickly. I mean, especially in 2020, where your entire lifestyle changes, it seems almost week to week. Yeah. Yeah. I mean, I'm almost going to go back to some of these episodes and relive it.
+没错。我可以随心所欲地编辑。没人会知道。但我觉得单人节目对我来说最难，因为当我采访某人时，至少我可以要求他们的内容，他们的信息。但一周似乎是最佳点，如果两周一期，我有话要说，我需要太长时间才能有时间说出来。但如果超过一周，那就会完全让人不知所措。是的，完全有道理。是的，完全有道理。我想帕特里克和我最初是双周一期，后来我们改成了月更。但是的，我完全同意，你知道，如果你在月初发现一条新闻，有时你必须，你必须把它扔掉。因为，因为，你知道，两周过去了，事情很快就变得无关紧要了。我的意思是，特别是在2020年，你的整个生活方式都在改变，似乎每周都在变。是的。是的。我的意思是，我几乎要回去重温其中一些剧集了。
+
+126
+01:28:40.000 --> 01:29:20.000
+It's like, do I want to do that? I don't know. But but no, but it did generate a lot of interesting episodes. Like I did one episode, 115, all about the coronavirus models. You know what? What was right? What was wrong? What are they actually trying to do? And I had a lot of you know, I talked to my friend who works in a hospital about recently about what his experiences have been like over the last three weeks. So, you know, we have been talking a lot about what's going on. I, you know, some episodes I feel like I just want to talk about a concept and ignore what's going on in the outside world. I've completely thrown that away, I think.
+就像，我想那样做吗？我不知道。但，但没有，但它确实产生了很多有趣的剧集。比如我做了一集，第115集，全是关于冠状病毒模型的。你知道吗？什么是对的？什么是错的？他们实际上在试图做什么？我有很多，你知道，我最近和我在医院工作的朋友谈论了他过去三周的经历。所以，你知道，我们一直在谈论正在发生的事情。我，你知道，有些剧集我觉得我只想谈论一个概念，忽略外部世界正在发生的事情。我想我已经完全抛弃了那个想法。
+
+127
+01:29:20.000 --> 01:30:00.000
+Yep, yep. Yeah, I think, you know, it's interesting. We have this sort of this this by polar or bimodal response to our current events. There's some folks who say, you know, I just want to know about the topic. And there's other folks who say, I'm so glad you you you add color to the show and it's not just about tech all the time. And so I think the compromise we finally struck was to put the time stamp of when the show topic starts um that seemed to satisfy most people but um but i totally agree with you that the idea of just ignoring the outside world you know like the entire world is burning down and you say okay today we're going to talk about the beta distribution
+是的，是的。是的，我认为，你知道，这很有趣。我们对当前事件有这种双极或双峰反应。有些人说，你知道，我只想了解这个话题。还有些人说，我很高兴你为节目增添了色彩，它并不总是关于技术。所以我认为我们最终达成的妥协是加上节目主题开始的时间戳，这似乎满足了大多数人，但是，但是，我完全同意你的观点，即忽略外部世界的想法，你知道，就像整个世界都在燃烧，而你说，好吧，今天我们要谈论贝塔分布。
+
+128
+01:30:00.000 --> 01:30:59.000
+kind of odd but yeah i feel like i i feel like i I know to wrap it up, but I feel like the the purpose of the podcast is not to be a like a course that you take that's going to be evergreen. It's more like let's sit back. Let's have a conversation about issues that are important to us. And let's talk about let's talk about concepts that we know and then uh we'll get interested in things we'll discover things then if we want to learn more maybe we'll do like you know look look at a more formal course or something like that yeah yeah totally so it's it's the local maximum is the podcast are you on you're probably on uh like like google podcasts and stitcher and all these things apple spotify, Apple, Spotify. Great. Yeah. If you if you don't have any of those or if you want more information, you can go to localmaxradio.com. And Max, it was it was it was really awesome to have you. I just realized your name is Max
+这听起来有点奇怪，但我感觉，我知道该结束了，但我认为这个播客的目的并不是要成为一门长青的课程。它更像是让我们坐下来，聊聊对我们重要的问题。我们谈论我们了解的概念，然后我们会对某些事物产生兴趣，发现一些东西，如果想深入了解，也许我们会去看看更正式的课程之类的。是的，完全同意。所以这就是《Local Maximum》播客。你可能在谷歌播客、Stitcher、苹果、Spotify这些平台上收听。太棒了。如果你没有这些平台，或者想了解更多信息，可以访问localmaxradio.com。Max，能请你来真是太棒了。我刚意识到你的名字是Max，
+
+129
+01:30:59.000 --> 01:31:32.000
+and it's Local Max Radio. Is that on purpose or is that? Well, yes, I realize it's a triple entendre, right? Yeah, that's right. So there's the local maximum, which is the the probabilistic. Well, it's the local maximum is a is both an optimization concept, a machine learning concept and a design concept, too. So that's one meaning. There's also my name in it and also the local maximum. Well, it's, you know, location data. I'm all about that, too. So two meetings. Two meetings is one thing. But three meetings, that's when you know.
+而播客叫《Local Max Radio》。这是故意的吗？嗯，是的，我意识到这是一个三重双关语，对吧？没错。所以有“局部最大值”（local maximum），它既是一个优化概念，也是一个机器学习概念，还是一个设计概念。所以这是一个含义。里面还有我的名字，还有“本地最大值”（local maximum），你知道，位置数据，我也很关注这个。所以有两个含义。两个含义是一回事，但三个含义，那你就知道厉害了。
+
+130
+01:31:32.000 --> 01:31:51.000
+That's very rare, three meetings. Yeah, you hit the jackpot. It's very clever. Cool. This is awesome. I'm definitely going to listen to some episodes. Actually, right when we get off this, I'm going to check this out because this is super exciting. And I really appreciate you coming on. Folks are just dying,
+三个含义非常罕见。是的，你中了大奖。这非常聪明。太酷了。这太棒了。我一定会去听一些剧集。事实上，我们结束通话后，我就会去看看，因为这太令人兴奋了。我真的很感谢你能来。大家都在渴望，
+
+131
+01:31:51.000 --> 01:32:25.000
+chomping at the bit to know about anything AI machine learning. And so, you know, I feel like we covered a lot of really, really important ground here that any engineer can apply, even in their day-to-day work, which is ultimately, I think, really useful and has high impact. Cool. It's great to be on the show and to have this really fascinating discussion with you. We covered a lot of ground, things that I have to look more into now. All right. Cool. Awesome. It was really great talking to you. And then for folks out there, thank you for supporting us on Patreon. Obviously, tough times for a lot of folks out there. We don't demand
+迫不及待地想了解任何关于人工智能和机器学习的知识。所以，我觉得我们在这里涵盖了很多非常非常重要的领域，任何工程师即使在日常工作中也可以应用，我认为这最终是非常有用且具有高影响力的。太酷了。很高兴能参加这个节目，并与你进行这次非常精彩的讨论。我们涵盖了很多领域，有些事情我现在必须深入研究一下。好的，太酷了。太棒了。和你聊天真的很愉快。对于听众朋友们，感谢你们在Patreon上对我们的支持。显然，现在对很多人来说都是艰难时期。我们不强求，
+
+132
+01:32:25.000 --> 01:32:30.000
+anything. All the content is totally free. But we do really appreciate all the donations that goes to our equipment. And we have some hosting costs and all of that. So thank you again for your support. Thank you for your emails. A lot of really good ideas keep coming in. And our hope is to, I don't think we'll ever end the FIFO queue, but our hope is to go through it and try to answer as many questions as you folks have. And we'll see you all next month. The intro music is Axo by Binar Pilot. Programming Throwdown is distributed under a Creative Commons Attribution Sharealike 2.0 license. You're free to share, copy, distribute, transmit the work, to remix, adapt the work, but you must provide attribution to Patrick and I and share alike in kind. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+任何东西。所有内容都是完全免费的。但我们确实非常感谢所有的捐款，这些捐款用于我们的设备。我们还有一些托管费用等等。所以再次感谢你们的支持。感谢你们的来信。很多非常好的想法不断涌现。我们希望，我不认为我们会结束这个先进先出队列，但我们希望能够处理它，并尽可能多地回答你们的问题。我们下个月再见。片头音乐是Binar Pilot的《Axo》。《Programming Throwdown》根据知识共享署名-相同方式共享2.0许可协议发布。你可以自由分享、复制、分发、传播作品，进行重混、改编，但必须注明我和Patrick的署名，并以相同方式共享。本集目前还没有评论。点击转录稿中的任何句子即可发表评论。

@@ -1,0 +1,716 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:49.000
+programming throwdown episode 82 reactive programming and the actor model with jonas bonair take it away jason hey. So we have a really cool interview. I'm sure a lot of you know about Scala and Akka. You've heard about this. We've talked about this on the show. And we have Jonas Bonner, who is... Are you the original creator of Akka? Is that right? Yeah, I started it back in 2009. The first launch of the product was in 2009. I started hacking on it a year earlier.
+Programming Throwdown 第 82 期：响应式编程与 Actor 模型，嘉宾 Jonas Bonér。Jason，请开始你的介绍。嘿，我们今天有一场非常棒的访谈。我相信你们很多人都了解 Scala 和 Akka。你们一定听说过，我们在节目中也讨论过。我们请到了 Jonas Bonér，他是……你是 Akka 的最初创建者，对吧？是的，我是在 2009 年启动这个项目的。该产品的首次发布是在 2009 年，而我在此前一年就开始着手开发了。
+
+2
+00:00:49.000 --> 00:01:25.000
+So, yes. Cool, excellent. Jonas is going to explain kind of reactive programming, the actor model. He's going to talk us through sort of that whole kind of revolution. I think it's amazing to do, especially for UI and for a lot of other kind of processes, to have this sort of model. And Jonas is going to really, as an expert, is going to explain it to all of us. So, Jonas, why don't you kind of tell us your background, why you got, you know, how you kind of ended up getting really into this sort of programming model. Is it something, is it sort of a series of anti-patterns that you saw along the way that made you say oh
+没错，太棒了。Jonas 将为我们讲解响应式编程和 Actor 模型。他将带我们了解整个变革过程。我认为这种模型非常了不起，特别是在 UI 和许多其他类型的流程中。作为专家，Jonas 将为我们详细解读。那么，Jonas，你能介绍一下你的背景吗？你是如何开始深入研究这种编程模型的？是因为你在工作中遇到了一系列反模式，才让你觉得……
+
+3
+00:01:25.000 --> 00:02:10.000
+we need to build something new here so what was the motivation for that and what's that journey kind of been like it's been i guess about 10 years right yeah yes it's time flies by quickly yeah it's actually started a bit earlier than that even it's uh so So my journey into distributed systems and concurrent system and stuff like that actually started the journey towards Akka and the Akka model there and everything started back in I was I joined BA systems back in the day and I was working then on open source product, Aspect, Aspect oriented program work were quite popular back then,
+我们需要在这里构建一些新的东西。那么，当时的动机是什么？这段旅程是怎样的？我想大概有 10 年了吧？是的，时光飞逝。其实开始得更早一些。我进入分布式系统、并发系统等领域的旅程，实际上始于我加入 BA Systems 的时候。当时我正在做一个开源产品，Aspect 导向编程（AOP）在当时非常流行。
+
+4
+00:02:10.000 --> 00:02:45.000
+I don't know if AspectJ and stuff, Aspect works was later merged with AspectJ and etc. So there was a lot of like barcode weaving and having this dynamic capabilities to Java and any language that implemented AOP. So I actually worked on that open source product while working at BA Systems. But then I was headhunted by a small startup in 2003 or something like that that used the technology that we had built which was of course
+我不知道你是否了解 AspectJ 之类的东西，AspectWorks 后来与 AspectJ 合并了。当时有很多字节码编织技术，为 Java 和任何实现 AOP 的语言提供动态能力。我在 BA Systems 工作时，确实参与了那个开源产品的开发。但在 2003 年左右，我被一家小型初创公司挖走了，他们使用了我们构建的技术，当然那是……
+
+5
+00:02:45.000 --> 00:03:46.000
+open source a small small startup in the valley called called terracotta and they did distributed systems and and and and essentially tried to cluster the jvm underneath the jvm itself to make i mean and maintain the programming model of sort of you know threads and locks and sort of stretch that out across a set of distributed nodes and try to do sort of all the messiness underneath to make that work. Essentially, if we should get geeky here, the way it actually worked was that the sort of locks and sort of memory barriers were sort of translated into sort of transactional scope. So it was those transactions that were maintained across the JVM. And they did that completely transparently using Aspect-oriented programming. So in that case, how do you... And the tech that I had built.
+开源的。那是一家位于硅谷的小型初创公司，叫 Terracotta。他们做分布式系统，本质上是试图在 JVM 之下对 JVM 本身进行集群化，并维持那种线程和锁的编程模型，将其扩展到一组分布式节点上，并试图在底层处理所有混乱的细节来使其工作。如果我们深入技术细节，它的工作方式实际上是将锁和内存屏障转换为事务范围。因此，这些事务是在 JVM 之间维护的。他们完全透明地使用了面向切面编程。那么，在这种情况下，你如何……以及我构建的技术。
+
+6
+00:03:46.000 --> 00:04:21.000
+How do you handle the data dependency there? I mean, if somebody is treating it as like threads, they might not be aware of that they have to broadcast all this data, right? Exactly, exactly. I mean, when I joined the company and actually went promoting it and stuff, we actually went quite far, you know, selling people on the model. But the thing is that it was a completely broken model from the start. And that started to grow on me after, you know, being out of clients,
+你如何处理那里的数据依赖？我的意思是，如果有人把它当作线程来处理，他们可能没有意识到必须广播所有这些数据，对吧？完全正确。当我加入公司并推广它时，我们确实在向人们推销这种模型方面走得很远。但问题是，它从一开始就是一个完全破碎的模型。在接触了几个客户之后，这种感觉越来越强烈。
+
+7
+00:04:21.000 --> 00:04:58.000
+you know, after a couple of years. And we never really got it to work. And no surprise, you know, I'm now a firm believer of the sort of opposite way of approach in distributed systems, where you sort of embrace the network, embrace the constraints of the network, and instead of trying to hide it, you know, it turns, if you try to hide it, in my opinion, it turns into this leak abstraction that leaks so much that it becomes more or less useless. You know, we've seen this many, many, many times in the past, with, you know, with RPC and distributed objects
+几年后，我们从未真正让它成功运行。不出所料，我现在坚信分布式系统应该采取相反的方法，即拥抱网络，拥抱网络的约束，而不是试图隐藏它。在我看来，如果你试图隐藏它，它就会变成一种泄漏严重的抽象，以至于变得几乎毫无用处。过去我们已经多次看到这种情况，比如 RPC 和分布式对象，
+
+8
+00:04:58.000 --> 00:05:23.000
+or XA or anything like that. You know, it's actually, it works to the point where it doesn't work, and when it doesn't work, everything falls apart. Right. Where you have network disconnection and partial failures, you have really no idea how you can recover from, et cetera. So that, you know, made me completely lose faith in that model. And actually, in general, you know, the way I was sort of doing,
+或者 XA 之类的东西。它在某种程度上有效，直到它失效，而一旦失效，一切都会崩溃。没错。当出现网络断开和部分故障时，你根本不知道如何恢复，等等。所以，这让我对那个模型完全失去了信心。实际上，总的来说，我当时……
+
+9
+00:05:23.000 --> 00:06:20.000
+after that, I was doing consultancy on distributed system in Java in general, you know, the way I was sort of doing, after that, I was doing consultancy on distributed system in Java in general, you know, embrace Macorba and all the tools that they have, EGBs and all the tools that they have there. And it started to grow in me that all of this is just the wrong way of approaching the problem and I went through this crisis in a way. I started to sort of, you know, dig through a lot of research papers and stuff and then it started, then I chatted with a friend that had been actually always in school, been programming in Erlang. You know, he went straight to Ericsson and Ericsson developed his language, his esoteric and quite obscure language called Erlang. And I just, you know, when talking with him, I sort of realized that, wow, this is the model I've been looking for. I mean, communication or distributed communication is first class.
+在那之后，我一直在做 Java 分布式系统的咨询工作，拥抱 CORBA 以及他们拥有的所有工具，比如 EJB 等。我开始意识到，所有这些都是解决问题的错误方式，我经历了一场危机。我开始深入研究大量研究论文，然后我和一个在学校时一直用 Erlang 编程的朋友聊天。他直接去了爱立信，而爱立信开发了这种深奥且相当晦涩的语言——Erlang。在和他交谈时，我意识到，哇，这就是我一直在寻找的模型。我的意思是，通信或分布式通信是一等公民。
+
+10
+00:06:20.000 --> 00:06:57.000
+We have true isolation. You know, failure can't cascade across components or across nodes, as we've even seen, you know, often in Java and things like that. And that sort of set me on the path first, learning Erlang for real. So I've been tinkering with it back in school, and I, of course, knew what it was, being sweet and having friends using it, but i've never really took it seriously but i i felt like of course i can't you know program erlang and day in and day out all my clients you know my my whole life is served on the jvm you know i then okay then i better find a way to to port that
+我们拥有真正的隔离。故障不会在组件或节点之间级联，正如我们在 Java 等语言中经常看到的那样。这让我走上了正轨，首先是真正学习 Erlang。我在学校时曾摆弄过它，当然知道它是什么，作为瑞典人，我也有朋友在使用它，但我从未真正认真对待过。但我感觉，我不可能在所有客户那里日复一日地编写 Erlang，我的整个生活都建立在 JVM 之上。所以我当时想，好吧，我最好找到一种方法来移植那个……
+
+11
+00:06:57.000 --> 00:07:41.000
+model because essentially the model the principles they're so so they're so good. Over to Java. And that's how I started Akka. Back in 2008 was that. Oh, I see. So are there any sort of, did you encounter any sort of really fundamental limitations of, or say differences between the JVM and Erlang that were like serious roadblocks for Akka? Or was it more of like just a mechanical like, you know, day in, day out, let's get it done. Like, were there any like real technical hurdles there? Yeah, one of the things, you know, that people always tend to point out when they come from Erlang, and they're absolutely right about that, is that you can't have any, you can't
+模型，因为本质上，这些原则非常好。移植到 Java。这就是我启动 Akka 的方式，那是在 2008 年。哦，我明白了。那么，在 JVM 和 Erlang 之间，你是否遇到了任何根本性的限制，或者说是严重的障碍？还是说这更多是机械性的，比如日复一日地完成工作？有没有什么真正的技术障碍？是的，人们从 Erlang 转过来时总是会指出一点，他们说得完全正确，那就是在 JVM 上你不可能拥有真正的隔离，因为它是共享堆。所以隔离只是基于约定。但通过尝试建立一个设定边界并使人们容易做正确事情的编程模型，即使你使用 Akka，如果你真的想自找麻烦，你总是可以使用反射等手段绕过它。所以这是困难的一点。还有垃圾回收之类的问题。Erlang 有垃圾回收，但它是按 Actor 进行的。
+
+12
+00:07:41.000 --> 00:08:24.000
+have such a thing as true isolation on the JVM because it is a shared heap. So sort of isolation is only by convention. But by trying to have a programming model that sets up the boundaries and tries to make it easy to do the right thing. And regardless, even if you use ACA, you can always use reflection and stuff like that to bypass that if you really, really want to shoot yourself. So that's one of the things that's hard. And also things like garbage collection. Erlang has garbage collection, but it has it per actor.
+所以不是那样。Erlang 有垃圾回收，但它是按 Actor 进行的。因此，由于你可以控制垃圾回收器，所以公平性更高。而在 JVM 上的 Akka 中，我们对这些底层事物确实没有控制权。有时这会导致更长的延迟停顿等。当然，通常可以通过做正确的事情来缓解这些问题，我们试图引导人们做正确的事情，不要产生太多的垃圾等。这很有道理。但它仍然与 Erlang 不同，在 Erlang 中，你拥有……
+
+13
+00:08:24.000 --> 00:09:05.000
+So it's not that. Erline has a garbage collection, but it has it per actor. So you have more fairness because you have control over the garbage collector. While in SysAka on the JVM, there's really no control we have over such low-level things. And sometimes it can be more of long latency pauses and stuff like that. But of course, very often those can be mitigated by doing the right thing. And we try to push people in the direction of doing the right thing, not creating too much garbage and stuff like that. That makes sense. But still, it's not the same thing as an Erlang, you know, where they're full control
+对一切的完全控制。虚拟机是为 Actor 设计的，而 JVM 则不是。那么在 Akka 的情况下，我的意思是，你可以让所有 Actor 在单独的进程中运行，对吧？但这可能也有其自身的代价，对吧？是的，我们不那样做。我们……所以它的工作方式，如果我们深入探讨 Actor，我们应该先解释 Actor 模型吗？是的，这是一个好点。所以也许让我们稍微回溯一下，谈谈什么是 Actor 模型？
+
+14
+00:09:05.000 --> 00:09:44.000
+over everything. The VM is built with actors in mind, which is not the case for the JVM. So in the case of Akka, I mean, you could have all the actors running in separate processes, right? But that probably has its own expense, right? Yeah, no, we don't do that. We sort of, so the way it works, you know, if we should go into how, into the actor, should we first explain the actor model? Yeah, that's a good point. So maybe let's, yeah, let's spiral back a little bit and talk about, you know, what is the actor model?
+什么是响应式编程？如果有人来了，假设他们是大一学生，学过系统软件，写过一些 C 代码，他们问：什么是 Actor 模型？这意味着什么？是的，当然。Actor 模型其实很古老。我是从 Erlang 那里学到的，但 Erlang 是从 Carl Hewitt 在 70 年代初写的论文中借鉴的。它是一个完整的计算模型，就像 Lambda 演算一样，是一个基础的计算模型，与大多数其他模型有不同的视角。它将通信视为一等公民，即通信和行为。它被称为 Actor 模型，因为 Actor 是计算的单元。
+
+15
+00:09:44.000 --> 00:10:47.000
+What is reactive programming? If someone comes, let's say they're in first year of university, they've taken systems software and they've written some code in C, and they say, what is the actor model? What does this mean? Yeah, sure. The actor model is actually quite old. I learned it from Erlang, but Erlang took it from papers by Carl Hewitt, that he wrote in the early 70s or something like that. model is a complete computation model, like lambda calculus, a foundational computational model that has a different take than most of the other ones. It models communication as first class, communication and behavior. And it's called the actor model because actor is the unit of computation.
+它是你拥有的工作单元。而且，Actor 非常轻量级。至少，在某种意义上，现在我们谈论的是它们通常是如何实现的。但在 Erlang 和我见过的大多数 C++ 实现中，以及 Akka 中，Actor 的实现方式都是在资源使用方面极其轻量级。
+
+16
+00:10:47.000 --> 00:11:17.000
+It's sort of the unit of work that you have. And, you know, actors are extremely lightweight. At least, I mean, in a sense, now we're getting down to how they usually are implemented. But both in Erlang and most C++ implementations that I've seen, as well as ACA, implement actors in the way that they are extremely lightweight in terms of how they use resources.
+例如，在 Akka 中，你可以在普通的笔记本电脑上运行数百万个 Actor。它们不会消耗……哦，我明白了。所以它几乎就像一个绿色线程。就像绿色线程或协程之类的东西。完全正确。所以我们在线程上进行多路复用，
+
+17
+00:11:17.000 --> 00:11:34.000
+For example, ACA, you can run millions of them on a regular laptop. And they don't consume... Oh, I see. So it's almost like a green thread. Like a green thread or a coroutine or something like that. Exactly. So we do multiplexing on threads, you know,
+你拥有这种 Actor 到线程的 N:M 映射。在 Akka 中，这被称为调度器（Dispatcher），但是的，这就是你调度或运行它们的线程池。在 Akka 中，它只消耗堆内存。是的，对于那些可能不熟悉的人来说。所以基本上，如果你创建一个线程，甚至更大程度上，创建一个进程，底层其实发生了很多事情。你可能会说只是 new thread，看起来很快，或者 C++ 中的 std::thread，但实际上底层操作系统在做大量工作。
+
+18
+00:11:34.000 --> 00:12:11.000
+so you have like this N, N, N colon M mapping of actors to threads. And Inaka is called the dispatcher, but yeah, it's that sort of thread pool that you schedule or that you run them on. Inaka only consumes like a heap. Yeah, just for people who might not be familiar. So basically, if you create a thread or even to a greater extent, you create a process, this is actually a lot is happening under the hood. You might say just new thread and it's it seems really quick or std thread or something in c++ but actually under the hood the os is doing a ton of work there
+所以你不能在现实中创建，比如说，一百万个进程，这不切实际。因此，你看到的这些绿色线程或协程，其理念是系统在开始时创建，比如说，32 个线程。然后当你想要在旁边做一点工作时，它只是使用那些已经创建好的 32 个线程之一。如果你尝试同时做 33 件事，第 33 件事就排在队列里。一旦其中一个线程空闲，它就开始处理那个队列。
+
+19
+00:12:11.000 --> 00:12:49.000
+and so you can't realistically create let's say a million processes you know on one computer it's just not practical and so a lot of these uh you see these green threads or these co-routines the idea is the system creates let's say's say, 32 threads right at the beginning. And then when you say, hey, I want to do this bit of work on the side, it just uses one of those 32 threads that's already been created. And if you try and do 33 things at the same time, that 33rd thing just kind of sits in a queue. And once one of the threads is free, it starts offloading that queue.
+没错，完全正确。所以这本质上就是我们在 Akka 中实现 Actor 的方式。我的意思是，没有什么能阻止你将 Actor 实现为每个进程一个 Actor。但我认为 Actor 的全部好处就消失了，在我看来。Actor 之所以伟大，是因为它们不映射到线程，你可以轻松创建成千上万甚至数百万个，并将它们分布在集群上。
+
+20
+00:12:49.000 --> 00:13:14.000
+Right, exactly. So that's essentially how we implement actors in Akka. I mean, nothing prevents you from implementing the actors as having one actor per process. But I think the whole benefit of actors falls apart, in my opinion. The actors are so great because they are not mapped to threads, that you can easily create thousands or millions of them and spread them out on the cluster.
+我倾向于将它们视为与自然界中事物运作方式非常相似，映射到蚁群或细菌等的工作方式，那里有那么多，对吧？所以如果其中几个失败了，也没关系，因为其他的可以接手失败者开始的地方，而不会真正影响应用程序的整体健康。这本质上就是我喜欢看待 Actor 的方式，以及为什么我认为它们是云的强大模型，那里有所有这些计算资源和所有这些可用的节点。但 Actor 还有其他几个重要的特征，即所有通信都是一等公民，内置于模型中。
+
+21
+00:13:14.000 --> 00:14:10.000
+The way I tend to look at them is very similar to how things work in nature, mapping them to how ant colonies work, or bacteria or something like that, where you have so many, right? So if a few of them fail, it doesn't really matter because others can take over where the failed ones started and without really affecting the overall health of the application. And that's essentially how I like to look at actors and why I see them a really powerful model for the cloud, where you have all these compute resources and all these nodes available. But a few other things that are characteristically important to actors is that all communication is first class, built into the model.
+通信本质上或默认是分布式的，本地通信只是一种优化。它是分布式和本地通信的统一。这意味着它们看起来是一样的。无论你是与就在你旁边的 Actor 通信，还是与位于另一个节点或另一个数据中心的 Actor 通信，看起来都是一样的。
+
+22
+00:14:10.000 --> 00:14:36.000
+Communication is distributed by nature or by default, where local communication is just an optimization. It is a unification of distributed and local communication. That means that they both look the same. It looks the same if you communicate with an actor that sits right next to you or lives in another node or in another data center.
+看起来是一样的。这就是我们所说的位置透明性。这样做的好处之一是，如果你底层有一个相当先进的运行时，它了解 Actor 是如何被使用的，哪些负载过重，
+
+23
+00:14:36.000 --> 00:14:55.000
+It looks the same. And this is what we call location transparency. And one of the benefits of that is that if you have a reasonably advanced runtime underneath here that sort of understands how actors are being used and which ones are overloaded,
+哪些利用不足，哪些实际上正在失败，那么该运行时可以通过移动 Actor 来优化这些事情。在我看来，这就是位置透明性的关键，即集群可以通过在不同节点上移动 Actor 来自我优化，而无需客户端从用户角度感知到。
+
+24
+00:14:55.000 --> 00:15:21.000
+which ones are underutilized, which ones are actually failing now and stuff, you know, that runtime can optimize these things by moving the actors around. And this is sort of, in my opinion, the key to location transparency, that the cluster can optimize itself by shuffling actors around on different nodes without the experience from the user perspective, the client.
+他甚至不需要知道正在发生什么。这在很大程度上要归功于 Actor 模型的动态性。我没有说的一件事是，你与 Actor 通信的方式通常是通过某种引用。在 Erlang 中，你有所谓的 PID，即你发送消息或与之通信的进程 ID。在 Akka 中，我们有所谓的 ActorRef。所以你永远不会直接与 Actor 通信，而只能通过这种代理或引用。这意味着 Actor 可以
+
+25
+00:15:21.000 --> 00:15:55.000
+He never really has to even know that that is going on. That's a lot thanks to the dynamicity of the actor model, that the actors can serve. One thing that I didn't say is that the way you communicate with an actor is usually through some sort of reference. In Erlang you have what is called the PID, the process ID that you send messages to, or communicate with. In Akka we have what is called the PID, the process ID that you send messages to, or can you communicate with it. In ACA, we have what is called the actor ref. So you never communicate with the actor directly, but only through this sort of proxy or this reference. So this means that the actor can
+住在任何地方。这种间接层也让运行时有机会以透明的方式管理故障，通过故障转移到其他 Actor，甚至在其他节点上，或者将消息路由到相同类型的其他 Actor 等等。所以这是一件非常强大的事情。而且，这也是……
+
+26
+00:15:55.000 --> 00:16:16.000
+live anywhere. And this sort of leveling direction also gives the runtime the opportunity to manage failure in a transparent way by sort of failing over to other actors, even on other nodes, or to route messages, you know, to other actors of the same type and things like that, you know. So that's a very powerful thing. And this is, you know, also leveraged
+在故障模型中被利用。所以这也是我从 Actor 模型中看到的关键点之一，它具有监督的概念，Actor 会互相监视。它是完全无主、去中心化的。没有特殊的 Actor 之类的东西。但每个 Actor 都可以监视其他 Actor。如果他的伙伴死了，他会收到通知说，哦，你的伙伴死了。
+
+27
+00:16:16.000 --> 00:16:45.000
+in the failure model. So that is sort of one of the key things also that I see from the actor model, that it has this notion of supervision, that actors watch out for each other. It's completely masterless, decentralized. There's no special actors or anything like that. But each actor can watch out for other actors. And if his buddy dies, he will get a notification and say, oh, your buddy died.
+你想怎么处理？然后他可以选择升级，因为处理这件事可能超出了他的权限。他可能没有创建该 Actor 之类的。但随后他会向层级上方升级。或者他可能决定采取行动，重启该 Actor 或接管他的工作等等，所有这些都可以完成，这要归功于隔离性，这些 Actor 是完全自包含或自治的单元，没有任何与其他东西的强耦合。所以基本上，最终用户可以在 Actor 级别构建一些检查点。
+
+28
+00:16:45.000 --> 00:17:25.000
+What do you want to do about it? And then he can choose to escalate because it might be above his pay grade what to do. He perhaps didn't create the actor or stuff like that. But then he escalates up the hierarchy. Or he might decide to do something about it and restart the actor or take over his work and things like that and and all that can be done you know thanks to isolation that these actors are completely self-contained or autonomous units that that um to serve that doesn't have any any strong coupling with anything else so basically uh the the end user could build let's say some checkpointing at the actor level.
+然后如果他们说，哦，我所依赖的这个人应该给我 10 个工作单元，但他给了我 5 个就死了。我可以使用我的检查点回到一个更早的状态，那时那个人还没有给我任何工作，然后重启他们，并继续前进。完全正确，一切都是这样。通常组织它的方式就像一个组织层级，你有老板，或者你想叫什么都行，我们称之为 Actor 父级。所以任何 Actor 都可以通过简单地创建工作者来成为父级。通过升级……当你收到来自你的工作者之一的通知或消息时，你可以选择采取行动或向上升级。你也可以有这种侧向错误通知，
+
+29
+00:17:25.000 --> 00:18:20.000
+And then if they say, oh, this person that I was dependent on is supposed to give me 10 units of work and they gave me five units of work and then died. I could use my checkpoint to sort of go back to an earlier state where that person hasn't given me any work and then and then reboot them and kind of can keep going exactly and and and things everything so the way normally organized it is is just like an organizational hierarchy that you have like bosses or whatever you want to call it like we call it the the actor parent so any actor can be a parent simply by creating workers. And by escalating sort of the... When you receive a notification, a message from one of your workers, then you can choose to do something about it or escalate up, you know. And you can also have this sort of sideway error notification
+因为创建该 Actor 的可能不是你，但你可能依赖于他，或者类似的情况。所以收到你所依赖的工作者或 Actor 失败的通知也很有趣。当然，你需要在协议中编码这种游标或索引，这样你就知道你死的时候在哪里。但通常，如果你保留了该信息，它可以被转发给父级，父级然后可以启动另一个工作者，并在另一个失败的地方恢复他，如果这说得通的话。
+
+30
+00:18:20.000 --> 00:19:06.000
+because it might not be you that created the actor, but you might be dependent on him, right? Or something like that. So then it's also interesting to get a notification that the worker that you're dependent on, or the actor you're dependent on, failed. And you know, you need to encode this type of sort of a cursor or indexing in the protocol, of course, so you know where you were or where you were when you died. But usually, I mean, if you retain that information, that can be sort of relayed up to the parent, and the parent can then sort of kick off yet another worker and resume him where the other one failed, so to speak, if that makes sense.
+是的，说得通。那么这在数据流方面是如何工作的？比如，假设你是 Play 框架。我想所有这些 Actor 都在与同一个数据库通信。所以这就是他们读取和写入信息的方式吗？是的，这是一个很好的问题。这引出了我们在 Akka 中拥有的功能之一。状态持久化并不是核心 Actor 模型中编码的内容。Erlang 有他们自己的方式。他们本质上使用了一个名为 Amnesia 的分布式数据库，我们将信息放入其中，现在可以说是一个键值存储，
+
+31
+00:19:06.000 --> 00:19:49.000
+Yeah, that makes sense. So how does this work with respect to sort of data flow? Like let's say you're like the play framework, for example. I guess all of these actors are communicating with the same database. And so that's sort of, is that the way that they read and write information? Yeah, that's a great question. That sort of leads into one of the features we have in ACA. That's persistent of state is nothing that's sort of encoded in the core actor model. Erlang has their way of doing it. They're essentially using a distributed database called Amnesia, where we put information in and now sort of a key value store, you
+不仅仅是那样。而我们采取了另一条路线，我们将持久化建立在事件日志之上。所以每个 Actor，如果你选择让它持久化，都有一个事件日志，用来存储它接收到的事件。我不知道你是否熟悉事件溯源（Event Sourcing）与命令溯源（Command Sourcing）。不，老实说，我从来没听说过。所以请继续。我们不需要深入探讨那些语义细节。但本质上它所做的是，它简单地记录进来的消息或它创建的事件，
+
+32
+00:19:49.000 --> 00:20:28.000
+can say, a little bit more than that. While we have taken sort of another route where we based our persistence on event logging. So each actor, if you choose it to be persistent, has an event log in which it stores the events that it receives. I don't know if you're familiar with event sourcing versus command sourcing or so. No, I've actually never heard of that, to be honest. So go for it. We don't need to go into those semantic details. But essentially what it does is it simply logs the messages that comes in or the events
+代表接收到该消息后产生的状态变化。它可能会收到一条消息。Actor 是有副作用的。我们还没说这一点。它们不是纯函数式的。
+
+33
+00:20:28.000 --> 00:20:44.000
+it creates representing the state change coming out of that, or receiving that message, actually. It might receive a message. Actors are side-effecting. We haven't said that. They're not purely functional or stuff.
+Actor 的全部意义在于在收到消息时做事情，所以它们是有副作用的。因此，每当你收到一条消息时，你都有机会创建一个事件，代表你作为接收该消息的结果所做的状态变化。然后我们有一种方法将该事件记录到持久化事件日志中，该日志是复制的，并且是完全持久、完全去中心化的。而且，既然所有……
+
+34
+00:20:44.000 --> 00:21:22.000
+The whole point of actors is to do stuff when they receive messages, so they are side-effecting. And so whenever you receive a message, you have the opportunity to create an event representing the state change that you did for that, as an effect of receiving that message. And then we have a way of logging that event, representing the state change to a persistent event log that is sort of replicated and then fully durable, fully decentralized and all those things. And, you know, and then since all, you know,
+所有代表状态变化的事件都是按发生顺序记录的，当 Actor 失败时，我们所做的只是重放事件日志，让 Actor 恢复到它之前的状态。拥有这个事件日志的好处是，你可以用它做比在 Actor 失败时恢复它更多的事情。你实际上可以让事件日志有其他消费者，例如副本，它们坐在那里不断读取事件，所以它们总是热备的。或者出于审计目的，你有一个强大的审计日志，系统中发生的一切，你都可以进去查看。或者出于调试目的，你可以有一个 Actor，它本质上只负责读取事件并将它们复制到外部系统，当事情出错时，你可以用它来重放。速度慢得多，比如一个接一个事件，当我们调试系统以找出哪里出错时等等。所以我认为，拥有这种带有事件日志的架构，为很多有趣的事情打开了大门。是的，这完全说得通。那么 Actor 模型和响应式编程之间有什么联系？所以响应式编程，据我所知，我用过一点 Angular 和一些 React.js，
+
+35
+00:21:22.000 --> 00:21:59.000
+all events representing state changes are logged in order as they happen, when an actor fails, what we do is simply replay the event log, bringing the actor up to speed where it was. And the beauty of having this event log is that you can use it for a lot of more things than just bringing up the actor when it failed. You can actually, having other consumers of this event log, for example, replicas that make sure that they sit and read events constantly, so they're always hot. Or for audit purposes, you have a strong audit log, everything that
+等等。基本上，在这种环境中，网站的部分内容只是在监视变量的变化。例如，一个非常简单的例子，你有一个 Angular 网站。你在顶部说，它将显示“Hello [name]”。也许在最开始，名字是空的或 null 之类的。但随后非常快地，
+
+36
+00:21:59.000 --> 00:22:50.000
+went on in the system, you can just go in and see. Or for debugging purposes, you can have one actor that essentially only sits and reads events and replicates them to an external system that you can use for replaying things when things go wrong. Much slower, like event after event, as we're debugging the system to find out what went wrong and things like that. So it opens up for a lot of interesting things in having this type of architecture with event logging, I believe. Yeah, that totally makes sense. So what's the connection between the actor model and the reactive programming? So reactive programming, as I understand it, I've used a little bit of Angular and some React.js
+名字被填充了。一旦发生这种情况，Hello [name] 就会监视该变量。它说，哦，名字已经变成了 Jason。所以让我们显示“Hello Jason”。这一切发生得如此之快，以至于人们根本没有注意到发生了什么。但在底层，有大量的监视和触发。这就是我理解的 Angular。那种响应式模型是如何比较的，
+
+37
+00:22:50.000 --> 00:23:16.000
+and things like that. And basically, in this environment, you have parts of the website are sort of just monitoring for variables to change. So for example, a very simple example, you have some Angular website. And you say at the top, it's going to say hello name. And maybe at the very beginning, you don't, you know, the name is just empty or null or something like that. But then very quickly,
+或者它如何与 Actor 很好地协作？是的，这是一个很好的问题。首先，我必须说“响应式”这个词已经开始变得相当过载了。它意味着很多事情。人们有一个上下文，或者一种映射方式，或者它对某人意味着一件事，例如 Web 开发人员，对低级系统程序员则意味着另一件事，等等，
+
+38
+00:23:16.000 --> 00:23:50.000
+you know, the name gets populated. And then as soon as that happens, the hello name is monitoring that variable. And it says, oh, the name has changed to Jason. So let's put hello Jason. And this all happens so quickly that, and there's probably no rendering along the way that people don't notice that's what's going on. But under the hood, there's a lot of monitoring and triggering. And so that's how I understand Angular. How does that reactive model compare,
+等等。我看待它的方式是，我将其视为两个不同的类别。整个响应式家族，我将其视为两件不同的事情。首先是响应式编程，我可以简要解释一下那意味着什么，至少我认为它是什么。但我们通常也称之为响应式系统。我将它们视为两件不同的事情，一个是用于本地编程，而另一个是用于建模分布式系统、分布式通信。一个是响应式系统的子集。但我可以回到响应式系统，
+
+39
+00:23:50.000 --> 00:24:21.000
+or how does that work well with Actor? Yeah, that's a great question. First, I have to say that reactive started to become a sort of quite overloaded word. It means a lot of things. You know, people have one context, become a sort of quite overloaded word. It means a lot of things. People have one context or one way of mapping that or it means one thing to, for example, a web developer, another thing to perhaps a low-level systems programmer, et cetera,
+但如果我们从响应式编程开始，那么，你知道，响应式编程确实是关于……我将其视为异步编程的一种变体或子集，其核心理念是新信息的可用性驱动逻辑。所以你拥有这种数据流图，它是极其懒惰的，除非信息可用，否则什么都不做。然后，一旦可用，它就会向下游流动，触发一系列行为或
+
+40
+00:24:21.000 --> 00:25:05.000
+et cetera. And the way I look at it is that I see it as two different categories. The whole family of reactive, I see it as two different things. First, we have reactive programming, and I can briefly explain what that means, at least what I think it is. But we also have what we usually call reactive systems. And I see them as two different things you know and one is for local for programming local things you know while the other one is to model distributed systems distributed community communication and and one is the subset of this i see reactive programming is a subset of reactive system but if we, I can get back to reactive systems,
+改变变量的数据流等等。所以它允许你将问题分解为多个离散的、定义明确的步骤。每一步都可以以完全异步和非阻塞的方式执行，这很棒。映射非常适合现代硬件，如多核等。然后它们可以被重新组合以产生工作流，或者正如我所说，一个图，它就在那里，它通常对完全无界的信息流做出反应，就像信息流一样，所以它真的没有终点，它只是对环境做出反应。正如我所说，响应式编程通常意味着……至少我是这样看的，
+
+41
+00:25:05.000 --> 00:25:36.000
+but if we should start with reactive programming, so, you know, reactive programming is really about sort of, I see it as sort of a variation or a subset of asynchronous programming, you know, where the whole idea is that the availability of new information drives the logic. So you have this sort of data flow graph, you know, that's extremely lazy, that doesn't do anything unless the information is available. And then, you know, and as soon as it's available, it flows downstream, like triggering a bunch of behaviors or
+它是用于本地计算的。它并没有真正的分布式模型。所以它比消息驱动更偏向事件驱动。我们也许不需要深入探讨它们之间的所有语义差异，但
+
+42
+00:25:36.000 --> 00:26:23.000
+changing data flow of variables and things like that. So it sort of allows you to decompose the problem into multiple sort of discrete steps that are well-defined. And each step can be executed in a fully asynchronous and non-blocking fashion, which is great. Maps work very well to modern hardware like multicore and things like that. And then they can be recomposed to produce a workflow or as I said a graph and it sort of is there and it usually you know reacts to sort of completely unbounded flow of information like a stream of information so there's really no end to it it just reacts to its environment so to speak and reactive programming as I said it's it's sort of usually meant for the way I actually I see it as at least it is that
+我简短的看法是，事件驱动就像你简单地向任何感兴趣的人发出事件。它可以是零个，可以是 200 个，可以是 100 万个，这真的没关系。而发出事件的人真的不知道。这一切都是以完全本地的方式发出的。而消息驱动确实是关于各方之间的直接通信。所以它模拟了可直接寻址的通信。
+
+43
+00:26:23.000 --> 00:26:40.000
+it's it's for local, it's for local computation. It doesn't really have a distribution model. So it's more event-driven than sort of message-driven. We perhaps don't need to go into all the semantic differences between them, but
+你知道你在和谁说话，为什么说话等等。这意味着你实际上可以使用它来跨越地址边界，而响应式编程完全是在一个地址边界内。这说得通。但不同的 API，如果我们从编程角度谈论具体内容，那么 API 可以分为两类。
+
+44
+00:26:40.000 --> 00:27:10.000
+the way I view it in short is that event-driven is like you simply just sort of emit events to whoever is interested. You know, it can be zero, it can be 200, it can be a million, it doesn't really matter. And the guy emitting the event really doesn't know. And it all sort of is emitted in a fully local fashion. While message-driven is really about direct communication between parties. So it models direct addressable communication.
+一个是基于回调的。那是旧的 Node 模型，或者说旧的。当然，它比那古老得多，但 Node 普及了它。我们有这个事件循环。它是匿名副作用和回调，或者从事件源读取事件。但另一个现在变得越来越流行的是一种更声明式的模型，
+
+45
+00:27:10.000 --> 00:27:35.000
+You know who you're talking to and why, etc. And that means that you can actually use it to cross address boundaries, while reactive programming is really all within one address boundary. That makes sense. But the different APIs, if we should talk concrete in a programming perspective, so the APIs, you can categorize into two different groups.
+你使用函数，使用函数组合，比如 map、filter、fold 等等，这是大多数分布式流产品开始使用的方法。不出所料，我认为因为我绝对偏爱声明式模型，因为它允许组合，而回调模型真的很难组合，而且用回调进行错误处理真的很难，等等。回调地狱和所有这些事情。所以我们实际上在声明式方法方面看到了很多有趣的产品，
+
+46
+00:27:35.000 --> 00:27:59.000
+One is callback-based. That's sort of this old Node model, or old. It's a lot older than that, of course, but Node popularized that. We have this event loop. It was anonymous side effect and callbacks, or, you know, this sort of reads event from event sources. And, but the other one is a sort of becoming more popular now, is a more declarative model
+比如 Future 和 Promise，这是一个相当古老的概念，但在 Web 开发以及系统编程和复制开发编程中变得非常非常流行。我们当然在 Akka 中拥有它们。另一个我会触及的是流，你可以在本地运行这些流，我们有 Akka Streams，它实现了响应式流规范，所有这些都在本地运行，这是一种编排工作流的方式，
+
+47
+00:27:59.000 --> 00:28:45.000
+where you use functions, you use function composition, and, you know, things like map and filter and fold and things like Google buy and you know these things and that's sort of the approach that also most of these like distributed streaming products have sort of started to use. And no surprise I think because I mean I definitely favor the declarative model because it allows for composition, while the callback model is really hard to compose and it's really hard to do error handling with callbacks, etc. You know, the callback hell and all these things. So we've actually seen a lot of interesting products in the of the declarative approach to function to to reactive
+并以非常低延迟、高效的方式进行本地数据处理。但你也可以以分布式方式进行。
+
+48
+00:28:45.000 --> 00:29:32.000
+programming you know one is is or none of this is new by the way you know but we've seen it you know being being popularized and one is for example futures and promises that's quite an old concept but it's becoming really really popular both in web development as well as systems programming and replication development programming and we have them in aka of course in the uh and the uh and the other one i will retouch upon this sort of streams and and and you can run these streams locally and we we have streams in article protocol aka streams that implements the reactive stream specification that all all runs it locally and it's a way to orchestrate workflow you know know, and do local data processing in a very low latency, high efficient way. But you can also do it in a distributed fashion, you know.
+所以这总结了我对响应式编程的看法。我不知道你是否希望我也谈谈响应式系统。是的，当然。那将很好地过渡到下一部分。是的，请继续。是的，正如我所说，响应式系统绝对是响应式编程的超集，但试图将这些能力扩展为一套好的设计原则，用于分布式系统。所以我们试图将其编码在所谓的“响应式宣言”中。
+
+49
+00:29:32.000 --> 00:30:10.000
+So that sort of sums up my view on reactive programming. I don't know if you want me to touch on reactive systems as well. Yeah, definitely. That would segue really well into the next part. Yeah, go ahead. Yeah, so reactive system, as I said, I mean, it is definitely a superset of reactive programming, but sort of trying to expand those capabilities into a set of good design principles, I'd say, for distributed systems. So we try to encode that in what's called the reactive manifesto.
+这是我发起的，后来通过他人的贡献而演变。但它本质上是试图为构建现代系统提出一种通用词汇和一套设计原则，这些系统为多核、云计算、物联网、数据流以及所有这些事情做好了准备。我总是倾向于说，这些都不是什么新鲜事。这些原则可以追溯到 70 年代和 80 年代，Jim Gray、Pat Hell 的工作，
+
+50
+00:30:10.000 --> 00:30:49.000
+It's something I started and then later have evolved through contributions by others. But it's essentially to try to come up with a common vocabulary and a set of design principles for building modern systems that are ready for multi-core, for cloud computing, you know, IoT, you know, data streaming, and all of these things. And I always, you know, feel inclined to say that nothing of this is new, you know. These principles, you know, can be traced back to the 70s and 80s, the work by Jim Gray, Pat Hell,
+以及我的一些老英雄，还有 Joe Armstrong 在 Erlang 上的工作。响应式系统的基础是消息传递。如果我们要谈论纯语义，它不是事件驱动的，因为正如我所说，事件驱动完全是关于……它真的没有寻址方式。你不能跨越地址边界。
+
+51
+00:30:49.000 --> 00:31:10.000
+and some of my old-time heroes, and also Joe Armstrong on Erlang. And the foundation for reactive systems is message passing. It's not being event-driven, if you should like tour pure semantics, because as I said, event-driven is all about, it really doesn't have a way of doing addressing. You can't cross address boundaries.
+而消息传递，完全是关于向某人、向目的地发送消息。所以我认为这是建模分布式通信的最佳方式。因为我认为这里的关键是，消息传递，当我们谈论响应式系统时，我们所建立的基础是，消息传递确实在组件之间创建了这种时间边界，允许它们完全解耦，它们可以在时间上解耦，这就是允许并发的原因，
+
+52
+00:31:10.000 --> 00:31:46.000
+While message passing, it's all about sending a message to someone, to a destination. So it's really the best way to model distributed communication, I believe. And because I think the key here is that message passing, what we build on when we talk about reactive systems is that message passing really creates this sort of temporal boundary between components that allows them to be fully decoupled, you know, and they can be decoupled in time, and this is what allows for concurrency, you know, and they can be decoupled in time, and this is what allows for concurrency, you know, and they can be
+它们也可以在空间上解耦。这就是允许分布、移动性和我们谈到的位置透明性的原因，这种间接层和这种完全隔离也为自愈系统铺平了道路，正如系统所知，系统从故障中恢复而不会影响系统的其他部分。所以响应式宣言最终讲述了消息传递可以通过自愈系统为你提供弹性，即隔离属性，所有这些事情，以及弹性，即系统按需增长和收缩，实现云计算的承诺等等。所以，是的，有很多
+
+53
+00:31:46.000 --> 00:32:30.000
+decoupled in space also. And this is what allows for distribution and mobility and location transparency as we talked about, this level of indirection and this full isolation that also, you know, paves the way for self-healing system, as system know you know you know recover from failure without affecting other parts of the of the system so so so the reactive manifesto sort of ends up with with the story of of that message passing you know can give you resilience through self-healing systems that is isolated properties of isolation all these things as well as elasticity you know having to have the system to grow and shrink on demand you know to do living up to the promise of cloud computing etc so yeah a number a number of
+问题。我的意思是，在我跳入一整套其他问题之前，有一个问题是，你谈到了这种动态系统的编排，对吧？有没有关于，我想说响应式，但有没有关于某种非常先进的监督的工作？例如，每种 Actor 类型或每个 Actor 实现，是否有东西可以监视它们并说……
+
+54
+00:32:30.000 --> 00:33:04.000
+questions i mean so one one question before i jump into a whole suite of other questions is you talk about the sort of uh orchestration and of of this sort of dynamical system, right? Is there any work on sort of, I wanted to say reactive, but any work of sort of like a really advanced sort of supervision? So for example, every actor type or every actor implementation, something could monitor those and say,
+问题是，我的意思是，在我跳入一整套其他问题之前，有一个问题，你谈到了这种编排，以及这种动力系统的编排，对吧？有没有关于，我想说的是反应式，但有没有关于某种真正高级的监督的工作？例如，每种参与者类型或每个参与者实现，是否有某种东西可以监控它们并说，
+
+55
+00:33:04.000 --> 00:33:40.000
+oh, this particular action is very expensive. And I've learned it's expensive because this program has been running for 10 minutes or it ran yesterday or something like that. And so we could plan ahead and say, you know, these sets of actions need to run on their own machine because they're super expensive. These other ones are really lightweight. I mean, my guess is there's probably a lot of, I don't know if it's possible in the context of the JVM, but in general, it sounds like there's a lot of open research around sort of supervising and moving around these actors
+哦，这个特定的操作非常昂贵。我了解到它很昂贵，是因为这个程序已经运行了10分钟，或者它昨天运行过之类的。所以我们可以提前计划，说，你知道，这些动作集需要在它们自己的机器上运行，因为它们非常昂贵。而其他的则非常轻量。我的意思是，我猜可能有很多，我不知道在JVM的上下文中是否可能，但总的来说，听起来围绕着监督和移动这些Actor有很多开放的研究
+
+56
+00:33:40.000 --> 00:33:59.000
+to get optimal performance. Absolutely. And we do that to some extent in ACA. And I've always been, you know, long-term, you know, the vision that I have, I mean, it's long-term I'd like to see, you know, fully adaptive systems, you know, leveraging AI and all these things,
+以获得最佳性能。当然。我们在Akka中在一定程度上做到了这一点。我一直，你知道，从长远来看，你知道，我有的愿景，我的意思是，从长远来看，我希望看到，你知道，完全自适应的系统，你知道，利用人工智能和所有这些东西，
+
+57
+00:33:59.000 --> 00:35:04.000
+you know, but that's sort of far out. So what we have in practice running today is simpler in metrics-based routers, for example. That can sort of act both upon, you know, more based on low-level metrics, you know, latency and throughput and these type of things. And as you say, failure rates and things like that. And we also allow us to sort of tag certain groups of actors as high priority or less priority or give them different roles and things like that. And that can also be taken into account in how you prioritize work across the cluster. But one thing that we haven't said is that, I sort of touched a little bit upon it, but one of the sort of really fascinating things with Actors is that even though we implement it in a statically compiled language like Java, for example, or Scala,
+你知道，但这还很遥远。所以我们今天在实践中运行的是更简单的基于指标的路由器，例如。它们可以根据低级指标，你知道，延迟和吞吐量以及这些类型的东西来采取行动。正如你所说，故障率等等。我们还允许我们将某些Actor组标记为高优先级或低优先级，或者赋予它们不同的角色等等。这也可以在跨集群优先处理工作时被考虑在内。但有一件事我们还没说，我刚才稍微提了一下，但关于Actor最迷人的事情之一是，即使我们在像Java或Scala这样静态编译的语言中实现它，
+
+58
+00:35:04.000 --> 00:35:41.000
+you know, it's actually implemented in Scala. I mean, the actor model by itself, you know, gives you a lot of dynamicity because the actor, when it receives a message, it can sort of redefine its own behavior prior to receiving the next message. So it can completely change the way it behaves. And this means that it can actually turn itself, for example, if it feels like it is overloaded, it can itself turn itself into a router and spin up, you know, like 20 different routers on other machines even
+你知道，它实际上是用Scala实现的。我的意思是，Actor模型本身，你知道，给了你很大的动态性，因为Actor在接收到消息时，可以在接收下一条消息之前重新定义自己的行为。所以它可以完全改变它的行为方式。这意味着它实际上可以把自己变成，例如，如果它觉得它超载了，它可以自己把自己变成一个路由器，并启动，你知道，比如在其他机器上启动20个不同的路由器，甚至
+
+59
+00:35:41.000 --> 00:36:09.000
+and start relaying. And once the traffic decreases, it just kills them and sort of restores the old behavior doing the work himself. So this is probably a contrived example, but this is stuff that, I don't know if that is that contrived, but things are usually more advanced than this, you know, and we have capabilities that does, that sort of solves this better, but it sort of tries to illustrate the
+并开始中继。一旦流量减少，它就会杀死它们，并恢复旧的行为，自己完成工作。所以这可能是一个人为的例子，但这东西，我不知道这是否那么人为，但事情通常比这更先进，你知道，我们有能够解决这个问题的能力，这更好，但它试图说明
+
+60
+00:36:09.000 --> 00:36:29.000
+dynamicity of the actor model, that these actors are fully dynamic in the way that they redefine what they are, really, and as well as being moved around, you know, along with their state, and so that opens for a ton of possibilities. Yeah, I mean, I think it's fascinating.
+Actor模型的动态性，这些Actor在重新定义它们真正是什么方面是完全动态的，以及随着它们的状态被移动，你知道，这开启了无数的可能性。是的，我的意思是，我认为这很迷人。
+
+61
+00:36:29.000 --> 00:36:48.000
+I mean, I think an actor could try to say, like, is the data, you know, is the IO going to justify the, you know, the computation boost I get from spinning up a bunch of sub-actors? And if not, I'll just do it myself or something like that. Exactly. Exactly.
+我的意思是，我认为一个Actor可以尝试说，比如，数据，你知道，IO是否证明了我从启动一堆子Actor中获得的计算提升是合理的？如果不是，我就自己做，或者类似的事情。完全正确。完全正确。
+
+62
+00:36:48.000 --> 00:37:13.000
+Exactly. I mean, it's always a trade-off. You know, there's no right answer. It's all contextual. And even if you have all the information, you probably can easily do the wrong call and take the wrong call anyway, you know. So that's why there's that dynamicity in having, like, sort of where there's no fixed topology. You know, the classic way to distribute it, at least the way I learned to build a distributed system,
+完全正确。我的意思是，这总是一种权衡。你知道，没有正确的答案。一切都是情境化的。即使你拥有所有的信息，你可能也很容易做出错误的决定，无论如何都会做出错误的决定，你知道。所以这就是为什么在没有固定拓扑结构的情况下有那种动态性。你知道，分发它的经典方式，至少是我学习构建分布式系统的方式，
+
+63
+00:37:13.000 --> 00:37:47.000
+was that you have to design the topology of the system up front, you know, where things should run, etc. You need to redeploy or reboot things to change. But having this dynamicity means that the topology can evolve and will probably completely change from how you initially deployed it after it had been running for a while. Yeah, that makes sense. So what's the difference between, let's say, the actor model in ACA and something like MPI? Yeah. and something like MPI? Yeah, yeah.
+是你必须预先设计系统的拓扑结构，你知道，东西应该在哪里运行，等等。你需要重新部署或重启东西来改变。但拥有这种动态性意味着拓扑结构可以演变，并且在运行一段时间后，它可能会与你最初部署它的方式完全不同。是的，这很有道理。那么，比如说，Akka中的Actor模型和像MPI这样的东西有什么区别呢？是的。和像MPI这样的东西？是的，是的。
+
+64
+00:37:47.000 --> 00:38:10.000
+First, I'd say, you know, of course, MPI being native, it can be used for things like, you know, probably a lot more low latency that doesn't have the overhead of the garbage or the unpredictability of the garbage collector, things like that. But also, I personally never used MPI, of the garbage or the impredictability of the garbage collector things like that but but also you know i personally never used mpi but but that's does that map to threads that directly
+首先，我会说，你知道，当然，MPI是原生的，它可以用于诸如，你知道，可能更多的低延迟，没有垃圾回收的开销或垃圾回收器的不可预测性，诸如此类的事情。但我也，我个人从未使用过MPI，垃圾回收或垃圾回收器的不可预测性之类的东西，但我也，你知道，我个人从未使用过MPI，但这是否直接映射到线程
+
+65
+00:38:10.000 --> 00:39:10.000
+one-to-one or does it do multiplexing or because that's it could be one of the differences yeah i mean yeah i think i think mpi is is very heavy-handed so i think every every um mpi node yeah definitely needs to be a thread, maybe even a process. I don't know if there's – I think there might be shared memory. So I think each MPI node has to be its own process, if I remember correctly. Yes, I'd say that there's nothing wrong with that model. I mean, there is a certain class of use cases that fits that model by having, you know, essentially one worker, you know, sitting, you know, in the same place, so to speak, with all the caches hot, you know, there's no sort of context switching at all. You can just do all the work that you give it with the lowest latency as possible.
+一对一，还是它做多路复用，或者因为那可能是区别之一，是的，我的意思是，是的，我认为MPI是非常强硬的，所以我认为每一个，嗯，MPI节点，是的，绝对需要是一个线程，甚至可能是一个进程。我不知道是否有——我想可能有共享内存。所以我认为每个MPI节点必须是它自己的进程，如果我没记错的话。是的，我会说那个模型没有什么错。我的意思是，有一类用例适合那个模型，通过拥有，你知道，本质上是一个工作者，你知道，坐在，你知道，同一个地方，可以说，所有的缓存都是热的，你知道，根本没有上下文切换。你可以用尽可能低的延迟完成你给它的所有工作。
+
+66
+00:39:10.000 --> 00:40:05.000
+You know, that model is great when you have a limited number of workers and a static number of workers, where you know that you have, for example, 10 workers or five workers, and you just want to hand out work and have them go as fast as they can possibly do. The single writer principle is really a really good guiding principle when it comes to modern hardware. You just keep the cache assault just right as fast as you can and don't let go, because then you might be suspended. While the actor model, you know, it of course can do that, but a lot more inefficient, because it can be sort of, you know, rescheduled on another thread, on another core, you know. So, and it's really hard. There are, of course, native libraries, J9 libraries that tries to solve the problem of pinning threads to cores,
+你知道，当你有有限数量的工作者和固定数量的工作者时，那个模型很棒，你知道你有，例如，10个工作者或5个工作者，你只是想分发工作，让他们尽可能快地运行。单写者原则在现代硬件方面确实是一个非常好的指导原则。你只是保持缓存尽可能快，不要放手，因为那样你可能会被挂起。而Actor模型，你知道，它当然可以做到这一点，但效率要低得多，因为它可能被，你知道，重新调度到另一个线程，另一个核心上，你知道。所以，这真的很难。当然有原生库，J9库试图解决将线程固定到核心的问题，
+
+67
+00:40:05.000 --> 00:40:47.000
+and we can pin actors to threads and things like that. But that sort of violates the idea of the model, because the idea of the model is to have, you know, hundreds of thousands of these things that give you a very different way of programming. And that fits another class of problems, you know. So it's really comparing apples and oranges. For example, if you're on the JVM, there is a great library that implements more of the MPI model that's called the Disruptor. It was created by a guy called Martin Thompson working for LMAX building sort of high-frequency trading exchanges and stuff like that. I'm not sure about the high frequency, but he's been involved in these types of things, but it's actually a stock exchange
+我们可以将Actor固定到线程等等。但这违反了模型的理念，因为模型的理念是拥有，你知道，成千上万的这些东西，给你一种非常不同的编程方式。这适合另一类问题，你知道。所以这真的是在比较苹果和橘子。例如，如果你在JVM上，有一个很棒的库实现了更多的MPI模型，叫做Disruptor。它是由一个叫Martin Thompson的人创建的，他为LMAX工作，构建高频交易交易所之类的东西。我不确定高频，但他参与了这些类型的事情，但它实际上是一个证券交易所
+
+68
+00:40:47.000 --> 00:41:06.000
+with, of course, extremely low latency guarantees and where they have the number of workers fixed and where the actor model would be a really bad fit. But for a large class of problems, especially when we talk about microservices and there's like in general cloud application development, streaming, all these things.
+当然，有极低的延迟保证，工作者的数量是固定的，Actor模型在这里会非常不合适。但对于一大类问题，特别是当我们谈论微服务和一般云应用开发、流处理、所有这些事情时。
+
+69
+00:41:06.000 --> 00:41:47.000
+I think Actress is a really good tool to use. Yeah, that makes sense. I mean, I think, I mean, it's hard to know what something is capable of, but it's easier to talk about how it's typically used. And the way MPI is typically used is, as you said, you know, one MPI node per machine usually, and, you know, very limited passing of data back and forth. A lot of it is really kind of done by hand. And yeah, I think the biggest thing is it, it sounds like with the actor model, you can kind of build it on one machine, and then be kind of confident that it will scale out whereas with mpi um it's it's
+我认为Actor是一个非常好的工具。是的，这很有道理。我的意思是，我认为，我的意思是，很难知道某样东西的能力，但谈论它通常是如何使用的更容易。MPI通常的使用方式是，正如你所说，你知道，每台机器一个MPI节点，你知道，来回传递的数据非常有限。很多都是真正手工完成的。是的，我认为最大的事情是，听起来使用Actor模型，你可以在一台机器上构建它，然后确信它会扩展，而MPI，嗯，它
+
+70
+00:41:47.000 --> 00:42:17.000
+much more tailored to you know your specific your your hardware and the specific environment what about what about something like a spark or hadoop or something like that like one of these um i don't know what you would you would call like, kind of like a big data ETL type library. What would be the trade-offs? Why would somebody use, let's say, Spark instead of Akka or Akka instead of Spark or something like that? That's a great question.
+更适合你的特定硬件和特定环境。那么像Spark或Hadoop之类的东西呢，或者像这些，嗯，我不知道你会称为什么，有点像大数据ETL类型的库。权衡是什么？为什么有人会使用，比如说，Spark而不是Akka，或者Akka而不是Spark之类的？这是一个很好的问题。
+
+71
+00:42:17.000 --> 00:42:38.000
+And I think it composes pretty well. First, you can definitely use Akka to build something like that. For example, Flink. I don't know if you know that. That's built right on top of Acca. You're using all of these features that we talked about. And, you know, so it's more of a low-level programming model
+我认为它们组合得很好。首先，你绝对可以使用Akka来构建类似的东西。例如，Flink。我不知道你是否知道。它是直接建立在Akka之上的。你正在使用我们谈到的所有这些功能。而且，你知道，所以它是一个更低级的编程模型
+
+72
+00:42:38.000 --> 00:43:27.000
+when you only talk about the actor part of Acca. But what we have added is a lot of things on top. We have ACCA cluster, for example, that does sort of peer-to-peer gossip-based clustering, similar to Dynamo or Coord, or I don't know what you're familiar with in terms of research papers, but, you know, similar to Cassandra, you know, masterless, fully decentralized clustering. And another tool that sort of ties into the streaming, as I said, is the Akka Streams library that gives you a great toolbox to do quite advanced streaming, you know, fanning out, fanning in, doing data processing
+当你只谈论Akka的Actor部分时。但我们添加了很多东西。例如，我们有Akka Cluster，它进行某种基于八卦（gossip）的对等集群，类似于Dynamo或Coord，或者我不知道你对研究论文熟悉什么，但是，你知道，类似于Cassandra，你知道，无主、完全去中心化的集群。另一个与流处理相关的工具，正如我所说，是Akka Streams库，它为你提供了一个很好的工具箱来进行相当高级的流处理，你知道，扇出、扇入、进行数据处理
+
+73
+00:43:27.000 --> 00:43:55.000
+and things like that. But we have chosen to only support local processing, focusing more on very, very low latency and high throughput. So if you want to do distributed stream processing, of course you can use something like Akka, but you will have to build a lot of things yourself. You can perhaps stitch together. We actually have support for that called StreamRest where you can sort of stitch together
+等等。但我们选择只支持本地处理，更多地关注非常、非常低的延迟和高吞吐量。所以如果你想做分布式流处理，当然你可以使用像Akka这样的东西，但你必须自己构建很多东西。你也许可以拼凑在一起。我们实际上有对此的支持，叫做StreamRest，你可以某种程度上拼凑在一起
+
+74
+00:43:55.000 --> 00:44:33.000
+Akka streams nodes, local Akka streams nodes across the cluster. And for simple uses, that's great. And that's why we built it for customers that love that model but only want to be able to scale up a little bit. But if you have big needs for doing fast data processing, then you should definitely use the tools tailored for that. And then Spark streaming or Flink or something like Google Cloud Dataflow are great models for that. Of course, I mean, they compose. You can have actors as being the services to the end point, the stateful end points,
+跨集群的Akka Streams节点，本地Akka Streams节点。对于简单的用途，这很棒。这就是我们为那些喜欢那个模型但只想能够稍微扩展一点的客户构建它的原因。但如果你有进行快速数据处理的大需求，那么你绝对应该使用为此量身定制的工具。然后Spark Streaming或Flink或像Google Cloud Dataflow这样的东西是很好的模型。当然，我的意思是，它们可以组合。你可以让Actor作为端点的服务，有状态的端点，
+
+75
+00:44:33.000 --> 00:45:04.000
+receiving data from external systems or being the application point for microservices at the end points of the streaming pipeline. And so they absolutely compose nicely. That makes sense. One question about the actor model. Can the, do the actors, so one thing that I think makes this a little different from something like Ray or one of these other systems
+从外部系统接收数据，或者作为流处理管道末端的微服务的应用点。所以它们绝对可以很好地组合。这很有道理。关于Actor模型的一个问题。Actor可以，Actor是否，所以有一件事我认为这与像Ray或其他系统中的一些东西有点不同
+
+76
+00:45:04.000 --> 00:45:45.000
+is I think the actors can actually send data before they have sort of terminated so most of the time when you have these kind of systems at least i kind of think of it as sort of this functional thing where i send inputs to some process and i get back outputs and so that can fan out however it does but with the actor model something could be running maybe even perpetually and it's it's it's sort of a like a um like a like a permanent thing that's getting data sending data you're getting messages sending messages back but it doesn't have to be just sent back on termination i feel like that opens a lot of opportunity yeah it's really good
+我认为Actor实际上可以在它们某种程度上终止之前发送数据，所以大多数时候当你拥有这些类型的系统时，至少我倾向于认为它是一种函数式的东西，我发送输入到某个进程，我得到输出，所以它可以扇出，无论它怎么做，但使用Actor模型，某样东西可能一直在运行，甚至可能是永久的，它是一种，嗯，像一个永久的东西，正在获取数据，发送数据，你正在接收消息，发回消息，但它不必只是在终止时发回。我觉得这开启了很多机会，是的，这真的很好
+
+77
+00:45:45.000 --> 00:46:16.000
+that you that you point point that out i should have said it in that you know that one of the sort of the area where actors sort of shine is that it's is in being long-lived addressable stateful uh objects in long-lived meaning that they outlive the context, application context, or scope, stuff like that. And addressable means that you have a stable reference that you can always send a message to them.
+你指出这一点，我应该在那个中说，你知道，Actor闪耀的领域之一是作为长寿命、可寻址的有状态对象，长寿命意味着它们比上下文、应用上下文或范围等更长寿。可寻址意味着你有一个稳定的引用，你可以随时向它们发送消息。
+
+78
+00:46:16.000 --> 00:46:38.000
+And stateful is probably the most important thing, how it distinguishes from a lot of these other concurrency constructs, like most data flows, and they are stateful within, but they terminate and then it's the end of that. Or futures that have one value, but they're not really stateful in the sense that they
+而有状态可能是最重要的事情，它如何区别于许多其他并发结构，比如大多数数据流，它们在内部是有状态的，但它们终止了，然后就是那个的结束。或者只有一个值的Future，但它们在某种意义上并不是真正有状态的，即它们
+
+79
+00:46:38.000 --> 00:47:27.000
+are long lived addressable stateful things. So that's really how I should use them. If you only have a need for stateless, you know, essential stateless data processing, then I would not use actors. There are better tools for that. I will use some sort of stream processing, some sort of data flow graph, or rely on futures, or future promises, or something like that even for local computation i wouldn't rely on actors but as soon as you have this exact need that you point out then then actors are are extremely handy so how does that work when you say they're addressable like is there almost like a like a dns type thing going on when you start when you start ACCA system where you can say, give me worker 23 or something
+是长寿命、可寻址的有状态的东西。所以这确实是我应该使用它们的方式。如果你只需要无状态的，你知道，本质上是无状态的数据处理，那么我就不会使用Actor。有更好的工具。我会使用某种流处理，某种数据流图，或者依赖Future，或者Future Promise，或者类似的东西，即使是本地计算，我也不会依赖Actor。但一旦你有你指出的这种确切需求，那么Actor就非常方便了。那么当你说是可寻址的时，它是如何工作的？当你启动Akka系统时，是否几乎像DNS一样，你可以说，给我工作者23或类似的东西
+
+80
+00:47:27.000 --> 00:47:54.000
+like that. I want to send them a message. We'll figure out a way to do that. Yeah, exactly. I mean, first, the way it works in ACCA is that if you just use ACCA actors, it doesn't give you any DNS capabilities. But it all starts from the top level actor that creates actor, and then you need to make sure that you pass along the references that each actor needs to have,
+那样。我想给他们发消息。我们会想办法做到这一点。是的，完全正确。我的意思是，首先，它在Akka中的工作方式是，如果你只使用Akka Actor，它不会给你任何DNS功能。但这一切都从创建Actor的顶级Actor开始，然后你需要确保你传递了每个Actor需要拥有的引用，
+
+81
+00:47:54.000 --> 00:48:34.000
+as well as when an actor uses another actor, its reference, its actor rep, the handle is passed along. So you can just store away that and communicate back, etc. So that's how you can populate things. But that's, of course, very limiting. So one of the features with Acker cluster that adds, you know, the clustering capabilities is what we call sharding, Acker cluster sharding, and that essentially gives you what you asked for. You have this, essentially the address is where actors are gossiped around, and that can change.
+以及当一个Actor使用另一个Actor时，它的引用，它的Actor引用，句柄被传递。所以你可以存储它并回传，等等。这就是你可以填充东西的方式。但这当然非常有限。所以Akka Cluster的一个功能，增加了，你知道，集群功能，就是我们所说的分片（sharding），Akka Cluster Sharding，这本质上给了你所要求的。你有这个，本质上地址是Actor被八卦（gossip）传播的地方，这可能会改变。
+
+82
+00:48:34.000 --> 00:49:26.000
+You can have consistent hashing, consistently hand out actors across the node ring, the set of distributed nodes in the cluster. And when nodes leave and go, that needs to be repartitioned. And actors will then be reallocated or moved around, and that information, or the news of DNS or addressable information will be gossiped around so everyone has the has the latest news to speak it sounds like the the whole the problem of you know i need a shared let's just say a key value store uh we could we could treat dns as a key value store like i have this sort of shared key value store that needs to be replicated among all the actors that that sounds like a hard problem i mean it sounds like i mean there's there's there's a Like I have this sort of shared key value store that needs to be replicated among all the actors.
+你可以有一致性哈希，一致地在节点环上分发Actor，集群中分布式节点集。当节点离开和进入时，这需要重新分区。然后Actor将被重新分配或移动，该信息，或DNS或可寻址信息的八卦（gossip）将被传播，所以每个人都有最新的消息，可以说。听起来，你知道，我需要一个共享的，我们假设是一个键值存储，我们可以把DNS当作一个键值存储，就像我有一个需要在所有Actor之间复制的共享键值存储，这听起来是一个难题，我的意思是，听起来，我的意思是，有一个
+
+83
+00:49:26.000 --> 00:50:22.000
+That sounds like a hard problem. I mean, it sounds like there's conflicts that could happen. Someone could just find out about an actor and that actor's already dead or something like that. It almost seems like there's a lot of complexity around having a consistent key value store that's gossiped among all the actors like how does that actually work absolutely you're right there and and and you know we we rely on on on on on both like old and recent research research there as i said you know this epidemic gossiping is based on on also not reasonably old papers now. And the same thing as the failure detection algorithms and things like that. But when it comes to replicating of the state, we rely first on vector clocks, which is a quite old thing invented by Leslie
+这听起来是一个难题。我的意思是，听起来可能会发生冲突。有人可能刚刚发现一个Actor，而那个Actor已经死了之类的。这几乎看起来围绕着拥有一个在所有Actor之间八卦（gossip）的一致键值存储有很多复杂性，这实际上是如何工作的？绝对，你是对的，而且，你知道，我们依赖于，你知道，既有旧的也有最近的研究，正如我所说，你知道，这种流行病式的八卦（gossip）也是基于现在相当旧的论文。以及故障检测算法之类的东西。但当涉及到状态的复制时，我们首先依赖向量时钟（vector clocks），这是Leslie发明的相当古老的东西
+
+84
+00:50:22.000 --> 00:50:51.000
+Lamport back in the day. I don't remember. I think so. Yeah was it Leslie Lamport back in the day? No, perhaps, yeah, I don't remember. I think so, yeah, he invented Lamport clocks and then someone else invented vector clocks and stuff like that. But anyway, that's quite old, but we also, you know, rely on quite recent research when it comes to disseminate a sort of state, and that is something called CR crdt so a conflict tree replicated data types which is quite recent research which actually you know vector clock
+Lamport在过去。我不记得了。我想是这样。是的，那是Leslie Lamport在过去吗？不，也许，是的，我不记得了。我想是这样，是的，他发明了Lamport时钟，然后其他人发明了向量时钟之类的东西。但无论如何，这相当古老，但我们也，你知道，在传播某种状态时依赖相当新的研究，那就是叫做CRDT的东西，即冲突无关复制数据类型（Conflict-free Replicated Data Types），这是相当新的研究，实际上，你知道，向量时钟
+
+85
+00:50:51.000 --> 00:51:36.000
+is actually is the crdt but the crdt sort of generalizes that by giving you a way of of expressing state that sort of in a fully monotonic increasing fashion with a merge function that you know that you could always merge you know so it will always it sounds similar sounds similar to like this operational transform type stuff where you can you can forward any of these ideas it's it's it's it's very similar with sort of I think it was parallel research this year DDT was, I think, started by Mark Shapiro at Microsoft, while this Operation Transform was at Google, right? So I think it was sort of done more or less in parallel.
+实际上是CRDT，但CRDT通过给你一种表达状态的方式来概括它，这种方式以完全单调递增的方式，带有一个合并函数，你知道，你总是可以合并，你知道，所以它总是，听起来类似于这种操作转换（operational transform）类型的东西，你可以转发任何这些想法，它非常类似于，我想是并行研究，这个CRDT，我想，是由微软的Mark Shapiro开始的，而这个操作转换是在谷歌，对吧？所以我认为它或多或少是并行完成的。
+
+86
+00:51:36.000 --> 00:52:06.000
+But CRDTs have sort of exploded in the research arena after the initial papers. And there's now models for modeling CRDTs that are not just, you know, the simple things like registers and counters, but also things like maps and sets and even, to some extent, graphs. So you can model quite rich data structure as long as you adhere to the rules, you know, and be sure that they are they are eventually consistent for sure they
+但CRDT在最初的论文之后在研究领域爆发了。现在有建模CRDT的模型，不仅仅是，你知道，像寄存器和计数器这样的简单东西，还有像映射和集合，甚至在某种程度上，图。所以你可以建模相当丰富的数据结构，只要你遵守规则，你知道，并确保它们最终是一致的，当然它们
+
+87
+00:52:06.000 --> 00:53:01.000
+are strongly consistent but you can be guaranteed that they will always converge eventually you know so you have strong eventual consistency that makes sense yeah so just to to sort of tie it back uh to to something everyone knows if you talk about like uh google docs so you have a google doc you're editing it your friend is editing it and let's say you both go to the same cursor and you both hit delete at exactly the same time to delete some character. Now what's going to happen is one of you is going to arrive first, and that delete is going to take effect. Then the second person shows up with the delete, and basically, to sort of simplify this, there'll be some bookkeeping going on. So we know that when that person hit the delete key, we know sort of their state when they did that. And so the system can sort of modernize that delete or bring it forward in time. And when it does that, it will encounter the previous delete.
+是强一致的，但你可以保证它们最终总是会收敛，你知道，所以你有强最终一致性。这很有道理。是的，所以为了把它联系起来，你知道，联系到每个人都知道的东西，如果你谈论像谷歌文档，所以你有一个谷歌文档，你正在编辑它，你的朋友正在编辑它，假设你们都去同一个光标，你们都在完全相同的时间点击删除来删除某个字符。现在会发生的是，你们中的一个人会先到达，那个删除会生效。然后第二个人带着删除出现，基本上，为了简化这一点，会进行一些簿记。所以我们知道当那个人点击删除键时，我们知道他们做这件事时的状态。所以系统可以某种程度上现代化那个删除或把它向前推进。当它这样做时，它会遇到之前的删除。
+
+88
+00:53:01.000 --> 00:53:32.000
+And it will say, oh, this person didn't really intend to hit delete after that delete they intended to really do the same thing and so we'll just we'll just you know not execute that second one or we'll figure out some way to amend it you know if someone deletes a letter at exactly the same time another person deletes the entire line then we'll just delete the whole line um but all of that kind of, you know, it's almost like a git rebase or something like that, but you can't rely on a person to do the merge. You have to come up with a set of rules
+它会说，哦，这个人并不是真的想在那个删除之后点击删除，他们打算真的做同样的事情，所以我们只会，你知道，不执行第二个，或者我们会想出某种方法来修改它，你知道，如果有人在完全相同的时间删除一个字母，另一个人删除整行，那么我们只会删除整行，嗯，但所有这些，你知道，它几乎就像一个git rebase之类的，但你不能依赖一个人来做合并。你必须想出一套规则
+
+89
+00:53:32.000 --> 00:53:58.000
+that can be executed autonomously. Right, right. And you know, these sort of primitive ways of doing that is like last write, win, stuff like that is usually not sufficient because you will have data loss. And a lot of key value stores implement it like that, which is quite fascinating, while others rely on things like vector clocks and even CRDTs to actually do proper
+可以自主执行。对，对。而且，你知道，做这件事的这种原始方式，比如最后写入胜出（last write win），之类的东西通常是不够的，因为你会丢失数据。很多键值存储就是这样实现的，这相当迷人，而其他人则依赖像向量时钟甚至CRDT这样的东西来实际做适当的
+
+90
+00:53:58.000 --> 00:54:26.000
+merge without discarding data. Cool, that makes sense. So as far as recovering from node failure, is that something that kind of ACA pushes on the user? So I guess ACA provides the user with a notification of a failure and then the developer has to figure out sort of how to reconcile that? No, that's not the way it works. So if the user if you move, it's a user
+合并而不丢弃数据。酷，这很有道理。那么关于从节点故障中恢复，这是Akka推给用户的东西吗？所以我猜Akka向用户提供故障通知，然后开发者必须弄清楚如何协调这一点？不，不是那样工作的。所以如果用户，如果你移动，它是用户
+
+91
+00:54:26.000 --> 00:54:42.000
+if you then mean the user of one of the actors. As I explained earlier you have this level of interaction. You have the actor that you talk to and you never really see or touch or know much about the
+如果你指的是其中一个Actor的用户。正如我之前解释的，你有这种交互级别。你有你与之交谈的Actor，你永远不会真正看到或触摸或知道太多关于
+
+92
+00:54:42.000 --> 00:55:34.000
+actor unless you use monitoring software of course which you should. From a programming perspective of course you can subscribe to a set events on how the actor is doing but you don't have to do that but but since the responsibility of recovering from runtime and and you know it's on on node fail or or or do what what was a specific question you asked there yes yeah no it's fine so specific so if an actor fails then i guess the system will spin up a copy but then it also has to notify. Actually, that's an interesting thing. Like if an actor fails, we have to know like who is impacted by that because it could actually be anybody potentially.
+Actor的事情，除非你使用监控软件，当然你应该这样做。从编程的角度来看，当然你可以订阅关于Actor表现的一组事件，但你不必这样做，但因为从运行时恢复的责任，以及，你知道，在节点故障时，或者做，什么是你问的具体问题，是的，是的，没关系，所以具体来说，如果一个Actor失败了，我猜系统会启动一个副本，但它也必须通知。实际上，这是一件有趣的事情。比如如果一个Actor失败了，我们必须知道谁受到了影响，因为这实际上可能是任何人。
+
+93
+00:55:34.000 --> 00:56:27.000
+So I guess potentially everyone has to be notified of that. Yeah, everyone that has, you know, essentially the way it works is that, you know, it can be any number of actor refs, references to that actor. And if an actor fails, it can be, of course, restarted on the same machine very quickly. But the bigger problem and the more common problem, or perhaps not more common problem, one is user error normally or running out of memory or something like that. But the more interesting problem is probably on node failure, where the whole machine goes down. And, you know, what's happening then is that we rely on ACA cluster there to do failure detection, you know, and that's of course
+所以我猜每个人都可能需要被通知。是的，每个人，你知道，本质上它的工作方式是，你知道，它可以是任意数量的Actor引用，对该Actor的引用。如果一个Actor失败了，它当然可以在同一台机器上非常快地重启。但更大的问题和更常见的问题，或者也许不是更常见的问题，一个是用户错误通常或内存不足之类的。但更有趣的问题可能是节点故障，整个机器宕机。而且，你知道，那时发生的是我们依赖Akka Cluster来进行故障检测，你知道，这当然
+
+94
+00:56:27.000 --> 00:57:01.000
+a really hard problem because it's very easy to have like false positives. I mean, you might think that the actor or that the node that you're communicating with, we do some heart beating, you know, pinging around and heartbeats might be delayed for various reasons. It might not be that the node failed, it might be delayed for various reasons. It might not be that the node failed, it might be that it's just doing garbage collection because we're on the JVM, so it's just really really slow and it's busy. Or it might just be overloaded with user requests. Or there might be a temporary network glitch, so the node is still alive.
+是一个非常难的问题，因为很容易有假阳性。我的意思是，你可能认为你正在与之通信的Actor或节点，我们做一些心跳检测，你知道，ping来ping去，心跳可能会因为各种原因延迟。可能不是节点失败了，可能因为各种原因延迟了。可能不是节点失败了，可能只是因为它正在进行垃圾回收，因为我们在JVM上，所以它真的非常非常慢，而且很忙。或者它可能只是被用户请求超载了。或者可能有一个临时的网络故障，所以节点仍然活着。
+
+95
+00:57:01.000 --> 00:57:49.000
+And that's really hard to do. So we have heuristics and we have ways to define certain thresholds for these heuristics. But if based on these heuristics we have to decide that node is down, then we have we have uh they have to do different algorithms in order to how to how to resolve resolve that it can be that we're sort of basing it on first i have to say you know that the problem might in most cases is is a problem of split brain you know that you actually have to it's actually only a network disconnect you you don't know but it might be that it's only a network disconnect. You don't know, but it might be that it's only a network disconnect or splitting up the cluster into two
+这真的很难做到。所以我们有启发式方法，我们有定义这些启发式方法特定阈值的方法。但如果基于这些启发式方法，我们必须决定该节点已宕机，那么我们必须，我们有，他们必须做不同的算法，以便如何解决这个问题，它可能是我们某种程度上基于，首先我必须说，你知道，这个问题在大多数情况下是脑裂（split brain）的问题，你知道，你实际上必须，它实际上只是一个网络断开，你不知道，但它可能只是一个网络断开。你不知道，但它可能只是一个网络断开或将集群分成两个
+
+96
+00:57:49.000 --> 00:58:08.000
+different halves. Then you have another problem, which is which side of the data center should you let keep running? Because if you only spin up all actors on both sides,
+不同的半部分。然后你有另一个问题，数据中心的哪一边你应该让它继续运行？因为如果你只是在两边都启动所有Actor，
+
+97
+00:58:08.000 --> 00:58:32.000
+you know, thinking that the other half is down, then you run into the problem that you have a duplication, you know, and you can run into all kinds of data consistencies, right? So you need some sort of intelligence here to do a good, sort of take a good decision. Like one of the half of the cluster then needs to decide, I'm out, you know, and the other half won, or vice versa. And there are different algorithms for that
+你知道，认为另一半宕机了，那么你就会遇到重复的问题，你知道，你可能会遇到各种数据一致性问题，对吧？所以你需要某种智能来做一个好的，某种程度上，做出一个好的决定。比如集群的一半然后需要决定，我出局了，你知道，另一半赢了，或者反之亦然。有不同的算法
+
+98
+00:58:32.000 --> 00:59:06.000
+and we don't need to go into specifics, right? But they're all based on your needs for the use case, you know. One example might be that there is one critical actor that you absolutely need for the system to function to be on one side. And then, of course, that system wins, even though you only have two actors there, or two nodes there, and 200 on the other one. Sorry, it's really bad luck. Or it's like simple majority wins. The majority of nodes wins while the smaller cluster has to reboot or hold.
+我们不需要深入细节，对吧？但它们都基于你对用例的需求，你知道。一个例子可能是有一个关键的Actor，你绝对需要系统功能在某一边。然后，当然，那个系统赢了，即使你那里只有两个Actor，或两个节点，而另一边有200个。抱歉，这真的很倒霉。或者就像简单多数胜出。大多数节点胜出，而较小的集群必须重启或暂停。
+
+99
+00:59:06.000 --> 00:59:53.000
+So this is really a hard problem, but once you've detected that, it's really about resuming the actors on the healthy nodes, you know, and repartition the cluster to have sort of a balance to sort of allocation of actors on the nodes that are still running. And also sort of gossip around the new address information. So all the actor refs in the cluster, meaning all clients, can start using the actors on the new locations. And from the user of these actors, they should never find out, apart from the latency, of course, it takes for this whole process to happen.
+所以这确实是一个难题，但一旦你检测到这一点，它实际上是关于在健康的节点上恢复Actor，你知道，并重新分区集群以某种程度上平衡Actor在仍在运行的节点上的分配。以及某种程度上八卦（gossip）新的地址信息。所以集群中的所有Actor引用，意味着所有客户端，都可以开始使用新位置上的Actor。对于这些Actor的用户，他们永远不应该发现，当然，除了这个整个过程发生所需的延迟。
+
+100
+00:59:53.000 --> 01:00:32.000
+It seems like to sort of program in a defensive way, it seems really important to segment the data you're receiving from each actor so like for example a degenerate example is where you spin up a bunch of actors and they let's say they send messages to you and your job is to just concatenate all of these messages or accumulate all of these messages right maybe they're sending back numbers and you're just adding them up. And so you've added up, you're up to, you know, 1027 and then an actor dies. Well, now you're kind of in trouble because you don't necessarily know the contribute.
+看起来为了以防御性的方式编程，分段你从每个Actor接收的数据似乎非常重要，所以例如一个退化的例子是你启动一堆Actor，它们，假设它们向你发送消息，你的工作只是连接所有这些消息或累积所有这些消息，对吧？也许它们发回数字，你只是把它们加起来。所以你已经加起来，你加到了，你知道，1027，然后一个Actor死了。好吧，现在你有点麻烦了，因为你不一定知道贡献。
+
+101
+01:00:32.000 --> 01:01:06.000
+You can't separate the contribution of that actor from the other ones. And so even if, unless that one happens to, unless you have some way of restarting that actor at exactly the right spot, you kind of, you then that that death needs to sort of cascade upwards because you're inconsistent right so it seems like uh people have to program in a way where they're uh you know keeping track of who said what and uh that way they uh they don't end up in the situation where they can't recover right yeah the way the way it's usually solved is by is by using event logging.
+你不能把那个Actor的贡献和其它的分开。所以即使，除非那个恰好，除非你有某种方法在完全正确的地方重启那个Actor，你有点，那么那个死亡需要某种程度上级联向上，因为你不一致，对吧？所以看起来，人们必须以一种他们，你知道，跟踪谁说了什么的方式编程，那样他们，他们就不会陷入无法恢复的情况，对吧？是的，通常解决的方法是使用事件日志记录。
+
+102
+01:01:06.000 --> 01:01:52.000
+Then the actor doesn't need himself to keep track of that. But, you know, whatever made it to the actor, or more, whatever the actor has actually done, you know, is persisted. So he knows exactly where he was when he died, because he can just like bring, you know, replay the log, bring him up to speed and continue to take more requests. While the sender of those, I mean, of course, knows where he was, where he sent because he didn't get an act of the message. And by the way, we have support for that, guaranteed delivery as well through the replay, so resending the message, deduplication, and at least once
+然后Actor自己不需要跟踪那个。但是，你知道，任何到达Actor的东西，或者更多，Actor实际做的事情，你知道，都被持久化了。所以他确切地知道他死时在哪里，因为他可以就像带，你知道，重放日志，让他跟上进度并继续接收更多请求。而那些的发送者，我的意思是，当然，知道他在哪里，他在哪里发送，因为他没有得到消息的确认。顺便说一句，我们也有对此的支持，通过重放保证交付，所以重新发送消息，去重，以及至少一次
+
+103
+01:01:52.000 --> 01:02:20.000
+delivery as well. So I think we have more or less the whole chain covered if you layer in these things. This is also one of the core philosophies of ACA, is that the bare-bones actor don't have any guarantees. You know, it's far forget. You're on your own. And that's simply because that's the most performant. That's the least expensive. And some might want that.
+交付也是。所以我认为如果我们把这些东西分层，我们或多或少覆盖了整个链条。这也是Akka的核心哲学之一，即裸机Actor没有任何保证。你知道，它是即发即忘（fire and forget）。你得靠自己。这仅仅是因为那是最高效的。那是成本最低的。有些人可能想要那个。
+
+104
+01:02:20.000 --> 01:02:56.000
+So why should you pay for more than you absolutely need? But we then have, you know, layers that you can sort of layer in, in terms of reliability. For example, when it comes to communication, you essentially just use a mix-in or a trade call that at least wants delivery, that does what it says, at least it wants delivery, deduplication and retransmission of messages, etc. So give that reliability when it comes to the communication. That, of course, costs a lot. Well, not a lot, but it costs what it costs, of course.
+所以你为什么要为你绝对不需要的东西付费？但我们然后有，你知道，你可以某种程度上分层的层，在可靠性方面。例如，当涉及到通信时，你本质上只是使用一个混入（mix-in）或特质（trait）调用，至少一次交付，它做它所说的，至少一次交付，去重和消息重传等。所以当涉及到通信时给予那种可靠性。那当然成本很高。嗯，不是很高，但它当然有它的成本。
+
+105
+01:02:56.000 --> 01:03:28.000
+And you don't need to write it yourself. And when it comes to, you know, on the consumer side, we, as I said, allow you to layer in event logging, which, of course, also has a cost because it needs to go down to disk and commit every message. And in order to do that in a strong, consistent fashion, it needs to wait until you have committed the message down to a reliable medium, which is pluggable, by the way, so you can plug in almost anything you like. But that also has a cost, you know,
+而且你不需要自己写它。当涉及到，你知道，在消费者端，我们，正如我所说，允许你分层事件日志记录，这当然也有成本，因为它需要下到磁盘并提交每条消息。为了以强一致的方式做到这一点，它需要等到你把消息提交到可靠的介质，顺便说一句，它是可插拔的，所以你可以插入几乎任何你喜欢的。但这也有成本，你知道，
+
+106
+01:03:28.000 --> 01:03:49.000
+but you can choose then to layer in the guarantees you need when you need it. So what about, I mean, now there's this, I mean, like the whole blockchain thing is getting really popular. There's a lot of like really interesting distributed technologies that are coming out that are distributed sort of, I guess, over the the public sphere i guess is a way to say it but you have things
+但你可以选择在需要时分层你需要的保证。那么，我的意思是，现在有这个，我的意思是，比如整个区块链的东西变得非常流行。有很多非常有趣的分布式技术正在出现，它们是分布式的，我猜，在公共领域，我猜是一种说法，但你有东西
+
+107
+01:03:49.000 --> 01:04:47.000
+like web torrent and things like that and in this case you know there's um many uh many clients can't actually reach each other like many physical nodes can't communicate with each other um but you're relying on sort of the whole system to have some sort of graph that is connected, right? And so can Akka work over something like that? Like, does it have NAT punch through? And, you know, does the design extensible to that? Or is it mostly for sort of clusters where the nodes are able to communicate with each other pretty reliably and all of that? First, I've said that there are blockchain implementations on Arca, and I haven't used them myself. I can't talk about the quality of them.
+像Web Torrent之类的东西，在这种情况下，你知道，有，嗯，许多客户端实际上无法互相到达，就像许多物理节点无法互相通信一样，但你依赖于某种系统拥有某种连接的图，对吧？所以Akka可以在类似的东西上工作吗？比如，它有NAT穿透吗？而且，你知道，设计是否可扩展到这一点？还是它主要用于某种节点能够相当可靠地互相通信的集群，所有这些？首先，我说过有基于Akka的区块链实现，我自己没用过它们。我不能谈论它们的质量。
+
+108
+01:04:47.000 --> 01:05:17.000
+But nothing prevents you from... The Actimol by itself, I think, lends itself very well to these types of distributed problems because it's all just stateful nodes and efficient communication between them. But the way we've looked at ACA and the implementation of ACA is that we've always said that it should ideally be used in a trusted environment, thanks to security problems and things like that.
+但没有什么能阻止你……Actor模型本身，我认为非常适合这些类型的分布式问题，因为它都是状态节点和它们之间的高效通信。但我们看待Akka和Akka实现的方式是，我们一直说它理想情况下应该在受信任的环境中使用，感谢安全问题之类的。
+
+109
+01:05:17.000 --> 01:06:26.000
+You can tunnel it over TLS and things like that. And we have support for these type of security guarantees, but it's not really meant for that type of large, super world-scale systems. If all you used were stateless actors, then it would probably work quite well. But where it becomes tricky is with the stateful part. Because if you want strong consistency, you can only have one actor in charge and you need a full replication of that state across everywhere, the whole world, etc. And it's not really meant for that. Then you need something like blockchain that's meant for being shared in a distributed fashion, in a fully reliable fashion. But marrying the two, having the model of communication from actors or from AR and having into the state being blockchains
+你可以通过TLS之类的东西隧道传输它。我们有对这些类型安全保证的支持，但它并不是真正为了那种大型、超世界规模的系统。如果你使用的都是无状态Actor，那么它可能工作得很好。但棘手的地方在于有状态的部分。因为如果你想要强一致性，你只能有一个Actor负责，并且你需要那个状态在世界各地等的完全复制。它并不是真正为了那个。那么你需要像区块链这样旨在以分布式方式、以完全可靠的方式共享的东西。但将两者结合，拥有来自Actor或AR的通信模型，并进入状态是区块链
+
+110
+01:06:26.000 --> 01:07:31.000
+i mean i mean that could absolutely work uh but i haven't explored it but conceptually it would cool that makes sense so so you uh founded a company light bend is that correct yeah it's a company that we i you know when i when i Akka by 2009, I had no intention to really start a company, but it immediately became extremely popular and I realized I had to start doing consultancy on it and, you know, Acke grew out of the Scala community, so I knew a lot of people there who went to conferences, and I met with Mark Noderski, the creator of Scala. And so he and I sort of realized that, yeah, we should do something together. Acke's built on Scala, and Scala's really getting traction. Acke's getting traction. It could be interesting to form a company together. So we did that and we launched it in 2011 and we later then added the Play framework
+我的意思是，这绝对行得通，但我还没深入研究过，不过从概念上讲这很酷，这说得通。所以你创立了一家公司叫 Lightbend，对吧？是的，那是一家我们……你知道，当我在 2009 年创建 Akka 时，我根本没打算创业，但它很快就变得非常流行，我意识到我必须开始提供相关的咨询服务。而且，你知道，Akka 是从 Scala 社区发展起来的，所以我认识很多去参加会议的人，我还见到了 Scala 的创始人马丁·奥德斯基（Martin Odersky）。于是我们俩意识到，是的，我们应该一起做点什么。Akka 是基于 Scala 构建的，而 Scala 正在获得关注，Akka 也在获得关注。一起成立一家公司可能会很有趣。所以我们这样做了，并在 2011 年推出了它，后来我们又加入了 Play 框架。
+
+111
+01:07:31.000 --> 01:08:10.000
+and a bunch of tools around it and the last year we've been working on a fast data platform for distributed streaming, making sense in the streaming jungle, and things like that. So it's been quite a ride. Cool. So I guess 2009, 2011, and, yeah, I think Scala was really big, I think, at Twitter. Twitter was really pushing Scala. Who are the other sort of really heavy hitters that are using Scala and Play and things like that? Yeah, that's a great question.
+以及围绕它的一系列工具。去年我们一直在致力于一个用于分布式流处理的快速数据平台，在流处理的丛林中理清头绪，诸如此类的事情。所以这一路走来相当不容易。酷。我想 2009 年、2011 年，是的，我认为 Scala 在 Twitter 那里非常火，Twitter 当时在大力推广 Scala。还有哪些真正的大牌公司在使用 Scala、Play 之类的技术？是的，这是个好问题。
+
+112
+01:08:10.000 --> 01:08:49.000
+I mean, a lot of the heavy hitters, unfortunately, we can't talk much about. You know, that's always the case. But, you know, but a lot of investment banks and, you know, most banks on Wall Street are heavily invested in Scala. Oh, I didn't know that but but but also you know you know linkedin for example and and and uh yeah um yeah a lot of the different differences like like uh social media and also retail you know there's there's a ton of old clients i i i sort of, yeah. Cool. I don't exactly know who I can mention, you know, without saying.
+我的意思是，很多大牌公司，不幸的是，我们不能多谈。你知道，情况总是这样。但是，你知道，很多投资银行，你知道，华尔街的大多数银行都在 Scala 上投入了大量资金。哦，我不知道这一点，但还有，你知道，比如 LinkedIn，还有，是的，嗯，是的，很多不同的领域，比如社交媒体，还有零售业，你知道，有很多老客户，我，我，是的。酷。我不太确定在不透露的情况下我能提到谁。
+
+113
+01:08:49.000 --> 01:09:15.000
+Yeah, that makes sense. I'm hesitant. I can sort of list along, but then I might say something that I shouldn't say. Yeah, that totally makes sense. But absolutely, there's a ton of, you know, because it is, even the Scala course of a source, it is this intersection between what is just a user and what is a client. But, you know, scholars really have been taking off immensely. I started using it in 2006, I think.
+是的，这说得通。我很犹豫。我可以列举一些，但我可能会说出一些我不该说的话。是的，这完全说得通。但绝对有很多人，你知道，因为它是，即使 Scala 是开源的，在纯粹的用户和客户之间也存在这种交叉。但是，你知道，Scala 确实发展得非常迅猛。我想我是在 2006 年开始使用它的。
+
+114
+01:09:15.000 --> 01:09:50.000
+It was quite early. And, you know, back then, I remember the first conference, it was in 2010. It was like a small group meeting at EPFL. And it's been really growing immensely after after that and and yeah actually i do some some scholar mostly spark at my job i think it's fantastic i mean it's absolutely phenomenal um sometimes i i uh see some people using operators in a really confusing way and so i have to like, take a moment to say, okay, what is this? What is this operator doing? But overall, you know, the freedom
+那时还很早。而且，你知道，当时我记得第一次会议是在 2010 年。那就像是在洛桑联邦理工学院（EPFL）的一个小组会议。从那以后它一直在飞速增长，而且，是的，实际上我在工作中也做一些 Scala，主要是 Spark，我觉得它太棒了，我的意思是它绝对是现象级的。嗯，有时我看到有些人以一种非常令人困惑的方式使用运算符，所以我不得不花点时间想，好吧，这是什么？这个运算符在做什么？但总的来说，你知道，它给你的自由。
+
+115
+01:09:50.000 --> 01:10:45.000
+it gives you, I'm a big fan of languages that at least have the option of typing, you know, type safety. And the Spark, the Spark framework is absolutely fantastic. And so yeah, i'm a big fan but i probably started using it um around 2013 2014 so i've only been using it for a few years yeah i'm glad to hear that you like it i think i think for the use case that that you're talking about i think it's it's it's it's worth one where it really really shines because you know because of the functional side of Scala. And the things we talked about for reactive programming initially in this chat, having sort of first-class combinators, like map and filter and fold, and having them easily composed. These are things that's hard with a language like Java that doesn't have
+我非常喜欢那些至少有类型选择的语言，你知道，类型安全。而且 Spark 框架绝对太棒了。所以是的，我是它的忠实粉丝，但我可能是在 2013 年到 2014 年左右才开始使用它的，所以我只用了几年。很高兴听到你喜欢它。我想，对于你谈到的用例，我认为它确实非常出色，因为你知道，因为 Scala 的函数式特性。以及我们在这次聊天初期谈到的响应式编程，拥有像 map、filter 和 fold 这样的一等组合子，并且能轻松组合它们。这些在像 Java 这样没有
+
+116
+01:10:45.000 --> 01:11:01.000
+first-class functions. I think that's why we see a lot of these companies like Spark and Flink and Kafka. It's also written in Scala. Oh, I didn't know that. Yeah. I've done also Java
+一等函数的语言中是很难做到的。我想这就是为什么我们看到很多像 Spark、Flink 和 Kafka 这样的公司。它也是用 Scala 编写的。哦，我不知道这一点。是的。我也用过 Java
+
+117
+01:11:01.000 --> 01:11:21.000
+Hadoop. It's not pretty. It's like extract data function, but it's actually a class and it has a function called run or something like that. It becomes very verbose because everything has to be a class. With Scala, it feels much more native.
+Hadoop。它并不美观。它就像一个提取数据函数，但实际上它是一个类，并且有一个叫 run 之类的函数。它变得非常冗长，因为一切都必须是一个类。用 Scala，感觉更原生。
+
+118
+01:11:21.000 --> 01:11:41.000
+I mean, you can add two columns of a data set without having to create a class. I mean, it seems, in hindsight, it's very obvious that's the right design pattern, you know. Exactly, yeah, yeah. And just have, you know, first-class closure or something like that makes it look, makes it so much easier.
+我的意思是，你可以将数据集的两列相加，而无需创建一个类。我的意思是，事后看来，这显然是正确的设计模式，你知道。完全正确，是的，是的。只要有，你知道，一等闭包之类的东西，就会让它看起来，让它变得容易得多。
+
+119
+01:11:41.000 --> 01:12:27.000
+And that said, you know, Java added Lambdas, you know, so it's a little bit easier in Java now than it used to be. But, you know, lambdas are not functions, you know, in the true sense. So I think they miss out a lot on that. Yeah, that makes sense. So what about like the company LightBend? so it started out with you and and the the the founder or creator of scala and have you added a lot of people since then or is it are you trying to keep you pretty focused or what yeah we've been growing slowly i'd say i mean we've been around for you know for a few for a few for a few seven years now and i we been sort of, we're up to around 140 people now which is
+话虽如此，你知道，Java 添加了 Lambda，你知道，所以现在 Java 比以前容易一点了。但是，你知道，Lambda 并不是真正意义上的函数。所以我认为他们在这一点上错失了很多。是的，这说得通。那么像 Lightbend 这家公司呢？它是从你和 Scala 的创始人开始的，从那时起你们增加了很多人吗？还是你们试图保持专注，或者是什么？是的，我们一直在缓慢增长，我想说，我的意思是，我们已经存在了，你知道，七年了，我们现在大约有 140 人，这
+
+120
+01:12:27.000 --> 01:13:21.000
+yeah, we're sort of pretty sized, well-sized engineering organization and sales and marketing and stuff like that. So all it takes to run a real company, when you start the startup, we were just seven guys, not in the garage, but at our homes. We started very distributed and we're still very distributed, which is really challenging, but we sort of try to grow slowly and only grow where we absolutely need. When it comes to being remote We're where I think we're around 20 countries now and we're almost at all continents, you know When they like Asia, you know both both Australia and New Zealand were in Africa We're South America us Europe. We're across the whole
+是的，我们是一个规模相当不错的工程组织，还有销售和营销等等。所以经营一家真正的公司需要的一切，当我们创办这家初创公司时，我们只有七个人，不是在车库里，而是在我们各自的家里。我们开始时非常分散，现在仍然非常分散，这确实很有挑战性，但我们试图缓慢增长，只在绝对需要的地方增长。说到远程办公，我想我们现在遍布大约 20 个国家，几乎覆盖了所有大洲，你知道，比如亚洲，你知道，澳大利亚和新西兰，我们在非洲，我们在南美洲，美国，欧洲。我们遍布整个
+
+121
+01:13:21.000 --> 01:14:02.000
+All the whole world which is you know know it's true super exciting and fun but it's also very challenging when it comes to you know communication and meetings and all those things yeah i mean not to you know like go off on a tangent but uh this is something that that day-to-day you know we've been uh i've been talking about a lot um you're dealing with sort of time zone and and sort of being able to sort of franchise in a sense the the the organization right and so how do you deal with the fact that there's people all over the world they're all waking up going to sleep at different times like do you use like slack or something like that i mean what how do you sort of keep
+整个世界，这你知道，这超级令人兴奋和有趣，但当涉及到沟通、会议和所有这些事情时，也非常具有挑战性。是的，我的意思是，不是要跑题，但这确实是我们每天都在谈论很多的事情。你在处理时区问题，以及在某种意义上能够特许经营这个组织，对吧？那么你是如何处理世界各地的人们在不同时间起床和睡觉的事实呢？你们使用 Slack 之类的工具吗？我的意思是，当每个人都在世界不同地方时，你是如何保持
+
+122
+01:14:02.000 --> 01:14:34.000
+consistency there when everyone's you know know, different parts of the world? Yeah, that's a great question. Everyone, you know, we don't have it all figured out. You sort of learn as you go. But sort of one of the guiding principles that I've had, you know, when building the company from the start is that, you know, that there is no such thing like remote employees. It's only distributed teams. And the distinction I make here is that it's really, really hard
+一致性的？是的，这是个好问题。每个人，你知道，我们并没有完全搞定。你是在边做边学。但我从一开始建立公司时就有的指导原则之一是，没有所谓的远程员工。只有分布式团队。我在这里所做的区分是，这真的非常非常困难
+
+123
+01:14:34.000 --> 01:15:16.000
+to have a team co-located and one or two guys remote because that means that they talk over coffee and over lunch and things like that, and then they forget to pass that information on. And it becomes very split up and divided, and it's really, really hard on the people that are then remote. But if you talk about fully distributed teams, that means that every single one is remote. And even if they do happen to sit in the same office, they can't communicate. Of course, they can't communicate. Of course, they can talk. But if there is important information, it has to be communicated over some sort of textual form or perhaps send a screencast around or something like that.
+让一个团队在同一个地方办公，而一两个人远程，因为这意味着他们会在喝咖啡和午餐时聊天，然后他们会忘记传递这些信息。这会变得非常分裂，对那些远程的人来说真的非常非常困难。但如果你谈论的是完全分布式的团队，这意味着每个人都是远程的。即使他们碰巧坐在同一个办公室，他们也无法沟通。当然，他们可以沟通。当然，他们可以交谈。但如果有重要信息，它必须通过某种文本形式传达，或者发送一个截屏视频之类的东西。
+
+124
+01:15:16.000 --> 01:16:01.000
+But it's mainly text. So having this distinction that for a team, we have had teams that have been fully co-located, and then that's fine, but then everyone needs to be there, you know. Else it's a fully distributed team regardless of where people are. And having that mentality sort of helps. But it also makes it, you know, makes it hard, you know, when it comes to, makes it tedious, you know, having to write everything down. It takes more time to document everything thoroughly and things like that. And also, you know, it might be harder to do meetings. But one of the guiding principles that we've had in the past that we actually had to go away from a little bit now,
+但主要是文字。所以有这种区分，对于一个团队，我们有过完全在同一个地方办公的团队，那没问题，但每个人都需要在那里，你知道。否则，无论人们在哪里，它都是一个完全分布式的团队。拥有这种心态会有所帮助。但这也使得它，你知道，使得它很困难，你知道，当涉及到，使得它很乏味，你知道，必须把所有东西都写下来。彻底记录所有事情需要更多时间，诸如此类。而且，你知道，开会可能更难。但我们过去拥有的指导原则之一，我们现在实际上不得不稍微偏离了一点，
+
+125
+01:16:01.000 --> 01:16:37.000
+but that we tried to do is to keep all teams in the same time zone, because that means that they can hang out on Slack and things like that in real time and don't have to wake up and catch up on 200 messages. It's a really hard time figuring out the context. But as I said, we haven't managed to keep that for every team. But for example, the ACA team is fully distributed, but all in one, or it might be two time zones. Yeah, that makes sense. So that's something that also helps. Yeah.
+但我们尝试做的是让所有团队保持在同一个时区，因为这意味着他们可以在 Slack 上实时交流，而不必醒来后去补看 200 条消息。弄清楚上下文真的很难。但正如我所说，我们没能为每个团队都做到这一点。但例如，Akka 团队是完全分布式的，但都在同一个，或者可能是两个时区。是的，这说得通。所以这也是有帮助的。是的。
+
+126
+01:16:37.000 --> 01:17:05.000
+But as you know, the tools, it's mainly Slack and email and Skype Hangouts or Zoom that we use now. So it's just, yeah, nothing fancy. Cool. That makes sense. Yeah, actually, I ran into somebody whose company had the exact opposite philosophy. They wanted each team to be distributed. And let's just say it doesn't work. Like that idea just is not a good idea. I think what you proposed is actually, I agree 100%.
+但如你所知，工具方面，主要是 Slack、电子邮件和 Skype Hangouts 或 Zoom。所以，是的，没什么特别的。酷。这说得通。是的，实际上，我遇到过一家公司，他们的理念完全相反。他们希望每个团队都是分布式的。我们只能说这行不通。那个想法真的不是一个好主意。我认为你提出的建议，我 100% 同意。
+
+127
+01:17:05.000 --> 01:17:49.000
+I think it's very isolating to have, and it's never going to be balanced. So it's, I mean, it's, the odds are not that it's, the odds are high that it's going to be, as you said, one or two people out of 10, you know, across the globe. And the other eight are on the other side of the globe. So it doesn't really work. But yeah, once you go to the team level, yeah, yeah, exactly. Cool. So if someone is, um, so we have listeners all over the world. If someone is, um, you know, just, uh, in university, um, they have a degree in, let's say computer science or electrical engineering or something like that. And they're interested in, you know, and they're interested in a career at Lightbin.
+我认为拥有这种模式非常孤立，而且永远不会平衡。所以，我的意思是，几率很高，正如你所说，全球 10 个人里只有一两个人。而其他八个人在地球的另一端。所以它真的行不通。但是的，一旦你到了团队层面，是的，是的，完全正确。酷。所以如果有人，嗯，所以我们有来自世界各地的听众。如果有人，嗯，你知道，只是在大学里，嗯，他们有计算机科学或电气工程之类的学位。而且他们对，你知道，而且他们对在 Lightbend 的职业生涯感兴趣。
+
+128
+01:17:49.000 --> 01:18:15.000
+So what opportunities are there? We're actually surprisingly, a number of people have reached out to us. And so they literally ended up finding jobs with people we interviewed, which I was pretty shocked. I didn't really expect that, but it turns out this is actually a really good medium for people who are, especially in university, but in general, just engineers. And so what sort of opportunities do you have at Lightbend?
+那么有什么机会呢？我们实际上令人惊讶地，很多人联系了我们。所以他们最终通过我们面试的人找到了工作，这让我很震惊。我真的没想到，但事实证明，对于那些人，尤其是大学生，以及一般的工程师来说，这确实是一个很好的媒介。那么你在 Lightbend 有什么样的机会呢？
+
+129
+01:18:15.000 --> 01:18:42.000
+And what does that look like? Yeah, we're very interested in people coming straight out of the university. They haven't been damaged yet. No, just kidding. But it's usually, you know, we've been hiring a lot of people right from the university or very close to coming out of the university at least. And, you know, and I think that, you know,
+那是什么样的？是的，我们对刚从大学毕业的人非常感兴趣。他们还没有被“损坏”。不，开个玩笑。但通常，你知道，我们一直在招聘很多刚从大学毕业或至少非常接近毕业的人。而且，你知道，我认为，
+
+130
+01:18:42.000 --> 01:19:15.000
+if you're interested in working on, you know, hard distributed systems type of things, multi-core concurrency related things, cloud computing, these type of things, streaming, and this whole thing with fast data and also machine learning, if those things interest you, you should absolutely apply. And since we are so distributed, if you're the right guy, you know, I mean, then we'll hire you wherever you are, more or less, because we have teams that are across all time zones.
+如果你有兴趣从事，你知道，硬核分布式系统类型的事情，多核并发相关的事情，云计算，这些类型的事情，流处理，以及关于快速数据和机器学习的整个事情，如果这些事情让你感兴趣，你绝对应该申请。而且因为我们分布得如此广泛，如果你是合适的人选，你知道，我的意思是，那么无论你在哪里，我们都会雇佣你，因为我们的团队遍布所有时区。
+
+131
+01:19:15.000 --> 01:19:52.000
+All the way, you know, from Japan, you know, and, you know, far out in Asia, you know, Australia, New Zealand, all the way down to South America. And then, you know, the west coast of the U.S. So it's all over the place. Cool. Great. So what's an average day like for you or for, you know, an employee? If your day is really atypical and crazy, what's an average day like for someone who works at Lightpin? Yeah, I think it's different for different people.
+一直到，你知道，从日本，你知道，远在亚洲，你知道，澳大利亚，新西兰，一直到南美洲。然后，你知道，美国西海岸。所以它遍布各地。酷。太棒了。那么你或员工的平均一天是什么样的？如果你的日子非常不典型且疯狂，那么在 Lightbend 工作的人的平均一天是什么样的？是的，我认为对不同的人来说是不同的。
+
+132
+01:19:52.000 --> 01:20:28.000
+You know, when it comes to me, I mean, me personally, I mainly work with colleagues in the U.S. So for me, I have meetings, you know, starting from 4 in the afternoon all the way up to 9, 10, 11 sometimes. So, but that's nice, you know, I can get a lot of, you know, sort of silent space, silent time and, you know, time for myself, you know, thinking, working, all that stuff, without being that interrupted in the day, and then I, you know, can be more social and discuss things in the afternoons.
+你知道，说到我，我的意思是，我个人主要与美国的同事一起工作。所以对我来说，我有会议，你知道，从下午 4 点一直到 9 点、10 点，有时甚至 11 点。所以，但这很好，你知道，我可以获得很多，你知道，某种安静的空间，安静的时间，以及，你知道，属于我自己的时间，思考，工作，所有这些事情，而不会在白天被打断，然后我，你知道，可以在下午变得更社交并讨论事情。
+
+133
+01:20:28.000 --> 01:20:54.000
+One thing also that I have to mention when it comes to the average engineer's schedule is that we have a notion of roles. We do all the support ourselves. This is one of the things that our customers love, that we don't have a support organization per se, but it's actually the teams. You know, if you have a problem with ACA, it's someone from the ACA team that helps solving that.
+关于普通工程师的时间表，我还要提到的一件事是，我们有角色的概念。我们自己做所有的支持工作。这是我们的客户喜欢的事情之一，我们本身没有专门的支持组织，但实际上是团队自己在做。你知道，如果你在使用 Akka 时遇到问题，是 Akka 团队的人来帮助解决。
+
+134
+01:20:54.000 --> 01:21:24.000
+That's sort of quite challenging, you know, taking on that role or that hat, so to speak, but also quite fun, you know. It can be fun to sort of see how people are using your software and helping them with the stuff that you built last week. That makes sense. Most engineers are juggling these two roles, developing and doing support.
+这在某种程度上相当具有挑战性，你知道，承担那个角色或那顶帽子，可以这么说，但也相当有趣，你知道。看到人们如何使用你的软件并帮助他们解决你上周构建的东西，这很有趣。这说得通。大多数工程师都在兼顾这两个角色，开发和做支持。
+
+135
+01:21:24.000 --> 01:21:59.000
+Usually on a few days doing support and then and then you know a couple of weeks hacking and then back back and back to support and things like that so so cool that makes sense yeah i mean i think it's very hard to build something like this in in a vacuum right so i mean the best ideas are going to come from those discussions so exactly i think i think i mean without without them and without our open source community i have to say not just our customers you know but that's without the passionate community that we've had we we would never get them to get it this far i wouldn't be you know wouldn't even exist i think but wouldn't
+通常几天做支持，然后，然后，你知道，几周写代码，然后回到支持，诸如此类。所以，酷，这说得通。是的，我的意思是，我认为在真空中构建这样的东西非常困难，对吧？所以，我的意思是，最好的想法将来自那些讨论。所以完全正确，我想，我想，我的意思是，没有他们，没有我们的开源社区，我必须说，不仅仅是我们的客户，你知道，但如果没有我们拥有的充满激情的社区，我们永远不会走到这一步，我不会是，你知道，甚至不会存在，我想，但不会
+
+136
+01:21:59.000 --> 01:22:29.000
+be where it is even without the the open source. We've been getting so much from that. So many passionate people talking about it, encouraging things, but also rolling up their sleeves and actually sending in patches. And it's really an extremely good example of what can, what can mean on the good side of humanity, what can be achieved with people across all cultures and actually
+即使没有开源，它也不会有今天的成就。我们从中获得了太多。这么多充满激情的人在谈论它，鼓励事情，但也卷起袖子，实际上发送补丁。这真的是一个非常好的例子，关于什么可以，什么可以在人类美好的一面，什么可以通过跨越所有文化的人们实现，并实际上
+
+137
+01:22:29.000 --> 01:22:49.000
+collaborate into doing something substantial I think it's quite heartening to see actually. Cool, yeah that sounds absolutely amazing so yeah, Jonas it was absolutely amazing having you on the show, I actually learned a lot, this is one of the most educational episodes for me personally.
+合作做一些实质性的事情，我认为看到这一点确实令人振奋。酷，是的，这听起来绝对太棒了。所以，是的，Jonas，邀请你参加节目真是太棒了，我实际上学到了很多，这是我个人最具教育意义的一集。
+
+138
+01:22:49.000 --> 01:23:18.000
+Thank you very much. I appreciate it. I think people are absolutely going to love it. Can you give us some sort of what's the best way to reach you or reach Lightbend? So what serves like some good, calm communication information there? Yeah, I think the best way to reach me is probably on Twitter. I'm jboner, J-B-O-N-E-R on Twitter. Just reach out. And else, you know, Jonas at LifeBand, if you want to send me emails,
+非常感谢。我很感激。我想人们绝对会喜欢它的。你能给我们一些，联系你或联系 Lightbend 的最好方式是什么吗？所以有什么好的、冷静的沟通信息吗？是的，我认为联系我最好的方式可能是 Twitter。我是 jboner，Twitter 上是 J-B-O-N-E-R。直接联系我就行。否则，你知道，Jonas at Lightbend，如果你想给我发电子邮件，
+
+139
+01:23:18.000 --> 01:23:50.000
+lifeband.com. If you want to find out, you know, I have my personal website, jonasboner.com, but if you want to find out more about LightBin, just go to lightbin.com or aka.io, if you want to learn more about Aka. We have a ton of material, both on the Aka website and also on LightBin, all kinds of this stuff, webinars, recorded webinars and articles and all kinds of stuff. Very good. All of it is all of it is totally free to use right so basically you're the business model here
+lightbend.com。如果你想了解，你知道，我有我的个人网站，jonasboner.com，但如果你想了解更多关于 Lightbend 的信息，只需访问 lightbend.com 或 akka.io，如果你想了解更多关于 Akka 的信息。我们有大量的材料，无论是在 Akka 网站上还是在 Lightbend 上，各种各样的东西，网络研讨会，录制的网络研讨会和文章以及各种各样的东西。非常好。所有这些都是完全免费使用的，对吧？所以基本上你的商业模式是
+
+140
+01:23:50.000 --> 01:24:26.000
+is that people can do anything they want with Aka college projects you know even commercial projects but then you're there to help them if if they need some extra functionality or they get stuck or something like that absolutely it's just open core model where everything you you know, in the core, you know, ACA, Play, Scala, and supporting tools, you know, are open source. And we try to help the community as much as our customers. But then we also have, you know, commercial tools on top, you know, things like monetary management and we have a full, as I talk about
+人们可以用 Akka 做任何他们想做的事情，大学项目，你知道，甚至是商业项目，但如果你需要一些额外的功能或者他们卡住了之类的，你就在那里帮助他们。绝对是，这只是开放核心模式，你所知道的一切，在核心中，你知道，Akka、Play、Scala 和支持工具，你知道，都是开源的。我们尽量像帮助客户一样帮助社区。但我们也拥有，你知道，之上的商业工具，你知道，像监控管理之类的东西，我们有一个完整的，正如我谈到的
+
+141
+01:24:26.000 --> 01:24:42.000
+the fast data platform is also commercial but everything that we covered in this podcast, in this call is fully open source and we're here to help. Cool, thank you so much again and
+快速数据平台也是商业化的，但我们在本播客、本次通话中涵盖的所有内容都是完全开源的，我们随时准备提供帮助。酷，再次非常感谢，并且
+
+142
+01:24:42.000 --> 01:25:06.000
+everyone, let us know what you think about the episode. Feel free to chat on the Discord. If you so much again. And yeah, everyone, let us know what you think about the episode. Feel free to chat on the Discord. If you have any questions, feel free to at both of us, Programming Throwdown at and jbonair at on Twitter or ask on the Discord and I can pass it along. But thanks again for this interview. It's fantastic. Yes, thanks, John.
+大家，让我们知道你们对这一集的看法。欢迎在 Discord 上聊天。如果你们再次非常感谢。是的，大家，让我们知道你们对这一集的看法。欢迎在 Discord 上聊天。如果你有任何问题，欢迎在 Twitter 上 @ 我们两个，Programming Throwdown 和 jboner，或者在 Discord 上提问，我可以转达。但再次感谢这次采访。太棒了。是的，谢谢，John。
+
+143
+01:25:06.000 --> 01:25:11.000
+That was awesome. Thanks a lot for having me. I really enjoyed chatting with you guys as well. So it was definitely mutually beneficial. The intro music is Axo by Binar Pilot. Programming Throwdown is distributed under a Creative Commons Attribution Sharealike 2.0 license. You're free to share, copy, distribute, transmit the work, to remix, adapt the work, but you must provide attribution to Patrick and I and sharealike in kind. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+那太棒了。非常感谢邀请我。我也很喜欢和你们聊天。所以这绝对是互惠互利的。片头音乐是 Binar Pilot 的 Axo。Programming Throwdown 在知识共享署名-相同方式共享 2.0 许可下分发。你可以自由分享、复制、分发、传输作品，进行重混、改编作品，但你必须注明 Patrick 和我的署名，并以相同方式共享。这一集还没有评论。点击转录中的任何句子即可发表评论。

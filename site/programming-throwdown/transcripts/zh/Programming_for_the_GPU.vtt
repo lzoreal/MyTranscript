@@ -1,0 +1,601 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:47.000
+episode 54 programming for the gpu take it away patrick we're here today with mark harris from nvidia mark why don't you go ahead and introduce yourself. Tell us a little bit about what you do with NVIDIA. Okay. Yeah, so my title at NVIDIA is Chief Technologist for GPU Computing Software. And my role is kind of twofold. One is inward facing and one is outward facing. So my inward facing role is to help define our software strategy for computing
+第54期：GPU编程。帕特里克，开始吧。今天我们请到了来自NVIDIA的马克·哈里斯。马克，不如你先自我介绍一下，跟我们聊聊你在NVIDIA的工作。好的，没问题。我在NVIDIA的职位是GPU计算软件的首席技术专家。我的角色主要分为两部分：对内和对外。对内，我负责协助制定我们的计算软件战略，
+
+2
+00:00:47.000 --> 00:01:23.000
+at NVIDIA. And so that's for things like CUDA programming, which we'll talk about more hopefully. And the other aspect is the external facing role, which is a little bit of evangelism, giving talks at conferences such as the GPU Technology Conference. And I also run a blog called Parallel for All, which is on NVIDIA. Hopefully you guys can drop a link after the show recording. And on that blog, it's a developer blog written by developers for developers. And it's a deeply technical blog about parallel programming
+在NVIDIA。这包括CUDA编程等内容，希望我们稍后能深入探讨。对外，我的角色更像是一位布道者，在GPU技术大会（GTC）等会议上发表演讲。我还运营着一个名为“Parallel for All”的博客，隶属于NVIDIA。希望你们能在节目播出后附上链接。这是一个由开发者为开发者撰写的博客，内容深入探讨并行编程
+
+3
+00:01:23.000 --> 00:01:39.000
+and GPU programming. So can you maybe just give us a little bit of background what NVIDIA is, what they do as a company? I mean I think most people have heard of them but they just think of, well I guess people don't go to Best Buy anymore but you go to Amazon or Newegg or whatever the
+和GPU编程。那么，你能简单介绍一下NVIDIA的背景，以及他们作为一家公司主要做什么吗？我想大多数人都听说过他们，但他们可能只想到……好吧，我想现在人们已经不去百思买（Best Buy）了，而是去亚马逊或Newegg之类的网站，
+
+4
+00:01:39.000 --> 00:01:55.000
+international equivalent is. I still go to Best Buy. Sorry Best Buy. Okay. Yeah anyways kind of tell us who NVIDIA is, what they do, and why CUDA is a thing. Okay, so, well, what is NVIDIA? NVIDIA is a
+或者其他国际同类网站。我还是会去百思买。抱歉，百思买。好吧，总之，请介绍一下NVIDIA是谁，他们做什么，以及为什么CUDA会存在。好的，那么，什么是NVIDIA？NVIDIA是一家
+
+5
+00:01:55.000 --> 00:02:21.000
+visual computing company. And what that means is that we focus on building solutions for all aspects of visual computing. We call ourselves the inventors of the GPU. That's the graphics processing unit. I think NVIDIA coined that term back in 1999 with the first GeForce product.
+视觉计算公司。这意味着我们专注于为视觉计算的各个方面构建解决方案。我们自称为GPU的发明者，也就是图形处理器。我想NVIDIA在1999年推出第一款GeForce产品时创造了这个术语。
+
+6
+00:02:21.000 --> 00:03:12.000
+And most consumers would be familiar with, especially gamers, would be familiar with our GeForce GPUs, which are graphics cards for making your game's graphics look amazing and run really fast. But GPUs are used in a variety of computations, and so we have four kind of focused business areas, and those are gaming, professional visualization, data center, and automotive. And visual computing or parallel computing are really important in all four of those. And it turns out that GPUs are very useful and good at accelerating those computations so the obvious ones are gaming because the GPU was designed for computer graphics
+大多数消费者，尤其是游戏玩家，应该很熟悉我们的GeForce GPU，它们是让游戏画面看起来惊艳且运行流畅的显卡。但GPU也被用于各种计算，所以我们有四个重点业务领域：游戏、专业可视化、数据中心和汽车。视觉计算或并行计算在所有这四个领域都非常重要。事实证明，GPU在加速这些计算方面非常有用且高效。最明显的例子是游戏，因为GPU最初就是为计算机图形设计的，
+
+7
+00:03:12.000 --> 00:03:53.000
+and also professional visualization but the area I work in is data center and parallel computing so you know GPUs it turns out are great at parallel computing because graphics is parallel. And, I mean, I don't know how much detail you want me to go into about the history of that. Well, maybe, I mean, a simple way of saying it is that with graphics, you're trying to do two things. You're trying to figure out where a bunch of triangles are in space. And then you're also trying to draw sort of a bunch of triangles are in space, and then you're also trying to draw sort of a bunch of pixels on the screen, and in both cases they're kind of embarrassingly parallel.
+专业可视化也是如此。但我工作的领域是数据中心和并行计算。你知道，GPU在并行计算方面表现出色，因为图形处理本身就是并行的。我不知道你想让我详细介绍多少关于这方面的历史。嗯，简单来说，在图形处理中，你主要做两件事：一是确定空间中一堆三角形的位置，二是尝试绘制……空间中一堆三角形的位置，然后尝试在屏幕上绘制一堆像素。在这两种情况下，它们都属于“尴尬并行”（embarrassingly parallel）。
+
+8
+00:03:53.000 --> 00:04:40.000
+Like you have many triangles and they can all be discovered, located independently, and you have many pixels that can all be processed more or less independently. And so that makes the GPU kind of ideal for doing a lot of these things in parallel, right? Absolutely. Yeah, so you have millions of pixels to shade in every frame, and you're running 60 frames a second or whatever. And triangles, I guess modern games probably have um hundreds of thousands to millions of triangles per per frame too so you're getting to the point of having you know pixel size or sub pixel triangles um and yeah so so back in the day
+比如你有许多三角形，它们都可以被独立发现和定位；你也有许多像素，它们都可以或多或少地独立处理。这使得GPU非常适合并行处理这些任务，对吧？绝对是这样。是的，每一帧都有数百万个像素需要着色，而且你还要以每秒60帧的速度运行。至于三角形，现代游戏每一帧可能都有几十万到数百万个三角形，所以你已经达到了像素级或亚像素级三角形的程度。是的，所以回到过去，
+
+9
+00:04:40.000 --> 00:05:30.000
+back when i was in grad school um and actually way before that, people kind of recognized this with graphics hardware. And they started hacking around on using graphics APIs and GPUs to do computing that the GPUs weren't really necessarily designed for. And so this is something that I focused on in grad school, and I called it GPGPU, which stands for General Purpose Computation on GPUs. And since then, that's become something that isn't just grad students mucking around with graphics APIs. And back in 2006 or 2007, NVIDIA launched CUDA,
+在我读研究生的时候，甚至更早之前，人们就已经通过图形硬件意识到了这一点。他们开始尝试利用图形API和GPU来做一些GPU原本并非为此设计的计算。这就是我在研究生期间关注的重点，我称之为GPGPU，即通用图形处理器计算。从那时起，这已经不再仅仅是研究生们摆弄图形API的玩意儿了。2006年或2007年，NVIDIA推出了CUDA，
+
+10
+00:05:30.000 --> 00:05:50.000
+which is a set of extensions to C and C++ that allow you to program GPUs for parallel computing in a traditional programming language rather than using a graphics API. Yeah, I mean, before... Oh, go ahead, Patrick. Yeah, so I kind of recall vaguely that time when people first started kind of doing the GP, GPU stuff.
+这是一套针对C和C++的扩展，允许你使用传统的编程语言来编写GPU并行计算程序，而无需使用图形API。是的，在……哦，请继续，帕特里克。是的，我隐约记得人们刚开始做GPGPU的那段时光。
+
+11
+00:05:50.000 --> 00:06:29.000
+And, I mean, you might be able to fill me in where I'm misremembering or incorrect, Mark, but at first you were writing in a language which was essentially a shader for the GPU, so you kind of had to still frame whatever problem you were doing in terms of trying to tell the graphics what to do. Then CUDA came out. What was that process like and what did NVIDIA really see that made them say, hey, there's something here? Yeah, it's interesting. So my personal story for this was that I was an intern at NVIDIA in 2001. And that's when I sort of learned.
+马克，如果我记错了或者有误，你可以纠正我。起初，你编写的语言本质上是GPU的着色器，所以你仍然必须根据如何指挥图形处理来构建你所解决的问题。后来CUDA出现了。那个过程是怎样的？NVIDIA究竟看到了什么，让他们觉得“嘿，这里面大有可为”？这很有趣。我个人的经历是，我在2001年是NVIDIA的实习生。那时我才开始了解这些。
+
+12
+00:06:29.000 --> 00:06:42.000
+My PhD was on cloud simulation and rendering. So this was before people were talking about the cloud. So I was rendering clouds, right? Like pictures of clouds. Like balls of moisture. Okay. Yeah, exactly. In the sky.
+我的博士研究方向是云模拟和渲染。那是在人们谈论“云”之前。所以我当时是在渲染云，对吧？就是云的图片。就像一团团水汽。好的。是的，就在天空中。
+
+13
+00:06:42.000 --> 00:07:26.000
+And I had gotten this. At NVIDIA, I learned from some of the engineers there about some of the things they'd done with shaders. Like one of the guys wrote some shallow water equation solvers in DirectX and the Game of Life. He had the Game of Life running in pixel shaders. And this was before, I think they called it Shader Model 2.0 or something like that. So there was no floating point on these GPUs at that point. So you had to kind of hack everything in fixed point. You had basically 10-bit precision in the pixel shaders. And that was fun. But I basically got the idea
+在NVIDIA，我从一些工程师那里学到了一些他们用着色器做的事情。比如有人用DirectX写了一些浅水方程求解器，还有“生命游戏”（Game of Life）。他让“生命游戏”在像素着色器中运行。那是在他们称之为Shader Model 2.0或类似版本之前。所以当时这些GPU上没有浮点运算。你必须用定点数来破解一切。在像素着色器中，你基本上只有10位精度。那很有趣。但我基本上有了这个想法，
+
+14
+00:07:26.000 --> 00:07:52.000
+and I learned that NVIDIA was going to be coming out with GPUs with floating point pixel shaders in the near future and so I went back to grad school and I thought well what if I did all of the simulation of the clouds on the GPU in addition to the rendering and so I basically started doing fluid simulation on the GPU. And, but I didn't know, and a bunch of other grad students, you know,
+而且我了解到NVIDIA在不久的将来会推出带有浮点像素着色器的GPU。所以我回到研究生院，心想：如果我不仅做渲染，还在GPU上进行云的模拟会怎样？于是我基本上开始在GPU上做流体模拟。但我不知道，还有很多其他研究生，
+
+15
+00:07:52.000 --> 00:08:18.000
+and researchers were doing stuff in similar areas. There was ray tracing going on in shaders. There was FFTs even. And so I kind of started. I went on, like, I was also into the GPGP stuff very early. And there was a thing you could download that would do edge detection. So instead of rendering the teapot, it would actually render the edges. And it was so hard.
+以及研究人员也在做类似领域的工作。着色器里有光线追踪，甚至还有FFT。所以我开始……我也很早就接触了GPGPU。当时有一个可以下载的东西，能做边缘检测。所以它不是渲染茶壶，而是渲染边缘。这太难了。
+
+16
+00:08:18.000 --> 00:09:06.000
+I mean, this was pre-CUDA. It was so hard. I mean, it took, like, a week to figure out figure out like how to get it to compile and then, oh, you don't have the right GPU. You have to go out and buy another one. And it was just, it was, it could have made it so much easier. Right. So I think that, I mean, while I was back in grad school and not at NVIDIA before I came on full time, obviously people at NVIDIA really saw this opportunity. And I believe that it was Jensen, our CEO, ultimately, who was convinced. And then by the time I got back in 2003, there was already an effort to build NV50, which became G80, which was the first CUDA-capable GPU. And there was, you know, it's the first GPU with a dedicated computing mode with byte
+我的意思是，那是CUDA之前。太难了。我花了一周时间才弄明白怎么编译它，然后发现显卡不对，还得去买另一块。这本可以让事情变得简单得多。没错。所以我认为，当我在研究生院而不是在NVIDIA全职工作时，NVIDIA的人显然看到了这个机会。我相信最终是我们的CEO黄仁勋（Jensen）被说服了。到2003年我回来时，已经有一个开发NV50的计划，后来变成了G80，也就是第一款支持CUDA的GPU。那是第一款具有专用计算模式的GPU，具有字节
+
+17
+00:09:06.000 --> 00:10:09.000
+addressable memory instead of just pixel shaders, random access memory from the shader units. And in terms of, you're right, it was hard. And it was kind of fun. And it was, if you felt like, you know, a hacker, getting this stuff to work, but when you got something to work, it kind of had this feeling of magic, right? that really needs way more precision than I have in these fixed point pixel shaders, actually works. And it felt like magic, which is really not a sustainable feeling in software development. Right. So what NVIDIA did was to build hardware that was dedicated to computing as well as graphics. And then build software on top of that. And so we saw early on from talking to potential customers
+可寻址内存，而不仅仅是像素着色器，是从着色器单元进行随机存取内存。至于你说的，确实很难。这很有趣，如果你觉得自己像个黑客，能让这些东西运行起来，那种感觉就像魔法一样。真的需要比这些定点像素着色器更高的精度，但它竟然真的能运行。那种感觉就像魔法，但这在软件开发中并不是一种可持续的感觉。没错。所以NVIDIA所做的是构建既能用于计算也能用于图形的硬件，然后在上面构建软件。我们很早就从与潜在客户的交谈中发现，
+
+18
+00:10:09.000 --> 00:10:52.000
+that we would have to build something using languages that they're familiar with. And when we went around to customers and we were talking to people in areas ranging from defense to oil and gas to fluid simulation like Cadence and Affluent, I guess, was the company at the time. I think it's Ansys now. And they all said, well, it's got to either be, some said it's got to be Fortran, some said it's got to be C or C++. So we decided, we were kind of afraid of Fortran at the time, so we were like, well, we've got to build something that's based on C, and that became CUDA. So it's basically C with some extensions,
+我们必须使用他们熟悉的语言来构建东西。当我们走访客户，与国防、石油和天然气、流体模拟（比如Cadence和Fluent，当时那家公司叫这个名字，我想现在是Ansys）等领域的人交谈时，他们都说，要么必须是Fortran，要么必须是C或C++。所以我们决定——当时我们对Fortran有点畏惧——所以我们想，我们必须构建一个基于C的东西，那后来就成了CUDA。所以它基本上就是带有扩展的C语言，
+
+19
+00:10:52.000 --> 00:11:14.000
+and it took away that magic feeling. You know, it did, when you wrote a program, it did what you thought it should do, rather than, oh, maybe if I hack this this way, it'll work, and then it does. And did those first CUDA-capable GPUs, I mean, did they get widespread adoption? Did NVIDIA's investment in putting in the extra work
+它消除了那种魔法般的感觉。你知道，当你写一个程序时，它会按照你预想的那样运行，而不是“哦，也许我这样破解一下它就能行，然后它真的行了”。那些第一批支持CUDA的GPU是否得到了广泛采用？NVIDIA在投入额外精力
+
+20
+00:11:14.000 --> 00:11:54.000
+to build a compiler toolchain and all that, did that really kind of pay off, or did it take a while? Well, it certainly paid off, but it also took a while. There was a lot of initial interest, and adoption started immediately. People were using CUDA 1.0. I still talk to customers who are like, yeah, I've been using CUDA since it first came out, or the beta, or whatever, and starting to build real software with it right away. But to really call it successful and actually see real applications that people could go and buy or download that accelerate with GPUs
+构建编译器工具链等方面所做的投资，真的得到了回报，还是花了一段时间？嗯，它确实得到了回报，但也花了一段时间。最初有很多兴趣，采用率也立即开始了。人们在使用CUDA 1.0。我至今仍与那些说“是的，我从CUDA刚出来时就开始用了，或者从测试版就开始用了”的客户交谈，他们立刻就开始用它构建真正的软件。但要真正称其为成功，并看到人们可以购买或下载的、利用GPU加速的真正应用程序，
+
+21
+00:11:54.000 --> 00:12:36.000
+probably took a couple of years. And now, you know, it's the point. I wouldn't say CUDA is mainstream, but, but it's definitely something that, um, that real, uh, products and, um, labs and researchers and all of these things all use. So just for, for people's clarity, I mean, if you're playing a video game, I don't know what the cool kids play these days. Um, and it. And it's running some amazing graphics. Is it the case that there's also CUDA programs doing general processing in the same pipeline? Or is it typically that you run some specific scientific application that would use it?
+可能花了几年的时间。现在，你知道，已经到了这个地步。我不会说CUDA是主流，但它绝对是真正的产品、实验室和研究人员都在使用的东西。为了让大家清楚，如果你在玩电子游戏——我不知道现在酷孩子们玩什么——而且它运行着一些惊人的图形。是不是在同一个流水线中也有CUDA程序在进行通用处理？还是说通常是你运行某个特定的科学应用程序才会用到它？
+
+22
+00:12:36.000 --> 00:13:31.000
+So early on, we made efforts to get CUDA into some games. And there are some ways that CUDA is used in games. So for example, NVIDIA has a physics simulation library for games called PhysX. And it uses CUDA for cloth simulation, particle simulation, rigid body simulation, things like that. But most games that are doing computing, and a lot of games do do general purpose computing, they use compute shaders within the graphics API. So after CUDA came out, DirectX and OpenGL both introduced their own flavors of compute shaders that basically are able to do similar things to CUDA programs programs but within the graphics API so that you don't have to be juggling two different APIs.
+所以早期我们确实努力将CUDA引入一些游戏。CUDA在游戏中有一些应用方式。例如，NVIDIA有一个名为PhysX的游戏物理模拟库。它使用CUDA进行布料模拟、粒子模拟、刚体模拟等。但大多数进行计算的游戏——很多游戏确实在做通用计算——都在图形API中使用计算着色器（compute shaders）。CUDA推出后，DirectX和OpenGL都引入了各自的计算着色器，它们基本上能够做与CUDA程序类似的事情，但都在图形API内，这样你就不必同时处理两个不同的API了。
+
+23
+00:13:31.000 --> 00:14:20.000
+But they have largely the same programming model within the kernel. A kernel is what we call a parallel region of your program. Within the kernel, whether it's in the graphics API compute shader language or in CUDA C++, the programming model is basically the same with a few minor differences. So that may be a perfect transition to kind of go into like, what is that? Obviously, it's an audio-only thing, but kind of describe to us, what is the programming model for writing these programs? Yeah, sure. but like kind of describe to us like what is the programming model for writing these programs yeah sure so if you want to write a program for a gpu you want to take advantage of all of the parallelism so gpus have now thousands of parallel cores um and if you can think of these if you if
+但它们在内核（kernel）内的编程模型基本相同。内核是我们对程序并行区域的称呼。无论是在图形API计算着色器语言中，还是在CUDA C++中，编程模型基本相同，只有一些细微差别。这可能是一个完美的过渡，让我们进入下一个话题：那是什么？显然这是一个纯音频节目，但请为我们描述一下，编写这些程序的编程模型是什么？好的，没问题。但请为我们描述一下编写这些程序的编程模型是什么。好的，没问题。如果你想为GPU编写程序，你需要利用所有的并行性。GPU现在有数千个并行核心，如果你是从图形背景转过来的，
+
+24
+00:14:20.000 --> 00:15:09.000
+you're coming from a graphics background you can think of these as pixel shader cores, but really they're unified cores that do everything from transforming vertices for the vertex shader to shading pixels to just running compute instructions. And so you're basically writing, the way you can think about it is you look in your program for parallel or regions that have parallelism. And what that means is you have loops, typically in a program, where the iterations of the loop are not dependent on each other. So they could be run at the same time. So you can think of flattening out that loop and then running each iteration at the same time, or many of the iterations at the same time on separate processors. And so that's what Coodle lets you do.
+你可以把它们看作像素着色器核心，但实际上它们是统一的核心，可以完成从转换顶点（用于顶点着色器）到对像素着色，再到运行计算指令的所有工作。所以你基本上是在编写……你可以这样想：你在程序中寻找并行区域或具有并行性的区域。这意味着你通常在程序中有循环，其中循环的迭代彼此不依赖。所以它们可以同时运行。你可以想象把那个循环展开，然后在单独的处理器上同时运行每个迭代，或者同时运行许多迭代。这就是CUDA让你做的事情。
+
+25
+00:15:09.000 --> 00:15:38.000
+And basically you write a program where, or you write a kernel program where within that function the whole kernel is being executed by many threads simultaneously. So basically the code is single thread code, but it's run in parallel across many threads. And you have... You kind of hinted at this, but when someone buys a computer, they buy a quad core computer or they buy an i7 that has six cores, right?
+基本上你编写一个程序，或者说编写一个内核程序，在这个函数中，整个内核由许多线程同时执行。所以代码基本上是单线程代码，但它在许多线程上并行运行。你……你刚才暗示了这一点，但当有人买电脑时，他们买的是四核电脑，或者买的是有六个核心的i7，对吧？
+
+26
+00:15:38.000 --> 00:15:59.000
+And you're saying the GPU has a thousand cores. So it sounds... I mean, just in a very naive way, you could say, well, why not use the GPU for everything? It has 1,000 cores. My CPU has four cores, right? So why would I ever use the CPU? Well, I will say that the GPU is becoming increasingly important.
+而你说GPU有一千个核心。所以听起来……我只是以一种非常天真的方式说，为什么不把GPU用于所有事情呢？它有1000个核心。我的CPU有四个核心，对吧？所以我为什么要用CPU呢？嗯，我会说GPU正变得越来越重要。
+
+27
+00:15:59.000 --> 00:16:24.000
+But in fact, I was just looking at a – I saw a die shot of a Broadwell CPU, and it's half GPU, the die is. Oh. Like literally, literally. The actual cores – well, this was a Broadwell, not a Xeon. A Xeon is not half GPU, but just a regular core like i5 or something like that. And with four cores.
+但事实上，我刚才看了一个Broadwell CPU的芯片透视图，它有一半是GPU。哦。真的，字面意思。实际的核心——好吧，这是Broadwell，不是Xeon。Xeon不是一半GPU，但像i5之类的普通核心。有四个核心。
+
+28
+00:16:24.000 --> 00:17:07.000
+So the four cores take up maybe know maybe a quarter of the diary or something like that but um so why not use a gpu for everything um well the cores are different as you're hinting at um uh we call them cuda cores but um you know that's a sort of a marketing name but um really they are um individual processing elements that process instructions, but they use a parallel execution model that's called SIMT. You may have heard of SIMD. SIMD stands for single instruction, multiple data. And what that means is that you have a single instruction, but executed by um on multiple data elements simultaneously
+所以这四个核心可能只占芯片面积的四分之一左右，但是……那么为什么不把GPU用于所有事情呢？嗯，核心是不同的，正如你所暗示的那样。我们称它们为CUDA核心，但这是一种营销名称，但实际上它们是处理指令的独立处理单元，但它们使用一种称为SIMT的并行执行模型。你可能听说过SIMD。SIMD代表单指令多数据（Single Instruction, Multiple Data）。这意味着你有一条指令，但同时在多个数据元素上执行。
+
+29
+00:17:07.000 --> 00:17:46.000
+and so you can think of that as having multiple threads that well no you can think of that as having a vector of data elements and you apply the same um instruction to all the elements in that vector simultaneously yeah like extra alus that'd be sse yeah that SSE, that's right, or AVX. And that's where you basically have a bunch of ALUs. SIMT was an NVIDIA coin term, but it's been used more broadly since then, I think. It stands for single instruction, multiple thread. So now instead of just having a vector of data elements, you actually have multiple threads that execute
+所以你可以把它想象成拥有多个线程……不，你可以把它想象成拥有一个数据元素向量，你将相同的指令同时应用于该向量中的所有元素。是的，就像额外的ALU，那是SSE，没错，或者AVX。这就是你基本上拥有一堆ALU的地方。SIMT是NVIDIA创造的术语，但我认为从那以后它被更广泛地使用了。它代表单指令多线程（Single Instruction, Multiple Thread）。所以现在不仅仅是拥有一个数据元素向量，你实际上拥有多个执行
+
+30
+00:17:46.000 --> 00:18:24.000
+the same instruction. And the difference, the important difference here is that each of these threads has its own program counter, which means that they can branch to different instructions separately. Whereas with SIMD, the branch has to be wrapped around the whole vector effectively. So if you need to make a decision, it has to be at the granularity of your vector size. If you need to make a decision in CUDA or in SIMD, then it can happen at a single thread granularity. Of course, there's a cost to that because the hardware, although we have all these little cores, they do share instruction fetch
+相同指令的线程。这里重要的区别在于，每个线程都有自己的程序计数器，这意味着它们可以分别跳转到不同的指令。而在SIMD中，分支必须有效地包裹在整个向量周围。所以如果你需要做出决定，它必须在向量大小的粒度上进行。如果你需要在CUDA或SIMD中做出决定，那么它可以在单线程粒度上发生。当然，这是有代价的，因为硬件虽然有所有这些小核心，但它们确实共享指令获取
+
+31
+00:18:24.000 --> 00:18:57.000
+and decode logic. And so you may end up with overhead of replays or predication of your instructions. I'm getting pretty technical here. No, it's great. That's kind of the difference between GPU cores and vector units or SSE units. But where the real difference is in terms of your original question is that the cores are very lightweight cores on a GPU, and they don't have very good single-thread performance.
+和解码逻辑。所以你最终可能会因为指令的重放或谓词化而产生开销。我讲得太技术了。不，这很棒。这就是GPU核心与向量单元或SSE单元之间的区别。但就你最初的问题而言，真正的区别在于GPU上的核心是非常轻量级的核心，它们的单线程性能不是很好。
+
+32
+00:18:57.000 --> 00:19:19.000
+They really get their performance in aggregate, right, from running many threads in parallel, usually doing the same thing, possibly branching and diverging some,, usually doing the same thing, possibly branching and diverging some, but usually doing the same thing. And CPU cores, on the other hand, they have a lot of things like branch prediction and big caches.
+它们确实是在聚合中获得性能，对吧？通过并行运行许多线程，通常做同样的事情，可能偶尔分支和发散，但通常做同样的事情。另一方面，CPU核心有很多分支预测和大缓存之类的东西。
+
+33
+00:19:19.000 --> 00:19:36.000
+They're optimized for latency, in other words. They're optimized to reduce latency, which means that if you only have one thing to do, you can do it really fast. On a GPU, if you only have one thing to do, you're leaving 999 cores idle. Ah, gotcha. Right.
+换句话说，它们针对延迟进行了优化。它们被优化以减少延迟，这意味着如果你只有一件事要做，你可以做得非常快。在GPU上，如果你只有一件事要做，你就让999个核心处于空闲状态。啊，明白了。没错。
+
+34
+00:19:36.000 --> 00:20:11.000
+So the way we talk about it is that GPUs are optimized for throughput. CPUs are optimized for latency. There's a bit of gray area there because CPUs have AVX and they can do things in parallel too. It's just that the scale of parallelism is lower on a CPU versus a GPU. And we're optimized for throughput, which means instead of trying to reduce latency, we try to hide it. So we always talk about latency hiding. GPUs are really good at hiding latency by executing other work while we're waiting.
+所以我们谈论的方式是：GPU针对吞吐量进行了优化，CPU针对延迟进行了优化。这中间有一点灰色地带，因为CPU有AVX，它们也可以并行做事情。只是CPU与GPU相比，并行性的规模较低。我们针对吞吐量进行了优化，这意味着我们不是试图减少延迟，而是试图隐藏它。所以我们总是谈论延迟隐藏。GPU非常擅长通过在等待时执行其他工作来隐藏延迟。
+
+35
+00:20:11.000 --> 00:20:41.000
+So if there's a memory access that we have to wait for data to come into the cache from off-chip, then we do work in other groups of threads, possibly even the same instruction in other groups of threads. But we have other instructions to issue to hide that latency. So does that carry over to the graphics world as well? Like maybe one part of the screen... It comes from the graphics world. Okay. So one part of the screen, the triangles have all been positioned and you say, okay, this
+所以如果我们有一个内存访问，必须等待数据从片外进入缓存，那么我们就会在其他线程组中做工作，甚至可能在其他线程组中执行相同的指令。但我们有其他指令可以发出以隐藏该延迟。那么这是否也适用于图形世界？比如屏幕的一部分……它来自图形世界。好的。所以屏幕的一部分，三角形已经定位好了，你说，好的，这
+
+36
+00:20:41.000 --> 00:21:16.000
+part of the screen is good to go. Let's start rendering pixels. Meanwhile, the next frame of triangles is already trying to get pushed to the screen at the same time. Is that the kind of pipelining you're talking about? Yeah, there is pipelining involved, but it's also just about having – so if you think about your pixels, you have some large triangle, possibly, that has hundreds of pixels it covers, and they're all shaded with the same pixel shader. So that pixel shader has to go and compute. It has to fetch from textures.
+部分屏幕准备好了。让我们开始渲染像素。同时，下一帧的三角形已经在尝试同时推送到屏幕上了。这就是你所说的流水线吗？是的，涉及流水线，但它也只是关于拥有……所以如果你考虑你的像素，你可能有一个很大的三角形，它覆盖了数百个像素，它们都用相同的像素着色器进行着色。所以那个像素着色器必须去计算。它必须从纹理中获取。
+
+37
+00:21:16.000 --> 00:21:59.000
+It has to blend the colors that it gets. It can do arbitrary computation now. But those pixels are grouped together into groups um in the hardware and in kudo we we refer to those as warps it's a term that comes from weaving actually but um because you had parallel threads and weaving um and so those warps uh so each warp is a group of 32 threads or 32 pixels and and while one warp is waiting on a texture fetch, for example, or a memory load, then we can switch to instructions from another warp within what we call the multiprocessor.
+它必须混合它得到的颜色。它现在可以进行任意计算。但这些像素在硬件中被分组在一起，在CUDA中我们称之为“Warp”（线程束），这个术语实际上来自编织，因为你在编织中有并行线程。所以这些Warp……每个Warp是32个线程或32个像素的组。当一个Warp在等待纹理获取或内存加载时，我们可以切换到我们称之为“多处理器”（multiprocessor）内的另一个Warp的指令。
+
+38
+00:21:59.000 --> 00:22:16.000
+And so the multiprocessor can issue instructions from multiple warps simultaneously, or while one warp is waiting. Oh, I see. It's similar to pipelining. It's actually more similar to hyperthreading. Yep, that makes sense. So for people who don't know, you can probably explain it better than I could,
+所以多处理器可以同时发出来自多个Warp的指令，或者当一个Warp在等待时。哦，我明白了。这类似于流水线。实际上它更类似于超线程（hyperthreading）。是的，这很有道理。所以对于不知道的人，你可能比我解释得更好，
+
+39
+00:22:16.000 --> 00:22:43.000
+but I think a loose definition of hyperthreading is you have on your CPU, you have your floating point unit, you have something that know, on your CPU, you have your floating point unit, you have something that does integer arithmetic, you have many of these little mini modules, and you could sort of fake out having two or more threads if one of them needs the floating point unit and the other one needs the arithmetic unit at the same time.
+但我认为超线程的一个粗略定义是：在你的CPU上，你有浮点单元，你有做整数算术的东西，你有许多这些小模块，如果你其中一个需要浮点单元，另一个需要算术单元，你可以假装同时拥有两个或多个线程。
+
+40
+00:22:43.000 --> 00:23:16.000
+And it's as if you're executing them both in parallel. Right. And on the CPU, I believe what hyperthreading requires ultimately is duplicating resources like the register file, right? And on the CPU, the register file is relatively small, at least on x86 CPUs. Well, the visible registers are fairly small. But on a GPU, the register file is quite big. It's almost like a small cache, except that it's a register file.
+就好像你在并行执行它们一样。没错。在CPU上，我相信超线程最终需要复制寄存器文件等资源，对吧？在CPU上，寄存器文件相对较小，至少在x86 CPU上是这样。嗯，可见寄存器相当小。但在GPU上，寄存器文件相当大。它几乎像一个小缓存，只是它是一个寄存器文件。
+
+41
+00:23:16.000 --> 00:23:57.000
+So it's directly accessible by instructions. And so we actually have, you know, on the GPU, the cores that I talked about are grouped together into things called multiprocessors. So, for example, a multiprocessor on Pascal, the latest architecture we just announced, has like 64 CUDA cores. And it has, I think, 128 kilobyte or 256 kilobyte register file on that SM. Wow. So there's a lot of registers. When you talk about having a multiprocessor, you said each core needs to be at a similar instruction, basically,
+所以指令可以直接访问它。所以我们实际上有……在GPU上，我谈到的核心被分组为称为多处理器的东西。例如，Pascal架构（我们刚刚宣布的最新架构）上的多处理器有64个CUDA核心。而且我认为该SM上有128KB或256KB的寄存器文件。哇。所以有很多寄存器。当你谈到拥有一个多处理器时，你说每个核心需要处于相似的指令，基本上，
+
+42
+00:23:57.000 --> 00:24:46.000
+that you want to be executing the same thing as much as possible. I think this is really interesting because really understanding how your program gets executed helps you design really good software, or at least in the efficiency case. And what is it that's actually different that causes you not to be able to get off that far? So you have the multiprocessor, you have all these cores in it, and what is it that actually, like you said, you duplicate some things, not other things. What is it actually that is preventing you from being able to have code running very different parts of the program um so what's prevent uh what's preventing you having code well um but each core each thread basically doesn't isn't being run on a full-blown core that has a separate you know instruction fetch and decode and issue.
+你希望尽可能多地执行相同的事情。我认为这非常有趣，因为真正了解你的程序是如何执行的有助于你设计出非常好的软件，或者至少在效率方面。那么实际上有什么不同导致你无法走得那么远？所以你有这个多处理器，你有里面所有的核心，实际上是什么……就像你说的，你复制了一些东西，没有复制其他东西。实际上是什么阻止了你能够让代码运行程序的非常不同的部分？所以是什么阻止了你拥有代码……嗯，但每个核心，每个线程基本上不是在一个拥有单独指令获取、解码和发出的全功能核心上运行。
+
+43
+00:24:46.000 --> 00:25:02.000
+So that logic is shared across basically 32 cores. And so we group threads into groups of 32. And that's what we call a warp. And I'm not sure if I'm answering your question. Yeah, no, that's kind of what I was saying.
+所以该逻辑基本上在32个核心之间共享。所以我们将线程分组为32个一组。这就是我们所说的Warp。我不确定我是否回答了你的问题。是的，不，这基本上就是我所说的。
+
+44
+00:25:02.000 --> 00:25:15.000
+It's so that the instructions are fetched in a batch and that you want all of the I was saying. It's so that the instructions are fetched in a batch and that you want all of the cores in the multiverse to execute that same thing. So if they get too far off, they need some instructions that another processor doesn't yet need or whatever, right? And then you get out of sync
+所以指令是分批获取的，你希望多处理器中的所有核心都执行相同的事情。所以如果它们偏离得太远，它们需要一些另一个处理器尚不需要的指令，或者其他什么，对吧？然后你就不同步了，
+
+45
+00:25:15.000 --> 00:25:58.000
+and you'd have to add extra hardware to handle that, which would get you closer and closer to a CPU core. Yeah, exactly. Yeah, that's right. And so when you write code for a GPU, you want to be aware of kind of the branchiness of that code, right? So if you have a loop where you're processing a lot of data, but each iteration of the loop, you're checking conditions and it's really data dependent, if every iteration is completely data dependent what it does, then performance may potentially suffer. But if you can kind of do some work ahead of time to maybe reorder your data, sorting
+你必须添加额外的硬件来处理这个问题，这会让你越来越接近CPU核心。是的，完全正确。是的，没错。所以当你为GPU编写代码时，你要意识到代码的分支性，对吧？所以如果你有一个循环，你在处理大量数据，但循环的每次迭代，你都在检查条件，而且它确实是数据相关的，如果每次迭代所做的事情完全是数据相关的，那么性能可能会受到影响。但如果你能提前做一些工作来重新排序你的数据，排序
+
+46
+00:25:58.000 --> 00:26:33.000
+or something like that, or binning, so that threads that are contiguous in terms of their thread ID or whatever are accessing memory that's contiguous and also making decisions that are contiguous, then you're going to get much better performance. Sorry, go ahead. No, I was just going to try to give an example. So you're telling me like if you had even numbers, you do operation A, and an odd numbered indexes of the array you do operation b then instead of running linearly through the array you would want to maybe like process all the even numbers first and then all the odd numbers as
+或者类似的东西，或者分箱（binning），这样在线程ID等方面连续的线程能够访问连续的内存，并且做出连续的决定，那么你就会获得更好的性能。抱歉，请继续。不，我只是想举个例子。所以你是说，如果你有偶数，你做操作A，在数组的奇数索引处你做操作B，那么与其线性地遍历数组，你可能想先处理所有偶数，然后再处理所有奇数，而不是
+
+47
+00:26:33.000 --> 00:27:07.000
+opposed to even odd even odd yeah i would just use my um use arithmetic on the indices in that case instead of um saying if even do this, if odd, do that, right? And so that threads, you know, just space out what your threads are doing rather than which threads are doing it. So how does somebody, if you have all of these threads all doing, well, I guess doing the same thing, but on different pieces of data, how do you debug this? I mean, I imagine you don't step through the debugger like you do with GDB and go line by line.
+偶数、奇数、偶数、奇数。是的，在这种情况下，我会对索引使用算术，而不是说“如果是偶数做这个，如果是奇数做那个”，对吧？这样线程……只是分散你的线程在做什么，而不是哪些线程在做。那么如果有人拥有所有这些线程，都在做……好吧，我想是在做同样的事情，但在不同的数据片段上，你如何调试这个？我的意思是，我想你不会像使用GDB那样逐行单步调试。
+
+48
+00:27:07.000 --> 00:27:29.000
+That would probably be bad. Well, it's a great question. How do you debug GP programs? And we do have tools. We have very good tools now, in fact. It's gotten a lot better. The CUDA 1.0 days, we did introduce CUDA 1.0 with a debugger and a profiler but they were very basic
+那可能会很糟糕。嗯，这是一个很好的问题。你如何调试GPU程序？我们确实有工具。事实上，我们现在有非常好的工具。情况好多了。在CUDA 1.0时代，我们确实推出了带有调试器和分析器的CUDA 1.0，但它们非常基础。
+
+49
+00:27:29.000 --> 00:27:46.000
+so you can step through the instructions and people do and when you're really trying to figure out a difficult bug just like on a CPU it really helps to have a debugger that lets you step in and inspect memory locations
+所以你可以单步执行指令，人们也确实这样做。当你真的试图找出困难的错误时，就像在CPU上一样，拥有一个允许你进入并检查内存位置的调试器真的很有帮助。
+
+50
+00:27:46.000 --> 00:28:24.000
+and variable values and things like that. And so you can do that, but there are a couple different modes that you can step, right? So we have a couple of tools. One is on the Linux side, we have what's called CUDA GDB, which is basically a modified GDB that supports programming or debugging CUDA programs. On Windows we have something called Visual Studio Edition, which is a plugin for Visual Studio that gives you debugging
+以及变量值之类的东西。所以你可以这样做，但有几种不同的模式可以单步执行，对吧？所以我们有几种工具。一种是在Linux端，我们有所谓的CUDA GDB，它基本上是一个支持编程或调试CUDA程序的修改版GDB。在Windows上，我们有Visual Studio Edition，这是一个Visual Studio插件，为你提供调试
+
+51
+00:28:24.000 --> 00:29:15.000
+and profiling inside the IDE for GPU programs. And that Insight also has graphics profiling and debugging features. There's also an Eclipse plug-in called, or an Eclipse IDE called Insight Eclipse Edition for Linux and Mac that kind of wraps the CUDA GDB stuff as well as the profiler. Anyway, so if you're stepping through a program running on the GPU, I talked about warps. One way to step through is to actually look at one thread and step each, you know, instruction for that or each line of code for that thread. Another way to do it is to step a warp or to step all the threads in what's called a thread block, which is a CUDA construct. And there's different reasons
+和分析功能，在IDE内为GPU程序。Insight也有图形分析和调试功能。还有一个名为Insight Eclipse Edition的Eclipse插件，用于Linux和Mac，它也封装了CUDA GDB和分析器。总之，如果你正在单步执行在GPU上运行的程序，我谈到了Warp。单步执行的一种方法是实际查看一个线程，并为该线程单步执行每个指令或每行代码。另一种方法是单步执行一个Warp，或者单步执行所谓的线程块（thread block）中的所有线程，这是一个CUDA结构。有不同的原因
+
+52
+00:29:15.000 --> 00:29:51.000
+you might want to do that. You might want to actually look at the values held in variables for a number of threads at once, and you can do that in the debugger. So you're kind of doing parallel debugging. Or you might want to just focus on one thread to try to understand the logic a bit better. And so you can, in Insight, Visual Studio Edition at least, I'm not sure about the CUDA GDB, probably also there too, you can toggle which way you want the debugger to step. I mean, the hardware is always going to run things a warp at a time. But it looks to you, or only focus in on the values of a single thread, if you want.
+你可能想这样做。你可能想一次查看多个线程变量中保存的值，你可以在调试器中做到这一点。所以你是在进行并行调试。或者你可能只想专注于一个线程，以更好地理解逻辑。所以你可以在Insight（至少在Visual Studio Edition中，我不确定CUDA GDB是否也可以，可能也可以）中切换你想要调试器单步执行的方式。我的意思是，硬件总是会一次运行一个Warp。但对你来说，如果你愿意，可以只关注单个线程的值。
+
+53
+00:29:51.000 --> 00:30:14.000
+Oh, I see. That makes sense. So I guess if you're doing this, you're looking at one warp, and then the other ones are just kind of frozen. Or I guess they could be running. It doesn't matter, because they're not dependent on each other. Yeah, well, if you're debugging, if you're hitting a breakpoint, you need to freeze the program. And so that actually requires hardware,
+哦，我明白了。这很有道理。所以我猜如果你这样做，你是在看一个Warp，然后其他的只是被冻结了。或者我猜它们可能在运行。没关系，因为它们彼此不依赖。是的，嗯，如果你在调试，如果你遇到了断点，你需要冻结程序。所以这实际上需要硬件，
+
+54
+00:30:14.000 --> 00:30:45.000
+and it's something that we've gradually improved. It used to be that you couldn't have a display attached to the GPU you were debugging. And if you think about it, the GPU has modes. It has graphics mode and compute mode. And if you freeze it in compute mode, then it can't service the display, which means you're running Windows and suddenly Windows freezes. So you had to have a separate GPU in order to debug previously. Now we can do single GPU debugging,
+这是我们逐渐改进的东西。过去，你不能在正在调试的GPU上连接显示器。如果你想一想，GPU有模式。它有图形模式和计算模式。如果你在计算模式下冻结它，那么它就无法服务显示器，这意味着如果你在运行Windows，突然Windows就冻结了。所以以前你必须有一个单独的GPU才能进行调试。现在我们可以进行单GPU调试，
+
+55
+00:30:45.000 --> 00:31:21.000
+and with Pascal, which we just announced at GTC in March, we have compute preemption, which basically allows you to, you know, just as it sounds, just with traditional preemption, you know, you basically can store the state of the program and kick it out and switch to something else, some other application. And so that allows the debugger to step through programs and hit breakpoints while making sure the operating system is interactive on a single GPU system.
+随着Pascal（我们在3月GTC上刚刚宣布的），我们有了计算抢占（compute preemption），它基本上允许你……正如听起来的那样，就像传统的抢占一样，你基本上可以存储程序的状态并将其踢出，切换到其他东西，一些其他应用程序。所以这允许调试器在单GPU系统上单步执行程序并命中断点，同时确保操作系统是交互式的。
+
+56
+00:31:21.000 --> 00:32:00.000
+So one of the things you, I mean, obviously you're talking from the perspective of nvidia and cuda but i mean people will know and you mentioned before looking at the die shot of some of the broad wall chips or whatever having gpus on the same die as a cpu what are you know obviously there's probably some advantages some disadvantages you kind of speak to like what the difference is between a processor integrated with a GPU versus a discrete GPU? Sure. So, yeah, I mean, the majority of the products that NVIDIA sells, the GPUs that we sell are discrete GPUs.
+所以你提到的事情之一，我的意思是，显然你是从NVIDIA和CUDA的角度谈论的，但人们会知道，你之前提到看Broadwell芯片的芯片透视图，在同一个芯片上有GPU和CPU，你知道，显然可能有一些优点和缺点，你能谈谈集成GPU的处理器与独立GPU之间的区别吗？当然。所以，是的，NVIDIA销售的大多数产品，我们销售的GPU都是独立GPU。
+
+57
+00:32:00.000 --> 00:32:41.000
+In other words, they're on a board that plugs into, like, a PCI Express socket. And they're separate from the CPU. And so, well, just a little bit on that. When you're programming a program that uses the GPU, for example, in CUDA, you're writing a heterogeneous program. The program still needs to use the CPU, right? So most programs have at least control from the CPU, if not significant computation there also. And so you have to take care of the GPU and the CPU have separate memory, and so there are transfers that have to happen between the GPU and the CPU. And I can come back to that later.
+换句话说，它们在插入PCI Express插槽的板卡上。它们与CPU是分开的。所以，关于这一点，当你编写使用GPU的程序时，例如在CUDA中，你是在编写一个异构程序。程序仍然需要使用CPU，对吧？所以大多数程序至少有来自CPU的控制，如果不是那里也有重要的计算的话。所以你必须注意GPU和CPU有独立的内存，所以GPU和CPU之间必须发生传输。我可以稍后再回来谈这个。
+
+58
+00:32:41.000 --> 00:33:31.000
+In fact, we should come back. Remind me to talk about unified memory. But there are also processors that are integrated, as you mentioned. So NVIDIA has a line of processors called Tegra, which are a system on a chip. There's also, as I mentioned, Broadwell core CPUs have their Iris graphics on board. So they have a GPU integrated with the cpu on die so these are kind of similar in some ways the system on a chip approach is a bit broader that are the tegra basically has a few arm cores and then it has a gpu and it has also has a bunch of other, you know, all the things that you need to build a whole small system. And so Tegra is used in things for, like, laptops,
+事实上，我们应该回来谈谈。提醒我谈谈统一内存（unified memory）。但也有集成的处理器，正如你提到的。所以NVIDIA有一系列名为Tegra的处理器，它们是片上系统（system on a chip）。正如我提到的，Broadwell核心CPU也有板载的Iris图形。所以它们有一个与CPU集成在同一个芯片上的GPU。所以这些在某些方面是相似的。片上系统方法稍微广泛一些，Tegra基本上有几个ARM核心，然后它有一个GPU，它还有一堆其他的东西，你知道，构建整个小型系统所需的所有东西。所以Tegra被用于笔记本电脑等设备中。
+
+59
+00:33:31.000 --> 00:34:08.000
+sorry, not laptops, tablet computers, like the Google Pixel C, I think, has Tegra in it. And it's also used in something we call Jetson, which is an embedded development kit, which is aimed at people who are developing things like robots, drones, other embedded systems. And so to your question, you know, what's the difference between these and the trade-offs? Well, if you have a certain die size, if you can dedicate it all to GPU, obviously you're going to have a more powerful GPU, but if you have to split it half between GPU and CPU
+抱歉，不是笔记本电脑，是平板电脑，比如谷歌的 Pixel C，我想它里面就有 Tegra。它还被用于我们称之为 Jetson 的产品中，这是一个嵌入式开发套件，旨在面向那些开发机器人、无人机和其他嵌入式系统的人。回到你的问题，你知道，这些产品之间有什么区别以及如何权衡？嗯，如果你有一定的芯片面积，如果你能把它全部投入到 GPU 上，显然你会拥有一个更强大的 GPU，但如果你必须在 GPU 和 CPU 之间平分它
+
+60
+00:34:08.000 --> 00:34:29.000
+or GPU and CPU and other stuff, then the amount of computational capability of each of those things goes down. So it's a balancing act, right? What do you want to do? If you want to do high-end supercomputing, you know, NVIDIA Tesla GPUs are used in supercomputers like Titan at Oak Ridge National Labs.
+或者在 GPU、CPU 和其他组件之间分配，那么每一部分的计算能力就会下降。所以这是一个平衡的问题，对吧？你想做什么？如果你想做高端超级计算，你知道，NVIDIA Tesla GPU 被用于像橡树岭国家实验室的 Titan 这样的超级计算机中。
+
+61
+00:34:29.000 --> 00:34:55.000
+If you want to do that, then the system on a chip approach probably isn't the right way for you because you need the most powerful GPU with the highest memory bandwidth and the highest computational throughput, right? If you want to build a robot where you need CPUs and GPUs and sensors and data inputs and all this kind of stuff, then an integrated
+如果你想做那个，那么片上系统（SoC）的方法可能就不适合你了，因为你需要最强大的 GPU，具备最高的内存带宽和最高的计算吞吐量，对吧？如果你想制造一个机器人，需要 CPU、GPU、传感器、数据输入以及所有这些东西，那么一个集成式的
+
+62
+00:34:55.000 --> 00:35:32.000
+processor that's really low power obviously makes a lot of sense. So we build things for the whole spectrum from very low power embedded to places where we need power efficiency, but the actual total system power is not as much of an issue. Does that, I mean, am I going the right way? Yeah, that makes sense. And then what is it, so you talked about, you know, kind of transferring out over, let's say, PCI Express and that obviously passes certain data size, that makes great sense, as you said, in supercomputing. But then if you talk about how does, as a programmer,
+低功耗处理器显然非常有意义。所以我们为整个领域构建产品，从极低功耗的嵌入式设备，到那些我们需要能效，但实际总系统功耗不是那么大问题的领域。这样说，我的意思是，我的方向对吗？是的，这很有道理。那么，你谈到了，你知道，比如通过 PCI Express 进行传输，这显然会传输特定的数据量，正如你所说，这在超级计算中非常有意义。但如果你谈到作为一名程序员，
+
+63
+00:35:32.000 --> 00:35:50.000
+is there a way to kind of guide someone and say, hey, you could do this on the CPU or you could take the time to transmit to the GPU and then transmit it back and how they kind of build that threshold in their mind about which one to do or is there even a way to write a single program and then at runtime or at compile time,
+有没有一种方法可以引导某人，告诉他们，嘿，你可以在 CPU 上做这个，或者你可以花时间传输到 GPU，然后再传回来，以及他们如何在脑海中建立起关于该选择哪种方式的阈值，或者甚至有没有一种方法可以编写一个单一的程序，然后在运行时或编译时，
+
+64
+00:35:50.000 --> 00:36:10.000
+it determines, hey, based on this code size, we're going to execute this in one versus the other. Yeah, okay, there's a lot in that. I'm sorry. That's all right. So I'll go back to what I was talking about. If you're on a system with a GPU and a CPU that are separate and they have separate memories,
+它能决定，嘿，根据这段代码的大小，我们要在其中一个上执行，而不是另一个。是的，好吧，这里面有很多内容。抱歉。没关系。所以我回到我刚才谈论的内容。如果你在一个拥有独立 GPU 和 CPU 且它们拥有独立内存的系统上，
+
+65
+00:36:10.000 --> 00:36:42.000
+up until CUDA 6, which we launched a couple years ago, you always had to explicitly manage all memory. And so as you were talking about, you would have to create, let's say the data comes from a file. So your CPU loads that data from file into CPU memory. You then have to allocate GPU memory for that data and do an explicit memcopy between the CPU memory and the GPU memory. So CUDA has an API for that, CUDA memcopy.
+在几年前我们推出的 CUDA 6 之前，你总是必须显式地管理所有内存。正如你所谈到的，你必须创建，比如数据来自一个文件。所以你的 CPU 将该数据从文件加载到 CPU 内存中。然后你必须为该数据分配 GPU 内存，并在 CPU 内存和 GPU 内存之间进行显式的内存拷贝（memcopy）。所以 CUDA 有一个 API 来实现这一点，即 CUDA memcopy。
+
+66
+00:36:42.000 --> 00:37:11.000
+It works just like memcopy, except it allows you to copy from the CPU to the GPU or the other direction, or from GPU memory pointer to another pointer. And there's a cost to that because PCI Express has a certain bandwidth. So given the data size, the bandwidth of PCI Express, you can estimate how long that's going to take. And so if you have a huge amount of data and a small amount of computation,
+它的工作方式就像 memcopy，只是它允许你从 CPU 拷贝到 GPU，或者反方向，或者从 GPU 内存指针拷贝到另一个指针。这是有成本的，因为 PCI Express 有一定的带宽。所以考虑到数据大小和 PCI Express 的带宽，你可以估算出这需要多长时间。所以如果你有大量的数据和少量的计算，
+
+67
+00:37:11.000 --> 00:37:57.000
+and you're only going to do a small amount of computation on the GPU before you need to do something on the CPU, like, I don't know, send it on the network or write it back to disk or whatever, then the overhead of transferring it might be higher than the computation cost that actually, you know, of performing the task on the GPU. And so there are trade-offs, as you hinted at. You need to decide whether it's worthwhile on the current hardware to transfer data to the GPU for processing. And there are many applications where it's obviously beneficial. But there are some applications where that tradeoff is trickier. And so there's a lot of things you can do,
+并且在需要在 CPU 上做某些事情（比如，我不知道，发送到网络或写回磁盘等）之前，你只会在 GPU 上进行少量的计算，那么传输的开销可能比在 GPU 上执行任务的实际计算成本还要高。所以正如你所暗示的，这里存在权衡。你需要决定在当前的硬件上将数据传输到 GPU 进行处理是否值得。在许多应用中，这显然是有益的。但有些应用中，这种权衡比较棘手。所以你可以做很多事情，
+
+68
+00:37:57.000 --> 00:38:17.000
+like trying to overlap the communication with computation via pipelining. We have facilities in CUDA for streaming so basically you can associate computations and copies with separate streams of API commands so that if they're independent they can be overlapped. So what you could do is you could chunk your data up so that you
+比如尝试通过流水线将通信与计算重叠。我们在 CUDA 中有流（streaming）设施，基本上你可以将计算和拷贝与独立的 API 命令流关联起来，这样如果它们是独立的，就可以重叠进行。所以你可以做的是，你可以把你的数据分块，这样你
+
+69
+00:38:17.000 --> 00:39:07.000
+transfer a little bit of it, you start processing on it and then you do another transfer on a separate stream simultaneously, things like that. But yeah, there is a bit of a balancing act there it and then you start it and you do another transfer on a separate stream simultaneously things like that um but yeah there is a bit of a balancing act there and and it's it depends on the application sometimes it's trickier than others um that makes sense and so i think if you have tegra right then then you're sharing some memory so then you know i guess a copy doesn't happen there something else must happen or something uh yeah so on tegra you have one memory so you know it's shared between all the processors in the integra so um so you know you can um allocate a pointer and then just share it between CPU and GPU code.
+传输一小部分，开始处理它，然后同时在另一个流上进行另一次传输，诸如此类。但是，是的，这里确实存在一点平衡，而且它取决于应用程序，有时比其他时候更棘手。这很有道理，所以我想如果你有 Tegra，那么你共享了一些内存，所以我猜那里不会发生拷贝，一定发生了别的事情，或者什么。嗯，是的，在 Tegra 上你有一个内存，所以你知道它在 Tegra 的所有处理器之间共享，所以你可以分配一个指针，然后就在 CPU 和 GPU 代码之间共享它。
+
+70
+00:39:07.000 --> 00:39:35.000
+There's a couple of things. There's a couple of gotchas on current Tegra's, I believe, like on the TK one. I'm not sure if it's true on the Tegra K one. I don't know about the Tegra X one. The caches were not coherent between the CPU and GPU. And so sometimes what seems like it should be free actually has a cost because of having to invalidate caches. That makes sense.
+有几件事。我相信在当前的 Tegra 上有一些陷阱，比如在 TK1 上。我不确定在 Tegra K1 上是否如此。我不知道 Tegra X1 的情况。缓存不是 CPU 和 GPU 之间一致的。所以有时看起来应该是免费的东西，实际上因为必须使缓存失效而产生了成本。这很有道理。
+
+71
+00:39:35.000 --> 00:40:17.000
+So there's a wide variety of people who want to leverage a GPU. There's people like Patrick who builds robots and underwater submarines in his garage um and there are people no that's not true but that's a good idea and there are people like me who know nothing about uh c i tried to write a c program once uh for a company that patrick and i worked for and and they kicked me off the project almost immediately. I had no idea what I was doing. And so I'm more of like a MATLAB or Python person. And so how does sort of the CUDA ecosystem
+所以有各种各样的人想要利用 GPU。有像帕特里克这样在车库里制造机器人和水下潜艇的人，还有人……不，那不是真的，但那是个好主意。还有像我这样对 C 一无所知的人，我曾经为帕特里克和我工作过的一家公司尝试编写一个 C 程序，他们几乎立刻就把我踢出了项目。我根本不知道自己在做什么。所以我更像是一个 MATLAB 或 Python 用户。那么 CUDA 生态系统是如何
+
+72
+00:40:17.000 --> 00:40:35.000
+sort of cater to all of these different people who have different backgrounds? Apparently they don't do Fortran, so those people are SOL, but for everybody else... Sorry, that last part you broke up. Oh, I said that. You told us earlier that it doesn't support Fortran, so the Fortran people are
+迎合所有这些背景不同的人的呢？显然他们不做 Fortran，所以那些人就没戏了，但对于其他人……抱歉，最后那部分你断断续续的。哦，我说的是。你之前告诉我们它不支持 Fortran，所以 Fortran 用户就
+
+73
+00:40:35.000 --> 00:41:01.000
+SOL. No, they're not. Oh, they're not. Okay. That's a great question. You said the word ecosystem, and we do talk about ecosystem at NVIDIA a lot in terms of CUDA. And I know a lot of companies do that. But whenever you're building a platform, you care about the ecosystem. And so you're right, there are a lot of programmers and there are many programming languages. And we would like to enable them all.
+没戏了。不，他们不是。哦，他们不是。好的。这是一个很好的问题。你提到了“生态系统”这个词，我们在 NVIDIA 确实经常谈论 CUDA 的生态系统。我知道很多公司都这样做。但无论何时你构建一个平台，你都会关心生态系统。所以你是对的，有很多程序员，也有很多编程语言。我们希望支持他们所有人。
+
+74
+00:41:01.000 --> 00:41:31.000
+Or anybody that has parallel programs or a lot of data to process, anybody who needs high bandwidth and throughput, we would like them to be using GPUs. And so we try to enable as many ways of programming GPUs as possible to cater to those different needs. And so when we talk about the CUDA platform, we talk about three ways of programming. There's directives, which are basically hints to the compiler
+或者任何拥有并行程序或大量数据需要处理的人，任何需要高带宽和吞吐量的人，我们都希望他们使用 GPU。所以我们尝试尽可能多地提供编程 GPU 的方式，以满足这些不同的需求。所以当我们谈论 CUDA 平台时，我们谈论三种编程方式。一种是指令（directives），它们基本上是给编译器的提示，
+
+75
+00:41:31.000 --> 00:42:12.000
+that you can add to loops in C or Fortran that allow the compiler to try to automatically parallelize those loops. And if you've heard of OpenMP, OpenMP is a compiler directives standard, which enables you to specify, oh, this loop is parallel, please, you know, parallelize it for me. And that started on CPUs. There's work ongoing in OpenMP to support accelerators like GPUs, and we're involved in that. There's also another standard called OpenACC which is another way to program and it supports, there's compilers for Fortran as well
+你可以将它们添加到 C 或 Fortran 的循环中，允许编译器尝试自动并行化这些循环。如果你听说过 OpenMP，OpenMP 是一种编译器指令标准，它使你能够指定，哦，这个循环是并行的，请帮我并行化它。这始于 CPU。OpenMP 中正在进行支持像 GPU 这样的加速器的工作，我们也参与其中。还有另一个名为 OpenACC 的标准，这是另一种编程方式，它支持……也有针对 Fortran 的编译器，
+
+76
+00:42:12.000 --> 00:42:41.000
+as C and C++ for OpenACC as well. So the second way is with libraries. If you have a fairly standard computation or if you use an industry standard library for those computations, there's a good chance that there's already a drop-in replacement that targets GPUs. So, for example, there's a popular linear algebra library
+以及针对 OpenACC 的 C 和 C++ 编译器。所以第二种方式是使用库。如果你有一个相当标准的计算，或者如果你为这些计算使用行业标准库，很有可能已经有一个针对 GPU 的直接替换库。例如，有一个流行的线性代数库，
+
+77
+00:42:41.000 --> 00:43:31.000
+or it's actually just an interface standard that many libraries implement called BLAS. It stands for basic linear algebra subroutines. And there's a KUBLAS that NVIDIA provides. There's KUFFT, which does fast Fourier transforms. If you use FFTW on the CPU, for example, or MKL on Intel processors, you know, you can drop in QFFT and accelerate those on the GPU. And then there's a number of other more kind of domain-specific libraries. There's libraries of solvers, QSolver, QSparparse is for sparse linear algebra and basically a whole bunch there's one that's getting a lot of
+或者它实际上只是一个许多库实现的接口标准，称为 BLAS。它代表基本线性代数子程序。NVIDIA 提供了 KUBLAS。还有 KUFFT，它执行快速傅里叶变换。例如，如果你在 CPU 上使用 FFTW，或者在英特尔处理器上使用 MKL，你知道，你可以直接使用 QFFT 并在 GPU 上加速它们。然后还有许多其他更特定于领域的库。有求解器库，QSolver，QSparparse 用于稀疏线性代数，基本上有很多……现在有一个非常
+
+78
+00:43:31.000 --> 00:43:47.000
+interest now called CooDNN which we can talk about more which is for deep learning, deep neural networks so that's the second way is libraries and the third way is with programming languages so I've talked a lot about CUDA and what I really meant by that was CUDA C++ or CUDA C,
+受关注的库叫 CooDNN，我们可以多谈谈它，它是用于深度学习、深度神经网络的，所以这是第二种方式，即库。第三种方式是使用编程语言，所以我谈了很多关于 CUDA 的内容，我真正指的是 CUDA C++ 或 CUDA C，
+
+79
+00:43:47.000 --> 00:44:19.000
+which basically is using NVIDIA's compiler, MVCC, to compile C or C++ with extensions for parallelism. But there's also CUDA Fortran, which was created by a company called PGI, the Portland Group, which is now owned by NVIDIA. But they started CUDA Fortran when they were an independent company. And CUDA Fortran basically takes that CUDA programming model that I talked about and introduces it to Fortran with extensions.
+它基本上是使用 NVIDIA 的编译器 MVCC 来编译带有并行扩展的 C 或 C++。但也有 CUDA Fortran，它是由一家名为 PGI（Portland Group）的公司创建的，现在归 NVIDIA 所有。但他们在作为独立公司时就开始了 CUDA Fortran。CUDA Fortran 基本上采用了我谈到的那种 CUDA 编程模型，并通过扩展将其引入到 Fortran 中。
+
+80
+00:44:19.000 --> 00:44:39.000
+Cool. There's even CUDA Python. Go ahead. No, no, keep going. So Cuda Python was made by this company, Continuum Analytics, in Austin. And they make a product called Conda, Anaconda. Yep. Anaconda is awesome.
+酷。甚至还有 CUDA Python。继续。不，不，继续说。所以 CUDA Python 是由奥斯汀的一家名为 Continuum Analytics 的公司制作的。他们制造了一个名为 Conda、Anaconda 的产品。是的。Anaconda 太棒了。
+
+81
+00:44:39.000 --> 00:45:06.000
+It's a Python, basically, package manager. It's kind of like using apt-get in Linux or RubyGems if you're a Ruby programmer. And it lets you basically manage packages. But they also have made a bunch of their own Python packages, one of which is called Numba, which is an open source compiler for Python. And you might say, but wait, Python's not compiled. It's interpreted.
+它基本上是一个 Python 包管理器。它有点像在 Linux 中使用 apt-get，或者如果你是 Ruby 程序员，就像 RubyGems。它让你基本上可以管理包。但他们也制作了许多他们自己的 Python 包，其中一个叫 Numba，这是一个用于 Python 的开源编译器。你可能会说，等等，Python 不是编译型的吗？它是解释型的。
+
+82
+00:45:06.000 --> 00:45:46.000
+Well, what they've done is they've allowed you to put a little annotation on a function. You basically put at JIT in front of a function, and then it uses LLVM to JIT compile that, so it'll run faster on your CPU. And they also have a CUDA JIT and a number of syntax things to expose the CUDA programming model in Python. Cool. Yeah, a couple other resources. I've used Theano, which is pretty good. It's a Python-based, kind of like a MATLAB-like environment.
+嗯，他们所做的是允许你在函数上添加一个小注解。你基本上在函数前面加上 @JIT，然后它使用 LLVM 进行 JIT 编译，这样它在你的 CPU 上运行得更快。他们还有一个 CUDA JIT 和一些语法，可以在 Python 中暴露 CUDA 编程模型。酷。是的，还有其他一些资源。我用过 Theano，它相当不错。它是一个基于 Python 的、有点像 MATLAB 的环境。
+
+83
+00:45:46.000 --> 00:46:12.000
+Right. But it runs on the GPU. And then there's also TensorFlow, which is a new one that I've only done the little test app. So I haven't played much with TensorFlow. But it also gives you this MATLAB-like environment. But under the hood, it's all running on the GPU. And I think they're both using Kublaz,, I believe, and KUDI and that. Absolutely. Yes, definitely, they are.
+对。但它在 GPU 上运行。然后还有 TensorFlow，这是一个新的，我只做过小测试应用。所以我还没怎么玩过 TensorFlow。但它也给了你这种类似 MATLAB 的环境。但在底层，它都在 GPU 上运行。我想它们都使用了 Kublaz，我相信，还有 KUDI 之类的。绝对是，是的，它们肯定使用了。
+
+84
+00:46:12.000 --> 00:46:47.000
+Yeah, so these, I mean, you guys talked about these in the Scientific Python podcast that I listened to, and they are tensor libraries, and they're MATLAB-like, but,like, but really they're being driven by deep neural networks work. And that's where we focus with kudnn, but also kublas, the linear algebra. So a lot of the computations on these tensors are basically just matrix vector multiplies or matrix matrix multiplies, things like that. And that's where GPUs really excel.
+是的，所以这些，我的意思是，你们在 Scientific Python 播客中谈论过这些，我听过，它们是张量库，它们类似 MATLAB，但实际上它们是由深度神经网络工作驱动的。这就是我们用 kudnn 关注的地方，还有 kublas，线性代数。所以这些张量上的许多计算基本上只是矩阵向量乘法或矩阵矩阵乘法，诸如此类。这就是 GPU 真正擅长的地方。
+
+85
+00:46:47.000 --> 00:47:09.000
+If you want to get peak performance on GPU, then just do large matrix matrix multiplies, right? So, yeah, so I guess the last thing I want to say about the ecosystem is that we wanted to enable all these things. And so we've worked in a few areas. One is the directives I talked about. One is in building libraries where it makes sense,
+如果你想在 GPU 上获得峰值性能，那就只做大型矩阵矩阵乘法，对吧？所以，是的，我想关于生态系统我想说的最后一件事是，我们想支持所有这些东西。所以我们在几个领域进行了工作。一个是刚才提到的指令。一个是构建有意义的、
+
+86
+00:47:09.000 --> 00:47:47.000
+where there is demand. And then the other is the compiler. We wanted to enable other compiler writers and developers to build compilers that could target GPUs. And so we started using LLVM, which I don't know if you guys have talked about LLVM on this show, but it's an open source compiler tool chain. And it basically has become really popular and is being used in the back ends of a lot of different compilers for various languages.
+有需求的库。另一个是编译器。我们想让其他编译器编写者和开发者能够构建针对 GPU 的编译器。所以我们开始使用 LLVM，我不知道你们在这个节目中是否谈论过 LLVM，但它是一个开源编译器工具链。它基本上变得非常流行，并被用于各种语言的许多不同编译器的后端。
+
+87
+00:47:47.000 --> 00:48:12.000
+And by allowing, basically what we provided is some extensions to LLVM. Actually, they're not even extensions. Because LLVM is extensible, we're able to do it all entirely within that. So our extensions are actually a subset of LLVM rather than a superset. But basically some annotations that allow you
+通过允许，基本上我们提供的是对 LLVM 的一些扩展。实际上，它们甚至不是扩展。因为 LLVM 是可扩展的，我们能够完全在其中完成所有工作。所以我们的扩展实际上是 LLVM 的一个子集，而不是超集。但基本上是一些注解，允许你
+
+88
+00:48:12.000 --> 00:48:42.000
+in the low-level intermediate representation of LLVM to express the parallelism, just as you would in CUDA kernels. And that enables LLVM compilers, or LLVM-based compilers to target GPUs. And so we have a library called NVVM that will generate assembly code for the GPU from this extended LLVM IR. And we also open-sourced a version of this, and it's included in LLVM.
+在 LLVM 的底层中间表示中表达并行性，就像你在 CUDA 内核中所做的那样。这使得 LLVM 编译器或基于 LLVM 的编译器能够针对 GPU。所以我们有一个名为 NVVM 的库，它将从这种扩展的 LLVM IR 生成 GPU 的汇编代码。我们还开源了这个版本，它包含在 LLVM 中。
+
+89
+00:48:42.000 --> 00:49:11.000
+And so that has enabled a number of developers, such as Continuum Analytics, such as PGI, such as others, even Google, to target GPUs much easier and to build tools, language tools for them. Cool. So if you're a student just starting out and you want to kind of get something up and running that's really cool like you want to you know in a day or in a week you want to go from you know
+这使得许多开发者，例如 Continuum Analytics、PGI 等，甚至谷歌，能够更容易地针对 GPU 并为它们构建工具、语言工具。酷。所以如果你是一个刚起步的学生，你想运行一些非常酷的东西，比如你想在一天或一周内从
+
+90
+00:49:11.000 --> 00:50:05.000
+you know intro to cuda to having something kind of really cool that you could show your friends what would you recommend like is there a cool demo that you recommend or a site that has a cool, like, for Ruby, there's the Rails for Zombies, where you end up with this, like, Twitter-like website that you could show off. Is there something like that for CUDA? Yeah, so we should do a CUDA for Zombies or something like that. What I would recommend for people who specifically want to learn CUDA programming, CUDA C++, is check out, there's a Udacity course. It's actually almost a couple years old now, but it would still be relevant. And I think it's called Programming Massively Parallel Programming or something like that. I'm sure it's I'll look it up for you while you keep talking. Parallel programming or something like that. I'm sure to parallel programming.
+CUDA 入门到拥有一些你可以向朋友展示的真正酷的东西，你会推荐什么？有没有什么酷的演示，或者有一个很酷的网站？比如对于 Ruby，有 Rails for Zombies，最后你会得到一个类似 Twitter 的网站，你可以炫耀一下。CUDA 有类似的东西吗？是的，所以我们应该做一个 CUDA for Zombies 之类的东西。对于那些专门想学习 CUDA 编程、CUDA C++ 的人，我推荐去看看 Udacity 的一门课程。它实际上已经有几年了，但仍然相关。我想它叫“大规模并行编程”之类的。我确定它是……我会在你继续说话时为你查一下。并行编程之类的。我确定是并行编程。
+
+91
+00:50:05.000 --> 00:50:29.000
+Yeah, look it up. The instructors are Dave and – that might be it. The instructors are Dave Lubke, who heads up graphics research at NVIDIA, and John Owen and Steve Davis. Cool. Yeah, well, definitely. Yeah, that would be awesome. We actually talked to some guys.
+是的，查一下。讲师是 Dave 和……那可能是它。讲师是 Dave Lubke，他负责 NVIDIA 的图形研究，还有 John Owen 和 Steve Davis。酷。是的，好吧，肯定。是的，那太棒了。我们实际上和一些人谈过。
+
+92
+00:50:29.000 --> 00:50:47.000
+And a lot of Udacity courses. It's a great kind of... We talked to some folks at Udacity, and there's a show on Udacity for people who don't know what that is, but it's a great platform for learning almost anything technical. And now they're getting into other areas, too.
+还有很多 Udacity 课程。这是一个很好的……我们和 Udacity 的一些人谈过，对于不知道那是什么的人来说，Udacity 上有一个节目，但它是一个学习几乎任何技术内容的绝佳平台。现在他们也进入了其他领域。
+
+93
+00:50:47.000 --> 00:51:20.000
+So there's an Udacity course on CUDA that all of you should check out. Yeah. Yeah, yeah, definitely. Cool. And, you know, if you don't want to, if you're not a C programmer, for example, if you want to use GPUs if you're not a c programmer for example if you want to use gpus but you're not a c programmer um you guys already mentioned the the tools some of the tools that are available for python so um theano and tensorflow so i would say for python programmers they should check those out and there's a number of tutorials for those theano has a bit of a learning curve i
+所以有一门关于 CUDA 的 Udacity 课程，你们都应该去看看。是的。是的，肯定。酷。而且，你知道，如果你不想，如果你不是 C 程序员，例如，如果你想使用 GPU，但你不是 C 程序员，嗯，你们已经提到了 Python 可用的一些工具，所以……Theano 和 TensorFlow，所以我建议 Python 程序员应该去看看这些，并且有很多教程。Theano 有点学习曲线，我
+
+94
+00:51:20.000 --> 00:51:44.000
+think but um yeah i would definitely agree. Yeah, Theano is difficult. TensorFlow, there's a lot of awesome documentation. I haven't played with it enough yet, but it looks very solid. Okay. And then Numba is the other one. But one thing I also want to mention is the SDK. So the compute SDK,
+认为，但……是的，我绝对同意。是的，Theano 很难。TensorFlow 有很多很棒的文档。我还没玩够，但它看起来非常扎实。好的。然后 Numba 是另一个。但我还想提的一件事是 SDK。所以计算 SDK，
+
+95
+00:51:44.000 --> 00:52:32.000
+I think we're calling it compute works SDK because we have a whole bunch of other works SDKs at NVIDIA, includes the CUDA toolkit. And the CUDA toolkit has a whole bunch of samples, like tons of samples. And they're nicely grouped into categories including you know one of the categories is called simple you know so so you can look at people like me yeah so in board it's not necessarily because they're you know they're easy but because they do simple things but you know so you can you start with those and there's there's cooler demos too in there if you want to do something fun there's there's um in the simulation category there's one that that i co-wrote with um with a guy called larson island that's uh n body um which
+我想我们称之为 compute works SDK，因为我们在 NVIDIA 有很多其他的 works SDK，它包括 CUDA 工具包。CUDA 工具包有很多示例，比如大量的示例。它们被很好地归类，包括……你知道，其中一个类别叫 simple，所以……所以你可以看看像我这样的人，是的，所以 board 不一定是因为它们容易，而是因为它们做简单的事情，但你知道，所以你可以从那些开始，那里也有更酷的演示，如果你想做一些有趣的事情，在模拟类别中有一个我与一个叫 Larson Island 的人合写的，是 n-body，它
+
+96
+00:52:32.000 --> 00:52:56.000
+gets used to demonstrate gpus a lot basically it's um simulating gravitational interactions of of stars effectively um so uh it basically does this all pairs computation of gravity between the stars and it runs really fast on GPUs and you can get really cool visuals out of it it's got an OpenGL renderer that sounds awesome yeah it's fun to play with
+经常被用来演示 GPU，基本上它是模拟恒星的引力相互作用，实际上……所以它基本上在恒星之间进行这种全对引力计算，它在 GPU 上运行得非常快，你可以从中得到非常酷的视觉效果。它有一个 OpenGL 渲染器，听起来很棒。是的，玩起来很有趣。
+
+97
+00:52:56.000 --> 00:53:19.000
+and then there's another one that's fun to play with I think it's called Particles that a former colleague of mine wrote and it is a really cool demo with all these balls in a box, and you can just bash them around and they collide, you know, so they don't pass through each other. And that's all done using CUDA. And then there's one, I think there's a smoke particles one
+然后还有另一个玩起来很有趣的，我想它叫 Particles，是我以前的一个同事写的，这是一个非常酷的演示，盒子里有所有这些球，你可以把它们撞来撞去，它们会碰撞，你知道，所以它们不会穿过彼此。这都是使用 CUDA 完成的。然后有一个，我想有一个烟雾粒子演示，
+
+98
+00:53:19.000 --> 00:53:52.000
+that does smoke simulation. Actually, I'm not sure. It's just doing particle simulation but it's rendering it to look like smoke with light scattering and stuff so cool um so yeah yeah so so what is tell us kind of what a day at nvidia is like uh and i know in your case here jason before we transition to that because everybody out there is probably thinking this because I still am, you wanted us to remind you to talk about unified memory. Oh, yeah, we should do that before we do. Right.
+它做烟雾模拟。实际上，我不确定。它只是在做粒子模拟，但它渲染出来看起来像带有光散射等的烟雾，太酷了。嗯，所以……是的，那么告诉我们 NVIDIA 的一天是什么样的？我知道在你的情况下，杰森，在我们过渡到那个之前，因为外面的每个人可能都在想这个，因为我仍然在想，你希望我们提醒你谈谈统一内存。哦，是的，我们在那之前应该做那个。对。
+
+99
+00:53:52.000 --> 00:54:22.000
+So I should have talked about that when I was talking about the heterogeneous processors. Yeah, that was my fault. I didn't want to cut anyone off. is a feature of the CUDA programming model that we introduced in CUDA 6 a couple years ago and that we're, with the Pascal architecture, we're enhancing it a lot. So the idea is, I mentioned that you have to explicitly transfer data from the GPU to the CPU. And it would be nice if that weren't the case.
+所以我应该在我谈论异构处理器时谈论那个。是的，那是我的错。我不想打断任何人。是 CUDA 编程模型的一个特性，我们在几年前的 CUDA 6 中引入了它，并且随着 Pascal 架构，我们正在对其进行大量增强。所以想法是，我提到你必须显式地将数据从 GPU 传输到 CPU。如果不是这样就好了。
+
+100
+00:54:22.000 --> 00:54:58.000
+It would be nice if you could just allocate data and then the GPU and the CPU could use it. And then behind the scenes, maybe, it would get migrated on demand to the processor that needs it. And that's what unified memory is. So unified memory in CUDA 6 was basically software, which does page migration between the GPU and the CPU. So if you're familiar with virtual memory, you have pages, and when the CPU needs to access data that's in a page that possibly is not in memory, it's on disk, then it does a page fault.
+如果能直接分配数据，然后 GPU 和 CPU 都能使用它就好了。然后在幕后，也许它会按需迁移到需要它的处理器上。这就是统一内存。所以 CUDA 6 中的统一内存基本上是软件，它在 GPU 和 CPU 之间进行页面迁移。所以如果你熟悉虚拟内存，你有页面，当 CPU 需要访问可能不在内存中、在磁盘上的页面中的数据时，它会发生页面错误。
+
+101
+00:54:58.000 --> 00:55:18.000
+It faults on that memory, and then a fault handler runs, and it actually loads the data into memory, and then the CPU can proceed with accessing it. Well, before Pascal, GPUs didn't have the ability to page fault. But we kind of, you know, looking forward to GPUs that did, we built unified memory
+它在该内存上出错，然后错误处理程序运行，它实际上将数据加载到内存中，然后 CPU 可以继续访问它。嗯，在 Pascal 之前，GPU 没有页面错误的能力。但我们有点，你知道，期待有这种能力的 GPU，我们构建了统一内存，
+
+102
+00:55:18.000 --> 00:55:57.000
+so that you can still access memory from both the CPU and the GPU and it gets migrated at the page level automatically. With Pascal, because we can page fault, that means that you can just allocate data with CUDA malloc managed, it's called, and then when the CPU touches a page, that page will get faulted back to the CPU. When the GPU touches a page, it'll get faulted to the GPU. And while that may sound expensive, often those page faults are hideable. As I was talking about latency hiding, you just hide that with other work.
+这样你仍然可以从 CPU 和 GPU 访问内存，并且它会在页面级别自动迁移。有了 Pascal，因为我们可以页面错误，这意味着你可以直接用 CUDA malloc managed 分配数据，它叫这个，然后当 CPU 触碰一个页面时，该页面会被错误回传给 CPU。当 GPU 触碰一个页面时，它会被错误传给 GPU。虽然这听起来很昂贵，但通常这些页面错误是可以隐藏的。正如我谈到的延迟隐藏，你只是用其他工作隐藏它。
+
+103
+00:55:57.000 --> 00:56:53.000
+And it enables other things once you have hardware support the the pascal gpus have the ability to access a 49-bit virtual address which is one bit larger than the cpu virtual address space which means that the gpu can access all its own memory as well as all the cpu memory and all the memory of any other gpu in the system it has enough virtual address space for that. And so that means you can have a single virtual memory space and the hardware just takes care of migrating the pages when, where they're needed. And with operating system support, that means that you can potentially support accessing memory, even if it's just allocated with the system allocator, in other words, malloc in C or new in C++, you can just allocate memory with malloc or new, pass that pointer to the GPU and access it,
+一旦你有硬件支持，它就能实现其他事情。Pascal GPU 有能力访问 49 位虚拟地址，这比 CPU 虚拟地址空间大 1 位，这意味着 GPU 可以访问它自己的所有内存以及 CPU 的所有内存和系统中任何其他 GPU 的所有内存，它有足够的虚拟地址空间来实现这一点。所以这意味着你可以拥有一个单一的虚拟内存空间，硬件只需在需要时负责迁移页面。有了操作系统支持，这意味着你可能支持访问内存，即使它只是用系统分配器分配的，换句话说，C 中的 malloc 或 C++ 中的 new，你可以直接用 malloc 或 new 分配内存，将该指针传递给 GPU 并访问它，
+
+104
+00:56:53.000 --> 00:57:20.000
+pass that pointer to another GPU and access it, use it on the CPU, et cetera, even accessing more memory than the physical memory because the operating system handles virtual memory and paging out to disk and things like that. So it's a big step for heterogeneous in terms of making it easier but also enabling you to process data sizes that you possibly couldn't before because they wouldn't fit in GPU memory.
+将该指针传递给另一个 GPU 并访问它，在 CPU 上使用它，等等，甚至访问比物理内存更多的内存，因为操作系统处理虚拟内存和磁盘分页等。所以对于异构来说，这是一个大步骤，不仅更容易，而且使你能够处理以前可能无法处理的数据大小，因为它们放不进 GPU 内存。
+
+105
+00:57:20.000 --> 00:57:52.000
+Gotcha. What I heard was magic. Yeah, right. It's like the magic eraser in Photoshop. It just works. But like what I just, it kind of ties into the whole LLVM thing where, you know, someone might just annotate a for loop and you want to send that to the GPU and you want that process to be as painless as possible. You don't want to have to inject a bunch of copy to the GPU commands into their code. Absolutely. It absolutely ties into that. I think you're referring to the directives like OpenACC.
+明白了。我听到的是魔法。是的，对。就像 Photoshop 中的魔术橡皮擦。它就是有效。但就像我刚才说的，它有点与整个 LLVM 东西联系在一起，你知道，有人可能只是注解一个 for 循环，你想把它发送到 GPU，你希望那个过程尽可能无痛。你不想不得不向他们的代码中注入一堆拷贝到 GPU 的命令。绝对。它绝对与此相关。我想你指的是像 OpenACC 这样的指令。
+
+106
+00:57:52.000 --> 00:58:08.000
+Right. And the PGI guys actually added a mode to the OpenACC compiler about a year ago that will automatically use unified memory behind the scenes. So in OpenACC, what you normally do is you have to, first you annotate your loop.
+对。PGI 的人实际上在大约一年前向 OpenACC 编译器添加了一个模式，它会在幕后自动使用统一内存。所以在 OpenACC 中，你通常做的是，首先你注解你的循环。
+
+107
+00:58:08.000 --> 00:58:37.000
+You say, oh, this loop is parallel. But then you find, oh, it's slower because the compiler doesn't know which data it needs, and so it just copies all the data over for that loop. And even if some of it's read-only, for example, from the GPU, or it's not accessed on the GPU. And so you can go deeper in OpenACC and use these data directives to annotate, oh, well, copy this now,
+你说，哦，这个循环是并行的。但然后你发现，哦，它变慢了，因为编译器不知道它需要哪些数据，所以它只是为那个循环拷贝了所有数据。即使其中一些是只读的，例如，从 GPU，或者它不在 GPU 上访问。所以你可以在 OpenACC 中深入使用这些数据指令来注解，哦，好吧，现在拷贝这个，
+
+108
+00:58:37.000 --> 00:58:59.000
+or put a read-only copy on the GPU, things like that. But with unified memory, you shouldn't have to do that. I mean, you always know more about your program than the compiler does. So you can always help with performance by adding more information like that. But that becomes an optimization rather than a requirement, right?
+或者在 GPU 上放置一个只读副本，诸如此类。但有了统一内存，你不应该那样做。我的意思是，你总是比编译器更了解你的程序。所以你可以通过添加更多这样的信息来帮助提高性能。但这变成了一种优化，而不是要求，对吧？
+
+109
+00:58:59.000 --> 00:59:34.000
+And yeah, so unified memory really ties into the kind of automatic offloading approach. Gotcha. That makes sense. That makes sense. So I know you work remotely, but sort of in general, what is sort of day-to-day like? We have a lot of people who are in high school, in college, a lot of listeners who are in college, and they want to know a lot about industry and what it's like to work in different industries. So what's sort of a typical day like at NVIDIA?
+是的，所以统一内存确实与那种自动卸载方法联系在一起。明白了。这很有道理。这很有道理。所以我知道你是远程工作的，但总的来说，日常工作是什么样的？我们有很多高中生、大学生，很多听众在大学里，他们想了解很多关于行业以及在不同行业工作是什么样的。所以 NVIDIA 的典型一天是什么样的？
+
+110
+00:59:34.000 --> 01:00:04.000
+Typical day at NVIDIA, well, I get out of bed, I sit down at my desk. So I'm probably not the best person to ask about the typical day at NVIDIA because I work remotely. Actually, maybe that's true. Maybe let's do this a little different. We ask this question to everyone we interview. But here, actually, let's ask what's it like to work remotely? Because that's something a lot of people probably aren't familiar with, actually. So working remotely is good, I think, for me.
+NVIDIA 的典型一天，嗯，我起床，坐在桌子前。所以我可能不是询问 NVIDIA 典型一天的最佳人选，因为我远程工作。实际上，也许那是真的。也许我们换个方式。我们问每个采访对象这个问题。但在这里，实际上，让我们问问远程工作是什么样的？因为那是很多人可能不熟悉的，实际上。所以远程工作对我来说很好，我想。
+
+111
+01:00:04.000 --> 01:00:41.000
+Because, well, it allows me to live where I want. I don't know if we mentioned on the recording, I live in Australia. My family is originally from the U.S., but I now have an Australian family. And at least for now, we're living here, and I live in a beautiful place up in the mountains, which I couldn't do in Silicon Valley or certainly couldn't afford to. So there's a downside. I mean, I'm remote. There's the obvious time zone issue.
+因为，嗯，它允许我住在我想住的地方。我不知道我们是否在录音中提到过，我住在澳大利亚。我的家人最初来自美国，但我现在有一个澳大利亚家庭。至少目前，我们住在这里，我住在山上一个美丽的地方，我在硅谷做不到，或者肯定负担不起。所以有一个缺点。我的意思是，我是远程的。有明显的时区问题。
+
+112
+01:00:41.000 --> 01:01:11.000
+The downside of being remote is that you don't get to go into the office and work with your team directly every day. So if I were to give advice to young people starting out, because I think you were aiming towards that, go work in the office, go to the headquarters if you're going to a big company. Unless you're working for a company that's distributed and that's the culture, and then you just have meetups and travel to meet each other now and then, then you really want to experience the company culture. And I did that at first. I actually worked in the UK.
+远程工作的缺点是你不能每天去办公室直接和你的团队一起工作。所以如果我要给刚起步的年轻人建议，因为我想你是指向那个，去办公室工作，如果你去大公司，去总部。除非你为一家分布式的公司工作，那是文化，然后你只是偶尔聚会和旅行去见彼此，否则你真的想体验公司文化。我起初就是那样做的。我实际上在英国工作过。
+
+113
+01:01:11.000 --> 01:01:34.000
+I'd already been an intern in the home office, but I worked in the UK for a while in an office. And it makes a difference in terms of building your team and getting to know people. So if you work remotely, you really have to work to overcome the barriers of being remote and make sure people know you're there. So I have a lot of one-on-one meetings on the phone with people
+我已经在总部实习过，但我有一段时间在英国的一个办公室工作。这在建立团队和了解人方面有很大不同。所以如果你远程工作，你真的必须努力克服远程的障碍，确保人们知道你在那里。所以我有很多和人们的电话一对一会议，
+
+114
+01:01:34.000 --> 01:02:10.000
+just so I'm staying in touch and staying in the loop and so I can do my work. Yeah, that makes sense. And then I travel. I go to the U. the US several times a year. But the time zone benefit, I guess, is that I get up in the morning and it's afternoon in California. And I have all my meetings early in the day, which is kind of a pain. They say you shouldn't start with meetings, but I have no choice. But after I'm done with my meetings, my whole afternoon is free to just focus on work. Whereas if you're in an
+只是为了保持联系和保持在循环中，这样我才能完成我的工作。是的，这很有道理。然后我旅行。我一年去美国几次。但时区的好处，我想是，我早上起床，加州是下午。我所有的会议都在一天早些时候，这有点痛苦。他们说你不应该从会议开始，但我别无选择。但在我开完会后，我的整个下午都是自由的，可以专注于工作。而如果你在
+
+115
+01:02:10.000 --> 01:02:51.000
+office and you're involved in a lot of different things that you end up getting called into tons of meetings and it gets hard to get large blocks of time. And so I think it's important for, especially in engineering, to have large blocks of time because you really do have to have time to think and work. Yeah, definitely. Yeah. I mean, I agree that it's for people just starting out, I wouldn't recommend being remote. But as in your case, once you know the team, there's a lot of companies that have a work from home day. Maybe on Wednesdays, everyone works from home or something like that. And in that case, it's okay.
+办公室，你参与了很多不同的事情，最终会被叫去参加大量的会议，很难获得大块的时间。所以我认为，特别是在工程领域，拥有大块的时间很重要，因为你确实需要时间去思考和工作。是的，肯定。是的。我的意思是，我同意对于刚起步的人来说，我不建议远程。但就像你的情况一样，一旦你了解了团队，有很多公司有在家工作日。也许在周三，每个人都在家工作之类的。在这种情况下，没关系。
+
+116
+01:02:51.000 --> 01:03:28.000
+You kind of work around that. Or even if you've been with a certain team for four, five, six years and then you move off site, you've built those relationships and you have those bonds. And then working from home can give you a lot of benefit. Thank you, Mark, so much for coming on the show. This is fascinating. Thank you. Yeah, all of us have benefited greatly from the work that you and other people at NVIDIA have done, both in ways for us to relax, play video games, and also in our day-to-day work,
+你有点绕过那个。或者即使你和某个团队在一起工作了四、五年、六年，然后你搬到异地，你已经建立了那些关系，有了那些纽带。然后在家工作可以给你带来很多好处。非常感谢 Mark 来到节目中。这太迷人了。谢谢。是的，我们所有人都从你和 NVIDIA 的其他人所做的工作中受益匪浅，无论是让我们放松、玩电子游戏的方式，还是在我们的日常工作中，
+
+117
+01:03:28.000 --> 01:04:14.000
+making it so we can accelerate our programs. And as a person who does a lot of AI stuff, it's gone from things taking months to things taking hours, and that's just amazing. And I know Patrick's done a lot of um sort of high performance computing and things like that himself so yeah cool cool thanks a lot and uh yeah we'll send the link to uh your blog your blog is parallel for all um so uh people listening go to uh um programmingthrowdown.com we'll have a link to that um and uh thank you again and we'll uh we'll wrap it up and uh thank you guys in the audience for uh
+使我们能够加速我们的程序。作为一个做很多 AI 工作的人，它已经从需要几个月的事情变成了需要几个小时的事情，这太神奇了。我知道帕特里克自己也做了很多高性能计算之类的事情，所以是的，酷，酷，非常感谢，而且，是的，我们会发送链接到你的博客，你的博客是 parallel for all，所以，听众们去 programmingthrowdown.com，我们会有链接到那个，而且，再次感谢，我们会结束它，而且，感谢观众中的你们，
+
+118
+01:04:14.000 --> 01:04:39.000
+for uh supporting us on patreon and the reviews and the comments feedback on social media all of that um yeah we really appreciate all of that. As you can tell, we've changed the format when we do interviews. People probably know this by now because we've done a few of them at this point. We'll do a programming language show next month.
+支持我们在 Patreon 上，以及评论和社交媒体上的反馈，所有这些……是的，我们非常感谢所有这些。如你所见，我们在做采访时改变了格式。人们现在可能已经知道了，因为我们到目前为止已经做了几个。我们下个月会做一个编程语言节目。
+
+119
+01:04:39.000 --> 01:05:00.000
+But we've just had some absolutely amazing people like Mark reach out to us. So we definitely wanted to do this interview. And I hope you guys appreciate it. The intro music is Axo by Binar Pilot. Programming Throwdown is distributed under a Creative Commons Attribution Sharealike 2.0 license.
+但我们确实有一些绝对了不起的人像 Mark 一样联系我们。所以我们绝对想做这次采访。我希望你们喜欢。开场音乐是 Binar Pilot 的 Axo。Programming Throwdown 在知识共享署名-相同方式共享 2.0 许可下分发。
+
+120
+01:05:00.000 --> 01:05:05.000
+You're free to share, copy, distribute, transmit the work, to remix and adapt the work, but you must provide attribution to Patrick and I and share alike in kind. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+你可以自由分享、复制、分发、传输作品，进行重混和改编，但你必须注明我和帕特里克的署名，并以相同方式共享。这一集还没有评论。点击转录中的任何句子来发表评论。
