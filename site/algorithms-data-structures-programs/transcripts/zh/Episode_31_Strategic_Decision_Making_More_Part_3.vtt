@@ -1,0 +1,216 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:42.000
+There's an episode of the TV show Futurama where the protagonists discover that cats are actually aliens, conquering aliens that have come from another planet and conquered humanity into caring for them. Welcome to ADSP, the podcast episode 31 recorded on June 5th, 2021. My name is Connor. And today with my co-host Bryce, we continue part three of our four-part conversation with Chandler Carruth and Patricia Oss. On today's episode, we talk about strategic decision-making, how to disagree, and so much more.
+有一集电视剧《飞出个未来》，主角们发现猫其实是外星人，它们是来征服外星的，并让人类心甘情愿地照顾它们。欢迎来到 ADSP 播客，这是于 2021 年 6 月 5 日录制的第 31 期节目。我是康纳。今天我和共同主持人布赖斯一起，继续我们与钱德勒·卡鲁思和帕特里夏·奥斯的四部分对话的第三部分。在今天的节目中，我们讨论了战略决策、如何产生分歧等等内容。
+
+2
+00:00:42.000 --> 00:01:41.000
+If you haven't listened to parts one and two, they will be linked in the show notes. I highly recommend you listen to those ones first, as this is a continuation of that conversation. So I'm just curious, should we try and get one of the points here is, is not overcoming resistance to a directional change. Yeah. What does that mean? Like, can you give, put that in an example, explain how you would go about that? Yeah. I mean, I think this is, so, so first off, let's, let's, let's make sure we understand what we're talking about. We're talking about times when there's, you know, there's there's a strategic decision or a directional decision that needs to happen. And you have you're suggesting and you are proposing a particular direction.
+如果你还没有听过第一部分和第二部分，它们会链接在节目文稿中。我强烈建议你先听前两部分，因为这是那场对话的延续。所以我很好奇，我们是否应该努力把其中一个观点弄明白，那就是——不克服对方向转变的阻力。是的。那是什么意思？比如说，你能举个例子，解释一下你会怎么做吗？好的。我的意思是，我认为这是，所以，首先，让我们，让我们，让我们确保我们明白我们在谈论什么。我们在谈论需要做出战略决策或方向性决策的时候。而你建议并提出了一个特定的方向。
+
+3
+00:01:41.000 --> 00:02:40.000
+And that is not the direction taken right and you still need to like you need to like we're in the kind of disagree and commit phase but it's not about like doing a single thing it's about like a very large scale directional shift and and i've seen this a couple of times and i've i've had this happen to me a couple of times um so the particular like one of the particular sharp examples here is there's a technology that I do not personally kind of like. It doesn't seem elegant to me. And it's called ThinLTO. This is a variation of link time optimization developed by Teresa Jackson and David Lee and a bunch of other people at Google. And personally, I don't like the way it works.
+而那不是所采取的方向，对吧？你仍然需要，就像我们需要进入“不同意并承诺”的阶段，但这不仅仅是做一件单一的事情，而是关于一个非常大规模的方向转变。我见过好几次这种情况，我自己也经历过好几次，嗯。其中一个特别尖锐的例子是，有一种技术我个人其实不太喜欢。它对我来说看起来不够优雅。它被称为 ThinLTO。这是由特蕾莎·杰克逊、大卫·李以及谷歌的其他许多人开发的一种链接时间优化变体。就我个人而言，我不喜欢它的工作原理。
+
+4
+00:02:40.000 --> 00:03:19.000
+It seems like a messy workaround. And so I advocated really hard that we should actually invest in understanding why. But the goal of it is to make link time optimization scalable enough to use broadly on very, very large C++ applications, huge C++ applications. And LTO normally, as it normally is, just doesn't scale very well. And so you can't use it for these applications. And thin LTO scales very well. I had argued that we should actually try and tackle the underlying scaling issues of LTO rather than taking the thin LTO approach. I thought it was much more clean.
+它看起来像是一个混乱的权宜之计。因此，我竭力主张我们应该去投资了解原因。但它的目标是使链接时间优化具有足够的扩展性，以便广泛用于非常非常大的 C++ 应用程序、巨大的 C++ 应用程序。而 LTO 通常来说，扩展性其实不是很好。所以你不能将它用于这些应用程序。而 ThinLTO 的扩展性非常好。我曾争辩说，我们应该尝试解决 LTO 底层扩展性问题，而不是采用 ThinLTO 的方法。我认为那样要干净得多。
+
+5
+00:03:19.000 --> 00:03:44.000
+I think there's a lot of really exciting untapped potential in that space. Basically, every link time optimizing compiler that we had access to, which was basically one and a half LLVMs and some early stage work in GCC at the time, was single threaded, right? And built around link lists. And so like has the worst cache locality you can imagine.
+我认为那个领域有大量非常令人兴奋的、未被开发的潜力。基本上，我们能够接触到的每一个链接时间优化编译器——当时基本上是一个半 LLVM 和一些 GCC 的早期工作——都是单线程的，对吧？而且是围绕链表构建的。所以它拥有你能想象到的最差的缓存局部性。
+
+6
+00:03:44.000 --> 00:04:34.000
+And so it doesn't scale well, which is kind of unsurprising. And I was like, we need to fix those problems before we try and kind of change the fundamental model to make it scale. But Teresa and David had a great idea for how to change the fundamental model. And it didn't require changing all of the internals of the compiler it didn't require you know making things you know multi-threaded and efficient all this stuff and it still scales and the decision was to basically go with their approach it was it was and at the time I really disagreed with this I thought this was was just the wrong thing to do. And it was kind of hard because, right, like I had to help them out.
+因此它扩展性不好，这其实并不令人意外。当时我就觉得，在我们试图改变基础模型来使其具有扩展性之前，我们需要解决这些问题。但特蕾莎和大卫对如何改变基础模型有一个极好的想法。它不需要改变编译器的所有内部结构，不需要让事情变得多线程且高效等等，而且它仍然具有扩展性。最后的决定基本上是采用他们的方法。在当时，我真的很不赞同这一点，我认为这绝对是错误的做法。这有点困难，因为，对吧？我必须帮助他们。
+
+7
+00:04:34.000 --> 00:05:37.000
+I was bringing up LLVM at Google, having brought up Clang as the front end. I was bringing up kind of the LLVM backend for actual compilation. And they were working on thin LTO and needed my support in LLVM. And that was hard for me. I struggled at first. And largely, I think finally, we got to a much better place where I found ways that I could kind of contribute to enabling them, rather than kind of getting in their way. But it was difficult. And the funny thing is that, like, in retrospect, right, like, if today me got past me and Teresa and David Lee's kind of different proposals, I would absolutely pick thin LTO. So as much as it's less elegant, it's also dramatically less risky. And at the time, I felt like I really didn't see this risk that was associated with the direction I was pushing for. But in retrospect, it actually makes a lot more sense why we ended up going that direction. I
+我在谷歌推广 LLVM，此前已经推广了作为前端的 Clang。我当时在推广用于实际编译的 LLVM 后端。而他们正在开发 ThinLTO，需要在 LLVM 中得到我的支持。这对我来说很难。一开始我很挣扎。很大程度上，我认为最终我们达到了一个好得多的境地，我找到了能够为他们提供赋能而不是阻碍他们的方法。但这很困难。有趣的是，回想起来，对吧？如果今天的我遇到了过去的我、特蕾莎和大卫·李的不同提议，我绝对会选择 ThinLTO。所以尽管它不那么优雅，但它的风险也大大降低了。而在当时，我觉得自己真的没有看到与我所推动的方向相关的风险。但回想起来，我们最终会走向那个方向其实更有道理。我
+
+8
+00:05:37.000 --> 00:06:05.000
+think it was the right call, even though personally, it felt really like, oh, this is a good technology. And it also worked. And for me, the biggest part of this kind of disagreeing and committing at the strategic level was, you know, I had a loud voice in the Olivium community. And it was important to actually acknowledge, like, this is working. And to do that very loudly. And so, you know, making sure, like, Teresa could get up on a panel to talk about LTO. So I got invited to a panel. I was like, you should probably also bring Teresa up
+认为这是一个正确的决定，尽管就我个人而言，感觉真的很像：“哦，这是一项好技术。”而且它也确实成功了。对我来说，在战略层面上这种“不同意并承诺”的最大部分是，你知道，我在 LLVM 社区中很有话语权。承认这一点很重要，比如：这正在起作用。而且要很大声地表达出来。因此，你知道，要确保，比如特蕾莎可以上台谈论 LTO。所以我被邀请参加一个小组讨论。我说：你大概也应该带上特蕾莎，
+
+9
+00:06:05.000 --> 00:06:19.000
+because like, you know, I advocated for a different strategy of LTO and hers is the one that actually got built. So maybe we should not, right? Like, and doing that is, you know, it can feel bad, but that's the important part
+因为，你知道的，我曾倡导过一种不同的 LTO 策略，而她的策略才是真正被构建出来的。所以也许我们不应该……对吧？这样做，你知道的，可能会感觉不好，但这是重要的一部分
+
+10
+00:06:19.000 --> 00:06:36.000
+of kind of disagreeing, committing at a strategic level is that you actually have to own, you actually have to own the strategy at the end of it. And because it's a strategic thing, right, it's not just like you're going to let the patch go in, right? You have to contribute to the new strategy, right? You have to help debug things.
+——在战略层面上做到“不同意并承诺”，意味着你最终必须对这一战略负责。因为这是一个战略性的事情，对吧？它不仅仅是让一个补丁通过那么简单，对吧？你必须为新策略做出贡献，对吧？你必须帮助调试问题。
+
+11
+00:06:36.000 --> 00:07:05.000
+You have to help with the planning. You have to, like, figure out how the piece of, you know, LVM that I'm working on can actually work with the thin LTO strategy, how to integrate this stuff. And you have to pull yourself on board with that, even if it feels like the wrong strategy. But your negativity towards the concept probably spread to people around you as well. Because we are tribal are oh i'm sure you know we
+你必须协助规划。你必须弄清楚我正在开发的 LLVM 的那一部分如何才能真正与 ThinLTO 策略协同工作，如何整合这些东西。即使感觉这是错误的策略，你也必须让自己参与其中。但你对这个概念的消极态度可能也传染给了你周围的人。因为我们有部落属性，哦，我确信，你知道，我们
+
+12
+00:07:05.000 --> 00:07:55.000
+are tribal in in in how we work we are in our groups in it and oh of course so did that cause any friction but when you were trying to to i'm sure i'm sure it did and like i can remember specific places where it did because there were people people who really thought I was right and I should have been able to make this decision. And one of the interesting things, and again, this is a great observation, because when you want to actually overcome this kind of having a direction that you don't agree with being decided on. You actually have to undo that negativity. You can't prevent it. Like, there's no hope, right? People are going to, as you said, this is a natural thing. But you have to figure out how do you undo that.
+在工作方式上有部落属性，我们在自己的群体中也是如此。哦，当然。所以这有没有引起任何摩擦？当你试图去……我确信肯定有。我能记起它引发摩擦的具体地方。因为有些人真的认为我是对的，而且我本应该能够做出这个决定。有趣的事情之一是——这也是一个很好的观察结果——当你想要真正克服这种“你并不同意却被定夺的方向”时。你实际上必须消除这种消极情绪。你无法阻止它。是的，毫无希望，对吧？正如你所说，人们会有这种反应，这是一件很自然的事情。但你必须弄清楚如何去消除它。
+
+13
+00:07:55.000 --> 00:08:18.000
+And one of the ways that you undo that, for example, is by going and doing the work, right? Do the groundwork, the dirty, grungy work to actually help out the direction you didn't want and let people see that because that helps people then understand that like, oh, okay If Chandler's okay with it then I guess it's okay Right, like
+而消除这种情绪的方法之一，比如，就是去付诸行动，对吧？做基础工作，做那些粗脏的底层工作来真正支持那个你不想要的方针，让人们看到这一点。因为这能帮助人们理解：“哦，好吧，既然钱德勒觉得没问题，那我想这就没问题。”对吧？
+
+14
+00:08:18.000 --> 00:08:38.000
+and you have to be an active participant in kind of undoing the tribal stuff There will be people who will feel an intense loyalty to you. And so therefore, yeah. I also want to be clear. I don't think I handled this particular case perfectly. Part of why I'm bringing this one up is that this one is probably one of the rougher cases.
+你必须积极参与消除部落化情绪的工作。总会有一些人对你怀有强烈的忠诚度。所以因此，是的。我也想澄清一点。我不认为我完美地处理了这个特定案例。我提出这个案例的部分原因在于，这可能是比较棘手的案例之一。
+
+15
+00:08:38.000 --> 00:09:00.000
+And I think there's still kind of ruffled feathers and it still is difficult for people who are on different sides of this to kind of work effectively. And we all lose as a consequence, right? Like, that's not a good outcome. Is there a way that you could have handled it differently that could have maybe given a better result?
+而且我认为仍然存在一些不愉快的情绪，对于处于不同立场的人来说，有效合作仍然很困难。结果就是我们所有人都输了，对吧？这可不是一个好结果。有没有什么办法可以让你用不同的方式处理它，从而可能带来更好的结果？
+
+16
+00:09:00.000 --> 00:09:41.000
+I should have been much more vocal earlier. So there was a lot of lag time between kind of the decision getting made and when I was able to kind of you know do some of this legwork to support it um and I think that really uh amplified a lot of the problems um and what would have been better would have been to have kind of very immediate like decision made and immediately show signs of like helping implement the new decision um but but for me like when i i read these things it seems it seems like an upward thing towards management that i have to get on
+我本应该更早地直言不讳。因此，在决定做出之后，到我能够做一些基础工作来支持它之间，存在着大量的滞后时间，嗯，我认为这确实放大了许多问题。如果能做到以下这点会更好：决策一经做出，就立即表现出支持实施新决策的迹象。但是对我来说，当我读到这些东西时，它似乎是一种向上管理的东西——我必须接受这件事，
+
+17
+00:09:41.000 --> 00:10:28.000
+board with this thing uh because the decision has been made and and you know so that the management or whoever's above me will see that I'm a team player but and and that doesn't resound much with me but but what you're saying is more that I need to show these people who are loyal to me and who respect me that you know I'm okay with this and we should be okay with this together and we should you know yeah that makes much more sense to me and it's it's wild the effects this has like like this this you know uh that delay which i i still really regret to this day um uh right it hurt team morale right it caused you know parts the team to drift apart right how many missed opportunities were there because we let this friction – and I say we let because I was part of this, right?
+因为决定已经做出了，你知道的，这样管理层或我之上的任何人都能看到我是一个团队合作者。但这并没有引起我太多的共鸣。而你所说的是，我更需要向那些对我忠诚、尊重我的人展示，你知道的，我对这事没意见，我们应该一起对这事没意见，我们应该……是的，这对我来说更有意义。而且它产生的影响真是太疯狂了，像这种……这种延误，我至今仍深感遗憾，嗯……对吧，它损害了团队士气，对吧？它导致团队的某些部分分崩离析，对吧？由于我们放任这种摩擦滋生——我说“我们”放任，是因为我也是其中的一部分，对吧？
+
+18
+00:10:28.000 --> 00:10:59.000
+We let this friction develop. And it's got to be a lot. And that's, you know, it's a regret. There's a – a part of my soul is sad that I'm bringing this up. But it is a good leadership principle. So there's – at Amazon, there's these 14 LPs, which stands for leadership principles. And Amazon is famous for, you know, really promoting these across culture and whatnot. And one of them is disagree and commit. And it's actually, it's actually a pretty good one. Some of them I don't, I don't agree with all 14 of them. But this one, it's basically like, there's going
+我们放任这种摩擦滋生，错过了多少机会？那肯定有很多。这是一个遗憾。我的心灵深处有一部分在提起这件事时感到难过。但这是一个很好的领导力原则。因此，亚马逊有这 14 条 LP，代表领导力原则（Leadership Principles）。亚马逊以在整个文化中大力推广这些原则而闻名。其中一条就是“不同意并承诺”（disagree and commit）。实际上，这其实是一条相当不错的原则。有些原则我并不完全认同，我并不赞同全部 14 条。但这一条，基本上就是：总会
+
+19
+00:10:59.000 --> 00:11:29.000
+to be times where there's different directions that you can go, either technically or strategically. And they're really big on data-driven design and stuff like that at Amazon. But at a certain point, a decision has to be made. And basically, the LP talks about how once that decision is made, you can say, I don't agree with this decision. I think it's, I prefer this one, but we're going with this one. And once that decision is made, it's supposed supposed to be like, everyone's, everyone's on board with
+有这样的时候，无论是在技术上还是战略上，你们可以选择不同的方向。亚马逊非常崇尚数据驱动的设计之类的东西。但在某个时刻，必须做出一个决定。基本上，LP 谈到的是，一旦做出那个决定，你可以说：“我不赞同这个决定。我认为这个……我更喜欢那个，但我们要走这一条。”而一旦做出了那个决定，它本该意味着每个人都支持
+
+20
+00:11:29.000 --> 00:12:15.000
+it, commits to it, and they're going to make that successful and work. And, and there's an opportunity to sort of state that, like, I don't agree with this final decision. But once that's, that decision is made, it's, it's time to, you know, go forward. And yeah,, yeah, it's, it's definitely not easy, but like having that as an LP at a company, like as, as a sort of a tenant, like I definitely have worked at companies where those disagreements happen and then they just sort of like, they just linger. And, um, it's not even clear, like, uh, you know, how do we come to the decision? And so they just sort of, it goes on and on and on. And it's, I think it's a great sort of tenet to have that, like, you know, there's inevitably at any company, there's going to be disagreements. But at a certain point, you just got to pull the trigger.
+它，致力于它，并努力让它取得成功和奏效。并且有机会表明，比如：“我不同意这最后的决定。”但一旦决定做出了，就是时候向前推进了。是的，这绝对不容易。但把这作为公司的一条 LP，作为一个信条——我确实在一些公司工作过，在这些公司里，发生分歧之后，那些分歧就会一直挥之不去，而且甚至不清楚，你知道的，我们是怎么做出决定的？所以它们就会没完没了地持续下去。我认为这是一个很好的信条，即：在任何公司，分歧都不可避免地会出现。但在某个时刻，你就是得扣动扳机。
+
+21
+00:12:15.000 --> 00:12:59.000
+And everyone's got to contribute to that direction at that point. And, you know, maybe a year down the road, you'll figure out it wasn't the right decision. And you can reassess at that point. But for that year, when you're getting to that point, it doesn't help to have only 50% of the team that believes that that was the right decision to be really all cylinders ahead on it or have 50% not all cylinders ahead. That's not helpful. You're going to realize the decision was the wrong one if it was the wrong one faster if everyone is just helping out and i want to be very clear about something i having a tenant is important but taking it back to patricia right the questions like like for interviewing someone in a leadership role
+到了那个地步，每个人都必须为那个方向贡献力量。或许一年之后，你会发现这不是个正确的决定。你可以在那个时候重新评估。但在走向那一年的过程中，只有 50% 的团队相信那是正确的决定，并为此开足马力，而另外 50% 的人没有开足马力，这毫无帮助。这毫无帮助。如果这真的是个错误的决定，大家都在全力帮忙的话，你会更快地意识到这一点。我想明确一件事：拥有一个信条很重要，但回到帕特里夏刚才的话，像面试担任领导角色的人时，
+
+22
+00:12:59.000 --> 00:13:49.000
+the the particular key thing here is that people in this world need to really show that they are operating by that tenant. And that's even more important than the tenant itself. We have the tenant at Google and it still happens because whenever there's a leader that isn't showing they're going to live by this tenant, it starts to cause like it starts that entrenchment and that i i think we are i think it's a lot about the human condition we are often very proud people and we also have lots of loyalty and and having these things will make it difficult to say okay i lost and also i'm not only okay with losing but I'm enthusiastically on board with you. Yeah, it's really hard. It's a great way of putting it.
+这里一个特别的关键点是，这个世界上的这些人需要真正展示他们是在按这个信条行事。这比信条本身还要重要。我们在谷歌有这个信条，但这种情况仍然会发生，因为每当有领导者没有表现出他们会恪守这个信条时，它就会开始导致这种根深蒂固的对抗。我认为这在很大程度上与人类的境况有关。我们通常是非常骄傲的人，我们也有很强的忠诚度，而拥有这些东西会让人很难说：“好吧，我输了。而且我不但接受失败，我还热情洋溢地支持你们。”是的，这真的很难。这个说法太棒了。
+
+23
+00:13:49.000 --> 00:14:43.000
+So some techniques that I've been trying to practice to help me overcome that human reluctance is to change the kind of frame of mind of what my goal is. I'm not usually a huge fan of corporate trainings, right? Sometimes they're real questionable. But there's one corporate training that I really love. Even though most of it's garbage, it has this one catchphrase that I keep coming back to, which is, you know, what do you really, really want? And then they clarify, no, no, no. What is the one thing that you really want? Like, you must choose one thing and focus on that. And when you apply that here, the interesting thing you get to is what you really want is a decision.
+所以我一直在尝试实践一些技巧来帮助自己克服这种人类天生的抗拒，那就是改变我目标的心态框架。我通常不是很喜欢企业培训，对吧？有时它们真的很可疑。但有一个企业培训我是真的很喜欢。尽管大部分内容都是垃圾，但它有一个我总是回想起的流行语，那就是：“你真正、真正想要的是什么？”然后他们会澄清：“不，不，不。你真正想要的那件事是什么？你必须选择一件事并专注于此。”当你把它应用到这里时，你会得到的有趣结论是：你真正想要的是一个决定。
+
+24
+00:14:43.000 --> 00:15:25.000
+Not your decision, but a decision not your decision but a decision and so by focusing on the fact that you've made a decision you're making progress you basically channel your enthusiasm for progress as proxy for the enthusiasm of the decision you don't particularly like right and this this kind of lets you get yourself enthusiastic yeah and then apply it to something that you're not super enthusiastic about because okay so get a proxy realize yeah yeah and it's all about picking well what do you really want do you want your decision or do you want to have a decision because you can't always have both so you have to pick which one you care about most once you do that it's much easier to
+不是你想要的决定，而是一个决定。不是你想要的决定，而是一个决定。因此，通过专注于“已经做出了一个决定”这一事实，你就是在取得进展。你基本上把对进展的热情，转化为对那个你并不特别喜欢的决定的热情的替代品。而这种方法能让你让自己充满热情。是的，然后把它应用到你并不是超级热情的某件事上。所以，找一个替代品，意识到……是的，是的。这一切都在于选择：你真正想要什么？你是想要你的决定，还是想要有一个决定？因为你不可能两者兼得，所以你必须选择你最关心哪一个。一旦你做到了这一点，要对“没有采用你的决定”感到热情就会容易得多。因为那不是你热情的所在，你热情的所在是推动决策通过、获得一个决定、让人们开始朝着某个方向前进，对吧？嗯，这对我来说真的很有帮助，部分原因是我注意到了一件事。
+
+25
+00:15:25.000 --> 00:16:14.000
+be enthusiastic about not having your decision because that's not what you're enthusiastic about you're enthusiastic about making it through the decision getting a decision making people like start moving on in some direction right um and and this for me was really helpful in part because i noticed something. And a manager of mine, you know, years and years ago told me this. And I didn't get it. It didn't make sense at the time. But he pointed out that it is much cheaper in so many cases to let people make the decision they want to make than to convince them to make the decision you think is right.
+多年前，我的一个经理告诉我这件事。当时我没懂。当时觉得毫无道理。但他指出，在很多情况下，让人们做出他们想做的决定，要比说服他们做出你认为正确的决定便宜得多。
+
+26
+00:16:14.000 --> 00:17:18.000
+And then, to your point, Connor, eventually, if it is wrong, they'll figure it out. It can be so much cheaper to let people make a bad decision and then learn what the right decision is than to try and prevent them from making a mistake, or trying to avoid the wrong decision just just make the bad decision it'll be totally fine we'll figure it out later um and that can be so much lower cost um especially at larger scales i i yeah yeah i well i have a baby example from when i was like a super junior um i was at opera and we we were working on the desktop browser and we had this guy who was basically, I don't know, I guess in retrospect, I would say he was like sort of like a creative genius, but he was also a coder. And so he had created all sorts of things. And so basically a lot of what was opera was basically his brainchild um and so and then he comes and he was like he has this brilliant idea in his like his opinion is brilliant and all of these people that you know worked with him for a long time they you know he was like super here they were like
+然后，正如你所说，康纳，如果这个决定最终是错的，他们会自己发现的。让人们做出一个错误的决定，然后去了解什么是正确的决定，要比试图阻止他们犯错，或者试图避免错误的决定……便宜得多。直接做出错误的决定完全没问题，我们以后会想办法解决的，嗯。这成本可能会低得多，尤其是在更大规模的情况下。我……是的，是的。我有一个很幼稚的例子，自我非常资浅的时候……我在 Opera 工作，我们当时在开发桌面浏览器。我们当时有一个家伙，基本上，我不知道，现在回想起来，我会说他有点像是个创意天才，但他也是个程序员。所以他创造了各种各样的东西。因此，Opera 的很多东西基本上都是他的创意产物。
+
+27
+00:17:18.000 --> 00:17:44.000
+this is brilliant and and i thought it was dumb i was like like, nobody's, this is silly. Like, are we going to do this? This is a really silly thing. And I was so wrong. I was like the wrongest in the entire world. Because what, I don't know if anyone remembers, but way back when, in the early 2000s, when you opened a tab, it was white.
+然后他来了，他有一个绝妙的主意——在他看来是绝妙的——所有这些与他共事了很长时间的人，你知道的，他当时非常受推崇，他们都觉得：“这太棒了。”
+
+28
+00:17:44.000 --> 00:18:38.000
+There was nothing there. it was just a white rectangle in your face and his idea was let's put like big icons and things there for your favorite websites and he called it a speed dial and it would have like the nine like a speed dial and he would even connect it to see if you tap the right like number it would open that but you could also click on them and so you had like a three by three matrix where you could put in all of your favorite websites with like a picture and everything and so when you opened a new tab you would see the speed dial and you could just click on where you wanted to go i was like this is silly this is stupid it's like five I just I was so wrong I was I was absolutely completely terribly wrong about this entire thing and and and for me personally
+而我却觉得这很蠢。我想：“这根本没人用，这太傻了。我们真要这么做吗？这真是一件很傻的事。”而我大错特错。我简直是全世界错得最离谱的人。因为——我不知道是否有人还记得，但早在 20 世纪 2000 年代初期，当你打开一个标签页时，它是白色的。
+
+29
+00:18:38.000 --> 00:19:28.000
+this was huge for me because and it's colored like my entire thinking for the rest of my career because i i learned that i can be fundamentally completely wrong about something and have no idea like and because i think we have this tendency to believe in ourselves like i you know i think this is dumb and i will all data i will find will reaffirm my my position and i would kind of hold on to it no matter what happens but actually sitting down and and like accepting the fact that this was brilliant and and it has been copied by all browsers ever since you know it's like 15 years later, this is what you do.
+那里什么都没有，只有一张白色的矩形贴在你的脸上。而他的想法是：让我们在那里放一些大图标和针对你最喜欢的网站的东西。他称之为“速拨”（speed dial）。它会有九个格子，就像速拨一样。他甚至把它连接起来，看看你点击正确的数字是否能打开它，但你也可以点击它们。所以你有一个三乘三的矩阵，你可以在其中放入你所有最喜欢的网站，并带有图片等等。因此，当你打开一个新标签页时，你会看到速拨，你只需点击你想去的地方。当时我觉得这太傻了，太愚蠢了……我真的大错特错。我对整件事的看法完全、彻底、错得离谱。而且对我个人而言，
+
+30
+00:19:28.000 --> 00:19:56.000
+But so it was brilliant. But having that gave me the, I don't know, I won't call it humility because it's not humility. It's a healthy skepticism to my own opinion. A willingness just to be wrong. Yeah. And see that good things can happen even when you're wrong.
+这对我影响巨大。它影响了我整个职业生涯的思考方式，因为我了解到，我对某事的看法可能会从根本上错得彻底，而且自己完全意识不到。因为我认为我们有一种倾向，总是相信自己——比如“我觉得这很蠢”，我会寻找所有数据来重申我的立场，无论发生什么，我都会坚持己见。但实际上，坐下来接受这样一个事实：这个想法是极好的，并且从那以后它被所有的浏览器争相效仿，你知道的，15 年后，这就是大家都在做的事。
+
+31
+00:19:56.000 --> 00:20:30.000
+And just like, okay, so this is what I think. I might be wrong. There might be a fundamental flaw here where I'm just totally wrong. And if I am, that's okay. Yeah. And that's like a superpower. If you can actually go walk into a room and be convinced by someone else and like really, truly convinced that I think that what you said was right and what I said was wrong, that can build like mountains. Like it's massive.
+所以它是极好的。但拥有这种经历给了我，我不知道，我不会称之为谦逊，因为它不是谦逊，而是对我自己的观点保持健康的怀疑态度。一种愿意承认自己错了的意愿。是的。并且看到：即使你错了，美好的事情也可能会发生。
+
+32
+00:20:30.000 --> 00:20:49.000
+And it's such a small thing. I do this, I freely admit I struggle with this. That's why I cheat. I cheat by focusing on, you know, progress over. Yeah, but I think that's a good one because I think that's something that, you know, you can do because it hurts to be wrong. It sucks to be wrong.
+就像：“好吧，这就是我的想法。我可能错了。这里可能存在一个根本性的缺陷，而我完全搞错了。如果真是这样，那也没关系。”是的。这简直就像超能力。如果你能真正走进一个房间，被别人说服——并且是真正、彻底地被说服——认为对方说的是对的而你说的是错的，那可以堆砌出像山一样大的成就。这太震撼了。
+
+33
+00:20:49.000 --> 00:21:38.000
+It really does. It's interesting this is coming up because literally just on the last episode, Bryce remarked the exact same thing that his telltale sign of really bright folks is the ability to like once they've realized that they're wrong just to like unabashedly like change 180 degrees and start 90 degrees and start walking that direction as if like they never at any point previously thought otherwise like they'd oh i'm wrong okay that's fine with yeah yeah and yeah something something you were saying earlier and this sort of goes to the your example patricia's i i'm not i actually don't think this is an amazon thing but i learned it in amazon they have this policy of like one way and two way door decisions and that like if it's a two-way door decision meaning that you can enter and then leave um those are the ones where it's a lot easier to just like you know disagree
+而且这是一件多么小的事。我这样做——我坦然承认，我在这方面做得很挣扎。这就是为什么我作弊。我通过专注于“取得进展而不是……”来作弊。是的，但我认为这是一个很好的方法，因为我认为这是你可以做到的事，因为犯错是痛苦的。犯错感觉糟透了。
+
+34
+00:21:38.000 --> 00:22:19.000
+and commit and we'll find out and that's the thing is like designing that sort of nine three by three icon if it's a terrible idea at the end of the day you just you just trash it sure there's a sunk cost there but like there's there's very very little cost to like reversing that and there's certain decisions where it's one way if you're going to make this big change and those are the ones that you really have to spend a ton of time up front you know figuring out is this the direction although chandler you're saying maybe not even that one no no no like i think i think that's that's that's actually a critical flaw the goal shouldn't be to spend a ton of time up front figuring out the right decision when you have a one-way decision the goal should be to engineer the door to open the other direction yeah the goal should be like what one one-way
+确实如此。有趣的是，这件事又被提起了，就在上一集里，布赖斯表达了完全相同的观点，即他用来识别真正聪明的人的标志性特征，就是当他们意识到自己错了时，能够毫不羞愧地做出 180 度大转弯，不对，是 90 度大转弯，开始朝那个方向走，就好像他们在此之前从不曾有过相反的想法一样，就好像：“噢，我错了，好吧，那就这样吧。”是的，是的。你刚才说的一些话——这有点类似于你的例子，帕特里夏——我其实不认为这是一个亚马逊独有的概念，但我确实是在亚马逊学到这一点的。他们有“单向门”和“双向门”决策的政策。如果这是一个双向门决策，意味着你可以进去然后再出来，那些就是更容易做到“不同意并承诺”的情况，我们会拭目以待。就像设计那个三乘三图标的网格一样，如果最后证明是个糟糕的主意，你大不了把它废弃掉。当然，其中会有沉没成本，但逆转它的成本非常非常低。而有些决策是单向的——如果你要做出这种重大改变，这些就是你真正需要在前期花大量时间去搞清楚的决策：“这真的是正确的方向吗？”尽管钱德勒，你刚才的意思是，也许连这种也不需要？不，不，不。我认为那实际上是一个致命的缺陷。当面临单向决策时，目标不应该是花大量时间在前期去找出正确的决定。目标应该是把门设计成可以朝另一个方向打开。是的，目标应该像是什么……单向
+
+35
+00:22:19.000 --> 00:23:12.000
+decisions are never good um like what one of what the the classical example of this is standard C++. One of the big problems that standard C++ has is that pretty much all of our decisions are one-way decisions. And we would have a lot less stress if we could find ways to have that not be the case. This is something that I see in API design all the time. A lot of people feel like you know an api is a one-way decision because once you publish it you have to support it forever and and so so then a bunch of people invest incredible amounts of time trying to do good api design and to avoid mistakes and and my perspective has really been warped here to a different thing where it's like i mean sure invest some amount of time there but you almost want to time box that very sharply and instead invest all the rest of the time in getting out
+决策从来都不是好东西。其中一个经典的例子就是标准 C++。标准 C++ 的一大问题在于，几乎我们所有的决策都是单向决策。如果我们能找到办法不让它们成为单向决策，我们的压力就会小得多。这也是我在 API 设计中经常看到的情况。很多人觉得，你知道的，API 是一个单向决策，因为一旦你发布了它，你就必须永远支持它。所以，很多人的做法是投入大量时间试图做好 API 设计，以避免犯错。我的观点在这里已经被扭曲成了一种不同的看法：当然，在上面投入一定量的时间是可以的，但你几乎希望把这部分时间严格地设定时间盒（timebox），而把所有剩余的时间都投入到如何摆脱那些你不可避免会犯的错误中去。因为这两件事的扩展函数（scaling function）是不同的，对吧？如果你投入大量时间来做一个好的决定，那是一次性的。很好。但下一个决定呢？前一次的投入对你必须做出的下一个决定毫无帮助。
+
+36
+00:23:12.000 --> 00:23:51.000
+of the mistakes that you will inevitably make um because one of these things is has a different scaling function on it than the other one right if you if you invest a bunch of time making a good decision, that's one way. Great. But the next one, right? Like it doesn't, none of that investment pays off for the next decision you have to make. Right. Whereas if you invest a bunch of time making the door two ways, all of that time you invest pays off every time you get the decision where that door applies. And so it's a tremendously better scaling function and so you time box the non-scaling investment right and put all the rest of the
+然而，如果你投入大量时间让门变成双向的，你投入的所有时间都会在你每次遇到适用这扇门的决策时得到回报。因此，这是一个扩展性好得多的函数。所以你要把那些不具备扩展性的投入用时间盒限制起来，把所有其余的精力投入到改变问题空间中去。
+
+37
+00:23:51.000 --> 00:24:20.000
+energy into into changing the the problem space that's a great point it's just it's basically like from finance or business it's fixed versus variable cost like you you do the two-way door and it's variable and then that just distributes over every single decision you make in the future which yeah i've actually that's a it's variable, and then that just distributes over every single decision you make in the future. Yeah. Actually, that's a great meta point. Like, Amazon, you should update your book. Update your stuff.
+这真是个好点子！这基本上就像金融或商业里的固定成本与可变成本。你做了双向门，这是可变成本，然后这个成本就会分摊到你未来做出的每一个决策中。这……我实际上……这是一个极好的元观点。就像亚马逊，你们应该更新你们的书了。更新你们的内容。
+
+38
+00:24:20.000 --> 00:24:56.000
+But there's another kind of other subtle problem here, which is the time spent before a decision is made is the most expensive time. So one of the interesting things about spending your engineering time on the doors instead of on the decisions is that you make the decision more rapidly. So you timebox your investment in the decision. You make the decision rapidly. And that has its own value. And you're not paying for an unmade decision the entire time you're investing in doing the door. You're just making bad decisions. Can I take us down from down from metaphoric to concrete like what is the door yeah absolutely here so so like classic example let's take apis i think c++ apis are a great example here right
+但这里还有另一个微妙的问题，那就是在做出决定之前花费的时间是最昂贵的时间。因此，将你的工程时间花在门上而不是决定本身上的一个有趣之处在于，你能更快地做出决定。所以你将自己在决定上的投入限制在时间盒内。你迅速做出决定。这本身就有价值。而且在你投入建造门的过程中，你并不需要为尚未做出的决定买单。你只是在迅速做出不完美的决定。我能把我们从隐喻拉回到具体事物上来吗？什么是“门”？是的，绝对可以。所以，举个经典例子，我们以 API 为例，我认为 C++ API 就是一个很好的例子，对吧？
+
+39
+00:24:56.000 --> 00:25:35.000
+we can we can try to do good api design but the the thing we actually want to invest most of our time in is the ability to change the API when we get it wrong. And so we build refactoring tools, and then we build large-scale refactoring tools, and then we build systems for running large-scale refactorings across a monolithic code base, or across all of the shards of your sharded code base. And then you tune that system so that you can run them more rapidly and at lower cost. For example, at Google, one of our big costs is we're lucky we have a monolithic repository that we can handle, but we have to do code review. And so maybe we're making 10,000 refactoring changes.
+我们可以尝试做好 API 设计，但我们真正想要投入大部分时间的，是当我们把 API 做错时能够对其进行修改的能力。因此，我们构建重构工具，然后我们构建大规模重构工具，然后我们构建用于在单一代码库（monolithic code repository）或分片代码库的所有分片中运行大规模重构的系统。接着，你调整该系统，以便能够更快速、以更低的成本运行它们。例如，在谷歌，我们的巨大成本之一——幸运的是我们有一个可以处理的单一代码库——但我们必须进行代码审查。所以也许我们要进行 1,0000 次重构更改。
+
+40
+00:25:35.000 --> 00:26:08.000
+How do you code review those? So we've actually built tools and infrastructure to smooth the code review cost and to bring that cost down, build tools to smooth the testing cost of rolling out these changes, right? And what we're doing is we're, because you almost never have true one-way doors. What you do is you have a differential cost function based on the direction, right? That it costs us so much money or time to go in and it costs us, you know, so like this massive multiplier if we ever want to go back out. What you're actually trying to do is you're trying to drive that cost down over time.
+你怎么对这些更改进行代码审查？因此，我们实际上构建了工具和基础设施，以平摊代码审查的成本并降低该成本，构建了工具来平摊推出这些更改的测试成本，对吧？我们正在做的是——因为你几乎永远不会遇到真正的单向门——你根据方向设计了一个差分成本函数（differential cost function），对吧？进去要花我们那么多的钱或时间，如果我们想再出来，就会面临巨大的乘数。你实际上在尝试做的是，随着时间的推移把这个成本降下来。
+
+41
+00:26:08.000 --> 00:26:55.000
+And we very specifically just attack the economic problem of replacing an API when we discover a mistake. And every time we make that cost lower, right, this makes the kind of risk of each API decision lower. Because we're like, well, maybe we're wrong. And so we can still apply some time boxed amount of, like, there's still a differential here. It's not free, right? But now we can have a much more rational time box around like, well, we've consulted the experts, we've thought about the consequences of this API design, to the best of our ability, it's going to, like, we think this is a good one, let's try it out, and if it doesn't work, we'll replace it, right? And even for a particular API, we, like, you can, you can turtle this all the way down, right? So for a particular API, past a certain point,
+我们非常明确地只攻击当发现错误时替换 API 的经济学问题。每一次我们降低这个成本，这就降低了每个 API 决策的风险。因为我们会想：“好吧，也许我们错了。”所以我们仍然可以应用一些限时的、有时间盒的投入——这里仍然存在差异。它不是免费的，对吧？但现在我们可以围绕以下方面设定一个更理性的时间盒：“好吧，我们已经咨询了专家，我们已经尽最大努力思考了这个 API 设计的后果，我们认为这是一个好主意，让我们试一试。如果不管用，我们就替换它，对吧？”甚至对于特定的 API，你可以……你可以把这一切层层套用到底，对吧？所以对于一个特定的 API，过了某个时间点，
+
+42
+00:26:55.000 --> 00:27:42.000
+rather than trying to theorize about how the programmers will react to this API and how readable or not readable it will be. If we're particularly uncertain, we'll actually invest in being able to roll back that particular API. So we'll have, you know, an allow list early on for who gets to use it so that we can avoid it, you know, being everyone on day one, right? And we can kind of have some beta testers and get some rounds of feedback. We may put special things into the API just to make it easier to change if we discover we're wrong. And again, the whole thing here is just about decreasing the differential cost so that we can make the decision and not worry about it, and then learn and then make a new decision when we get new
+与其试图去理论化程序员将如何对这个 API 做出反应、它会有多强的可读性，如果我们特别不确定，我们实际上会投资于能够回滚该特定 API 的能力。所以我们会在早期设定一个白名单，规定谁可以使用它，这样我们就可以避免在第一天就向所有人开放，对吧？我们可以有一些内测人员，并进行几轮反馈。我们甚至可能会在 API 中加入一些特殊的东西，以便在我们发现自己错了时更容易进行修改。再次强调，这一切的核心仅仅在于降低差分成本，这样我们就能做出决定而不必担心它，然后在获得新信息时进行学习并做出新的决定。
+
+43
+00:27:42.000 --> 00:27:47.000
+information. Thanks for listening. We hope you enjoyed. Stay tuned for part four, our final part of this conversation, and have a great day. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+感谢收听。希望你们喜欢。请继续关注第四部分，这是我们这场对话的最后一部分，祝你有美好的一天。这集节目目前还没有评论。点击文稿中的任何句子即可发表评论。

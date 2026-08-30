@@ -1,0 +1,331 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:57.000
+I'm going to fight you on the ranges transform being better than for each year. All right, this is here we go. This is what this is what our listeners have been waiting for a for loop versus algorithm war. No, that's not code. I thought it was a smiley face. Connor, I thought that was a smiley face, not APL code. Welcome to ADSP the podcast episode 36 recorded on June 30th 2021. My name is Connor and today with my co-host Bryce we talk about stood for each versus stood transform and a ton of other algorithms as well as a little bit of APL. What are the circumstances in which you would use std 4-h instead of a range-based for loop? I honestly don't think I've ever coded
+我要跟你争论，ranges transform 比 for_each 更好。好吧，我们要开始了。这就是听众们一直期盼的：for 循环与算法之争。不，那不是代码。我以为那是个笑脸，康纳，我以为那是个笑脸，而不是 APL 代码。欢迎收听 ADSP 播客第 36 期，录制于 2021 年 6 月 30 日。我是康纳，今天我和我的联合主持人布赖斯将讨论 std::for_each 与 std::transform 以及大量其他算法，还有一点 APL。在什么情况下，你会使用 std::for_each 而不是基于范围的 for 循环呢？老实说，我觉得我从来没有在生产环境中编写过
+
+2
+00:00:57.000 --> 00:01:33.000
+a std 4-h in production. And I mean, yeah, like std 4-h is like, in my opinion, I think Jake Hempstead, he's a co-worker that works on Rapids and NVIDIA. He says that, like, basically, like, we both agree, but he has some great quip that I'm going to fail to get correct. But it's basically that, like, a stood for each, like, isn't an algorithm. Yeah. The only time when it's useful is if you call it the parallel version but yeah i've i've seen that but also too i just like uh a lot of times where
+std::for_each。我的意思是，是的，就 std::for_each 而言，依我之见，杰克·亨普斯特德——他是与我共事于英伟达 Rapids 项目的同事——他说，基本上，我们俩都同意这一点，但他有一个很棒的俏皮话，我可能记不太准确了。但大意是，std::for_each 根本算不上一个算法。是的，唯一有用的情况是当你调用并行版本的时候，但是的，我见过这种情况，不过话说回来，我也只是……很多时候，只要
+
+3
+00:01:33.000 --> 00:02:17.000
+there's a stood for each i think that there's like another algorithm that's more like better named that you just uh oh interesting so your argument is that you should use another algorithm not a range-based for loop yeah if it seems like you need a std for each like odds are you can refactor your code a tiny bit and find out that oh this is actually a reduction or oh this is a this is a transform so i was writing an example the other day um where I was, so essentially it was an example where I would go and find the min element in a vector and then in a second pass, I would go in, divide all the elements of the vector
+出现了 std::for_each，我认为就会有另一个命名更好、更合适的算法，你只需要……噢，有意思！所以你的论点是，你应该使用另一个算法，而不是基于范围的 for 循环？对，如果你觉得需要用到 std::for_each，十有八九你可以稍微重构一下代码，就会发现，噢，这其实是个归约（reduction），或者，噢，这其实是个变换（transform）。所以前几天我写了一个例子，嗯，在这个例子里，基本上我要去查找一个 vector 中的最小值元素，然后在第二遍遍历中，我用最小值去除 vector 的所有元素
+
+4
+00:02:17.000 --> 00:02:37.000
+by the minimum element. So essentially it was like scaling everything to the minimum element. So after the second pass, the minimum element in the vector would then be one. This is assuming that the vector was of a numeric type. So after the second pass, where you divide everything by the min element,
+。所以本质上，就是将所有东西按比例缩放到最小元素。因此经过第二遍遍历后，vector 中的最小元素就会变成 1。这是假设该 vector 的类型是数值类型。所以在第二遍遍历中，你把所有东西都除以最小元素，
+
+5
+00:02:37.000 --> 00:03:10.000
+the min element would be one and everything else would be, you know, that its original value divided by the min element so it would be normalization yeah normalization well not really not not uh normalization in the sense of like math normalization because that would be that would be the value divided by the unit the the unit norm which is a different thing. But it's sort of like a scale. I don't know, actually. I'd have to go remind myself how math works.
+最小元素就会变成 1，而其他所有东西则是，你知道的，其原始值除以最小元素，所以会变成……也就是归一化吗？是的，归一化。不过也不完全是，不是数学意义上的那种“归一化”，因为那样的话，就应该是该值除以单位范数，那是另一回事。但它有点像是一种缩放。其实我也不太确定，我还得去回想一下数学是怎么运作的。
+
+6
+00:03:10.000 --> 00:03:39.000
+But I don't think it's normalization in the math sense, because I think normalization in the math sense would normalize everything to be a value from between zero and one, I believe. But yeah, it's sort of like, it's what you do if you want to take a series of like time measurements and convert them to speed up relative to the slowest. And so then I was like asking myself, well, how do I write that second loop in the most C++-y way?
+但我觉得它不是数学意义上的归一化，因为我认为数学意义上的归一化会把所有东西都归一化为 0 到 1 之间的值。不过是的，这有点像，如果你想获取一系列时间测量值，并将它们转换为相对于最慢值的加速比时，你所做的事情。然后我就在问自己，好吧，我该如何以最 C++ 风格的方式编写第二个循环呢？
+
+7
+00:03:39.000 --> 00:04:02.000
+And the first thing I was going to do was astute ranges for each, but this was for slide code. So I'm like, that's a long identifier. And then I got to put a lambda in there too. Maybe this will just be clearer as a range-based for loop. And so what would you use for that second pass? It's a transform. Yeah, I was thinking about that too. I mean, that's what it is. It's a transform.
+我首先想到的就是 std::ranges::for_each，但这只是示例代码，我想：这个标识符太长了。而且我还得在里面塞进一个 lambda。也许用基于范围的 for 循环会更清晰。那么，对于这第二遍遍历，你会用什么呢？是个 transform。对，我也在想这个。我的意思是，这就是它的本质：它就是一个 transform。
+
+8
+00:04:02.000 --> 00:04:18.000
+But if you use the transform, then you have to write the lambda function yeah I mean in APL this is four characters that's what I've been thinking the whole time but okay so if we're using ranges I've already started off I've got to do stood ranges transform that's like
+但如果你用了 transform，你就得写 lambda 函数。对啊，在 APL 中这只要四个字符。我一直在想这个，好吧，如果我们使用 ranges，我已经开始了，我必须写 std::ranges::transform，这
+
+9
+00:04:18.000 --> 00:04:47.000
+that's already as verbose as like the for loop and the parens for the range based for loop and then on top of that i gotta stick a lambda in there and the lambda has to capture because it has to capture that min element i think that code is way clearer as a range based for loop not as a transform i mean uh is it clearer hang on let's let's let's let's write this let Hang on. Let's write this. Let's write this.
+已经和 for 循环以及基于范围的 for 循环的括号一样冗长了，不仅如此，我还得在里面塞一个 lambda，而且这个 lambda 必须进行捕获，因为它必须捕获那个最小值。我觉得这段代码写成基于范围的 for 循环要清晰得多，而不是用 transform。我的意思是，呃，真的更清晰吗？等一下，我们来写一下。等一下。我们来写一下。我们来写一下。
+
+10
+00:04:47.000 --> 00:04:59.000
+Let's write this right now. Let's do it. Let's do it. We're going to do it. Audience, we are. I am firing up. I am firing up a text editor. I am firing up a text editor.
+我们现在就把这个写出来。我们干吧。我们来写。我们要动手了。观众朋友们，我们要动手了。我正在启动。我正在启动一个文本编辑器。我正在启动一个文本编辑器。
+
+11
+00:04:59.000 --> 00:05:19.000
+All right. You ready, Connor? I am ready. I mean, I can see this code perfectly in my head. But yes, let's do it. Yeah, but no, no, no. I care about the count, the count of characters. I'll narrate.
+好了。准备好了吗，康纳？我准备好了。我的意思是，这段代码我在脑海里看得清清楚楚。不过是的，我们来写吧。对，但是，不，不，不。我在乎字符数，字符数。我来做旁白。
+
+12
+00:05:19.000 --> 00:05:46.000
+Here we go. We got std vector v equals dot, dot, dot, semicolon. Line two. Auto min equals std colon colon ranges colon colon min underscore element paren v paren semicolon. And, well, we're definitely not doing a four each. Well, we're going to write it first. Connor sees the four each, and we're not doing that. No, we're not. We're not doing that. No, we're not. We're not doing that.
+我们开始。我们有 std::vector<double> v 等于点、点、点，分号。第二行。auto min 等于 std::colon::colon::ranges::colon::colon::min_element(v)，分号。而且，我们绝对不会用 for_each。好吧，我们还是先把它写出来。康纳看到了 for_each，而我们不用那个。不，我们不用。我们不用那个。不，我们不用。我们不用那个。
+
+13
+00:05:46.000 --> 00:06:02.000
+I mean, yeah, this is like, this kind of example just makes me sad about C++ though, because... Alright, so I've written it with the 4-H. It's pretty bad. So if we write it with a transform, now we have to take... I'm also opening my
+我的意思是，是的，这种类型的例子让我对 C++ 感到有些沮丧，因为……好吧，所以我用 4-H（for_each）写出来了。这真是糟透了。所以如果我们用 transform 来写，现在我们得把……我也在打开我的
+
+14
+00:06:02.000 --> 00:06:21.000
+APL editor. We'll put this in the show notes as well. Actually, I can just do this and try APL. Send you a link. Yeah, you're going to... Now we are live coding on the podcast audience. Now we're live. I'm going to fight you.
+APL 编辑器。我们也会把这个放到节目笔记里。其实，我可以直接这样做并尝试 APL。发给你一个链接。对，你将……现在我们在播客现场进行实时编码，观众朋友们。现在我们开始直播了。我要跟你争论。
+
+15
+00:06:21.000 --> 00:06:43.000
+I'm going to fight you on the ranges transform being better than 4-H here. All right. Here we go. This is what our listeners have been waiting for, a for loop versus algorithm war. So, okay, let's look at the 4-H here. The 4-H takes one input range, right? The vector. And it modifies in place.
+我要跟你争论，在这里 ranges::transform 比 for_each 更好。好了。我们开始。这就是我们的听众一直在等待的：for 循环与算法之争。所以，好吧，我们来看看这里的 for_each。for_each 接收一个输入范围，对吧？那个 vector。并且它在原地进行修改。
+
+16
+00:06:43.000 --> 00:07:34.000
+The transform, I want to modify these elements in place. So I got to give it the input range, which is in this case, it's just going to be the vector V. But then I also have to give it an output iterator, not an output range, but just an output iterator. Right? Correct. So the code, the for each line, the lambda is the same in both cases. No, it's not the same in both cases. In the transform case, in the for each case, the lambda takes the element by reference and it does divide equals to it. And it does it in place. In the transform case, we still need to capture, but we'll take the element by value and we'll return e divided by min.
+而 transform，我想在原地修改这些元素。所以我必须把输入范围传给它，在这个例子中，它就是 vector v。但除此之外，我还必须传给它一个输出迭代器，不是输出范围，而仅仅是一个输出迭代器，对吧？没错。所以代码中，for_each 那一行，在两种情况下 lambda 是一样的。不，在两种情况下不一样。在 transform 的情况下，在 for_each 的情况下，lambda 通过引用接收元素，并对其执行除法赋值（divide equals）。它是在原地完成的。在 transform 的情况下，我们仍然需要捕获，但我们会按值接收元素，并返回 e 除以 min。
+
+17
+00:07:34.000 --> 00:07:58.000
+But the big flaw that I see in using the transform here is that I have to pass the input twice. I have to pass v once as the input range, and then I have to do v.begin. Oh, that is just, like, no. This is the use case for 4-H. Like, I reject your and Jake's argument that there's no use case for 4-H.
+但我在这里使用 transform 看到的最大缺陷是，我必须把输入传两次。我必须把 v 作为输入范围传一次，然后我还得写 v.begin()。噢，这简直就像……不行。这就是 for_each 的用武之地。我拒绝你和杰克的观点，即 for_each 没有用武之地。
+
+18
+00:07:58.000 --> 00:08:33.000
+Like, in-place modification of a thing, that's what 4-H is for. But that's not even the one that I'm arguing for. The one that I'm arguing for the one that i'm arguing for is this this little beauty which is going to be a whole lot nicer so this is the range base for that bryce is typing now which there's no lambda it's just four auto ref e E colon V, E divided by equals min. And it's like half the characters. It is, it's 27 characters.
+比如，对某个对象进行原地修改，这就是 for_each 的用途。但那甚至都不是我所主张的。我所主张的……我所主张的是这个小宝贝，它要好得多。所以这是由布赖斯正在键入的基于范围的 for 循环，里面没有 lambda，只有 for (auto& e : v) { e /= min; }。它的字符数几乎少了一半。没错，它只有 27 个字符。
+
+19
+00:08:33.000 --> 00:09:19.000
+The transform one is a 71 character line. The 4H one is a 54 character line. And even if you are using like, even if you take out the namespace qualification, the stud ranges namespace qualification, the 4H line is still 41 characters. The transform line is still 58 characters. Now, there's no way that anything other than the range-based for loop is the correct option here. But anyways, why don't you show me how you do this in APL? Well, we should. I do know that I believe in Sean Parent's C++ seasoning talk.
+transform 那一行有 71 个字符。for_each 那一行有 54 个字符。而且即使你去掉命名空间限定符，去掉 std::ranges 命名空间限定符，for_each 那一行仍然有 41 个字符。transform 那一行仍然有 58 个字符。现在，除了基于范围的 for 循环之外，绝对没有别的选项是这里正确的选择。不过无论如何，你为什么不向我展示一下你如何在 APL 中做到这一点呢？好吧，我们应该这么做。我确实知道，我相信肖恩·帕伦特（Sean Parent）关于 C++ 调味料（C++ seasoning）的演讲。
+
+20
+00:09:19.000 --> 00:09:44.000
+He does argue that anything that's like less than one or two operations, I think, it's fine to use a short for loop. I don't know. I have a hard time. I mean, I definitely would not use a non-range-based for loop for that. And actually, let's look at what that would look like. Let's look at what that would look like. And the reason I wouldn't use it is I just think it's more error. Well, you know what? I take it back.
+他确实认为，任何少于一两个操作的事情，使用简短的 for 循环是可以接受的。我不知道。我很难接受。我的意思是，我绝对不会为那个场景使用非基于范围的 for 循环。事实上，让我们来看看那会是什么样子。让我们来看看那会是什么样子。我之所以不会用它的原因，只是因为我认为它更容易出错。好吧，你知道吗？我收回前言。
+
+21
+00:09:44.000 --> 00:10:18.000
+If I'm doing something index-based, I might do that. And yeah, I know that we're not supposed to. But in some cases, if you'm doing something index-based, I might do that. And like, yeah, I know that we're not supposed to, but in some cases, if you're doing something index-based, it might be, you know, the way to go. All right. All right. So we're looking at, we won't, we won't do a classic for loop with iterators because that would just be, that would just be rough. And we won't do the correct thing of doing stood vector size type. We'll just assume it's going to be size T because secret, it always is size T. Or we could just use int here. That'd be fine.
+如果我在做基于索引的操作，我可能会那样做。是的，我知道我们不应该这样做。但在某些情况下，如果你在做基于索引的操作，那可能是，你知道的，可行的方法。好吧。好吧。所以我们看的是，我们不会用迭代器去做一个经典的 for 循环，因为那简直是……那太粗糙了。而且我们也不会做正确的事情——使用 std::vector<size_type>。我们只会假设它是 size_t，因为秘密是，它总是 size_t。或者我们也可以在这里用 int。那也没问题。
+
+22
+00:10:18.000 --> 00:11:01.000
+Size T equals zero. Maybe I should use int here because that'll be fewer characters and that is how a few fewer characters. And that is how people would write it. So like even this one is like shorter than the 4-H one. And of course, it's not all about size. I mean, the reason to not use this one, the index space for loop one, of course, is that it's index it's index space so you know it's very easy to make a mistake here um and to end up going out of bounds um and actually when now that i've finished reading the line is actually like like one character longer exactly
+size_t 等于 0。也许我应该在这里用 int，因为那会更少字符，而且确实是更少字符。而这正是人们会写的方式。所以，甚至连这个也比 for_each 那一个短。当然，这并不完全取决于长度。我的意思是，不使用这个基于索引的 for 循环的原因，当然是因为它是基于索引的，所以你知道，在这里犯错非常容易，并且最终会导致越界。事实上，现在当我读完这一行时，它实际上比 std::ranges::for_each 那一行……长了一个字符，整整长了一个字符。
+
+23
+00:11:01.000 --> 00:11:48.000
+one character longer than the uh stood ranges for each one yeah i don't know i just you can't parallelize anything other than the transform no you can paralyze the four oh right sorry the 4-h as well uh compared to like your two right and and that's what i think i said at the beginning is that the reason to use the 4-H, the algorithm, is if you want to parallelize it. Going from the range-based for loop to a parallel for loop in C++ requires completely rewriting. Going from a stood 4-H to a parallel stood 4-H is adding one argument. Going from a transform to a parallel transform is adding one argument. Going from a transform to a parallel transform is adding one argument.
+比 std::ranges::for_each 那一行长一个字符。是的，我不知道，除了 transform 之外，你什么也无法并行化。不，你可以并行化 4——哦，对，抱歉，还有 for_each，比起你的那两个……对，而这正是我在开始时所说的话，使用算法 for_each 的原因在于如果你想并行化它。在 C++ 中，从基于范围的 for 循环转变为并行 for 循环需要完全重写。从 std::for_each 转变为并行 std::for_each 只需要添加一个参数。从 transform 转变为并行 transform 只需要添加一个参数。从 transform 转变为并行 transform 只需要添加一个参数。
+
+24
+00:11:48.000 --> 00:12:14.000
+But can we agree that the transform one is strictly worse than the 4-H here? Because we're doing the transform in place and that's exactly what 4-H is. No. You're not going to convince me that transform is worse than for each um that is a trend that's a transform regardless of it's in place or out of place that's a transform um it's not a for each
+但是，我们能不能同意，在这里 transform 绝对比 for_each 更糟糕？因为我们在原地做 transform，而这正是 for_each 的作用。不。你无法说服我 transform 比 for_each 更糟。那是一个 transform，不管它是原地进行的还是非原地进行的，那都是一个 transform，它不是一个 for_each。
+
+25
+00:12:14.000 --> 00:13:05.000
+okay all right well okay then can we agree that for each is syntax sugar for for transform can we agree that for each is syntax sugar for transform um no how is it not syntax sugar for transform uh how is it not syntax sugar i don't even know what like that's the thing is i just i don't use for each for each why do i need for each i need to iterate over a range and then do something totally side effecty um that's what do something in place do a modification of something in place like that's what that's what that's what transforms that's what transforms for
+好吧，好吧，好吧。那么我们能否同意，for_each 是 for transform 的语法糖？我们能否同意 for_each 是 transform 的语法糖？不。它怎么就不是 transform 的语法糖了？它怎么就不是语法糖了？我甚至不知道——这就是问题所在，我只是……我不用 for_each。为什么我需要 for_each？我需要迭代一个范围，然后做一些完全具有副作用的事情……那才是……做一些原地的事情，对某物进行原地修改——这才是，这才是 transform 的用途。
+
+26
+00:13:05.000 --> 00:13:54.000
+no because like with trans like that's literally the purpose for forage existing no this is actually a great argument for us to have right now or a great debate for us to have right now because the next topic we're going to talk about is going to be the parallel scan algorithm and in the downstream of the parallel scan algorithm we have exactly this problem and uh and i believe i use in my examples of for each so i yeah i i think that like uh for each is for like side effecty things and that is not what a transform is for a transform is for. A transform is for applying a unary operation to some range of values. And you can do stuff that side by side, these look
+不，因为比如对于 transform 来说，那字面意思就是 for_each 存在的目的。不，这实际上是我们现在可以进行的一个绝佳争论，或者说是一个绝佳的辩论，因为我们要讨论的下一个主题将是并行扫描（parallel scan）算法，而在并行扫描算法的下游，我们正好遇到了这个问题，而且——我相信我在 for_each 的例子中使用了它——所以，是的，我认为……for_each 是用于具有副作用的事情的，而这并不是 transform 的用途。transform 的用途是：transform 是用于将一元操作应用于某些值范围。你可以做一些并排的事情，这些看起来
+
+27
+00:13:54.000 --> 00:14:34.000
+similar, but fundamentally a transform doesn't need to have side effects. So maybe should the thing that we call transform be called transform copy, and then we should have an in-place transform, which is called transform. This is actually amazing that you're bringing this up. I was just having a meeting. Or wait, actually, did you end up discussing this with, what's his name, George, Georgie? Who do you think told George to speak to you about adjacent difference? Yeah, you pinged us. I like how Connor's like, oh, it's this amazing coincidence, not realizing that the meeting that you just had was orchestrated by me.
+很相似，但从根本上讲，transform 不需要具有副作用。所以也许我们称之为 transform 的东西应该叫 transform_copy，然后我们应该有一个原地（in-place）的 transform，就叫 transform？你提出这一点真的太棒了。我刚刚开了一个会。或者等等，实际上，你最后有没有和——他叫什么名字来着？乔治（George）、格奥尔吉（Georgie）探讨过这个？你觉得是谁叫 George 来找你谈邻近差（adjacent difference）的？对，你发消息找了我们。我喜欢康纳这种反应，噢，这真是个惊人的巧合，却没有意识到你刚开的那个会是由我策划的。
+
+28
+00:14:34.000 --> 00:15:20.000
+You pinged all four of us. You pinged all three of us and were like, you all should talk. I was there when you DMed. I probably mispronounced his his name though uh he um this this is a new hire on uh on my team uh uh he his name is spelled um like george but with two i's at the end um but he has told uh he's um uh he's he's russian he he lives in moscow um he's told us that he um prefers to go by george at least among english speakers so that's what we've been okay that's how we've been saying it so i i i do not speak russian i do not know i'm actually not i i do not know if you speak
+你 ping 了我们四个。你 ping 了我们三个，然后说：“你们都应该聊聊。”我发私信的时候就在场。不过我可能把他的名字念错了，呃……他……这是我团队里的一名新员工，呃……他的名字拼写是……像 George，但结尾有两个 i，不过他告诉过我们，他……呃……他是俄罗斯人，住在莫斯科，他告诉我们他更喜欢别人叫他 George，至少在讲英语的人当中是这样，所以我们一直……好吧，我们一直都是这么叫的。所以，我不说俄语，我不知道——其实我不知道你是不是会说俄语？不，不，不，我不确定。我不确定。我不确定。我不确定他的名字的起源，但他喜欢别人叫他 George。
+
+29
+00:15:20.000 --> 00:16:11.000
+russian or not no no no i'm not sure I'm not sure. I'm not sure whether. I'm not sure the origin of his name, but he likes to be called George. All right. So George, Jake and I had this meeting. All the details don't matter. But we were talking about naming at one point. And the observation was made that certain algorithms have underscore copy versions and then certain algorithms do not. And like finding the what what's the like delineating factor that causes that? Because like arguably replace and replace copy or not arguably replace is just a specialization of transform.
+好吧。所以 George、Jake 和我开了这个会。所有的细节都不重要。但我们在某个时候谈到了命名。然后大家发现，某些算法有带 _copy 后缀的版本，而其他一些算法则没有。就像，找出是什么划分了这种差异的决定性因素是什么？因为可以说 replace 和 replace_copy……或者可以说 replace 只是 transform 的一种特化。
+
+30
+00:16:11.000 --> 00:16:40.000
+You can like in, in a couple of times on Twitter, I've like posted little diagrams of like algorithm hierarchies where like mismatch is the most general version of a bunch of other algorithms like adjacent find, et cetera. And transform is also at the root of a hierarchy. And there's only a couple that are specializations, but replace is one of them. And so we have replace and replace copy, but we don't have transform and transform copy. Or in the case that we were specifically talking about
+你可以在 Twitter 上看到好几次，我发过一些算法层级的微型图表，其中 mismatch 是一堆其他算法（比如 adjacent_find 等）的最通用版本。并且 transform 也位于某个层级的根部。只有少数是特化版本，但 replace 就是其中之一。所以我们有 replace 和 replace_copy，但我们没有 transform 和 transform_copy。或者在我们专门讨论的情况下
+
+31
+00:16:40.000 --> 00:17:19.000
+with George and Jake, adjacent difference and adjacent difference copy. And so an example of the dichotomy here is we have sort and uh and then we have sort copy is that right uh we don't have sort copy but um don't we do have like partition and partition copy but that's the thing is those i guess the dichotomy here is we have sort, which is the, sort is the unannotated name. It doesn't have like, you know, a sort in place or anything on it. And so sort is in place, whereas transform is not in place. Right.
+与 George 和 Jake 一起讨论的 adjacent_difference 和 adjacent_difference_copy。这里这种二分法（dichotomy）的一个例子是，我们有 sort，呃，然后我们有 sort_copy，是这样吗？呃，我们没有 sort_copy，但是……难道我们没有诸如 partition 和 partition_copy 之类的吗？但这就是问题所在，我想这里的二分法是：我们有 sort，sort 是未加注解的名字。它没有像（你知道的）sort_in_place 或类似的东西。所以 sort 是原地的，而 transform 不是原地的。对。
+
+32
+00:17:19.000 --> 00:18:07.000
+And so one could argue that the naming style of the algorithms is inconsistent. That we should have said, okay okay all of the in-place algorithms will have a suffix or all of the non-in-place algorithms will have a suffix we should have picked one kind to have the good names and by good names i mean names that don't have a prefix or suffix um and so like in that world, you would either have sort, like the current thing currently called sort would be called, you know, sort in place. And then you would have a sort that takes both an input and an output. And then you'd have a, you know, and then transform would be as it is today. Or the alternative would be, you would, sort would be as it is today. Or the alternative would be, you would sort would be as it is today, where it takes one range
+所以人们可能会认为，算法的命名风格是不一致的。我们本应该说，好吧，好吧，所有原地算法都会有一个后缀，或者所有非原地算法都会有一个后缀。我们本应该选择其中一种风格来拥有好名字，这里的好名字指的是没有前缀或后缀的名字。所以在那种世界里，你要么会有 sort，当前被称为 sort 的东西现在会被称为（你知道的）sort_in_place。然后你会有一个接收输入和输出的 sort。然后你会有一个，你知道的……然后 transform 就会像今天这样。或者另一种选择是，sort 会像今天这样，其中它接收一个范围
+
+33
+00:18:07.000 --> 00:18:22.000
+and it does the sorting in place. Then you'd also have a sort copy. And then you'd have, like transform would be different from what it is today. It would be an in-place transform. And the thing that we call transform today, we would instead call transform copy.
+并在原地进行排序。然后你也会有一个 sort_copy。然后，就像 transform 会与今天不同一样，它会是一个原地 transform。而我们今天称之为 transform 的东西，我们反而会叫它 transform_copy。
+
+34
+00:18:22.000 --> 00:19:07.000
+In either of those two worlds would be consistent. But that's not the world we live in. So what's interesting is that I haven't gone through and checked every single one, but for the copy algorithms, underscore copy that has that suffix, I'm almost certain, actually that's not true, what i was about to say uh but a lot of them are permuting algorithms like sort sort um for instance i was about to say that but then i just realized replace copy is is a counter example because replace is not doing a permutation so like partition and sort uh it makes it makes sense for those the defaults of those to not have a third iterator with like an output
+在这两种世界中，命名都是一致的。但那不是我们生活的世界。所以有趣的是，我没有逐一检查每一个算法，但对于拷贝算法，带有 _copy 这个后缀的算法，我几乎可以肯定——其实不对，我刚才想说的是……但其中许多都是排列（permuting）算法，比如 sort，sort……例如，我正想这么说，然后我突然意识到 replace_copy 是一个反例，因为 replace 并不是在做排列。所以像 partition 和 sort，对于那些算法来说，默认没有第三个带有输出迭代器的参数是合乎情理的
+
+35
+00:19:07.000 --> 00:19:32.000
+where you're doing some copy. The most common case I would assert is that you're sorting that range. You don't need to do, like you don't need a second or a third iterator to define your output. And arguably, like just having said that out loud, it's kind of makes sense why you would do the same thing for replace because replace almost always you're going to be doing that in place.
+，也就是你在做某种拷贝的时候。我敢断言，最常见的情况是你在对那个范围进行排序。你不需要——比如你不需要第二个或第三个迭代器来定义你的输出。可以说，刚才把话说出口之后，这就变得有点说得通了：为什么你会对 replace 做同样的事情，因为 replace 几乎总是会在原地进行。
+
+36
+00:19:32.000 --> 00:20:17.000
+Whereas it's not as obvious that for the more general version of transform that you always want to do that in place. Exactly. I think that's a mistake. But that is the reason behind – that is the rationale behind the design. And if you look at the standard itself and if you look at how it's organized, there's a distinction between what's considered the modifying sequence operations, the non-modifying sequence operations, the partitioning and the sorting operations. Like when you look at the way that they're organized in the standard and the way that they're grouped together, it makes a little bit more sense. And, you know, we've been talking about consistency
+然而，对于更通用的 transform 版本来说，并不那么显而易见的是你总是希望在原地进行。没错。我认为这是一个错误。但这正是背后的原因——这就是设计背后的基本原理。如果你看看标准本身，看看它是如何组织的，就会发现被视为修改序列操作（modifying sequence operations）、非修改序列操作、分区和排序操作之间是有区别的。当你查看它们在标准中的组织方式以及它们的分组方式时，这就变得更有意义了。而且，你知道的，我们一直在讨论一致性，
+
+37
+00:20:17.000 --> 00:20:42.000
+because I think both you and I have a great desire for consistency across APIs. But the design of the algorithms today picked a design that was not consistent across all the algorithms. But the reason for that was to be consistent with what the use cases were going to be. That, oh, the most common case for sorting
+因为我认为你和我都有着对 API 跨接口一致性的极大渴望。但今天的算法设计所选择的设计并非在所有算法中都保持一致。而这样做的原因是为了与实际的使用场景保持一致。哦，排序的最常见情况
+
+38
+00:20:42.000 --> 00:21:15.000
+is we're sorting this thing in place. So therefore, the thing called stood sort should be the one that does that. But for transform, in places, I think was assumed at the time that it was thought that that was not the most common case. And so therefore, the thing called stood transform should not be the in place one and so there is a logic there it's not just like that it was random there was a thinking that certain algorithms permutation type algorithms you'll typically do those in place
+是我们对这个对象进行原地排序。因此，名为 std::sort 的那个函数理应是执行该操作的函数。但对于 transform 来说，在当时人们认为原地操作并不是最常见的情况。因此，名为 std::transform 的那个函数不应该是原地操作的。所以这里面是有逻辑的，这不仅仅是随意的。当时的考量是，某些算法——排列类型的算法，你通常会在原地执行它们，
+
+39
+00:21:15.000 --> 00:22:04.000
+whereas other algorithms you'll often not do them in place and you know I think one of the interesting things that you and I share in Common Connor and one of the things that makes your perspective and analysis of our algorithms library unique is looking at things with a bird's eye view. Or another way I think of it is taking a step back. One of the things that you do that you're really good at is you take a step back and you don't look at locally what's the right decision for this one algorithm. You take a step back and you look at how do all of these different algorithms fit together?
+而其他算法，你通常不会在原地执行它们。你知道，我认为你我之间有一个很有趣的共同点，康纳，也是让你的视角和对我们的算法库的分析变得独一无二的一点，那就是从鸟瞰的视角来看待事物。或者我思考它的另一种方式是退一步看。你擅长的一点就是，你能退一步看，而不是仅仅局限于局部去看这单个算法的正确决定。你退后一步，审视所有这些不同的算法是如何组合在一起的？
+
+40
+00:22:04.000 --> 00:22:30.000
+How do they form a collective set of operations? And like, what series of combination, what combination of different operational semantics are missing? You know, those tables from your algorithm intuition talk. That's the sort of thing that I mean. But like, you and I both look at the C++ standard algorithms and we sort of like take a step back
+它们是如何形成一组集体操作的？以及，缺失了什么样的一系列组合、不同操作语义的组合？你知道的，来自你的算法直觉（algorithm intuition）演讲中的那些表格。这就是我所指的那种东西。但是，你我都在审视 C++ 标准算法，我们有点像是在退后一步，
+
+41
+00:22:30.000 --> 00:22:59.000
+and we look at the trends and patterns across all of the algorithms. And I think that's why we see this inconsistency and it bothers us. As I frequently joke, it's Bryce's law. I would rather be consistently wrong than inconsistent. Yeah.
+去观察所有算法的趋势和模式。我想这就是为什么我们看到了这种不一致性，并且它让我们感到困扰。正如我经常开玩笑的那样，这就是布赖斯定律（Bryce's law）：我宁愿始终如一地犯错，也不愿前后不一致。对。
+
+42
+00:22:59.000 --> 00:23:37.000
+Yeah, this makes me think of a couple things. But yeah, this is now the second time in like a week that I've been thinking about this underscore copy thing. And it makes me want transform and transform copy. Because also, too, a part of the reason you don't like the transform and you prefer the for each is because of that iterator. And if we had the transform version that was just in place, you would be less averse to using, in my opinion, what is the correct algorithm. Right. And that transform in place has an interesting and notable difference from 4-H, which is that 4-H, as I said before, the way that the 4-H version of this algorithm worked was
+是的，这让我想到了几件事。不过，是的，这大约是一周内第二次让我思考这个 _copy 的事情。这让我渴望拥有 transform 和 transform_copy。因为同样的，你不喜欢 transform 并且更喜欢 for__each 的部分原因是因为那个迭代器。如果我们有一个纯粹是原地进行版本的 transform，你就会对使用——在我看来是正确的算法——不那么排斥。没错。而且那个原地 transform 与 for_each 有一个有趣且显著的区别，那就是 for__each，正如我之前所说，这个算法的 for__each 版本的工作方式是
+
+43
+00:23:37.000 --> 00:24:24.000
+you took the input argument by reference in the lambda. You took the argument by reference, the parameter, the element by reference and inside and in the lambda you took it by you took the argument by reference and the parameter the element by reference and you would modify it within that lambda so it was it was less functional right that that i'm taking this this this argument by reference i'm modifying it whereas in an in-place transform I would take it by value and I would return it and I would return a new thing. And that is, you know, more pure and more functional. Right. Yeah. Yeah. Yeah. And I don't, I don't know what, what the significance or the importance of that is in this particular case, but I bet you there's,
+你在 lambda 中通过引用获取输入参数。你通过引用获取参数、形参、通过引用获取元素，并在 lambda 内部——你通过引用获取参数，通过引用获取形参、元素，然后你会在那个 lambda 中修改它，所以它没那么函数式（functional），对吧？我通过引用获取这个参数，我正在修改它；而在原地 transform 中，我会按值获取它，然后我将其返回，返回一个新的东西。而这，你知道的，更加纯粹，也更加函数式。对。对。对。对。我不知道，我不知道这在这个特定情况下有什么意义或重要性，但我敢打赌，
+
+44
+00:24:24.000 --> 00:25:03.000
+I bet you that that is a significant difference. Yeah. And this this sort of, you know, you say the word consistency. I really like the word and prefer symmetry. There's a book that is called The Pursuit of Elegance, I believe. And it's a fantastic book. I'll make sure I got the title, right? If not, I'll come back and fix this in post, but I'm pretty sure it's the pursuit of elegance. And it talks a lot about symmetry and why, um, we find symmetric things beautiful. Um, there's a whole chapter section on Jackson Pollux, who's a famous artist, um, who basically like all
+我敢打赌这是一个重大的区别。是的。而这种……你知道的，你说了“一致性”这个词。我真的很喜欢并更倾向于“对称性（symmetry）”这个词。有一本书叫《追求优雅》（The Pursuit of Elegance），我相信是叫这个。这是一本非常棒的书。我会确保书名没有记错；如果没有，我回头会在后期制作中修正它，但我确信它叫《追求优雅》。书中大量谈论了对称性以及为什么我们觉得对称的事物很美。
+
+45
+00:25:03.000 --> 00:25:26.000
+his paintings are just like flicking paint. So it's these like crazy sort of just like amalgamation of different paint colors. And, you know, it looks sort of like a child could do it, but they've studied these paintings and they have like fractal properties that like the people have tried to duplicate with like, you know, ladders and they've
+书里有一整章是关于杰克逊·波洛克（Jackson Pollock）的，他是一位著名的艺术家，他的画作基本上就是甩洒颜料。所以这些就像是疯狂的、各种颜料颜色的混合体。而且，你知道的，看起来就像一个小孩子也能画出来，但人们对这些画作进行了研究，它们具有分形（fractal）属性，人们曾试图用各种方法去复制它们，比如用梯子，他们尝试了各种不同的技术，但人们就是无法弄清楚杰克逊·波洛克是怎么做到的。
+
+46
+00:25:26.000 --> 00:25:53.000
+tried all these different techniques and like people can't figure out how Jackson Pollock does it. And in fractals, like there's a certain sense of symmetry because you zoom in and zoom out and it's always the same ratio of, you know, pieces of the fractal that you're looking at. Anyway, so yeah, I love symmetry. And this brings me to the second point that I was gonna mention earlier about Kate Gregory has talked about how like partial sort copy
+在分形中，存在着某种意义上的对称性，因为你放大或缩小，你所观察到的分形碎片的比例总是相同的。不管怎样，是的，我热爱对称性。这就把我带到了我之前想提到的第二点：格雷戈里（Kate Gregory）曾谈到过诸如 partial_sort_copy 是一个名字糟糕透顶的算法。我们应该把它叫做（你知道的）top_n 或类似的名字。但我内心深处其实真的很喜欢 partial_sort_copy 这个名字，因为它与它的同类算法是对称的。存在 partial_sort。存在 sort。
+
+47
+00:25:53.000 --> 00:26:11.000
+is a terribly named algorithm. And we should call it, you know, top N or something like that. But there is a part of me that actually really likes the name partial sort copy because it's symmetric with its sibling algorithms. There's a partial sort. There's a sort.
+带有 _copy 后缀的，你知道的，正如乔纳森·巴卡拉（Jonathan Baccara）所称的那样，是个“灾难（ruin）”。但它毕竟是一个常见的前缀或后缀。在这种情况下，它是一个后缀。我真的很喜欢这些名字的对称性，这是我们在向 C++23 范围算法中添加适配器时考虑过的事情，我们在添加查看相邻元素的算法时，试图保持一致，我们试图选择那个常见的前缀。所以，就我个人而言，我未必更倾向于 adjacent，但因为
+
+48
+00:26:11.000 --> 00:26:45.000
+The underscore copy is, you know, as Jonathan Bacara calls it, a ruin. But just like it's a common prefix or suffix. In this case, it's a suffix. And I really like the symmetry of the names and that's something that we've like taken into consideration with the C++23 range algorithms that we're adding in adapters where we're trying to be consistent when we were adding algorithms that look at adjacent elements we you know we we are trying to choose the prefix that's common so like I personally don't necessarily prefer adjacent, but because
+adjacent_find 和 adjacent_difference 已经在 C++ 标准库中存在了，所以那是我们采用的前缀。无论如何，是的，对称性，我认为对称性超级重要。而且，是的，当涉及到重命名某些事情时——我不确定你对 top_n 与 partial_sort_copy 的看法如何，但它……我其实很纠结，一方面 top_n 确实是你可能会去使用的，但另一方面我觉得，肖恩·帕伦特说过什么呢？他说，工程学是一门职业，是需要去研究的东西，我们的库和标准……他主张每个人、每个 C++ 开发者都应该通读标准，虽然我并不一定说我赞同这一点，但我认为这种观点——即我们的库和工具
+
+49
+00:26:45.000 --> 00:27:37.000
+adjacent find and adjacent difference like exist already in the C++ standard library, that's the prefix that we went with. Anyways, so yeah, symmetry, symmetry, I think is super important. And yeah, when it comes to like renaming things to I'm not sure how you feel about top end versus partial sort copy, but it's it, but I'm actually torn on like, yes, top-end is what you would reach for, but a part of me thinks that like, you know, what does Sean Parent say is that, you know, like engineering is a profession and it's something that needs to be studied and like our libraries and the standards. Like he advocates that everyone, every C++ developer should read through the standard, which I'm not necessarily saying I agree with, but I think the sentiment that, you know, our libraries and our tools,
+值得花时间和精力去研究——是有道理的。是的，所以我其实还没有对 top_n 与之作何抉择拿定主意。是的，说实话，我对这两个名字都不是特别狂热。如果你是一个用户，千万别去读 C++ 标准。你不需要那样做。你知道，虽然 symmetry（对称性）——我们确实觉得对称很美，但 asymmetry（不对称）也可以很优雅。我以前在路易斯安那州立大学（LSU）时有个老朋友叫扎克（Zach），
+
+50
+00:27:37.000 --> 00:28:06.000
+like they deserve time and study. And yeah, so I actually don't have my mind made up on top end versus. Yeah, I don't know. I don't love either of the names, if we're being honest. Don't read the C++ standard if you're a user. You don't need to do that. You know, while symmetry, you know, we do find symmetry beautiful, you know, asymmetry can be elegant too i had
+他非常迷恋骑自行车，自行车天生就是不对称的，因为自行车的齿轮组装在它的一侧，对吧？所以他开了一辆现代 Veloster。他把它描述为对他来说最理想的汽车，每个人都问他为什么，他说：“嗯，它像自行车一样是不对称的。”因为现代 Veloster 是一款紧凑型轿车，它是一辆掀背车，而且只有三个门。所以在乘客侧有两个门，但在驾驶员侧，驾驶员侧后面没有门。所以这辆车……即使是现在，汽车当然也有些不对称，因为驾驶员侧在汽车的一侧，但它们通常相当对称。不过这辆车比大多数车都要更加不对称。我说，这就是吸引他买下这辆车的原因：“这辆车像自行车一样是不对称的，而我真的很喜欢自行车。”我认为，当你想到汽车时，它们从外部看起来完全是对称的。
+
+51
+00:28:06.000 --> 00:29:14.000
+one of my uh old friends from when i was at lsu uh zach um uh he was really into uh uh biking um uh and uh bikes are inherently uh asymmetric because um you have the gear set on one side of the bike right um uh and so he um he drove a hyundai velociter um and uh he described it as like the ideal car for him and everyone's asked him why and he said well um it's asymmetrical like bikes because the hyundai velociter is it's this like a compact car um and it's a hatchback and it's got only three doors so on the passenger side there's two doors um but on the driver's side there's not a door behind the driver's side so the car so it's it's like even now cars are of course a bit asymmetric because the driver's side is you know on one side of the car but they're usually pretty symmetric but like this is a more asymmetric car than most i'm like that's what sold them on the car was like this is asymmetric like bikes
+就像……对，这就是很多时候的看法。是的。我认为，已经有研究表明，客观上美丽的人拥有非常对称的面孔。是的，这其中一定有什么关于我们眼睛的模式识别的东西，会觉得：“噢，这很容易消化，因为它在两边完全一模一样。”
+
+52
+00:29:14.000 --> 00:29:43.000
+and i really like bikes and i think that there's some beauty in asymmetry when you think when you think about cars in general though they are from like to look at it from the outside are completely symmetric like and that's what yeah yeah that's what a lot of the times. Yeah. I think, I think there's been studies done that like objectively beautiful people have very symmetric faces. Yeah. It's just something, something about pattern recognition of our eyes that are just like, Oh, that's easy to digest because it's, it's exactly the same on both sides.
+所以大脑处理起来更容易。我不知道我是不是全凭空捏造了这些，但听起来挺对的。因为我注意到了视觉提示，而康纳没有，当康纳说“客观上美丽”时，他把这个词加了引号，大概是想暗示他所说的“研究所认为的客观美丽”或“社会所认为的客观美丽”并不一定就是真正美丽的东西。对。是的。美，存乎于赏者之眼中。你知道这很有趣。我刚意识到人类也有和汽车类似的属性，人类从外部看起来非常对称，但在内部我们相当不对称，对吧？我们的大脑是不对称的。我们的器官在很大程度上是不对称的，心脏在一侧，等等。所以，是的，这有点像汽车从外部看起来相当对称，
+
+53
+00:29:43.000 --> 00:30:37.000
+And so it's, it's easier for the brain to process. I don't know if I just made all that up, but sounds right. And because I caught the visual cue, but Connor didn't, when Connor said objectively beautiful, he put it in quotes, presumably to suggest that he meant that what a study considers objectively beautiful or what society considers objectively beautiful is not necessarily what is actually beautiful. Right. Yeah. Beauty is in the eye of the beholder. You know, it's interesting. I just realized humans have similar, have that same property of cars where humans look very symmetrical from the outside, but internally we're quite asymmetrical, right? Our brains are asymmetrical. Like our organs are asymmetrical for the most part, hearts on one side, et cetera. So yeah, so sort of like how a car externally looks pretty symmetrical,
+但在内部却有驾驶员侧等等。是的，这挺有趣的。是的，这是一个有趣的观察。我想其中是不是蕴含着某种生活哲理——我们在软件工程中制造的那些看起来对称的东西，在底层往往是不对称的。这一切都只是一种幻觉。我把 APL 代码发在消息里了。
+
+54
+00:30:37.000 --> 00:31:03.000
+but like internally there's a driver's side, et cetera. Yeah, it's sort of interesting. Yeah, that is an interesting observation. I wonder if there's some life, life lesson there that the things that, or some software engineering lesson there that the things that we make symmetrical are often not symmetrical under the hood. And it's all just an illusion. I, uh, I put the APL code in the, in the message.
+噢，我以为我看到了。但我以为那只是一些随机字符。问题是，我怎么才能找到聊天窗口在哪里？我看到你了。噢，我找到了。我找到聊天窗口了。我找到聊天窗口了。不，那不是代码。
+
+55
+00:31:03.000 --> 00:31:23.000
+Oh, I, I thought I saw that. But I thought it was just like random characters. The question is, can I find out where the chat is? I saw you. Oh, I found it. I found the chat. I found the chat. No, that's not code.
+我以为那是个笑脸，康纳。我以为那是个笑脸，康纳。我以为那是个笑脸，而不是 APL 代码。所以，带我过一遍。带我过一遍。来吧，我可以快速共享我的屏幕。好的，好的。不过，是的，我们确实需要讨论扫描（scans），因为我还得去理发。你的整个屏幕。
+
+56
+00:31:23.000 --> 00:31:43.000
+I thought it was a smiley face, Connor. I thought it was a smiley face, Connor. I thought that was a smiley face, not APL code. So walk me through it. Walk me through it. Here, I can share my screen quickly. Yeah, yeah. But then, yeah, we do need to talk about scans because I need to go and get my haircut. Your entire screen.
+我觉得你的头发留长点很好看。我喜欢你现在的发型。在目前这个长度之前，有一个长度我是无法接受的。而且我认为主要是不久前的那个长度再加上我无法接受的小胡子。但你现在的头发，我很喜欢你现在的头发。我不觉得这有助于约会。我觉得女人们不会喜欢它。所以这才是重中之重。
+
+57
+00:31:43.000 --> 00:32:09.000
+I think your hair looks good long. I like it like this. There was a length before this current length that I did not approve of. And I think it was mostly the length before the current length plus the mustache I did not approve of. But your current hair, I like your current hair. I don't think it helps with dating. I don't think women like it. So that is of the utmost importance.
+你觉得我这一头巨大的头发可能会成为其中的障碍吗？我觉得你的个性闪耀着光芒，布赖斯。我不知道我的个性是不是也这样。好吧。回到 APL。所以右边这个基本上是你的 min 归约（reduction）。斜杠表示归约（reduce）。而 min 符号使它成为一个求最小值。
+
+58
+00:32:09.000 --> 00:32:35.000
+Do you think my giant head of hair might possibly be an impediment there too? I think your personality shines through, Bryce. I don't know if mine does though. Yep. Back to APL. So this basically on the right here, this is your min reduction. So the slash is a reduce. And the min glyph makes it a minimum.
+然后右对齐符号（right tack）只是恒等（identity）。所以它只是把原样返回给你。接着，整个表达式是一个叉子（fork）。发生的情况是，它首先将一元操作（即恒等和最小值）应用到列表中。然后它将这两者的结果作为参数提供给二元除法函数。这个顺序让我有点困惑，因为……是的，这是中缀（infixix），然后是一元操作。
+
+59
+00:32:35.000 --> 00:33:07.000
+And then the right tack is just identity. So it just gives you back what you have. And then the whole expression is a fork. So what happens is it applies the unary operation, aka identity and minimum to the list first. And then it takes the results of those two things and provides those as arguments to the binary divide function. The ordering confuses me a little bit because... Yeah, this is infixix and then the unary
+然后，右侧的组合子就是恒等函数。所以它只是把原封不动的东西还给你。接着，整个表达式是一个分支（fork）。所以发生的情况是，它首先对列表应用一元操作，也就是恒等和最小值。然后，它获取这两者的结果，并将它们作为参数传递给二元除法函数。这个顺序让我有点困惑，因为……对，这是中缀表达式，然后是一元表达式
+
+60
+00:33:07.000 --> 00:33:54.000
+operations are technically like prefix yeah that's i would have expected based on the description you just gave i would have expected the first two to be inverted but yeah in apl um unary operations are prefix and binary operations are infix which honestly is something I don't really ever say much because you just sort of read it and it works. But when it comes to forks, I guess, yeah, that might need a tiny bit of explanation. A.K.A. S-prime combinators. This is pretty elegant. Like, it is pretty, you know nice like like i guess what's not what's elegant it's not that i find the code elegant because i don't understand i think enough about apl to you know fully grok this um but the
+操作技术上就像是前缀，是的，根据你刚才的描述，我本来会期望前两个颠倒过来，但确实在 APL 中，一元操作是前缀，二元操作是中缀，老实说，这其实是我不太常说的一点，因为你读着读着它就起作用了。但说到分叉（forks），我想，是的，那可能需要一点点解释。也就是 S-prime 组合子。这相当优雅。就像，它相当，你知道的，挺好，就像……我想，优雅的不是我发现代码优雅，因为我对 APL 的理解还不够深，无法完全领会这一点……但
+
+61
+00:33:54.000 --> 00:34:45.000
+elegant thing is the fact that you somebody who understood apl were able to code this up and in four characters you know express this problem that problem that like, you didn't, you didn't know that I was going to suggest this problem ahead of time. This is not something that like you select that we selected as, you know, something that you, you knew was easy to express in EPL, but just like the fact that off, off the cuff, you were able to express this and you know in four characters two operations um uh i think speaks a lot to the power of apl um i mean also speaks a lot to connor as a programmer but um it is pretty impressive the apl fans that are listening are like hooting and hollering bryce is uh he's a convert.
+优雅之处在于，你这样一个精通 APL 的人能够写出这段代码，并且用四个字符就表达了这个问题，而且你事先并不知道我会建议这个问题。这不是我们预先挑选好的、你知道在 APL 中很容易表达的事情，而只是……随兴所至，你就能用四个字符和两个操作表达出来……我觉得这很大程度上说明了 APL 的威力……当然，这也很大程度上说明了康纳作为程序员的能力……但无论如何，这确实令人印象深刻，正在收听的 APL 粉丝们现在一定在欢呼雀跃，布赖斯……他已经皈依了。
+
+62
+00:34:45.000 --> 00:35:04.000
+He's on his way. Well, and it's not, it's not like, it's not like this is like a standard problem. Like, okay. Minimum element. That's a pretty standard problem. But like take the result of that and divide it by something like that's not, you know, it's not uncommon, but like, it's not a standard thing. Forks are, forks are everywhere.
+他正在成为 APL 粉丝的路上。好吧，而且这也不是说……这并不是那种标准问题。比如，求最小值。这是一个相当标准的问题。但像这样，拿这个结果去除以某个数，这就不是……你知道的，虽然不算罕见，但也不是标准的东西。分叉，分叉无处不在。
+
+63
+00:35:04.000 --> 00:35:38.000
+Averaging is a fork, right? So what, are everywhere averaging is a fork right you take what what what is a fork exactly a fork is uh the name that ken iverson has given um what is known as the s prime combinator from combinatory logic but it is it's basically just like a function manipulation so you're whenever you have the pattern where you need to do two unary operations on the same input and then take the results of those and feed them to a binary operation, that's a fork. And so like average, you sum the list and you take the length of the list. Both of those are unary operations. And then you divide those two numbers.
+求平均值就是一个分叉，对吧？所以……分叉无处不在，求平均值就是一个分叉，对吧？你对……分叉究竟是什么？分叉是肯·艾verson（Ken Iverson）给……组合逻辑中被称为 S-prime 组合子的东西起的名字，但它基本上只是一种函数操作：每当你有这样的模式——需要对同一个输入进行两个一元操作，然后将这两个结果传递给一个二元操作——这就是一个分叉。所以就像求平均值，你对列表求和，然后获取列表的长度。这两者都是一元操作。然后你将这两个数字相除。
+
+64
+00:35:38.000 --> 00:35:54.000
+That's a fork. Figuring out if something is a palindrome. If you reverse it and then take identity and then just check if those things are equal, that's a fork. Like forks are everywhere. Speaking of palindromes, one of the GitHub Copilot examples that I saw
+这就是一个分叉。判断某物是否为回文。如果你将它反转，然后取恒等操作，接着只是检查这两者是否相等，这也是一个分叉。分叉无处不在。说到回文，我看到的其中一个 GitHub Copilot 的例子是
+
+65
+00:35:54.000 --> 00:36:16.000
+was it writing like an is palindrome function for you. Oh yeah. So what are we going to call that episode? This is going to be so, this is going to be cut into like three episodes and we're naming an episode that people have listened to two episodes ago. I don't know. I mean, Skynet maybe. Skynet is here. Skynet is here.
+它为你编写诸如 is_palindrome（是否为回文）这样的函数。哦，是的。那么我们要把那一集叫什么？这将被剪辑成大约三集，而我们要给一集命名，这一集的内容听众在两集之前就已经听过了。我不知道。我是说，可能是“天网”。“天网”来了。“天网”来了。
+
+66
+00:36:16.000 --> 00:36:21.000
+Skynet is here. Yeah, I think that's that's got to be the name. Thanks for listening. We hope you enjoyed and have a great day. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+“天网”来了。是的，我想这一定得是这一集的标题。感谢收听。希望你们喜欢，祝有个美好的一天。这一集还没有评论。点击文字记录中的任何句子即可发表评论。

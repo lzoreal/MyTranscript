@@ -1,0 +1,731 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:50.000
+programming throwdown episode 166 speedy database queries with lucas fiddle take it away patrick everyone welcome to another episode. Pretty excited about this one. Well, I think I say that every time. It's true every time. Try to bring you guys good content. Today, talking a little bit about some part of databases we haven't talked about. We've had a fair amount of people on to talk about various aspects of database and learned a lot. Today, Lucas is here and he's going to help us understand some a little bit lower level stuff, some optimizations and queries.
+programming throwdown episode 166 speedy database queries with lucas fiddle take it away patrick everyone welcome to another episode. Pretty excited about this one. Well, I think I say that every time. It's true every time. Try to bring you guys good content. Today, talking a little bit about some part of databases we haven't talked about. We've had a fair amount of people on to talk about various aspects of database and learned a lot. Today, Lucas is here and he's going to help us understand some a little bit lower level stuff, some optimizations and queries.
+
+2
+00:00:50.000 --> 00:01:14.000
+We had a bunch of good thoughts, even in the pre-recording. I took notes. I don't know how many of we're going to get to, but I'm excited to have Lucas here. Lucas is the founder at PG Analyze. Welcome to the show, Lucas. Thank you. Thanks for having me. All right. So we normally start off by talking a little bit about how people got into tech so the question we normally tee up at the beginning is what was your first sort of like computer programming experience like do you have like a formative
+We had a bunch of good thoughts, even in the pre-recording. I took notes. I don't know how many of we're going to get to, but I'm excited to have Lucas here. Lucas is the founder at PG Analyze. Welcome to the show, Lucas. Thank you. Thanks for having me. All right. So we normally start off by talking a little bit about how people got into tech so the question we normally tee up at the beginning is what was your first sort of like computer programming experience like do you have like a formative
+
+3
+00:01:14.000 --> 00:02:00.000
+moment where you're like oh yeah that's that's it that's magical yeah good question so how did i get into tech was probably i think it was my dad's laptop which was probably running you know windows 95 or whatever was before that at that point so i'm in my 30s now for context and i remember what fascinated me back then there was this game where you had these apes throwing bananas at each other and you could program it because it was just written in i think a version of visual basic or something or like basic i think just at the time and so i think how i got into programming you could argue is going in and modifying that game so you know the ape would throw the banana a bit stronger essentially um and so that kind of stuff was like fascinating for me early on and how i think i got actually into serious programming was
+moment where you're like oh yeah that's that's it that's magical yeah good question so how did i get into tech was probably i think it was my dad's laptop which was probably running you know windows 95 or whatever was before that at that point so i'm in my 30s now for context and i remember what fascinated me back then there was this game where you had these apes throwing bananas at each other and you could program it because it was just written in i think a version of visual basic or something or like basic i think just at the time and so i think how i got into programming you could argue is going in and modifying that game so you know the ape would throw the banana a bit stronger essentially um and so that kind of stuff was like fascinating for me early on and how i think i got actually into serious programming was
+
+4
+00:02:00.000 --> 00:02:20.000
+probably um you know with game programming um from a hobby perspective. So I wanted to build my own game engine. I wanted to build my own games. Let's say the most I got to was there was this competition over the weekend where people were building games with Pygame. And so I ended up building a really simple game where you were rolling a ball for a tube and going around obstacles.
+probably um you know with game programming um from a hobby perspective. So I wanted to build my own game engine. I wanted to build my own games. Let's say the most I got to was there was this competition over the weekend where people were building games with Pygame. And so I ended up building a really simple game where you were rolling a ball for a tube and going around obstacles.
+
+5
+00:02:20.000 --> 00:02:48.000
+And that game actually worked compared to all the other ones that I coded up the engine for but didn't create any assets for. but that's really how i got started to you know kind of programming as something that i enjoyed at the time um and then more you know later how i actually got into the tech industry was i um actually like left school i don't wouldn't recommend it but i left school um at the age of of 16 and essentially just started working. And my first job was a hosting company, essentially, you know,
+And that game actually worked compared to all the other ones that I coded up the engine for but didn't create any assets for. but that's really how i got started to you know kind of programming as something that i enjoyed at the time um and then more you know later how i actually got into the tech industry was i um actually like left school i don't wouldn't recommend it but i left school um at the age of of 16 and essentially just started working. And my first job was a hosting company, essentially, you know,
+
+6
+00:02:48.000 --> 00:03:22.000
+putting servers in racks, like back when you still had physical servers and also writing code to support, you know, somebody provisioning in the backend for that hosting company. And so really that's, you know, where I would say I would got my first professional experience actually, you know, working with customers, working with, you know, applications, working with customers working with you know applications working with databases um and that's you know a long time since um since i was 16 um and then i pretty you know soon actually got into um the more entrepreneurial side of this right so um back in if i remember correctly in 2007 um we started a company together where i was essentially
+putting servers in racks, like back when you still had physical servers and also writing code to support, you know, somebody provisioning in the backend for that hosting company. And so really that's, you know, where I would say I would got my first professional experience actually, you know, working with customers, working with, you know, applications, working with customers working with you know applications working with databases um and that's you know a long time since um since i was 16 um and then pretty you know soon actually got into um the more entrepreneurial side of this right so um back in if i remember correctly in 2007 um we started a company together where i was essentially
+
+7
+00:03:22.000 --> 00:04:04.000
+the you know one of the co-founders and technical CTO, I think at some point as well, I forget. But essentially, creating a blogging network. So something like Tumblr or Twitter or X, if you call it these days. But much earlier, essentially. And so the backing database for that was Postgres. And so my interest in Postgres really started back then in that startup where we essentially had that blogging site that got a lot of visitors and had a lot of traffic coming into that site. But ultimately, it was always database query that, you know, fetched your results if the burden cached. And so that's really where my interest in Postgres and the database world came in was, you know, from an application perspective as an application engineer, encountering frustrating slow experiences.
+the you know one of the co-founders and technical CTO, I think at some point as well, I forget. But essentially, creating a blogging network. So something like Tumblr or Twitter or X, if you call it these days. But much earlier, essentially. And so the backing database for that was Postgres. And so my interest in Postgres really started back then in that startup where we essentially had that blogging site that got a lot of visitors and had a lot of traffic coming into that site. But ultimately, it was always database query that, you know, fetched your results if the burden cached. And so that's really where my interest in Postgres and the database world came in was, you know, from an application perspective as an application engineer, encountering frustrating slow experiences.
+
+8
+00:04:04.000 --> 00:04:41.000
+Wow, that was awesome that was that was that was a whirlwind tour i think that you know mentioning these various sort of like stops along the the road and sort of even i don't want to say meager that there's an underbinding like oh working at a database hosting company and putting racks on i feel like everyone or even myself i look around and see everyone where we are at today and you know know, you know, you're at a company, you know, Jason, I read tech companies or whatever, like, these kinds of things, people look at them and say, Oh, hey, like, wow, it must have been this, like, you know, meteoric rise. And I guess I do know some people who this kind of is, but then others, it's just like this story of just like, no, it's like really basic job after basic job,
+Wow, that was awesome that was that was that was a whirlwind tour i think that you know mentioning these various sort of like stops along the the road and sort of even i don't want to say meager that there's an underbinding like oh working at a database hosting company and putting racks on i feel like everyone or even myself i look around and see everyone where we are at today and you know know, you know, you're at a company, you know, Jason, I read tech companies or whatever, like, these kinds of things, people look at them and say, Oh, hey, like, wow, it must have been this, like, you know, meteoric rise. And I guess I do know some people who this kind of is, but then others, it's just like this story of just like, no, it's like really basic job after basic job,
+
+9
+00:04:41.000 --> 00:05:22.000
+and just like continuing to just sort of roll it forward. So I guess like that's an encouragement to me to hear it, but also to other folks out there listening like, oh, man, sometimes it takes that first job. It's like all about the next step or whatever. Maybe some people will sort of like innately have the everything set up for them to just sort of like go directly into a quote unquote dream job. But some people it just really takes finding it finding your way growing, not not to say that maybe you actually loved all those jobs uh but sometimes you look back on them and like wow i can't believe i did that at least for me and it was funny you know like so i worked at microsoft a couple years back and my first big company job at microsoft i was like wow you know i never thought it would get here because i i remember thinking i could never get a job at
+and just like continuing to just sort of roll it forward. So I guess like that's an encouragement to me to hear it, but also to other folks out there listening like, oh, man, sometimes it takes that first job. It's like all about the next step or whatever. Maybe some people will sort of like innately have the everything set up for them to just sort of like go directly into a quote unquote dream job. But some people it just really takes finding it finding your way growing, not not to say that maybe you actually loved all those jobs uh but sometimes you look back on them and like wow i can't believe i did that at least for me and it was funny you know like so i worked at microsoft a couple years back and my first big company job at microsoft i was like wow you know i never thought it would get here because i i remember thinking i could never get a job at
+
+10
+00:05:22.000 --> 00:05:45.000
+apple or google right like i was not you know, the Ivy League graduate who could, you know, actually have that background that they look for in those interviews. But there's always a backdoor of sorts into those companies, right? But it's just not for the front door, right? Like if your resume looks like you dropped out of school at 16, like they're not just going to be like a rubber stamp, right? But if you have a way of showing your skills and showing your work, right, in some other way, then there's always a way in the system essentially and showing your work right in some other way then there's
+apple or google right like i was not you know, the Ivy League graduate who could, you know, actually have that background that they look for in those interviews. But there's always a backdoor of sorts into those companies, right? But it's just not for the front door, right? Like if your resume looks like you dropped out of school at 16, like they're not just going to be like a rubber stamp, right? But if you have a way of showing your skills and showing your work, right, in some other way, then there's always a way in the system essentially and showing your work right in some other way then there's
+
+11
+00:05:45.000 --> 00:06:21.000
+always a way in the system essentially to you know find that dream job of yours if that's what you're going for i have opinions in big companies by the way but if that's what you want there is a way to do it yeah i feel like there's i have opinions about ivy league schools about big companies but maybe maybe you have to have to save those up for for another time or yeah one thing bonus episode or something one thing i remember when I got my first tech job, it was much less than half of what a starting engineer makes at one of these big tech companies or like fang companies, let's say. But I remember this is a kind of a really weird thing.
+always a way in the system essentially to you know find that dream job of yours if that's what you're going for i have opinions in big companies by the way but if that's what you want there is a way to do it yeah i feel like there's i have opinions about ivy league schools about big companies but maybe maybe you have to have to save those up for for another time or yeah one thing bonus episode or something one thing i remember when I got my first tech job, it was much less than half of what a starting engineer makes at one of these big tech companies or like fang companies, let's say. But I remember this is a kind of a really weird thing.
+
+12
+00:06:21.000 --> 00:06:54.000
+But I remember I had to do something like go get a pen from from the cabinet because i didn't have a pen at my desk and i walked back and i realized oh i made like 10 cents in the walk or it was like three cents or something like that but that was such a big deal it's like wow you know they paid me a quarter to you know go and get this pen and this notebook and that was just blew my freaking mind that like, oh, the salary that you get paid as part of everything. And yeah, it's true. It really is kind of stepping stones.
+But I remember I had to do something like go get a pen from from the cabinet because i didn't have a pen at my desk and i walked back and i realized oh i made like 10 cents in the walk or it was like three cents or something like that but that was such a big deal it's like wow you know they paid me a quarter to you know go and get this pen and this notebook and that was just blew my freaking mind that like, oh, the salary that you get paid as part of everything. And yeah, it's true. It really is kind of stepping stones.
+
+13
+00:06:54.000 --> 00:07:25.000
+I feel like now, and Patrick maybe can attest to this, in management, in leadership, there's just always kind of a crisis. And I feel like you just always kind of a crisis and and i feel like uh you know you have to kind of build the battle scars to walk into the office every day where there's some kind of crisis and say all right you know let's let's let's let's get this figured out and let's move on to the next one i feel like that would have just completely destroyed me as a new as a new hire yeah and it's fascinating
+I feel like now, and Patrick maybe can attest to this, in management, in leadership, there's just always kind of a crisis. And I feel like you just always kind of a crisis and and i feel like uh you know you have to kind of build the battle scars to walk into the office every day where there's some kind of crisis and say all right you know let's let's let's let's get this figured out and let's move on to the next one i feel like that would have just completely destroyed me as a new as a new hire yeah and it's fascinating
+
+14
+00:07:25.000 --> 00:08:00.000
+i think you know to me it is you know that's why i now run the small company right and so to me it is this notion of there's nobody else like everything stops with me ultimately as a ceo right so if if things don't work yes of course i can tell people to improve but ultimately you know i need to be the one making sure that it happens and that's a really different mindset than being a cog in a wheel so to say which sometimes can happen in some jobs right where you're just like doing what you're told but you're like your buck stops really early right like you're just shipping the code and not even shipping it you're just writing the code you're committing it and you're done right versus in startup you actually have to care about the outcome of the code
+i think you know to me it is you know that's why i now run the small company right and so to me it is this notion of there's nobody else like everything stops with me ultimately as a ceo right so if if things don't work yes of course i can tell people to improve but ultimately you know i need to be the one making sure that it happens and that's a really different mindset than being a cog in a wheel so to say which sometimes can happen in some jobs right where you're just like doing what you're told but you're like your buck stops really early right like you're just shipping the code and not even shipping it you're just writing the code you're committing it and you're done right versus in startup you actually have to care about the outcome of the code
+
+15
+00:08:00.000 --> 00:08:37.000
+yeah that's an important distinction and lesson and i'll also say one of the interesting things and you're kind of mentioning it that it never stops happening is people believe this like you said you're just there's gonna be an issue and you're just gonna tell someone to take care of it and it's like i mean maybe maybe at some level or if you've grown a really good team you can kind of claim through your hard work that you've gotten to that point but i was trying to explain to some people the other day it's i you know i have a team of people work with me but there's you can't tell them what to do you have to get them to buy in convince them like explain teach them like to make those decisions jointly so any expertise i have is only as good as like how much i can imbue
+yeah that's an important distinction and lesson and i'll also say one of the interesting things and you're kind of mentioning it that it never stops happening is people believe this like you said you're just there's gonna be an issue and you're just gonna tell someone to take care of it and it's like i mean maybe maybe at some level or if you've grown a really good team you can kind of claim through your hard work that you've gotten to that point but i was trying to explain to some people the other day it's i you know i have a team of people work with me but there's you can't tell them what to do you have to get them to buy in convince them like explain teach them like to make those decisions jointly so any expertise i have is only as good as like how much i can imbue
+
+16
+00:08:37.000 --> 00:09:21.000
+into others the same feelings and same understandings and context and you know having to trust each other to make good decisions but it's it's this weird thing where everyone believes or even you know i was explaining to my kids and have this thing like oh you know you're you've been there a long time like you just tell everyone what to do it's like yeah no that doesn't that doesn't work like it's all about trying to like explain what you would like explain a plan like trying to convince others to buy in and so people believe it's this like bullion flag that just gets flipped like oh you're senior or you're a manager or you're whatever and that means anyone without that flag you get to tell what to do and it's like no no it does not work like that all right so i i guess like trying to get us on to our our story arc today uh you mentioned something in in in your sort of intro
+into others the same feelings and same understandings and context and you know having to trust each other to make good decisions but it's it's this weird thing where everyone believes or even you know i was explaining to my kids and have this thing like oh you know you're you've been there a long time like you just tell everyone what to do it's like yeah no that doesn't that doesn't work like it's all about trying to like explain what you would like explain a plan like trying to convince others to buy in and so people believe it's this like bullion flag that just gets flipped like oh you're senior or you're a manager or you're whatever and that means anyone without that flag you get to tell what to do and it's like no no it does not work like that all right so i i guess like trying to get us on to our our story arc today uh you mentioned something in in in your sort of intro
+
+17
+00:09:21.000 --> 00:09:40.000
+there that you started uh you got introduced to Postgres and you were sort of talking about, and I think this is a, you know, interesting segue is a lot of people get very focused on what tool to do a job, right? Not what like kind of tool, but the specific name brand on the thing. And you see it in other hobbies. It's not like it's unique to programmers,
+there that you started uh you got introduced to Postgres and you were sort of talking about, and I think this is a, you know, interesting segue is a lot of people get very focused on what tool to do a job, right? Not what like kind of tool, but the specific name brand on the thing. And you see it in other hobbies. It's not like it's unique to programmers,
+
+18
+00:09:40.000 --> 00:10:07.000
+but you know, I don't know. I'm going to pick something I don't know anything about. Oh, you know, running. I want to go running. What exact shoe do I need? Is it going i need everybody nike you know is it going to be rebugs like they get very hyper focused and then you hear people just say no just go run and like no no you don't understand i gotta know which shoe uh and so i think sometimes people can get caught up with uh you know choosing a specific database you know uh brand or a specific program or which one they're going to run and i
+but you know, I don't know. I'm going to pick something I don't know anything about. Oh, you know, running. I want to go running. What exact shoe do I need? Is it going i need everybody nike you know is it going to be rebugs like they get very hyper focused and then you hear people just say no just go run and like no no you don't understand i gotta know which shoe uh and so i think sometimes people can get caught up with uh you know choosing a specific database you know uh brand or a specific program or which one they're going to run and i
+
+19
+00:10:07.000 --> 00:10:34.000
+think we're going to talk about a bunch of stuff today that's going to cut across hopefully a lot of different things in this sort of generic the underworkings the underpinnings and often i'll say in some ways are more similar than they are different and being aware of the difference is important but being aware of the similarities more important maybe same important equally important well we'll figure it out. But you had mentioned something in the intro about Postgres. I thought it was really, really interesting. And we'll drop it here just because I want to make sure we hit it and you kind of mentioned it,
+think we're going to talk about a bunch of stuff today that's going to cut across hopefully a lot of different things in this sort of generic the underworkings the underpinnings and often i'll say in some ways are more similar than they are different and being aware of the difference is important but being aware of the similarities more important maybe same important equally important well we'll figure it out. But you had mentioned something in the intro about Postgres. I thought it was really, really interesting. And we'll drop it here just because I want to make sure we hit it and you kind of mentioned it,
+
+20
+00:10:34.000 --> 00:11:10.000
+which is Postgres, unlike a lot of other databases, is open source. And so being open source, the community vibe is a little bit different. Can you maybe speak a little like your introduction to Postgres? And I think even now you're still working with postgres so like obviously it's sort of stuck with you and why does it continue to be something that uh that you work with for sure yeah and i think it's interesting you mentioned open source as the qualifier i i actually you know these days open source is a term has gotten a bit muddled because a lot of databases are open source or open core in some way or form um i think what really differentiates Postgres to me is that it's not run by a single entity.
+which is Postgres, unlike a lot of other databases, is open source. And so being open source, the community vibe is a little bit different. Can you maybe speak a little like your introduction to Postgres? And I think even now you're still working with postgres so like obviously it's sort of stuck with you and why does it continue to be something that uh that you work with for sure yeah and i think it's interesting you mentioned open source as the qualifier i i actually you know these days open source is a term has gotten a bit muddled because a lot of databases are open source or open core in some way or form um i think what really differentiates Postgres to me is that it's not run by a single entity.
+
+21
+00:11:10.000 --> 00:11:31.000
+It's a community project, right? And so if you think of the Linux kernel, for example, it's a very similar community project. I mean, there's actually the one big difference is in Linux kernel, there's Linux Torvalds at the head of everything versus Postgres doesn't have that person necessarily. But what's interesting to me with Postgres in particular is that it's 27 years old now. So, you know, it's almost as old as I am. Not all the way, but almost there.
+It's a community project, right? And so if you think of the Linux kernel, for example, it's a very similar community project. I mean, there's actually the one big difference is in Linux kernel, there's Linux Torvalds at the head of everything versus Postgres doesn't have that person necessarily. But what's interesting to me with Postgres in particular is that it's 27 years old now. So, you know, it's almost as old as I am. Not all the way, but almost there.
+
+22
+00:11:31.000 --> 00:11:52.000
+And I'm sure some older than some of you listeners here. And I think what's interesting is that it has survived the test of time, right? Like it wasn't the fad that gone away. It actually, you know, survived the like changes that happened over the years, cloud databases, right? Like if people deploy a database in the cloud today a lot of times it's postgres probably more than half the databases relational databases deployed are going
+And I'm sure some older than some of you listeners here. And I think what's interesting is that it has survived the test of time, right? Like it wasn't the fad that gone away. It actually, you know, survived the like changes that happened over the years, cloud databases, right? Like if people deploy a database in the cloud today a lot of times it's postgres probably more than half the databases relational databases deployed are going
+
+23
+00:11:52.000 --> 00:12:38.000
+to be postgres today um in the cloud you know caveat comment but um but i think the like where it really comes back to right is that it's a community project. Everybody can contribute to it. It's in many ways had all the downsides of community projects. So sometimes you might have to look for tools beyond the core product. So one of the things that we did with my company is provide a monitoring and optimization tool for Postgres called PG Analyze. And the idea there is essentially to add the know, add the parts to Postgres that, you know, are not there yet. And similarly, you know, what I think has stood out of Postgres over the test of time also is the fact that you can extend Postgres. So we don't do much of that personally. But what many people have done, you know, there's companies like TimescaleDB or
+to be postgres today um in the cloud you know caveat comment but um but i think the like where it really comes back to right is that it's a community project. Everybody can contribute to it. It's in many ways had all the downsides of community projects. So sometimes you might have to look for tools beyond the core product. So one of the things that we did with my company is provide a monitoring and optimization tool for Postgres called PG Analyze. And the idea there is essentially to add the know, add the parts to Postgres that, you know, are not there yet. And similarly, you know, what I think has stood out of Postgres over the test of time also is the fact that you can extend Postgres. So we don't do much of that personally. But what many people have done, you know, there's companies like TimescaleDB or
+
+24
+00:12:38.000 --> 00:13:17.000
+Citus Data that I used to work at personally, that extend Postgres by creating an extension for Postgres. And that allows you to ultimately build a very different database into the core engine. And so I think coming back to which database should you choose? I think I'm cool with any choice. So I will never fault anyone for choosing, you know, my SQL or MongoDB. It's all cool. The reason I personally choose Postgres as my default is because I think it has the extensibility that covers a lot of different use cases. And so you, you kind of have that riddle room, like if you're suddenly looking to store columnar data, there is a way to do that in Postgres. If you're looking to do time-series data, there's a way to do that in Postgres. And if you want to work with embeddings in your AI
+Citus Data that I used to work at personally, that extend Postgres by creating an extension for Postgres. And that allows you to ultimately build a very different database into the core engine. And so I think coming back to which database should you choose? I think I'm cool with any choice. So I will never fault anyone for choosing, you know, my SQL or MongoDB. It's all cool. The reason I personally choose Postgres as my default is because I think it has the extensibility that covers a lot of different use cases. And so you, you kind of have that riddle room, like if you're suddenly looking to store columnar data, there is a way to do that in Postgres. If you're looking to do time-series data, there's a way to do that in Postgres. And if you want to work with embeddings in your AI
+
+25
+00:13:17.000 --> 00:13:59.000
+system, there's a way to do it in Postgres with pgVector. And so those flexibilities are very convenient, right? Because oftentimes, if you choose a specialized database too early then you will just hit a you know brick wall and then you can't do anything yeah i think this is something i've heard echoed a lot and um i'll guess you kind of said stood the test of time i guess like the other word there is like you know fad so there's like fad databases i don't know people who like you said choose let's say a specialized database um and i think and maybe we can talk about it briefly but like sort of document store databases or just key value stores with no relational part no real query engine leave people on a lurch when they realize they need to do a query right like oh hey i have this key value
+system, there's a way to do it in Postgres with pgVector. And so those flexibilities are very convenient, right? Because oftentimes, if you choose a specialized database too early then you will just hit a you know brick wall and then you can't do anything yeah i think this is something i've heard echoed a lot and um i'll guess you kind of said stood the test of time i guess like the other word there is like you know fad so there's like fad databases i don't know people who like you said choose let's say a specialized database um and i think and maybe we can talk about it briefly but like sort of document store databases or just key value stores with no relational part no real query engine leave people on a lurch when they realize they need to do a query right like oh hey i have this key value
+
+26
+00:13:59.000 --> 00:14:39.000
+store it's it's super cool it's super fast like i feel really good about myself and then you know someone comes in and we're going to talk about this a little later, hopefully, but like someone comes in and says, Oh, I want some aggregation. I want whatever. And you're like, uh, uh, okay, there's no sequel. I got to write this myself. Or you find yourself like writing a sequel engine over your thing. Like, you know, and oftentimes at some, some form of premature optimization, I guess, like people are trying to like narrow in for some future concern of what happens if i have a billion visitors to my website and you don't have one it's like okay first get you know a handful make some good decisions or whatever but yeah you kind of mentioned that like early specialization or going to a niche database and and interesting that you say sort of postgres
+store it's it's super cool it's super fast like i feel really good about myself and then you know someone comes in and we're going to talk about this a little later, hopefully, but like someone comes in and says, Oh, I want some aggregation. I want whatever. And you're like, uh, uh, okay, there's no sequel. I got to write this myself. Or you find yourself like writing a sequel engine over your thing. Like, you know, and oftentimes at some, some form of premature optimization, I guess, like people are trying to like narrow in for some future concern of what happens if i have a billion visitors to my website and you don't have one it's like okay first get you know a handful make some good decisions or whatever but yeah you kind of mentioned that like early specialization or going to a niche database and and interesting that you say sort of postgres
+
+27
+00:14:39.000 --> 00:14:58.000
+has i guess i knew that but i didn't know is like, I hear about extensions for all sorts of things for Postgres, and it's really a way to customize it later, potentially for lower cost than sort of completely ripping out and switching to a new database that's sort of like layering on an extension. Do I sort of have that model kind of right? Yeah, I think so.
+has i guess i knew that but i didn't know is like, I hear about extensions for all sorts of things for Postgres, and it's really a way to customize it later, potentially for lower cost than sort of completely ripping out and switching to a new database that's sort of like layering on an extension. Do I sort of have that model kind of right? Yeah, I think so.
+
+28
+00:14:58.000 --> 00:15:22.000
+I mean, you could, I think one good example is Postgres, you know, has a lot of data types. So Postgres can be typed, right? So it's not just a, you know, throw in text and it's always text you can actually say hey this is a url and then there's some validation because urls have certain structure and so one of the most basic extensibilities of postgres is that you can do your own custom data types so if you know a way that you want your data to be validated and you want your data to be stored but you want the
+I mean, you could, I think one good example is Postgres, you know, has a lot of data types. So Postgres can be typed, right? So it's not just a, you know, throw in text and it's always text you can actually say hey this is a url and then there's some validation because urls have certain structure and so one of the most basic extensibilities of postgres is that you can do your own custom data types so if you know a way that you want your data to be validated and you want your data to be stored but you want the
+
+29
+00:15:22.000 --> 00:16:00.000
+input to be this particular text format you can write an extension that does that for you in postgres and so it's that right it's the fact that you don't have to contribute a change to the core database to add a new data type you can actually just do create extension my data type and that's all you need to do right like ultimately you write a c extension you if you do that kind of stuff and lowlevel parts. There's also a way to do this in Rust these days. So if you want to have more type safety, there's a good way to write complex extensions in Rust. And then sometimes extensions can be as simple as just a SQL script, right? Sometimes it's just literally, I want to have this function in all my projects. So I can just say, create extension, my function.
+input to be this particular text format you can write an extension that does that for you in postgres and so it's that right it's the fact that you don't have to contribute a change to the core database to add a new data type you can actually just do create extension my data type and that's all you need to do right like ultimately you write a c extension you if you do that kind of stuff and lowlevel parts. There's also a way to do this in Rust these days. So if you want to have more type safety, there's a good way to write complex extensions in Rust. And then sometimes extensions can be as simple as just a SQL script, right? Sometimes it's just literally, I want to have this function in all my projects. So I can just say, create extension, my function.
+
+30
+00:16:00.000 --> 00:16:37.000
+And then that's just a way to package it, essentially. Cool. Maybe let's dive real deep here for a second and and then uh we'll see how this goes this is if it goes bad it'll be on me not not on lucas but we're going to try to dive deep into database okay so i i guess like not every database but a lot of databases you'll sort of hear the the sort of storage and i guess even you know maybe this goes back to a lot like spinning metal hard drives maybe people don't even know what that is anymore um but you know sort of people talk about uh you know using using a b tree and we don't have to go into like that's always really hard like describe to me what a b tree is no no let's not do that
+And then that's just a way to package it, essentially. Cool. Maybe let's dive real deep here for a second and and then uh we'll see how this goes this is if it goes bad it'll be on me not not on lucas but we're going to try to dive deep into database okay so i i guess like not every database but a lot of databases you'll sort of hear the the sort of storage and i guess even you know maybe this goes back to a lot like spinning metal hard drives maybe people don't even know what that is anymore um but you know sort of people talk about uh you know using using a b tree and we don't have to go into like that's always really hard like describe to me what a b tree is no no let's not do that
+
+31
+00:16:37.000 --> 00:17:13.000
+please uh but like you know have this b tree which is a generalization of a binary tree so it's this order tree structure that sort of lives and we're going to insert insert data into um and so the idea here being we want to store something and then later we're going to you know kind of query for it so um i guess like when you start at this level this feels like not that hard right like oh i'm just going to insert something into a hash map and then i'm just going to you know query it back out um and this is really you know you know no big deal and so i guess sort of like the first thing is like making sure it goes on disk so like it's not in memory but it actually needs to be on disk that way if
+please uh but like you know have this b tree which is a generalization of a binary tree so it's this order tree structure that sort of lives and we're going to insert insert data into um and so the idea here being we want to store something and then later we're going to you know kind of query for it so um i guess like when you start at this level this feels like not that hard right like oh i'm just going to insert something into a hash map and then i'm just going to you know query it back out um and this is really you know you know no big deal and so i guess sort of like the first thing is like making sure it goes on disk so like it's not in memory but it actually needs to be on disk that way if
+
+32
+00:17:13.000 --> 00:17:48.000
+your you know service dies or whatever you know it's preserved and you can kind of kind of load it back up um but but leaving that as sort of the base and maybe i set you up poorly but like you know sort of the base there like what are what are some of the like mechanics that a database offers we're going to try to get to ultimately talking about like why queries get slow um but i start putting putting data in this you know tree and the tree is you know ordered in in some manner and i want to write you know queries against it sort of what what kind of is the growth that leads me from there to like all of a sudden, something was fast, and now it's not fast?
+your you know service dies or whatever you know it's preserved and you can kind of kind of load it back up um but but leaving that as sort of the base and maybe i set you up poorly but like you know sort of the base there like what are what are some of the like mechanics that a database offers we're going to try to get to ultimately talking about like why queries get slow um but i start putting putting data in this you know tree and the tree is you know ordered in in some manner and i want to write you know queries against it sort of what what kind of is the growth that leads me from there to like all of a sudden, something was fast, and now it's not fast?
+
+33
+00:17:48.000 --> 00:18:03.000
+Yeah, I think this is a great topic. We'll have to go into a lot of details there. All right, yeah, let's go. So I think, let's forget about data structures for a moment. So I think, let's forget about trees or hash maps. I don't think, from a fundamental perspective, they don't necessarily matter, right? We can definitely talk about how B2 works,
+Yeah, I think this is a great topic. We'll have to go into a lot of details there. All right, yeah, let's go. So I think, let's forget about data structures for a moment. So I think, let's forget about trees or hash maps. I don't think, from a fundamental perspective, they don't necessarily matter, right? We can definitely talk about how B2 works,
+
+34
+00:18:03.000 --> 00:18:45.000
+but I don't think that's actually the most important thing i think the most important thing is to understand that ultimately what most databases that are not in memory databases do for you is that they store data in a file on disk right an actual file is on your desktop um in a sense um and make access to that portions of that file very efficient right because the like usually what that means is in a relational database you have a table in postgres for example a table gets represented as a file and then if you have indexes each index also gets its own file but you don't always want to look at the whole file right what you want to do is you want to look at a portion of the file just enough to answer the question you're asking, right? Which might be, give me this particular person's birth date
+but I don't think that's actually the most important thing i think the most important thing is to understand that ultimately what most databases that are not in memory databases do for you is that they store data in a file on disk right an actual file is on your desktop um in a sense um and make access to that portions of that file very efficient right because the like usually what that means is in a relational database you have a table in postgres for example a table gets represented as a file and then if you have indexes each index also gets its own file but you don't always want to look at the whole file right what you want to do is you want to look at a portion of the file just enough to answer the question you're asking, right? Which might be, give me this particular person's birth date
+
+35
+00:18:45.000 --> 00:19:08.000
+by email address or something, right? Or like give me the top 10 users of my website or something. And so really what the database does for you is figure out the best way to work with those files, both from a reading and a writing perspective so that you don't have to, right? Because the alternative here is that you and your own code and your own software do the same thing right you do file open and then file read
+by email address or something, right? Or like give me the top 10 users of my website or something. And so really what the database does for you is figure out the best way to work with those files, both from a reading and a writing perspective so that you don't have to, right? Because the alternative here is that you and your own code and your own software do the same thing right you do file open and then file read
+
+36
+00:19:08.000 --> 00:19:50.000
+and file write but ultimately what you would usually most likely what i would do is i would just literally read the whole file and then put it in the hash map in python or ruby script right and then just look at it and it's just not workable if you're talking gigabytes or terabytes of data like it's just too slow and so really the the big job of database is to make that interaction way more effective way more efficient and then also lets you write queries in a way where you don't have to write the code to do all these lookups right but you can actually express your intent using sql and then database figures out how to locate the data you're looking for okay that was much better than i did all right so so what i hear here is like uh that's all right i give it to you no no no uh the separation of
+and file write but ultimately what you would usually most likely what i would do is i would just literally read the whole file and then put it in the hash map in python or ruby script right and then just look at it and it's just not workable if you're talking gigabytes or terabytes of data like it's just too slow and so really the the big job of database is to make that interaction way more effective way more efficient and then also lets you write queries in a way where you don't have to write the code to do all these lookups right but you can actually express your intent using sql and then database figures out how to locate the data you're looking for okay that was much better than i did all right so so what i hear here is like uh that's all right i give it to you no no no uh the separation of
+
+37
+00:19:50.000 --> 00:20:30.000
+concerns that's how i would sort of term it which is like you know you're writing some application that like you said sort of wants quick access to a wide variety of data past the point where you know you're going to necessarily want to just have it all in memory and all these other benefits and so the database job is to i think you said really well like make the smallest portion of data available or need the smallest portion of data available in order to answer your questions and then provide sort of an api in this case sql a query so that you can tell the database what it is that you're looking for. So and then its job is to as efficiently as possible, give you back your answer. That's right. And I think from performance
+concerns that's how i would sort of term it which is like you know you're writing some application that like you said sort of wants quick access to a wide variety of data past the point where you know you're going to necessarily want to just have it all in memory and all these other benefits and so the database job is to i think you said really well like make the smallest portion of data available or need the smallest portion of data available in order to answer your questions and then provide sort of an api in this case sql a query so that you can tell the database what it is that you're looking for. So and then its job is to as efficiently as possible, give you back your answer. That's right. And I think from performance
+
+38
+00:20:30.000 --> 00:20:57.000
+perspective, the one thing that I'll mention that's really important to understand is that oftentimes you will, the database will look at a lot more data than what isn't the result that gives back to you, right? So the oftentimes performance issues are like, you might just be looking for a single row, like in this case of the birthdate and the email address, right? But the database actually has to look at the whole user's file, aka table in this case, right? And actually, in the worst case, read the whole file, right? Until it finds the matching row.
+perspective, the one thing that I'll mention that's really important to understand is that oftentimes you will, the database will look at a lot more data than what isn't the result that gives back to you, right? So the oftentimes performance issues are like, you might just be looking for a single row, like in this case of the birthdate and the email address, right? But the database actually has to look at the whole user's file, aka table in this case, right? And actually, in the worst case, read the whole file, right? Until it finds the matching row.
+
+39
+00:20:57.000 --> 00:21:13.000
+And so really... Oh, go ahead. I was just gonna say, so what would cause that? So if I have a table, I have a file, what would be the difference between able to efficiently go to the specific row versus have to look at the whole thing? So I think ultimately what it,
+And so really... Oh, go ahead. I was just gonna say, so what would cause that? So if I have a table, I have a file, what would be the difference between able to efficiently go to the specific row versus have to look at the whole thing? So I think ultimately what it,
+
+40
+00:21:13.000 --> 00:21:35.000
+I mean, so the simplest thing you could do, so maybe, again, important to remember is that usually in systems like Postgres, and I think this applies to at least most relational systems like MySQL and such, is that the index and the main table are separate right so the main table is usually so i'll talk a little bit in detail just because it's helpful to think about this visually in a sense right so a the main table in postgres
+I mean, so the simplest thing you could do, so maybe, again, important to remember is that usually in systems like Postgres, and I think this applies to at least most relational systems like MySQL and such, is that the index and the main table are separate right so the main table is usually so i'll talk a little bit in detail just because it's helpful to think about this visually in a sense right so a the main table in postgres
+
+41
+00:21:35.000 --> 00:21:59.000
+is usually separated in what's called pages and they're eight kilobyte pages and so each eight kilobyte page has you know a number attached it, like just an integer number that counts up. And then in each page, you can have one or more rows, post calls some tuples often for various reasons. May not have to get into that. But the point is, these rows that you're looking for, they're in these pages. Now, if you knew which page you're looking for,
+is usually separated in what's called pages and they're eight kilobyte pages and so each eight kilobyte page has you know a number attached it, like just an integer number that counts up. And then in each page, you can have one or more rows, post calls some tuples often for various reasons. May not have to get into that. But the point is, these rows that you're looking for, they're in these pages. Now, if you knew which page you're looking for,
+
+42
+00:21:59.000 --> 00:22:29.000
+you could very much like a phone book, right? You could just look in the phone book on page 20 and you knew that there's your row somewhere on that page now the challenge is that oftentimes you don't know that right you don't know on which page the data is you're looking for and so short of you know just reading through the whole like each individual page right until you get to the matching row really what you want is an index that sometimes can also answer the thing directly but usually in many cases what the index does is just point you back at the right page right so the index just says hey i know you're
+you could very much like a phone book, right? You could just look in the phone book on page 20 and you knew that there's your row somewhere on that page now the challenge is that oftentimes you don't know that right you don't know on which page the data is you're looking for and so short of you know just reading through the whole like each individual page right until you get to the matching row really what you want is an index that sometimes can also answer the thing directly but usually in many cases what the index does is just point you back at the right page right so the index just says hey i know you're
+
+43
+00:22:29.000 --> 00:23:10.000
+looking for this user with this email address um that's in page like 67 and you know you just then read that one page of eight kilobyte right it's an eight kilobyte read essentially um and then you know that in that eight kilobyte read somewhere is going to be that row that you're looking for and that's really where indexes come in is just reducing that lookup that you have to do now the important thing to remember of course the index is again a file and so we don't just have to do io for the main page the main table the page on the main table but we also have to do io for the index itself and that's where it gets, I think, conceptually more challenging. Even I have challenges these days when you ask me how much overhead is it going to be
+looking for this user with this email address um that's in page like 67 and you know you just then read that one page of eight kilobyte right it's an eight kilobyte read essentially um and then you know that in that eight kilobyte read somewhere is going to be that row that you're looking for and that's really where indexes come in is just reducing that lookup that you have to do now the important thing to remember of course the index is again a file and so we don't just have to do io for the main page the main table the page on the main table but we also have to do io for the index itself and that's where it gets, I think, conceptually more challenging. Even I have challenges these days when you ask me how much overhead is it going to be
+
+44
+00:23:10.000 --> 00:23:28.000
+if you read something from an index. It's really hard to estimate that because in a B-tree, you have to walk the tree. So you ultimately start at the root page, figure out, okay, do I go left, do I go right? Do I go left, do I go right? At some point, you end up on that thing that's essentially matching a query or multiple like index entries that are matching your query um and
+if you read something from an index. It's really hard to estimate that because in a B-tree, you have to walk the tree. So you ultimately start at the root page, figure out, okay, do I go left, do I go right? Do I go left, do I go right? At some point, you end up on that thing that's essentially matching a query or multiple like index entries that are matching your query um and
+
+45
+00:23:28.000 --> 00:23:56.000
+then these index entries will have a pointer back to one or more pages and so it's hard to do a conceptual model for that but i think that's roughly how i would try to describe it so so right after you said it's rough i'm going to attempt it because i want to i want to make sure i kind of understand this so the index is so the data that you want to feed into the query, so one or more entries, like let's say email address. So it's like a mapping of email address to page number for the rest of the data associated with that row.
+then these index entries will have a pointer back to one or more pages and so it's hard to do a conceptual model for that but i think that's roughly how i would try to describe it so so right after you said it's rough i'm going to attempt it because i want to i want to make sure i kind of understand this so the index is so the data that you want to feed into the query, so one or more entries, like let's say email address. So it's like a mapping of email address to page number for the rest of the data associated with that row.
+
+46
+00:23:56.000 --> 00:24:29.000
+But it could be, I don't know what the right term is, compound. It could be composite. It could be more than one thing. And so the idea is the index file gets opened, and then searched for finding the sort of entries in the key there. And then it gets the value of the page. And then it goes to the actual table file, opens that and then efficiently goes to that page sort of by number lookup because because you have it and then is when people talk about building a database table and saying this thing is the key
+But it could be, I don't know what the right term is, compound. It could be composite. It could be more than one thing. And so the idea is the index file gets opened, and then searched for finding the sort of entries in the key there. And then it gets the value of the page. And then it goes to the actual table file, opens that and then efficiently goes to that page sort of by number lookup because because you have it and then is when people talk about building a database table and saying this thing is the key
+
+47
+00:24:29.000 --> 00:25:30.000
+so that rows are have some unique identifier or whatever is that is that inherently different or is it still just an index file but like happens to have a shorthand name because it's so common yeah it depends a bit on the database so in postgres that i'm most familiar with it it's mainly a convention in a sense that so if you have a primary key, right, let's say we have a users table, the users table has three columns, an ID and email and a birthdate. Usually the ID would be the primary key, you could also make the email a primary key. And really, one of the distinctions with primary keys is that they're usually, well, they always have to be unique. So email might not be the best choice if you want to support, you know, the same email you use twice. So let's suppose for a moment that ID column is the primary key. Now, in this scenario, we're describing where we're looking for the email, the ID column actually does not get involved at all, unless we're looking for the ID, right? But if you're just looking for the birthday value, and we're just doing select birthday from users where email equals something, then we never need to look at the id now in postgres specifically primary keys do matter most mostly when you're joining tables
+这样行或多或少都有某种唯一标识符，这本质上有什么不同吗？还是说它依然只是一个索引文件，只不过恰巧有一个简写名称，因为这太常见了？对，这在不同的数据库中情况略有不同。以我最熟悉的 Postgres 为例，这主要是一种约定。也就是说，如果你有一个主键，比如我们有一个 users 表，users 表有三列：一个 ID、一个电子邮箱和一个生日。通常 ID 会是主键，你也可以把电子邮箱设为主键。主键的一个区别在于，它们通常，或者说它们必须始终是唯一的。所以如果你想支持同一个电子邮箱使用两次，电子邮箱可能就不是最佳选择。现在，我们假设 ID 列是主键。在我们要查找电子邮箱的这个场景中，除非我们要查找 ID，否则 ID 列其实完全不会参与，对吧？但如果你只是在查找生日值，并且我们只是执行 select birthday from users where email equals something，那么我们就永远不需要查看 ID。现在在 Postgres 中，主键尤其重要，主要是在你连接表时
+
+48
+00:25:30.000 --> 00:25:57.000
+and you're like trying to say this is you know kind of like i'm talking about this one record and there's only ever going to be one record because i already kind of am grouping in a certain way and so it's it's mostly relevant if you're joining things and you're like using the id column in a join. Then it matters a lot from a career performance optimization perspective. But otherwise, it doesn't make a big difference if you're looking for an ID value versus an email value. They're essentially both indexes in this case, right? So primary key is an index.
+并且你试图说这你知道，有点像我在谈论这一条记录，而且永远只会有一条记录，因为我已经以某种特定方式进行了分组，所以它主要在你要连接数据，并且在连接中使用 ID 列时才相关。从职业性能优化的角度来看，这非常重要。但除此之外，如果你在寻找 ID 值与电子邮箱值，它并没有太大区别。在这种情况下，它们本质上都是索引，对吧？所以主键就是一个索引。
+
+49
+00:25:57.000 --> 00:26:18.000
+Okay. And so then reversing that, I think you said birthdate. So if you're using birthdate and you didn't know in advance that you were going to be searching on birthdate, then this is where the database has no option. It doesn't have an efficient way to find birthdate. And so this is where it needs to end up going through Table or does it do some magic there as well?
+好的。反过来想，我想你刚才说的是生日。如果你使用的是生日，而且你没有事先知道你要按生日搜索，那么数据库就别无选择了。它没有高效的方法来找到生日。所以这时候它最终必须遍历整个表，还是说它也会在其中做一些魔法？
+
+50
+00:26:18.000 --> 00:26:57.000
+No, I think ultimately, if you just said select, let's say select email from users where birthdate equals something, but you don't have an index on birthdate, then then there would be no way for database to do it efficiently beyond just like looking through like the table until it might find matches and if unless you're doing a limit one in your query it may have to look at the whole table right if you're doing limit one then it gets lucky and the first page has that row right then you know with 50 average or whatever yeah um and i mean this is also again where it matters like how queries are written matters in a huge way how the database can optimize things for you right so if you're very specific you're like i want this order and i want
+不，我想最终，如果你只是说 select，比如说 select email from users where birthdate equals something，但你在 birthdate 上没有索引，那么数据库除了遍历整个表直到可能找到匹配项之外，就没有其他高效的方法了。除非你在查询中使用了 limit one，否则它可能不得不查看整个表，对吧？如果你使用了 limit one，那么如果它运气好，第一页就有那行数据，对吧，那么平均 50 次或者无论多少次你就知道了。对，我的意思是，这也是为什么查询编写的方式非常重要，它在很大程度上决定了数据库能为你优化哪些事情，对吧？所以如果你非常具体，比如我想要这个顺序，我想要
+
+51
+00:26:57.000 --> 00:27:31.000
+you know the top five then that's going to be more expensive then i don't care about the order and i just want one um because that's going to be faster okay yeah so so maybe actually that's a decent segue so all right so we have these sets of tables there the database is managing them we have some indexes over the and then now we're sort of talking you were kind of moving to the next level sort of like writing writing queries and then as you said there's um i feel like this is happens in programming as well uh i at least i made this a lot and I've seen other people do it. When you first start writing a program, you're worried you didn't write your conditional correct.
+你知道，前五个，那就会成本更高；而如果我不在乎顺序，我只想要一个，嗯，因为那样会更快。好的，对，所以也许这其实是一个不错的过渡。好吧，所以我们有这些表，数据库在管理它们，我们在它们之上有一些索引，然后现在我们开始讨论，你刚才转到了下一个层面，也就是编写查询。正如你所说，我觉得这在编程中也会发生，至少我经常这样做，我也看到其他人这样做。当你刚开始编写一个程序时，你会担心你的条件语句没写对。
+
+52
+00:27:31.000 --> 00:28:04.000
+So you write your conditional multiple times or other variations of it. You don't trust like, oh, if I is less than 50 and then a couple of lines later, you'll say like, as if I does not equal 50. And it's like, well well it can't equal 50 because you said it can't be less or maybe i'm messing up anyways you sort of like repeat conditionals that that don't need to be um or you put a lot of parentheses in your math operations and so you know i come from c++ so this is like a big deal because everyone's always performance nerdy but like you know oh i have a constant and a you know another constant but i put my
+所以你会多次编写你的条件语句，或者它的其他变体。你不信任它，比如，哦，如果 i 小于 50，然后几行之后，你会说，就像 i 不等于 50 一样。这就好比，嗯，它不可能等于 50，因为你说了它不能小于，或者也许我搞砸了。不管怎样，你有点像在重复那些不需要的条件语句，或者你在数学运算中加了大量的括号。所以你知道，我来自 C++ 背景，所以这算是一件大事，因为每个人总是对性能很狂热，但你知道，哦，我有常量和另一个常量，但我把我的
+
+53
+00:28:04.000 --> 00:28:41.000
+parentheses in such a way that i'm telling the compiler i don't want to let you you know oh i have a constant and a you know another constant but i put my parentheses in such a way that i'm telling the compiler i don't want to let you you know pre-multiply these constants together at compile time uh because i'm over prescriptive about what i'm doing um so when we're writing queries you're sort of saying if you're over prescriptive in some way like you're very very very stringent then you're sort of limiting the hand of the the database and sort of how it can can do things can maybe like unpack that a little like what what exactly are the kinds of things it does or doesn't care about and what would you sort of be looking for as like code smells i guess and the you know you're making it slower than it needs to be right and i think i would say well i mean in general you need to do
+括号写成这样，就是在告诉编译器，我不想让你，你知道，哦，我有常量和另一个常量，但我把括号写成这样，是在告诉编译器，我不想让你在编译时把这些常量预先相乘，因为我对自己在做什么要求过于死板。所以，当我们编写查询时，你是说如果你在某些方面过于死板，也就是非常非常严格，那么你就在某种程度上限制了数据库的手脚，限制了它做事的方式。能不能稍微展开讲讲？它究竟关心或不关心哪些事情，你觉得会有哪些像代码异味一样的东西，你知道的，这会让它变得比实际需要的慢，对吧？我想我会说，嗯，总的来说你需要做
+
+54
+00:28:41.000 --> 00:29:18.000
+what the intent is you're trying to implement right so sometimes you may just have to do an order with three columns and a filter clause with five different like aware clause of five different things you're looking for right so i think it it depends a lot on what you're trying to do i think you actually mentioned an interesting case of compilers right so i think that situation where you're like optimizing for certain things because the compiler you know does things a certain way and so you know you have to write them with all these parentheses um unfortunately at least today you also have to do a little bit of that with databases. So in Postgres specifically, I wouldn't even say here's one right way or wrong way to do it. I would rather say learn how to learn about the database. So how do you figure out what the
+你试图实现的意图，对吧？所以有时你可能必须处理带有三列的排序和带有五个不同过滤条件的 where 子句，你要寻找五种不同的东西，对吧？所以我觉得这很大程度上取决于你试图做什么。我觉得你其实提到了编译器的一个有趣情况，对吧？所以那种情况，比如你针对某些事情进行优化，因为编译器你知道的，会以某种特定方式处理事情，所以你知道你必须带着所有这些括号来编写它们。不幸的是，至少在今天，你在使用数据库时也必须做一点类似的事情。所以在 Postgres 中，我甚至不会说有一种正确或错误的做法。我更愿意说，去学习如何了解数据库。所以你如何弄清楚
+
+55
+00:29:18.000 --> 00:29:53.000
+database is doing and how do you understand the different choices available in terms of how the database can find your data ultimately because generally I would say yes it's better to not over specify like the where clauses but there are exceptions there are actually cases where I've you know I've seen real life situations where I'm joining two tables and adding a where clause actually improved performance drastically because it allowed a different kind of join to happen versus if there was no where clause it had to join like read one table first and then do a nested loop over the other one and so it really does depend a bit um and what was most important in that situation for me was able
+数据库在做什么，以及如何理解数据库在寻找你的数据时可用的不同选择？因为总的来说，我会说，最好不要过度指定 where 子句，但也有例外。实际上有些情况下，我见过真实的生活情况，我连接两个表并添加了一个 where 子句，结果性能得到了极大的提升，因为它允许采用一种不同类型的连接，而如果没有 where 子句，它就必须先读取一个表，然后对另一个表进行嵌套循环。所以这确实有点取决于实际情况。在那种情况下对我和最重要的能够
+
+56
+00:29:53.000 --> 00:30:28.000
+to in postgres there is a command explain and if you put explain in front of a query what the database will give you is essentially the query plan that it well if you explain analyze it actually executes and says here is the plan i use and here is you know how long each part took if you just do explain it just gives you the plan that it is most likely going to be used if you run it again um and so what that really tells you is what the database is doing and so one of the most important feedback loops right like when programming might be a repl right like you're typing something in an interactive shell and gives you back a result and so one of the most important feedback loops in database world is i would say that i write a
+在 Postgres 中有一个命令叫 explain，如果你在查询前加上 explain，数据库给你的基本上就是查询计划。如果你用 explain analyze，它实际上会执行并说：这是我使用的计划，这是每个部分花费的时间。如果你只用 explain，它只会给你一个如果你再次运行它最有可能被使用的计划。所以这真正告诉你的是数据库在做什么。因此，最重要的反馈循环之一，就像编程中的 repl 一样，你把一些东西输入交互式 shell，它会给你一个结果。而在数据库世界中，最重要的反馈循环之一，我想说的是我编写一个
+
+57
+00:30:28.000 --> 00:31:09.000
+query i do and explain i see the query plan i think it's a bad query plan i change my query right um maybe add an index so that database you know i try different indexes i see what sticks essentially right um but that interaction you can't really get around like that that just has to happen right even if you have happen right even if you have best practices even if you you know don't over specify your conditions sometimes you just have to like get in and do that feedback loop and do that iteration so when you run explain on a query and you get back the the query plan i'm sure i've done this before i know i've done it before but it's not something i do routinely so it's not top of mind to me. But is so like, let's say Postgres and I send the query plan to the, I guess there's some
+查询，我执行 explain，我看到查询计划，我认为这是一个不好的查询计划，我改变我的查询，对吧？也许添加一个索引，以便数据库，你知道的，我尝试不同的索引，基本上看看哪个管用。但这种交互是你无法绕过的，这必须要发生，对吧？即使你有最佳实践，即使你没有过度指定条件，有时你就是得深入进去，进行那个反馈循环并进行迭代。所以当你在一个查询上运行 explain 并得到了查询计划时，我确信我以前做过这个，我知道我以前做过，但这并不是我经常做的事情，所以它没有浮现在我的脑海里。但是，比如说，如果 Postgres 把查询 plan 发送给，我想有一些
+
+58
+00:31:09.000 --> 00:31:36.000
+sort of execution engine that is going to run, I think. And you were saying, and you sort of mentioned something interesting, which is what keyed me off, which is like, that it thinks it's going to run. So is it true that like, if, if we had two databases that were the same schemas, but yours was an order of magnitude more data than mine, and I send my query to mine, you send it to yours, would we get back the same explain? That is like, is it invariant? And it's like just a schema
+某种将要运行的执行引擎。你刚才说，你提到了一个有趣的事情，正是这个启发了我，那就是它认为它将要运行。那么，是不是说，如果我们有两个拥有相同架构的数据库，但你的数据量比我的多一个数量级，我把我的查询发给我的，你发给你的，我们会得到相同的 explain 结果吗？也就是说它是恒定的吗？它只是一个架构
+
+59
+00:31:36.000 --> 00:32:10.000
+and the execution engine, same version? Or is it somehow like understanding the size of your data? It's monitored queries in the past and is somehow like trying to do this like at what level is it sort of building that plan yeah and i think to a big extent this again does depend on the system right so i'll speak to postgres but definitely this does vary between database systems um so generally speaking it's definitely deterministic or invariant how we're going to call it right but essentially it's definitely deterministic, or invariant, however you want to call it. But essentially, the planner in Postgres, with the exception of essentially one feature I can think of right now,
+和执行引擎，版本相同？还是说它在某种程度上了解你的数据量？它监控过过去的查询，并在某种程度上试图这样做。它在什么层面上构建该计划？是的，在很大程度上，这确实取决于系统，所以我将针对 Postgres 来说明，但各个数据库系统之间肯定会有所不同。所以总的来说，它绝对是确定性的，或者说是恒定的，随便你怎么叫它。但本质上，Postgres 中的规划器，除了我目前能想到的一个特性之外，
+
+60
+00:32:10.000 --> 00:32:29.000
+is if you give it the exact same files on disk, and you run it on a different server, it's going to give you the same plan. Now, the problem is that usually you're not really aware of all those details. I would say the most important things... Let me actually take a step back just for people to follow along more easily, right? So again, like think through you're sending this
+如果你给它磁盘上的完全相同的文件，并在不同的服务器上运行它，它会给你相同的计划。现在，问题在于你通常并不知道所有这些细节。我会说最重要的事情……实际上让我退一步，以便让大家更容易跟上，对吧？所以再次强调，想象一下你把这个
+
+61
+00:32:29.000 --> 00:33:04.000
+query to a database. So what does the database actually do? Maybe just to like give you a visual because I find that helpful. So like query comes in, right? So the first thing the database does is actually parses the query. So the engine, in this case, Postgres, turns that query into a parse tree. And that parse tree then essentially gets, you know, analyzed and says, hey, you're looking for this particular table and such. Now, the part we're talking about is after that initial parsing, right after the database essentially knows, you know, this is what you're looking for these tables, you're querying, then it actually has to figure out, you know, how do I get that data. And so that's the component that is trying to, you know, come up with a career plan is called usually the planner or in Postgres,
+查询发送给数据库。那么数据库实际做了什么？也许只是为了给你一个直观的印象，因为我觉得这很有帮助。所以查询进来了，对吧？数据库做的第一件事实际上是解析查询。所以引擎，在这个例子中是 Postgres，把那个查询变成了一个解析树。然后这个解析树基本上会被分析，并显示：嘿，你在寻找这个特定的表等等。现在，我们讨论的部分是在初始解析之后，也就是在数据库基本上知道，你知道的，这是你在寻找的表，你在查询，然后它实际上必须弄清楚，我如何获取该数据。因此，负责想出一个查询计划的组件通常被称为规划器，或者在 Postgres 中，
+
+62
+00:33:04.000 --> 00:33:37.000
+sometimes the optimizer. And that's really the part where it looks at that you know parse tree that comes in like the query that comes in in combination with a couple of other things i'll talk about in a second and then says here is the plan and then what happens is that in postgres called the executor goes and executes that plan right and then ultimately the executor is what sends you back your query result. Now, if we're doing explain, what we're doing is we're just looking at the output of that planner component without doing the execution, unless you're doing the explain on lies I mentioned earlier. Now, looking into what does this planner actually do, right?
+有时被称为优化器。这确实是它查看进入的解析树（即进来的查询）并结合我一会儿要谈到的其他几件事，然后说“这就是计划”的部分。然后发生的事情是，在 Postgres 中被称为执行器（executor）的组件会去执行那个计划，对吧？最后，执行器就是把查询结果发回给你的组件。现在，如果我们执行 explain，我们所做的只是查看规划器组件的输出，而不执行它，除非你执行了我前面提到的 explain analyze。现在，深入研究这个规划器实际上是做什么的，对吧？
+
+63
+00:33:37.000 --> 00:34:24.000
+Like, how does it come up with its result? And in most systems today, the way this works is it essentially does a cost-based estimation. So it tries to say, if I were to go ahead and execute this, or if my friend, the executor, would go ahead and execute, how expensive would it be, right? So is it more expensive to use this index or that index? Is it more expensive to, you know, join this table first with this other table? So it's trying to essentially go through all these different variations of how to get the data. And the way it does that is it attaches a cost to it like an actual cost value which is a floating point value and it says you know it's a tree that it builds ultimately so it says you know join this first and then do that and so like ultimately it comes up with a cost at the end right so the top there always sits a cost on the plan and that cost is the lowest cost right like that's kind of what
+它如何得出结果？在当今的大多数系统中，其工作原理是它基本上进行基于成本的估算。所以它试图说明，如果我继续执行这个，或者如果我的朋友执行器继续执行，代价会有多大，对吧？使用这个索引还是那个索引代价更高？先将这个表与另一个表连接代价更高吗？所以它基本上是在尝试遍历获取数据的各种不同变体。它这样做的方法是为它附加一个成本，一个实际的成本值，这是一个浮点数值，它说，你知道，它最终构建的是一个树，所以它说，你知道，先连接这个，然后再做那个，所以最终它在最后会得出一个成本，对吧？所以在顶部总是有一个关于计划的成本，而这个成本是最低的成本，对吧？这就是
+
+64
+00:34:24.000 --> 00:34:59.000
+the point there's there's again caveats there but like generally it's speaking cost is the lowest cost right like that's kind of what i mean there's there's again caveats there but like generally speaking it's the lowest cost that it tries to find and then that's the best plan from database perspective now in terms of it being reproducible between systems it what's important for us to look for is what is the data it actually looks for when it makes these cost estimations right um and so we talked about an example earlier where you're doing that select star from table limit one and you don't care about the order, that's actually going to be cheaper in terms of cost, right? Because the database can estimate, well, most likely, you know, I'll not have to look at the whole table because I'll just find trenching row at some point. And so it will
+重点，这其中当然也有注意事项，但总的来说，成本就是它试图找到的最低成本，从数据库的角度来看，这就是最佳计划。现在，就它在系统之间可重现而言，对我们来说重要的是要寻找它在进行这些成本估算时实际查看的数据是什么。所以我们之前讨论过一个例子，你正在执行 select star from table limit one 并且你不在乎顺序，就成本而言，这实际上会更便宜，对吧？因为数据库可以估计，好吧，很有可能，你知道的，我不必查看整张表，因为我会在某个时候找到那行数据。所以它会
+
+65
+00:34:59.000 --> 00:35:33.000
+actually discount the cost for that, right? It will actually reduce the cost because of that. And the way it can do that is because it has statistics about the data in the database right it wouldn't want to read the whole data but it has statistics about how frequent are certain values right and so if it knows actually when you're looking for a birth date that everybody has like maybe everybody inputs like 2000 the january 1st 2000 for some reason right Because they're just like being funny. And let's say you're looking for that. The database will know that that's the most common value in that table. And so we'll actually be able to do different optimizations
+实际上为该操作打折成本，对吧？它实际上会因此降低成本。它之所以能做到这一点，是因为它拥有数据库中关于数据的统计信息，对吧？它不想读取所有数据，但它拥有关于某些值的频率的统计信息。所以如果它确实知道，当你在寻找一个生日时，每个人都输入了，比如不知为什么每个人都输入了 2000 年 1 月 1 日，对吧，因为他们只是在开玩笑。假设你在寻找这个。数据库会知道那是该表中出现频率最高的值。
+
+66
+00:35:33.000 --> 00:35:59.000
+because of that and give you a different plan. And so when you compare between databases, what matters is that those statistics that database scatters are actually the same because if they're different, then it's going to give you a different plan. One last note on that, just to make sure i included that is the other thing that's really important is the actual physical size of the table and of the indexes so a issue that a lot of people run into is they're trying to compare their development environment
+正因为如此，它实际上能够进行不同的优化，并给你一个不同的计划。所以当你比较不同的数据库时，重要的是数据库散布的那些统计信息实际上是相同的，因为如果它们不同，它就会给你一个不同的计划。关于这一点，最后补充一点，为了确保我把它包含进去，另一件非常重要的事情是表和索引的实际物理大小。所以很多人遇到一个问题，他们试图将开发环境
+
+67
+00:35:59.000 --> 00:36:36.000
+with a production environment and statistics are a problem yes but the other issue is that the planner will know how big your table is and if your table is 100 gigabytes it's not going to of a production environment and statistics are a problem yes but the other issue is that the planner will know how big your table is and if your table is 100 gigabytes it's not going to do sequential scan but if the table is just one megabyte it is going to suggest a sequential scan and so sometimes i see people asking why is my database not using my index and the reason is well you're running this locally and the database thinks your table is tiny so it's just gonna not use an index because it doesn't need one oh wow that's actually like several steps more complicated than i was thinking it would it would be so we mentioned a bunch of really interesting stuff there so understanding the
+与生产环境进行比较，统计数据是一个问题，是的，但另一个问题是规划器会知道你的表有多大。如果你的表有 100 GB，它就不会这样做。生产环境的统计数据是个问题，是的，但另一个问题是规划器会知道你的表有多大。如果你的表有 100 GB，它就不会做顺序扫描，但如果表只有 1 MB，它就会建议顺序扫描。所以有时我看到人们问：为什么我的数据库不使用我的索引？原因在于，你是在本地运行的，而数据库认为你的表很小，所以它干脆不使用索引，因为它不需要。哦，哇，这实际上比我想象的要复杂好几个步骤。所以我们在那里提到了很多非常有趣的东西。理解
+
+68
+00:36:36.000 --> 00:37:11.000
+data sizing i can kind of see that like it's sort of a function of like you know how big various caches are and speeds out to the hard drive and the amount of RAM you're using and this kind of thing. The statistics one is somewhat intriguing to me, which is understanding what are useful statistics to measure. And then presumably, whenever data is modified or inserted into the table, rather than re-scanning and computing the statistics, presumably it's incrementally updating them as it goes. But then using that, that actually, I don't know, that's not obvious to me that like,
+数据规模，我大概能理解，这有点像各种缓存有多大、硬盘传输速度、你使用的 RAM 数量以及诸如此类的事情的一个函数。统计数据这块让我觉得有点着迷，也就是理解什么是用来测量的有用统计数据。然后大概每当有数据被修改或插入表中时，它不是重新扫描并计算统计数据，而是随之进行增量更新。但随后利用这一点，实际上，我不知道，这对我来说并不明显，即
+
+69
+00:37:11.000 --> 00:37:42.000
+you know, like you said, birthdays, right? We know, for instance, there can only be, you know, in a month and day, only 366, I guess, birthdays that there can be. And so chances of collision are really high. The birthday paradox or whatever that's called the birthday birthday i don't know what it's called anyways uh so so i mean not that it's getting that clever but as you mentioned like some things uh you know have like skew really left like all really small values and very few really big numbers and you there are various techniques for kind of understanding that and so that's actually really interesting are there hints
+你知道的，就像你说的，生日，对吧？我们知道，例如，一个月中只有，你知道的，一年中大概只有 366 个生日，我想。所以发生碰撞的概率非常高。生日悖论还是不管它叫什么，生日生日，我不知道它叫什么。不管怎样，所以我的意思是，倒不是说它变得那么聪明，但正如你所提到的，有些事情，你知道的，会产生严重的倾斜，比如所有非常小的值和非常少数非常大的数字，并且有各种技术可以用来理解这一点，所以这实际上非常有趣，有什么提示吗？
+
+70
+00:37:42.000 --> 00:37:58.000
+you provide uh you know at the table to say, hey, as I'm building this, I kind of know in advance I'm going to be interested in these kinds of things or these are queries I'm going to want to run later or it's just not kind of worth it? Yeah, and I would say it again depends very much on your database system, right? Like what it provides.
+你在表里提供这些信息，比如说：“嘿，在我构建这个的时候，我提前知道我对这些类型的东西感兴趣，或者这些是我以后想运行的查询，”还是说这根本不值得？是的，我会说这同样非常取决于你的数据库系统，对吧？比如它提供了什么。
+
+71
+00:37:58.000 --> 00:38:16.000
+So the way this works in Postgres is these statistics are collected by a process called analyze. There's also an automatic process called auto-analyze. And so auto-analyze will just run on the periodic schedule depending on the amount of change in a table, essentially. So if you do a lot of updates, a lot of inserts, at some point, that auto-analyze
+在Postgres中，其工作原理是这些统计信息由一个名为analyze（分析）的过程收集。还有一个自动过程叫auto-analyze（自动分析）。因此，auto-analyze会基本上根据表中更改的数量，按定期计划运行。所以，如果你做了大量的更新、大量的插入，在某个时候，那个auto-analyze
+
+72
+00:38:16.000 --> 00:38:33.000
+counter essentially has gone to the point where it kicks off an analyze. But what it does then, it actually samples your table. So it looks for, I think, by default, 30,000 records. Don't quote my discipline. I look it up in Postgres documentation. But the point is it looks at a certain amount of default part of the table.
+计数器基本上达到了触发analyze的程度。但它随后实际做的是对你的表进行抽样。所以它会查找，我想默认是30,000条记录。别拿我的数字当绝对标准，我可以在Postgres文档里查。但重点是它会查看表中默认的一部分特定数量的记录。
+
+73
+00:38:33.000 --> 00:38:56.000
+And then it actually, by default, takes just 100 records from that. And so there is a way to customize a couple of things here in Postgres specifically. For example, you can tell it actually look at more data. So don't just look at those 100 ultimately that it saves, but look at the thousand, for example. So oftentimes people say, you know, store more statistics so we know more in more detail, you know, how often, like let's say birthdays, right?
+然后它实际上默认只从那里取100条记录。所以在Postgres中确实有一种方法可以自定义这里的几件事。例如，你可以告诉它实际查看更多数据。所以不要只看最终保存的那100条，而是看比如1,000条。因此，人们经常说，存储更多统计信息，这样我们就能更详细地了解，比如生日出现的频率是多少？
+
+74
+00:38:56.000 --> 00:39:29.000
+If we want to cover every birthday and we just do day and month, then, you know, we could just say, let's raise that statistics target to 400. Keep it easier. Don't know how to do 366, just do 400. And then Postgres will actually remember exactly how oftentimes each of those values showed up in its sample. The other thing, and I'll just drop this here in case you ever get to this point, but just to note that the database also offers this, is Postgres has a way to do what's called extended statistics. And that's essentially where it collects even more statistics
+如果我们想涵盖每一个生日，而我们只用月和日，那么我们可以说，把那个统计目标提高到400。简单起见，不知道怎么弄366，就弄400。然后Postgres实际上会准确记住这些值中的每一个在其样本中出现了多少次。另一件事，我顺便提一下，以防你以后遇到这种情况，但也要注意数据库也提供了这个功能，Postgres有一种称为扩展统计信息（extended statistics）的方法。这基本上是它收集更多的统计信息
+
+75
+00:39:29.000 --> 00:39:42.000
+that are slightly more expensive to calculate, which is why they don't always do it. But then you can have things like, is this column dependent on this other column, right? Like, for example, do people with the name Lucas always have birthdays in August? I don't know. My birthday's not in August.
+这些统计信息的计算成本稍高一些，这就是为什么它们不总是默认这样做。但随后你可以拥有诸如以下的信息：这个列是否依赖于另一个列？比如，名字叫卢卡斯（Lucas）的人生日总是在八月吗？我不知道，我的生日不在八月。
+
+76
+00:39:42.000 --> 00:40:15.000
+But the point is, if there are correlations between those values then often sometimes that matters a lot for complex career plans and so there is a way to instruct the database to measure that information specifically so that then you get better career plans uh yeah i can imagine probably similar to compiler there's like a whole like in-depth rabbit trail of complexity. So I guess like slightly shifting off of that. So the other thing I guess when you were explaining, you know, trying to build these costs is the one thing as someone who kind of doesn't know, but always kind of boggles my mind
+但重点是，如果这些值之间存在相关性，那么通常这对于复杂的查询计划非常重要，因此有一种方法可以指示数据库专门测量该信息，以便随后你可以获得更好的查询计划。是的，我可以想象，可能类似于编译器，里面有一整套深入的复杂性。所以我想稍微转移一下话题。因此，当你解释试图构建这些成本时，另一个对我这种不懂但总是觉得很困惑的事情是
+
+77
+00:40:15.000 --> 00:40:44.000
+is handling transactions. So if you're doing some read, modify, you know, right, you know, kind of cycle, or you're doing something transactionally into the database, I imagine like how the plan executes, is it just trying to minimize the sort of costo? Or is it thinking a bit about like the probability that like, a right comes in and interrupts the query and has to go again? Or how is that sort of like component? Maybe maybe I'm off, it's fine if this is like not relevant. But I guess like, that's always one of those things
+处理事务。因此，如果你在做一些读取、修改、写入的循环，或者你在数据库中以事务方式做某些事情，我很好奇计划是如何执行的？它只是试图最小化某种成本吗？还是它也在考虑有写入进来并中断查询、导致查询必须重新运行的概率？或者那个组件是怎么样的？也许我想错了，如果这不相关也没关系。但我想，这总是其中一件事
+
+78
+00:40:44.000 --> 00:41:13.000
+that like all of this has to be done. Yes yes but it all has to be done in the phase of like data that could be changing out from under you and it has to be done consistently right and i think this is where you'll once again you'll hear hear me say this a couple of times but um you'll once again see that you know postgres is this is one way our data is to do differently um so postgres has you has a system called MVCC, Multi-Version Concurrency Control. And I mean, it's more of a general term, right? Outdated pistols have two,
+所有这些都必须完成。是的，是的，但所有这些都必须在数据可能在你脚下发生变化的情况下完成，而且它必须保证一致性，对吧？我想在这里你会再次听到我多次提到这一点，但你会再次看到，Postgres在数据处理上有其独特的方式。所以Postgres有一个系统叫做MVCC（多版本并发控制）。我的意思是，这是一个更通用的术语，对吧？老式系统有两个，
+
+79
+00:41:13.000 --> 00:41:30.000
+but Postgres has a particular way of implementing MVCC. And Postgres has received criticism for that too. Like people sometimes criticize that for performance reasons and such. But one of the most important things that the MVCC implementation in Postgres does, it solves exactly the scenario you're describing, right? Where I'm doing a select, but whilst
+但Postgres有一种特定的MVCC实现方式。Postgres也因此受到过批评。人们有时会出于性能原因等对这一点进行批评。但Postgres中的MVCC实现所做的最重要的事情之一，就是正好解决了你所描述的场景，对吧？我在执行一个select查询，但当
+
+80
+00:41:30.000 --> 00:41:45.000
+my select is running, because maybe I'm looking at a big portion of the table, right? So it takes some time, then a write comes in. And so there's two choices here. Either we block that, right? So I finish my select and the write is blocked, or they are able to run concurrently. Now, if you implement this naively, if you built your own database,
+我的select正在运行时，因为也许我正在查看表很大的一部分，对吧？所以这需要一些时间，然后一个write（写入）进来了。这里有两种选择。要么我们阻塞那个写入，对吧？所以我完成select，写入被阻塞，要么它们能够并发运行。现在，如果你以天真的方式实现这一点，如果你自己构建了一个数据库，
+
+81
+00:41:45.000 --> 00:41:57.000
+you should probably just block the writes, right? Like keep it simple. But in a concurrent like real world system, that doesn't work, right? Because you just have too much stuff going on at the same time. And so that's really where what Postgres does at the most fundamental level
+你大概应该直接阻塞写入，对吧？保持简单。但在一个并发的现实世界系统中，这行不通，对吧？因为你同时有太多事情在发生。所以这正是Postgres在最基本层面上所做的，
+
+82
+00:41:57.000 --> 00:42:23.000
+is if you think back to those pages, right? With those rows. So each of those rows, I mentioned earlier that they're actually called a tuple in Postgres. Now that distinction matters because it's technically a row version not a row because there can be rows that are physically there in that page that you're not actually seeing because they're for example an insert that came in after you started your select right and so postgres has a way to essentially say well this is this is something from the future right so you can see
+如果你回想一下那些页面，对吧？带着那些行。因此，我之前提到过，这些行在Postgres中实际上被称为元组（tuple）。现在这种区别很重要，因为它技术上是一个行版本而不是一个行，因为可能有一些行物理上存在于你实际上看不到的那个页面中，因为它们例如是在你开始select之后才进行的插入，对吧？因此Postgres有一种方法可以基本上说，好吧，这是来自未来的东西，对吧？所以你可以看到
+
+83
+00:42:23.000 --> 00:42:44.000
+these like even as you're doing your select the postgres execut, this is something from the future, right? So you can see these, like, even as you're doing your select, the Postgres executor might encounter things from the future that it's just going to ignore because they're from the future, right? And it's really fascinating because, like, you have to think about this in performance optimization too because you can also encounter things that are in the past and not relevant to you anymore, but they're still physically there, right? Because, again, it's a physical structure.
+这些，即使你在做select，Postgres执行器也可能会遇到来自未来的东西，它会直接忽略它们，因为它们来自未来，对吧？这真的很迷人，因为你必须在性能优化中也考虑到这一点，因为你也会遇到处于过去且与你不再相关的那些东西，但它们物理上仍然在那里，对吧？因为，再说一次，这是一个物理结构。
+
+84
+00:42:44.000 --> 00:43:25.000
+And so, like, it really, like like the part where it sucks for you ultimately is that there are situations where you can have data that you need to look at but because of these visibility rules it's actually no longer there right like you're not supposed to see it it's just you have to physically walk over it because it's in that file still okay so it's trying to put put these things in a place where you'll see them but then like you said there's some i guess i always think like some counter some timestamp it is a counter like yeah your query is like at some counter version and it knows like anything less than this or greater than this like it needs the highest value up to but not greater than your your ticker value i guess uh and so it's scanning and
+所以，对你来说最终很糟糕的部分在于，在某些情况下，你可能会拥有需要查看的数据，但由于这些可见性规则，它实际上已经不在了，对吧？比如你不应该看到它，你只是必须物理地走过它，因为它还在那个文件中。好吧，所以它试图把这些东西放在你能看到它们的地方，但然后就像你说的，我总是觉得有一些计数器、某种时间戳。它确实是一个计数器，对吧？你的查询就像在一个计数器版本上，它知道比如任何小于这个或大于这个的东西——它需要直到但不大于你的计时器值的最高值，我想。所以它在扫描，
+
+85
+00:43:25.000 --> 00:44:00.000
+it's seeing stuff that's crazy i don't know this starts to get really and this is why i guess people always sort of have this caution where as you said if you're building your own it's better just to block people have this they slowly end up building their own database and then not thinking about these things right i always just have a file now i need to have it updated now i need to and then you slowly backing your way into uh some of this complexity so the query planner has this explain function and it's giving you these costs when it goes to the execution it has to kind of respect all these all these rules um so as someone writing the query plan this is i we most been talking about it sounds like reads like joins and order buys
+它看到了各种东西，这太疯狂了。我不知道，这开始变得真的很……这就是为什么我猜人们总是会有这种保留意见，正如你所说的那样，如果你自己构建一个数据库，最好还是直接阻塞。人们有这种心态，他们最终慢慢地自己构建了一个数据库，然后不去考虑这些事情，对吧？我总是觉得“我现在有一个文件，我需要更新它，我需要……”，然后你慢慢地陷入了这种复杂性中。因此，查询规划器有这个explain（解释）函数，它在进行执行时会给你提供这些成本，它必须某种程度上遵守所有这些规则。所以作为编写查询计划的人——我们大部分时间都在讨论它，听起来像是读取，比如连接（joins）和排序（order by）
+
+86
+00:44:00.000 --> 00:44:36.000
+are these important for inserts as well or or composite statements like how is the sort of like breakdown of like when is it like yeah yeah it's it's probably not something worth worrying about yeah i would say it depends yeah i mean definitely so anything that's more complex is going to be more interesting to think about right so if you're joining tables even if it's just two tables oftentimes that can already be an important question which is what you're joining first like are you first looking at table a or table b right um or can you look at them both at the same time um it gets much more relevant of course if you're joining five tables together or you're looking only for a small part of this table then you're using that
+这些对插入（inserts）也很重要吗？还是复合语句？比如，对于“什么时候这其实不值得担心”的划分是怎样的？是的，我会说这取决于情况。我的意思是，肯定的，任何更复杂的东西都更值得去思考，对吧？所以如果你连接表，即使只是两个表，通常这也已经是一个重要的问题，也就是你首先连接什么——你是先看表A还是表b，对吧？或者你可以同时查看它们吗？
+
+87
+00:44:36.000 --> 00:45:15.000
+to find something else in another table um if you're just inserting data um i don't think so postgres technically still makes a prayer plan for that because what you can do in postgres is you can do insert um into the table and then select and then you actually run a query to insert the data right so you are essentially running a full query just to get the data you're inserting um but if you're just passing data to the server there's not no magic to that right it's literally just writing it out there's different ways to do it like there's copy in postgres which is way faster than insert blah. But it's generally not something you need to worry about from a planning perspective. And the same applies to, you know, like, let's say you're changing a schema or something like those are called utility statements in Postgres,
+如果你把五个表连接在一起，或者你只寻找这个小部分表，然后你用它去另一个表中寻找其他东西，这就变得更有意义了。如果你只是插入数据，我不这样认为。Postgres技术上仍然会为此制定一个查询计划，因为你可以在Postgres中做的是：你可以执行insert into table然后select，然后你实际上运行一个查询来插入数据，对吧？所以你本质上只是为了获取要插入的数据而运行了一个完整的查询。但如果你只是把数据传递给服务器，这没有什么神奇的，对吧？它实际上只是把数据写进去。有不同的方法可以做到这一点，比如Postgres中有copy，它比insert快得多，等等。但从规划的角度来看，这通常不是你需要担心的事情。同样的道理也适用于，比方说，你正在更改一个架构（schema）或类似的东西——在Postgres中这些被称为实用语句（utility statements），
+
+88
+00:45:15.000 --> 00:45:56.000
+they're totally separate from query plans. So really, it matters most of your reading data. And then what is it so so when you're you know writing your your queries and they're complex and you're you know looking at your query plans like on the balance i guess there's this uh decision between like you said maybe you can't optimize your query it has to be a certain way or there's just like yes it's frustrating but it's no good and then you can kind of sort of look to i guess indexes we were talking about that but also I guess to uh schema definitions like what is this sort of troubleshooting debugging go from like okay I have this query it's not doing what I want you know we talked about query plan which is sort of like I guess how to mutate the query in
+它们与查询计划完全分开。所以真的，这主要在你读取数据时最重要。那么，当你编写查询而且它们很复杂，并且你看着你的查询计划时，总体来说，我猜这里存在一个决定，正如你所说的，也许你无法优化你的查询，它必须是某种特定的方式，或者只是“是的，这很令人沮丧，但也没办法”，然后你可以开始关注索引——我们刚才讨论过这个——但也关注架构定义。所以这个故障排除和调试过程是从“好吧，我有这个查询，它没有按我想要的那样运行”（我们讨论了查询计划，这有点像如何以某种形式突变查询
+
+89
+00:45:56.000 --> 00:46:37.000
+some form to make it better so you've exhausted that what is this sort of like trip down this uh you know optimization look like yes usually what i would do in practice i'll just walk you through my personal debugging um but like approach here is um so imagine we have the query right and we so my situation is i'm the application engineer we're going to be back an engineer who got handed you know kind of a sql query that's bad um from the data team or something and they're like this is so slow you're like making the whole database slow fix it right and so i'm like okay what do i do um and so the first thing i would do again is go look at a query plan to understand you know what is you know what's actually happening right because i might up until now have just thought about this function call in my like application
+以使其变得更好）到你已经筋疲力尽之后，这种通往优化的旅程是什么样的？是的，通常我在实践中会怎么做——我带你过一遍我个人的调试方法。我的方法是：想象我们有这个查询，我的情况是我是应用工程师，我是后端工程师，接手了一个来自数据团队等的糟糕的SQL查询，他们说“这太慢了，你让整个数据库变慢了，修好它”，对吧？所以我说“好吧，我该怎么办？”。所以我要做的第一件事还是去查看查询计划，以了解实际上发生了什么，对吧？因为在此之前，我可能只考虑了我应用中的那个函数调用，
+
+90
+00:46:37.000 --> 00:47:00.000
+which uses an orm so i don't even see the sequel right so like first step is actually looking at the sequel the next step is looking at the query plan. And then really what oftentimes helps in Postgres specifically, and the same applies to other systems, is looking at the physical IO that's being done. So don't just look at the plan, but look at how much data does it actually have to fetch. And so the way you do this in Postgres is you pass... So first of all, you do explain analyze,
+它使用了ORM，所以我甚至看不到SQL，对吧？所以第一步实际上是查看SQL。下一步是查看查询计划。然后，在Postgres中（其他系统也一样）往往真正有帮助的是查看正在进行的物理IO。所以不仅要看计划，还要看它实际上必须获取多少数据。在Postgres中你可以通过这样做来实现……首先，你执行explain analyze，
+
+91
+00:47:00.000 --> 00:47:17.000
+which actually executes the query. So it doesn't just say here is the plan, but it also says when it executes the plan, what part takes how long, right? And this helps you then say, well, you know, in my really complex query plan where I'm doing joins and insert, like, sorry, index selection and stuff and whatnot,
+它实际上会执行查询。所以它不仅说“这里是计划”，它还说当它执行计划时，哪个部分花费了多长时间，对吧？这有助于你指出，嗯，在我这个执行连接和插入的非常复杂的查询计划中（抱歉，是索引选择之类的东西），
+
+92
+00:47:17.000 --> 00:47:42.000
+this index scan is slow, right? Like this particular index scan, we looked at the whole index and that was really slow. And the reason you know this is by doing explain analyze versus explain. Now explain analyze has an option called buffers and if you pass buffers um it's kind of this terminology thing which is confusing so a buffer in postgres is also a page um postgres uses those interchangeably so when we say buffer is really what we mean is those eight kilobyte pages that i talked about earlier right so these portions of
+这个索引扫描很慢，对吧？比如这个特定的索引扫描，我们查看了整个索引，这真的很慢。你知道这一点的原因是通过对比explain analyze与explain。现在explain analyze有一个选项叫buffers（缓冲区），如果你传递了buffers——这是一种让人糊涂的术语，所以Postgres中的缓冲区也是一个页面，Postgres交替使用这些词——所以当我们说缓冲区时，我们真正指的是我之前谈到的那些8千字节的页面，对吧？所以这些部分
+
+93
+00:47:42.000 --> 00:48:23.000
+the file on this and so if you pass that buffers option it will show you how much of the file ultimately it had to read and so it will tell you i had to read 100 buffers and then you have to do the mental math and say 100 times eight kilobytes is you know that's this much in actual bytes um and so that way you know like which part of the plan not only how slow or or fast it was, but also, you know, then, you know, this actually took this much IO, essentially. What I would do next is kind of what you were alluding to earlier, right? Which is try to think about, do I want to, like, is this an indexing problem? Or is this more of a data modeling type problem, right? Or a query structure problem, right?
+文件情况也是这样，如果你传递了那个 buffers 选项，它就会向你展示最终不得不读取文件的多少内容，所以它会告诉你，我不得不读取 100 个缓冲区，然后你必须进行心算，得出 100 乘以 8 KB 是多少，你知道，这就是实际字节数，嗯，这样你就会知道计划的哪个部分不仅在速度上有快有慢，而且，你还知道，实际上这花费了多少 IO，基本上是这样的。我接下来要做的事有点像你刚才暗示的那样，对吧？也就是试着去想，我是不是想，比如，这是一个索引问题？还是这更像是一个数据建模类型的问题，对吧？或者是一个查询结构问题，对吧？
+
+94
+00:48:23.000 --> 00:48:54.000
+So I think they're all different directions, right. I can change the way my query is written, I can change my table definition, or I could add indexes. Oftentimes, changing the query, like how you write it, or adding or sometimes removing or changing an index, those are the easier choices, because they're really fast to do, like indexes or cache structures of sorts, right? So you can just create new ones and the Postgres planner will choose them if they're better most of the time. And so most of the time, I would say, probably start with understanding
+所以我认为这些都是不同的方向，对吧。我可以改变查询的编写方式，我可以改变表定义，或者我可以添加索引。通常，改变查询，比如你的写法，或者添加、有时删除或更改索引，这些都是较容易的选择，因为它们做起来非常快，比如索引或某种缓存结构，对吧？所以你只需创建新的索引，如果它们更好的话，大多数情况下 Postgres 规划器会选择它们。所以大多数情况下，我想说，可能要从理解
+
+95
+00:48:54.000 --> 00:49:18.000
+what the query is trying to do. If there's a simple change you can make in the query, try that first because it's going to be fastest, right? Then next, look at indexes. And then really only if that doesn't work, then it helps to look at the actual data model i'll give you one example of where the data model makes a big difference is again think back to this physicality of looking at those portions of the file on disk if your rows like in your table if
+查询试图做什么开始。如果查询中可以进行简单的修改，先尝试那个，因为那样最快，对吧？接下来，看看索引。然后，真的只有在这些方法行不通时，再去查看实际的数据模型，我会给你举一个数据模型会产生巨大影响的例子，同样要回想一下磁盘上查看文件那些部分的物理特性，如果你的行，就像你的表中的
+
+96
+00:49:18.000 --> 00:50:02.000
+each row is very wide right so you have a lot of columns in them maybe a lot of text columns that are like have a lot of text in them then they will take up a lot of space in each page and so what happens is that you know like let's say you have this eight kilobyte page um and you have you know each row taking one kilobyte so at most you'll have probably seven um rows maybe eight rows to hang on math works out per page now imagine instead you had instead of that one megabytes sized row, you had 100 kilobytes size row, suddenly you can fit 10 times more into each page, right? And so the thing that matters there is, if your data, if you have a really wide table, that can sometimes be a big problem. And so it does sometimes make sense to essentially think about making tables small from
+每一行非常宽，对吧？也就是说你里面有很多列，可能有很多文本列，里面包含大量文本，那么它们就会在每个页面中占用大量空间，所以会发生什么呢，你知道的，比方说你有这个 8 KB 的页面，嗯，并且你有，你知道的，每一行占用 1 KB，所以你最多大概会有 7 行，也许 8 行，如果算一下的话，每个页面能存这么多。现在想象一下，如果你不是那种 1 兆字节大小的行，而是一个 100 千字节大小的行，突然之间你可以在每个页面中塞下多达 10 倍的内容，对吧？所以这里重要的事是，如果你的数据，如果你的表非常宽，这有时会成为一个大问题。因此，从
+
+97
+00:50:02.000 --> 00:50:18.000
+a physical perspective, in terms of each row being small, like having less columns or having less text columns in particular, because then you're optimizing for that. Yeah, so that's, I mean, I guess that's like a pretty universal, it's like a data locality thing, which is like, oh, hey, I want to,
+物理角度来看，从每一行都很小的角度出发，考虑让表变小有时是有意义的，比如减少列数，或者特别是减少文本列，因为这样你就是在为此进行优化。是的，所以，我的意思是，我想这算是一个相当普遍的原则，就像数据局部性问题，意思是，哦，嘿，我想，
+
+98
+00:50:18.000 --> 00:50:46.000
+if I have a JPEG attached to the row, it might be better to like insert it with an ID and then put the ID in the row. So that way, like, as you're mentioning mentioning you don't have to physically read in pages to get through the data to get through the jpeg maybe handle jpeg separately but you know you don't have to like physically read in multiple pages trying to get to the next page of actual data that you're interested in you're trying to make it really compact so that the number of rows through the reader go as fast as possible like the highest throughput and
+如果我在行中附加了一张 JPEG，最好是把它和一个 ID 一起插入，然后把 ID 放在行中。这样一来，就像你提到的那样，你就不必为了遍历数据以获取 JPEG 而物理读取页面了，也许可以单独处理 JPEG，但是，你知道，你不需要为了到达下一个你感兴趣的实际数据页面而去物理读取多个页面，你试着把它弄得非常紧凑，以便通过读取器的行数尽可能快地通过，就像最高的吞吐量一样，并且
+
+99
+00:50:46.000 --> 00:51:14.000
+you do that by moving data that's unlikely like you're not querying for text inside a jpeg you know it's stored it sort of stores externally or differently so that you know your your queries run fast that's right and i'll add one quick thing just so that people don't get confused if at some point you do dive into this detail um so one important thing to know in Postgres in particular is that if your data gets beyond a certain size, there's actually a separate storage for it. So Postgres, what you just described, Postgres has a way of doing this, right?
+你通过移动不太可能的数据来实现这一点，你不会去查询 JPEG 内部的文本，你知道，它是外部存储的或者以不同方式存储的，这样你的查询就能运行得很快，对吧，我会补充简短的一点，以免大家在某些时候深入了解这些细节时感到困惑，嗯，所以在 Postgres 中需要了解的一个重要事情是，如果你的数据超过了一定大小，其实有单独的存储空间给它。所以 Postgres，就像你刚才描述的那样，Postgres 有这样做的机制，对吧？
+
+100
+00:51:14.000 --> 00:51:43.000
+So if you, for some reason, do decide to store a JPEG, which you shouldn't do, don't store images in your database. But if you do do that for some reason, and they are like multiple megabytes in size, Postgres will actually store it in what's called Toast. Not the, you know know thing you eat but uh the the extended was it the oversized attribute storage technique i think um okay but the point is it's a thing and so if you have really large values they're actually less of a problem the issue is more if you have these medium-sized values right so these things that are kind of they're not large enough to be stored separately
+所以如果你出于某种原因决定存储一张 JPEG——你不应该这么做，不要在数据库中存储图片。但如果你出于某种原因真的那样做了，而且它们有几兆字节大，Postgres 实际上会把它存储在所谓的 Toast 中。不是那个，你知道的，你吃的东西，而是那个扩展的，是叫超大属性存储技术吗，我想，嗯，不过重点是它确实存在，所以如果你有非常大的值，它们其实没那么大问题，问题更在于如果你有这些中等大小的值，对吧？就是那些，它们不够大到需要单独存储，
+
+101
+00:51:43.000 --> 00:52:29.000
+but they're large enough to mess up your page structure that's the issue okay so like it's basically you confuse postgres so he doesn't know is this something i'm actually going to need to access or it's just a blob and so there's like some ambiguous overlap where yeah like it doesn't know it doesn't know where to put them okay that makes that makes sense uh and then good database recommendation don't put your jpegs in the database but i i know people are still going to do it so uh definitely happens um okay so so it's it's has the indexing you know like you said lastly about the the schemas and i think this is like one of those things too that they get fairly debated and approached but i'm a big fan of like thinking about your data models and like in general in general, even for code, I think it's under thought about. And so people don't really sit
+但又大到足以把你的页面结构弄乱，这才是问题所在，好吧，所以基本上，你把 Postgres 给搞糊涂了，以至于它不知道这到底是我实际需要访问的东西，还是它只是一个二进制大对象（blob），所以这里存在某种模棱两可的重叠，对吧，比如它不知道，它不知道该把它们放在哪里，好吧，这说得通，说得通，嗯，还有一个很好的数据库建议，不要把你的 JPEG 放在数据库里，但我知道人们还是会这么做，所以这绝对会发生，嗯，好吧，所以它有索引，你知道的，就像你刚才说的，最后是关于模式的，我认为这也是那些被相当多地争论和探讨的话题之一，但我非常喜欢思考数据模型，总的来说，甚至对于代码来说，我认为人们对它的思考还不够。所以人们并没有真正坐
+
+102
+00:52:29.000 --> 00:53:09.000
+down and think like, how does my data actually need to look what goes in it, people just sort of like start writing code and shoving stuff into classes, structures, tables, like it's sort of all manifesting the same, the same sort of problem and sitting down, but you get into this discussion where i guess you hear people talk about normalizing or denormalizing your data like you know you're like it's a star pattern and data warehousing versus anything i mean feel free to just be like no i don't want to talk about that but like any any commentary or thoughts on like is it better to put as much stuff locally into the row put it into separate and do joins like how what is your philosophy sort of like i mean the one thing i'll mention so denormalizing and normalizing is important right so the i mean the
+下来思考，我的数据实际上需要长成什么样，里面放什么，人们只是开始写代码，把东西塞进类、结构体、表中，这感觉都像是在表现同一种、同一种问题，而且坐下来，但你会陷入这样一种讨论，我想你会听到人们谈论规范化或反规范化你的数据，就像你知道的，你觉得这就像数据仓库中的星型模式与任何其他模式的对比一样，我的意思是，如果不想谈论这个，大可直说，不过对于诸如把尽可能多的东西本地化到行中，还是放到独立的表中然后进行连接，你有什么评论或想法吗？你的哲学是什么样的？我的意思是，我要提的一点是，反规范化和规范化是很重要的，对吧？所以，我的意思是，
+
+103
+00:53:09.000 --> 00:53:50.000
+most let's put this in layman's terms it's like do i have one copy of my data or multiple copies of my data right so sometimes it makes sense to essentially write the exact same value to multiple tables because then you normalize it and the benefit of that can be that you don't have to look at the other table to get the data right um but maybe even like so this is one case and it's very situational but i would say don't denormalize unnecessarily right like in the simplest case like start out by just storing your data once like it's going to be smaller it's going to be easier and then if you encounter issues where that's not feasible then think about um denormalizing um the other thing i'll mention because i think there's oftentimes we talked about this very beginning about documents, like stores versus relational databases. And one of
+用大白话来讲，这就像是：我应该保留一份数据副本还是多份数据副本，对吧？所以有时，将完全相同的值写入多个表中实际上是有意义的，因为这样你就将其反规范化了，这样做的好处可能是你不必去查看另一张表来获取数据，对吧？嗯，不过也许甚至像——这是一种情况，而且非常具体，但我会说不要不必要地反规范化，对吧？就像在最简单的情况下，首先只存储一份数据，它会更小，更容易处理，然后当你遇到不可行的问题时，再考虑反规范化，
+
+104
+00:53:50.000 --> 00:54:30.000
+the things that Postgres actually has this data type is called JSONB. And JSONB is essentially a binary variant of JSON, which is slightly more optimized for indexing. And so the big benefit of JSONB is that instead of you having to specify each of your columns that you're going to need, you actually just have this, you know, JSON column, or JSONB column rather. And this JSONB column is just storing a JSON document, right? It's just storing key values, and it can be nested and all that stuff. And so what you can do that way is you can just throw your data into Postgres and then query it without having to have that rigid structure. There are limitations, and it's not going to be always, it's definitely going to be slower in some ways than just having separate columns.
+我要提到的另一件事是，因为我认为我们经常在刚开始时讨论文档，比如文档存储与关系型数据库。而 Postgres 实际上有一种叫做 JSONB 的数据类型。JSONB 本质上是 JSON 的二进制变体，它针对索引进行了稍微更多的优化。因此，JSONB 的最大好处是，你不必指定你需要哪些列，你实际上只需要拥有这个，你知道的，JSON 列，或者更准确地说是 JSONB 列。这个 JSONB 列只是存储一个 JSON 文档，对吧？它只是存储键值对，并且可以嵌套等等。所以你可以通过这种方式做的是，你可以直接把你的数据扔进 Postgres，然后进行查询，而不必拥有那种死板的结构。它有局限性，它不会总是，在某些方面肯定比只拥有单独的列要慢。
+
+105
+00:54:30.000 --> 00:55:14.000
+But if you're unsure about the structure of your data, right, if you don't know yet, maybe there's metadata attached to your objects, then using something unstructured like a JSON P field is the way to go and is what I would do oftentimes. So I guess it's just don't optimize too early right like rather like keep things normalized do a jsonp column where you need them to have that unstructured information and then if you need to then optimize the structure later on this is this has been like super useful i've uh you know know what databases are and in fact i've tried to encourage people we probably should be using more of them but i've generally avoided them in my life so i've never had to run down this but i always just sort of it's one of those things that kind of like uh it it's a little
+但是如果你不确定数据的结构，对吧，如果你还不知道，也许你的对象附加了一些元数据，那么使用像 JSONB 字段这样非结构化的东西就是正确的选择，这也是我经常会做的事。所以我想这只是不要过早优化，对吧？相反，保持数据规范化，在需要这些非结构化信息的地方使用 JSONB 列，如果需要的话，稍后再优化结构。这真的超级有用，我，你知道数据库是什么，事实上我曾试图鼓励人们，我们可能应该更多地使用它们，但在我的生活中我通常都在避开它们，所以我从来没有经历过这些，但我总是觉得，这就像是那种有点
+
+106
+00:55:14.000 --> 00:55:55.000
+confusing it's pretty in depth and i feel and i don't and i don't know um and we're going to kind of try to transition this here but uh for me i feel like it almost became these techniques you're talking about are critical and useful but it once became like oh when i was coming out of school there was like a database admin was like a big thing and then people did not want to be database admins i don't know like the current zeitgeist around like database admins but a lot of people just got this like you know i do not want to do you know looking at queries and i do not want to do optimization like that is a dead-end job you do not want it you're going to be like you know stuck racking servers or whatever the the like mindset was i don't know where it
+让人困惑、相当深入的事情，而且我觉得，我不知道，而且我们接下来打算在这里过渡一下，但对我来说，我觉得它几乎变成了——你谈论的这些技术至关重要且非常有用，但曾几何时，比如自我从学校毕业出来时，数据库管理员是个很了不起的职位，然后人们又不想当数据库管理员了。我不知道，就像现在围绕数据库管理员的时代精神是什么，但很多人只是得到了这样一种观念，你知道，我不想做，我不喜欢看查询，我不想做这种优化，那是一份死胡同的工作，你不会想做的，你最终会像，你知道，被困在机房理线服务器什么的，这种心态是怎样的，我不知道它是从哪里
+
+107
+00:55:55.000 --> 00:56:34.000
+came from but i feel like there's like lingering after effects through even to today where people have this hesitancy to like engage with you know databases yet we see like all the major tech companies very reliant on quite traditional uses of databases you know they they gussy them up is that i don't know anyways make them fancy by like you know sharding them and distributed and all of this and we've had great you know podcast interviews with folks folks working on that but i feel still like at the engineer level to engineer level but a lot of people who just would rather avoid it for i don't say like stigma reasons but uh it's been great to hear your explanation of this and like it's really not that different than compiling and debugging
+来的，但我觉得甚至直到今天，它都还留有余波，以至于人们对接触数据库感到迟疑，然而我们看到所有大型科技公司都极度依赖对数据库相当传统的运用，你知道的，他们把数据库包装得很好，我不知道，反正通过对它们进行分片、分布式处理以及所有这些来让它们变得花哨，我们已经与那些从事这方面工作的人进行过非常棒的播客采访，但我仍然觉得在工程师的层面上，许多人为了——我不会说是出于污名化的原因，但为了——宁愿避开它。不过听你对这一点的解释真的很棒，这实际上与编译和调试
+
+108
+00:56:34.000 --> 00:57:06.000
+stuff you would do or at least i do you know day-to-day just like in sort of c++ code and making code run faster and don't use more data than you need to it's all the same concepts right and i would say you know administration is uncool but you don't use more data than you need to it's all the same concepts right and i would say you know administration is uncool but you don't have to call administration right like it's the same if system administrators like people didn't want to be called system administrators anymore maybe other new people coming into industry didn't want to be called administrators and so now we have devops engineers right like it's it's the same thing with databases now people are called data platform engineers instead of like dbas like i think you
+你在日常工作中会做的事情没有什么不同，或者至少我在日常的 C++ 代码中就是这样做的，让代码运行得更快，不要使用超过你所需的数据，这些概念都是一样的，对吧？而且我会说，你知道，管理工作很不酷，但你不需要使用超过你所需的数据，这些概念都是一样的，对吧？而且我会说，你知道，管理工作很不酷，但你不需要把这叫做管理，对吧？就像如果系统管理员——人们不想再被称为系统管理员了，也许进入这个行业的新人不想被称为管理员，所以现在我们有了 DevOps 工程师，对吧？数据库也是一样，现在人们被称为数据平台工程师，而不是 DBA，我想你
+
+109
+00:57:06.000 --> 00:57:42.000
+you pointed out one thing that you know if i think about database performance work right the part that i really enjoy is i can make a difference pretty easily often right like it's oftentimes like you can get drastic performance improvements like something takes multiple seconds and like people have a slow experience to milliseconds and you know it's super fast and that is really rewarding right like as as somebody working on that as somebody as an engineer working on you know it's super fast and that is really rewarding right like as as somebody working on that as somebody as an engineer working on it um it's it's really rewarding to kind of get that kind of uh performance benefit the performance improvement um by doing boring administration in a sense i'm with you i mean running the like debug tool timing code and like seeing literally like
+指出了这样一点，如果我考虑数据库性能优化工作的话，我真正喜欢的部分是，通常我可以很容易地带来改变，对吧？通常你可以获得显著的性能提升，比如某些操作需要好几秒钟，用户的体验很慢，而优化后只需几毫秒，并且，你知道的，速度超级快，这真的很有回报，对吧？作为一个从事这项工作的人，作为一个致力于此的工程师，你知道的，速度超级快，这真的很有回报，对吧？作为一个从事这项工作的人，作为一个致力于此的工程师，嗯，通过做某种意义上枯燥的管理工作，能够获得那种性能效益、性能提升，真的是非常有回报的。我懂你的意思，我的意思是，运行类似调试工具、对代码计时，并且亲眼看到类似
+
+110
+00:57:42.000 --> 00:58:20.000
+7 000 x speed ups right right? You know, like you said, something, somebody has some program, it takes minutes to run, and now it runs in like, a few milliseconds. This is something I find enormously rewarding. But it's this grunge work of going in and putting the logging in like paying attention, but maybe you and I are broken the same way. I find that enormously rewarding, because it's just like, haha, you did this. And here's my it's like code golf, I guess, or whatever, like, you know, here's my speed, it's so much better than your speed. So I was going to transition it now. So so we opened up with that, that your founder at this company, PG analyze, I guess, tipped off by you've already said the word analyzer and Postgres
+7000 倍的速度提升，对吧？你知道的，就像你说的，某人有个程序，运行需要几分钟，现在只要几毫秒就能跑完。这是我觉得非常有成就感的事情。但这也是那种需要深入其中并加上日志、需要全神贯注的繁重工作，不过也许你和我在这方面是一类人。我觉得这非常有成就感，因为这就像是，哈哈，你做到了。这就是我的，这有点像代码高尔夫（code golf），或者随便你怎么说，你知道，这就是我的速度，它比你的速度快得多。所以我现在打算过渡一下。所以我们以此开篇，你是这家名为 PG Analyze 公司的创始人，我想，从你刚才已经说出 analyzer（分析器）这个词以及 Postgres 在
+
+111
+00:58:20.000 --> 00:58:42.000
+shortening to PG there, I think we might might be teed off to what is a little, but maybe help explain like what your company does and sort of like a little bit about it and just sort of like tell folks what you're up to. Sure. And I'll try to put this in, you know, from the perspective of why I as an engineer care about that and why I started a company. So let me give you just a little bit of background
+这里缩写为 PG 来看，我想我们可能已经对它是什么有了一点线索，不过也许可以帮助解释一下你们公司是做什么的，以及它的背景，并向大家介绍一下你们在忙些什么。当然。我会试着从以下角度来阐述：为什么我作为一名工程师会在意这些，以及我为什么要创办一家公司。所以让我简单介绍一点背景，
+
+112
+00:58:42.000 --> 00:59:09.000
+on how the company came to be. So ultimately I started as a site project, which is close to 11 years ago now. So it's been a while. But I've only been, you know, kind of full time in the last couple of years. And so we now have a small team, you know, essentially supporting it. And ultimately, what I set out to do with PG Analyst at the beginning was giving me better introspection into the database, right? So back then, again, all focused on Postgres, right? Pointed out PG, short for Postgres.
+关于这家公司是如何诞生的。最终，我是在大约 11 年前把它作为一个业余项目开始的。所以已经有一段时间了。但我只是在过去几年里才全职投入其中。所以我们现在有一个小团队，基本上在支持它。最终，我在一开始建立 PG Analyze 的初衷是让我对数据库有更好的内省能力，对吧？所以当时，还是专注于 Postgres，对吧？指出 PG 是 Postgres 的缩写。
+
+113
+00:59:09.000 --> 00:59:33.000
+And so the reason that I started that as a project back then was that I tried to say, you know, what does the database think is going on, right? Like if I look at the database and I see like CPU utilization or IO utilization, it doesn't really tell me much. And so the very first thing that we did back then was just query performance metrics, essentially. And so it was just saying, you know, here is this query that was running and this query took the most time and there's various ways in postgres to get that data and to kind of say you know this is
+当时我把这个作为一个项目启动的原因是，我试着去想，数据库认为自己正在发生什么，对吧？如果我查看数据库并看到 CPU 利用率或 IO 利用率，它并没有真正告诉我多少信息。所以当时我们做的第一件事基本上就是查询性能指标。它只是在说，你知道，这是刚才运行的查询，这个查询花费的时间最多，在 Postgres 中有各种方法来获取这些数据，并说明，你知道，这是
+
+114
+00:59:33.000 --> 00:59:51.000
+a query that's essentially making the system busy and so that's how we kind of set out to you know kind of just have a way to say here is what's most slow on the database um now over the years um and especially more recently, what we've turned this into is not just, you know, kind of that monitoring and observability side, but really also giving recommendations.
+一个基本上让系统变忙的查询，所以这就是我们开始的方式，你知道，只是想有一种方法说，这是数据库上运行最慢的东西。嗯，这些年来，特别是在最近，我们将其转变为不仅是监控和可观测性方面，而且还真正地提供建议。
+
+115
+00:59:51.000 --> 01:00:03.000
+And so we already touched upon indexes earlier, but one of the things that I'm, I think, reasonably proud of is our implementation of how we make index recommendations. Now, it's actually not as good as I'd like it to be, nowhere near it,
+所以我们刚才已经谈到了索引，但我认为我相当自豪的一件事是我们如何实现索引建议的方式。现在，它实际上还没有达到我理想中的那种程度，远没有达到，
+
+116
+01:00:03.000 --> 01:00:22.000
+but it is, you know, I think a system that is a really good starting point that says, here is my query workload. Here are the suggested indexes, essentially. Here is what's missing. You're querying for these things. You're doing these where clauses and these join clauses. We think this index would be helpful to make your queries faster.
+但它是一个很好的起点系统，能够指出：这就是我的查询工作负载。这就是建议的索引，基本上就是这样。这就是缺失的部分。你正在查询这些东西。你正在使用这些 where 子句和 join 子句。我们认为这个索引将有助于使你的查询更快。
+
+117
+01:00:22.000 --> 01:00:35.000
+Go try it out. Human in the loop type system, right? Actually try it out and see if it makes a difference. Well, that's awesome. So you guys, so how, I mean, so you're an extension, you're sort of like,
+去试试看吧。一种人在回路的系统，对吧？去实际尝试一下，看看它是否能带来改变。哇，太棒了。所以你们，那么，你是作为一种扩展，你有点像，
+
+118
+01:00:35.000 --> 01:00:47.000
+how does that, how does it like integrate in? I have a database I'm running, like your service comes alongside and sort of monitors what mine is doing. And then I'm able to sort of get these suggestions and try them out. So we'd love to be an extension, but we're not.
+它是如何集成的呢？我正在运行一个数据库，你们的服务会在一旁运行并监控我的数据库在做什么。然后我能够获得这些建议并进行尝试。我们非常愿意成为一个扩展，但我们不是。
+
+119
+01:00:47.000 --> 01:01:04.000
+So the problem with extensions, this is kind of a technicality, but the sad part is extensions require you to usually have access to a database server. And what we find in practice is that most people today don't run their own database service. They use managed services like Amazon RDS or Google Cloud SQL or Azure Database.
+所以扩展的问题在于，这有点像技术细节，但令人遗憾的是，扩展通常需要你对数据库服务器拥有访问权限。我们在实践中发现的是，当今大多数人并不运行自己的数据库服务。他们使用托管服务，比如 Amazon RDS、Google Cloud SQL 或 Azure Database。
+
+120
+01:01:04.000 --> 01:01:26.000
+And so the issue is that you can't really write the custom extension and run it, have your customers expect to run it, right? I mean, you can yourself can certainly run it, but we intentionally did not require any custom extension. What we do is we have people install an agent and that agent essentially sits next to the database, right? Like it's in a container or in a virtual machine. And essentially it runs SQL queries itself
+所以问题在于，你不能真正编写自定义扩展并运行它，让你的客户期望去运行它，对吧？我的意思是，你自己当然可以运行它，但我们故意不要求任何自定义扩展。我们做的是让人们安装一个代理，该代理基本上位于数据库旁边，对吧？就像它在一个容器或虚拟机中一样。它基本上自己运行 SQL 查询，
+
+121
+01:01:26.000 --> 01:01:39.000
+to get data from database about like statistics that are happening. And then the other thing it's doing, it's looking at the error logs. So we do a lot of log parsing because that's where we get additional information, like which query plan happened at which time, like there's ways to tell Postgres
+以从数据库中获取关于正在发生的统计数据的数据。然后它做的另一件事是查看错误日志。所以我们做了大量的日志解析，因为那是我们获得额外信息的地方，比如哪个查询计划在什么时候发生，有一些方法可以告诉 Postgres
+
+122
+01:01:39.000 --> 01:01:51.000
+to log query plans. And so we essentially pick up those query plans to then kind of put them in a more easily accessible UI. Oh, wow, that's awesome. That's interesting. Yeah, I guess I didn't really think about that, but you're right.
+去记录查询计划。所以我们基本上会捕获那些查询计划，然后将它们放入更易于访问的用户界面中。哦，哇，太棒了。真有趣。是的，我想我之前没有真正考虑过这一点，但你是对的。
+
+123
+01:01:51.000 --> 01:02:05.000
+Like most people are probably not like, you know, installing locally a Postgres database and running it and they're running it somewhere in the cloud. So like adapting to that and still being able to make it work, I guess like it's even less obvious to me that it would work.
+就像大多数人可能没有在本地安装 Postgres 数据库并运行它一样，他们是在云端的某处运行它。所以适应这一点并仍然能够让它工作，我觉得它能工作这一点对我来说甚至更加不明显。
+
+124
+01:02:05.000 --> 01:02:20.000
+But yeah, the fact that you guys, that's actually really cool. And so this started as like sort of a side project is clearly something you're passionate about. I mean, like we've sort of touched on these subjects sort of all together and building a tool that sort of like helps you do the things that you would do naturally,
+但事实是你们，这真的很酷。所以这作为一个业余项目开始，显然是你充满热情的事情。我的意思是，我们差不多把这些主题放在一起讨论了，并且构建了一个工具，它有点像能帮助你完成你本来会自然而然去做的事情，
+
+125
+01:02:20.000 --> 01:02:45.000
+but like faster. And, you know, for people who maybe don't have that background or expertise and really helping people who, you know for people who maybe don't have that background or expertise and and really helping people who you know run into slow queries and be able to sort of like help break them open and and sort of look at them have you guys felt like that uh people is it much is it people who are like pretty experienced and saying oh these are actually just like incredibly time saving and i know i know that i can tell what it's doing is smart and good. And
+但速度更快。并且，对于那些可能没有那种背景或专业知识的人，真正去帮助那些遭遇慢查询并能够将它们剖析开来、进行查看的人，你们是否觉得——人们，这是不是主要是那些相当有经验的人说：“哦，这些实际上太省时了，而且我知道我能看出它在做什么，既聪明又好。
+
+126
+01:02:45.000 --> 01:03:25.000
+I like it. And I want to use it to save time. Or is it more people are like, yeah, I have no clue. Like, I'm just going to, you know, click yes, whatever it says, and I'm just going to trust you to be in charge of everything. Yeah, I would definitely say it's both, you know, it really depends. So you know, we, the good thing is, we have enough customers that I definitely don't know all their names. And you know, I don't know all the use cases either. But I think one pattern that I definitely see, and this is, you know, for the folks listening, if you're currently in college, for example, you may, this may be like, at least conceptually a long way from where you're at. But what's out there often in industry these days is that you have usually what's called data platform team. And so there's often in big
+并且我喜欢它。我想用它来节省时间。”还是更多的人会说：“是的，我毫无头脑。就像，我只会，你知道，点击‘是’，无论它说什么，我都会信任你来负责一切。”是的，我绝对会说两者皆有，这真的取决于具体情况。所以你知道，我们，好消息是，我们有足够多的客户，以至于我肯定叫不出他们所有人的名字。而且你知道，我也不知道所有的用例。但我认为我绝对看到的一个模式是——对于正在收听节目的朋友们，如果你目前正在上大学，例如，这在概念上可能离你现在所处的位置还很远。但如今在工业界中常见的情况是，通常有所谓的数据平台团队。因此，在大公司里通常有一个中央团队来运营数据存储，
+
+127
+01:03:25.000 --> 01:04:01.000
+organizations there's a central team that operates data stores right in databases and so one of the things that we found is that those you know centralized teams that manage the databases they ultimately work with application engineers right because application engineers write the code they make all these feature changes and so the challenge that they have is that they are usually just a small team like you might have 100 application engineers, 200 application engineers, but there's just like five data platform engineers that are like wrangling all the databases. And you know, if any of the databases is down or slow, everything is on fire. But there's still just this tiny team. And so really, where we come in, and where we found, you know, making the biggest impact,
+嗯，在数据库中。因此，我们发现的一件事是，这些集中管理数据库的团队，他们最终会与应用工程师合作，因为应用工程师编写代码，他们进行了所有这些功能更改。所以他们面临的挑战是，他们通常只是一个小团队，你可能有一百个应用工程师、两百个应用工程师，但只有大约五个数据平台团队的工程师在处理所有的数据库。而且，你知道的，如果任何一个数据库宕机或变慢，一切都会陷入瘫痪。但仍然只有这么一个小团队。所以，我们真正切入的地方，也是我们发现能够产生，
+
+128
+01:04:01.000 --> 01:04:22.000
+so to say, is just enabling those teams to then ultimately hand off more things to the application teams, right? So to give better tooling to the application team so that the application team can say, hey, maybe this is an obvious issue that PG Analyze can help me identify. So I don't need to spend as much time with that really overwhelmed data platform team.
+可以说是最大影响力的地方，就是赋能这些团队，让他们最终能够将更多的事情移交给应用团队，对吧？从而为应用团队提供更好的工具，以便应用团队能够说：“嘿，这也许是一个明显的、PG Analyze 可以帮我识别的问题。所以我不需要花太多时间去麻烦那个已经不堪重负的数据平台团队。”
+
+129
+01:04:22.000 --> 01:04:58.000
+And so it just becomes that way of kind of collaborating more effectively that's awesome and then how like i guess like a bit a bit on a an adjacent topic but a bit off topic um sort of taking something that i think you had been doing for a lot of years you know had kind of been like you said a side project turning it into a company how's that experience been like any sort of like like introspective tips or like suggestions like people out there this is like for anyone who has is sort of new you will have these thoughts you will sit someday in a big company if you ever go there and you will think why am i here i could do this on my own i could be making more doing this on my own if you're not at
+所以这成了一种更有效协作的方式，太棒了。然后——关于一个有点相关但又稍微偏离的话题，嗯，差不多就是把你多年来一直在做的事情（正如你所说，曾是一个业余项目）转变成一家公司，那种经历是怎样的？有没有什么内省的贴士或建议，献给外面的——这是给任何有这种想法的新人准备的，你总有一天会在一家大公司里工作，如果你去过那里的的话，你会想：“我为什么在这里？我自己也能做这个，我自己做这个能赚更多钱。”如果你不在
+
+130
+01:04:58.000 --> 01:05:19.000
+a big company you're going to say why am i doing this i could just be at a big company you know so these thoughts are at least for everyone I've ever spoken to, these are always sort of at war in our heads. But from someone who's sort of, I think you said you had been at Microsoft for a while. Now you're sort of doing this on your own. You've kind of played both sides of it, I guess. Any sort of like thoughts or tips from the trenches?
+大公司，你会说：“我为什么要做这个？我本可以去一家大公司。”所以这些想法，至少对于我交谈过的每个人来说，总是在我们的脑海中交战。但从一个——我想你之前说过你在微软待过一段时间，现在你自己在做这个，你基本上扮演了双方的角色。从战壕里走出来，有什么想法或建议吗？
+
+131
+01:05:19.000 --> 01:05:49.000
+Yeah, I think, you know, there's the saying, if you like drinking coffee at a coffee shop, don't create your own coffee shop, right? So you like drinking coffee at a coffee shop don't create your own coffee shop right so like don't start your coffee shop because you would wish there was a coffee shop around the corner because running a coffee shop is not the same as drinking coffee at a coffee shop so this is great i'm paraphrasing but you know what i mean right like there's like running a business is definitely not the exact same thing as you imagining using that business as an end user of imagining it exists right so i think there is something to be said about do you actually want
+是的，我认为，俗话说得好：如果你喜欢在咖啡馆喝咖啡，就不要自己开一家咖啡馆，对吧？所以如果你喜欢在咖啡馆喝咖啡，就不要自己开一家咖啡馆，对吧？所以不要去开一家咖啡馆，只是因为你希望转角处能有一家咖啡馆，因为经营一家咖啡馆和在咖啡馆喝咖啡并不是一回事。这太棒了，我在用自己的话复述，但你懂我的意思，对吧？就像经营一家企业绝对和你想象中作为终端用户去使用那家企业、或者想象它存在完全不是一回事，对吧？所以，我想这是值得探讨的：你真的想
+
+132
+01:05:49.000 --> 01:06:15.000
+to run a business because it it's great don't get me wrong i really enjoy working on my own terms and you know having a team of folks working you know with me and kind of like that's all great but it is not necessarily the same as saying i'll just go and create a project for fun right so i think there's an important distinction there. Now, I will say that it's definitely possible, but you have to have a lot of patience. So I'm very much, I mean, we bootstrapped the company, we have no outside funding. And because we bootstrapped it,
+经营一家企业吗？因为这很棒，别误会我的意思，我真的很享受按照自己的意愿工作，并且拥有一群与我一起工作的团队，你知道，这都很棒，但这并不一定等同于说“我只是为了好玩而去创建一个项目”，所以我觉得这里有一个重要的区别。话虽如此，我可以说这绝对是可能的，但你必须有极大的耐心。所以我是那种，我的意思是，我们是自筹资金（bootstrapped）的公司，我们没有外部融资。正因为我们是自筹资金，
+
+133
+01:06:15.000 --> 01:06:31.000
+that's why it was a side project for a long time is because revenue just wasn't there in the beginning. It just took a long time to even be able to pay one person's salary. And if you're willing to do that, I personally believe that most people listening to this will be able to create their own business if they really go for it, right?
+所以它长期以来只能是一个业余项目，因为一开始根本没有收入。仅仅能够支付一个人的薪水就花了很长时间。如果你愿意这样做，我个人相信，听节目的绝大多数人如果真正去追求的话，都能够创建自己的企业，对吧？
+
+134
+01:06:31.000 --> 01:06:54.000
+But the challenge is that you have to have that longevity. You have to have the motivation. And so I think what I would do, if I would do it again, is focus on something that you, A, enjoy working on. B, can use yourself, right? So ideally, you're your own customer in some way or form because then it's just much more motivating um and you know c you actually enjoy building the business side of it not just you know like you actually want
+但挑战在于你必须具备这种持久力。你必须有动力。所以我想，如果我再来一次的话，我会专注于几点：A，你喜欢做的事情。B，你自己能用到的东西，对吧？所以理想情况下，你在某种程度上就是自己的客户，因为那样会更有动力，
+
+135
+01:06:54.000 --> 01:07:27.000
+to run the coffee shop yeah i guess like for for folks out of the industry i mean i guess that like eating your own dog food was like very weird term to me the first time I sort of like heard it. Everyone sort of takes it for granted now, but like I was like, what? It is a weird term. I was like, this is, this is like interior and people even say, oh, dog food programs. And like, there's all these, and there's even other variants I won't go into for different big companies, but this is like a very common term, which is, you know, what Lucas is referring to here is like, if you can build something and be your own customer for that thing, and like,
+并且，C，你实际上喜欢建立企业的那一面，而不只是，你知道的，你真的想经营那家咖啡馆。是的，我想对于行业外的人来说，我的意思是我觉得“吃自己的狗粮（eating your own dog food）”这个术语在我第一次听到时觉得非常奇怪。现在每个人都把它当成理所当然，但我当时想：什么？这是一个奇怪的术语。我当时想，这太内行了，人们甚至会说“狗粮项目”。而且还有各种各样的变体，我不打算在这里列举不同大公司的各种说法，但这确实是一个非常常见的术语，也就是
+
+136
+01:07:27.000 --> 01:08:02.000
+force yourself to use it, like, that just makes the iteration cycle better. Like you're teaching yourself something, you're staying engaged with it. I think we talked about at the beginning, you guys started playing video games, I feel like video games are very obvious example, because you're like, well, of course, I would play this video game. And you I don't know anyone who would sit down and say, I'm going to build a video game i don't want to play like everyone sits down and says i'm going to build a video game that i want to play and so they're inherently saying i want to build something that i know whether or not they enjoy playing it by the end that's a different different question um but maybe this loses some of its obviousness as people
+卢卡斯在这里所指的是，如果你能构建某些东西并成为该东西的自己的客户，并且强迫自己去使用它，那么这只会让迭代周期变得更好。就像你在教导自己一些东西，你与它保持着紧密的联系。我想我们在开始时谈到，你们开始玩电子游戏，我觉得电子游戏是一个非常明显的例子，因为你会想：嗯，当然，我会玩这个电子游戏。我不知道有谁会坐下来然后说：“我要制作一个我不想玩的电子游戏。”每个人坐下来都会说：“我要制作一个我想玩的电子游戏。”所以他们本质上是在说：我想构建一些东西，通过它最后能否享受游玩的过程来检验自己，这是另一个问题，
+
+137
+01:08:02.000 --> 01:08:42.000
+sit down and they try to say i just want to build a business. And then this thing you mentioned, I think was great to this, like, for folks who don't know this bootstrap versus like taking external investment is a is a very tough decision. And I haven't been to myself, so I won't fess any knowledge or wisdom there. But it's great to hear someone like, you know, share some examples. I think you hear a lot of pros and cons of both sides, but clearly a really big passion project for you. You can kind of like hear it come across and that, you know, even in the beginning, I was sure, you know, Lucas making sure people want to know that, you know, he's technical, but I mean, I think that's pretty clear from, from the explanations, but you know, I think like it's exciting and, you know, it's been great talking to you. And
+不过，也许当人们坐下来并试图说“我只想开创一项业务”时，这种显而易见性就消失了。然后你提到的这一点，我认为非常好，对于那些不知道自筹资金（bootstrap）与接受外部投资之间区别的人来说，这是一个非常艰难的决定。我自己没有经历过，所以我不会假装自己有什么知识或智慧。但听到有人分享一些例子真的很棒，我想你会听到双方的很多优缺点，但这显然是一个对你充满热情的项目。你可以从你身上感受到这一点，而且，你知道，甚至在一开始，我确信，你知道，卢卡斯要确保人们知道他是懂技术的，但我的意思是，从这些解释来看这已经很清楚了，不过，你知道，我认为这令人兴奋，而且，与你交谈非常愉快。
+
+138
+01:08:42.000 --> 01:08:58.000
+I learned a lot today. I mean, there's a huge gap in my knowledge from what actually happens. I know at a really low level, I know what a B2 is. At a really high level, I know what a Postgres server is, but kind of unboxing some of the middle parts and some of these optimizations
+我今天学到了很多。我的意思是，在实际发生的事情方面，我的知识存在巨大空白。我在很低的层面上知道什么是 B 树（B2 原文如此）。我在很高的层面上知道什么是 Postgres 服务器，但对中间的一些部分以及其中的一些优化
+
+139
+01:08:58.000 --> 01:09:27.000
+and what happens to you, as well as a ton of tips and tricks along the way for sort of heuristics about when to... This has been great, Lucas. Is there anything else you wanted to like t up uh we'll have the link to pg analyze just pganalyze.com so it's pretty easy to find anything else you want to like send people to or you know you know recommend them to look at for sure and i'll actually add one more thing that we talked a little bit about earlier but i just make sure to mention it for this audience in particular is if you're interested in databases,
+和发生的事情进行了拆解，沿途还有大量关于何时……的启发式技巧和窍门。这太棒了，卢卡斯。还有什么你想提及的吗？我们会在链接中放上 pg analyze，网址就是 pganalyze.com，所以很容易找到。还有什么你想指引大家去看，或者推荐大家去了解的吗？当然，我还要补充一点，我们刚才早些时候讨论过，但我一定要向这个特定受众提及的是，如果你对数据库感兴趣，
+
+140
+01:09:27.000 --> 01:09:44.000
+well, there's two things I'll point out. So if you're interested in database in general, CMU actually has a course on databases where they publish all the lectures online. It's really good on databases more broadly. So if you want to look for just CMU and database things, and Andy Pavlo is the one who runs that, that's, I would say, you know,
+嗯，有两件事我要指出。所以如果你对数据库总体上感兴趣，卡内基梅隆大学（CMU）实际上有一门关于数据库的课程，他们会在网上公开所有的讲座。它对更广泛的数据库知识非常有帮助。所以如果你想寻找 CMU 和数据库相关的内容，安迪·帕夫洛（Andy Pavlo）是负责这门课的人，可以说，这是
+
+141
+01:09:44.000 --> 01:10:00.000
+one of the best just online materials to learn about databases more broadly. If you're interested in Postgres in general, one thing I would recommend is Postgres like talks about everything in the open. So Postgres has mailing lists. It's old school in that sense. So you can actually follow along,
+了解更广泛数据库知识的最好在线材料之一。如果你对 Postgres 总体上感兴趣，我推荐的一件事是，Postgres 讨论所有事情都是公开的。所以 Postgres 有邮件列表。从这个意义上说，它很传统。所以你实际上可以关注它的发展，
+
+142
+01:10:00.000 --> 01:10:26.000
+which is really cool. You can actually follow along Postgres development. It's really technical, right? But if you ever are really interested in this like at the lowest level you can just subscribe to the mailing list and you can just see what people are discussing and how new features get contributed so that can be really fascinating if you're into that side of the house and if you you know want to contribute to postgres there's also each year google summer of code where postgres participates as you is you can actually kind of have an official project and a mentor
+这真的很酷。你实际上可以关注 Postgres 的开发。它非常技术性，对吧？但如果你对这个最低级别的底层内容真的很感兴趣，你只需订阅邮件列表，就能看到大家在讨论什么以及新功能是如何贡献的，如果你喜欢这方面的内容，这会非常吸引人。如果你想为 Postgres 做贡献，每年还有 Google 夏令营（Google Summer of Code），Postgres 会参与其中，你实际上可以有一个官方项目和一个导师，
+
+143
+01:10:26.000 --> 01:10:49.000
+that help you kind of contribute to Postgres. Now on PG Analyze, I do a weekly video series called Five Minutes of Postgres. So if you're interested in Postgres, each week on the PG Analyze YouTube channel, there's just a five-minute video where I talk about what I found interesting that week. So sometimes that's, you know, usually it's other people's blog posts that I use as a starting point, but I'll talk about things like the slow query optimization that we talked about earlier today,
+帮助你为 Postgres 做贡献。至于 PG Analyze，我每周主持一个名为“Postgres 五分钟”（Five Minutes of Postgres）的视频系列。所以如果你对 Postgres 感兴趣，每周在 PG Analyze 的 YouTube 频道上都会有一个五分钟的视频，我在其中讨论我那周觉得有趣的事情。有时那是，通常是我用别人的博客文章作为起点，但我会谈论诸如我们今天早些时候讨论的慢查询优化、
+
+144
+01:10:49.000 --> 01:11:06.000
+new features and new Postgres releases. So just a way to stay on top of Postgres. And then pgannalize, pgannalize.com. We're also on Twitter as pgannalize. Awesome. And also kudos for like the remembering multiple punch list things that to go through and get back onto the topic.
+新功能和新的 Postgres 版本之类的内容。这只是一个紧跟 Postgres 步伐的方法。然后是 pganalyze，pganalyze.com。我们在 Twitter 上的名字也是 pganalyze。太棒了。另外，真佩服你能记住要经历的多个备忘单事项并能回到原话题。
+
+145
+01:11:06.000 --> 01:11:30.000
+That was very smooth. Very impressive, Lucas. Well, I've enjoyed having you on the show. I hope folks find this as enjoyable as I did as educational. And databases are a very important topic for our industry and lots of different avenues and directions. And so I've learned a lot today and it's been great to have you on the show. So thank you for coming. Yeah. Thank you so much for hosting.
+非常流畅。非常令人印象深刻，卢卡斯。嗯，我很高兴你能来参加节目。我希望大家能像我一样觉得这次访谈既愉快又有教育意义。数据库对我们的行业来说是一个非常重要的主题，有许多不同的途径和方向。所以我今天学到了很多，你能来参加节目真是太好了。所以谢谢你的到来。好的。非常感谢你的主持。
+
+146
+01:11:30.000 --> 01:11:35.000
+All right. And we'll see everyone next time. See everyone later. Music by Eric Barndollar. music by eric barn dollar programming throwdown is distributed under a creative commons attribution share alike 2.0 license you're free to share copy distribute transmit the work to remix adapt the work but you must provide provide attribution to Patrick and I and share alike in kind. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+好的。我们下次见。大家再见。音乐由Eric Barndollar创作。Programming Throwdown是在知识共享 署名-相同方式共享 2.0 协议下分发的。你可以自由分享、复制、分发、传输该作品，以及进行重混和改编，但你必须注明署名给我和Patrick，并以相同方式共享。本期节目暂无评论。点击文字记录中的任意句子即可发表评论。

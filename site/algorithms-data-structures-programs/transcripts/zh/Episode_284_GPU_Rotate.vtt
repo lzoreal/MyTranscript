@@ -1,0 +1,321 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:30.000
+And then also whenever you are at the first tile and you want to copy the first element into the back of the array, you also need to make sure that the first tile or the last tile has already been read because you would be overwriting its space. And so you basically need to guard against those things. But isn't it just like a scan? In what way? That like I'm just moving, well, at least some part of it is I'm just moving information down. I'm just shifting information down. It's just like if you think about it, it's like,
+并且，每当你位于第一个分块，并且想把第一个元素复制到数组的末尾时，你还需要确保第一个分块或最后一个分块已经被读取过，因为你会覆盖它的空间。所以你基本上需要防范这些情况。但这不就像是一个扫描（scan）吗？在什么方面？就像我只是在移动，好吧，至少它的一部分是我只是在向下移动信息。我只是在向下移动信息。这就像如果你仔细想想，它就像是，
+
+2
+00:00:30.000 --> 00:00:45.000
+Like a shift is definitely just a scan. This is just a shift. It's not just a shift. It's like a shift left for one partition, though, and a shift right for the other partition. So you can't do this with a scan, right? What, what, will you explain that to me? Like, if you're doing a one rotate,
+像是一个移位（shift）绝对就是一个扫描。这只是一个移位。它不只是一个移位。不过，这就像是一个分区的左移，以及另一个分区的右移。所以你不能用扫描来做到这一点，对吧？什么，什么，你能向我解释一下吗？比如，如果你在做一个旋转1位，
+
+3
+00:00:45.000 --> 00:01:19.000
+the first element goes to the back. Sure, you can consider that a shift, like a shift right. But then every other element is going left. And like, by definition, how are you going to get the second piece of information in the first spot with the scan? Welcome to ADSP the podcast episode 284 recorded on April 23rd, 2006. My name is Connor and today with my co-host, Bryce, we chat with Marco in part two of this
+第一个元素会去到末尾。当然，你可以认为那是一个移位，就像右移一样。但接着其他所有元素都要往左走。而且，根据定义，你打算怎么用扫描在第一个位置上得到第二个信息片段呢？欢迎收听 ADSP 播客第 284 期，录制于 2006 年 4 月 23 日。我是康纳（Connor），今天与我的联合主持布莱斯（Bryce）一起，在第二部分中与马尔科（Marco）交谈
+
+4
+00:01:19.000 --> 00:01:56.000
+three to four-part interview. In this episode, we do a deep dive on the potential implementation of a GPU rotate. Over to you, Marco. Now, like a mini-representation of the better code GPRotate that you gave a week ago. Yeah, it was recently, so I have everything in my head still. Yeah, so basically the idea of this site project was to implement like a GPU implementation of rotate, doing it in place. And the reason for doing it in place is that you're going to get the best theoretical performance. So our rotate is just moving memory around.
+这个三到四部分访谈的第二部分。在本 episode 中，我们深入探讨了 GPU 旋转（rotate）的潜在实现。交给你了，马尔科。现在，就像你一周前给出的更好代码 GPRotate 的一个迷你表示。是的，这是最近的事，所以我脑子里还存着所有东西。是的，所以基本上这个业余项目的想法是实现一个旋转的 GPU 实现，进行原地（in place）操作。而进行原地操作的原因是，你将获得最佳的理论性能。所以我们的旋转只是在移动内存。
+
+5
+00:01:56.000 --> 00:02:23.000
+So you're going to be bound by the memory bandwidth of the GPU. And so the less memory movement that you have to do, that's going to give you the best theoretical performance. So if you think about it, you could theoretically just, let's say you have an array and you want to rotate it, you could just allocate a buffer of the same size, do the rotation into that other buffer, and then copy the buffer back into the original. That would be like the easy way of doing it. But that way, you're moving from one array to another.
+因此，你将受限于 GPU 的内存带宽。所以你需要进行的内存移动越少，就能给你带来最佳的理论性能。因此，如果你仔细想想，理论上你只需，假设你有一个数组，并且你想旋转它，你可以简单地分配一个相同大小的缓冲区，将旋转操作执行到那个其他缓冲区中，然后把缓冲区复制回原数组。那将是实现它的简单方法。但那样的话，你是在从一个数组移动到另一个数组。
+
+6
+00:02:23.000 --> 00:02:44.000
+And so if your arrays of size n, you would have to do 4N data movement, right? And by doing it in place, you only have to do two times n data movement. Because in a rotate, you're going to have to read each element from the array, and you're going to have to write it back at another location. That's an amount of work that you cannot get around.
+因此，如果你的数组大小为 n，你将不得不进行 4N 的数据移动，对吧？而通过原地进行，你只需进行 2 乘以 n 的数据移动。因为在旋转中，你必须从数组中读取每个元素，并且你必须将它写回到另一个位置。这是你无法绕过的工作量。
+
+7
+00:02:44.000 --> 00:03:04.000
+So the minimum theoretical movement they have to do is two times the size of the array. And so by doing it in place, you're able to get to that theoretical limit. And so that would be what we call speed of light. So if your algorithm, if the throughput of your algorithm is half the memory bandwidth of the GPU, that means that you've achieved the best theoretical performance.
+所以你必须进行的最小理论移动是数组大小的两倍。因此，通过原地操作，你能够达到那个理论极限。这就是我们所说的光速（speed of light）。所以如果你的算法，如果你算法的吞吐量是 GPU 内存带宽的一半，这意味着你已经达到了最佳的理论性能。
+
+8
+00:03:04.000 --> 00:03:36.000
+So that was basically the goal of the project. Wait, why is it half? I'm not sure I understand. Yeah, because you have to, if your array is of size n, you have to read the whole array and you have to write the whole array back. If you're not doing it in place, you have to do four because you have to, you would have to read the array, write it into another array, then read the other array and write it back to the original. That would be four. If you do it in place, you have to read the array and then write it back, which is two. Yeah, but like the way that we usually count, like, for like mem copy, for example, we usually count like memory movement.
+所以这基本上就是该项目的目标。等等，为什么是一半？我不确定我是否理解。是的，因为你必须，如果你的数组大小为 n，你必须读取整个数组，并且你必须把整个数组写回。如果你不是原地操作，你必须做四次，因为你必须，你得读取数组，把它写入另一个数组，然后读取另一个数组并写回原数组。那将是四次。如果你原地操作，你得读取数组然后把它写回，也就是两次。对，但就像我们通常计算的那样，比如对于内存复制（mem copy），例如，我们通常计算像内存移动。
+
+9
+00:03:36.000 --> 00:03:52.000
+We count reads plus rights, but we don't expect it to be half, for something like memory movement, for something like mem copy. I don't understand, I don't understand the half part. Why would you expect? Well, because the memory bandwidth of the GPU is just telling you how many gigabytes per second
+我们计算读取加上写入，但对于某些东西，比如内存移动，对于像内存复制这样的东西，我们不期望它是的一半。我不理解，我不理解一半的部分。你为什么会期望？嗯，因为 GPU 的内存带宽只是在告诉你每秒有多少吉字节
+
+10
+00:03:52.000 --> 00:04:09.000
+can you can kind of like move through the GPU. And so in order to read, let's say a million elements, you need, and in order to read a million elements, you're saturating the GPU, whatever bandwidth that is. And in order to write them back, you're saturating it again. So you're doing like two trips.
+你可以某种程度上穿过 GPU。因此，为了读取，比方说一百万个元素，你需要，并且为了读取一百万个元素，你正在饱和 GPU，无论那个带宽是多少。为了把它们写回去，你再次使它饱和。所以你进行了两次传输。
+
+11
+00:04:09.000 --> 00:04:39.000
+That's why you would divide it by half. But that's not usually the performance model that we use for something like MemCopy or Transform. Like we expect MemCopy to hit like 90% of peak bandwidth, right? Yeah, yeah, it hits that 90%, but what I mean is that, let's say you have an array of a million elements and it takes you a second to rotate that array. That means, I mean, how do I put it? Basically, it's like the amount of elements per second that you can rotate is going to be half the memory bandwidth of the GPU. If you see it in that way.
+这就是为什么你要把它除以二。但对于像 MemCopy 或 Transform 这样的东西，那通常不是我们使用的性能模型。就像我们期望 MemCopy 能够达到峰值带宽的 90% 左右，对吧？对，对，它达到了那 90%，但我的意思是，假设你有一个包含一百万个元素的数组，而你花了一秒钟来旋转那个数组。这意味着，我的意思是，我该怎么说呢？基本上，就像你可以每秒旋转的元素数量将是 GPU 内存带宽的一半。如果你从那个角度看的话。
+
+12
+00:04:39.000 --> 00:04:56.000
+Yeah, yeah, yeah, yeah, sure, sure. Okay, I'm on board, yeah. So you're still saturating the, you're still saturating the GPU, of course. So the goal would be to saturate the memory back. Right, right. It's, what you're saying is the elements per second is going to be half. I'm always thinking about this in terms of number of bytes mode. Exactly.
+对，对，对，对，当然，当然。好的，我懂了，对。所以你仍然在使，你当然仍然在使 GPU 饱和。所以目标将是使内存带宽饱和。对，对。它，你所说的是每秒元素数将是一半。我一直在从字节数的角度考虑这个问题。正是如此。
+
+13
+00:04:56.000 --> 00:05:06.000
+So the throughput of the algorithm itself, not necessarily the throughput of the memory move. Right, right, right. Okay, yeah, sure. I'm on board. Yeah. Okay. Okay. So we take that and then.
+所以是算法本身的吞吐量，而不一定是大规模内存移动的吞吐量。对，对，对。好的，没问题。我懂了。对。好吧。好吧。所以我们接受这一点，然后。
+
+14
+00:05:06.000 --> 00:05:27.000
+Okay. Okay. And this is assuming, that's assuming that you never have to touch any sort of global memory, or that's your theoretical best case, assuming that you never have to go out of L2 Cash. Exactly. So that's basically the, we cannot get better than that. That's the best we can do. And so that's what we are trying to achieve.
+好吧。好吧。而且这是假设，假设你永远不必触及任何类型的全局内存，或者那是你的理论最佳情况，假设你永远不必跳出 L2 缓存。完全正确。所以这基本上是，我们无法做得比这更好。这是我们能做到的最好情况。所以这正是我们试图实现的。
+
+15
+00:05:27.000 --> 00:05:55.000
+That's what I'm trying to achieve with the implementation and the algorithm. And so now that we have that, we can basically think, how would we rotate an array by just one element? So that's the first thing that I did. There's just one element. How would I do that? And so if we think about a huge array, because I mean, if we're going to do a GPU implementation, the thing would do, like the use case would be to have huge amounts of huge arrays. And so if we have a huge array and we want to rotate by just one element and we want to do that in place,
+这就是我试图通过实现和算法来实现的目标。既然我们有了这个，我们基本上可以思考，我们如何仅通过一个元素来旋转一个数组？所以这是我做的第一件事。只有一个元素。我该怎么做？所以如果我们考虑一个巨大的数组，因为我的意思是，如果我们要实现一个 GPU 实现，那么用例将是拥有大量的巨型数组。所以如果我们有一个巨大的数组，并且我们只想旋转一个元素，并且我们想原地完成，
+
+16
+00:05:55.000 --> 00:06:33.000
+what we would do is since we're on a GPU, we want to tile the array so that then each CTA or each block gets one pile of the array and does whatever it has to do on it. And so once we've tiled the array, we're not going to tie the whole array. We're going to tile the array except the first element. The first element is the one we're rotating and it's just one element, so we don't need to tile it. We can just tile the rest of the array. And then each block is going to grab one of the tiles and then it has to, it's going to read one of the tiles and it has to write it back one element before because that's how you would be rotating the array.
+我们要做的就是，既然我们在 GPU 上，我们希望将数组分块（tile），以便每个 CTA 或每个块（block）获得数组的一个分块，并在其上做它必须做的事情。因此，一旦我们将数组分块，我们将不会分块整个数组。除了第一个元素外，我们将对数组进行分块。第一个元素是我们要旋转的那个，它只是一个元素，所以我们不需要分块它。我们可以只分块数组的其余部分。然后每个块将抓取其中一个分块，接着它必须，它将读取其中一个分块，并且它必须向前一个元素将其写回，因为这就是你旋转数组的方式。
+
+17
+00:06:33.000 --> 00:07:10.000
+then the first tile is also the one that's in charge of moving the first element into the back of the array, because that's what you would need to do in order to rotate an array, right? You move the first element into the back and you move the rest of the array all the way to the front. And so there's two problems there. The first one is that whenever you are writing a tile back, it could be that you are overwrite, well, you are overriding the next tile or the tile before you. And so it could be that you overwrite it before it has been read by another block, which would cause a wrong result. So you need to guard against that.
+然后第一个分块也是负责将第一个元素移动到数组末尾的那一个，因为这是为了旋转数组你需要做的事情，对吧？你把第一个元素移动到末尾，然后把数组的其余部分一直移动到前面。所以那里有两个问题。第一个问题是，每当你把一个分块写回时，可能是你在覆盖，好吧，你正在覆盖下一个分块或你之前的分块。因此，可能你在它被另一个块读取之前就覆盖了它，这会导致错误的结果。所以你需要防范这一点。
+
+18
+00:07:10.000 --> 00:07:42.000
+And then also, whenever you are at the first tile and you want to copy the first element into the back of the array, you also need to make sure that the first tile or the last tile has already been read because you would be overriding its space. And so you basically need to guard against those things. But isn't it just like a scan? In what way? that like I'm just moving, well, at least some part of it is I'm just moving information down. I'm just shifting information down. It's just like, if you think about it, it's like a shift is definitely just a scan.
+并且，每当你位于第一个分块，并且想把第一个元素复制到数组的末尾时，你还需要确保第一个分块或最后一个分块已经被读取过，因为你会覆盖它的空间。所以你基本上需要防范这些情况。但这不就像是一个扫描吗？在什么方面？就像我只是在移动，好吧，至少它的一部分是我只是在向下移动信息。我只是在向下移动信息。这就像，如果你仔细想想，它就像是一个移位绝对就是一个扫描。
+
+19
+00:07:42.000 --> 00:08:03.000
+This is just a shift. It's not just a shift. It's like a shift left for one partition, though, and a shift right for the other partition. So you can't do this with a scan, right? What, what, explain that to me? Like, if you're doing a one rotate, the first element goes to the back. Sure, you can consider that a shift, like a shift right. but then every other element is going left.
+这只是一个移位。它不只是一个移位。不过，这就像是一个分区的左移，以及另一个分区的右移。所以你不能用扫描来做到这一点，对吧？什么，什么，向我解释一下？比如，如果你在做一个旋转1位，
+
+20
+00:08:03.000 --> 00:08:34.000
+And by definition, how are you going to get the second piece of information in the first spot with the scam? Sure, I agree. But in the case of like doing like a rotate of one, like if you're doing like a rotate of like small number, then it's just like a scan plus some special handling for the small number maybe. But how do you express the memory movement in terms of the scan? Where does this can come into play? Yeah, I don't think this is. I think the communication pattern is similar to a scam.
+第一个元素会去到末尾。当然，你可以认为那是一个移位，就像右移一样。但接着其他所有元素都要往左走。而且，根据定义，你打算怎么用扫描在第一个位置上得到第二个信息片段呢？当然，我同意。但在像旋转1位的情况下，比如你在对一个小数字进行旋转，那么它可能就像是一个扫描加上对该小数字的一些特殊处理。但你如何用扫描来表达内存移动呢？这个扫描在哪个地方发挥作用？是的，我不认为这是。我认为通信模式类似于扫描。
+
+21
+00:08:34.000 --> 00:09:00.000
+Yeah, so I think we can get into that. That's what I was going to get into. So how do you communicate between blocks whenever a tile can be overwritten or not? And so how I did that is that you have an array in global memory in a scratch buffer where every tile has like an atomic flag. And then whenever, so the steps that a block takes is that it gets a tile, it catches it into shared memory. And then once it has cached it into shared memory,
+是的，所以我想我们可以进入那个话题。那正是我要讲的。那么，每当一个分块可能被覆盖或不被覆盖时，你如何在块之间进行通信？我是这样做的：你在全局内存的一个暂存缓冲区（scratch buffer）中有一个数组，其中每个分块都有一个类似原子标志（atomic flag）的东西。然后每当，所以一个块采取的步骤是，它获取一个分块，将其缓存到共享内存（shared memory）中。然后一旦它将其缓存到共享内存中，
+
+22
+00:09:00.000 --> 00:09:41.000
+it can basically release the flag so that the other blocks know that they are safe to overwrite that memory location. And then it needs to poll the previous tiles flag so that it's sure that it can overwrite the memory location that it is going to write to. And then once that flag has been released, it can write the cache tile to the destination. And so whenever you do that, you're basically using those global flags to make sure that you're never overwriting some memory location. that has not been read already, and you're avoiding getting a wrong result. So you're using those flags. That's basically the communication path between the blocks. How many flags do you need?
+它基本上可以释放该标志，以便其他块知道它们可以安全地覆盖该内存位置。接着它需要轮询（poll）前一个分块的标志，以确保它可以覆盖它将要写入的内存位置。然后一旦那个标志被释放，它就可以将缓存的分块写入目的地。因此，每当你这样做时，你基本上是在使用那些全局标志来确保你永远不会覆盖任何尚未被读取的内存位置，从而避免得到错误的结果。所以你正在使用这些标志。这基本上是块之间的通信路径。你需要多少个标志？
+
+23
+00:09:41.000 --> 00:10:05.000
+One. So you have one flag per tile, and a tile is 32 kilobytes. So I don't know, I think for an array of a gigabyte, let's see. So it's per per block. Yeah. For an array of a gigabyte, you would have around 30,000 tides and 30,000 flags. So the amount of extra memory that you're using there is very small in comparison to this type of theory. Yeah.
+一个。所以你每个分块有一个标志，而一个分块是 32 KB。所以，我不知道，我想对于一个 1 GB 的数组，让我们看看。所以它是按每个块来的。是的。对于一个 1 GB 的数组，你会有大约 30,000 个分块和 30,000 个标志。因此，与这种类型的理论相比，你所使用的额外内存量是非常小的。是的。
+
+24
+00:10:05.000 --> 00:10:42.000
+Yeah. So that's basically the algorithm. But if you think about it, so in the presentation, I call this and I call this the short algorithm. And that is because if you say that instead of having a rotate distance of one, let's say you have a rotate distance of, I mean, I think now it's better if we switch to thinking in terms of piles instead of elements. because we're always going to be talking about tiles, so we can just say that an array has a certain amount of tiles instead of elements. So imagine that you are now trying to rotate an array by five tiles. And let's say you only launch three blocks.
+是的。所以这基本上就是算法。但如果你仔细想想，在演讲中，我把这称为“短算法”（short algorithm）。这是因为如果你说，与其把旋转距离设为 1，假设你有一个旋转距离，我的意思是，我想现在最好是我们转变为从分块的角度来思考，而不是从元素角度思考。因为我们总是会讨论分块，所以我们可以直接说一个数组有一定数量的分块，而不是元素。想象一下，你现在正试图将一个数组旋转 5 个分块。假设你只启动了 3 个块。
+
+25
+00:10:42.000 --> 00:11:16.000
+So you can only process three tiles at the same time. Then, okay, another thing I forgot to say is that whenever in the implementation, you're actually processing the tiles from the back of the array. Because since you're moving them to the left, you want to start processing from the back so that the first block gets the last tile and the second blocks gets the second to last tile. And so that way you're moving from the back. Since you're moving the array to the left, you want to start processing from the back in order to get the best, like the best overlap in that sense. Yeah.
+所以你只能同时处理 3 个分块。然后，好吧，我忘记说的另一件事是，在实现中，你实际上是从数组的末尾开始处理分块的。因为既然你要把它们向左移动，你就想从末尾开始处理，以便第一个块得到最后一个分块，第二个块得到倒数第二个分块。通过这种方式，你是在从末尾开始移动。既然你要把数组向左移动，你就希望从末尾开始处理，以便获得最佳的，也就是那种意义上的最佳重叠。是的。
+
+26
+00:11:16.000 --> 00:11:56.000
+So taking into account that we're doing that, let's say we want to rotate an array by five tiles and we're only launching three blocks. Then we would have a deadlock because let's say the first block, gets the last tile, the second block gets the second to last tile, the third block gets the third to last tile. So you're processing the three last tiles, but then the first block wants to overwrite the memory location of five tiles before it, because you're rotating it by five tiles. But that five tiles before it is not being processed by any block, so it's just going to be waiting indefinitely until it can override that and you're so, so you're basically going to have a deadlock. And that's where that algorithm no longer works. And you know,
+所以考虑到我们正在这样做，假设我们想要将一个数组旋转 5 个分块，而我们只启动了 3 个块。那么我们就会陷入死锁（deadlock），因为假设第一个块得到了最后一个分块，第二个块得到了倒数第二个分块，第三个块得到了倒数第三个分块。所以你正在处理最后三个分块，但接着第一个块想要覆盖它前面 5 个分块的内存位置，因为你是按 5 个分块旋转它的。但在它前面的那 5 个分块没有被任何块处理，所以它将无限期地等待，直到它能够覆盖那个分块，所以，所以你基本上会陷入死锁。这就是该算法不再起作用的地方。你知道，
+
+27
+00:11:56.000 --> 00:12:23.000
+need another way. Okay, and so you have some other approaches. That's interesting. So you're, you, depending on the rotate size, or the amount of rotation and I guess the amount of concurrency you have on the GPU, you pick a different algorithm. Exactly. Do you do this as like a persistent kernel?
+需要另一种方法。好的，所以你有一些其他的方法。这很有趣。所以你，根据旋转的大小，或者旋转量，以及我猜你在 GPU 上的并发量，你选择不同的算法。完全正确。你把它当作一个持久内核（persistent kernel）来做吗？
+
+28
+00:12:23.000 --> 00:12:50.000
+Yes, so I am launching, well, there's actually we can get into that later. The first implementation is that you're launching as many CTAs. So you have a tile size of 32 kilobytes, and you launch as many CTAs or as many blocks per SM as you can to use up the shared memory of the SM, which on H-100, I think you're launching six blocks per SM. And then you have also an atomic counter on the scratch buffer
+是的，所以我正在启动，嗯，实际上我们稍后可以讨论这个。第一个实现的方案是，你启动尽可能多的 CTA。所以你的分块大小为 32 KB，你为每个 SM 启动尽可能多的 CTA 或尽可能多的块，以用尽 SM 的共享内存。在 H-100 上，我想你是每个 SM 启动 6 个块。然后你在暂存缓冲区上还有一个原子计数器，
+
+29
+00:12:50.000 --> 00:13:22.000
+so that you're doing a work stealing loop. So whenever a block wants a new tile, it decrements the atomic counter to get whatever tile it needs to process. And so that way you have load balancing implemented into that as well. I don't know, Connor, you said at the beginning that there were some things that were not clear in the presentation. So I would like you to... No, no, no, I was waiting because Bryce was staring at the ceiling looking like he was looking for religion or something. And so I was waiting for him to either not his head in agreement or ask for clarification.
+这样你就在做一个工作窃取循环（work stealing loop）。每当一个块想要一个新的分块时，它就会使原子计数器递减，以获取它需要处理的任何分块。通过这种方式，你也将负载平衡（load balancing）实现到了其中。我不知道，康纳，你一开始说演讲中有一些东西不是很清楚。所以我希望你……不，不，不，我一直在等，因为布莱斯正盯着天花板，看起来像是在寻找信仰什么的。所以我一直在等他要么点头表示同意，要么要求澄清。
+
+30
+00:13:22.000 --> 00:13:57.000
+This stuff, this stuff made sense. It was the later on when you started making adjustments to the algorithm based on like the NICU results. And I can't remember if it was acronyms or if it was like words and stuff. And you started tuning and adjusting things and getting closer to speed of light. And that's the stuff where I was kind of like, you know, I don't use NICU that often. And admittedly, I think of like people that work at MVIDIA at least on like Kuda code. because obviously there's a bunch of folks that do different stuff, like some of the C++ engineers,
+这个，这个东西是讲得通的。是后来当你开始根据类似 NICU 结果对算法进行调整时。我记不清是缩写词还是单词之类的东西了。你开始调整和微调各项内容，并越来越接近光速。那就是我有点觉得，你知道的，我不常使用 NICU。而且不可否认，我认为像在 NVIDIA 工作的人，至少在 CUDA 代码方面。因为显然有一群人做不同的事情，比如一些 C++ 工程师，
+
+31
+00:13:57.000 --> 00:14:20.000
+they're working on tooling, right? So they're not actually authoring kernels or working with any of our kind of GPU accelerated library. So we've got lots of folks at Nvidia. But of the folks that are doing Kuda and kernel-related things, I would guess that there are, like, different tiers of people that work at different levels. And, like, the people that work at the NICU
+他们在从事工具开发，对吧？所以他们实际上并没有编写内核，也没有使用我们的任何那种 GPU 加速库。所以我们在 NVIDIA 有很多人。但在那些做 CUDA 和内核相关事情的人中，我猜，会有不同级别的人在不同的层面上工作。比如，那些在 NICU 工作的人，
+
+32
+00:14:20.000 --> 00:15:05.000
+and that are considered, like, you know, kuda ninjas, which I would put you in that camp because you're designing algorithms and like using NICU and I think that is like a fraction. I don't know. And maybe Bryce, you've worked longer at Nvidia. But like I primarily work at like a higher level, you know, the the thrust level, cub level. The number of times that I have actually from scratch like coded a raw kuda kernel like is in the low double digits. And I do not. You are sadly in the minority. Connor. Am I sadly in the minority? More people should, but don't. More people should, but don't. More people should not write their own kernels and just use our libraries, but... I thought, I see,
+并且被认为是，你知道的，CUDA 忍者（kuda ninjas），我会把你归入那个阵营，因为你在设计算法并使用 NICU，我认为这只是一小部分。我不知道。也许布莱斯，你在 NVIDIA 工作的时间更长。但我主要是在较高的层面上工作，你知道的，thrust 级别，cub 级别。我实际从头开始编写一个原始 CUDA 内核的次数，在低两位数。而我没有。你悲哀地属于少数人。康纳。我悲哀地属于少数人吗？更多的人应该这样做，但却没有。更多的人应该这样做，但却没有。更多的人不应该编写自己的内核，而应该只使用我们的库，但是……我以为，我明白了，
+
+33
+00:15:05.000 --> 00:15:37.000
+I thought you're saying something else. But because admittedly, writing like rock kernels is like, in my opinion, approaching infinitely harder than just reaching for like a cub reduce or a thrust reduce. Yeah. And there's a bunch of like hardware and software factors, like the disaggregation. of the disaggregation of ML inference, the disaggregation of the GPU core itself, that is making this a lot more and more challenging. Yeah. So. CPU core is now this like crazy asynchronous thing and programming it's kind of a nightmare.
+我以为你在说别的。但因为不可否认，编写原始内核在我的看来，比起去拿一个 cub reduce 或 thrust reduce，几乎可以说是无限困难。是的。而且有一堆硬件和软件因素，比如解聚。机器学习推理的解聚，GPU 核心本身的解聚，这使得事情变得越来越具有挑战性。是的。所以。CPU 核心现在是一个这样疯狂的异步东西，编程简直是一场噩梦。
+
+34
+00:15:37.000 --> 00:16:19.000
+I should clarify, programming it's kind of a nightmare if you program it the way that we program GPUs 10 years ago because the GPU today is very different. And so we need new abstractions. And that's why things like cute DSL, like kuda tile, et cetera, have all come about is because, like, the GPU itself is just different than it was. And so we're sort of like struggling with that problem. So wait, why does a, why is raw colonel authoring complicated by what you just said? Because the traditional view is that like you think about a processor core, right? Like, you know, you issue a load instruction.
+我应该澄清一下，如果你按照我们 10 年前对 GPU 编程的方式对它进行编程，编程简直是一场噩梦，因为今天的 GPU 非常不同。所以我们需要新的抽象。这就是为什么像 cute DSL、CUDA tile 等等东西都应运而生，因为 GPU 本身就与过去不同了。所以我们有点在与这个问题作斗争。那么，为什么根据你刚才所说，编写原始内核会变得复杂？因为传统的观点是，你考虑一个处理器核心，对吧？就像，你知道的，你发出一个加载指令。
+
+35
+00:16:19.000 --> 00:16:46.000
+You issue like a, you do some indexing math, then you do like an FMA, then you have like a store instruction, right? And like that's, those are all things that are executed by a processor core, right? Yeah. Yeah, that's not how that works. Because like there is no processor core. There's, there's a load and store unit. There's an ALU unit that's doing your indexing math. There's an FMA unit that's doing your, you know, your fused multiply ad that's doing your actual like hard math.
+你发出一个，你做一些索引数学计算，然后你做一个 FMA（融合乘加），然后你有一个存储指令，对吧？就像那是，所有这些都是由处理器核心执行的东西，对吧？是的。是的，事情不是那样运作的。因为根本没有处理器核心。有，有一个加载和存储单元。有一个执行你的索引数学计算的 ALU 单元。有一个 FMA 单元，它在做你的，你知道的，你的融合乘加，在做你实际的硬核数学。
+
+36
+00:16:46.000 --> 00:17:21.000
+You have a special math functions unit that's doing things like your. your cosigns, your signs, your exponents, et cetera. Those are all different, like, pieces of hardware that the abstraction that we've had in software for, like, the last 50 years has been that they're like this monolithic thing. But in reality, like, each of these separate operations is executed by a different piece of hardware. And what's happened over the past, you know, nine, ten years is we've slowly exposed more and more of that asynchrony to you, the programmer.
+你有一个特殊数学函数单元，它在做诸如你的，你的余弦、正弦、指数等事情。这些全都是不同的硬件部件，而我们在软件中使用了过去 50 年的抽象，一直是它们是一个单一整体。但实际上，其中每一个独立的操作都是由不同的硬件部件执行的。而在过去，你知道的，九、十年里发生的事情是，我们慢慢地向你——程序员——暴露了越来越多的异步性。
+
+37
+00:17:21.000 --> 00:17:49.000
+So now, like, there's a bunch of different ways to issue asynchronous loads and stores within a thread in Kuda. And the way that you issue instructions to the tensor cores that do the matrix multiplication, those are asynchronous operation. So now, like, within each thread, you're not just like, oh, I do a load, then I do a map mall, then I do a store. It's like you asynchronously launch a load. you asynchronously launch a Map Mall, you asynchronously launch a store.
+所以现在，在 CUDA 中的一个线程内，有许多不同的方法来发出异步加载和存储。你向执行矩阵乘法的张量核心（tensor cores）发出指令的方式，那些是异步操作。所以现在，在每个线程中，你不仅仅是“哦，我做一个加载，然后我做一个矩阵乘法，然后我做一个存储”。而是你异步地发起一个加载。你异步地发起一个矩阵乘法，你异步地发起一个存储。
+
+38
+00:17:49.000 --> 00:18:15.000
+And then, like, you have to like, if you want to get full utilization, you have to overlap the compute and the communication. So it's like, oh, I start launching like this load, and then I do some compute, and then I launch the store. And then by the time I've done that, the load that I launched has landed and I can start doing the next thing. And so you have to do this pipelining. And you have to do this thing called warp specialization.
+然后，如果你想获得充分的利用，你必须重叠计算和通信。所以它就像是，“哦，我开始发起这样的加载，然后我做一些计算，然后我发起存储”。等我做完这些时，我发起的加载已经着陆了，我可以开始做下一件事了。所以你必须进行这种流水线化（pipelining）。你还必须做一件事，叫做线程束专门化（warp specialization），
+
+39
+00:18:15.000 --> 00:19:00.000
+where you have some of your SM cores that are doing the dispatching of work to the tensor cores and some that are doing compute and some that are just dispatching the I.O. operations, etc. So now you have to have this tasking model. And if you're writing Kuta Kurnals, the way that you wrote Kuta Kurnals 10 years ago, this is like you're either not taking advantage of this, in which case your performance is bad, or your code's really, really ugly and awful. And so we're building like new abstractions, things like Qaeda tile, et cetera, that abstract over these things and make Kuta programming simple and easy again and also performance portable. Simple and easy again. That's a funny statement.
+即你的一些 SM 核心在向张量核心分派工作，一些在做计算，还有一些只是在分派 I/O 操作等。所以现在你必须拥有这个任务模型。如果你在编写 CUDA 内核时，采用的是 10 年前编写 CUDA 内核的方式，这就像要么你没有利用这一点，在这种情况下你的性能很差，要么你的代码非常非常丑陋和糟糕。所以我们正在构建新的抽象，比如 CUDA tile 等等，它们对这些事情进行抽象，使 CUDA 编程再次变得简单容易，并且具有性能可移植性。再次变得简单容易。真是个搞笑的说法。
+
+40
+00:19:00.000 --> 00:19:37.000
+As if at any point Kuta kernel authoring has been an easy endeavor. Kuta kernel authoring has never been easier than it is today because you can write something like Kuta tile. and you can, which is like a very small diff on how you'd write something in Numpi and Pi Torch. And you can write that, you can write Triton, those like three or four other DSLs like this, where you can write very high-level code and you can get the fastest performance. You can get better performance than you'd get writing the low-level code that would be the equivalent of it. I see. And you can write that code and you can get performance portability.
+好像在任何时候编写 CUDA 内核都是一件轻而易举的事。编写 CUDA 内核从来没有像今天这样容易，因为你可以编写诸如 CUDA tile 之类的东西。你可以，它就像你在 Numpy 和 PyTorch 中编写代码时的一个非常小的 diff（差异）。你可以编写它，你可以编写 Triton，还有其他三四个这样的 DSL，你可以在其中编写非常高级的代码，并且获得最快的性能。你可以获得比编写与其等效的底层代码更好的性能。我明白了。你可以编写那样的代码，并且获得性能可移植性。
+
+41
+00:19:37.000 --> 00:20:17.000
+So, I mean, is this all to say that the work that Mark was doing is like, suffering compared because I didn't hear any of that asynchronous stuff or is it simple enough because we're just copying stuff around that we're not going to suffer from. You can't write what Marco is writing easily in something like tile because what Marco is writing is fundamentally more of a communication primitive than just pure compute. And by communication primitive, I mean like what's one of the main things we talked about in this algorithm is how do you know when another, when like you can override you like, incoming tile. So just like scan or reduce, this is more about how do threads communicate and
+所以，我的意思是，这一切是否意味着马尔科正在做的工作正在受苦，因为我没有听到任何关于异步的事情，或者它是足够简单的，因为我们只是在周围复制东西，所以我们不会受到影响？你不能在像 tile 这样的东西中轻松地编写马尔科正在编写的代码，因为马尔科编写的代码本质上更多的是一个通信原语，而不仅仅是纯粹的计算。我说的通信原语的意思是，我们在该算法中讨论的主要事情之一是如何知道另一个，当像你可以覆盖你传入的分块时。所以就像扫描或归约一样，这更多的是关于线程如何通信并
+
+42
+00:20:17.000 --> 00:20:52.000
+talk to each other. This is a fundamental building block that you need to be able to expose to a higher level dialect. So now I think this is like the rare case of an example of something that you do still need to write, or maybe it's not the rare case. This is an example of something that you still need to write in Simtie. But given that the communication is not at the threat level, but at the tile level, would it not be possible to still do it in Kura tile? It might be. I mean, maybe, maybe. That's actually a question that I wanted to ask you. Because I think, I mean, the other thing, we haven't talked about that yet,
+彼此交谈。这是一个基本的构建块，你需要能够将其暴露给更高层的方言。所以现在我认为这是一个罕见的例子，说明了你仍然需要编写的东西，或者也许这并不罕见。这是一个例子，说明了你仍然需要用 SIMT 编写的东西。但鉴于通信不是在线程级别，而是在分块级别，难道不可能仍然在 CUDA tile 中完成吗？可能是的。我的意思是，也许，也许。这实际上是我一直想问你的一个问题。因为我认为，我的意思是，另一件事，我们还没谈到这一点，
+
+43
+00:20:52.000 --> 00:21:30.000
+because the challenge of the actual implementation is that you have a lot of unaligned memory movement because GPUs are very sensitive and the bandwidth, the memory bandwidth of a GPU is very sensitive to the alignment and the size of your loads and stores. And in this, implementation, you have a lot of unaligned loads and stores, and you need to move around that in specific ways, which is what I talked about in the presentation. And so I'm interested, I would be interested to know if something like that is possible in Kura Tile, where it takes care of maximizing the performance of the memory movement, no matter what the alignment is or other
+因为实际实现的挑战在于，你有很多未对齐的内存移动，因为 GPU 非常敏感，GPU 的内存带宽对加载和存储的对齐方式以及大小非常敏感。在这个实现中，你有很多未对齐的加载和存储，你需要以特定的方式绕过这些，这也是我在演讲中谈到的内容。所以我有兴趣，我会想知道像这样的事情是否在 CUDA tile 中是可能的，在那里它负责最大化内存移动的性能，无论对齐方式或其他特性如何。
+
+44
+00:21:30.000 --> 00:21:52.000
+characteristics. Yeah. So, I mean, initially hearing the unaligned thing, my initial reaction is, is there some way we could pad? And I think the equivalent of padding here would be some form of like, could we over rotate? Could you rotate to the next alignment and then like correct? And I think that that's always going to,
+是的。所以，我的意思是，最初听到未对齐的事情时，我的第一反应是，有没有什么办法我们可以进行填充（pad）？我想这里的填充等价物将是某种形式的，我们能过度旋转（over-rotate）吗？你能旋转到下一个对齐位置然后进行纠正吗？我认为这总是会，
+
+45
+00:21:52.000 --> 00:22:09.000
+like it's just the idea at the top of my head. I don't think that helps you because I think it's just as expensive to over align and then correct. But like if you could, if you think about like something like a transpose where a transpose when you de-tose when you decompose it into tiles,
+这只是我脑海中浮现的想法。我不认为这会对你有帮助，因为我认为过度对齐然后纠正的代价同样高昂。但如果你能，如果你考虑像转置（transpose）这样的东西，当转置被分解成分块时，
+
+46
+00:22:09.000 --> 00:22:27.000
+you transpose the tile locally, and then you transpose the entire tile when you write it back into global memory. So it's like two-step. There's like a local operation, and there's a global operation. The thing that would be great would be with rotate, if you could have the same thing,
+你在本地转置分块，然后在将其写回全局内存时转置整个分块。所以这是两步的。有一个本地操作，还有一个全局操作。如果对于旋转，你也能有相同的东西，那就太棒了，
+
+47
+00:22:27.000 --> 00:22:56.000
+where like if you over-rotated and were able to do like aligned axes when you do the load from global memory, and then you had to do some extra work to do a correction, but that, in that correction would be the unaligned part, but that correction only happened at the L2 level. Like at worst it would hit the L2, then that might be, you know, worth it.
+就像如果你过度旋转，并且能够在从全局内存加载时执行对齐访问，然后你必须做一些额外的功来做纠正，但那个，在这个纠正中将是未对齐的部分，但那个纠正只发生在 L2 级别。最坏情况下它会命中 L2，那么这可能是，你知道的，值得的。
+
+48
+00:22:56.000 --> 00:23:23.000
+But I don't know whether that's just a very off the top of my head. I don't know. Now you're having extra memory movements, So you're getting further away from the theoretical maximum performance. What I did basically is if you imagine the rotate distance of one, and we imagine that our array is aligned to a sector boundary, so it's 32 byte aligned, which is basically perfect alignment. So you're one-off that perfect alignment.
+但我不知道这是否只是我的一时灵感。我不知道。现在你有了额外的内存移动，所以你离理论上的最大性能越来越远。我基本上所做的是，如果你想象旋转距离为 1，并且我们想象我们的数组是对齐到一个扇区边界（sector boundary）的，所以它是 32 字节对齐的，这基本上是完美的对齐。所以你距离那个完美的对齐差了一个。
+
+49
+00:23:23.000 --> 00:23:44.000
+Whenever you want to copy your first type to shared memory, and so what you can do is that you can just over-copy. So you align the tile to the sector boundary, so to the previous sector boundary, which would be in this case the beginning of the array, and then you copy all of that instead of starting from that unaligned position. And then that way you're doing, it's called overcopying,
+每当你想要将你的第一个分块复制到共享内存时，你可以做的是，你可以进行过度复制（over-copy）。所以你将分块对齐到扇区边界，也就是前一个扇区边界，在这个例子中将是数组的开头，然后你复制所有这些，而不是从那个未对齐的位置开始。然后通过这种方式你正在做的是，这被称为过度复制，
+
+50
+00:23:44.000 --> 00:24:07.000
+where you just copy more than you actually need to, but that way you copy in an aligned fashion. And so you get the best performance there. But then in shared memory, the tile that you're actually interested in is still unaligned. And so what I did in that case is that I copied into registers and then aligned it into registers, so to speak, And then you can do align stores back into global memory.
+即你只复制比你实际需要更多的内容，但通过这种方式，你以对齐的方式进行复制。所以你在那里获得了最佳性能。但在共享内存中，你实际感兴趣的分块仍然是未对齐的。所以在那种情况下我所做的是，我把它复制到寄存器中，然后在寄存器中将其对齐，可以这么说，然后你就可以将对齐的存储写回全局内存。
+
+51
+00:24:07.000 --> 00:24:34.000
+And so you can use an instruction that is called a funnel shift where you just copy eight bytes. So you want to copy four bytes into registers. And what you do is that you copy the eight bytes that surround those four bytes that you want. Because those four bytes are not even in one place or in one register or in another. They are in between. And so you copy them both. And then the funnel shift basically just gives you part of that. Yeah.
+所以你可以使用一个名为漏斗移位（funnel shift）的指令，你只需复制 8 个字节。所以你想把 4 个字节复制到寄存器中。你所做的是，你复制包围着你想要的那些 4 个字节的 8 个字节。因为那 4 个字节甚至不在一个地方，不在一个寄存器中，也不在另一个寄存器中。它们在中间。所以你把它们都复制了。然后漏斗移位基本上只给你其中的一部分。是的。
+
+52
+00:24:34.000 --> 00:25:12.000
+The funnel shift instruction gives you part of that, of that eight byte. So it gives you four bytes out of those eight bytes that you have loaded. And so that way you can basically align it into registers, and then you can do align stores back into global memory. So there's like a little, a couple of tricks that you need to do in order to make the global memory movement as good as possible. So with the overcopy thing, how does that help? because you're just copying more of a tile than you need, but then don't you end up with like where the starting address does have to be offset by one? What do you mean by the starting address?
+漏斗移位指令为你提供所加载的那 8 个字节的一部分。所以它从你加载的那 8 个字节中给你 4 个字节。通过这种方式，你基本上可以在寄存器中将其对齐，然后你可以将对齐的存储写回全局内存。所以为了使全局内存移动尽可能好，你需要做一些小小的、几个技巧。那么对于过度复制这件事，它是如何帮助的呢？因为你只是复制了比你需要更多的分块，但接着你难道不会遇到像起始地址必须偏移 1 这样的情况吗？你说的起始地址是什么意思？
+
+53
+00:25:12.000 --> 00:25:35.000
+Address of what? Of your tile or of the memory that you're copying? The memory that you're copying. No, so let's say our array, our array starts at address zero, which is 32 by the line. And then the tile that we want to copy starts at address one. So we forget about that and we copy from address zero. But then in shared memory, In shared memory, the tile is still unaligned.
+什么东西的地址？你的分块的还是你正在复制的内存的？你正在复制的内存。不，所以假设我们的数组，我们的数组从地址 0 开始，这是 32 字节对齐的。然后我们想要复制的分块从地址 1 开始。所以我们忘掉那个，我们从地址 0 开始复制。但在共享内存中，在共享内存中，分块仍然是未对齐的。
+
+54
+00:25:35.000 --> 00:25:57.000
+It's still at address one. That's what we're actually interested in copying. We just copy extra so that we can do the copies as synchronously. Yeah, I'm having an idea. Oh, that could be interesting. You may want to look at the TMA, I'm to call mode. No, the I'm to call mode specifically, which is what we use for convolutions. What's it called?
+它仍然在地址 1。这才是我们真正有兴趣复制的内容。我们只是多复制了一部分，以便我们可以异步进行复制。是的，我有一个想法。哦，那可能会很有趣。你可能想看一看 TMA，异步模式（async mode）。不，特别是不带异步模式的那个，那是我们用于卷积的。它叫什么？
+
+55
+00:25:57.000 --> 00:26:40.000
+Like, I am to two, then the. number two, then call COL. So we use that for convolutions because for convolutions, you sort of have to do a similar thing where you want to access a bunch of stencil points. And you can think of this rotate as sort of being similar. And in particular for the case of like the one, the off by one, this might be interesting, where it will build you like a matrix where it's hard to get into here without like a visual. but it'll build you like a matrix where it's got your like input like tiled into like shifted columns.
+就像，我到 2，然后。数字 2，然后是 COL。所以我们把那个用于卷积，因为对于卷积，你有点必须做类似的事情，你需要访问一堆模板点（stencil points）。你可以认为这个旋转有点类似于此。特别是对于那种相差 1 的情况，这可能会很有趣，它会为你构建一个矩阵，其中很难在没有视觉辅助的情况下进入这里。
+
+56
+00:26:40.000 --> 00:27:01.000
+And then each one of those columns is going to be aligned. Although I guess it is way like the downside is that it is shared memory. It's wasteful of shared memory, right? It has some redundant shared memory. In the case of like a rotative one, it may be an interesting thing to look at. Nice. Yeah. So currently in the implementation,
+但它会为你构建一个矩阵，其中包含像输入那样分块成移位列的东西。然后其中的每一列都将是对齐的。尽管我猜这是，缺点是它是共享内存。它浪费了共享内存，对吧？它有一些冗余的共享内存。在像旋转 1 位的情况下，这可能是一个值得一看的东西。不错。是的。所以目前在实现中，
+
+57
+00:27:01.000 --> 00:28:24.000
+The thing that may be interesting to think about here is that the problem that you're facing is similar to the problem that like stencils would have. Now, when you see these alignment problems for what data types is this usually? In the implementation, I basically assumed an array of bytes because that's basically the worst case scenario. So if I get the best performance on an array of bytes, I should be able to get the best performance on any data type. Right. So this is hard. So for something like a stencil problem, you don't often have this because for a stencil, like, you know, I'm usually dealing with like FP32 or something. And so if I move over by one, I'm still aligned to like a reasonable number of bytes. Whereas like for something like string processing where I'm dealing with like, you know, a single bite thing, then it's a lot easier to get hosed here. But nobody cares about single bite. Like nobody cares about like a stencil on like, you know, a single bite thing. And nobody cares about like a stencil on like, you know, a car. Well, I don't know, maybe. I mean, things like word count. Yeah, things like word count. So that's actually interesting. If you do something like a transform, reduce word count on like, on like into eight data, does it have similar alignment problems? Maybe. No, maybe it doesn't
+这里可能有趣的想法是，你面临的问题类似于模板（stencils）会遇到的问题。现在，当你看到这些对齐问题时，这通常针对什么数据类型？在这个实现中，我基本上假设了一个字节数组，因为那基本上是最坏情况。所以如果我在字节数组上获得最佳性能，我应该能够在任何数据类型上获得最佳性能。对。所以这很难。对于像模板问题这样的事情，你通常不会遇到这种情况，因为对于模板，比如，你知道的，我通常处理的是 FP32 或类似的东西。所以如果我移动一个位置，我仍然对齐到一个合理的字节数。而像字符串处理这种处理单字节东西的情况，在这里就很容易遭到惨败。但没有人关心单字节。就像没有人关心诸如对单字节东西的模板。也没有人关心诸如对 char 的模板。嗯，我不知道，也许吧。我的意思是，诸如字数统计（word count）之类的事情。是的，诸如字数统计之类的事情。所以这实际上很有趣。如果你做类似 transform、reduce 字数统计的事情，比如对 int8 数据，它会有类似的对齐问题吗？也许吧。不，也许不会。
+
+58
+00:28:24.000 --> 00:29:03.000
+because what you're saying for rotate is you, well, I don't know. No, I do think it's similar. I do think it's a lot of this, I think it's very similar to like these stencil type problems. But you never have to do stencils on FP16 or FP8. Because I mean, sometimes are you, I don't know if you're using convolutions on the smaller types of loading points. You might, you might be doing convolutions in the smaller types. But I'm specifically, I'm thinking about like string processing stuff, like, like word count or other things that would use like a stenciled view of text. Interesting. So you said that there was a second algorithm, right? So the, what's the second Yeah, I mean, I don't know.
+因为你对旋转操作的说法是，嗯，我不知道。不，我确实觉得它很类似。我确实觉得其中很大一部分，我觉得它非常类似于这种模板（stencil）类型的问题。但你绝不需要在 FP16 或 FP8 上做模板操作。因为我的意思是，有时你，我不知道你是否在较小的浮点类型上使用卷积。你可能会，你可能会在较小的类型中做卷积。但我特别是在想，比如字符串处理之类的事情，像，像单词计数或其他会使用文本模板视图的东西。有趣。所以你刚才说还有第二个算法，对吧？所以，第二个，是什么呢？是的，我的意思是，我不知道。
+
+59
+00:29:03.000 --> 00:29:21.000
+I don't know if you have what's up with Ramon. I don't know. Oh, yeah. Maybe we need to read the second. Do we leave the second algorithm for part two? Well, it depends on when you have to go. I need to go 18 minutes ago. Well, then probably, yes, we should save that for part two.
+我不知道你有没有，雷蒙（Ramon）怎么了。我不知道。哦，是的。也许我们需要读第二个。我们把第二个算法留到第二部分吗？这得看你什么时候得走。我18分钟前就得走了。好吧，那可能是的，我们应该把那个留到第二部分。
+
+60
+00:29:21.000 --> 00:29:43.000
+We will do part two of this. We already talked for an hour, so potentially I will split that into two episodes, and we will come back. And I was thinking this whole time too, I was like, how would I do this in pair it? I was like, I would just use a permutation iterator and a copy. And then I was like, oh, yeah, that's the point though. That's not in place. That's out of place. So the thing that makes this tricky is the in-placeness.
+我们将做这个的第二部分。我们已经聊了一个小时了，所以很可能我会把它拆成两集，然后我们会回来的。而且我这一整门都在想，我在想：我在 Ｐａｒｅｔ 中会怎么做？我想的是：我只会用一个置换迭代器（permutation iterator）和一个复制操作。然后我就想，哦，对啊，关键就在这里。那不是原地的（in-place）。那是异地的（out-of-place）。所以让这变得棘手的是原地性。
+
+61
+00:29:43.000 --> 00:29:59.000
+Like if you're just doing an out-of-place rotate, it's very easy. Yeah. We should talk more next week. I do very much want to hear more about this. Yeah, yeah. We'll set something up for next week. Maybe not on Thursday, maybe a Tuesday or Wednesday. And then you'll hear part two of the rotate story.
+就像如果你只是做一个异地旋转，那非常简单。是的。我们下周应该多聊聊。我确实非常想听到更多关于这的内容。好的，好的。我们会安排下周再聊。也许不是周四，可能是周二或周三。然后你就会听到旋转故事的第二部分。
+
+62
+00:29:59.000 --> 00:30:48.000
+and then we'll also get to hear Bryce's Fifth Infinity Stone, you know, Auto Kuda taking over the world. I don't believe that Bryce is better than me at AI, but I'm excited to hear why he thinks he is, folks, and stay tuned for that. And also, if the listener has some questions on the algorithm, I guess it would be a good time also to ask them so that we can maybe cover them next week. Oh, yeah, yeah. We will, links will be to the GitHub discussion, or you can also, if you're on X or, I mean, I'm on all the socials, Blue Sky, Macedon. The best place is probably the GitHub discussion, because that, like, is all in one place. But yeah, you can add us on socials as well. And if there's questions for Marco, or even if you've got ideas, why didn't you consider this?
+然后我们还能听到布莱斯的第五颗无限宝石，你知道的，Auto Kuda 统治世界。我不相信布莱斯在人工智能方面比我强，但我很高兴听到他为什么认为自己比我强，各位，敬请期待。另外，如果听众对这个算法有什么问题，我想现在也是个好时机提出来，这样我们也许能在下周进行讨论。哦，对，对。我们会把链接放到 GitHub 讨论区，或者你也可以，如果你在 X 上，或者，我的意思是，我在所有社交媒体上都有账号，比如 Blue Sky、Mastodon。最好的地方可能还是 GitHub 讨论区，因为那样所有东西都在一个地方。不过是的，你也可以在社交媒体上加我们。如果你有给马尔科的问题，或者甚至如果你有想法：‘你们为什么不考虑这个？’
+
+63
+00:30:48.000 --> 00:31:13.000
+We can definitely chat about those on part two, because it's rare that we have to record twice separately on the same topic back to back. A rare opportunity to have your question asked and answered or comment, I guess just read if it's a comment. Bryce, you look like you got one last thing to say. No, no, no. My last thing to say is I'm going to be in so much trouble. All right. Thanks, Marco. Thank you, guys.
+我们绝对可以在第二部分中聊聊这些，因为我们很难针对同一个话题连续录制两次。这是一个让你的问题被提出并解答的难得机会，或者如果是评论的话，我猜就是被读出来。布莱斯，你看起来还有最后一句话要说。不，不，不。我要说的最后一句话是，我要惹上大麻烦了。好的。谢谢你，马尔科。谢谢你们，伙计们。
+
+64
+00:31:13.000 --> 00:31:18.000
+Be sure to check these show notes, either in your podcast app or at ADSP thepodcast.com for links to anything we mentioned in today's episode, as well as a link to a get-up discussion where you can leave thoughts, comments, and questions. Thanks for listening. We hope you enjoyed and have a great day. Low quality, high quantity. That is the tagline of our podcast. That's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+请务必查看节目文稿，无论是在你的播客应用中还是访问 ADSP thepodcast.com，获取我们今天节目中提到的任何内容的链接，以及指向 GitHub 讨论区的链接，你可以在那里留下想法、评论和问题。感谢收听。希望你们喜欢，祝你有美好的一天。质量不高，数量管够。这就是我们播客的标语。那不是标语。我们的标语是：夹杂着少许信息的混乱。本期节目暂无评论。点击文稿中的任意句子即可发表评论。

@@ -1,0 +1,681 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:01.000
+Hey everybody, so if you're following H. So if you're following, you know, Hacker News, or you're following these various sources, you've probably heard about Scientific Python. It's becoming a really important way for people to try and do numerical computation and solve really difficult problems. There's a bunch of really awesome libraries for that. And we'll definitely cover that in detail. And we have Guido Imperiale here from Coiled to tell us kind of more about it. So Guido is an open source software engineer for Coiled. And I think we're all really grateful for having Guido on the show to lend us his experience and expertise.
+大家好，如果你在关注 Hacker News 或者其他各种资讯源，你可能已经听说过 Scientific Python。对于想要进行数值计算和解决极难问题的人来说，它正成为一种非常重要的方法。为此，社区涌现出了许多非常棒的库。我们接下来一定会详细探讨这一点。今天我们请到了来自 Coiled 的 Guido Imperiale 来为我们做更多介绍。Guido 是 Coiled 的一名开源软件工程师。我想我们都很感谢 Guido 能来到节目中，分享他的经验和专业知识。
+
+2
+00:01:01.000 --> 00:02:10.000
+So thanks for coming on the show, Guido. Hi, everyone. Cool. So before we dive into what is Scientific Python, why don't you give us some background about what have you been up to? What kind of led you to Coiled? And how did you get involved in Dask and in the overall SciPy community? Well, I have 10-something years in risk risk management in banking and insurances in Italy and UK. And what risk management is about is simulate financial instruments or the whole balance sheet many, many times. And a lot of financial institutions use obscure closed source software, which tends to be very, very slow and inefficient and really unwieldy. And I decided, nope, I'm going to rewrite it from zero. And I needed a really, really big hammer to break down the problem.
+非常感谢你能来节目，Guido。大家好。太棒了。在我们深入了解什么是 Scientific Python 之前，能先给我们讲讲你的背景吗？是什么让你加入了 Coiled？你又是如何参与到 Dask 以及整个 SciPy 社区中的？我在意大利和英国的银行及保险行业的风险管理领域工作了大约十年。风险管理的核心就是对金融工具或整个资产负债表进行非常多次的模拟。许多金融机构使用晦涩的闭源软件，这些软件往往非常非常缓慢、低效且异常笨拙。于是我决定：“不，我要从头重写它。”我需要一个非常非常大的“锤子”来拆解这个问题。
+
+3
+00:02:10.000 --> 00:02:36.000
+And I realized that Dask was just right. Cool. So why don't you dive into that a little bit? So I've heard stories of banks running their own version of Python. I think, Patrick, you mentioned this in an earlier episode. There's like Bank Python or something like that. And so what about closed source software at the companies you were at? What about it was sort of unwieldy and difficult to use?
+我意识到 Dask 正是我的不二之选。太棒了。那你能不能稍微深入讲讲这个？我听说过一些银行运行自己定制版 Python 的故事，帕特里克（Patrick），我想你在之前的节目中也提到过。比如有什么“Bank Python”之类的东西。那么，你在之前公司使用的闭源软件，究竟是哪些方面让你觉得笨拙且难以使用呢？
+
+4
+00:02:36.000 --> 00:03:16.000
+First of all, it was a piece of software designed 30 years ago, back when multithreading was not a thing. So first of all, it's all traditional design of have an iteration on a single point, go through the whole depth and then go back. It had no benefit whatsoever from SIMD, AVX or parallel multithreading. It would be really, really painful. It was written in C++, but that was the only saving grace. And then that was the simulation part of the software. The aggregation part was written in Java and it was even worse.
+首先，那是一套三十年前设计的软件，当时多线程还根本不存在。所以，它的整个设计都非常传统——针对单个数据点进行迭代，走完全部深度，然后再返回。它完全无法利用 SIMD、AVX 或并行多线程带来的任何好处。那真的会非常非常痛苦。它虽然是用 C++ 写的，但这成了它唯一的救赎。而且，那只是软件的模拟部分。至于聚合部分则是用 Java 写的，甚至还要更糟糕。
+
+5
+00:03:16.000 --> 00:03:55.000
+To give an order of magnitude, the reporting part was taking five days over to run every time, five days exercise with two people who did nothing else but throw kicks at the software whenever it was hanging. And it was running on 20 hosts with 380 gigabytes of RAM each. We are talking about now 10 years ago. So that was expensive hardware. Wow. Yeah, that's wild. And I came, I saw saw i rewrote and by the time i left five years later that exact same algorithm instead of five days
+举个量化指标，报表部分每次运行需要整整五天时间。这是一个耗时五天的苦差事，需要安排两个人全天候盯着，只要程序卡死就得去“踢它一脚”。它当时运行在 20 台主机上，每台主机拥有 380 GB 的内存。我们要知道，这是 10 年前的事了。所以这可是昂贵的硬件。哇。是的，太疯狂了。我来了，我看到了，我重写了。五年后当我离开时，完全是同一个算法
+
+6
+00:03:55.000 --> 00:04:40.000
+and 380 gigabyte of ram was running in two hours and 20 gig so so this is interesting. So you saw this huge Java C++ monolith, right? And yeah, I mean, it's really inefficient. How do you get started on a project like that? I mean, do you sit down and write a document explaining every bit and piece? Do you start by converting small pieces? How do you go about doing such a transformation? Okay, first of all, in any such kind of environment where you have a massive piece of software, that legacy software that you need to tackle, forget about rewriting the whole thing in one go. You just can't.
+只用了 2 小时和 20 GB 内存就运行完了，而不是当年的 5 天和 380 GB 内存。所以这很有意思。你看到了这个巨大的 Java 和 C++ 单体应用，对吧？是的，而且它确实非常低效。你是如何着手这样一个项目的？我的意思是，你会坐下来写一份文档，解释每一个细枝末节吗？你是从转换一小部分开始的？你是如何着手进行这样一场变革的？好吧，首先，在任何拥有如此庞大且你需要解决的遗留软件的环境中，千万别想着一口气把整东西全部重写。你根本做不到。
+
+7
+00:04:40.000 --> 00:05:25.000
+You will fail. You will end up in a five years long project that never delivers and management will pull the plug on it, guaranteed. So it is imperative to follow a bit of mantra of agile and deliver as small a piece as you can every time to keep stakeholders happy. And that piece needs to integrate as good as possible with the legacy software. And yes, that means that you will have a 20% of throwaway code, but it's the way to go. Because at all times during this transformation process, which takes in the end, it takes five years, don't get me wrong. Stakeholders can see,
+你会失败的。你最终会陷入一个长达五年、永不交付的项目，然后管理层会直接砍掉它，这是百分之百保证的。因此，你必须遵循敏捷开发的某种准则，每次尽可能交付最小的部分，以维持利益相关者的满意。而且，这部分代码需要尽可能完美地与遗留软件进行集成。是的，这意味着你可能会扔掉 20% 的临时代码，但这正是正确的做法。因为在这个转换过程中——说实话，整个过程最终确实花了五年时间，别误会。利益相关者随时都能看到，
+
+8
+00:05:25.000 --> 00:06:06.000
+oh, now this little piece was rubbish and now it's super fast and super stable. And they start getting their appetite wet for the next big thing. And they will be happy to keep bankrolling your project. Yeah, that makes sense. Yeah. I think one of the challenges is where you have, there's this sort of meme. It's like, yeah, there's 18 different messaging platforms. I want to make one that unifies them all. Now there's 19 platforms, right? And so you're going to, in the short term, kind of add another piece. Actually, so this new, the rewrite that you did was that, that was using Dask and Python, correct? And XR, yes. Okay, got it. So there was a moment there where you had to kind
+哦，原来这个小模块以前是垃圾，现在变得超级快、超级稳定了。然后他们就会对下一个大项目产生胃口，并乐意继续为你的项目提供资金。是的，这说得通。是的。我想其中一个挑战在于，存在这样一种梗。就像是，有 18 种不同的聊天软件，我想做一个把它们统一起来的软件。结果现在变成了 19 种软件，对吧？所以短期内，你实际上是在添加另一个组件。说起来，你做的这次重写，是用的是 Dask 和 Python，对吧？还有 Xarray，是的。好的，明白了。所以在这个过程中，你曾不得不花心思
+
+9
+00:06:06.000 --> 00:06:51.000
+of convince people to add another language and add complexity to that project. How did you go about doing that? That was actually easy because I did not start from dusk. That project was around this third-party software within C++ and Java, there was an ungodly amount of Bash and Perl scripting, and which if anybody had the pleasure to work with it in a serious size, it's impossible to deal with. As soon as you get beyond two pages of code, Bash becomes unusable. It becomes untestable and really, really hard to read
+说服人们引入另一种语言，并给项目增加了复杂性。你是怎么做到这一点的？其实这挺容易的，因为我并不是从 Dask 开始的。那个项目围绕着 C++ 和 Java 的第三方软件，充斥着惊人数量的 Bash 和 Perl 脚本。如果有谁曾有幸处理过这种规模的脚本，就会知道它根本无法应对。一旦代码超过两页，Bash 就会变得完全无法使用。它变得无法测试，而且极其难以阅读——
+
+10
+00:06:51.000 --> 00:07:13.000
+if you have a newbie programmer on the team that will not understand why with parentheses space works and parentheses without space doesn't work. So it's really, really bad. And Perl is, well, I mean, there are actual competition about obfuscating Perl and I'll leave it at that. I've seen Perl soft.
+如果团队里来了一个新手程序员，他根本不会理解为什么加括号加空格能运行，而加括号不加空格却不能运行。所以这真的很糟糕。至于 Perl，好吧，我的意思是，甚至还有专门关于如何把 Perl 代码搞得晦涩难懂的比赛，我就不多说了。我见过 Perl 软——
+
+11
+00:07:13.000 --> 00:07:39.000
+I've seen things that you mortals cannot even comprehend. I've seen Perl programs that generate at runtime Perl regular expressions worth five pages, which are then fed into a second Perl interpreter to parse the actual content. Yeah, this is brutal. It's insane. So that was the situation I came in and I realized, nope.
+我见过你们这些凡人根本无法理解的东西。我见过能在运行时生成长达五页的 Perl 正则表达式的 Perl 程序，然后这些表达式又被输入到第二个 Perl 解释器中来解析实际的内容。是的，这太残忍了。太疯狂了。这就是我当时面对的局面，我意识到：不行。
+
+12
+00:07:39.000 --> 00:08:10.000
+And I started rewriting piece by piece, script by script. We're talking about thousands of individual small scripts. Everything in Python, adding tooling on top of that, or a customer-specific tooling. Some of which by now, by the way, it is now open source. Look up B shell on PyPy, on PyPy. Is it B shell? B shell, as in Python shell. B shell. Oh, python shell p shell oh oh okay got it not to be confused
+于是我开始逐个模块、逐个脚本进行重写。我们说的是成千上万个独立的小脚本。所有东西都用 Python 重写，并在其之上添加工具链，或者针对客户定制的工具链。顺便说一句，其中有些工具现在已经是开源的了。你们可以在 PyPI 上搜索 B shell。是 B shell 吗？B shell，就像 Python shell 一样。B shell。哦，Python shell、P shell，哦，哦，明白了，不要跟
+
+13
+00:08:10.000 --> 00:08:43.000
+with pi shell or python shell or any of the other variations which were already taken so how do you spell this how do you spell your version p shell oh just p shell okay got it got it, got it. So I started with that and I started rewriting a lot of those individually small scripts which were glued together by Linux. So it was very easy to take one out and put the replacement in, which was like for like, just better working, faster,
+Pi shell、Python shell 或其他已经被占用的变体混淆了。那么这个怎么拼写？你的版本怎么拼写？P shell。哦，就是 P shell。好的，明白了，明白了。所以我从这个开始，并开始重写其中许多由 Linux 粘合在一起的独立小脚本。所以，抽出一个并换上替代品是非常容易的。新脚本功能完全一样，只是更好用、运行更快、
+
+14
+00:08:43.000 --> 00:09:06.000
+easier to maintain with unit tests and whatnot. And by the time I replaced the majority of those, I had a common library that was, and a common library, a common tooling, and a common learning for my whole team, which was 10 people, of their Python language, which I say, okay, now we have a solid foundation. We can start
+更易于维护，带有单元测试等等。等到我替换掉其中绝大多数脚本时，我已经为整个团队（当时有 10 个人）建立了一个公共库、公共工具链，以及对 Python 语言的共同认知。我说：“好了，现在我们有了坚实的基础，我们可以开始”
+
+15
+00:09:06.000 --> 00:09:51.000
+seriously building stuff that is, we built a round path. Now we can build a rocket. Yeah, that makes sense. So were there any people who were just really sympathetic to the current version and you had to sort of win them over or was everybody pretty happy to get rid of the current version? Everybody was very happy to get rid of Bash and Perl. There was an initial problem with somebody in management that forced us to use Python 2.6. That was back when Python 3.3 was out already. So that was a very bad decision. And we had to pay that technical debt because of that decision for several years to come. After how many years?
+认真地构建东西了。我们围绕 Python 搭建了发射台，现在我们可以造火箭了。是的，这说得通。那么，当时有没有人特别恋栈旧版本，你需要费力去说服他们，还是说大家都挺高兴能甩掉旧版本的？所有人都非常高兴能甩掉 Bash 和 Perl。不过管理层曾有一个人强迫我们必须使用 Python 2.6，这在当时 Python 3.3 已经发布的情况下是个非常糟糕的决定。因为这个决定，我们在接下来的几年里不得不偿还这笔技术债。过了多少年？
+
+16
+00:09:51.000 --> 00:10:08.000
+We just replaced everything with 3.6 or something. Yeah, that makes sense. Did Python 2 have typing or did that come with 3? It's got nothing. Okay. Without typing, I can't imagine writing any serious Python like more than two three hundred lines no
+我们才把所有东西都换成 3.6 左右的版本。是的，这说得通。Python 2 有类型注解（typing）吗，还是说那是 Python 3 才有的？它什么都没有。好吧。没有类型注解，我简直无法想象怎么写超过两三百行的严肃 Python 代码。
+
+17
+00:10:08.000 --> 00:10:28.000
+as a matter of fact we wrote the whole thing before typing was a thing but typing is very recent it started being usable around 3.5 ish let's say 3.6 and they're adding fundamental bits every version.
+事实上，我们在有类型注解之前就把整套系统写完了。但是类型注解是很晚才有的，大概从 3.5、3.6 左右开始变得可用，并且他们每个版本都在添加核心的基础功能。
+
+18
+00:10:28.000 --> 00:11:00.000
+Got it. Yeah. I feel like before that, people probably just were heavy users of like is instance and asserts and these other, just basically runtime, having to do the typing at runtime. Well, you still do that. I mean, but yes, typing helps a lot of course so you know we have this this big rewrite effort along the way at some point uh i guess you built the launchpad to your point and then you said now we can change this from being i guess pure python or just you know
+明白了。是的。我觉得在此之前，人们可能大量依赖像 `isinstance`、`assert` 以及其他这些手段，也就是基本上必须在运行时来进行类型检查。嗯，你现在仍然会这么做。我的意思是，但确实，类型注解当然能提供很大帮助。所以你看，我们在重写过程中经历了这场庞大的重组，在某个时间点——我想你搭建好了“发射台”，然后你说现在我们可以把这套系统从纯 Python，或者说只是
+
+19
+00:11:00.000 --> 00:11:35.000
+using like lists and dictionaries and all that now we can change it to doing more BLAS-type approaches that are going to be much faster. No, it was not pure Python. It was like Python scripts, which were wrapping around the closed source C++ and Java code. And what I did was Python scripts who were wrapping around the Python engine, which at that point I wrote in-house together with my team. Yeah. And so what was the rocket ship then? How did you make it fast?
+使用列表、字典之类的东西，转变为采用更多的 BLAS 风格的方法，这样会快得多。不，它以前并不是纯 Python。它是一组 Python 脚本，用来包装那些闭源的 C++ 和 Java 代码。而我做的是编写 Python 脚本来包装 Python 引擎，而这个引擎在那个阶段是我和团队在内部自己编写的。是的。那么后来的“火箭”究竟是什么？你是怎么让它变快的？
+
+20
+00:11:35.000 --> 00:12:16.000
+The biggest challenge was to understand what the previous software was doing, which was neatly outside the way of the education of any software engineer. The problem in a bank, chiefly, is that the people that know what the algorithm should do are people that if they know how to use R, you must be already happy. Most people just know how to use Excel. Those are the people that know the algorithm, know why you do the numbers in the way you do. And then those people just give their algorithm to the developers, which know how to write very good software,
+最大的挑战在于理解前一个软件在做什么，而这完全超出了任何软件工程师的教育范畴。在银行里，最大的问题在于：知道算法应该做什么的人，如果你能指望他们懂 R 语言，你已经该谢天谢地了。大多数人只懂 Excel。这些人懂算法，知道为什么要按那种方式计算数据。然后，这些人把他们的算法交给了懂如何编写优秀软件、
+
+21
+00:12:16.000 --> 00:12:57.000
+but know nothing about subject matter. And they're told, here, here's my Excel sheet, put it in production. And you would be shocked to hear how many financial institutions have at some point in their pipeline an Excel spreadsheet, which is executed from the C-sharp macro or something. Yeah, I believe it. Yeah, I mean, we saw this, Patrick and I saw this a long time ago with with matlab where there were there would be people who would be really good at matlab but then uh couldn't do any embedded code or or or things that were really uh needed to run in low memory and these other things and so
+却对业务领域一无所知的开发人员，并对他们说：“给，这是我的 Excel 表格，把它上线。”你会震惊地发现，有多少金融机构在他们的业务流程中的某个环节，竟然包含一个由 C# 宏或其他东西触发运行的 Excel 电子表格。是的，我相信。是的，我的意思是，帕特里克和我很久以前在使用 MATLAB 时也见过这种情况。有些人非常擅长 MATLAB，但却
+
+22
+00:12:57.000 --> 00:14:18.000
+you end up having to sort of translate and then you end up with two teams like the team that can build things and a team that knows sort of like the mathematical essence of whatever they're building. And getting those teams to work in harmony is really, really difficult. In fact, and because of these hybrid figures on either side, so what are normally called financial engineers, which are people that know the subject matter and have a decent, although not amazing, understanding of coding. And people like me, which are software engineers, which over time learned what they were doing, are in very high demand in the financial industry. Yeah, that makes sense. Okay, so you wrap these C++ modules and Java modules, right? And then at some point, I mean, to get the memory down and get the speed up, at some point, you probably had to rewrite those underlying know, maybe using Eigen or maybe it's just using raw matrices, raw arrays, and figured out a way to rewrite it using like NumPy and SciPy and Dask and that modern suite.
+完全不会写嵌入式代码，或者那些对低内存有极高要求的代码。所以你最终不得不进行翻译，结果往往导致团队分裂成两拨：一拨人负责构建系统，另一拨人则懂得他们所构建系统的数学本质。要让这两个团队和谐共事真的非常非常困难。事实上，正是因为两边都有这种混合型人才——也就是通常所说的金融工程师（他们既懂业务领域，又对编程有相当不错但不算精湛的理解），再加上像我这样随着时间推移逐渐弄懂了业务的软件工程师，我们在金融行业一直非常抢手。是的，这说得通。好的，所以你包装了这些 C++ 模块和 Java 模块，对吧？然后，在某个时刻——为了降低内存占用并提高速度——你可能不得不重写底层的那些代码，比如使用 Eigen，或者仅仅使用原始矩阵、原始数组，并想出一种方法用 NumPy、SciPy、Dask 以及现代的工具栈来重写它们。
+
+23
+00:14:18.000 --> 00:15:27.000
+Yes, more or less. the algorithm on paper, you can start thinking, okay, why is the current algorithm so slow? And how can I write it in a way that is fast? And as I was mentioning before, the immediate thing that jumped to the eye is that this C++ software was written before sim existed so there was no vectorization of any kind and the java one was taking was that expensive in terms of memory because it needed it needed to load as an input 50 60 gigabytes of data and then it needed to do successive iterations on that. And it was very obvious that at all times it was keeping the whole thing in memory. So Dask is very, very good at this, namely where you can have a baseline data on disk and you can load into memory just a little piece you need, crunch it,
+是的，差不多是这样。当你在纸上理清算法后，你就可以开始思考：“为什么当前的算法这么慢？我该如何用一种快速的方式来重写它？”正如我刚才提到的，一眼就能看出的显而易见的问题是，这个 C++ 软件编写于 SIMD 技术诞生之前，因此它没有任何形式的向量化。而 Java 软件之所以在内存上消耗巨大，是因为它需要将 50 到 60 GB 的数据作为输入加载进来，然后在其上进行连续的迭代。很显然，它在任何时候都把整个数据集全部塞在内存里。所以 Dask 在这方面非常非常擅长——也就是说，你可以把基础数据放在磁盘上，而只把需要的一小部分加载到内存中进行计算，
+
+24
+00:15:27.000 --> 00:16:01.000
+and then release it. Yeah, that makes sense. Yeah, I mean, if you need random access, then running on something like Daskworks distributed is really nice, because you can still get the random access, but you don't need everything on one machine. What about like, you know, when somebody has something that works in C++, they have to rewrite it in Python. Did you create sort of a, almost like a automatic test suite? Because you could take the existing C++, generate a bunch of output, and then go to
+计算完成后再释放掉。是的，这说得通。是的，我的意思是，如果你需要随机访问，那么运行像 Dask Distributed 这样的工具真的很棒，因为你仍然可以进行随机访问，但又不需要把所有东西都塞在同一台机器上。那么，当有人用 C++ 写好了能运行的代码，却必须用 Python 重写它时，你会不会创建某种类似自动化测试套件的东西呢？因为你可以利用现有的 C++ 生成一批输出，然后去找
+
+25
+00:16:01.000 --> 00:16:39.000
+the engineer and say, look, we want this output to match these numbers. And so now they have kind of like a built-in nice unit test ready to go. And so you kind of know when you have something that's correct. Yeah, absolutely. You don't even think about starting a rewrite of this kind of magnitude if you don't have Toro unit tests for the legacy software. You need to design the whole thing so that it can slot in, yank the old piece, put in the old piece, and you don't touch the test and they just continue working. Yep. Yep. Yep. Totally makes sense. Cool.
+工程师说：“看，我们希望这个输出能跟这些数字对上。”这样他们就相当于拥有了一个内置的、随时可用的单元测试。因此，当你写出正确的东西时，你心里是有数的。对，完全如此。如果你没有针对遗留软件的完整单元测试，你甚至都不会去考虑开始这种规模的重写。你需要将整个系统设计成可以无缝嵌入的结构：拔掉旧组件，插上新组件，你甚至不需要修改测试，它们就能直接继续运行。完全说得通。太棒了。
+
+26
+00:16:39.000 --> 00:17:13.000
+So at some point you kind of rolled off of this project, right? And joined Coil. Did you go to Coil straight from the banking company? Actually, no. I spent a couple of years in design in a different, in an oil trading company, which they told me, well, we have this, we told me they had this 20 years old Java software, which again was unfathomably slow. You have already heard that, didn't you? And they told me, rewrite it, carte blanche.
+所以你在某个时间点退出了这个项目，对吧？然后加入了 Coiled。你是直接从那家银行跳槽到 Coiled 的吗？其实不是。我在一家石油贸易公司花了几年的时间从事设计工作。他们告诉我：“嗯，我们有这个……”他们告诉我他们有一个已有 20 年历史的 Java 软件，同样慢得不可思议。你已经听过这种故事了吧？他们对我说：“重写它吧，全权交给你。”
+
+27
+00:17:13.000 --> 00:17:58.000
+As long as the numbers are the same and it's faster and more robust, you have carte blanche. And so I started with a clean slate, which was super exciting. And I used TASC again, this time not for vector computations, because it was unnecessary, because it didn't have Monte Carlo simulations to run, at least in the first iterations. But for managing the complexity of the problem, I used the distributed scheduler to organize the workload with great results. And again, I was computing the whole thing in a fraction of the time.
+只要算出来的数字是一样的，而且运行更快、更稳健，我就拥有全权自主权。所以我从一张白纸开始，这超级令人兴奋。我再次使用了 Dask，这次不是为了进行向量计算——因为没有必要，至少在最初的几次迭代中没有 Monte Carlo 模拟要跑。但我用它来管理问题的复杂性，我使用分布式调度器来组织工作负载，并取得了极佳的效果。同样地，我只花了极小的一小部分时间就完成了整个计算。
+
+28
+00:17:58.000 --> 00:18:39.000
+Yeah, that makes sense. Okay. So, and then from there you went to Coiled, is that correct? Correct. So, what inspired you to do that? So you could have gone to like a third, a fourth, a fifth company and done, sort of repeated this pattern, but instead you went to Coiled. What motivated that? First, I was motivateded was that for the whole years in my previous two employments, I was a heavy community contribution into Dask, as you would expect, and into XRA. So Matt told me, hey, I really like your PRs.
+是的，这说得通。好的。然后从那里你去了 Coiled，对吧？没错。是什么激发你这么做的？你本可以去第四家、第五家公司，然后重复这种模式，但你却选择了 Coiled。是什么动机促成了这一点？首先，我的动力在于，在我过去两段工作的整整几年里，正如你所预料的那样，我对 Dask 和 Xarray 进行了大量的社区贡献。所以 Matt 对我说：“嘿，我真的很喜欢你的 PR。”
+
+29
+00:18:39.000 --> 00:19:26.000
+Would you like to do just that for a living for me? And I really like the way that his team worked, uh, from what I could see from the, from the outside, I was seduced by the fact that Coiled is a 100% remote company. We are now talking, we were in the middle of 2020 and i was enjoying my working in my pajamas and i said wait what do you mean that as soon as the pandemic is gone i have to start doing two hours of commute again every day and i said no i really like my pajamas and so i just that makes sense yeah some people who are you know people who don't have uh
+“你想不想直接为我做这个来谋生？”而且从我从外部所能观察到的情况来看，我很喜欢他们团队的工作方式。我被 Coiled 是一家 100% 远程办公的公司这一事实深深吸引了。当时我们正在谈话，时间是 2020 年年中，我正享受着穿着睡衣工作的乐趣。我说：“等等，你什么意思？难道疫情一过，我每天又得花两小时去通勤了吗？”我说：“不，我真的很喜欢我的睡衣。”所以就这样——这说得通，是的。有些只是在听我们节目录音的听众
+
+30
+00:19:26.000 --> 00:20:08.000
+who are just listening to us can't tell but we're all in our scooby-doo pajamas right now so just close your eyes well unless you're driving if you're listening to us driving don't do this but if you're at home close your eyes just imagine a group of people in their pajamas that's that's pretty much what's going on back then I was I had this idea that I could potentially switch the country I was living in. Right now I'm living in the UK and I was thinking, okay, do I still want to live here? But the idea of having, being able to change country, which is a massive stressor and time sink while keeping my job with seamlessly was a really big appeal.
+可能看不见，但我们现在其实都穿着史酷比（Scooby-Doo）睡衣，所以请闭上眼睛——好吧，除非你正在开车，如果你是一边开车一边听节目的，千万别闭眼。但如果你在家，闭上眼睛，想象一下有一群人穿着睡衣，差不多就是这么回事。当时我脑子里有一个想法，那就是我有可能搬去另一个国家居住。我现在住在英国，当时我在想：“好吧，我还想继续住在这里吗？”但能够自由更换居住国家——这本来是一件极其劳心劳力且耗时的事情——同时又能无缝保留我的工作，这种吸引力真的太大了。
+
+31
+00:20:08.000 --> 00:20:40.000
+Yeah, that makes sense. Yeah, both Patrick and I moved also, moved during the pandemic. And we stayed in the same country, but we moved to just a different part of the US. And yeah, that's a huge appeal. Do you think people, a bit of a segue, do you think people ever go back to the office? I mean, how do you motivate people to do that? It seems like that's going to be a really uphill battle. Some people enjoy going to the office.
+是的，这说得通。是的，我和帕特里克都在疫情期间搬过家。我们虽然留在了同一个国家，但搬到了美国的不同地方。是的，这有着巨大的吸引力。顺便延伸一下，你觉得人们以后还会回办公室上班吗？我的意思是，你怎么能说服人们这样做呢？这看起来会是一场极其艰难的硬仗。有些人确实很喜欢去办公室。
+
+32
+00:20:40.000 --> 00:21:46.000
+I heard of several people with young kids that beg to go to the office. And a lot of people really enjoy the social aspects. I miss them. I miss having a few days a week where I just chat with co-workers at the water cooler, go out for lunch and whatnot. I miss those bits. Yeah, definitely. One thing that I've been trying to do is to, you know, maybe once every couple of months, fly to the office and see people in person. And maybe that's the future. I mean, I work at a company that has one big office and a bunch of satellite offices. But if your company is totally remote, maybe every two months, everybody flies into some, in your case, someplace in the EU and meets up. And you can get, you know, sparingly, but you can get some of that interaction and still work from home. I think that this is a massive opportunity for co-working spaces. I think that there's a massive amount of people
+我听说过好几个家里有小孩的人，他们简直求之不得地想去办公室。而且很多人真的很喜欢社交方面的东西。我也会怀念它们。我怀念一周里有那么几天，可以去茶水间和同事闲聊、一起出去吃午饭之类的。我确实怀念这些。是的，绝对的。我一直在尝试做的一件事是，也许每隔几个月飞去办公室一趟，和大家面对面交流。也许这就是未来。我工作的公司有一个大办公室和一堆卫星办公室。但如果你的公司完全是远程的，也许每隔两个月，所有人都可以飞到一个地方——对你来说，是欧洲的某个地方——然后聚在一起。你可以获得这种（虽然是稀疏的但确实存在的）互动，同时又能继续在家工作。我认为这对共享办公空间（co-working spaces）来说是一个巨大的机遇。我认为有大量的人
+
+33
+00:21:46.000 --> 00:22:21.000
+that are in the same situation that my closest co-worker is two hours from train away. The second closest is three hours by plane away. And it would be nice to be just in an office space where I can have water cooler chat and possibly go out and have lunch with somebody that is friendly, even if I am a software engineer and they are a fashion designer. Why not? Yeah, that's a good point. I'm in a co-working space at the moment,
+都处于这种境况：和我最近的同事坐火车要两个小时，第二近的同事坐飞机要三小时。如果能有一个办公室空间，让我可以在那里去茶水间聊天，甚至和某个友好的人一起出去吃个午饭，哪怕我是个软件工程师而对方是个时装设计师，那也挺好的。为什么不呢？是的，说得有道理。我现在就在一个共享办公空间里办公，
+
+34
+00:22:21.000 --> 00:22:51.000
+and there's not really anything that binds the different workers together. You know, we all have our own, I mean, for security reasons, you know, we all have to have our own key. So I can't go into some random company's office and bum around. But you know, the common spaces are pretty much empty. And I think that you hit that on the head, there's an opportunity there, you know, and like, it'd be nice if like the building had some kind of event for anybody who is working there, right? Yeah. Cool. Okay.
+这里其实没有什么东西能把不同的工作人员凝聚在一起。你知道的，我们都有自己的……我的意思是，出于安全原因，我们每个人都必须有自己的钥匙。所以我不能随便闯进某个随机公司的办公室里瞎晃悠。但公共空间基本上是空的。我觉得你算是说到点子上了，这里面确实存在机会。如果大楼能为在那里工作的任何人举办某种活动，那该多好啊。是的。酷。好吧。
+
+35
+00:22:51.000 --> 00:23:31.000
+So let's dive into, I want to learn more about Coiled, but let's put a bookmark in that for now and dive into the topic. What is scientific Python? You know, how is that different than Python? Like that different than Python? How do you define that niche? I would define it with anything that involves very large numerical computations, which means science proper, like geoscience, weather analysis, but also you have AI and machine learning.
+让我们深入探讨一下——我想更多地了解 Coiled，不过我们先把它放在一边，切入正题。什么是 Scientific Python？你知道，这跟普通的 Python 有什么不同？你怎么定义这个细分领域？我会将它定义为任何涉及大规模数值计算的领域，这既包括真正的科学研究，比如地球科学、天气分析，也包括人工智能和机器学习。
+
+36
+00:23:31.000 --> 00:24:06.000
+You have finance. All that requires gigabytes and gigabytes of data. Graph resolution of some sort, like, for example, social network analysis. That is also scientific computation. Got it. And so what are the sort of, you know, main tools that people use? We talked about Dask. Dask is definitely one of them. What are some other tools that people use where, you know, for example, if you were trying to hire somebody who is an expert in scientific Python,
+还有金融。所有这些都需要海量的数据。某种图论计算，比如社交网络分析。这也是科学计算。明白了。那么人们使用的主要工具都有哪些呢？我们讨论过 Dask，Dask 绝对是其中之一。还有哪些其他的工具是人们在使用的？例如，如果你想招聘一个精通 Scientific Python 的专家，
+
+37
+00:24:06.000 --> 00:24:56.000
+you'd kind of expect them to know about these tools. The library that everybody knows is Pandas. That is the baseline. There's Pandas, there's NumPy that is below Pandas, but it also has a different scope. So Pandas is all about data manipulation, tabular data manipulation specifically. So you were using Excel and now you're using Pandas and it's better in every possible way. But it still looks and feels like Excel. NumPy instead is about matricial computations and this kind of heavily vectorized algorithms that have potentially many, many dimensions that you can move along.
+你就会期望他们了解这些工具。人尽皆知的库就是 Pandas。这是基础。有 Pandas，还有位于 Pandas 基础之下的 NumPy，但它们的侧重点不同。Pandas 完全专注于数据操作，特别是表格数据的操作。你以前用 Excel，现在用 Pandas，它在方方面面都更好。但它看起来和感觉上依然很像 Excel。而 NumPy 则专注于矩阵计算以及这类高度向量化的算法，这些算法可能包含你可以在其中穿梭的很多很多维度。
+
+38
+00:24:56.000 --> 00:25:42.000
+And there is very high interoperability between the two. Again, Pandas is built on top of NumPy, so you can have an advanced numpy algorithm that runs on pandas. scipy is also on top of numpy, it's just extra functions that are more niche like statistical analysis and whatnot. If you put everything together you will end up with something that somewhat resembles R, although R is still king when it comes with really, really exotic algorithm that only exists in one paper circa 1996. That paper had a code attached to it and you can guarantee that code
+这两者之间具有非常高的互操作性。同样，Pandas 是构建在 NumPy 之上的，所以你可以在 Pandas 上运行高级的 NumPy 算法。SciPy 也是构建在 NumPy 之上的，它只是一些更小众的额外函数，比如统计分析之类。如果你把所有这些东西组合在一起，你最终会得到一个有点类似于 R 语言的东西，尽管在处理那些只存在于 1996 年某篇论文中的、极其冷门的算法时，R 语言仍然是无可争议的王者。那篇论文附带了一段代码，而你可以百分之百保证那段代码是用 R 写的。
+
+39
+00:25:42.000 --> 00:26:08.000
+is in R. Yeah, that's a good way of explaining it. So yeah, at a high level, the reason people use Excel is because tables are probably the easiest way to think with a vector mindset, right? And the reason why that's important is because if you do an operation on a vector, that vector can be very large or even unbounded.
+是的，这是一种很好的解释方式。所以，从宏观层面来看，人们使用 Excel 的原因在于，表格可能是以向量思维进行思考的最简单方式，对吧？之所以这很重要，是因为如果你对一个向量进行操作，这个向量可以非常大，甚至可以是无界的。
+
+40
+00:26:08.000 --> 00:26:50.000
+You could work with it in an atomic way. So for example, you know, if you look at R or MATLAB, you can have two matrices. The matrices can be really high dimensional, even arbitrary number of dimensions with respect to your program. And you can just do A plus B. And as long as the dimensions are equivalent, or even sometimes if they're not, there'll be some fan out operation. But in general, as long as the A and B have the same dimensions, you just do A. Literally in your code, you write A plus B and you get the sum of those two. The other part of it is, and people can try this, if you grab Octave, which is the open source MATLAB, or if you grab MATLAB and you do, you have two vectors,
+你可以用一种原子化的方式处理它。比如，如果你看看 R 或 MATLAB，你可以拥有两个矩阵。这些矩阵可以具有非常高的维度，甚至可以拥有相对于你的程序而言任意数量的维度。然后你只需要执行 `A + B`。只要它们的维度是等价的，或者有时即使不等价，也会有一些广播（fan-out）操作。但总的来说，只要 A 和 B 拥有相同的维度，你就可以直接执行 A。字面上在代码里写下 `A + B`，你就能得到这两个矩阵的和。另一部分是——人们可以去尝试一下——如果你获取 Octave（即开源的 MATLAB），或者如果你获取 MATLAB 并这么做：你有两个向量，
+
+41
+00:26:50.000 --> 00:27:41.000
+you do A plus B, it'll be done like super, super fast, right? You can also write a for loop in MATLAB and you can say, you know, for I zero to the size of the vector, you c is equal to c of i is equal to a of i plus b of i and that will take forever right and so so what the reason is because when you do a plus b under the hood it's not just a for loop it's doing a million other things to make that addition super super fast it's taking advantage of the different process, like coprocessors on your processor, like the SIMD and these other coprocessors, it might be running on the GPU, you know, depending on if you're using something like JAX or one of these things, it'll actually farm that out to the GPU on the graphics processing unit. Or even in the case of
+你执行 `A + B`，它会完成得超级、超级快，对吧？你也可以在 MATLAB 里写一个 `for` 循环，你可以说：从 0 到向量大小循环 `i`，然后 `C[i] = A[i] + B[i]`，而这将会花费无限长的时间，对吧？所以原因在于：当你执行 `A + B` 时，在底层它并不仅仅是一个 `for` 循环，它在做其他上百万件事情来让这个加法变得超级、超级快。它利用了处理器上的各种协处理器，比如 SIMD 和其他协处理器；它可能在 GPU 上运行——取决于你是否使用了像 JAX 这样的工具，它实际上会将计算分流到图形处理单元（GPU）上。甚至在
+
+42
+00:27:41.000 --> 00:28:34.000
+Dask, it might send that part of that sum to another machine or to many other machines and then go and collect the output. And so in all of these cases, you're able to work at a really high level and you're able to do the same operation many, many times on many different data atoms very, very quickly. And that's something that Excel also gives you. In Excel, you can say sum A. It's very, very terse. It's very fast. And it sums the entire column super quickly. So it's all kind of with that kind of a mindset that we can get a lot of stuff done without having to be experts on the GPU and SIMD and all of that stuff. Yes, except that there are two big things to point out. The first one is that the amount of library that is available for Excel is
+Dask 的情况下，它可能会把求和的一部分发送到另一台机器或许多其他机器上，然后再去收集输出。因此，在所有这些情况下，你都能够在极高的抽象级别上工作，并且能够非常、非常快地对许多不同的数据原子重复执行相同的操作。这也是 Excel 能带给你的体验。在 Excel 中，你可以说 `SUM(A)`。它非常、非常简练。它速度极快。而且它能超快地对整列进行求和。所以，这一切都带着这种思维方式，让我们无需成为 GPU、SIMD 等各项技术的专家，就能完成大量的工作。是的，不过有两件大事需要指出。第一点是，Excel 可用的库的数量，
+
+43
+00:28:34.000 --> 00:29:07.000
+a tiny fraction of what you have on Numpy. And the second big thing is reproducibility. So one of the biggest problems with Excel is that you have your VBA code and your in-cell formulas mixed with your data. And as soon as your data changes, you will need to start thinking, okay, how do I keep my software, meaning my VBA and my
+只是你在 NumPy 上所拥有的库的一小部分。第二件大事是可复现性（reproducibility）。因此，使用 Excel 最大的问题之一在于，你的 VBA 代码和单元格公式与你的数据混杂在一起。一旦你的数据发生变化，你就必须开始思考：“好吧，我在替换数据的同时，该如何保留我的软件（也就是我的 VBA 和 Excel
+
+44
+00:29:07.000 --> 00:29:50.000
+Excel formulas, while swapping the data? And for a regular piece of software, that's trivial. The software is the software, the data is the data. And you have a command that says software.py or.exe input file, output file, or something like that. In Excel, it's not like that. It's the same file. And I've seen the most horrible things to work around that. And inevitably, you will end up with human error, with stuff that simply stops working because the software has been corrupted by new data or something bad like that.
+公式）？”对于常规软件来说，这简直微不足道。软件就是软件，数据就是数据。你有一个命令，例如 `software.py` 或 `.exe` 输入文件、输出文件，诸如此类。但在 Excel 中并非如此。它们是同一个文件。为了绕过这个限制，我见过最可怕的做法。并且不可避免地，你会以人为失误告终，软件会因为新数据或类似的不良情况而遭到破坏，从而直接停止工作。
+
+45
+00:29:50.000 --> 00:30:12.000
+Or there was a manual step in updating the data that was not performed just right. And now there is a subtle difference in the output that you will not notice because you forgot a validation step that would be otherwise redundant. So that's a colossal problem. And then you have,
+或者在更新数据时有一个手动步骤没有执行准确。于是输出结果中出现了一个微小的差异，而你却不会察觉，因为你漏掉了一个本可起到冗余检查作用的验证步骤。所以这是一个巨大的问题。接着你还会遇到：
+
+46
+00:30:12.000 --> 00:30:46.000
+how do you put Excel code in version control? The short answer is you just commit a binary blob. Now there is a change. Put a new binary blob into version control. What changed? Well, you have two binary blobs. Can't you tell the difference? Yeah. And again, I've seen the most exotic solutions where there were macros that were yanking all the VBA code out of an Excel spreadsheet, saving them to version control, and then another macro
+你怎么把 Excel 代码纳入版本控制？简短的回答是：你只能提交一个二进制大对象（binary blob）。现在有改动了，把一个新的二进制大对象放进版本控制里。到底改了什么？嗯，你有两个二进制大对象。难道你看得出区别吗？是的。再次重申，我见过最奇特的解决方案：有些宏会把 Excel 电子表格中的所有 VBA 代码强行抽离出来、保存到版本控制中，然后另一个宏
+
+47
+00:30:46.000 --> 00:31:27.000
+that was Yankton-Bend back in and rebuilding the spreadsheet was nightmare. Speaking of nightmare, do you want a horror story? Sure, let's hear it. I actually was thinking of, I have a horror story in my head, but I'd love to hear yours first. It's probably more horrific and then people can ramp down at my story. Four words, matrix inversion in Excel. Oh my gosh. I saw somebody write a matrix inversion in three or four pages of VBA. It was, I was four pages of VBA. It was running. It was like a 10,000 by 10,000 matrix.
+再把它们塞回去并重新构建电子表格，这简直是一场噩梦。说起噩梦，你想听一个恐怖故事吗？当然，洗耳恭听。其实我脑子里正想着一个恐怖故事，但我很想先听听你的。你的可能更吓人，然后大家听完我的故事就可以稍微放松一下了。四个字：Excel 中的矩阵求逆。天哪。我曾看到有人用三四页的 VBA 代码来写一个矩阵求逆。那是……四页纸的 VBA 代码。它在运行。那是一个 1 万乘 1 万的矩阵，
+
+48
+00:31:27.000 --> 00:31:50.000
+So substantial. And it was pushing button and then it was leaving. Two hours later, it was coming back. And somehow, hopefully, it was giving the result. I looked at it. I looked at him. I looked at it. I opened my Jupyter notebook.
+相当庞大。然后按下按钮，人就走开了。两个小时后回来。不知怎么的，谢天谢地，它总算给出了结果。我看着它。我看着他。我看着它。我打开了我的 Jupyter 笔记本。
+
+49
+00:31:50.000 --> 00:32:50.000
+First line, import, open openpy excel or whatever second import pandas second line loaded the data from his input excel spreadsheet third line invert fourth line save out i looked at him push button 40 milliseconds later the program was done he looked at me i said oh i didn't know you could do it yeah i would be worried if i knew if you knew oh my gosh yeah i have a similar story where uh i'm gonna throw my brother-in-law under the bus so my brother-in-law is really really good at math got like a perfect on the math SAT. So I'm going to set him up to knock him down here. But he's really good at math, but he's not a computer scientist. He's an economist, right? And I remember this is years and years ago. So we were both like relatively junior professionals. And he asked me to take a look at his laptop because of course, everyone with a CS degree is also an expert in IT right in your family so I was really prepared to not have any solution for this because I'm
+第一行：`import openpyxl` 或别的什么；第二行：导入 Pandas；第二行：从他的输入 Excel 电子表格中加载数据；第三行：求逆；第四行：保存输出。我看着他，按下了按钮。40 毫秒后，程序运行完成了。他看着我，我说：“哦，我不知道这也能做到。”“是啊，如果你知道的话，我才该担心呢。天哪！”是的，我也有一个类似的故事，我打算把我的连襟（brother-in-law）给出卖一下。我的连襟数学真的非常好，数学 SAT 考了满分。所以我先把他捧高，然后再在这里把他击倒。他数学确实很好，但不是计算机科学家，他是个经济学家，对吧？我记得那是很多年以前的事了。当时我们俩都还算相对年轻的职场新人。他让我帮他看一眼他的笔记本电脑——当然啦，在你们家里，所有拥有计算机科学学位的人也都被当成 IT 专家——所以当时我真的做好了完全无法解决这个问题的准备，因为我通常对 IT 一窍不通。但事实是，他说程序运行得非常慢。而且——我真的没开玩笑——他当时一定同时打开了 200 多个 Excel 程序，
+
+50
+00:32:50.000 --> 00:33:36.000
+usually terrible at IT but but it's just he said it was running really slowly and he had I'm not even kidding it must have been over 200 Excel programs open at the same time and almost all of the files had almost exactly the same name. And basically he had created, as you said, he had this code that did all of this logic, but he wanted to run it on a hundred different data sets. And so as an economist, he didn't know how to do that. So he created a hundred copies of this Excel spreadsheet, and then he just had them all, it was more than a hundred, had them all open at the same time. And he was trying to copy and paste data into each one. And I was like, you have to learn R. I was like, at the time, I don't know how popular
+并且几乎所有文件的名字都几乎一模一样。基本上，正如你所说的那样，他写了一段完成所有这些逻辑的代码，但他想在 100 个不同的数据集上运行它。作为一个经济学家，他不知道该怎么做，于是他创建了 Excel 电子表格的 100 个副本，然后把它们全部同时打开——其实还不止 100 个。他试图把数据手动复制粘贴到每一个表格里。我当时就对他说：“你必须学 R 语言。”我当时心想……我不知道 Pandas 当时有多流行，我甚至不知道 Pandas 有多古老，所以我对这些一无所知。但我告诉他：“你必须学 R 语言，去买一本关于 R 的书。”是的，正如你所说的那样，人们被困在 Excel 里，然后他们很难迈出下一步。所以这就是我认为 Scientific Python 增长潜力最大的地方，也就是面对这群受众，对吧？那么，人们——比方说，像我连襟那样的人，以及其他可能
+
+51
+00:33:36.000 --> 00:34:11.000
+Pandas was. I don't even know how old Pandas is. So I didn't know about any of that. But I told him, you have to learn R and get a know, get a book on R. Yeah, I mean, to your point, you know, people get in sort of trapped in Excel and then it becomes difficult for them to take the next step. And so that's kind of where I think scientific Python, that's where I think it can grow the most is with that audience, right? The Excel audience. So how do people, let's say, you know, people out there like my brother-in-law and like other people who might
+非常擅长 Excel 的人——应该如何开始接触 Scientific Python 呢？他们可以通过什么方式切入进去？外面有大量的教程。首先，他们应该从 Python 教程开始，这些教程比较通用，会教他们基本的 `for` 循环。仅凭这些，他们就能够笨拙地读取 CSV 文件、在上面做一些计算，然后把结果写出来。从那以后，他们应该开始学习针对 Scientific Python 的 Pandas 教程，并意识到他们之前用纯 Python 写的那些 `for` 循环（当时他们还在逐个单元格地打开 CSV 文件、读取并计算）
+
+52
+00:34:11.000 --> 00:34:59.000
+be really good with Excel, how do they get started with scientific Python? Like what's a way they can ramp into that? There are plenty of tutorials out there. First, they should start with the Python tutorial, which is generic and it teaches them like basic for loops. And already that will give them the tools to awkwardly read a CSV file, do some calculations on it and then write it out. And then from there, they should start with a Pandas tutorial specific for scientific Python and realize that all that for loop that they wrote in pure Python, where they were opening the CSV file and reading cell by cell and calculating cell by cell, actually that
+在 Pandas 中其实只需要三行代码就能搞定。而且速度快得多。有一点不同的是——你知道的，Excel 是响应式的（reactive），对吧？而在 Pandas 中，它是命令式的（imperative），对吧？所以，在 Excel 中，你改变了数据，然后答案就会像变魔术一样自动出现，对吧？那么，你是如何让人们完成这种范式转变的呢？从“一切都是响应式的、像是某种真正的函数式编程语言”的 Excel，过渡到像 Pandas 这样需要读取数据的脚本？你是如何引导人们实现这种范式转变的？
+
+53
+00:34:59.000 --> 00:35:35.000
+becomes three lines in Pandas. And it's a lot faster as well. One thing that's different, you know, with Excel, it's reactive, right? You know, with pandas, it's imperative, right? So, you know, with Excel, you change the data and then the answer just magically appears, right? And so how do you get people to sort of make that paradigm shift from, you know, everything is reactive and sort of, it's like, Excel is like a true functional programming language, right? How do you go from that to something like Pandas, where it's a script where you read in the data? How do you get people to make that paradigm shift?
+在 Pandas 中只需要三行代码，而且速度快得多。有一点不同的是，你知道，Excel 是响应式的，对吧？而 Pandas 是命令式的，对吧？所以，在 Excel 中，你更改了数据，然后答案就神奇地出现了，对吧？那么，如何让人们完成这种范式转变，从“一切都是响应式的、Excel 就像一种真正的函数式编程语言”这种思维，转变到像 Pandas 这样通过脚本读取数据的工具？你如何让人们实现这种范式转变？
+
+54
+00:35:35.000 --> 00:36:35.000
+I think that for anybody that uses Excel professionally, reproducibility and removing human error is the cell. Yes, Excel is reactive which is great if you want to prototype something but then if you want to repeat the same operation every other week and you want to repeat it exactly the same way and you want your replacement to repeat it the day that you're on holiday, Excel is doom. You will get it wrong. You will introduce human error in these 20 different manual steps that you need to repeat the exact same thing. And the idea is you have input data, which is a plain formula-less Excel file or CSV or whatever or a web page. And you have software that you push button and you're guaranteed that if you
+我认为对于任何专业使用 Excel 的人来说，可复现性和消除人为错误是核心。是的，Excel 是被动响应式的，如果你想对某事进行原型设计，这很好，但如果你想每隔一周重复相同的操作，并且希望以完全相同的方式重复，还希望在你休假的那天由接替你的人来重复，那 Excel 就是一场灾难。你一定会出错。在你需要重复完全相同事情的这 20 个不同的手动步骤中，你会引入人为错误。其核心思想是，你有输入数据，它是一个没有公式的纯 Excel 文件、CSV 或其他什么，或者是一个网页。你拥有软件，只需点击一下按钮，就能得到保证：如果你
+
+55
+00:36:35.000 --> 00:36:57.000
+push button twice on the same data, you will get the same output. And if you want to change one thing, you can have version control. And you can say, okay, a push button. Oh, I don't like these numbers. But I remember a week ago it was working. Go back in version control one week. Push button.
+在相同的数据上点击两次按钮，你会得到相同的输出。如果你想更改某处，你可以使用版本控制。你可以说，好的，点击按钮。哦，我不喜欢这些数字。但我记得一周前它是正常工作的。通过版本控制回到一周前。点击按钮。
+
+56
+00:36:57.000 --> 00:37:20.000
+Oh, now it works. Okay, what changed? In Excel, at best, you have binary blob versus binary blob. In Python, you have those five lines that somebody changed and they shouldn't have. And you can blame it and fix it accordingly. It's a much better living. Yep, that makes sense. Cool.
+哦，现在它管用了。好吧，什么变了？在 Excel 中，充其量你只能得到一个二进制大对象与另一个二进制大对象的对比。而在 Python 中，你可以看到某人修改了不该修改的那五行代码。你可以追溯责任人并进行相应修复。这是一种好得多的生存方式。是的，这说得通。酷。
+
+57
+00:37:20.000 --> 00:37:42.000
+Yeah, I think that makes sense. Do you recommend people go from Excel to R to pandas or go straight to Pandas? Skip R. There is no need for R nowadays. Again, unless you are a scientist that needs that one specific algorithm that somebody wrote 20 years ago
+是的，我觉得这说得通。你建议人们从 Excel 转到 R 再到 pandas，还是直接转到 pandas？跳过 R。现在没有必要使用 R。再次强调，除非你是一位科学家，需要某个别人在 20 年前编写的、
+
+58
+00:37:42.000 --> 00:38:05.000
+and it's barely almost unknown. But even then, there is a really nice library, which I cannot remember the name, which can wrap our functions and you can work on NumPy objects. Cool. That makes sense. Yeah, so for folks out there, if you go from Excel straight to Pandas, you're going to see these constructs
+几乎鲜为人知的特定算法。但即便如此，也有一个非常不错的库（我记不起名字了），它可以包装 R 函数，让你能够处理 NumPy 对象。酷。这说得通。是的，所以对于各位听众来说，如果你从 Excel 直接转到 pandas，你会看到诸如
+
+59
+00:38:05.000 --> 00:38:50.000
+like data frames and wonders. A lot of Pandas is inspired by R. And so the inspiration might be a little bit lost on you. But I agree. I agree with Guido. I think you go straight to Pandas and you don't necessarily need to know the whole history there to get up and running and get proficient and get effective. And for those that miss the fumbling around bit of Excel, I think that using a Jupyter Notebook helps immensely. I always prototype my new code on Jupyter Notebook and only at a later date when I want to productionize it, I move to PyCharm. That's my personal preference at least.
+数据框（data frames）和类似的概念。很多 pandas 的设计灵感都来源于 R。因此，这些灵感对你来说可能有点难以体会。但我同意。我同意 Guido 的观点。我认为你可以直接使用 pandas，不一定非得了解那段完整的历史才能上手、熟练掌握并变得高效。对于那些怀念 Excel 摸索过程的人来说，我认为使用 Jupyter Notebook 极有帮助。我总是先在 Jupyter Notebook 上制作新代码的原型，只有在稍后想要将其投入生产时，我才会转向 PyCharm。至少这是我的个人偏好。
+
+60
+00:38:50.000 --> 00:39:19.000
+I find it a lot faster for prototyping. Yeah, that makes sense. What tool do you use to share Jupyter Notebook results? Do you do the export to HTML or do you have like another tool that you use? If I just want to show them to somebody on the internet, I may publish them to a GitHub guest or if I'm going to share them to somebody that doesn't know what Python is, I will do a save as to HTML.
+我觉得用于原型设计要快得多。是的，这说得通。你用什么工具来分享 Jupyter Notebook 的结果？你是导出为 HTML 还是使用其他工具？如果我只是想在互联网上展示给某人看，我可能会将它们发布到 GitHub Gist；如果我要分享给不懂 Python 的人，我会选择另存为 HTML。
+
+61
+00:39:19.000 --> 00:39:53.000
+Yep, that makes sense. So cool. So yeah, I think we covered this in really good detail. Just to recap for folks out there um you know so numpy is a blaz and blaz blaz stands let me step back a little bit so blaz is basic linear algebra system and so the idea is again going back to that vector add you know you want to do a plus b and you want it to be a component wise add really quickly. And so Blas basically provides you with a way to, and Blas is pretty low level, like C or C plus plus or even Fortran.
+是的，这说得通。太棒了。所以，是的，我想我们已经非常详细地探讨了这一点。为各位听众简单回顾一下，你知道的，numpy 是一个，blaz 和 blaz，blaz 代表，让我退一步解释一下，blaz 是基础线性代数系统（basic linear algebra system），所以其核心思想，再次回到那个向量加法，你知道的，你想做 a 加 b，并且希望它能非常快速地按分量相加。因此，Blas 基本上为你提供了一种方法，而且 Blas 是相当底层的，就像 C 或 C++ 甚至是 Fortran。
+
+62
+00:39:53.000 --> 00:40:24.000
+Blas is written in AVX assembly. It's very, very highly optimized. Right. Oh yeah. But even the interface will be, you know, if you wanted to interface directly with a BLAS system, you'll be writing, yeah, C or at best, you'll be writing C or C++. So, and yeah, you're right, under the hood, it's all custom written assembly code that's, you know, optimized for a million different architectures, et cetera. And so that's how people have done, you know, scientific
+Blas 是用 AVX 汇编语言编写的。它经过了非常、非常高度的优化。没错。哦，是的。但即使是接口，你知道的，如果你想直接与 BLAS 系统进行交互，你也得编写，是的，C 语言，或者充其量，你得编写 C 或 C++。所以，是的，你说得对，在底层，这全都是定制编写的汇编代码，针对数百万种不同的架构进行了优化，等等。这就是人们过去进行科学
+
+63
+00:40:24.000 --> 00:41:03.000
+computing in general, especially how scientists have been able to do it without having to sort of rewrite that from scratch, because that can be really difficult. And there's issues with precision. There's times where you want to change the order of operations. The thing that comes to my mind is actually the log sigmoid, where often you want to get the log likelihood of a sigmoid function. And it turns out if you do the sigmoid and then you do the log operation as two steps, you incur a lot of imprecision. And so your answer ends up being very imprecise. So many, many BLAS systems will offer a log sigmoid operator, which does both of those at once. And the result ends up being much more
+计算的方式，特别是科学家们如何能够做到这一点，而不必从头开始重写这些代码，因为那可能真的非常困难。而且这里面还存在精度问题。有时你可能想改变运算顺序。我脑海中浮现的一个例子其实是对数 sigmoid（log sigmoid），通常你希望获得 sigmoid 函数的对数似然（log likelihood）。事实证明，如果你分两步先计算 sigmoid 然后再进行对数运算，就会产生很大的不精确性。因此，你的答案最后会变得非常不精确。所以，许多、许多 BLAS 系统会提供一个对数 sigmoid 算子，它可以同时完成这两项运算，最终的结果会准确得多。
+
+64
+00:41:03.000 --> 00:41:53.000
+accurate. These are all things that people don't want to have to think about, right? Unless they're down in the weeds. So NumPy provides a beautiful Python interface to n-dimensional arrays and all of those operations. And it allows you to use Python to do all of that. But it's also pretty low level. You have to think in terms of matrices, and so that's where Pandas comes in. One thing that everybody that is not using Python is complaining about is, isn't Python slow? The answer is, well, yes, Python is pretty slow, but NumPy is as fast as C in theory, actually faster than whatever C you will write because it's been highly optimized.
+这些都是人们不想费脑子去想的事情，对吧？除非他们深入研究底层。因此，NumPy 为 N 维数组和所有这些操作提供了一个漂亮的 Python 界面。它允许你使用 Python 来完成所有这些工作。但它也相当底层。你必须以矩阵的思维方式来思考，这就是 pandas 发挥作用的地方。每个不使用 Python 的人在抱怨的一点是，Python 难道不是很慢吗？答案是，嗯，是的，Python 相当慢，但 NumPy 理论上和 C 一样快，实际上比你写出的任何 C 代码都要快，因为它经过了高度优化。
+
+65
+00:41:53.000 --> 00:42:34.000
+Yep. Yep. That's right. Yeah. This is a common criticism of Python. I think that for everything, you know, there's a Pareto distribution here. So a tiny percent of your code consumes 99% of the time. And so with NumPy, that expensive code is almost certainly being done in assembly or at best at C. So you are executing a command saying, you know, add these two arrays, and you're telling NumPy to do that. And if that, you know, instruction, you know, that message telling NumPy to do that. And if that instruction, that message telling NumPy to do that takes a hundred times as long as it would in C, it's totally irrelevant because that is very, very tiny
+没错。没错。确实如此。是的，这是对 Python 的常见批评。我认为对于所有事情，你知道的，这里存在帕累托分布（Pareto distribution）。所以一小部分代码消耗了 99% 的时间。因此，有了 NumPy，那些昂贵代码几乎肯定是用汇编语言完成的，或者最多是用 C 语言。所以你是在执行一个命令，比如说，将这两个数组相加，你是在指示 NumPy 这样做。如果这个指令，你知道的，那个告诉 NumPy 这样做的消息。如果这个指令、那个告诉 NumPy 这样做的消息花费的时间是在 C 语言中的一百倍，那也完全无关紧要，因为与矩阵实际相加的过程相比，这一点时间非常、非常微不足道。
+
+66
+00:42:34.000 --> 00:43:20.000
+compared to the actual adding of those matrices. And that actual add instruction, which is gonna take the vast, vast majority of the time is now super, super optimized. Way better than if you had just written a for loop in C++. There are times, what comes to my mind are simulators, but there are times where you do have many instructions and it's not really something that can be parallelized. And even there, there's Numba and there's a bunch of these there's Cpython you know a bunch of these tools that will convert you know Python functions to C on demand so if you're not doing anything complicated with objects you just have a lot of serial mathematical operations there's a whole
+相比之下，实际的加法指令将占据绝大部分时间，而现在它已经被超级、超级优化了。远比你自己用 C++ 编写一个 for 循环要好得多。有时候，我想到了模拟器，但有时候你确实有很多指令，而且这并不是那种可以轻易并行化的东西。即便在那时，也有 Numba，还有一堆这样的工具，比如 Cpython，你知道的，有一堆这样的工具可以按需将 Python 函数转换为 C。所以如果你没有对对象做任何复杂的操作，只是有很多串行数学运算，这里有一大堆不同的即时编译器（just-in-time compilers）可以为你优化这些。所以，简而言之，你知道的，不要因为速度原因而排斥 Python。好了，我们对 NumPy 和 pandas 的探讨已经相当深入了。Dask 所做的事情是将它带到多节点（multi-node）环境。而我认为，这真的、真的非常有趣。我必须坦白，其实我对这部分了解不多。我很想了解更多。那么，多节点究竟是如何将这种在我机器上运行得极快的操作，扩展到在一百台机器上运行，无论它们是在我的办公室里，还是更好地在云端的某个地方？Dask 又是如何实际做到这一点的？它是如何在远程运行你的代码的？
+
+67
+00:43:20.000 --> 00:44:05.000
+bunch of different just-in-time compilers that can optimize that for you. So yeah, in short, you know, don't be adverse to Python for speed reasons. So we've done a pretty good job covering NumPy and Pandas. The thing that Dask does is take it to multi-node. And that, I think, is really, really interesting. And I have to confess, I don't actually know a lot about that part of it. I'd love to know more. So multi-node is how do I take this operation that now runs really fast on my machine and get it to run on a hundred machines, even if they're in my office or even better if they're in the cloud somewhere. And how does Dask actually do that? How does it run your code remotely?
+好吧。传统上，分布式计算是非常底层的。过去，我们有非常底层的 C/C++ 编程工具包，它会告诉你，比如，你有两个节点，这是一个命令，允许你将这部分数据从一个节点发送到另一个节点，然后另一个节点需要期待这个数据，而且它无法扩展，就复杂度而言，它会以极快的速度变得非常、非常复杂。因此，Dask 背后的理念是，你在 Jupyter Notebook 或其他地方拥有这样一个对象，它的外观和感觉就像一个 Pandas 数据框或一个 NumPy 数组，除了你看向它时，有一行代码写着
+
+68
+00:44:05.000 --> 00:44:57.000
+Right. So traditionally, distributed computing has been very low level. Back in the day, we had this very low level CZ++ programming toolkit that would tell you something like, okay, you have two nodes, and this is a command that lets you send this piece of data from one node to another node and then the other node will need to expect that and it doesn't scale in terms of complexity it becomes really really complicated really fast so the idea behind dask is that you have this object in your Jupyter Notebook or whatever that looks and feels like a Pandas data frame or a NumPy array, except that you look at it and there is a line that says
+这个 Pandas 数据框有 40 太字节（terabytes）。这怎么可能？但你正坐在笔记本电脑前，笔记本电脑上却有一个 40 太字节的 Pandas 数据框。这怎么可能？但你正坐在笔记本电脑前，笔记本电脑上却有一个 40 太字节的 Pandas 数据框。这怎么可能？这里有个小把戏。其实你的笔记本电脑上或者其他任何地方都没有它。你拥有的是生成该数据框的指令。然后，每次你对该数据框或 NumPy 数组进行操作时，你都会向这堆指令中添加一条额外的延迟指令（delayed instruction）。最后，在你的笔记本电脑上，你拥有大约两兆字节的延迟指令，对你来说，它们是完全不可见的。
+
+69
+00:44:57.000 --> 00:45:42.000
+this Pandas data frame is 40 terabytes. How is that possible? But you're on your laptop and you have a 40 terabytes Pandas data frame on your laptop. How is that possible? But you're on your laptop and you have a 40 terabyte Pandas data frame on your laptop. How is that possible? There's a trick. You don't actually have it on your laptop or anywhere else for the matter. You have the instructions to generate that data frame. And then every time you do a manipulation on that data frame or on that NumPy array, you add an extra delayed instruction to the bunch. And at the end, on your laptop, you have two megabytes, say, worth of delayed instructions, which are, to you, they are completely invisible.
+你面前拥有最终的产品，只是里面没有实际的数字，然后你调用了一个在 pandas 和 numpy 中并不存在的方法，叫做 `.compute()`。当你这样做时，两件事发生了——嗯，如果你只是在笔记本电脑上，会有几件事发生：你可以在笔记本电脑上运行整个过程，并且它会比 NumPy 或 pandas 更快、性能更高，因为它会从磁盘或网络中读取你需要的那几个比特，进行处理，然后尽快释放内存，以便在加载下一部分之前腾出空间。
+
+70
+00:45:42.000 --> 00:46:20.000
+You have the final product in front of you just not the actual numbers are in it and then you invoke one method that in pandas and numpy does not exist which is dot compute when you do that two things have well a few things happen if you're just on your laptop you can run the whole thing on your laptop and it will be already faster and more performant than NumPy or Pandas because it will read from disk or from the network whatever bits you need, crunch them through and then release the RAM as soon as possible before the next bit can be loaded up.
+比方说，你有一个假设的有一百万行的 Excel 电子表格，你想对某一列求和。如果你在 pandas 中这样做，你必须加载这一百万行。现在所有东西都在内存中了，然后你在内存中进行求和。除非你有什么花哨的方法，否则这个求和在大多数情况下将使用单核 CPU。而有了 Dask，你可以说：把这个百万行的电子表格分成 160 个块（chunks），所以一百万除以 160 大约是 10,000 左右，现在你，现在每个，
+
+71
+00:46:20.000 --> 00:47:05.000
+Say, for example, that you have an hypothetical Excel spreadsheet of a million lines and you want to sum up a column. If you do that in Pandas you have to load up the million lines. Now you have everything in memory and then you do the sum in memory. And unless you have something fancy that sum will be most times using a single CPU with dusk you can say load this million lines spreadsheet in split it in a hundred and sixty chunks so one million over a hundred and sixty is no 10,000 something and now you and now every and And now every one of those
+并且现在每一个块都会交给我 16 个 CPU 中的一个，或者 8 个，或者 4 个，这取决于我的电脑有多高级。不管我有多少个 CPU，我都把它分成了 160 个块，Dask 会负责处理这一切，它会说：好吧，加载第一个块。一旦你开始完成第一个块的加载，
+
+72
+00:47:05.000 --> 00:47:27.000
+goes to one of my 16 CPUs or eight CPUs or four CPUs, depending how fancy my computer is. And it does not matter how many CPUs I've got. I have split it in 160 chunks and Dask will take care of it by saying, okay, load the first one. As soon as you start finishing loading the first one,
+就对你想要的那个列进行部分求和，现在你得到了一个单一的数字，然后你就可以释放它了。与此同时，假设你有另外七个处于空闲状态的 CPU，去加载第二个、第三个、第四个、第七个和第八个块。当你完成第一个块的加载时，在第一个 CPU 上加载第九个块，依此类推。所以在你的 8 核 CPU 主机上，任何时候内存中都有八个包含 10,000 行的块，
+
+73
+00:47:27.000 --> 00:47:55.000
+do the partial sum of that column that you want, and now you have one single number, and then you can release it. In the meantime, let's say you've got seven more CPUs that are idle, load the second one, and the third, and fourth, and seventh, and the eighth. By the time you finish loading the first one, load the ninth on the first CPU and so on. So at any time on your eight CPUs host, you've got eight 10,000 lines chunks in memory,
+完全饱和了你的 CPU 处理能力，而你处理的不是一百万行。这就是核心思想。然后，一旦你有了两个块的小计，用户想要什么？哦，他们只想要一个总计。好的，我其实不需要内存中的这两个数字。把它们加起来，现在我得到了一个数字。
+
+74
+00:47:55.000 --> 00:48:16.000
+completely saturating your CPU capacities, and you are instead of one million lines. That's the idea. And then once you have the subtotals of two chunks, what did the user want? Oh, they wanted just a grand total. Fine, I don't really need these two numbers in memory. Sum them up and now I have one number.
+重复此过程。我可以做一个递归聚合，所有这些都在底层进行，对你来说完全是透明的。你看不到它。如果你在笔记本电脑上运行，你所看到的只是你的百万行数据库现在占用空间相当于 80,000 行
+
+75
+00:48:16.000 --> 00:48:35.000
+Rease and repeat. And I can do a recursive aggregation and all of that is under the hood, completely transparent to you. You don't see it. If you're running on your laptop, all you see is your million lines database is now taking as much as 80,000 lines
+如果你有 8 个 CPU 并且把它分成 10,000 字节的块，它的运行速度就会快 8 倍。然后你可以扩展到云端或数据中心，因为你拥有的不是一百万行，而是一十亿行。无论你的笔记本电脑有多高级，它就是做不到。即使那样也完全不够。所以你甚至不需要把这个可能有太字节大小的十亿行数据库放在你的机器上。
+
+76
+00:48:35.000 --> 00:49:10.000
+if you have eight CPUs and you split in 10,000 bytes chunks and it runs eight times faster. And then you can scale up to the cloud or to a data center because you don't have a million lines, you have a billion lines. And no matter how fancy your laptop is, it will just not do it. It's just not enough even then. So you don't even have this billion lines database, which is probably going to be in the terabytes, on your machine.
+它存放在云端的某个地方，位于一个或多个数据库中。所以你拥有大约一兆字节的 Dask 数据框或 Dask 数组，点击计算按钮，Dask 会将这些指令推送给 Dask 调度器（scheduler），调度器反过来又拥有你购买的一千个或任意数量的 Dask 工作节点（workers）。Dask 调度器会协调工作节点说：你做这个，你做这个，你做这个，其方式与早先我的本地笔记本电脑协调我的 8 个 CPU 完全一样，只不过我拥有的不是 8 个 CPU，而是 8,000 个。然后你可以做更花哨的事情，比如在工作节点之间进行点对点（peer-to-peer）的数据共享，
+
+77
+00:49:10.000 --> 00:50:00.000
+You have it somewhere on one or many databases on the cloud. So you have your one megabyte worth of Dask data frame or DaskArray, push button compute, Dask will push these instructions to the Dask scheduler, which in turn has a thousand or whatever you made, I mean, you paid for Dask workers. And the Dask scheduler will coordinate the workers to say, you do this one, you do this one, you do this one, exactly the same way that earlier my local laptop was coordinating my eight CPUs, except that I don't have eight CPUs. I've got 8,000. And then you can do fancier stuff like share data between workers peer-to-peer,
+这通常是处理池（processing pool）等做不到的。而且数据就存储在工作节点附近。它永远不会触及你的笔记本电脑。是的，这超级酷。所以简单回顾一下，看看我是否理解了。所以，你知道的，大多数人要么想要可视化某些结果，在这种情况下，你知道的，你只对你的大脑能够处理的信息量感兴趣，对吧？所以某种折线图，你知道的，带有平滑处理等等，对于你的大脑理解发生了什么已经绰绰有余了。或者如果不是这样，你知道的，信息不是直接进入你的大脑，而是进入另一个数据库，并且
+
+78
+00:50:00.000 --> 00:50:42.000
+which is something that typically in a processing pool, for example, you can't do. And the data sits near the workers. It never touches your laptop. Yeah, this is super cool. So just to recap, so see if I understand. So, you know, most people want to either visualize some result, in which case, you know, you're only interested in as much information as your brain can process, right? So some kind of line case, you know, you're only interested in as much information as your brain can process, right? So some kind of line chart, you know, with smoothening and all of that is more than enough for your brain to understand what's going on. Or if it's not going, you know, the information is not going directly into your brain, it's going into another database. And
+通常那个数据库可以一次接受一部分，而不需要一次性加载整个东西。所以在上述任何一种情况下，正如你所说，要么你在流式传输小块数据，要么你把所有东西都压缩成一个小块。因此，只有中间值可能会很大。我的意思是，最后它可能会非常快地变小。
+
+79
+00:50:42.000 --> 00:51:08.000
+usually there's that database can take it in one piece at a time and doesn't need to have the entire thing loaded in at once. And so in either of those cases, to your point, like either you're streaming out small chunks or you're crushing everything down to a small chunk. And so only the intermediate values might be large. I mean, it might get small very quickly at the end.
+因此，Dask 的工作方式不是说：加载这个庞大的数据集，对每个部分执行所有逻辑然后进行聚合，而是推迟所有这些命令。最后，它分析操作图（graph of operations），并找出它可以把事情拆解成哪些部分，没错，明白了。
+
+80
+00:51:08.000 --> 00:51:56.000
+And so the way Dask works is instead of saying, load this huge data set, do all this logic on each piece and then aggregate, it's deferring all of those commands. And then at the end, it's analyzing the sort of graph of operations and it's figuring out where it can break things up into pieces that's correct got it so a couple of questions one is how do you handle like let's say i'm using some pretty esoteric like gambit right which is a game theory library in python right so let's say I want to use Gambit to, you know, calculate some Nash equilibria of some data. How does that work with Dask? Because now the Dask scheduler needs to tell these nodes,
+所以我有几个问题，一个是你是如何处理那些难以分解的东西的？比如你提到的矩阵求逆（matrix inversion），对吧？矩阵求逆是一个很难在例如 100 个节点上运行的操作，对吧？这并非不可能，但绝对不简单。Dask 是如何处理这种事情的？这就是那些花哨代码发挥作用的地方。这全关乎在需要时、在需要的地方复制数据。所有这一切都会自动为你完成。
+
+81
+00:51:56.000 --> 00:52:21.000
+hey, you have to, you know, pip install Gambit. And then when you're done, you have to pip uninstall it. Right, like how do packages work in this kind of environment? Right. This is where Coiled steps in. So normally what you will need to do, you have two ways to do it. One is you SSH into every one of the workers and you repeat the exact same pip install
+因此，你最终会得到同一块数据的多个副本，这意味着集群范围内的内存总量会比你在单个主机上运行略高一些。有一些算法可以弄清楚如何在任何给定时间将活动副本的数量保持在最低限度。明白了。好的。是的，这可真是一些棘手的东西。
+
+82
+00:52:21.000 --> 00:52:53.000
+on every worker. That's the first option. The second, definitely more sensible option is you create a Docker image and then you send it to all the workers. Even then, you will be struggling with complexity with a lot of DevOps work in terms of keeping all the workers aligned. You have a thousand workers, you got to keep them aligned. It's not that simple. Yeah. And multiple people could be on
+正如你所说，这就是真正复杂的代码所在的地方。也许对于矩阵求逆这样的事情，甚至有一些专门的、对分布式友好的实现。这些算法可能与原生的 NumPy 略有不同，是的。是的，这说得通。
+
+83
+00:52:53.000 --> 00:53:28.000
+the cluster too. Like I might need Gambit, you might need PyTorch and we both submit our job at the same time, right? In that case, you will typically have two separate clusters. It's a lot easier. Ah, okay. Got it. It doesn't make much sense to share a cluster with different software. And you cannot share a cluster with different versions of the same software. Typically, what people do when they want to build heterogeneous clusters, they change the hardware.
+有些在 NumPy 中很简单的事情在 Dask 中可能几乎是不可能的。最明显的例子就是排序（sort）。当你把所有数据同时放在眼前的内存中时，任何冒泡排序或其他类型的排序都是 1980 年代的教科书级计算机科学。但是当你的数据块很小，散落在网络的各个角落时，这几乎就变成不可能的任务了。所以你可以对每个块进行本地排序，但随后你将无法进行全局排序。
+
+84
+00:53:28.000 --> 00:53:56.000
+So for example, they will have some nodes that are memory optimized with many, many gigabytes of memory, but not that great of a CPU. With compute optimized nodes, which are built for heavy lifting, but cannot store that much data. And the GPU nodes on the side got it but so so let's say i have a docker image and my docker my docker file is you know pip
+因此有一些变通的解决方案，例如，你不调用 sort，而是调用一个名为 topK 的函数，它的作用是：全局给我最大的 1,000 个元素或最小的 1,000 个元素，此时这变得非常简单。你从每个块中获取最大的 1,000 个元素。每个块有一百万个元素，例如，你从中取出 1,000 个。你从另一个块中取出 1,000 个。你对它们进行比较。现在你有 2,000 个了。
+
+85
+00:53:56.000 --> 00:55:01.000
+install gambit and i submit my job along with this docker image so then the the das scheduler tells these nodes um i guess run this docker container and then inside the docker container do this computation and then tear down the docker container is that how it works no it's the other way around the docker container will also contain the dusk scheduler and workers plus all the software that you need. And you will start task scheduler or task worker from inside the Docker container. So it's up to you to deploy the Docker container on the hosts and then start everything. And that's where Coiled steps in, the company I work for. The idea being that all of this work is a lot. And it's potentially months worth of DevOps engineering time to have it in production scale and that many workers.
+现在你从 2,000 个中选出 1,000 个。你需要重复这个过程。你再次拥有了一个对分布式友好的东西，但此时你必须更改算法。你不得不放弃了一部分你其实并不关心的算法，也就是那底部的 9,990,000 个元素。是的，没错。我记得很久以前在 MapReduce 上做过排序，我想我们当时做的是让每个节点计算其数据部分的量位数（quantiles），然后我们有另一个节点可以查看 100 组不同的分位数，并试图猜测整体的
+
+86
+00:55:01.000 --> 00:55:24.000
+And if you are a lonely data scientist that has the money for it because maybe your company bankrolls you but doesn't have the human resources to support you in your work, you can just push button and fire up a thousand workers in a matter of minutes with Coiled,
+整个数据集的分位数。所以分位数就是桶（buckets）。如果我有排序后的数据，并且它被分成不同的桶，这些边界会在哪里？一旦你说，我知道大约 10% 的数据在 0 到 10 之间，另外 10% 在 10 到 100 之间，另外 10% 在 100 到 200 之间。如果你有这个粗略的估计，那么你可以把这些桶中的每一个分给一个新的节点，让它们按顺序排序，现在你就得到了完全排序好的东西。如果你知道每个桶严格大于或小于另一个桶，对吧？
+
+87
+00:55:24.000 --> 00:55:57.000
+which you just specify, I want these packages, push button, and Coiled will build Docker for you. You don't need to know a single line of Docker file syntax. You just need to know your algorithm and which libraries you want to have. If you're prototyping in a Jupyter notebook, Dask will do something fancy, which is pickle the cells of the Jupyter notebook so that you don't need to install everything remotely beforehand.
+但你是对的。那可不是 90 年代的教科书内容。它开始变得非常复杂，需要你做很多近似的统计，因此你失去了所有的保证。是的。通常还会做的另一件事叫做重新分块（rechunking）。所以如果你真的、真的很需要将所有数据放在一个单独的块中，你会发现实际上你需要沿着某个特定轴将所有数据放在一个单独的块中。例如，假设你真的需要排序，
+
+88
+00:55:57.000 --> 00:56:22.000
+You can change your code on the fly in your Jupyter notebook cell, compute that code is pickled entirely, not just the reference to it, and send to the worker in real time so that in theory you could have generic workers that just have NumPy, SciPy, and Pandas installed, and that would be enough. Yeah, one thing that Google Colab does,
+或者你有一个一百万行乘一百百万列的矩阵，并且你需要按行对其进行排序。假设它的分块大小是 1000 乘以 1000 的正方形。你没法对它进行排序。你能做的是调用 rechunk。现在，你不再拥有 1000 乘以 1000 的正方形块，而是拥有百万行、单块乘单列。因此，每个块的单个大小与以前相同，但现在它是可以原地排序的，因为你把它们全都在内存中了，但你仍然不需要把整个矩阵都放进内存。哦，有趣。真的非常有趣。
+
+89
+00:56:22.000 --> 00:56:59.000
+which I thought was pretty cool, is you can do like bang pip install inside of Jupyter. And so when you do like a bang pip, that tells Google Colab that this is a pip install command. Yeah, it somehow gives you a, I guess you run inside of some kind of Docker or VM, and then you pip install whatever you want. And at some point, Google just terminates that machine running that Jupyter notebook. And so in this way, you don't have to pass Docker to Google. I feel like you could do something similar as long as it's just Python. You're not trying to install any kind of OS level stuff.
+酷。所以，是的，这太迷人了。我得亲自深入研究一下 Dask 并学习很多东西。我想各位听众，如果有人想学习 Dask，最好的学习途径是什么？Dask.org 上有大量非常好的教程。
+
+90
+00:56:59.000 --> 00:57:19.000
+I don't believe you can pip install stuff on a running cluster but again if you're using Coil rebuilding a cluster is a matter of 10 minutes at most if you're rebuilding the whole Docker image at all. Oh interesting yeah okay that's an interesting way of doing it
+明白了。所以去 Dask.org，查看教程部分。你建议人们在笔记本电脑上学习，还是应该在云端获取一台机器？这真的有区别吗？当你想要处理相当规模的数据时，它确实有区别。如果你只是在学习和摸索几千字节或几百万字节
+
+91
+00:57:19.000 --> 00:57:34.000
+yeah I like that especially at bigger companies you have a lot of different teams and different teams are using different packages and they're all running on the same cluster. Or in this case, they're running... In this case, they're not. Yeah, yeah.
+的数据，你的笔记本电脑完全可以胜任。打着引号的“Hello World”，因为这在 Dask 中当然没有太大意义，运行时间不到一毫秒。相比之下，例如 Spark 中的 Hello World 大概要花两到五秒，这简直荒谬。因为 Dask 的向下扩展（scales down）比 Spark 要好得多。然后你可以从那里向上扩展。你可以在你的笔记本电脑上工作。然后你意识到，哦，现在我想要更多的数据了，我的笔记本电脑快撑不住了。
+
+92
+00:57:34.000 --> 00:58:08.000
+Maybe cluster is not the right word. They're running... The same hardware. Yeah, they want to do distributed computation. Maybe I'll put it that way. So they want to run their task at the same time. And so, yeah, to your point, it's like, why not just build an ephemeral cluster for each team, right? As a matter of fact, a company that I was working for was doing at the same time four or five different versions of the
+也许“集群”这个词不太对。它们在运行……相同的硬件。对，它们想要进行分布式计算。也许我应该这么说。所以它们希望同时运行任务。因此，回到你的观点，为什么不为每个团队只构建一个临时的集群呢？事实上，我以前工作过的一家公司，当时正在同时运行四到五个不同版本的
+
+93
+00:58:08.000 --> 00:58:33.000
+same application software that they could run in parallel. And it was not a good design. There was a lot of compatibility issues, a lot of integration issues. You had to do integration testing every time. Does this version, or does the latest version of the cluster software collaborate correctly
+同一款应用软件，这样它们就可以并行运行。这不是一个好的设计。有很多兼容性问题，有很多集成问题。你每次都必须进行集成测试。这个版本，或者最新版本的集群软件，能否与
+
+94
+00:58:33.000 --> 00:58:59.000
+with the older version of the application software? It wasn't great. I find that whole design was because the whole thing was bare metal, was born in bare metal. It hadn't been migrated properly to the cloud. It was designed well before Docker. And with Docker, none of this makes sense, to be honest.
+旧版本的应用软件正确协作？这感觉不太好。我发现整个设计之所以这样，是因为整个系统都是基于裸金属（bare metal）的，生于裸金属时代。它没有被正确地迁移到云端。它在 Docker 出现之前很久就被设计好了。老实说，有了 Docker，这一切就都没意义了。
+
+95
+00:58:59.000 --> 01:00:12.000
+You can just have your own specific version of everything. And you have a bunch of Docker images that you just distribute and you don't need to care. And if somebody else wants to run a different version of the same thing on the same resources, fine. It's just, it's Docker, you will not even see them. Right, right. Does Dask then play nicely with like, you know, like the auto scheduling and auto scaling and all of that in Kubernetes? Let's say you have a bunch of people running jobs, and then, you know, it's six o'clock, everyone goes home. You know, does Dask know to sort called adaptive scaling, which does exactly this. You tweak how many seconds does a worker need to be idle before you tear it down? How much pressure do you need to have in terms of queue of Dask piling up in queue before you spin up a new worker and everything goes up and down on the fly. Yeah, that is super cool. So I can imagine something where you, you know, you like MD5 or you SHA some, your requirements,
+你只需要为所有东西拥有自己特定的版本就行了。你有一堆分发出去的 Docker 镜像，根本不需要操心。如果其他人想在相同的资源上运行同一东西的不同版本，没问题。这只是 Docker，你甚至都看不到它们。对，对。那么 Dask 能否与 Kubernetes 中的自动调度、自动扩缩容以及所有这些功能很好地配合？比方说，有一群人在运行作业，然后，到六点钟，大家都回家了。Dask 知道怎么做吗？这叫自适应扩缩容（adaptive scaling），它做的正是这件事。你可以调整工作节点（worker）需要闲置多少秒后才被销毁；在 Dask 任务在队列中堆积多少压力时，才需要启动一个新的工作节点。一切都在运行中动态上下弹性伸缩。对，这太酷了。所以我可以想象这样一种场景：你通过 MD5 或 SHA 来计算你的需求、
+
+96
+01:00:12.000 --> 01:00:42.000
+your Docker container, actually Docker container already is some, but basically you have two people have the same pip packages, they could get on the same cluster and you could use some kind of hashing to make sure of that. But if someone revs one of the dependencies or shows up with a totally different program, they would get a unique cluster that would scale up and down for them. Yeah. And again, this kind of functionality, it comes in Dask straight away.
+你的 Docker 容器（其实 Docker 容器本身就已经包含校验和了），但基本上，如果有两个人拥有相同的 pip 软件包，他们就可以进入同一个集群，你可以使用某种哈希来确保这一点。但如果有人升级了其中一个依赖项，或者带了一个完全不同的程序过来，他们就会获得一个专属于他们的、能够自动扩缩容的独特集群。是的。而且这种功能，在 Dask 中是直接就有的。
+
+97
+01:00:42.000 --> 01:01:27.000
+And you have packages like Dask Kubernetes. If you want to install it yourself, it will cost you quite a lot of DevOps to have it right. If you use Coiled, you have it out of the box. Yeah, actually, this is very timely because we just did an episode on Kubernetes. And inspired by that episode, I personally went in and did a bunch of digging. I finally got a Kubernetes cluster up and running where I had an ingress proxy, which I learned a few days ago for the first time. But basically, it's this thing where when you visit the cluster, you get authenticated. There's some SSso through like google auth um that
+并且你有像 Dask Kubernetes 这样的软件包。如果你想自己安装它，要搞定它需要花费相当多的 DevOps 成本。如果你使用 Coiled，它开箱即用。是的，其实这非常及时，因为我们刚刚做了一期关于 Kubernetes 的节目。受到那期节目的启发，我亲自去深入研究了一番。我最终搭建并运行了一个 Kubernetes 集群，里面包含了一个入口代理（ingress proxy），这是我几天前第一次学到的。但基本上，它是这样一种东西：当你访问集群时，你会通过身份验证。通过类似 Google Auth 的某种单点登录（SSO）
+
+98
+01:01:27.000 --> 01:02:03.000
+sets some cookie and then once you're authenticated you can get into the cluster for real it doesn't bounce you out and i have a few services on there that now each service doesn't need its own auth because i've put auth on the entire on the entire cluster but that whole thing took me multiple days to figure out. I was on Google, I was on Wikipedia, I was looking up a bunch of articles on Medium, and I was hacking my way through it. And it's currently kind of held together with duct tape. So that is just to make it so that you can securely log in
+设置一些 Cookie，一旦通过身份验证，你就可以真正进入集群，它不会把你踢出去。我在上面部署了一些服务，现在每个服务都不需要自己的身份验证了，因为我已经把身份验证加在了整个集群上。但光是搞定这一切就花了我好几天时间。我查了谷歌，看了维基百科，在 Medium 上翻阅了一堆文章，一路跌跌撞撞地摸索出来。目前它基本上是用胶带勉强粘合在一起的。所以，这仅仅是为了让你能够安全地登录
+
+99
+01:02:03.000 --> 01:02:24.000
+to this Kubernetes service, right? It took forever. And so, you know, it's definitely not worth it. I mean, if you could use something that's managed. Actually, yeah. So how does Coiled handle authentication? That's kind of a good kind of segue. I'm not familiar with that part of the software.
+到这个 Kubernetes 服务中，对吧？花的时间太长了。所以，这绝对不值得。我是说，如果你能使用托管的服务就好了。实际上，是的。那么 Coiled 是如何处理身份验证的呢？这算是一个很好的过渡。我对软件的这部分不太熟悉。
+
+100
+01:02:24.000 --> 01:03:30.000
+I am focused on the Dask distributed. But the idea being that you have your own AWS account and you install Coiled provides some like Terraform or some other kind of scripts where you can spin up Coiled in your own private cloud. And so there isn't just one Coiled cluster for everybody. Correct. And so got it. And so in your cloud, it's already private. So you don't have to, you could assume that you can trust the people who can see those IP addresses. Yes. Got it. it okay that makes sense and of course and of course on top of that there is a wealth of security that comes out of the box with ssl and whatnot which again can be a bit fiddly to figure out and called just delivers it out of the box. Very cool. Okay, so I think we covered a lot of things in really good detail. So you run Dask,
+我专注于 Dask 分布式系统。但其核心理念是，你拥有自己的 AWS 账号，然后你安装……Coiled 提供了一些 Terraform 或其他类型的脚本，让你能够在自己的私有云中启动 Coiled。所以并不是所有人共用一个 Coiled 集群。没错。所以，明白了。因此在你的云环境中，它已经是私有的。所以你不必……你可以假设你可以信任那些能看到这些 IP 地址的人。是的。明白了。好的，这说得通。当然，除此之外，还有 SSL 等开箱即用的丰富安全性，而这些东西自己配置起来可能会有点繁琐，Coiled 能够直接开箱提供。非常酷。好的，我想我们已经非常详细地涵盖了很多内容。所以你运行 Dask，
+
+101
+01:03:30.000 --> 01:03:50.000
+you create a bunch of operations in Dask. At some point you say.compute and then up until then, everything has been instantaneous because it's not actually doing anything. It's just deferring it. When you say.compute, that's when everything pauses. Dask goes off and crunches all of that and then comes
+你在 Dask 中创建了一系列操作。在某个时刻你调用 `.compute()`，在此之前，一切都是即时的，因为实际上什么都还没做。它只是在延迟执行。当你调用 `.compute()` 时，这时候一切才会暂停。Dask 会去处理并计算所有这些内容，然后
+
+102
+01:03:50.000 --> 01:04:24.000
+back with those answers. One other question, how do you deal with things that are difficult to decompose? Like you mentioned matrix inversion, right? Matrix inversion is a difficult operation to run on, for example, 100 nodes, right? It's not impossible, but it's not trivial. How does Dask handle something like that? That's where the fancy code comes in. It's all about copying over data when it's needed, where it's needed. And all of that happens automatically for you.
+返回结果。还有一个问题，你如何处理那些难以分解的任务？就像你提到的矩阵求逆，对吧？矩阵求逆在例如 100 个节点上运行是一个困难的操作，对吧？这并非不可能，但绝对不简单。Dask 是如何处理这种事情的？这就是那些高难度代码发挥作用的地方。核心就在于在需要的时候、在需要的地方复制数据。所有这些都会为你自动完成。
+
+103
+01:04:24.000 --> 01:04:51.000
+So you will end up with multiple copies of the same pieces of data, meaning that the total amount of memory cluster-wide will be somewhat higher than if you were running on a single host. There are algorithms that figure out how to try to keep the number of copies alive at any given time at a minimum. Got it. Okay. Yeah, that's some gnarly stuff.
+所以你最终会得到同一数据片段的多个副本，这意味着集群范围内的总内存量会比在单个主机上运行要高一些。有一些算法可以弄清楚如何在任何给定时间将活动副本的数量保持在最低限度。明白了。好的。是的，这确实有些棘手。
+
+104
+01:04:51.000 --> 01:05:11.000
+That's, as you said, that's where the really complicated code is. Maybe for something like matrix inversion, there's even some specialized implementations that are distributed friendly. The algorithms can be slightly different from PrimaPure and NumPy, yes. Yeah, that makes sense.
+正如你所说，这正是真正复杂的代码所在的地方。也许对于矩阵求逆这样的事情，甚至还有一些专门针对分布式友好的实现。这些算法可能与纯粹的 NumPy 有所不同，是的。是的，这说得通。
+
+105
+01:05:11.000 --> 01:05:59.000
+Some things which are straightforward and in NumPy can be close to impossible in Dask. Like the most obvious example is sort. Sorting a bubble sort of any kind of sort when you have everything at once in memory in front of you is 1980s textbook computer science. But when you have your chunks that are in small pieces scattered all around the network, it becomes almost impossible. So you can sort each chunk locally, but then you will not be able to do a global sort.
+有些在 NumPy 中很简单的事情，在 Dask 中可能几乎是不可能的。最明显的例子就是排序（sort）。当你把所有数据一次性全部加载到眼前的内存中时，任何一种排序（比如冒泡排序）都是 1980 年代的教科书级计算机科学。但当你的数据分块成小块、散落并分布在整个网络各处时，这就变得几乎不可能了。所以你可以对每个分块进行本地排序，但你将无法进行全局排序。
+
+106
+01:05:59.000 --> 01:06:36.000
+So there are solutions around that where you, for example, instead of calling sort, you get a function called the topK, which is give me the 1000 largest elements or smallest elements globally, at which point becomes trivial. You get the 1000 largest elements in each chunk. Each chunk is a million elements, for example, and you get 1,000 out of that. You get 1,000 out of the other. You compare them. Now you have 2,000.
+所以有一些解决方案，例如，你不用调用 sort，而是调用一个名为 `topK` 的函数，它的作用是“给我全局最大的 1000 个元素或最小的 1000 个元素”，此时这就变得很简单了。你获取每个分块中最大的 1000 个元素。每个分块有一百万个元素，你从中取出 1000 个。你从另一个分块中也取出 1000 个。你对它们进行比较。现在你有 2000 个了。
+
+107
+01:06:36.000 --> 01:07:19.000
+Now you get 1,000 out of 2,000. You need to repeat. You again have something that is distributed friendly, but you had to change the algorithm at that point. You had to let go of a piece of algorithm that you actually didn't care about, which is the bottom 9,990,000. Yeah, right. I remember working on sorting in MapReduce a really long time ago and i think what we did was we had each node compute the quantiles of their piece of the data and then we had another that could look at a hundred different sets of quantiles and try to guess at the overall
+现在你从 2000 个里选出 1000 个。你需要重复这个过程。你再次得到了一个对分布式友好的方案，但在那个节点上你必须更改算法。你必须放弃一部分你其实并不关心的算法部分，也就是那剩下 9,990,000 个较小的数据。是的，没错。我记得很久很久以前在 MapReduce 上做过排序工作，我想当时我们的做法是让每个节点计算它们那部分数据的分位数（quantiles），然后我们有另一个节点可以查看一百组不同的分位数，并试图猜测整体数据的
+
+108
+01:07:19.000 --> 01:07:52.000
+you know quantiles of the overall data set so quantiles are just buckets if i had the sorted data and it was broken up into buckets, where would those boundaries be? Once you say, you know, I know roughly 10% of my data is between zero and 10, another 10% is between 10 and 100, another 10% is between 100 and 200. If you have that rough estimate, then you can give each of those buckets to a new node, have them sort in order, and then now you have something totally sorted. If you know each bucket is strictly greater or less than the other, right?
+总体分位数。所以分位数其实就是分桶（buckets）。如果我拥有排好序的数据并把它分成桶，那些边界会在哪里？一旦你说：“我知道大约 10% 的数据在 0 到 10 之间，另外 10% 在 10 到 100 之间，还有 10% 在 100 到 200 之间。”如果你有了这个粗略的估计，你就可以把这些桶中的每一个分给一个新的节点，让它们按顺序排序，现在你就得到了一个完全排好序的东西。如果你知道每个桶严格大于或小于其他桶，对吧？
+
+109
+01:07:52.000 --> 01:08:25.000
+But you're right. That's not 90s textbook stuff. It starts to get really complicated and requires you to do a lot of statistics that are approximate, and so you lose all your guarantees. Yes. And another thing that is normally done is called rechunking. So if you really, really need all of your data in a single piece, you will realize that actually you need all your data along a certain axis on a single piece. So for example, let's say that you really need a sort
+但你说得对。那可不是 90 年代的教科书内容。这开始变得非常复杂，需要你做很多近似的统计，因此你会失去所有的确定性保证。是的。通常还会做的另一件事叫做重新分块（rechunking）。所以如果你真的、真的需要将所有数据合并成一个整体，你会发现实际上你需要沿某个特定轴将所有数据放在一个分块中。因此，举个例子，假设你真的需要排序，
+
+110
+01:08:25.000 --> 01:09:09.000
+or you have a matrix that is a million lines by a million columns and you need it sorted by row. And let's say you have it chunked in a thousand by a thousand squares. You can't sort that. What you can do is call a rechunk. And now instead of have a thousand by a thousand squares chunks, you have a million lines, single chunk by a single column. So the individual size of every chunk is the same as before, but now it's sortable in place because you have it in memory all at once, but you still don't have the whole matrix in memory. Oh, interesting. Really, really interesting.
+或者你有一个百万行乘百万列的矩阵，你需要按行排序。假设它的分块是 1000 乘 1000 的方块。你无法对它进行排序。你能做的是调用一个 `rechunk`。现在，你不再拥有 1000 乘 1000 方块的分块，而是拥有百万行、单分块乘单列的结构。因此，每个分块的个体大小和以前一样，但现在它可以就地排序了，因为你把它们一次性全部加载到了内存中，但你依然不需要把整个矩阵全部加载到内存里。哦，有意思。真的非常、非常有意思。
+
+111
+01:09:09.000 --> 01:09:26.000
+Cool. So yeah, this is fascinating. I'm going to have to really do a deep dive personally on Dask and learn a lot. I think folks out there, actually, if someone wants to learn Dask, what is the best way they can learn that? There are plenty of really good tutorials on Dask.org.
+酷。所以，是的，这太迷人了。我得亲自深入研究一下 Dask 并学习很多东西。我想观众朋友们，如果有人想学习 Dask，最好的学习途径是什么？Dask.org 上有很多非常好的教程。
+
+112
+01:09:26.000 --> 01:09:47.000
+Got it. So go to Dask.org, check out the tutorials section. Do you recommend people learn on their laptop or should they get a machine in the cloud? Does it really make a difference? It does make a difference the moment you want to deal with sizable data. If you're just learning and fumbling around with a few kilobytes or megabytes
+明白了。所以去 Dask.org，查看教程部分。你建议人们在笔记本电脑上学习，还是应该在云端获取一台机器？这真的有区别吗？当你想要处理相当规模的数据时，它确实有区别。如果你只是在学习，用几千字节或几兆字节的数据摸索，
+
+113
+01:09:47.000 --> 01:10:26.000
+of data, your laptop is fine. The hello world air quotes, because of course it doesn't make much sense in Dask, takes less than a millisecond to run. Compare it, for example, to a hello world in Spark that takes, I think, two to five seconds, something ridiculous. Because that scales down a lot better than, say, Spark. And then you can scale up from that. And you can work on your laptop. And then you realize that, oh, now I want more data. And now my laptop is dying.
+你的笔记本电脑就足够了。用带引号的“Hello World”（因为在 Dask 中这当然没太大意义）运行时间不到一毫秒。相比之下，例如 Spark 中的 Hello World 需要两到五秒，这有点荒谬。因为 Dask 的向下扩展（scale down）比 Spark 要好得多。然后你可以从这个基础上向上扩展（scale up）。你可以在笔记本电脑上工作。然后你就会发现，哦，现在我需要更多的数据了，我的笔记本电脑快撑不住了。
+
+114
+01:10:26.000 --> 01:10:41.000
+And now you scale to the cloud with the exact same software this is as a matter of fact what I do normally I work with a reduced data set locally which is super fast on my Jupyter notebook play around with it and once I have the algorithm nailed down
+现在，你可以使用完全相同的软件扩展到云端。实际上，我通常就是这么做的：我在本地使用一个缩减的数据集，这在我的Jupyter笔记本上运行得超级快，我可以在上面随意玩转。一旦我把算法搞定，
+
+115
+01:10:41.000 --> 01:11:25.000
+I take the exact same algorithm and I connect to a Dask scheduler and crunch it instead of the laptop. I send it to the Dask scheduler on a data set that is a thousand times larger. Yeah, that makes sense. Totally. Yeah, it's really nice. Actually, this is something that is missing in a lot of modern compute is the ability to run locally and then switch to running at scale and then switch back. So I'm thinking right now of Kubeflow and there's this determined AI. There's a lot of these solutions for running in the cloud, running parallel operations in the cloud. But if you write for them and you find a
+我就采用完全相同的算法，并连接到一个Dask调度器，而不是在笔记本电脑上运行。我将它发送到Dask调度器上，并在一个大上一千倍的数据集上运行它。是的，这完全说得通。真的，这真的很棒。实际上，这是许多现代计算中所缺乏的东西——能够在本地运行，然后切换到大规模运行，然后再切换回来。所以我现在想到的是Kubeflow以及Determined AI。有很多这样的解决方案用于在云端运行、在云端运行并行操作。但是如果你为它们编写代码，当你发现一个
+
+116
+01:11:25.000 --> 01:12:05.000
+bug and you want to reproduce that bug locally, you're stuck. You can't really do that. And so you end up in this really painful loop where I submit my job to the cloud, I go get a coffee, I come back, oh, I missed a colon, I submit it to the cloud, go for a walk. And so it's just the iteration time just plummets, right? And so it's just the iteration time goes, just plummets, right? And so it's nice to have sort of it all in one unified interface where you can say, okay, I clearly have a bug that is independent of my data. And so I'm going to pull one one thousandth of the data. I'm going to run the whole thing on my laptop 20, 30 times, get the bug fixed and then go back to running at scale. That's really
+Bug并且想要在本地重现该Bug时，你就卡住了。你实际上无法做到这一点。因此，你最终会陷入一个非常痛苦的循环：我将作业提交到云端，我去喝杯咖啡，回来后发现，哦，我漏了一个冒号，然后我又把它提交到云端，再去散步。因此，迭代时间直接骤降，对吧？所以迭代时间直接就……骤降，对吧？因此，将这一切集中在一个统一的接口中会很好，在那里你可以说，好吧，我显然有一个独立于数据的Bug。所以我要提取数据的千分之一。我将在我的笔记本电脑上把整个过程运行20到30次，修复Bug，然后再回到大规模运行。这真的很
+
+117
+01:12:05.000 --> 01:13:04.000
+nice. Cool. So let's jump into Coiled, the company. So tell us a bit about Coiled, the company. How long has it been around and how long have you been there? Coiled has been around for, I believe, a year and a half. And I've been there for a year, actually a year and a half and I've been there for a year actually a year a year and a half now two years the company are in a half me oh okay got it so so about how many people are there now uh around 50 something got it and is it I know it's it's remote is it is it concentrated in the EU is it really all over it's most of the people just happen to be in the US, but now we have a half dozen people in the EU, one in India. We used to have a couple in Australia that turned out to be problematic because our company meetings were at 6am in the morning for them, which was not really sustainable.
+棒。酷。那么让我们来聊聊Coiled这家公司。给我们讲讲Coiled这家公司吧。它成立多久了？你已经在那里待了多久了？Coiled成立大概有一年半了吧。我已经在那里待了一年了，实际上是一年半，而我在那里待了一年，实际上是一年……一年半，现在两年了。这家公司成立一年半，我……哦，明白了。所以现在大约有多少人？呃，大概50人左右。明白了，它是分布式的吗？我知道它是远程办公的，它是集中在欧盟，还是真的到处都是？大多数人碰巧都在美国，但现在我们在欧盟有大约半打人，印度有一个。我们过去在澳大利亚有几个人，但这被证明是个问题，因为对他们来说，我们的公司会议是在早上6点开的，这确实不太可持续。
+
+118
+01:13:04.000 --> 01:13:49.000
+Yeah, that makes sense. So it's been around for a couple of years, about 50 people. I mean, that's actually a lot of growth. I mean, to go from zero to 50 in two years, it takes a lot of coordination to get that many people onboarded. I mean, that's a person every two weeks. Yeah, very cool what's what's sort of the plans going forward are you hiring full-time are you hiring uh interns all the above none of the above i don't believe we are hiring interns right now we have a page with careers if you want to have a look at it if you want to send your cv you are more than welcome cool and And so what time zones are you supporting? So you mentioned India, the US and the EU.
+是的，这说得通。所以它成立有几年了，大约50人。我的意思是，这其实是很大的增长。从零到50人在两年内实现增长，需要大量的协调工作才能让这么多人入职。我的意思是，相当于每两周就入职一个人。是的，非常酷。未来的计划是什么？你们在招全职员工吗？你们在招实习生吗？以上都是，还是以上都不是？我不认为我们现在在招实习生。我们有一个招聘页面，如果你想看的话。如果你想发送你的简历，我们非常欢迎。酷。那么你们支持哪些时区呢？所以你提到了印度、美国和欧盟。
+
+119
+01:13:49.000 --> 01:14:15.000
+Is that pretty much the time zone block or what are the requirements there? We are as flexible as humanly possible in terms of requirements from the individual workers. So it's very, very flexible for personally. I'm a night owl. And that means that I frequently work until 1 a.m. in the morning
+这基本上就是时区范围吗？还是说有什么具体要求？在对个人员工的要求方面，我们在人力范围内尽可能地灵活。所以就个人而言，它非常非常灵活。我是个夜猫子。这意味着我经常工作到凌晨1点，
+
+120
+01:14:15.000 --> 01:14:46.000
+and then log in late in the next, the next, well, the same morning, technically. Right. That's cool. Patrick, are you a night owl? Yeah, no. Morning person. No, I used to be. I used to be, but with kids, I lost the opportunity to do it. I still think I would do it if I could. If the sun is not shining bright, I'm pretty much getting tired and going to sleep. You know, I actually, at a place patrick and i used to work a long time ago i got into a
+然后第二天，也就是第二天……好吧，严格来说是同一天早上，很晚才登录。没错。太酷了。帕特里克，你是夜猫子吗？不，不是。我是早起的人。不，我以前是。我以前是，但有了孩子后，我就失去了这样做的机会。我仍然认为如果可以的话我会这么做。如果太阳没有高高挂起，我差不多就会觉得累然后去睡觉。你知道，实际上，在我以前和帕特里克工作过的一个地方，我惹上了
+
+121
+01:14:46.000 --> 01:15:31.000
+lot of trouble because i just could not show up at what was it 7 30 or something they were asking us to show up and uh i just couldn't do it and i was like i'm sorry i mean i had no reason you know it's not like i had something at 7 30 but i'm also a night owl. I just could not do it. And I would always go in much later than that. But now with kids, I don't have a choice. They just come in and kick the door down, jump on my stomach. And I'm like, okay, I guess we're getting up now. But that's cool. I think that, yeah, I think there is a ton of flexibility there. If you're out there and you are, you know, if you're a Dask user, if you're a Dask enthusiast, you know, Coiled is hiring folks. You know, this is a question we get asked a lot.
+很多麻烦，因为我就是无法在什么……7点半左右出现，那是他们要求我们出现的时间，呃，我就是做不到，我就觉得，我很抱歉，我的意思是，我没有任何理由，你知道，并不是说我在7点半有什么事，但我也是个夜猫子。我就是做不到。我总是会比那个时间晚得多去上班。但现在有了孩子，我别无选择。他们就会闯进来把门踢倒，跳到我肚子上。然后我就想，好吧，我想我们得起床了。但那很酷。我认为，是的，我认为那里有大量的灵活性。如果你正在收听，而且你，你知道的，如果你是一个Dask用户，如果你是一个Dask爱好者，你知道的，Coiled正在招人。你知道，这是一个我们经常被问到的问题。
+
+122
+01:15:31.000 --> 01:16:06.000
+You know, what's the best way for someone to impress the hiring managers at Coiled? Contribute on both. We have the Dask board on GitHub, Dask Dask, which is the NumPy and Pandas wrapper, and the Dask Distributed, which is the scheduling part. We have plenty of issue tickets to pick up from. And if you have your own issues and you believe that it may be within your reach, go on and contribute with a PR. You will be very, very welcome to do so.
+你知道，对某人来说，给Coiled的招聘经理留下深刻印象的最佳方式是什么？在两边都进行贡献。我们在GitHub上有Dask的主仓库，比如Dask Dask（它是NumPy和Pandas的包装器），以及Dask Distributed（调度部分）。我们有很多Issue可供认领。如果你有自己的Issue，并且认为它在你的能力范围内，那就去提交一个PR吧。我们非常非常欢迎你这样做。
+
+123
+01:16:06.000 --> 01:16:24.000
+That's how I impressed Metropolis, for example. That's exactly how I was cutted. I was just contributing. Yeah, that makes sense. I submitted a change recently to Apache Drill. You know, one of the things that, just talking to some folks, I realized there's a lot of people don't understand that
+这就是我给Metropolis留下深刻印象的方式，例如。这正是我被录用的方式。我当时就是在做贡献。是的，这说得通。我最近向Apache Drill提交了一个修改。你知道，在与一些人交流时，我意识到很多人并不了解
+
+124
+01:16:24.000 --> 01:16:40.000
+at the end of the day, all of these things, whether it's Linux or whether it's Desk or whether it's Drill or Spark, all of these things at the end of the day are just pieces of software that you can go and look at, if they're open source. And so don't
+归根结底，所有这些东西，无论是Linux、Dask、Drill还是Spark，所有这些东西归根结底都只是软件，如果你愿意，你可以去查看它们的源代码，如果它们是开源的话。所以不要
+
+125
+01:16:40.000 --> 01:17:16.000
+ever shy away from going and reading the developer instructions, building your own local copy of whatever it is, and making whatever improvements or fixes you want to make. I think a lot of people are intimidated by that. They say, well, I pip install desk. I don't know how to get the code or how to change the code. And it turns out it's not as hard as you would think for any of these projects. And so I think it's great advice. I just want to double down on that and say, if you think this is interesting, go in and look at how you can have an impact right now.
+羞于去阅读开发人员指南，去构建你自己的任意软件的本地副本，并进行你想要进行的任何改进或修复。我认为很多人对此感到害怕。他们会说，好吧，我用pip安装了dask。我不知道如何获取代码，也不知道如何修改代码。事实证明，对于任何这些项目来说，它并没有你想象的那么难。所以我认为这是个极好的建议。我只是想再次强调这一点，并说，如果你觉得这很有趣，就去看看你如何能现在就产生影响力。
+
+126
+01:17:16.000 --> 01:18:04.000
+And that's going to be the best way to signal not only to them, but to yourself, like to tell for you to sort of confirm with yourself that this is something that you really enjoy and are good at. Yes. And it's going to be immensely, even if nobody is going to hire you, it's going to be immensely useful for your career growth and is 100% something that you can put in your CV. Frequent task contributor, it has a weight on a CV, definitely. Definitely. Yep. I think, you know, just to make this super concrete, we had a candidate who had kind of mixed results on the coding part of our interview. You know, so we were kind of debating, the hiring committee was going back and forth as to what to do about this candidate.
+这将是向他们以及向你自己发出信号的最佳方式，也就是说，你可以通过它向自己确认这确实是你真正喜欢且擅长的事情。是的。而且它将产生巨大的作用，即使没有人雇佣你，它对你的职业发展也将是极其有益的，并且100%可以写进你的简历中。频繁的Dask贡献者，这在简历上绝对很有分量。绝对的。是的。我认为，为了让这一点非常具体，我们曾有一位候选人在我们面试的代码编写部分得到了比较综合的结果。你知道，所以我们在某种程度上有些犹豫，招聘委员会在讨论如何处理这位候选人时举棋不定。
+
+127
+01:18:04.000 --> 01:18:56.000
+And one of us went to their GitHub and we saw that they had done all this open source work and they had these projects. They took the time to test it and it was related to our field. And so that actually had a huge impact. It almost just instantly changed everyone's perspective. So, you know, so if you do things, you know, and, you know, build things that you're proud of and then publish them so you can be proud of them, at least for a long time. And also kind of broadcast the message to others as well. Cool. So Guido, if people want to reach out to, you know, either you or other folks at Coiled, you know, what's the best way for folks to kind of follow you and know more about what you and what Coiled are up to? So if you are interested in the Dask development, we have the Dask GitHub boards.
+然后我们其中一个人查看了他们的GitHub，我们看到他们做了所有这些开源工作，并且他们拥有这些项目。他们花时间对其进行了测试，而且这与我们的领域相关。所以这实际上产生了巨大的影响。它几乎立刻改变了所有人的看法。所以，你知道的，如果你做事情，你知道的，并且构建让你感到骄傲的东西，然后发布它们，这样你至少可以长期为此感到自豪。同时也向其他人广播这个信息。酷。那么圭多（Guido），如果人们想联系你或Coiled的其他员工，你知道的，大家关注你并更多了解你和Coiled在做什么的最佳方式是什么？如果你对Dask的开发感兴趣，我们有Dask的GitHub讨论区。
+
+128
+01:18:56.000 --> 01:19:31.000
+We have the community board, which is about the higher level design and direction. And then we have the Dask, Dask, and Dask distributed boards, which are the lower level day-to-day issues. We have, I believe, a customer Slack. We have discourse. We are active on Stack Overflow as well. So if you put a question on Stack Overflow about Dask, there is a good chance that some of us may spot it.
+我们有社区论坛，是关于更高层面的设计和方向的。然后我们有Dask、Dask和Dask distributed的讨论区，这些是更底层的日常Issue。我想我们有一个客户Slack。我们有Discourse。我们在Stack Overflow也很活跃。因此，如果你在Stack Overflow上提出关于Dask的问题，我们中的一些人很可能会注意到它。
+
+129
+01:19:31.000 --> 01:19:47.000
+But if you want to be sure, reach out directly. We have people that just do that as a job. Cool. When you say Dask board, I'm actually on the Dask GitHub page now. What do you mean by that? The issues page. Okay. Oh, got it. What do you mean by that? The issues page. Okay. Oh, got it.
+但如果你想确保的话，直接联系我们。我们有专门把这作为工作的人。酷。当你提到Dask board时，我实际上现在就在Dask的GitHub页面上。你这是什么意思？Issue页面。好吧。哦，明白了。你这是什么意思？Issue页面。好吧。哦，明白了。
+
+130
+01:19:47.000 --> 01:20:07.000
+Okay. So yeah, check out the issues page and see the, oh yeah, here we go. Monthly community meeting. Oh, that is super cool. So yeah, definitely. If you go to Dask issues, you can actually see the issues are also used for discussion, which is really neat. Yeah, I've never seen that before.
+好吧。所以，是的，去看看Issue页面，然后看到……哦，是的，这里我们有。每月社区会议。哦，那太酷了。所以，是的，绝对的。如果你去Dask的Issue页面，你实际上可以看到Issue也被用于讨论，这真的很整洁。是的，我以前从未见过那个。
+
+131
+01:20:07.000 --> 01:20:39.000
+Cool, okay, I think we can put a bookmark in this. This has been super, super interesting. I think that, oh, before we close out, I wanted to let people know that this is the Coiled product. Obviously, Dask is completely open source, free to use, but also Coiled, if you're a student, if you're getting started, Coiled is also free. They have a very generous free tier. You will still pay for your cloud resources, although Amazon also has a bunch of amazing resources for students.
+酷，好吧，我想我们可以把这个加个书签。这真的、真的很酷。我想，哦，在结束之前，我想让大家知道这是Coiled的产品。显然，Dask是完全开源且免费使用的，但如果你是学生，如果你刚开始使用，Coiled也是免费的。他们有一个非常慷慨的免费层。你仍然需要为你的云资源付费，尽管亚马逊也为学生提供了一堆惊人的资源。
+
+132
+01:20:39.000 --> 01:21:31.000
+And you can combine these. They're not exclusive. So you can be on the AWS credits that they give students and use those credits to run Coiled completely for free. And even if you, let's say, have already graduated, you could get spun up with Coiled at a very modest amount. You get to choose what sort of resources that you want to put forth there and be well within the free tier. So there's really no reason not to try this out. And once you have Dask running locally on your laptop, you could use Coiled to run something at a larger scale with very little friction. Cool. And with that, we can call this a show. Thank you so much, Guido, for coming on. I mean, we covered a lot of really interesting stuff. We explained to folks how, you know, even if you're writing in C, if you just do
+你可以将它们结合起来。它们不是排他的。因此，你可以使用他们给学生的AWS额度，并使用这些额度完全免费运行Coiled。即使你，比方说，已经毕业了，你也可以用非常适度的金额开始使用Coiled。你可以选择你要投入的资源种类，并且完全在免费额度之内。所以真的没有理由不去尝试一下。一旦你在笔记本电脑上本地运行了Dask，你就可以使用Coiled以极小的阻力进行更大规模的运行。酷。有了这个，我们就可以结束节目了。非常感谢圭多（Guido）的光临。我的意思是，我们讨论了很多非常有趣的事情。我们向大家解释了，你知道的，即使你在用C语言编写代码，如果你只是做一个
+
+133
+01:21:31.000 --> 01:21:58.000
+4A from 0 to 10, that's not going to be as fast as NumPy and why that is. And I covered pandas, covered R, we covered Dask, gave people a whole bunch of great references we'll put a whole bunch of links here in the show notes to help help everyone out there get ramped up on this if you're not already and so thanks so much for helping to drive the discussion we don't really appreciate your time
+从0到10的4A循环，那也不会像NumPy那样快，以及为什么会这样。我们讨论了pandas，讨论了R，讨论了Dask，给听众提供了一大堆很棒的参考资料，我们将在本期节目的shownotes（节目笔记）中提供一大堆链接，来帮助大家在这个领域快速上手，如果你还没有上手的话。所以非常感谢你帮助推动讨论，圭多，我们真的很感激你的时间。
+
+134
+01:21:58.000 --> 01:22:34.000
+no worries thank you cool all right everyone thanks for supporting us on patreon and audible we really appreciate that if you want to get a hold of us it's patreon.com slash programming throwdown or you can subscribe to us to audible through our programming throwdown link in the show notes and if you want to reach us through email you can email us programming throwdown at gmail.com. So a lot of show suggestions have come from folks emailing us, listeners who know someone they think would be a really good fit for the show.
+不客气，谢谢。酷。好的，各位，感谢大家在Patreon和Audible上对我们的支持，我们真的很感激。如果你想联系我们，网址是patreon.com slash programming throwdown，或者你可以通过shownotes中的programming throwdown链接在Audible上订阅我们。如果你想通过电子邮件联系我们，你可以发邮件至programming throwdown at gmail.com。许多节目的建议都来自于给我们发邮件的听众，他们认识觉得非常适合上节目的人。
+
+135
+01:22:34.000 --> 01:22:58.000
+And we really appreciate that. So definitely keep the dialogue going. And we will catch everyone in a couple of weeks. Bye-bye. Hey, everyone. Just chipping in here after the fact to clarify the free usage of coiled anyone can use coiled for free with their existing aws or google cloud account up to 10 000 cpus a month there's a great way to test it out and try it for more information
+我们对此非常感激。所以一定要保持对话。我们将在几周后与大家再次见面。再见。大家好。在这里事后补充一下，以澄清Coiled的免费使用情况：任何人都可以使用现有的AWS或Google云账号免费使用Coiled，每月最多10,000个CPU。这是一个测试和尝试它的好方法，获取更多信息
+
+136
+01:22:58.000 --> 01:23:03.000
+you can head over to coiled.io. Music by Eric Barndollar. Programming Throwdown is distributed under a Creative Commons Attribution Share Alike 2.0 license. You're free to share, copy, distribute, transmit the work, to remix, adapt the work, but you must provide an attribution to Patrick and I and share alike in kind. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+你可以前往 coiled.io。片头曲由Eric Barndollar创作。Programming Throwdown根据知识共享署名-相同方式共享 2.0 协议发布。你可以自由分享、复制、分发、传输作品，进行演绎和改编，但你必须注明原作者帕特里克和我，并以相同方式共享。本期节目暂无评论。点击文字记录中的任意句子即可发表评论。

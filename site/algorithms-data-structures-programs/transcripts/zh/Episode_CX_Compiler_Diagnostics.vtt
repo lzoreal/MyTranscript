@@ -1,0 +1,226 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:46.000
+They didn't teach you Roman numerals at your fancy high school with the telescopes? No, they did not. No, they did not. Seems like something they should have done. I mean, does it really come up that often? Welcome to ADSP The Podcast, episode 110, recorded on December 22nd, 2022. My name is Connor, and today with my co-host Bryce, we talk about compiler diagnostics, printf debugging, and more. And we're moving straight into our New Year's Eve episode, and we're now going to let Bryce talk about compiler diagnostics.
+你们的高中没有用望远镜教你们罗马数字吗？没有，他们没有。没有，他们没有。听起来像他们应该做的事。我是说，这真的经常出现吗？欢迎收看 ADSP 播客第 110 期，录制于 2022 年 12 月 22 日。我是康纳，今天我和我的联合主持布莱斯一起讨论编译器诊断、printf 调试等内容。我们要直接进入我们的跨年夜节目，现在我们要让布莱斯谈谈编译器诊断。
+
+2
+00:00:46.000 --> 00:01:37.000
+So some of the compilers I work with don't have great diagnostics. And so what is a compiler diagnostic? What I mean by compiler diagnostic, what I mean is, when what there's one of two things that leads to a compiler diagnostic. Thing number one is you, the user, did something wrong. You wrote some code that was incorrect, and the compiler has to communicate that to you in some way. And the second thing is the compiler did something wrong. Like, you know, the compiler, like, you wrote valid code, you know, maybe it was very, maybe it was very obscure code. Maybe it was code you shouldn't have written, but you wrote valid code and the compiler, like,
+所以我合作过的一些编译器没有很好的诊断功能。那么什么是编译器诊断呢？我所说的编译器诊断，我的意思是，当出现以下两种情况之一时就会导致编译器诊断。第一种情况是你，作为用户，做错了什么。你写了一些不正确的代码，编译器必须以某种方式将其传达给你。第二种情况是编译器做错了什么。就像，你知道的，编译器，就像，你写了有效的代码，你知道的，也许它是非常，也许它是非常晦涩的代码。也许这是你不该写的代码，但你写了有效的代码，而编译器，比如，
+
+3
+00:01:37.000 --> 00:02:25.000
+sees it and is like, uh, like, I give up, I blow up, I run out of memory, something. And then the compiler has to in some way tell you, like, you gave me something that I choked on. Like, sorry. Like, you know, here especially in c++ are are an important part of your tool chain experience um there's this thing this sort of amorphous thing that i talk about which is um uh like the robustness of a compiler there's like a question of like you know how many how many of the language and library features
+看到了然后就觉得，呃，就好像，我放弃了，我崩溃了，我内存耗尽了，诸如此类。然后编译器必须以某种方式告诉你，比如，你给我的东西让我噎住了。抱歉。比如，你知道的，特别是在 c++ 中是你的工具链体验的重要部分，有这样一个东西，我谈论的这种无形的东西，就是，呃，就像编译器的鲁棒性，有一个问题，就像，你知道的，你有多少个语言和库特性
+
+4
+00:02:25.000 --> 00:02:43.000
+do you support, right? Like how many of the boxes do you check off? But then there's also the question of like, how robust is your support? And, you know, that's like partially a question of like, how well have you tested it? But also there's only so much testing that you can do outside of like compiling real world code.
+你支持吗？对吧？就像你勾选了多少个框？但还有一个问题，就是你的支持有多鲁棒？而且，你知道的，这部分是一个问题，就是，你测试得有多好？但除了编译真实世界的代码之外，你所能做的测试也是有限的。
+
+5
+00:02:43.000 --> 00:03:07.000
+And when you do compile real-world code, some amount of it might be quirky or weird and might lead to problems where the things that your compiler can't handle even though it should have, or things where maybe it's a little bit unclear whether the code is correct or your compiler is correct. But still, it's something that that um uh you know it'd
+当你编译真实世界的代码时，其中一定数量的代码可能是古怪的或奇怪的，并可能导致一些问题，即你的编译器无法处理本应处理的事情，或者可能有点不清楚代码是正确的还是你的编译器是正确的。但尽管如此，它仍然是某种东西，呃，你知道的，如果
+
+6
+00:03:07.000 --> 00:03:45.000
+be nice if uh if the compiler could handle even if it's maybe you know undefined behavior or you know an edge case or something that's like not officially supported um and sort of the degree to which your compiler can handle you know real world code is is what I like to call robustness. It's sort of like the quality of the features that you support. And I am faced with this perpetual problem where it's hard to get people to care about robustness and diagnostics. In the compiler space, people primarily care about performance. For the
+编译器能够处理，那就太好了，即使它可能是，你知道的，未定义行为，或者你知道的边缘情况，或者官方不支持的某种东西，而且你的编译器能够处理真实世界代码的程度，就是我喜欢称之为鲁棒性的东西。这有点像你支持的功能的质量。而我面临着这样一个永恒的问题，即很难让人们关心鲁棒性和诊断。在编译器领域，人们主要关心的是性能。对于
+
+7
+00:03:45.000 --> 00:04:37.000
+code that you can compile correctly, like how well does that code perform at runtime? And also how well does it perform at like how fast, how long does it take to compile? And like increasingly in the past few years, we've cared more and more about tooling and like things like safety and static analysis and stuff like that. But I think it's still been hard, at least in some organizations, to get people to care about diagnostics. And they're so important, especially if you have a less robust compiler. And I think one of the reasons why it's hard to get people to care about diagnostics, as opposed to things like performance, is that it's hard to quantify, right?
+你可以正确编译的代码，比如该代码在运行时的性能如何？以及它在编译速度、需要多长时间方面的性能如何？并且在过去的几年里，我们越来越关心工具链以及诸如安全性和静态分析之类的事情。但我认为，至少在某些组织中，让人们关心诊断仍然很困难。它们非常重要，特别是如果你有一个鲁棒性较差的编译器的话。我认为很难让人们关心诊断的原因之一，与性能等事情相反，它是很难量化的，对吧？
+
+8
+00:04:37.000 --> 00:05:26.000
+Like, how do you quantify how good your diagnostics are? And, you know, some compilers do test their diagnostics they're like okay well if you give me this ill-formed code i'm supposed to produce this type of um you know of error message and sometimes like you know clang and llvm have a um uh have testing tools that make it pretty easy to test whether you get a particular error message or a particular kind of error message from a particular piece of ill-formed code. And so that's part of what the testing is. But I don't think that a lot of compilers do this, and certainly maybe they don't do it as well as they should.
+比如，你如何量化你的诊断有多好？而且，你知道的，一些编译器确实会测试它们的诊断，他们会想，好吧，如果你给我这些格式不正确的代码，我应该产生这种类型的，呃，你知道的错误消息，有时，像 clang 和 llvm 有一个，呃，有测试工具，可以很容易地测试你是否从一段格式不正确的代码中得到了特定的错误消息或特定类型的错误消息。所以这也是测试的一部分。但我不认为有很多编译器这样做，当然，也许他们没有做到应有的那么好。
+
+9
+00:05:26.000 --> 00:06:19.000
+So I've been thinking about how could we do a better job of quantifying um uh diagnostics and um you know i i've over the past few years i've been accumulating um a collection of what i consider diagnostic failures of like real world um uh cases where somebody hit a bug and they were like, I got this error message. I don't know what it means. And then like eventually we figured it out and we're like, oh, well, that was just an unclear diagnostic. And, you know, there's some, there are some attributes of a diagnostic, you know, does it point you to the correct location in the code where that like this point, does it correctly point you to the origin of the issue um uh does it correctly like describe um uh the problem that's being encountered um you know we could
+所以我一直在思考我们如何能做得更好来量化，呃，诊断，而且，你知道的，在过去的几年里，我一直在积累，呃，我所认为的真实世界中的诊断失败的集合，呃，有人遇到了 bug，他们说，我得到了这个错误消息。我不知道这意味着什么。然后，最终我们弄清楚了，我们想，哦，这只是一个不清楚的诊断。而且，你知道的，有一些，诊断有一些属性，你知道的，它是否指向代码中正确的发生问题的位置，它是否正确地指向问题的根源，呃，它是否正确地描述了，呃，正在遇到的问题，你知道我们可以
+
+10
+00:06:19.000 --> 00:07:05.000
+probably go and make a list of like those those attributes um but one thing that i've been thinking about a way to like quantify this would be just take a corpus of like bad of diagnostic that may be questionable or maybe it's just like include good diagnostics too but just like take like 100 test cases of like some ill-formed code or maybe some some well-formed code that some compilers choke on and then generate those diagnostics that that code produces for code that some compilers choke on and then generate those diagnostics that that code produces for all the major compilers and then like create a survey where each person is shown the diagnostic um maybe like without the code and then they're like asked like hey what's the problem like like or how helpful is this diagnostic um and then
+可能去列出那些属性，但我一直在思考的一种量化方法是，只拿一个语料库，包含可能是有问题的诊断，或者可能只包括好的诊断，但只拿大约 100 个测试案例，比如一些格式不正确的代码，或者一些编译器会卡住的格式良好的代码，然后为所有主流编译器生成这些代码产生的诊断，然后创建一个调查，向每个人展示诊断，呃，比如没有代码，然后他们被问到，嘿，问题是什么？比如，或者这个诊断有多大帮助，然后
+
+11
+00:07:05.000 --> 00:07:58.000
+you know they they like they pick a score and then like in the next screen they're shown well okay here was the source code and here was the actual problem and then they're asked like now that you've seen the actual problem um like how helpful do you believe the diagnostic was was it like that you just misread the diagnostic or like was the diagnostic actually not that helpful? Or some sort of survey like that which would then give me some actual concrete data on how good are different compilers' diagnostics. And maybe that would also help me learn more about how to improve diagnostics. But yeah, this is something that I'm quite interested in, in trying to learn how we can quantify diagnostics, because I feel like if I can quantify it, then it makes it easier for me to
+你知道的，他们选择一个分数，然后在下一个屏幕上显示，好吧，源代码在这里，实际问题在这里，然后他们被问到，既然你已经看到了实际问题，比如你认为诊断有多大帮助？是不是你只是误读了诊断，还是诊断实际上并没有那么大帮助？或者诸如此类的调查，这会给我一些关于不同编译器诊断有多好的实际具体数据。也许这也会帮助我更多地了解如何改进诊断。但是，是的，这是我非常感兴趣的事情，试图了解我们如何能够量化诊断，因为我觉得如果我能将其量化，那么就会更容易让我
+
+12
+00:07:58.000 --> 00:08:22.000
+convince people that it's an important, something that's important, that it's something that we should strive to improve. All right, folks. Here's what we're going to do. There's two Connors. Have you seen Rust Diagnostics is my question. Not as much as I would like to,
+说服人们这是一件重要的事情，是我们应该努力改进的事情。好了，各位。我们要这么做。有两个康纳。我的问题是，你见过 Rust 诊断吗？不像我希望的那样多，
+
+13
+00:08:22.000 --> 00:09:03.000
+but I hear that they're very good. Which code base do I want to work in because I have three different rust ones open right now let's do this one but let's just go down to a test and so like for instance let's see if I actually have this turned on right now I have a couple local variables so we I always say we're not going to live code but just while Bryce was talking about diagnostics I just I consider I consider, I haven't worked with Elm, but I heard Elm was the language that coined the term compiler driven development. And Rust has really, I think it's like the, one of the best languages. What is compiler driven development?
+但我听说它们非常好。我想在哪个代码库中工作，因为我现在打开了三个不同的 rust 代码库，我们做这个，但让我们直接看一个测试，所以例如，让我们看看我是否真的开启了这个功能，我有几个局部变量，所以我们总是说我们不会现场编码，但就在布莱斯谈论诊断的时候，我只是认为，我没有用过 Elm，但我听说 Elm 是创造了编译器驱动开发这个术语的语言。而 Rust 真的，我认为它是，最好的语言之一。什么是编译器驱动开发？
+
+14
+00:09:03.000 --> 00:09:46.000
+Compiler driven development is this idea that you should design your compiler errors and diagnostics to be so helpful that it actually guides you while you're programming. Versus, it's kind of the opposite of what you were just saying. Like, you know, your diagnostics being so unhelpful that it's just confusing and it's going to waste time. Whereas like there are literally extensions in Rust that not only can the, are the diagnostics so good, it tells you what's wrong. You can like set up your editors to just like, I know Gonzalo, who's a individual we, we both work with at NVIDIA. I don't know what editor he used, but he says he just hits tab and that does cargo fix, which just automatically like fixes sort of does
+编译器驱动开发是指这样一种理念：你应该将你的编译器错误和诊断设计得如此有用，以至于它实际上在编程时指导你。与此相对，这有点与你刚才所说的相反。比如，你知道的，你的诊断是如此无用，以至于它只是令人困惑并且会浪费时间。而实际上在 Rust 中有一些扩展，不仅诊断非常好，它还告诉你哪里错了。你可以设置你的编辑器，比如，我认识贡萨洛，他是我们在英伟达共同工作的一个人。我不知道他用的是什么编辑器，但他说是只要按一下 Tab 键就可以运行 cargo fix，它会自动修复，有点像
+
+15
+00:09:46.000 --> 00:10:24.000
+You know the equivalent of Klein clang tidy fixes in C++ I don't know. I didn't I didn't ask But so I just added mute the mute keyword, which is basically the Analog of const except they do the opposite things and you can see here that I have a VS code extension called error lens or something like that what is it yeah error lens and it in lines the errors that I get and so this is technically a warning but it's saying that this variable does not need to be mutable so it immediately you know does
+你知道的，相当于 C++ 中的 clang tidy 修复，我不知道。我没有问。所以我刚刚添加了 mute 关键字，这基本上是 const 的类似物，除了它们做相反的事情，你可以这里看到我有一个名为 error lens 或类似名称的 VS 代码扩展，它是什么，是的，error lens，它将我得到的错误内联显示，所以这技术上是一个警告，但它说这个变量不需要是可变的，所以它立即，你知道的，
+
+16
+00:10:24.000 --> 00:11:07.000
+that and if i do something else uh like this well so that's not the error i was trying to get so i just took a variable that i'd already used and then used it again but i just typed it and put semicolon and it says path statement drops value okay okay but but but let's so so go back to that previous diagnostic because i have some questions about that so this is basically saying like it's it's this is the equivalent of your no discard. So it says path statement drops value. And then in backticks, warn path statements on by default. So is the diagnostic just the first first part path statement drops value
+做到了这一点，如果我做点别的，呃，像这样，好吧，所以这不是我想要得到的错误，所以我只是拿了一个我已经用过的变量，然后再次使用它，但我只是键入了它并加上了分号，它说路径语句丢弃了值，好吧，好吧，但但但，让我们，所以回到前一个诊断，因为我对它有一些疑问。所以这基本上是在说，它是，这是你的 nodiscard 的等价物。所以它说路径语句丢弃了值。然后在反引号中，在默认情况下警告路径语句开启。那么诊断只是第一部分：路径语句丢弃了值吗？
+
+17
+00:11:07.000 --> 00:11:45.000
+so actually let's just so that because this is not actually the this is a modified version of what you get when you the reason i'm asking is because the way that that's phrased i think it's a bad diagnostic because it it it doesn't have the context like if it says something says like path statement drops value it should say like what's the value that was dropped you know it should like quote it in the diagnostics of the so this is the actual diagnostic which they are okay so in the actual diagnostic here it does give you carrots well but but okay um what what is a path statement i'm just i think it means this statement in this current path.
+所以实际上让我们这样做，因为这不是实际的，这是当你得到的修改版本，我问的原因是因为它的表述方式，我认为这是一个糟糕的诊断，因为它没有上下文，如果它说类似路径语句丢弃了值，它应该说被丢弃的值是什么，你知道的，它应该在诊断中引用它。所以这是实际的诊断，它们是，好吧，在实际的诊断中，它确实给你提供了尖括号，但是，但是，好吧，呃，什么是路径语句？我只是，我想它指的是当前路径中的这个语句。
+
+18
+00:11:45.000 --> 00:12:06.000
+I've actually never seen this error before, but my guess is that they're telling you literally right here that like, if you are not going to use the value that's being returned from this expression or statement, put drop parentheses around expected. Is it possible for us to construct a statement like this that drops to value or that hat or the, sorry, the possible for us to construct a statement like this that drops two values? Or that – sorry.
+我实际上以前从未见过这个错误，但我的猜测是，他们在这里字面意思地告诉你，如果你不打算使用从这个表达式或语句返回的值，请在期望周围加上括号。我们是否有可能构建一个像这样丢弃值的语句，或者，抱歉，我们是否有可能构建一个像这样的丢弃两个值的语句？或者——抱歉。
+
+19
+00:12:06.000 --> 00:12:53.000
+Is it possible for us to construct a statement like this that has – like this statement that is just, you know, the name of the variable semicolon. So it's pretty clear here. But I want to see, like, what happens if that statement was, like, more complex and it, like, it named multiple variables? Because if it named multiple variables, then that diagnostic path statement drops value might make it – it may be variables because if it named multiple variables then that diagnostic path statement drops value might make it on it may be unclear which thing it drops i don't know does rust have a semicolon operator comma operator i think is what you're getting oh yeah sorry comma operator my guess is no it does not no um so i off the top of my head i don't i don't know yeah but but see like for me like i i would I would want that diagnostic to tell me in the warning message part, like, what is the thing that was dropped?
+我们是否有可能构建一个像这样的语句——比如这个语句只是，你知道的，变量名加分号。所以这里很清楚。但我想看看，如果那个语句更复杂，并且命名了多个变量会发生什么？因为如果它命名了多个变量，那么诊断路径语句丢弃了值可能会使它——如果它命名了多个变量，那么诊断路径语句丢弃了值可能会使它变得不清楚它丢弃的是什么，我不知道，Rust 有分号运算符吗？逗号运算符，我想这是你想说的。哦，是的，抱歉，逗号运算符。我的猜测是没有，它没有。呃，所以凭我的第一反应，我不知道，是的，但是你看，对我来说，我希望那个诊断在警告消息部分告诉我，被丢弃的东西是什么？
+
+20
+00:12:53.000 --> 00:13:25.000
+Expect it. It's pointing right at it. In the carrot part, yes, it's pointing at it. But I mean, if it's always going to point out i still think it's in more complicated expressions like if we go back to adding the unnecessary mute and compile you get like you get like multiple colors yeah you're you're putting mute on input and then it points directly at mute and says remove remove this mute and then i'm pretty sure if you go yeah but but even though it shows the carrot where it
+期望。它正指着它。在尖括号部分，是的，它正指着它。但我的意思是，如果它总是指出来，我仍然认为在更复杂的表达式中，如果我们回到添加不必要的 mute 并编译，你会得到，你会得到多种颜色，是的，你在输入上加上了 mute，它直接指向 mute 并说删除这个 mute，而且我确认为如果你去，是的，但即使它显示了尖括号指向
+
+21
+00:13:25.000 --> 00:14:37.000
+points you towards that particular thing um i don't know that i still think i would prefer for the textual warning to name the variable that does not need to be um mutable it's pointing right at it what are you talking about right but in in the in the tooling example that you just showed um go back to the ide so um is there a way to declare multiple variables on a single statement in rust uh yes okay but you would have to use like destructuring to do it and my my point is that the carrot like the carrot syntax is great, but the textual diagnostics are obviously used in tooling. And sometimes people don't always look at the carrot statements. Sometimes the carrot statement, if you're on an environment where the line is so long that it wraps around sometimes the carrots can be like hard to read and by carrots i mean like like that it reproduces the source code and that it puts like you know um uh the little carrot uh symbol and the line below the source code to show you like oh this is the
+你向那个特定的东西，呃，我不知道，我仍然认为我更愿意让文本警告命名不需要是可变的变量，它正指着它，你在说什么？对，但在你刚才展示的工具示例中，回到集成开发环境中，呃，有没有办法在 Rust 的单个语句中声明多个变量？是的，好吧，但你必须使用类似解构的方法来做到这一点，我的观点是尖括号语法很棒，但文本诊断显然用于工具中。有时人们并不总是看尖括号语句。有时尖括号语句，如果你身处的环境中的行太长以至于会换行，有时尖括号会很难读懂，我所说的尖括号是指，它重现了源代码，并且它在源代码下方的行中放置了，呃，小尖括号符号，向你展示，哦，这就是那行源代码中导致问题的东西
+
+22
+00:14:37.000 --> 00:15:23.000
+thing in that line of source that caused the problem interesting so when i used uh when i destructured a tuple into two variables, a and b, and then put mute in front of a, it doesn't say anything. So you don't get a warning for that. Although I'm not even sure, like, I assume this is valid code. It's compiling. I mean, let's try and do this a plus equal one. Right, because we have to call it under bar a, which actually at this point, now we don't need this to be under bar see like these diagnostics are like better let's see instead of saying like variable you know can be you know it doesn't need to be mutable it says variable a is assigned to but never used that's a better diagnostic to me it like it talks about what its subject is i don't want diagnostics
+有趣的是，当我将一个元组解构为两个变量 a 和 b，并在 a 前面加上 mute 时，它什么也没说。所以你不会得到该警告。虽然我甚至不确定，我想这是有效的代码。它在编译。我的意思是，让我们试着这样做：a += 1。对，因为我们必须称之为下划线 a，实际上在这一点上，现在我们不需要这个是下划线，你看，这些诊断更好，让我们看看，它不说变量可以，你知道的，它不需要是可变的，它说变量 a 被赋值但从未使用过。对我来说这是更好的诊断，它谈论的是它的主题，我不想要诊断
+
+23
+00:15:23.000 --> 00:15:51.000
+to ever say anything that's like like uh ambiguous about like what it what it means and like these are simple examples that we're looking at but it when in you when you get to complex code like the the it may become not unintuitive. Like what is meant? Like if it, if it just says like variable, you know, uh, uh, doesn't need to be mutable. Like in this case,
+说出任何像这样含糊不清的话，比如它意味着什么，这些是我们看到的简单例子，但是当你接触到复杂的代码时，它可能会变得很不直观。比如这是什么意思？如果它只是说像变量，你知道的，不需要是可变的。就像在这个例子中，
+
+24
+00:15:51.000 --> 00:16:10.000
+it's clear what variable is meant. But my point is that like in the wild, and when you're developing diagnostics like this, all of the test cases that you write, like this is going to make sense. But then like in the wild, in a big production code base um you know maybe there's some some some complex case where somebody gets this diagnostic and
+哪个变量是显而易见的。但我的意思是，在实际应用中，当你开发这样的诊断工具时，你写的所有测试用例都会说得通。但在实际应用中，在一个大型的生产代码库中，你知道的，也许有一些复杂的情况，有人得到了这个诊断信息，
+
+25
+00:16:10.000 --> 00:17:07.000
+they're like i don't like what which variable are you referring to like it doesn't cost anything for the diagnostic to explicitly say like hey this is the thing this is the name of the thing that that uh i'm talking about you i mean i think in this case like there's only one variable on the line so in the case we're using error lens it's pretty clear and here there's only one variable and there's five carats underneath the underneath the five characters of that variable name so like asking this asking you're basically saying that you want this warning colon variable does not need to be mutable it doesn't cost anything to put the name of the variable my point is more like as a as a as a matter of policy when a diagnostic talks about like a thing like a variable or an object or something it should say which thing it's talking about always because you never you
+然后他们会想，我不喜欢你指的是哪个变量，诊断信息明确指出“嘿，这就是这个东西，这就是我正在谈论的那个东西的名字”并没有什么坏处，我是说，我认为在这种情况下，这一行只有一个变量，所以在使用 error lens 的情况下，这很清楚，这里只有一个变量，在这个变量名的五个字符下方有五个脱字符号，所以像这样问，你基本上是说你想要这个警告：变量不需要是可变的名字，放上变量的名字没有什么坏处，我的观点更像是，作为一个原则问题，当诊断信息谈论像变量或对象之类的事情时，它应该总是说明它谈论的是哪个东西，因为你永远不知道
+
+26
+00:17:07.000 --> 00:18:39.000
+never know um uh how that diagnostic may that diagnostic may come up in more complex it may be emitted in more complex scenarios than you originally mattered and in the scenario that that then that you originally envisioned i mean in the scenario that you like in the scenario that you originally envisioned, I mean, in the scenario that you, like in the cases that you envisioned this diagnostic being emitted for, it may be cases where you know the the user reads it and i think this is often what happens where somebody like we like the diagnostic does tell you what the problem is but you've um uh like you read it quickly and you assume that it's something else you assume that it's talking about some other variable or something. And then you go and spend 30 minutes trying to figure out, oh, this other thing that I assumed it was talking about, that's where the problem is. Instead of if it had just been clear, if it had just told you specifically which thing it was talking about, I think things would be better. Like I'm picking on this one particular case here because I think this is exactly the source of a lot of C++'s diagnostic problems. If you look at a lot of like poor quality C++ diagnostics, it's because of like diagnostic messages like this. Now,
+你永远不知道这个诊断信息可能会在更复杂的情况下出现，它可能会在比你最初设想的更复杂的场景中被发出，而在你最初设想的场景中，我是说在你像你最初设想的场景中，我是说在你像你设想这个诊断信息被发出的情况下的场景中，可能是用户阅读它的情况，我认为这经常发生，有人像我们一样，诊断信息确实告诉你问题是什么，但你快速阅读它，然后你假设它是别的什么，你假设它在谈论其他某个变量或别的什么。然后你去花30分钟试图弄清楚，哦，我以为它在谈论的这个其他东西，问题就在那里。而不是如果它一开始就很清楚，如果它明确告诉你它到底在谈论哪个东西，我认为事情会更好。就像我在这里挑出这个特定的例子一样，因为我认为这正是 C++ 的很多诊断问题之源。如果你看一下很多低质量的 C++ 诊断信息，就是因为像这样的诊断消息。现在，
+
+27
+00:18:39.000 --> 00:19:31.000
+a lot of those are from the era before diagnostic messages reproduced the source line and before diagnostic messages did things like the carrot diagnostics where it shows you where the problem is and like that has made things better but i still think that like this is one of the root causes of of uh of poor diagnostics is when when the error message does not um uh like tell you uh what things it was dealing with and are like think about um uh you know assertions um in sort of the early days and i think still um common a lot of code bases when you have like assertions and see um uh you know the simplest form of assertion just like it checks the thing and then um if it if it fails it um you know it just simplest form of assertion, just like it checks the thing. And then, um, if it, if it fails it, um, you know, it just says assertion failed. Um, a lot of testing frameworks,
+其中很多来自诊断消息重现源代码行之前的时代，以及诊断消息做诸如脱字符诊断（显示问题所在位置）之类的事情之前的时代，这让情况有所改善，但我仍然认为，这是导致诊断效果差的根本原因之一，当错误消息没有告诉你它正在处理的是什么东西时，想想断言，在早期阶段，我认为在许多代码库中仍然很常见，当你在 C 语言中有断言时，你知道，最简单的断言形式就像它检查那个东西，然后，如果它失败了，你知道，它只是最简单的断言形式，就像它检查那个东西。然后，如果它失败了，你知道，它只是说断言失败。嗯，许多测试框架，
+
+28
+00:19:31.000 --> 00:20:28.000
+that are like assertion based or that have like some macro for, you know, testing this A equal B or, you know, something like that. They, those macros these days are constructed in such a way where if you want to do some something like you know assert or test that a is equal to b um uh if that fails it will print out to you what was the value of a and what was the value of b um because you know that's useful information if it just tells you hey like hey this assertion that a equals b fails then you're like okay well like well then what was the value of a in this case and what was the value of b um like i like that's the information that i would need to know to be able to diagnose to diagnose what the problem is or i think diagnostics that don't provide um uh diagnostics that aren't format strings i think are often bad
+基于断言的，或者有某种宏来测试 A 等于 B 或者诸如此类的东西。这些天来，这些宏的构造方式是，如果你想做一些事情，比如断言或测试 a 等于 b，如果失败了，它会向你打印出 a 的值是什么，b 的值是什么，因为你知道那是很有用的信息，如果它只是告诉你“嘿，这个 a 等于 b 的断言失败了”，那么你会想“好吧，那么在这种情况下 a 的值是多少，b 的值是多少”，就像那是我为了诊断问题而需要知道的信息，或者我认为不提供格式字符串的诊断信息通常是不好的
+
+29
+00:20:28.000 --> 00:21:02.000
+diagnostics diagnostics that don't like substitute in um context from the source of the error are often bad diagnostics f strings for the win you know that in python they have this beautiful feature where with an F string, if you just have an F string, you know, F quote, brace, name of your variable, and brace, end quote, it prints it out. But if you add an equal sign at the end of that variable, it'll turn the value of that variable into the name of the variable equals this. I'm not sure I understand.
+诊断信息，不替换来自错误源的上下文的诊断信息通常是不好的诊断信息，F-string 太棒了，你知道在 Python 中他们有这个美妙的功能，使用 F-string，如果你只有一个 F-string，你知道，F引号，大括号，你的变量名，大括号，结束引号，它就会把它打印出来。但是如果你在那个变量的末尾加上一个等号，它就会把那个变量的值变成变量名等于这个。我不确定我是否理解。
+
+30
+00:21:02.000 --> 00:21:38.000
+Let me find it again. So like the initial F string is F quote, brace of your variable we'll call it x and brace end quote and that's just going to print out whatever the value of x is but if you add an equal sign right after the x it's then going to instead of printing out the just the value of x it prints out x equals and then the value so that anytime you're doing printf debugging, which, you know, admittedly, is not the always the best way to debug, but you know, we've all been there. And sometimes you just need to do something quick and dirty, putting a bunch of those statements all over the place, you just need to add equal sign to each of your variables. And then like, how often
+让我再找找。所以最初的 F-string 是 F 引号，你的变量的大括号，我们称之为 x，大括号结束引号，这只会打印出 x 的任何值，但如果你在 x 后面马上加一个等号，它就不会只打印出 x 的值，而是打印出 x 等于然后是这个值，这样每当你进行 printf 调试时，你知道，诚实地说，这可能不是最好的调试方法，但你知道，我们都经历过。有时你只需要做一些快速而粗糙的事情，把一堆这样的语句到处放，你只需要在每个变量上加一个等号。然后就像，你有多经常
+
+31
+00:21:38.000 --> 00:22:45.000
+are you creating a little f string that is, you know, the name of the variable equals or colon, and then the actual value uh it's just a very nice thing that i found out a couple weeks ago i was like wow that's such a nice small addition people give printout debugging a lot of uh it gets a bad rap but um at least in my career in a special i you know i mostly work on concurrent systems um in a lot of cases um uh firing up a debugger um will uh you know running the code under the debugger will mean that the error won't reproduce um and so you know isn't that isn't that a problem with the debugger though and not like no if it's if it's a race if it's a if it's a race condition like it is almost always the case that running, that building, just, don't, forget even, forget even, like, running a debugger. the way depending on how you build the code and the
+在创建一个小型的 f-string，它是，你知道的，变量名等于或冒号，然后是实际的值，这只是我几周前发现的一个非常棒的东西，我想，哇，这是一个多么棒的小补充。人们对 printf 调试有很多，它名声不好，但是，至少在我的职业生涯中，特别是我，我主要从事并发系统工作，在很多情况下，启动调试器，在调试器下运行代码意味着错误将无法重现，所以，难道这不正是调试器的问题，而不是——不，如果这是一个竞争条件，几乎总是发生的情况是，运行，构建，只是，别，忘记甚至，忘记甚至，像，运行调试器。根据你构建代码的方式和
+
+32
+00:22:45.000 --> 00:23:32.000
+platforms that you're on um but often the platforms that i'm on the like the production version of the code doesn't just build in release mode it like builds in release mode and like explicitly like turns off like a lot of additional debugging things and like stack frames and like information that like without which the debugger can do absolutely nothing. And the difference between that release build and the debug build is sufficiently large that you've almost got a completely different code that you've compiled. And the performance characteristics of it are sufficiently different that something like a race condition may not appear in the debug version at all.
+你所处的平台，但通常我所处的平台的代码的生产版本不仅仅是在发布模式下构建的，它像是在发布模式下构建的，并且明确地关闭了许多额外的调试东西以及堆栈帧和信息，没有这些信息调试器将绝对什么也做不了。发布版本和调试版本之间的差异足够大，以至于你编译的代码几乎完全不同。它的性能特征有足够大的差异，以至于像竞争条件这样的东西可能根本不会出现在调试版本中。
+
+33
+00:23:32.000 --> 00:24:51.000
+And so that's why I've often had to lean on printf debugging. And sometimes I can't even do the printf debugging because the IO itself will cause the race condition to go away. And so instead of actually printing out what I want, I will instead you know store um i'll sort of buffer somewhere the information that i need to print out later like i'll have some variable that that will save like like the value that i wanted to print out and then afterwards i'll like only print it out at the very end so i i think people i think people you know people who are very anti-printfab debugging have perhaps worked in an environment where they've only had to deal with like some sort of concurrency bug or some sort of performance bug or something that only occurs when you're building and running sort of at speed of light.
+这就是为什么我经常不得不依赖 printf 调试。有时我甚至无法进行 printf 调试，因为输入输出本身就会导致竞争条件消失。因此，我不会实际打印出我想要的东西，而是会将我需要稍后打印的信息存储在某处进行缓冲，例如我会有某个变量来保存我想要打印的值，然后我会在最后才将其打印出来，所以我认为人们，我认为人们，那些非常反对 printf 调试的人可能在这样的环境中工作过：他们只需要处理某种并发错误、某种性能错误或某些只有在以光速构建和运行大小时才会出现的问题。
+
+34
+00:24:51.000 --> 00:25:20.000
+So what should all the front-end, back-end compiler engineers that are listening to this take away? That there's some survey coming out that's going to help them in the future or that they should just do better? I don't know yet because I haven't started down this road of trying to come up with a way of quantifying diagnostics. If anybody has done that or has thought about that like or i i guess i'm sort of looking for two things one i'm definitely looking for case studies of of poor diagnostics so if anybody has code that leads to like c++ code
+那么，所有正在收听此节目的前端、后端编译器工程师应该从中得到什么启发呢？是不是有一个即将进行的调查将对他们未来有所帮助，或者他们应该做得更好？我還不知道，因为我还没有开始着手寻找一种量化诊断的方法。如果有人已经做过或考虑过这一点，或者我想我在寻找两件事，一个是我绝对在寻找不良诊断的案例研究，所以如果有人有导致 C++ 代码的代码
+
+35
+00:25:20.000 --> 00:25:51.000
+like like like that's ill-formed where they got a diagnostic message and they spent a good amount of time trying to understand it and the problem was just that the compiler just provided a vague or unclear diagnostic. I'd love to get a lot of test cases of that. So send me those test cases. Anything where there was code that was ill-formed or code that was ill-formed or, or code that was well-formed, but just like any compiler, poor compiler diagnostic, um, test cases that, that you've
+格式错误的，他们得到了诊断信息，并花了很多时间试图理解它，而问题仅仅是编译器提供了一个模糊或不明确的诊断。我很乐意收集很多这样的测试用例。所以请把这些测试用例发给我。任何格式错误的代码，或者任何格式错误的代码，或者格式正确的代码，或者任何编译器，不良编译器诊断的测试用例，是你
+
+36
+00:25:51.000 --> 00:26:31.000
+come across. Um, I'd love to see those, but I also, I'm, I'm, I'm trying to understand what are like the attributes of a good diagnostic, what makes a good diagnostic. Um, there's, you know, what we talked about before about that. I want to see diagnostics that provide the relevant contextual information that points you to the correct location and the source that sort of describe the issue in the right ways. But I'm sure that there's some way of quantifying what good diagnostics are and like the sort of the attributes, the key properties. I just haven't quite figured out yet,
+遇到过的。我很想看看这些，但我也在努力理解一个好的诊断有哪些属性，是什么造就了一个好的诊断。正如我们之前讨论的那样，我想看到提供相关上下文信息、指向源码中正确位置并以正确方式描述问题的诊断。但我确信有一种方法可以量化什么是好的诊断以及诸如属性、关键属性之类的东西。我只是还没完全弄清楚，
+
+37
+00:26:31.000 --> 00:27:12.000
+or I guess I haven't really started the exercise of sitting down and thinking about what are those attributes. But if people have ideas, I'd love to hear that. Or if there's prior work in this area, I'd love to hear that. I know we, I think we already have a couple guests that we said we were going to bring on, and the next two episodes are going to probably be the retro and forward looking podcast that we do on 2022 slash 2023. But then we should, because on our short list of Rust people to bring on is JT, Jason Turner's cousin, and they are, I know they've done a lot of work on the Rust compiler diagnostics. So, I mean, they were recommended to us by Jane to, you know, come on just in general
+或者我想我还没有真正开始坐下来思考这些属性是什么。但如果人们有想法，我很乐意听到。或者如果这个领域有先前的工作，我很乐意听到。我知道我们，我想我们已经有了几个我们说要邀请的嘉宾，接下来两期节目可能将是我们对 2022/2023 年进行的回顾和展望播客。但接下来我们应该，因为在我们的 Rust 邀请短名单上有 JT，即 Jason Turner 的表弟，我知道他们在 Rust 编译器诊断方面做了很多工作。所以，我的意思是，Jane 推荐他们来，你知道的，总的来说
+
+38
+00:27:12.000 --> 00:27:52.000
+and talk about Rust, et cetera, but we could also have them on to talk about compiler diagnostics as well. Here's a question. Who invented carrot diagnostics? Like, not just like for, not in like Rust or in C++, but just in general, who invented carrot diagnostics? I don like for not in like ruster and c++ but just in general who invented carrot diagnostics and also i know that a lot of the stuff though was invented in like in in rust land i don't know if the carrot stuff exactly well i i think maybe some uh a listener will correct us if we're wrong but i believe clang was the first c++ compiler to have carrot style diagnostics i i think i think that even before that gcc maybe had diagnostics that pointed you to the line of code but um i don't
+谈论 Rust 等等，但我们也可以请他们来谈谈编译器诊断。这里有个问题。谁发明了脱字符诊断？我是说，不仅仅是为了，不是在 Rust 或 C++ 中，而是通常来说，谁发明了脱字符诊断？我不知道是为了，不是在 Rust 或 C++ 中，而是通常来说，谁发明了脱字符诊断，而且我也知道很多东西确实是在 Rust 领域发明的，我不知道脱字符的东西是否确切地——好吧，我想可能某个听众会在我们出错时纠正我们，但我相信 Clang 是第一个拥有脱字符风格诊断的 C++ 编译器。我想，我想甚至在那之前，GCC 可能有将你指向代码行的诊断，但我不
+
+39
+00:27:52.000 --> 00:28:34.000
+know maybe we should have something like richard smith on because maybe he'll he'll be able to tell us more about the history because i really think clang was the first c++ compiler to revolutionize diagnostics and everybody else sort of followed suit so maybe we can have richard smith on some time and he can um tell us a bit about the philosophy of diagnostics and claim yeah i mean what he's one of the main three folks at the moment on the carbon yeah yeah and maybe maybe then he could tell us a bit about what they have in mind for for diagnostics and um and carbon yeah i mean we've been ever since cpp north back in july which is almost half a year ago by now we were supposed to have uh chandler on um on the very last day but then it ended up just being too
+知道，也许我们应该请理查德·史密斯（Richard Smith）这样的人来，因为也许他能给我们讲更多关于历史的事情，因为我真的认为 Clang 是第一个彻底改变诊断的 C++ 编译器，其他所有人都效仿了，所以也许我们可以请理查德·史密斯来一次，他可以给我们讲一点关于诊断和 Clang 的哲学，是的，我的意思是，他是目前 Carbon 的三位主要负责人之一，是的，也许然后他可以给我们讲一点他们对诊断和 Carbon 的设想，是的，我的意思是，自从七月份的 CPP North 以来，那已经快半年了，我们本应该让钱德勒（Chandler）在最后一天上节目，但最后实在是太
+
+40
+00:28:34.000 --> 00:29:07.000
+hectic and we we didn't get a recording with him and ever since we've been it's been on our back burner i think we have like a you know on the back burner like 20 different folks that we're supposed to bring on but 2023 we'll make it happen. All right. Happy. I mean, technically I said it's the new year's Eve's new year's Eve episode, but it's actually December 30th today. Potentially you're watching, listening to this on Saturday though. So if it is Saturday, December 31st, happy new years. And well, I mean, for those of you that celebrate the new years that corresponds to the, what is it? Gregorian Julian? I don't even know what calendar the, uh, Western world follows.
+忙碌了，我们没有跟他录音，从那以后这件事就被搁置了。我想我们有大约 20 个不同的人排在备选名单上，我们本该邀请他们，但在 2023 年我们会实现的。好的。太好了。我的意思是，严格来说我说这是新年前夜的新年前夜节目，但实际上今天是 12 月 30 日。不过你可能在周六观看、收听这个节目。所以如果是 12 月 31 日星期六，新年快乐。好吧，我的意思是，对于那些庆祝与什么相对应的新年的人来说，这是什么？格里高利历？儒略历？我甚至不知道西方世界遵循的是什么日历。
+
+41
+00:29:07.000 --> 00:29:32.000
+So my, my, my thinking on this is it's pretty safe to say happy holidays because pretty much everybody across the planet gets time off around this time of year. So, you know, that's a holiday. That was last episode though. What about happy new years though? Is that fine? So, you know, that's a holiday. That was last episode, though. Whatever. What about Happy New Year's, though? Is that fine? I mean, I think.
+所以我的想法是，说“节日快乐”相当安全，因为基本上全球每个人在这个时候都有假期，所以，你知道，那是一个节日。不过那是上一集。那么“新年快乐”呢？那可以吗？所以，你知道，那是一个节日。不过那是上一集。不管怎样。那么“新年快乐”呢？那可以吗？我的意思是，我想。
+
+42
+00:29:32.000 --> 00:29:57.000
+What is the calendar? Do you know? Is it Gregorian? I mean, if Howard Hinton is listening to this, he's. Yeah. Yes. I believe it's the Gregorian calendar is the one that's used in most of the world yeah all right yeah gregorian happy new years introduced in october 1582 by pope gregory the i can't read roman numerals um as a modification
+日历是什么？你知道吗？是格里高利历吗？我的意思是，如果霍华德·辛顿（Howard Hinton）正在听这个，他是。是的。我相信世界上大多数地方使用的是格里高利历，是的，好的，是的，格里高利历新年是在 1582 年 10 月由格里高利教皇引入的，我不会读罗马数字，作为对……的修改
+
+43
+00:29:57.000 --> 00:30:45.000
+of and replacement for the jillian calendar yeah it's x i i i i don't know what that is x i i i come on really take a guess i don't know 13 take a guess yeah that's correct i guess again they didn't teach you roman numerals at your fancy high school with the telescopes um no they did not no they didn't seems like something they should have done middle school um i i i mean does it really come up that often they probably tried to teach it to me in montessori school but i uh i very much rejected the montessori educational program it was very structured like like in montessori school they give you like these these um like wooden blocks and they want you to like stack them from like smallest from largest to smallest
+儒略历的修改和替代，是的，那是 XIII，我不知道那是什么，XIII，拜托，猜一下吧，我不知道，13，猜一下吧，是的，对了，再猜一次，他们没有在你那个带望远镜的高级高中教你罗马数字吗？不，他们没有，不，他们没有，这似乎是他们在初中应该做的事情，我的意思是，这真的经常出现吗？他们可能试图在蒙台梭利学校教我，但我非常拒绝蒙台梭利教育计划，它非常结构化，就像在蒙台梭利学校他们给你这些像木块这样的东西，他们想让你把它们从最大到最小堆叠起来
+
+44
+00:30:45.000 --> 00:31:01.000
+to build a tower. I would be like, no, I want to go do something creative, like build some other structure. They'd be like, no, creativity is not allowed here. You're supposed to do this thing. I'm like, no, I'm a creative soul. I want to go do this other thing instead. It was not a great fit for me.
+来建造一座塔。我会说，不，我想去做一些有创意的事情，比如建造其他结构。他们会说，不，这里不允许有创意。你应该做这件事。我说，不，我是一个有创造力的灵魂。我想去做这另一件事。这非常不适合我。
+
+45
+00:31:01.000 --> 00:31:06.000
+Montessori school was very structured and I am a very montessori school is very structured um and uh and i am a very chaotic and uh a creative person all right on that note folks 2022 that's a wrap we will talk to you in 2023 yes we will thanks for listening we hope you enjoyed and have a happy new year There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+蒙台梭利学校非常有结构化，我是一个非常——蒙台梭利学校非常有结构化，而且，我是一个非常混乱和有创造力的人。好了，各位，2022年就到这里，我们2023年再见。是的，我们会的。感谢收听，希望你们喜欢，祝大家新年快乐。本集还没有评论。点击转录文本中的任何句子即可发表评论。

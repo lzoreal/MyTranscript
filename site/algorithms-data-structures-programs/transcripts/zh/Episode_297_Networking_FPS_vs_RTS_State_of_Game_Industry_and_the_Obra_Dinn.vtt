@@ -1,0 +1,456 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:37.000
+But we can quickly contrast with RTS. So like I said, in FPS, you're not simulating very many things at once. In RTS, and so, okay, so in FPS, what that means is you can afford to send the world state across the wire, right? You can afford to send deltas in the state of objects. Whereas in RTS, you have, you might have too many objects to do that, right? You don't have enough bandwidth to do that sometimes. So at least in my experience, which I now say is dated. But, you know, when you're simulating hundreds of things,
+不过我们可以把它和RTS（即时战略游戏）作个快速对比。所以就像我说的，在FPS（第一人称射击游戏）中，你同时不需要模拟太多的东西。在RTS中，好吧，在FPS中，这意味着你可以承担得起在网络上传输世界状态的开销，对吧？你可以承担得起传输物体状态变化的开销。而在RTS中，你拥有、你可能拥有太多的物体，以至于无法做到这一点，对吧？有时候你没有足够的带宽来做这件事。所以至少根据我的经验——我现在得说这已经过时了，但是，你知道，当你模拟数百个东西时，
+
+2
+00:00:37.000 --> 00:01:24.000
+potentially a thousand things on the battlefield, sort of numbers, the way RTS used to work, and presumably in some way still does, the machines are running parallel simulations. Welcome to ADSP, the podcast, episode 297 recorded on July 22, 2025. My name is Connor. Today with my co-host, Ben, we chat about networking in FPS versus RTS. video games, the state of the video game industry, the return of the Oberdeen, and more. I can tell you about networking stuff, if you like.
+战场上可能有上千个东西，诸如此类的数量——RTS过去的运作方式，并且可以推测在某种程度上现在仍然如此，机器在运行并行模拟。欢迎来到 ADSP 播客，第 297 期节目，录制于 2025 年 7 月 22 日。我是康纳。今天我和我的联席主持本一起探讨 FPS 与 RTS 中的网络编程、电子游戏、游戏产业的现状、《奥伯拉丁的回归》等话题。如果你愿意，我可以跟你聊聊网络方面的事情。
+
+3
+00:01:24.000 --> 00:02:01.000
+The great thing about networking in terms of it being good for my career, of course, was not just that it took off, but also that in networking, the problems don't tend to get that much easier just because the machines get faster, right? The latencies over the internet haven't got a whole lot. haven't got orders of magnitude better in a span of years, right? Not in the way that machines get faster. And so the fundamental problem of hiding that latency and making the gameplay look smooth, that's one of the fundamental problems with network programming, of course,
+网络编程对我的职业生涯大有裨益，这不仅仅是因为它兴起了，而且还在于在网络编程中，问题往往不会因为机器变快而变得容易多少，对吧？互联网上的延迟并没有提升太多。在短短几年内没有呈数量级地变好，对吧？不像机器变快的那种方式。因此，隐藏延迟并让游戏玩法看起来流畅的根本问题，当然也是网络编程的根本问题之一，
+
+4
+00:02:01.000 --> 00:02:30.000
+hasn't really changed, right? Now, having said that, different genres of game do networking very differently, right? So networking in a first-person shooter is very different, usually, from networking in a real-time strategy game, right? Because in the first-person shooter, you don't have very many things to simulate. You have, you know, a few dozen moving objects in the world, players, rockets, maybe doors, things like that.
+并没有真正改变，对吧？话虽如此，不同类型的游戏在网络处理上的做法大不相同，对吧？因此，第一人称射击游戏中的网络与实时战略游戏中的网络通常有很大不同，对吧？因为在第一人称射击游戏中，你要模拟的东西并不多。你知道，世界中只有几十个移动的物体，比如玩家、火箭，也许还有门之类的东西。
+
+5
+00:02:30.000 --> 00:02:54.000
+You don't have very, you typically, at any given moment, you don't have very many active things to simulate. In a real-time strategy game, you have a lot of units, you have potentially hundreds of units that are, It's a, you know, it's a big distributed simulation, if you like. Whereas an FPS is a much more, maybe much more latency intolerant,
+你没有太多……通常在任何给定时刻，你都没有太多需要模拟的活跃事物。而在实时战略游戏（RTS）中，你有很多单位，可能有多达数百个单位，这是一个……你知道的，如果你愿意的话，这是一个大型分布式模拟。而FPS则是一个延迟容忍度可能低得多，
+
+6
+00:02:54.000 --> 00:03:18.000
+but a much, much smaller simulation. And so the strategies you use to do networking are different in those two cases, right? And then, and then, you know, in, for example, an MMO, networking strategy is different again. Interesting. And so just so that can keep me up to date, this is actually probably less for the listener. I'm probably the least steeped in this world than other folks. When you say FPS, I definitely know about that.
+但模拟规模小得多的系统。因此，你在那两种情况下使用的网络策略是不同的，对吧？然后，然后，你知道，例如在MMO（大型多人在线游戏）中，网络策略又有所不同。很有意思。为了让我保持同步——其实这可能不是说给听众听的，相比其他人，我可能对这个领域的了解最少。当你说FPS时，我绝对知道。
+
+7
+00:03:18.000 --> 00:03:47.000
+I'm thinking like Call of Duty, Fortnite titles like that. When you say real-time strategy, the games that I think of are like civilization and like Dota, but like then you mentioned MMO. So potentially... So real-time strategy is classically things more like StarCraft. Okay, I mean, so StarCraft and Dota, they're very similar, no? Yeah, Dota derived from Stork. Starcraft, right? So yeah, you could put it in that camp. Back in the day, titles like,
+我想到的比如《使命召唤》、《堡垒之夜》这样的游戏。当你说实时战略时，我想到的游戏是《文明》和《刀塔》（Dota），但随后你提到了MMO。所以可能……所以实时战略在经典意义上更像是《星际争霸》这类游戏。好吧，我的意思是，《星际争霸》和《刀塔》非常相似，不是吗？对，《刀塔》源自《星际争霸》，对吧？所以是的，你可以把它归入那一类。过去的日子里，像……
+
+8
+00:03:47.000 --> 00:04:29.000
+let's see, Command and Conquer was a Real Time Strategy franchise. Okay. Was that the, was that the boat one? The boat one. There's some, there's some game where you're sailing like a pirate trying to shoot other ships. Total War franchise. Shogun Total War was the first one and then many after that. Okay, I'm not familiar with that title. Basically, it's a battlefield, you're controlling lots and lots of units. You're building units, you're building bases, you're a resource, it's a resource engine kind of a game where you get your resource engine started, you build units, you fight. Right, yeah. Age of Empires. I actually did play Age of Empires quite a bit. And it's real time. So when you said civilization, civilization
+让我想想，《命令与征服》是一个实时战略系列。好吧。那是那个……那个有船的游戏吗？有船的游戏。有些游戏里你开着海盗船试图攻击其他船只。全面战争系列。第一部是《幕府将军：全面战争》，之后还有很多。好吧，我对这个游戏不是很熟悉。基本上，它是一个战场，你要控制非常多的单位。你要建造单位，建造基地，它是一种资源引擎类的游戏，你建立资源引擎，然后建造单位、战斗。没错，对。《帝国时代》。我其实玩过蛮多《帝国时代》的。而且它是实时的。所以当你刚才说《文明》时，《文明》
+
+9
+00:04:29.000 --> 00:04:56.000
+is turn-based, of course, right? So RTS is real-time strategy. I got to be honest. I've only actually played the Civilization board game. I just assumed that the VIII video game version didn't need to be turn-based because it's a video game. Like, if you're going to fight, like, you know, the Romans versus the Greeks or I don't know what the armies were. I imagine it was something like that. Like, I imagine it was like World of Warcraft.
+当然是回合制的，对吧？所以RTS是实时战略。说实话，我其实只玩过《文明》的桌游。我只是以为电子游戏版的《文明》不需要是回合制的，因为它是个电子游戏。比如，如果你要战斗，像罗马人对阵希腊人，或者我不知道当时是什么军队。我猜大概是那种类型的。我猜它就像《魔兽世界》一样。
+
+10
+00:04:56.000 --> 00:05:23.000
+It's, you can, I think you can pick more or less any civilization these days. Okay. So, interestingly, Siv the computer game is still term-based. I pictured it was just like a historical world of warfare. Yeah, but it's not. You're saying it's still turn-based. Yeah, civilization, I guess, turn-based strategy tends to be much more about, you know, much more about traversing the tech tree, unlocking new things, getting down the tech tree.
+你可以……我想你现在基本上可以挑选任何文明。好吧。有趣的是，电脑游戏《文明》依然是回合制的。我还以为它就像历史版的《魔兽世界》呢。对，但它不是。你说它仍然是回合制的。对，我猜回合制战略更多的是关于……更多的是关于穿梭于科技树、解锁新事物、推进科技树。
+
+11
+00:05:23.000 --> 00:05:47.000
+Right. Right. Whereas real-time strategy tends to have less of that and is more about, like I said, building a production engine, right, in real time. So you can build units, build more units, go, fight, conquer. Right. Okay. And so, and none of these titles qualify as MMOs, right? I guess Fortnite technically is an MMO.
+对的。对的。而实时战略往往较少涉及这些，更多的是像我说的，实时构建一个生产引擎，对吧？这样你就可以建造单位、建造更多单位、前进、战斗、征服。对的。好吧。那么，这些游戏里没有一个能算作MMO，对吧？我猜《堡垒之夜》在技术上算是一个MMO。
+
+12
+00:05:47.000 --> 00:06:18.000
+Well, yeah. So maybe, so I'm not, I'm not sure. Okay, Fortnite is a FPS, also with elements of MMO. I don't actually know what the sort of maximum number of players you can have in the Fortnite game is. Well, I mean, the classic one's 100, but I don't know if you can go above that. So it's a pretty small MMO. When I say MMOs, I'm talking about things like World of Warcraft, which you can have 5,000 people in a single world.
+嗯，是的。所以也许，我不是很确定。好吧，《堡垒之夜》是一款FPS，同时也带有MMO的元素。我其实不知道《堡垒之夜》里玩家人数的上限是多少。嗯，经典的一场是100人，但我不知道能不能超过这个数字。所以这是一个相当小的MMO。当我提到MMO时，我说的是像《魔兽世界》这种在一个世界里可以容纳5000人的游戏。
+
+13
+00:06:18.000 --> 00:06:37.000
+Yeah, okay. And also, too, I guess when I was saying World of Warcraft, there's two, and I've never really understood this, there was the World of Warcraft that were like the Age of Empire's games. There was Warcraft. Or is that just Warcraft? So I've been saying the wrong thing? Yeah. So Warcraft was RTS. Okay.
+好吧。而且，我也觉得，当我提到《魔兽世界》时，有两款游戏——我一直没太搞懂——有一款《魔兽世界》就像《帝国时代》那样的游戏。那是《魔兽争霸》。还是说那就是《魔兽争霸》？所以我刚才一直说错了？对。所以《魔兽争霸》是RTS。好吧。
+
+14
+00:06:37.000 --> 00:06:55.000
+So replace every single time I said World of Warcraft. with Warcraft. I thought they were the same name. Actually, I'm losing, I'm like a negative thousand nerd credits on this episode. Yeah, so Warcraft was originally an RTS. Yeah, fantasy-based RTS. I think it was called
+所以把我刚才说每一个“《魔兽世界》”的地方，都替换成“《魔兽争霸》”。我还以为它们是一个名字呢。实际上，我在这期节目里正失去成千上万点书呆子信用分。是的，所以《魔兽争霸》最初是一款RTS。是的，基于奇幻设定的RTS。我想它最初叫
+
+15
+00:06:55.000 --> 00:07:17.000
+Warcraft orcs and humans originally, right? And that had one, two, three, three, you know, so Warcraft three was the, and then there was the Frozen Throne and some expansions, but basically, Warcraft 3 plus plus was the end of that line at the time. And then they took the franchise, the story, the elements, the
+《魔兽争霸：兽人与人类》，对吧？然后有1、2、3代，你知道的，所以《魔兽争霸3》是……然后是《冰封王座》和一些资料片，但基本上，当时的《魔兽争霸3》加上后续就是那个系列的终结。然后他们拿了这个系列、故事、各种元素，
+
+16
+00:07:17.000 --> 00:08:04.000
+IP, if you like, and made the MMO called World of Warcraft. I see. Okay. Henceforth shall never make this mistake again. Everyone's probably screaming at their headphones being like, how is that like World of Warcraft? That's not like that at all when I meant Warcraft. Okay, so we've set the landscape now. We've got we've got MMOs, we've got RTS, we've got FPS. I mean, there are lots of other genres of course. Right, right. But I just singled those out as having basically three very different approaches to networking. Okay. And do you want to take us through? Like, well, so, you know, you have to, you have to take this with the knowledge that I haven't worked in games for nearly 10 years. Although I do have a long history in games, I know how things were done.
+如果你愿意的话，就是它的IP，做成了一款名为《魔兽世界》的MMO。原来如此。好吧。从此以后我绝不再犯这个错误。大家可能正对着耳机尖叫：“这怎么会像《魔兽世界》？我指的是《魔兽争霸》时，它一点也不像好吗。”好了，现在我们把背景搭好了。我们有了MMO，有了RTS，有了FPS。当然，还有很多其他类型的游戏。对，对。但我把这些挑出来，是因为它们在网络处理上有三种截然不同的方法。好的。你想不想带我们了解一下？比如，嗯，你知道，你得……你得带着这样的认知来听：我已经将近10年没有在游戏行业工作过了。虽然我在游戏领域有着悠久的历史，我知道过去是怎么做的。
+
+17
+00:08:04.000 --> 00:08:26.000
+Things always move on. So, you know, if there are people listening to the podcast who are currently working in games, they might be saying, nobody's talking about anymore, and that's fine. But I think the broad strokes are probably still true, which is why I said. It's like when you program in FPS, you are, it's about, you know, it's about using, it's about interpolating or extrapolating where you think things are going to move to.
+事情总是在向前发展。所以，你知道，如果播客的听众里现在有人在游戏行业工作，他们可能会说：“根本没人谈论这个了。”这没关系。但我认为大致的轮廓可能仍然是正确的，这就是为什么我要说。就像你在编程一个FPS时，它是关于……它是关于使用、关于对你认为事物将要移动到的位置进行插值或外推。
+
+18
+00:08:26.000 --> 00:08:44.000
+You have very few things that you're actually simulating at one time, maybe a couple of dozen, because you have players moving around, you know, they're picking up health packs, maybe they're shooting their weapons. Most of their weapons probably, Many of the weapons are, use what are called colloquially, light speed bullets.
+你实际同时模拟的东西非常少，也许只有几十个，因为你有玩家四处走动，你知道的，他们在拾取血包，可能在开枪。他们的大多数武器可能……许多武器使用的是俗称的光速子弹。
+
+19
+00:08:44.000 --> 00:09:00.000
+In other words, there's not a bullet you have to simulate in the world. It doesn't move slowly enough. You know, rockets and things like that are simulated objects that are in the world. But if you shoot a pistol, if you shoot a machine gun, those bullets are treated like the light speed.
+换句话说，世界中没有一个你需要模拟的子弹。它的移动速度没有那么慢。你知道，火箭之类的东西是世界中被模拟的物体。但如果你开了一枪手枪，如果你开了一枪机枪，那些子弹就被当作光速处理。
+
+20
+00:09:00.000 --> 00:09:29.000
+Right. And so, you know, the big problem that you have to solve. And it's not really a problem to solve. it's more of a design issue that you have to figure out where you lie, where you make a choice, is, you know, you're always going to have the problem. Let's say you and I are fighting in an FPS. There is latency between our machines or between our two machines and a third machine, which is a server, right?
+对。所以，你知道，你必须解决的巨大问题——其实这并不是一个需要解决的问题，它更像是一个设计问题，你需要弄清楚你的立场、做出选择——就是，你总是会遇到这个问题。假设你和我在一个FPS中对战。我们的机器之间，或者我们两台机器和第三台机器（也就是服务器）之间存在延迟，对吧？
+
+21
+00:09:29.000 --> 00:10:01.000
+And I might see, I might have you directly in my sites and I might shoot you and I know that I'm shooting you. but because of latency, I'm not actually shooting you. So I'm seeing the wrong thing, right? Conversely on your side, you, you know, in your experience, that I am not shooting you because you ducked around a corner or something. But again, there's that latency, right? So how do you solve that problem? How do you do that fairly?
+我可能会看到，我可以直接把准星对准你，我可能会向你开枪，我知道我正在向你开枪。但由于延迟，我实际上并没有击中你。所以我看到的是错误的东西，对吧？反过来在你的那边，你，你知道，在你的体验中，我没有向你开枪，因为你躲到了墙角或者诸如此类的地方。但同样地，存在延迟，对吧？那么你如何解决这个问题？你如何做到公平？
+
+22
+00:10:01.000 --> 00:10:49.000
+And that's really a problem of like design rather than a problem of implement. right so either to me you know the two extremes would be either you'd you you have an experience where you you you die randomly when no one was shooting you because you couldn't see them right and that's a bad experience or I have the experience of I'm shooting this person and they're just not taking damage and I know I'm shooting now I've been shooting them for half a second or a second or whatever it is right so those are the kind of subjective experiences that you you have to try and treat fairly, try and solve in the presence of tens of milliseconds of latency. And my guess is that most of the time, it's that the shooter ends up missing if there's a choice.
+这实际上是一个设计问题，而不是一个实现问题。所以对我来说，你知道，这两种极端情况要么是：你会经历一种情况——当你根本没看见别人时，由于你看不到他们，你会莫名其妙地死去，这是一种糟糕的体验；要么是我有这样一种体验——我在向这个人射击，而他们就是不掉血，我知道我在开枪，我已经连续射击他们半秒钟、一秒钟或者随便多久了，对吧。所以这些就是你必须努力公平对待、在几十毫秒延迟的情况下试图解决的主观体验。我猜大多数时候，如果有得选的话，开枪的人最后会打空。
+
+23
+00:10:49.000 --> 00:11:07.000
+And my guess is based on the... Well, I don't know. You don't know? Like, in a sense, you have a choice. When you're simulating, you have a choice of, are you always running behind or are you always trying to predict the head? You know, so there's kind of that choice. when important things happen and important things in FPS
+我的这个猜测是基于……嗯，我不知道。你不知道？从某种意义上说，你是有选择的。在进行模拟时，你面临的选择是：你是总是落后运行，还是总是试图预测前方？你知道，所以大概有这样一种选择。当重要的事情发生时——FPS中重要的事情
+
+24
+00:11:07.000 --> 00:11:31.000
+are really like deciding whether or not someone dies. That's one of the most important things, right, in FPS that you can identify. Sometimes those things are, I think they are, they are modeled these days by taking both sides into account and sometimes the server will kind of roll back a little way and try and properly order things in time.
+实际上就是决定某人是否会死。这是FPS中你能识别的最重要的事情之一，对吧？有时候这些事情，我认为它们现在是通过将双方考虑在内来建模的，有时服务器会稍微回滚一点，并尝试在时间上正确地排序。
+
+25
+00:11:31.000 --> 00:12:19.000
+And, you know, so it's, it's like you're always, when you're simulating, you are never quite correct, but you're always trying to tend to correctness. You know, the world is always converging to a consistent shared state. It never quite gets there, and the amount by which it deviates from that is subjectively controls the sort of quality of the experience. Yeah, I mean, I remember when I, when I, I used to watch Fortnite back in the day when it was huge. And people when they were not at some local tournament, inevitably at some point, end up like they're measuring their ping and then they'll start whining about the ping because
+而且，你知道，这就好比你一直在进行模拟时，你永远不是完全正确的，但你总是试图趋向正确。你知道，世界总是在向一个一致的共享状态收敛。它永远无法完全达到那个状态，它偏离该状态的程度主观上控制着体验的质量。是的，我的意思是，我还记得当我……我以前经常看《堡垒之夜》，在它火爆的那阵子。人们在不在某个线下比赛时，不可避免地在某个时刻，最后会去测试他们的ping，然后他们就会开始抱怨ping，因为
+
+26
+00:12:19.000 --> 00:12:39.000
+LPBs. Yeah, yeah, yeah. And so, you know, if they miss and they, and so clearly that's like the networking issue that you're talking about here, right? Like when the ping is so bad and whatever, they click their mouse, but then the server doesn't get it for however many milliseconds. There's only so much you can do, right? Yeah, and there are certainly issues with lag spikes and things.
+低延迟玩家（LPBs）。对，对，对。所以，你知道，如果他们打偏了，他们……很显然这就是你在这里谈论的网络问题，对吧？就像当ping太糟糕或者别的什么时，他们点击了鼠标，但是服务器在若干毫秒内没有收到。你所能做的也就只有这些了，对吧？是的，而且延迟尖峰（lag spikes）之类的问题肯定是存在的。
+
+27
+00:12:39.000 --> 00:13:08.000
+But yes, like you say, there's a certain baseline which you can't really get below, right? You aren't going to get much below, you know, a few tens of milliseconds, probably. Yeah. And so, I mean, I don't know, is it too much to try and, like, dive into, like, a algorithm for queuing this stuff and, like, making these decisions? or is it probably again because my experience is now at least 10 years out of date
+但正如你所说，确实存在一个你无法真正低于的基线，对吧？你可能无法降到几十毫秒以下太多。是的。所以，我的意思是，我不知道，试图深入探讨一下用于排队这些东西以及做出这些决定的算法是不是要求太高了？或者可能又是因为我的经验现在至少落后了10年？
+
+28
+00:13:08.000 --> 00:13:25.000
+but we can quickly contrast with RTS so like I said in FPS you're not simulating very many things at once in RTS and so okay so in FPS what that means is you can afford to send the world state across the wire
+不过我们可以把它和RTS作个快速对比。所以就像我说的，在FPS中，你同时不需要模拟太多的东西。而在RTS中，好吧，在FPS中，这意味着你可以承担得起在网络上传输世界状态的开销，
+
+29
+00:13:25.000 --> 00:13:51.000
+right you can afford to send deltas in the state of objects whereas in RTS you have, you might have too many objects to do that, right? You don't have enough bandwidth to do that sometimes. And so, at least in my experience, which I now say is dated. But, you know, when you're simulating hundreds of things, potentially a thousand things on the battlefield, sort of numbers,
+对吧？你可以承担得起传输物体状态变化的开销，而在RTS中，你拥有、你可能拥有太多的物体，以至于无法做到这一点，对吧？有时候你没有足够的带宽来做这件事。所以至少根据我的经验——我现在得说这已经过时了，但是，你知道，当你模拟数百个东西时，
+
+30
+00:13:51.000 --> 00:14:26.000
+the way RTS used to work, and presumably in some way still does, the machines are running parallel simulations, right? So and that and what and what's being sent across the wire are inputs, right? And each machine has to simulate what the units do in response to those inputs, you know, because it's prohibitive to send all of that state all the time. There might be points where you can send some of it and synchronize, but, you know, in general, that's the way it used to be done anyway. And of course, that brings with it its own problems.
+战场上可能有上千个东西，诸如此类的数量，RTS过去的运作方式，并且可以推测在某种程度上现在仍然如此，机器在运行并行模拟，对吧？所以，而且，在网络上传输的是输入，对吧？每台机器都必须模拟单位对这些输入的反应，你知道，因为把所有这些状态一直传输过去成本太高了。可能会有一些点你可以传输其中一部分并进行同步，但无论如何，总的来说，过去就是这么做的。当然，这也带来了它自己的问题。
+
+31
+00:14:26.000 --> 00:14:50.000
+When you're running parallel simulations, you have to be really sure that those simulations aren't going to diverge. Well, that's what I was immediately thinking. I was like, if you're sending it back and forth, but you're not doing it constantly, don't you run the risk of two different boxes on other sides of the world, simulating that some Starcraft creature goes left instead of right? Well, absolutely, you run that risk. And that is why you do things to mitigate that risk.
+当你运行并行模拟时，你必须非常确定这些模拟不会分叉。嗯，这正是我马上想到的。我想的是，如果你把数据来回发送，但又不是持续发送，难道你不会冒这样的风险：世界两端的两台不同的机器，模拟出一个《星际争霸》生物向左走而不是向右走？嗯，当然，你要承担这种风险。这就是为什么你要采取措施来缓解这种风险。
+
+32
+00:14:50.000 --> 00:15:39.000
+So some of the things you do are transmitting checksums, right? To check that you're actually still in sync. But more than that, you have to do things like in the code, you know, for the good of the team who are writing the code, you have to do things like have separated random number generators, for instance. So, so one, anytime you do something which is going to be part of shared simulation, you have to use the synchronized, the random number pool, which is designated for that use, right? But there are lots of things in games that aren't synchronized. You know, there's particle effects and there's, you know, all sorts of things which happen only locally. Typically, in terms of rendering a lot of the time, like particle effects.
+所以你采取的一些措施包括传输校验和，对吧？来检查你们实际上是否仍然保持同步。不仅如此，你还必须在代码中做一些事情，你知道的，为了编写代码的团队好，你必须做一些事情，比如使用独立的随机数生成器。所以，任何时候你做一些将成为共享模拟一部分的事情时，你都必须使用为此目的指定的同步随机数池，对吧？但是游戏中有很多东西是不同步的。你知道，有粒子效果，还有各种只在本地发生的事情。通常在很多时候，就渲染而言，比如粒子效果。
+
+33
+00:15:39.000 --> 00:16:02.000
+Maybe audio cues or flavor as well. And those things are just happening on sort of local. They need to happen with local randomness, right? And it's fine. They don't contribute to the shared simulation state. But you can't accidentally use one random number pool when you, when you're really supposed to use the other, because then that will produce synchronization, desynchronization.
+也许还有音频提示或氛围。这些事情只是在某种本地层面上发生。它们需要用本地随机性来发生，对吧？这没问题。它们不参与共享模拟状态。但你不能不小心在使用本该使用另一个随机数池的时候，用错了其中一个，因为那样会导致同步、不同步。
+
+34
+00:16:02.000 --> 00:16:25.000
+Right? Because everything needs to, in the shared simulation, both sides need to agree, you know, in lockstep, what they're doing in a sense. I never thought of that. So, yeah, the stuff that can afford to be locally random that basically doesn't affect gameplay, if you will, but other stuff, which is, needs to be consistent,
+对吧？因为在共享模拟中，所有事情都需要——双方需要步调一致地同意他们在某种意义上正在做的事情。我从没想过这一点。所以，是的，那些可以承受本地随机、基本上不会影响游戏玩法的东东，如果你愿意的话；但其他需要保持一致的东西，
+
+35
+00:16:25.000 --> 00:16:45.000
+has to be identical. So you're having some seated random number genera. And is it like an endpoint that you're hitting on the server? Or is it something that in like the parallel simulation, everyone has the same like deck of cards that you're just pulling from? It's a parallel simulation. Everyone has the state. The topology of the network of the game might involve a server
+必须是完全相同的。所以你要使用带种子（seeded）的随机数生成器。这就像你在服务器上调用的一个端点吗？还是说在并行模拟中，每个人都有一副相同的“扑克牌”供大家抽取？这是一个并行模拟。每个人都有这个状态。游戏的网络拓扑可能包含一个服务器，
+
+36
+00:16:45.000 --> 00:17:25.000
+which acts as a aggregator for inputs and a sort of mediator for when turns happen. Interesting. But yeah, everyone is doing the same parallel. simulation. And so, yeah, so a very, a very simple way that can desync is through, you know, like we said, wrong randomness locally. Effects that occur either locally random or quite a lot, there's effects that occur when you're looking at them, right? So where you're looking on the battlefield and something, you know, when you're looking at something, it's, it's animating, it's doing whatever. Those kind of things also are local and, and need to not accidentally
+它充当输入的聚合器，以及发生回合时的中介。很有意思。不过是的，每个人都在做同样的并行模拟。所以，是的，导致不同步的一个非常简单的方法是通过——就像我们说的——本地错误的随机性。那些要么是本地随机的特效，要么是非常多的、当你看着它们时才发生的特效，对吧？所以当你在看战场上的某个东西，你知道，当你看着某个东西时，它在播放动画，在做各种事情。这些类型的事情也是本地的，并且需要确保不小心
+
+37
+00:17:25.000 --> 00:17:53.000
+contribute to the shared simulation. And then we can go a deeper level, right? You're trying to run this game across multiple machines, and the hardware in those machines isn't the same. In particular, the way those machines treat floating point numbers has probably small differences, right? And so you have to, you know, to run a true parallel simulation, you have to do things like, well, I can't use floating point
+参与到共享模拟中。然后我们可以进入更深的层次，对吧？你正试图在多台机器上运行这个游戏，而这些机器中的硬件并不完全相同。特别是，这些机器处理浮点数的方式可能存在微小的差异，对吧？所以你必须，你知道，要运行一个真正的并行模拟，你必须做一些事情，比如，我不能在我的并行模拟中使用浮点数。
+
+38
+00:17:53.000 --> 00:18:22.000
+in my parallel simulation. I have to use fixed point arithmetic, you know, things like that. This is way more complicated than I would have ever thought. Although I guess I've never thought very deeply about if you wanted to create, yeah, a game like... You have never been burned by all these issues. Yeah, yeah. You know, you can foresee some of these issues by thinking deeply, but, you know, also a lot of this is experiential, you know, like you've just been burned by that kind of thing before. Yeah.
+我必须使用定点算术，诸如此类的事情。这比我想象的要复杂得多。尽管我想我从来没有深入思考过如果你想创造一个像……你从未被所有这些问题坑过。对，对。你可以通过深入思考来预见其中的一些问题，但是，你知道，这其中很大一部分也是经验性的，你知道，就像你以前被那种事情坑过一样。对。
+
+39
+00:18:22.000 --> 00:18:54.000
+It's funny because every once in a while I hear people. people and they talk about, oh, you know, like you parallelize the reduction of some floating point numbers and then you don't have stability because you've changed the algorithm, them from serial to parallel. And I always have a little voice in the back of my head is like, I've never, you know, like run into some issue where like that's a big deal, you know, like, I'm sure there are instances, but there's just a little like, I don't know, is it an angel or a devil? Some little voice in the back of my head that's saying that like, I understand that that's a thing, but like I've never encountered it. And now here you are explaining.
+这很有趣，因为每隔一段时间我就会听到人们……人们会讨论，哦，你知道，就像你并行化某些浮点数的归约（reduction），然后你就会失去稳定性，因为你把算法从串行改成了并行。我的脑海深处总有一个微小的声音在说：我从来没有，你知道，遇到过那种这事儿很严重的问题，你知道，就像，我确信有这样的例子，但脑海深处总有那么一个小小的——我不知道，那是天使还是恶魔？某种微小的声音在说，我理解这是一种现象，但我从来没遇到过。而现在你在这里解释它。
+
+40
+00:18:54.000 --> 00:19:23.000
+Yeah. Like even, not even, it's not like, you know, some monetary bank account balance that is, you know, probably like the worst case where, you know, you've, you've got some different figure computed and you're losing, you're missing some money now, but even just, yeah, simulating two games. I've never even thought about the fact that, yeah, like, you're basically, it's a difficult problem to run a parallel simulation that is correct and identical in every detail. Yeah.
+是的。甚至，甚至都不是，它不像是什么货币银行账户余额——那可能是最糟糕的情况，你知道，你计算出了不同的数字，然后你现在丢钱了、少钱了——但甚至仅仅是，是的，模拟两个游戏。我甚至从来没想过这样一个事实：是的，运行一个在每个细节上都正确且完全相同的并行模拟，是一个极其困难的问题。对。
+
+41
+00:19:23.000 --> 00:19:47.000
+And so there are two things to mitigate that, right? One is make your simulation smaller. Don't simulate as much stuff. And not just sort of in numbers, but in terms of axes, right? And then the other side is drill down to all these things that really matter and sometimes quite low level, right, to make sure they are identical. You need to do a bit of both. That's wild.
+因此，有两个东西可以缓解这个问题，对吧？一个是让你的模拟规模变小。不要模拟那么多东西。不仅是在数量上，在各个轴（axes）上也是如此，对吧？然后另一方面是深入研究所有这些真正重要、有时相当底层的细节，对吧，以确保它们是完全相同的。你需要两方面都做一点。这太疯狂了。
+
+42
+00:19:47.000 --> 00:20:08.000
+I would have never thought of the use case for fixed point numbers is to avoid divergence and parallel simulations of a video game because floating point is producing different results on different architectures. That's wild. Is there any other shocking things that you run into in terms of like you might not think, you might not expect this,
+我绝不会想到定点数的用处竟然是为了避免视频游戏并行模拟中的分歧，因为浮点数在不同的架构上会产生不同的结果。这太疯狂了。你在处理过程中还遇到过什么其他令人震惊的事情吗？比如你可能不会想到、不会预料到，
+
+43
+00:20:08.000 --> 00:20:24.000
+but like you have to keep, you have to take this into consideration in order to make sure that these games work the way they should? I don't know. Like, it's hard for me to think. Yeah, I'm sure if you were actively working in the industry, you would have, in the last two weeks, you would have bumped into a couple different things.
+但你必须把这些考虑进去，以确保这些游戏能如预期般正常运行？我不知道。这很难让我想起来。是的，如果你最近一直在行业里工作，你肯定在过去两周内就撞上好几种不同的事情了。
+
+44
+00:20:24.000 --> 00:21:00.000
+You know, in the last 10 years of my career, I worked at Blizzard and I worked on Battlenet. And that was a different thing again, right? So that was MMO adjacent as well, right? And so the focus there is not so much in the real-time simulation, either on FPS or RTS. But a big focus there is secure. knowledge of, you know, which machines have knowledge of which parts of the simulation.
+在我职业生涯的最后10年里，我在暴雪工作过，我参与了战网（Battlenet）的项目。那又是完全不同的另一回事，对吧？所以那也是紧邻MMO的领域，对吧？那里的重点不在于实时模拟，无论是FPS还是RTS。但那里的一大重点是安全的知识，
+
+45
+00:21:00.000 --> 00:21:24.000
+And that plays into security, of course. Resource usage, right? So when you're simulating between machines playing a game with FPS or RTS, you're worried about resource usage in one sense, right? Which is like you're worried about, you know, how fast can this go? What's the bandwidth? That kind of thing. when you're when you're when you're when you start building servers then you're worried about a different
+你知道，哪些机器拥有模拟的哪些部分的知识。这当然也关系到安全性。资源使用，对吧？所以当你在运行FPS或RTS游戏的机器之间进行模拟时，你在某种意义上担心的是资源使用，对吧？就像你在担心，这能跑多快？带宽是多少？诸如此类的事情。而当你开始构建服务器时，你就会担心另一个
+
+46
+00:21:24.000 --> 00:22:16.000
+aspect of resource usage which is like for everyone that connects here how much how many resources does that use you need to think about things like denial of service attacks and stuff like that coming into the picture right and and typically where rts and fps have a historically at least the desire for both low bandwidth and better latency meant that we typically didn't use for example TCP connections. TCP connections were considered relatively heavyweight, right? The size of the header is larger than the size of the UDP header. They have a sort of startup time. They, you know, UDP is sure, it's, it's far and forget. It's not guaranteed delivery, but it's timely, right? And in a game where every 60th of a second, you're having to update the world, things are changing all the time.
+资源使用方面的问题，也就是：对于连接到这里的每个人，这会消耗多少资源？你需要考虑诸如拒绝服务攻击（DDoS）之类的事情，这些都进入了画面，对吧？并且通常情况下，RTS和FPS在历史上（至少曾经）对低带宽和更好延迟的渴望，意味着我们通常不使用例如TCP连接。TCP连接被认为相对较重，对吧？报头（header）的大小比UDP报头大。它们有一种启动时间。它们，你知道的，UDP当然是，它是“发后即忘”的。它不保证送达，但它是及时的，对吧？在一个每60分之一秒就必须更新一次世界、情况每时每刻都在改变的游戏中，
+
+47
+00:22:16.000 --> 00:22:50.000
+what happened, you know, half a second ago is kind of irrelevant, right? If you miss something, if you miss something half a second ago that doesn't affect what the player is saying, you can make it up, right? Doesn't matter. But when you move to server-based infrastructures and particularly large-scale server-based infrastructures, then you think more about what the resources used. And, you know, then you start having things like, well, people have multiple connections, you Their initial connection is to the sort of login endpoint.
+半秒钟前发生的事情其实是无关紧要的，对吧？如果你错过了某些事情，如果你错过了半秒钟前、不影响玩家所见的事情，你可以把它补回来，对吧？没关系。但当你转向基于服务器的基础设施，尤其是大规模基于服务器的基础设施时，你就会更多地考虑所使用的资源。然后，你知道，你开始有这样的情况，人们会有多个连接，他们最初的连接是连接到某种登录端点。
+
+48
+00:22:50.000 --> 00:23:16.000
+After that, they might make another connection to a different kind of server. You know, there's load balancing on the front end. They might, and then, you know, there are kind of ancillary things that come in as well. Like I was working on BattleNet, there's things like, you know, voice chat, which these days is in many, many games. But, you know, Ryan, when the clock back 20 years and it was in relatively few, sort of came into play. That's crazy.
+在此之后，他们可能会与另一种服务器建立另一个连接。前端会有负载均衡。他们可能会，然后，你知道，也会有一些辅助性的东西进来。就像我当时在做战网时，有一些东西，比如语音聊天，现在它在很多很多游戏中都有。但是，你知道，把时间倒回20年，当时它出现在相对较少的游戏中，但也开始登场了。这太疯狂了。
+
+49
+00:23:16.000 --> 00:23:40.000
+I mean, it's wild, too. Because like I said, I've watched quite a bit of, I don't know, games being played. And you never actually think about it, like, what would it take to go in? Like, I've actually never also understood fully engines. Like, I've seen people make videos of like, oh, I'm going to put together some small game. And they just go to Unity and they just start dropping assets places. And I'm like, wait, does that all it is? Like, if you, if you, yeah, it's all commoditized now.
+我的意思是，这也太疯狂了。因为就像我说的，我看了相当多的游戏实战。你其实从来不会去想，参与其中需要付出什么？比如，我其实也从来没有完全理解过引擎。就像我看到有人制作视频说：“哦，我要组装一个小游戏。”然后他们直接打开Unity，开始把各种资源（assets）丢在各个地方。我在想，等等，难道这就是全部吗？如果你，如果你，是的，现在这一切都商品化了。
+
+50
+00:23:40.000 --> 00:24:07.000
+You just drop assets and then, like, do you even need to write? I assume you need to write some code to, like, define the logic. of whatever, some airplane flying through the mountains or whatever and collision detection. But at one point in time, I always thought it was like, oh, you have to drop into C++ or C sharp or whatever language and you have to write the whole thing. But now it just seems like there's this drag and drop aspect of some... I mean, the engine, the engine gives you, will give you collision detection. I'm pretty certain of that.
+你只需要丢下资源，然后，就像，你甚至还需要写代码吗？我假设你需要写一些代码来定义逻辑，无论是什么——比如某架飞机穿过群山，或者碰撞检测。但曾在某个时刻，我一直以为，哦，你必须深入到C++、C#或任何语言中，你必须把整个东西都写出来。但现在看来，这似乎只是一种拖放式的……我的意思是，引擎，引擎会为你提供碰撞检测。对此我相当确定。
+
+51
+00:24:07.000 --> 00:24:28.000
+You wouldn't have to do your own collision detection necessarily. The engine just gives you a framework to build in, right? And it solves all the problems which otherwise you would have to solve yourself. Like, how to render things, how to represent things, how to represent the world, how to do collision detection, right? And all the other things. How to do animation. How to do audio. How to do textures.
+你不见得非得自己去做碰撞检测。引擎只是为你提供了一个构建的框架，对吧？它解决了所有其他你本来必须自己解决的问题。比如，如何渲染事物，如何表示事物，如何表示世界，如何做碰撞检测，对吧？以及所有其他事情。如何做动画。如何做音频。如何做纹理。
+
+52
+00:24:28.000 --> 00:24:56.000
+So when you have an engine, you get to concentrate on what the gameplay is. So with an engine, is there, like, do you have to write any code? Or is it feasible to go and make a game? Oh, yeah. You always have to write code, I think. I mean, we can imagine there are. ways in which you can make your outwriting code, I'm sure. But if you want your game to be good, I think you have to write some code.
+所以当你拥有一个引擎时，你就可以专注于游戏玩法的本身。那么有了引擎，是不是……你必须写任何代码吗？或者去制作一个游戏是可行的吗？哦，是的。我认为你总是得写代码。我的意思是，我们可以想象在某些情况下，你可以在不写代码的情况下制作游戏，我确凿无疑。但如果你想让你的游戏变得优秀，我认为你必须写一些代码。
+
+53
+00:24:56.000 --> 00:25:16.000
+Yeah. Interesting. But you know, an engine isn't just one thing either, right? Like I said, there's all these different sort of sub-genres of programming different areas. You know, an audio engine is a thing. When we say engine, historically, we often meant graphics engine. These days it means sort of every. thing.
+是的。很有意思。但你知道，一个引擎也不仅仅是一样东西，对吧？就像我说的，有所有这些不同种类的编程子流派和不同领域。音频引擎就是个东西。当我们说引擎时，历史上我们通常指的是图形引擎。而现在它意味着各种东西。
+
+54
+00:25:16.000 --> 00:25:41.000
+So, you know, physics engine, audio engine, animation engine. Yeah. Yeah, I know Jonathan Blow, I've heard interviews by him and seen a few of his YouTube live streams. And it seems like for a certain game, he'll write an engine and then he may reuse it for other games as well. But a lot of the stuff he's doing is actually building, which I guess is not dissimilar from other, whatever industries.
+所以，你知道，物理引擎、音频引擎、动画引擎。是的。是的，我知道乔纳森·布洛（Jonathan Blow），我听过他的采访，也看过他的一些YouTube直播。看起来对于某款游戏，他会编写一个引擎，然后他可能会将其重新用于其他游戏。但他正在做很多事情实际上是在构建工具，我想这与其他任何行业也没什么不同。
+
+55
+00:25:41.000 --> 00:26:25.000
+You build a tool using software or using, programming and then you have like a software tool and then you if you are the programmer you can go and edit and add stuff to like basically make your job easier like you know if you're the person who designed excel you can go add some new function into excel in order to make it easier to use but technically you can just go and use excel at the end of the day and you maybe know a little bit of bbA but you don't you're not hooking into the c++ plus to add some new future i'm sure there's some i mean another thing another thing we're sort of skirting around is a primary job of the sort of the unities and the unreal engines of the world is the asset pipeline right so it's not you know games
+你使用软件或编程构建一个工具，然后你就有了一个软件工具，如果你是程序员，你就可以去编辑和添加东西，基本上是为了让你的工作更轻松——就像，如果你是设计Excel的人，你可以去Excel里添加一些新功能，以便让它更易于使用；但从技术上讲，最终你大可直接去使用Excel，你可能懂一点VBA，但你并不是去接入C++来添加一些新功能。我确凿无疑有某种……我的意思是，另一件我们一直在边缘试探的事情是，像Unity和虚幻引擎这样的世界的首要工作是资源管线（asset pipeline），所以，你知道，游戏
+
+56
+00:26:25.000 --> 00:27:01.000
+aren't only made by programmers a huge amount of them is made by the artists the designers the the the audio folks the people who make the actual game assets the graphics the the 3D models the sound effects all that stuff and you need to to get all that stuff into your game in a way that understands. And that's a large part, you know, besides the programming aspects of how you program graphics, like the asset pipeline is a huge kind of off-the-shelf thing that these game engines bring. Yeah.
+不仅是由程序员制作的，其中很大一部分是由美工、设计人员、音频人员——也就是制作实际游戏资源的人、图形、3D模型、音效以及所有这些东西的人——制作的。你需要一种能够被理解的方式把所有这些东西带入你的游戏。除了如何编写图形程序这样的编程方面之外，这是一个很大的部分——资源管线是这些游戏引擎带来的一个巨大的、开箱即用的东西。是的。
+
+57
+00:27:01.000 --> 00:27:20.000
+I've seen that in some of those videos. And you have to typically pay for assets unless if they're like a part of the free assets. Right. Yeah. I mean, you can pay or get free assets. But also, if you're working in a game team and you're working with artists, they need a way to, they're making assets. They need a way to bring them to. Oh, right, right.
+我在其中一些视频中看到过。而且你通常必须为资源付费，除非它们是免费资源的一部分。对。是的。我的意思是，你可以付费或获取免费资源。但同时，如果你在一个游戏团队工作，并且与美工合作，他们需要一种方式，他们正在制作资源。他们需要一种方式把它们带到……哦，对了，对了。
+
+58
+00:27:20.000 --> 00:27:56.000
+Yeah. You have to design the tools for them to design assets so that you can have a library of them. Yeah, you have to bridge the gap between, you know, I don't even know what tools artists use these days. But, you know, whatever 3D modeling package produces some output, use some format, you know, you've got vertex data, you've got texture data. you've got, you know, lighting data. You need to bring that into the engine and be able to render it. Well, to wrap up this, well, we'll probably be two-part series, and then maybe we can talk about something else.
+是的。你必须为他们设计工具来设计资源，这样你才能拥有一个资源库。是的，你必须弥合……之间（的鸿沟），我甚至不知道现在美工使用什么工具。但是，无论什么3D建模软件包产生某种输出，使用某种格式，你知道，你有顶点数据，你有纹理数据，你有光照数据。你需要把这些带进引擎中并能够渲染它。好吧，为了结束这一期——好吧，这可能是一个两部分系列的节目，然后也许我们可以谈谈别的事。
+
+59
+00:27:56.000 --> 00:28:23.000
+What are your game recommendations of 2026? I'm not even sure if you're gaming these days anyways. And they don't need to be recent. They can be from, like, you know, a couple decades ago if you want. Well, you know, there are... I don't know that I can recommend. any recent games because I'm not up to date on what's, you know, like in the last, even the last five years, the number of, if you look at the graph of like how many games are released each
+你对 2026 年的游戏有什么推荐吗？我甚至不确定你现在是否还在玩游戏。而且它们不需要是最近的。如果你愿意，它们可以来自比如几十年前。嗯，你知道，有……我不知道我能不能推荐任何最近的游戏，因为我对最近的情况不是太了解——哪怕是过去五年内，如果你看看Steam上每年发布的游戏数量图表，它就像一根曲棍球棒一样。它是一条指数曲线。这有点荒谬。想想看真是太神奇了。所以从这个角度来看，我不知道。目前游戏产业的状况非常糟糕。真的吗？哦，是的。我的社交媒体动态全都是——因为我在游戏行业待了那么久，它们依然全都是游戏行业的人。在过去几年里袭击游戏行业的裁员潮，我要说，可能更久。但这似乎并没有减弱的迹象。
+
+60
+00:28:23.000 --> 00:29:01.000
+year on Steam, it's just like a hockey stick. It's, it's a sort of an exponential curve. It's kind of ridiculous. It's kind of amazing to think about. So from that point of view, I don't know. The games industry right now is in a really bad way. Really? Oh, yes. my social media feeds are full of, since I was in the games industry for so long, they're still full of game industry folks. And the layoffs that have been hitting the game industry for the last couple of years, I'm going to say, maybe more. But it doesn't seem to be abating.
+它似乎还在加速，游戏行业正处于一个相当糟糕的状况中，我为现在身处其中的人们感到难过。这是由某些特定因素驱动的吗？有几个因素，你知道的，我们可以去猜测。生成式AI是一个因素。另一个因素可能是疫情期间招聘狂潮的消退。第三个因素可能是游戏变得越来越……你知道，3A大作的预算实在太巨大了。我的意思是，我们讨论的是轻轻松松超过1亿美元。
+
+61
+00:29:01.000 --> 00:29:43.000
+It seems to be only accelerating games industry is a pretty bad way and I feel for folks in it right now. Is that driven by something in particular right now? There are several factors, you know, that we can speculate. Generative AI is one factor. Another factor would be perhaps come down from the hiring frenzy around the pandemic. A third factor could be that games are getting more and more, you know, triple A games are just have huge, huge budgets. I mean, we're talking over $100 million, easy.
+是的，我听到过一些关于《GTA 6》的传闻，它的GDP比一些疯狂数量的国家的GDP还要大。哦，是的。所以当你制作那样的游戏时，你真的会非常非常厌恶风险，对吧？这就是为什么，当你对自己说——《GTA 6》，对吧？它不是一款全新游戏。它是我们已经知道行之有效的公式的新版本。所以这就是目前几乎所有3A大作的现状，似乎如此。虽然有一个蓬勃发展的……就像我说的，Steam上发布的游戏数量一直在飙升
+
+62
+00:29:43.000 --> 00:30:18.000
+Yeah, I heard something about GTA-6 that it's got a GDP bigger than like some crazy number of countries. Oh, yeah. So when you're making games like that, you really are very, very risk-averse, right? Which is why, when you said to yourself, GTA-6, right? It's not a brand-new game. It's a new version of a formula we already know works. So this is the kind of thing that is AAA games almost entirely right now, it seems. There is a thriving, you know, like I said, number of games released on Steam just as going
+是的，我听说有关《GTA 6》的消息，它的国内生产总值（GDP）比很多国家的总和还要惊人。哦，是的。所以当你制作这样的游戏时，你确实会非常非常厌恶风险，对吧？这就是为什么当你对自己说《GTA 6》时，对吧？它不是一款全新的游戏。它是我们已知行之有效的公式的新版本。所以现在几乎所有的3A大作差不多都是这种类型。正如我所说，Steam上有数量相当可观的游戏正在发行
+
+63
+00:30:18.000 --> 00:31:05.000
+up and up and up. And that represents a kind of indie scene, I think. But, you know, games are changing a lot. Where the money is to be found, I don't know anymore. And a lot of folks are getting impacted by layoffs. you know, from, from jobs that 10 years ago seemed stable. Yeah. It makes me think about the movie industry and how a lot of film studios are just doing, you know, sequels, remakes, or preexisting, like, intellectual property, you know, book to movie kind of thing. And within, like, the movie space, people say that, like, these independent films, they don't get financed anymore in.
+不断上涨。我认为这代表了一种独立游戏圈。但是，你知道的，游戏正在发生很大变化。钱究竟在什么地方，我不再知道了。而且很多人都受到了裁员的影响，你知道的，从那些十年前看起来还很稳定的工作岗位上。这让我想到了电影行业，以及许多电影公司如何只是在制作续集、翻拍版，或者现有的知识产权，比如书改电影之类的。而在电影领域内，人们说这些独立电影，已经不再能获得资金支持了。
+
+64
+00:31:05.000 --> 00:31:43.000
+unless if you happen to be like a big name director who's proven that they've made a bunch of movies successfully and so they're willing to take a risk on you. But like back 20 years ago, 30 years ago, there was tons of movies that ended up being like classics that would like never get made today. Right. Well, and it's interesting to think about, you know, for some years, a couple of, you know, at least 10 years now, I've been wondering how the game industry would evolve in terms of structure. and when we look at the movie industry, you know, we can look back to the 40s. The 40s, 30s was the era of the studio, right?
+除非你恰好是一个大牌导演，证明过自己成功制作过一堆电影，所以他们才愿意在你身上冒个险。但就像20年前、30年前那样，有大量的电影最终成为了经典，而这些电影在今天根本不可能被拍出来。没错。而且思考这一点很有意思，你知道，多年来，至少已经有10年了，我一直在想游戏行业在结构上会如何演变。当我们审视电影行业时，你知道，我们可以回溯到40年代。40年代、30年代是制片厂的时代，对吧？
+
+65
+00:31:43.000 --> 00:32:15.000
+Where MGM had stars on payroll and you belonged to a studio, you know. And that completely changed. Nothing like that right now, now when you make a movie, you spin up a company to make the movie. You know, all of the people working in movies are unionized to a first approximation, right? Completely different. And, you know, for a while I thought, is this a potential way that it could play out in games? You know, like, until five years ago, we were still in the studio model for games.
+当时米高梅有签约明星，你属于某个制片厂，你知道的。而这完全改变了。现在根本没有那样的事了，现在当你拍电影时，你会成立一家公司来拍这部电影。你知道，从事电影工作的所有人按第一近似值来说都是加入工会的，对吧？完全不同。而且，你知道，有一段时间我认为，这会不会是游戏发展的一种潜在方式呢？你知道的，直到五年前，我们对游戏仍然采用制片厂模式。
+
+66
+00:32:15.000 --> 00:32:39.000
+Maybe that model is shifting now. Yeah, I've never thought about that. I guess time will tell. Anyways, you were about to recommend some stuff, but then you mentioned, yeah. Was I? Oh, well, you know, I don't know. I play old games. and I play games which anyone would recognize our classics a lot of the time.
+也许这种模式现在正在转变。是的，我从没想过这一点。我想时间会证明一切的。不管怎样，你刚才正要推荐一些东西，然后你提到了，对吧。我是吗？哦，好吧，你知道，我不知道。我玩老游戏。而且我经常玩那些任何人都会认为是经典的游戏。
+
+67
+00:32:39.000 --> 00:32:59.000
+Was Mario Golf on the Game Boy? Mario Golf on the Game Boy Keller is a great great game. I don't know. I don't know. You know, maybe you've never heard of that one particularly. Maybe 25% of our listeners, maybe more. Maybe all of our listeners are going, yes, I remember playing Mario Golf on the Game Boy. That was a great game. It depends what kind of games you like to play.
+Game Boy上的《马力欧高尔夫》吗？Game Boy上的《马力欧高尔夫》，Keller，真的是一款非常非常棒的游戏。我不知道。我不知道。你知道，也许你尤其没听说过那款。也许我们25%的听众，甚至更多，也许我们所有的听众都在想，是的，我记得在Game Boy上玩过《马力欧高尔夫》。那是个伟大的游戏。这取决于你喜欢玩什么类型的游戏。
+
+68
+00:32:59.000 --> 00:33:15.000
+You know, I like to play. I don't really play FPSs. I don't have the APMs to play RTSs these days. And neither do you, by the way. After at the age of 25, your APMs, too poor to be competitive. I don't think even back then,
+你知道，我喜欢玩。我其实不玩第一人称射击游戏。我现在的APM已经无法玩即时战略游戏了。顺便说一句，你也是。25岁之后，你的APM太差了，无法进行竞技。我不认为即使在当年...
+
+69
+00:33:15.000 --> 00:33:33.000
+because I really think you have to start playing video games at a young age to, like, develop that talent. And I was not allowed video games for a very long time. And, like, I tried to play Fortnite once or twice, actually more than once or twice, but usually, and I'm sure some of our listeners will relate,
+因为我真的觉得你必须在很小的时候就开始玩电子游戏，才能培养那种天赋。而我很久都不被允许玩电子游戏。而且，我尝试过一两次《堡垒不夜城》（Fortnite），实际上不止一两次，但通常，而且我相信我们的一些听众会有同感，
+
+70
+00:33:33.000 --> 00:33:56.000
+I would just go hide in a bush and see how far I could get, and I never won, but I couldn't even, like, build, you know, the ramps and the structure. Like, I couldn't, my fingers were not capable. I blame my parents. So it used to be an interesting, so an interesting observation, I always thought, and again, this is from maybe 15, 20 years ago, but it's still maybe it's true.
+我就会去躲在灌木丛里，看自己能走多远，而且我从来没赢过，但我甚至都不能，你知道的，建造坡道和建筑。就像我不能，我的手指做不到。我怪我的父母。所以这曾经是一个有趣的，一个有趣的观察，我一直以为，而且同样地，这可能是15、20年前的事了，但它可能仍然是真的。
+
+71
+00:33:56.000 --> 00:34:40.000
+RTS and FPS. Think of those as two genres, which we've been talking about. about, right? It's at a beginner, right? RTS seems like it's a strategy game, right? It seems like you have to think about it. It seems like it's a more cerebral kind of a game. And FPS seems like a Twitch game, right? Reactions are very, very important, right? As a beginner. At a competitive level, it's almost like those pictures reverse, right? TSs are all about going as fast as possible, making a resource engine spin up as quickly as possible, and reacting to the game. RTS at a very high level becomes much more, in a sense, of a Twitch game, right?
+即时战略（RTS）和第一人称射击（FPS）。把它们想象成我们一直在讨论的两种类型，对吧？作为一个初学者，对吧？RTS看起来像是一个策略游戏，对吧？看起来你得动脑筋思考。它似乎是一种更偏向脑力的游戏。而FPS看起来像是一个考验微操的游戏，对吧？反应速度非常非常重要，对吧？作为一个初学者。但在竞技水平上，这些特点几乎会反转，对吧？RTS的全部内容就是尽可能快地行动，让资源引擎尽可能快地运转，并对游戏做出反应。RTS在一个非常高的水平上，在某种意义上变得更像是一个微操游戏，对吧？
+
+72
+00:34:40.000 --> 00:35:13.000
+Contrast that FPS at a very high level becomes a much more strategic game. And it becomes about things like listening for the audio cues so you kind of can get some information about what your opponents are doing and where they are in the level. I never thought about that. That's very true. It's very true. I actually, I mean, a fun fact. One of my best friends from university was a competitive StarCraft player, and he was never professional, but he was good enough that he would get paid by professionals to train because a lot of the pros...
+相比之下，FPS在一个非常高的水平上变得更加注重策略的游戏。它变成了一些事情，比如倾听音频提示，这样你就可以获得一些关于你的对手在做什么以及他们在关卡中什么位置的信息。我从来没想过这一点。这非常真实。非常真实。实际上，我，一个有趣的事实。我大学时最好的朋友之一是一名竞技《星际争霸》玩家，他从来不是职业选手，但他足够优秀，职业选手会花钱请他去训练，因为很多职业选手...
+
+73
+00:35:13.000 --> 00:35:46.000
+Like a practice partner. Yeah, exactly. And they want people that have different strategies because on the competitive scene in tournaments, you play the same people, you get used to their strategies, but it's very hard to find a competitive player that you don't already. know their go-to strategies and whatnot and I don't know there's like different races or whatever you call them in Stargraft right anyways he he made money playing against people which is kind of cool I tend to play games these days that are firstly are comparatively short right I don't tend to
+就像一个陪练。对，完全正确。他们想要有不同策略的人，因为在锦标赛的竞技舞台上，你总是和同样的人对战，你习惯了他们的策略，但很难找到一个你还不知道其常用策略的竞技玩家。而且我不知道，在《星际争霸》里有不同的种族还是什么的，对吧？不管怎样，他通过和别人对战赚了钱，这挺酷的。这些天我倾向于玩的 Spiele 是首先，相对较短的游戏，对吧？我不太倾向于...
+
+74
+00:35:46.000 --> 00:36:28.000
+it it's going to take a lot for me to dive into a game which will require me to put in a hundred hours 200 hours. Right. The last big game I played was Tears of the Kingdom, which was fantastic. Legend of Zelda, by the way, if Tears of the Kingdom is not enough to give it to you. I've heard Legend of Zelda. I assume, yeah, that's the one with the, what do we call? It's the latest one in the Zelda franchise. Yeah, the cell shading. No, well, we can't remember, actually, but not all Zelda games are cell shaded. Okay. Right. But Tears of the Kingdom was really, really good. But that's the last sort of AAA game. That's the last AAA game I played.
+要让我沉浸在一个需要投入一百小时、两百小时的游戏中，这需要付出很大的代价。对。我玩的最后一款大型游戏是《王国之泪》，太棒了。顺便说一句，是《塞尔达传说》，如果《王国之泪》这个名字还不足以让你猜出来的话。我听说过《塞尔达传说》。我猜，是的，就是那个带有，我们叫它什么？这是塞尔达系列中最新的一款。对，那个渲染风格的。不，其实我们记不清了，但并不是所有的塞尔达游戏都是这种渲染风格的。好吧。对。但《王国之泪》真的非常非常好。但那是我玩的最后一款所谓的3A大作。那是我玩的最后一款3A大作。
+
+75
+00:36:28.000 --> 00:36:49.000
+And that was a couple of years ago now. So I tend to play the games which I can play, you know, over a weekend. Oh, Return of the Obra din. I played that one. That was a great game. Return of the Obra. Now, if you want to talk about graphics, you're going to get a shock when you look this up. No, speaking of graphics, all my monitors are frozen. I tried to open a new tab.
+那已经是几年前的事了。所以我倾向于玩那些我可以在一个周末就能通关的游戏。哦，《奥伯拉丁的回归》（Return of the Obra Dinn）。我玩过那个。那是个伟大的游戏。《奥伯拉丁的回归》。现在，如果你想谈论画面，当你查阅这个游戏时，你会大吃一惊的。不，说到画面，我所有的显示器都卡死了。我试图打开一个新标签页。
+
+76
+00:36:49.000 --> 00:37:07.000
+Oh, no. Big mistake. Maybe I should close this tab. The graphics guy. I'll look it up later. Although... So it's a game... So what's the pitch? The pitch I can give you is, um, insurance claims adjuster examines boat. What?
+噢，不。大错特错。也许我应该关掉这个标签页。图形专家。我稍后再查。虽然……所以这是一个游戏……那么它的宣传点是什么？我能给你的宣传点是，呃，保险理赔员检查一艘船。什么？
+
+77
+00:37:07.000 --> 00:37:24.000
+It doesn't sound like a great pitch for a game, is it? No. So it's the year... Oh, 1790. About that. I don't remember. It's the year 1790. The merchant ship, the Oberuddin, has returned from a voyage.
+这听起来不像是游戏的绝佳宣传点，对吧？没有。所以那是……哦，1790年。差不多那个时候。我不记得了。那是1790年。商船“奥伯拉丁号”从一次航行中归来。
+
+78
+00:37:24.000 --> 00:37:45.000
+and the ship is deserted. It's now sitting in Southampton Docks or wherever. You are an insurance claims adjuster. What? I guess insurance had just been invented at that point, actually. So you work for Lloyds of London or whoever. And it's your job to figure out what happened to this ship and what should the insurance payouts be, right?
+而且船上空无一人。它现在停在南安普顿码头还是什么地方。你是一名保险理赔员。什么？我想保险在那时其实刚刚被发明出来。所以你为劳合社（Lloyds of London）或诸如此类的机构工作。你的工作是弄清楚这艘船发生了什么事，以及保险理赔金额应该是多少，对吧？
+
+79
+00:37:45.000 --> 00:38:08.000
+So it's a game of exploration and solving mystery. Right? There's a mystery. The ship has returned. It had a crew of, of three dozen plus half a dozen passengers, however many, it's your job to figure out what was the fate of each one. What happened, such that this ship came back empty?
+所以这是一个关于探索和解谜的游戏。对吧？有一个谜团。这艘船回来了。它有一支由三十多人外加六名乘客组成的船员队伍，不管到底有多少人，你的工作是弄清楚每个人的命运。发生了什么，才导致这艘船空手而归？
+
+80
+00:38:08.000 --> 00:38:29.000
+And it's a great game. You know, you can play it over a few days, a weekend, not a real long game. It's maybe, you know, it's sort of somewhere between, somewhere around 15 hours of gameplay, maybe. Mm-hmm. And it's just really good. I enjoy these games which are like discovery,
+这是一个很棒的游戏。你知道，你可以在几天内，一个周末内通关，它不是一个真正意义上的超长游戏。它大概，你知道的，大概在15小时左右的游戏时长，也许吧。嗯。而且它真的很棒。我喜欢这种充满发现的游戏，
+
+81
+00:38:29.000 --> 00:38:53.000
+figuring out things. That's why I enjoyed The Witness. That's kind of like a scape roomy. Yeah, yeah, maybe. And talking of graphical style, you know, the Obra Din kind of pioneered a totally new graphical style. Some other games have since kind of copied it, but it's rendered amazingly in dithered monochrome.
+弄清楚各种事情。这就是为什么我喜欢《目击者》（The Witness）。那有点像密室逃脱游戏。对，对，也许吧。说到图形风格，“奥伯拉丁号”开创了一种全新的图形风格。从那以后，其他一些游戏也模仿了它，但它用抖动的单色进行了惊人的渲染。
+
+82
+00:38:53.000 --> 00:39:30.000
+Oh, wow. Wow. Okay, I did manage to successfully open a tab. Yeah, yeah. So it's a 3D world, but the rendering is quite different from more or less anything that we saw before. Wow, it kind of looks like some terminal-based game, except on steroids. This was not at all what I was expecting. Interesting. Well, if ever I have time, maybe I will try and play this game, and then we can have a return of the Oberdin. spoiler episode where we talk about this and you know I encourage listen I'm not saying I'm going to
+哦，哇。哇。好吧，我确实成功打开了一个标签页。对，对。所以它是一个3D世界，但它的渲染方式与我们之前看到的几乎所有东西都截然不同。哇，它看起来有点像某种终端机游戏，不过是加强版的。这完全不是我所期待的。有趣。好吧，如果我以后有时间，也许我会尝试玩一下这个游戏，然后我们可以做一期关于《奥伯拉丁的回归》的剧透节目，在节目中我们讨论这个，你知道的，我鼓励听众——我不是说我一定会这样做，
+
+83
+00:39:30.000 --> 00:40:01.000
+do this for sure but I encourage listeners now to go and play it and then if at any point I have time I will go and do this it does look like a very very interesting when you said it pioneered something in graphics this was not what I was expecting yeah what you're expecting right yeah interesting all right well we got a couple game recommendations out of you uh I was thinking the only The game that I play these days on the computer is Wingspan, which is just a board game. Oh, yeah, I know the board game. Yeah, yeah. It's just a digital version of the board game.
+我肯定会这样做，但我现在鼓励听众去玩一下，如果我什么时候有时间，我就会去做这件事。它看起来确实非常非常有趣。当你刚说它在图形上开创了某种先河时，这真不是我所预料到的。是的，和你预期的一样，对吧？是的，有趣。好吧，我们从你这里得到了几个游戏推荐，呃，我在想，我现在在电脑上玩的唯一游戏就是《展翅翱翔》（Wingspan），那只是一款桌游。哦，对，我知道那个桌游。对，对。这只是那款桌游的数字版。
+
+84
+00:40:01.000 --> 00:40:21.000
+I mean, the last game that I ever played to completion was Hogwarts Legacy, which was three or four years ago. And three or four years ago, you played it? Yeah, yeah. And I haven't touched it since. I wrapped it in like two days. I was in the top point one percent of the world. And that's why I can't. Laity tar.
+我的意思是，我玩到通关的最后一款游戏是《霍格沃茨之遗》，那是三四年前的事了。三四年前，你玩了它？对，对。从那以后我就没碰过它。我在大概两天内就通关了。我当时在全球排名前百分之零点一。这就是为什么我不能……莱蒂·塔（Laity tar）。
+
+85
+00:40:21.000 --> 00:40:37.000
+Yeah, that's why I can't have video games because my personality is too addictive. I've actually never played World of Warcraft. My mother... Yeah, I wouldn't start. Yeah, my mother didn't let me have video games, but she specifically said, I wasn't allowed a couple games.
+对，这就是为什么我不能玩电子游戏，因为我的性格太容易上瘾了。我其实从来没玩过《魔兽世界》。我母亲……对，我不会开始玩的。对，我母亲不让我玩电子游戏，但她明确表示，我不被允许玩某些特定的游戏。
+
+86
+00:40:37.000 --> 00:40:56.000
+I don't know how she knew what World of Warcraft was. I guess it was in the news. And I didn't actually even know what it was, and I went over to a kid's friend's house in high school, I think it was probably grade 9 or 10, and I saw what it was. and I was like, oh wow, like I understand. Like I would, my life would disappear as we know it, you know.
+我不知道她是怎么知道《魔兽世界》是什么的。我猜它上过新闻。我其实甚至不知道它是什么，我在高中时去过一个朋友家，我想大概是9年级或10年级，我看到了它是什么样子的。然后我就想，哦，哇，就像我明白了。我的生活会随之消失，如你所知，你知道的。
+
+87
+00:40:56.000 --> 00:41:24.000
+I was doing science fairs and math contests. All of that would have been gone because like the idea of, I mean, as people know, I love to climb leaderboards, city strides, whatever it is. If you give me a leaderboard, that's like the number one way to get me to do something, you know. If there was some list of people competing to do chores in this house, the problem is there's only two, so it's not a leaderboard. but if there was, you would have the cleanest house probably in the city.
+我当时在搞科学展和数学竞赛。所有这些都会消失，因为像……这个想法，正如大家所知，我喜欢爬排行榜，CityStrides，无论是什么。如果你给我一个排行榜，那绝对是让我去做某事的头号途径，你知道的。如果在这个家里有一个关于做家务的人的竞争列表，问题是这里只有两个人，所以它不是一个排行榜，但如果有的话，你可能会拥有这座城市里最干净的房子。
+
+88
+00:41:24.000 --> 00:41:48.000
+I'd be cleaning rooms that didn't need to be clean just to work my way up that leaderboard. What do you call it? You are the perfect victim of sort of the gamification strategy of everything. Oh, my God. You are absolutely, absolutely. Absolutely the target demographic. What was, yeah, so it was on a different episode, a guest recommended a book, which I won't remember off the top of my head, but I think, or it was a,
+我会去打扫那些根本不需要打扫的房间，只为了在那个排行榜上往上爬。你怎么称呼它？你是所有事物游戏化策略的完美受害者。天哪。你绝对是，绝对是。绝对是目标受众。什么是，是的，所以在另一集里，一位嘉宾推荐了一本书，我一下子记不起来了，但我想，或者它是一本，
+
+89
+00:41:48.000 --> 00:42:29.000
+like the theory of game design or something like the theory of fun something oh theory of fun for game design raff costa is it you'll know i won't i only heard about this book literally a couple days ago but he was saying that that that book even though he's not a game designer really influenced the way that he thinks about kind of designing a product that is engaging and gets people to come back not like in an unhealthy way but but yeah like i am the biggest which is why i can't like I don't let myself gamble. I don't let myself really play video games because, yeah, I think, well, that's a whole other topic. The gamblingification of society and how everything has got prediction market odds next to it.
+比如游戏设计理论之类的书，像《游戏设计趣味理论》（A Theory of Fun for Game Design）的拉夫·科斯特（Raph Koster），是吗？你会知道的，我不会。我 literalmente 几天前才听说这本书，但他说那本书即使他不是一个游戏设计者，也极大地影响了他对如何设计一个引人入胜并让用户回访的产品的思考方式，不是以一种不健康的方式，而是——但是是的，就像我是最大的——这就是为什么我不能，就像我不会让自己去赌博。我不会让自己真正去玩电子游戏，因为，是的，我觉得，好吧，那是另一个话题了。社会的赌博化，以及每件事物旁边都有预测市场的赔率。
+
+90
+00:42:29.000 --> 00:42:52.000
+It's very sad. We should talk in future because you work on algorithm libraries, right? You still work on that? Yeah, yeah. So in some way. I don't know which variant of that you work on right now. So we should talk about the data. design of the APIs for those kind of things because most of what I, a lot of what I do these days
+这非常悲哀。我们以后应该聊聊，因为你从事算法库的工作，对吧？你现在还在做那个吗？对，对。所以在某种程度上。我不知道你现在做的是其中的哪个变体。所以我们应该讨论数据的设计，针对这类事情的API设计，因为我所做的大部分工作，我现在的很多工作，
+
+91
+00:42:52.000 --> 00:42:57.000
+is API design. Be sure to check these show notes either in your podcast app or at ADSP the podcast.com for links to anything we mentioned in today's episode, as well as a link to a get-up discussion where you can leave thoughts, comments, and questions. Thanks for listening. We hope you enjoyed and have a great day. I am the anti-brace. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+都是API设计。请务必查看你的播客应用中的本集节目shownotes，或者访问 ADSP the podcast.com 获取本期节目中我们提到的任何内容的链接，以及一个可以让你留下想法、评论和问题的GitHub讨论链接。感谢收听。希望你喜欢，祝你有美好的一天。我是反者（anti-brace）。本集节目目前还没有评论。点击转写文本中的任意句子即可留下评论。

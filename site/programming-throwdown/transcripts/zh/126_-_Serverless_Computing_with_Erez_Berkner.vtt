@@ -1,0 +1,646 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:09.000
+Hey everybody. So, you know, a lot of projects that we're doing, you know, either in the spare time or even for your full time, you know, a lot of them require a lot of maintenance. And the maintenance and the overhead can actually really kill your project. It can drain your energy, suck away all the ambition that you had. And so I think, you know, it's really important to make things really fluid and really seamless, especially in the beginning, but even later on. So you're not kind of bogged down with old bugs from things you built a while ago. And so the biggest kind of maintenance headaches are maintaining, you know, as we talked about in the last episode, you know, maintaining your own database, you know, maintaining, you know, your own
+大家好。所以呢，你知道，我们正在做的很多项目，不管是业余时间做的，还是全职工作做的，你知道，其中很多项目都需要大量的维护。而维护和额外开销实际上真的会毁了你的项目。它会耗尽你的精力，吸干你曾经所有的雄心壮志。所以我觉得，你知道，让事情变得非常流畅和顺畅真的很重要，尤其是在开始的时候，甚至在后期也是如此。这样你就不会被以前写的代码里那些陈旧的Bug所拖累。因此，最大的维护头疼问题就是维护，正如我们在上一期节目中讨论的那样，维护你自己的数据库，维护你自己的
+
+2
+00:01:09.000 --> 00:02:01.000
+installation of all these libraries and these programs. And, you know, you have a cluster and then you have to add a new machine to the cluster. And all of that kind of really can suck kind of the fun out of a side project, or it can make even your day job kind of really difficult. So one of the ways that we've really taken this problem away from developers and made it just really beautiful, the developer experience is through serverless computing. We're going to really dive into what that means and how that works and kind of explain all of that. And I'm super happy that we have Erez Berkner here, who is a CEO of Lumigo, to here kind of really explain serverless computing and how to write these things, how to monitor them, how to test them, and how to build kind of really nice microarchitectures that you can rely on for a long time.
+所有这些库和程序的安装。而且，你知道，你有一个集群，然后你必须向集群添加一台新机器。所有这些真的会把副业的乐趣吸干，或者甚至会让你的日常工作变得非常困难。因此，我们真正为开发者消除这个痛点、让开发者体验变得非常棒的方法之一，就是通过无服务器计算。我们将深入探讨这意味着什么、它是如何运作的，并对此进行各种解释。我非常高兴Lumigo的首席执行官Erez Berkner今天能来到这里，为我们真正解释什么是无服务器计算，如何编写这些程序，如何监控它们，如何测试它们，以及如何构建你可以长期依赖的非常优秀的微架构。
+
+3
+00:02:01.000 --> 00:02:40.000
+So thanks for coming on the show, Erez. Hey, Justin. Hey, Patrick. Great to be here. Thank you for having me. Cool, cool. So before we dive all into serverless stuff, it's always good to kind of ask folks, you know, how are you doing with this COVID situation? And how has that affected Lumigo? And, you know, are you in the office? How has it changed your perspective on software development and running the company? I think I'm looking at this of the main concept of COVID, especially people working from
+所以谢谢你来到节目，Erez。嘿，Justin。嘿，Patrick。很高兴来到这里。谢谢你们邀请我。酷，酷。在我们深入探讨无服务器相关内容之前，通常都会想问问大家，你知道，你们的疫情情况怎么样？这对Lumigo有什么影响？而且，你知道，你在办公室办公吗？这如何改变了你对软件开发和运营公司的看法？我觉得我主要从两方面来看待疫情这个核心概念，尤其是人们在家
+
+4
+00:02:40.000 --> 00:03:15.000
+home in two different aspects. One is on our business and the services we provide. And that didn't change drastically on the one hand side, just because when you go serverless and you go to the cloud, you can in the modern environment connect work from home, work from office, work from anywhere in the world seamlessly. There's literally nothing there in the office that requires you to go within that network, within that perimeter. So that sense, the cloud and more specifically,
+办公这方面。一方面是对我们的业务和我们提供的服务的影响。一方面，这并没有发生巨大的改变，因为当你采用无服务器并转向云端时，在现代环境中，你可以无缝地连接在家办公、在办公室办公或在世界任何地方办公。办公室里确实没有任何东西要求你必须在该网络、该边界内部才能工作。所以从某种意义上说，云，更具体地说是
+
+5
+00:03:15.000 --> 00:03:55.000
+serverless really got our customers really ready for working from home, working remotely. So it's really, really like easy transition that factor on the other front we see covet pushes organization to try many new things for reducing cost for being more efficient and that's a interesting drive that we're seeing in some organization toward let's try out things that can take us to go five weeks better just because we need to be more efficient now in days where business is changing.
+无服务器，真的让我们的客户为在家办公、远程办公做好了充分准备。所以这真的是一个非常非常容易过渡的因素。在另一方面，我们看到疫情促使组织尝试许多新事物，以降低成本、提高效率，这是我们在一些组织中看到的有趣的驱动力，促使他们去“尝试那些能让我们提升5%的事情”，仅仅是因为在业务瞬息万变的今天，我们需要提高效率。
+
+6
+00:03:55.000 --> 00:04:31.000
+So you cannot attribute that completely to COVID, but you see a drastic adoption in the last couple of years in really modern technology, people are there to try more things out, especially when it's around cost saving. And that's one point probably of Sarah that we'll talk about. So that's on the business, on our company, we are working completely flexible with people that come into the office, working from home. Currently, it's completely open to people they feel comfortable with. That makes sense.
+所以你不能完全把这归因于疫情，但你在过去几年里确实看到了对真正现代技术的剧烈采用，人们愿意尝试更多的事情，特别是当它围绕着成本节约时。这也是Sarah可能会谈到的一个点。所以这是关于业务和我们公司的，我们采用完全灵活的工作方式，有去办公室办公的人，也有在家办公的人。目前，这完全对那些觉得舒适的人开放。这很合乎情理。
+
+7
+00:04:31.000 --> 00:05:18.000
+Yeah. My neighbor actually is in Marcom, in marketing and communications. And his job was massively affected compared to mine in the sense that he was going to a lot of events and he was meeting with clients and, you know, all of that became virtual. And that was a really big paradigm shift. And I think they're still trying to figure out how to do things like CES virtually, like how to do that well, where you could serendipitously bump into somebody when it's a virtual conference, right? And so there's no physical space. And so, yeah, I feel like that is really where we're going to have to see just massive shift in how people go around working. So I think, yeah, like visiting
+是的。我的邻居其实是在Marcom工作，也就是市场营销和传讯部门。与我相比，他的工作受到了巨大的影响，因为他要去参加很多活动，要见客户，你知道，所有这些都变成了虚拟的。这是一个非常大的范式转变。而且我认为他们仍在摸索如何把像CES这样的活动办好，比如如何把它办好，在虚拟会议中，你如何能偶然碰到某个人，对吧？因为没有物理空间。所以，是的，我觉得这确实是我们必须看到人们的工作方式发生巨大转变的地方。所以我想，是的，比如拜访
+
+8
+00:05:18.000 --> 00:05:59.000
+clients, I would imagine is really difficult right now. It's probably the biggest change. For sure. And I think that, you know, I think that this is impacting us as Lumigo a bit less because we are very much self-serve, developer-led company. So we didn't really visit our customers prior to COVID. Our customers didn't want us to visit them. They just wanted to do their thing. So yeah, so it was always really like easy, hey, connect, try, get value, move on. That's kind of the type I think that we're seeing that... And me as a developer, I love,
+客户，我想现在真的很困难。这可能是最大的变化。确实如此。而且我认为，你知道，这其实对我们Lumigo的影响要小一些，因为我们是一个非常自助式的、由开发者主导的公司。所以我们在疫情之前其实并没有去拜访我们的客户。我们的客户也不希望我们去拜访他们。他们只是想做他们自己的事。所以，是的，所以它一直都是非常轻松的，嘿，连接，尝试，获得价值，继续前进。我认为我们看到的那种类型……而作为一名开发者，我喜欢，
+
+9
+00:05:59.000 --> 00:06:27.000
+I don't want to spend time with a specific meeting in the office about a specific tool. If it works, I want to use it and I want to continue. So on that sense, I think the type of companies that are more come for a meeting in the office and meet everybody and start a big POC, that would really change their sales motion. I think a bit less on more than modern self-serve, bottom-up developer-led companies. Yeah, that makes sense. Totally makes sense. Cool. modern, self-serve, bottom-up, developer-led companies. Yeah, that makes sense. Totally makes sense.
+我不想花时间在办公室里开一个关于某个特定工具的专属会议。如果它好用，我想用它，而且我想继续用下去。所以在某种意义上，我认为那些更习惯于来办公室开会、见所有人并启动大型POC（概念验证）的公司，他们的销售模式真的会改变。对于那些更现代的、自助式的、自下而上的、由开发者主导的公司来说，这种影响会小一些。是的，这说得通。完全说得通。酷。现代的、自助式的、自下而上的、由开发者主导的公司。是的，这说得通。完全说得通。
+
+10
+00:06:27.000 --> 00:07:25.000
+Cool. So why don't you kind of give us some background about what kind of path led you to start Lumigo and kind of where that journey all started? Yeah, so I'll start by saying that I'm a developer by heart, but I started 20 years ago, approximately. My first role was at a company called Checkpoint, a cybersecurity company. And as time went by, I got more and more into the cloud business and the cloud security product and learned more about what cloud has to offer that was you know 2010 all the way to 2015 and 2016 is where you know i started to see from you know from within checkpoint this new paradigm of development emerging emerges mostly around event-driven architecture where you want
+酷。那么，你能不能给我们讲讲是什么样的经历促使你创立了Lumigo，以及这段旅程是如何开始的？好的，那我先说，我内心是一名开发者，但我大约在20岁时开始编程。我的第一份工作是在一家名为Checkpoint的公司，一家网络安全公司。随着时间的推移，我越来越多地接触到云计算业务和云安全产品，并更多地了解了云计算所能提供的东西。那是你知道的2010年一直到2015年，而在2016年，你知道，我开始从Checkpoint内部看到这种新兴的开发新范式。它主要围绕事件驱动架构，你希望
+
+11
+00:07:25.000 --> 00:08:11.000
+to have you know decouple more and more of the services about micro services and 2016 is where I got to know serverless very much from customers that you know we're ahead of the curve and in understanding that serverless is is allowing them to move much faster in development, in cost saving, and how do we do serverless, and specifically with Check Point, how do we secure serverless? And got to try and to play and later on to build with serverless. And honestly, I got really, really excited. I got excited and I got I fell in love with the concept of it's so easy to get started to get product to the market
+拥有，你知道，将越来越多的关于微服务的服务进行解耦。2016年，我通过那些走在时代前沿的客户真正了解了无服务器，他们理解到无服务器能让他们在开发和成本节约方面移动得更快，我们如何做到无服务器，特别是对于Check Point，我们如何保护无服务器？我开始尝试、玩转并在后来用无服务器进行构建。老实说，我变得非常非常兴奋。我感到兴奋，我爱上了这种概念：开始一个项目并把产品推向市场是如此容易，
+
+12
+00:08:11.000 --> 00:08:59.000
+and I decided that this is one of the main point that we want to I want to understand better and I learned that there are a lot of organizations, a lot of developers out there that are architects that think the same, that really believe that this is the right approach. I think you mentioned at the beginning, Jason, don't build it and don't do it yourself, but consume one more of it. You gave the example of databases. And it really makes sense. And then at the same time, I started hearing about the challenges in those environments. What is hindering the adoption? Why don't we go serverless? It makes sense. It's so, it's really, it's fun. And you get things done really fast, but we cannot do it because. And
+我决定这是我们想要——我想要更好地理解的主要方向之一。我了解到有很多组织，外面有很多开发者或架构师也有同感，他们真的相信这是正确的方法。我想你一开始提到过，Jason，不要自己去构建，不要自己去做，而是去消费更多的东西。你举了数据库的例子。这真的很合理。然后与此同时，我开始听到这些环境中的挑战。是什么在阻碍采用？为什么我们不用无服务器？这很合理。而且它真的很，真的很有趣。你能非常快地把事情搞定，但我们做不到，因为。然后
+
+13
+00:08:59.000 --> 00:09:24.000
+then you hear about monitoring and about debugging and the tools that are there are not sufficient. The ecosystem is not mature enough. And that's really where myself and Aviad Mor, who is my co-founder and CTO, who were with me in this whole journey that I just described, set out to help the community adopt serverless and remove the barriers. And that's how we started Lumigo
+你就会听到关于监控和调试的事情，现有的工具还不够。生态系统还不够成熟。这正是我和我的联合创始人兼CTO Aviad Mor（他陪我经历了刚才描述的整个旅程）着手帮助社区采用无服务器并消除障碍的原因。这就是我们创立Lumigo的原因，
+
+14
+00:09:24.000 --> 00:09:40.000
+and went into observability monitoring, debugging spaces of serverless. Got it. And so I see, so you're at Checkpoint. And so Checkpoint was, you started building serverless or you were just working with other people who had serverless? Somehow you got a kind of a lot of exposure
+并进入了无服务器的可观测性、监控和调试领域。明白了。所以我想，你在Checkpoint工作。那么Checkpoint是，你开始构建无服务器，还是你只是和使用无服务器其他人一起工作？不知怎么的，你在Checkpoint
+
+15
+00:09:40.000 --> 00:09:59.000
+to it at Checkpoint. Yeah, it was actually from two ways. One was from Checkpoint customers. I was heading the cloud security business of Checkpoint. And customers came and said, okay, Checkpoint, you're a security vendor. You invented the firewall. How do we secure serverless?
+对它有了很多的接触。是的，其实是通过两个途径。一个是来自Checkpoint的客户。我当时负责Checkpoint的云安全业务。客户走来说，好了，Checkpoint，你是一家安全厂商。你发明了防火墙，我们该如何保护无服务器？
+
+16
+00:09:59.000 --> 00:10:50.000
+That was interesting. This is where the initial hit was. And later on, my development teams also had serverless and used you know the first time i heard serverless i honestly didn't know what to think because i thought well it's not running you know on your house machine it's not running on this laptop so so it has to run somewhere on a server and so it didn't really you know the name actually really beguiles what it really is and so so how would you describe serverless to somebody? You know, it's funny because there is a known poster
+这很有意思。这就是最初的接触点。后来，我的开发团队也有无服务器项目，并且使用……你知道，我第一次听到“无服务器”这个词时，老实说我不知道该作何感想，因为我想，嗯，它没有在你的主机上运行，它没有在这台笔记本电脑上运行，所以它一定是在某个地方的服务器上运行。所以它并没有真正，你知道这个名字其实真的很迷惑它的本质是什么。所以，你会怎么向别人描述无服务器呢？你知道，这很有趣，因为在无服务器社区里有一张广为人知的海报，
+
+17
+00:10:50.000 --> 00:11:12.000
+in the serverless community saying, you know, there are servers in serverless. Yeah, right. So absolutely. So there are servers, it's just not your server. Maybe that's a bit more accurate. It's somebody else who's in charge of those servers. I'll give you my, you know, serverless is very dynamic.
+上面写着，你知道，无服务器里面其实是有服务器的。对吧？所以绝对是的。所以有服务器，只是那不是你的服务器。也许这样说更准确一点。是别人在管理那些服务器。我来告诉你我的……无服务器是非常动态的。
+
+18
+00:11:12.000 --> 00:12:08.000
+And I really want to say it's even kind of like used as a marketing term in many senses today. Because it evolved over time and some people have different definitions. But I want to keep this very, very simple in the way I define serverless. And I define serverless, or the main thing that I see as serverless providing organizations is the fact that you don't need to care about servers. So you get the example of a database where you need to deploy, have a physical or virtual server. And on top of that, deploy an operating system and application and maintain it and patch it and concern about high availability and scaling. And all of this stuff, if you think about it, most of this is commodity. And probably me as a company,
+而且我真的想说，在很多意义上，它今天甚至有点像被用作一个营销术语。因为它随着时间演变，有些人有不同的定义。但我希望在我定义无服务器时，保持非常非常简单。我所定义的无服务器，或者我认为无服务器为组织提供的最主要的事情是，你不需要关心服务器。所以你得到了数据库的例子，你需要部署、拥有一个物理或虚拟服务器。在此之上，部署操作系统和应用程序，并对其进行维护、打补丁，还要关心高可用性和扩展性。如果你仔细想想，所有这些东西，大部分都是商品化的。可能作为一家公司，
+
+19
+00:12:08.000 --> 00:12:46.000
+that's not my business. I'm not doing that best in the world. And if I could offload that to somebody else, because it's commodity, it's generic, I could focus on what makes my business unique and what makes my business logic and service unique. And this is really much the evolution of the cloud. You took your on-premise, don't buy physical servers, rent them from the cloud provider because they can do it better than you. You're not the expert in running servers. Same goes to operating system and running the application and databases over there. So you're not the expert in that.
+这不是我的核心业务。我不是世界上做得最好的。如果我可以把这个外包给别人，因为它是商品化的、通用的，我就可以专注于让我的业务独一无二的东西，以及让我的业务逻辑和服务器独一无二的东西。这其实就是云计算的演变。你把你的本地部署（on-premise）抛在脑后——不要买物理服务器，从云服务商那里租，因为他们比你做得更好。你不是运行服务器的专家。操作系统和运行在那上面的应用程序以及数据库也是同理。所以你不是那方面的专家。
+
+20
+00:12:46.000 --> 00:13:26.000
+So if you are in that mindset, that's really the next evolutionary step. And my definition of serverless is you don't use, maintain, deploy, patch servers. You consume the service. So if you think about it, my why definition is everything today that is as a service is classified as a serverless. And maybe the most known are function as a service, or lambdas, Azure functions, Google Cloud functions, which you can just write a couple of lines of code, upload them to the cloud, and they run.
+所以如果你持有这种心态，这其实就是演变的下一步。我对无服务器的定义是：你不使用、不维护、不部署、不打补丁服务器。你直接消费服务。所以如果你仔细想想，我广义的定义是，今天所有即服务（as a service）的东西都被归类为无服务器。也许最广为人知的是函数即服务（FaaS），或者Lambda、Azure函数、Google Cloud函数，你只需要写几行代码，把它们上传到云端，它们就会运行。
+
+21
+00:13:26.000 --> 00:14:13.000
+You don't know where, you don't know on which server, you don't know if you need more firepower, you get it automatically. You don't need to care about autoscaling or all these other big words that people have nightmares about. Yeah, autoscaling is a huge mess. We have an issue right now where there's spot instances, where a spot instance means you get this machine, but Amazon or whoever can take it away at any moment. And so you get it, you can do as much work as you can really quickly, and then they take it away. But they're really, really cheap, dirt cheap. And then there's reserved instances where Amazon says, we're going to guarantee you 99, a million nines availability on this machine. And so you want to save money, but you also want
+你不知道在哪里，你不知道在哪台服务器上，你不知道是否需要更多的计算能力，它是自动获得的。你不需要关心自动扩展（autoscaling）或人们做噩梦时的其他这些大词。是的，自动扩展是一个巨大的烂摊子。我们现在有一个问题，就是有竞价实例（spot instances），竞价实例意味着你得到了这台机器，但亚马逊或任何其他人可以随时把它拿走。所以你得到了它，你可以尽可能快地完成工作，然后他们把它拿走。但它们真的非常非常便宜，贱卖。然后还有预留实例（reserved instances），亚马逊会说，我们保证这台机器有99%、数百万个9的可用性。所以你既想省钱，又希望
+
+22
+00:14:13.000 --> 00:14:36.000
+your things to run. And so we've been struggling with auto-scaling so much. Anything that keeps you from having to deal with that, I can tell you firsthand is a huge benefit. Jason, it's not just you. I just want to say. Yeah, all right, good. So, yeah, so, you know, it's functional as a service, it's databases as a service, you know, DynamoDB,
+你的程序能够运行。因此，我们一直在与自动扩展做斗争。我可以第一手告诉你，任何能让你免于处理这些事情的东西，都是一个巨大的福利。Jason，不只是你。我只是想说。好吧，很好。所以，你知道，这是函数即服务、数据库即服务，比如DynamoDB、
+
+23
+00:14:36.000 --> 00:14:53.000
+Snowflake, it's Kafka as a service, like Q, and even Payment as a service, Stripe, PayPal with APIs. All of these are what I define as serverless because you don't maintain a server, you consume them via API, they auto scale without you worrying about.
+Snowflake，还有Kafka即服务，比如消息队列，甚至支付即服务，带API的Stripe、PayPal。所有这些都是我所定义的无服务器，因为你不需要维护服务器，你通过API消费它们，它们会自动扩展而无需你担心。
+
+24
+00:14:53.000 --> 00:15:17.000
+And today a serverless architecture basically allows you to use all these Lego pieces and connect them together and you have an application running within days if you have the right construct. And this is really the big promise of serverless. Cool. Yeah, that is a great, great explanation. Yeah, I mean, I'm sure a lot of folks out there
+而今天，无服务器架构基本上允许你使用所有这些积木块并将它们连接在一起，如果你有正确的结构，你可以在几天内让一个应用程序运行起来。这真的是无服务器的伟大承诺。酷。是的，这是一个非常非常棒的解释。是的，我的意思是，我确信外面有很多朋友
+
+25
+00:15:17.000 --> 00:15:43.000
+have had to deal with compatibility issues. You know, like, you know, you install Python or Python comes with, you know, Debian or Ubuntu. But it's like, oh, no, you need Python 3 to run this program. So it's like, OK, now I have to go download Python 3. And then and then, you know, maybe a year later or a few months later, you want to try this other program. It's like, oh, this other program requires Python 3.8. But the last one doesn't work on 3.8.
+都不得不处理兼容性问题。你知道，就像，你安装了Python，或者Debian或Ubuntu自带了Python。但结果是，哦，不，你需要Python 3来运行这个程序。所以就像，好吧，现在我必须去下载Python 3。然后，你知道，可能一年后或几个月后，你想尝试另一个程序。就像，哦，这个程序需要Python 3.8。但上一个程序在3.8上无法运行。
+
+26
+00:15:43.000 --> 00:16:13.000
+And now you have incompatibilities. And it just becomes a huge mess, right? And so you're using things like virtual env and Python or Docker, which is more general, you know, you containerize these things so that you could have, you know, Python 3.7 and Python 3.8 running at the same time. And you don't have to worry about them stepping on each other or keeping separate directories for everything and sandboxing everything yourself. And then to your point, once you have these sandboxes, these packages, why even run them on your machine?
+现在你遇到了不兼容问题。这简直成了一团乱麻，对吧？所以你正在使用诸如virtual env和Python或更通用的Docker之类的方法，你把这些东西容器化，这样你就可以让Python 3.7和Python 3.8同时运行。你不用担心它们互相踩脚，或者为所有东西保持独立的目录并自己做沙盒。然后正如你所说，一旦你有了这些沙盒、这些包，为什么还要在你的机器上运行它们呢？
+
+27
+00:16:13.000 --> 00:16:44.000
+You can run them anywhere. Exactly. And why scale them? What's actually happening in serverless is, as you mentioned, there are servers, but Microsoft, Amazon, Google, they're actually the one that's monitoring this automatically. And when they identify there is higher demand, they will allocate additional servers or reduce the servers really precisely to what you need. It's not a server that comes spinning up. It's a specific function within the server.
+你可以在任何地方运行它们。完全正确。为什么要扩展它们？无服务器中实际发生的事情是，正如你所提到的，这里确实有服务器，但微软、亚马逊、谷歌，实际上是他们在自动监控这一点。当他们发现需求增加时，他们会分配额外的服务器，或者极其精准地将服务器缩减到你需要的水平。这不是一个启动起来的整个服务器。它是服务器内的一个特定函数。
+
+28
+00:16:44.000 --> 00:17:50.000
+So you can get really granular to what you need. And that's the other point of, you know, you get what you need, you pay for what you need in service and binary. Yeah, that makes sense. So some of the things are, you know, I would say somewhat intuitive. So for example, MySQL, you know, Amazon has RDS, you know, they'll handle MySQL for you. But, you know, at that level of granularity, you're still allocating individual machines. It's just that Amazon is handling the MySQL installation and updates and all of that. But you still have to go and ask Amazon, I want this machine, I want that machine. And it's running MySQL, which is not your code, right? So Lambda, I think, is another level of complexity for folks. I think it's really, you know, it's hard to wrap your head around. You know, I have this Python file on my machine that's running on an installation on my machine, on a Westworld machine. And somehow I have to sort of teleport this into the cloud and how do i do that with dependencies and everything else and so
+所以你可以针对你的需求做到非常细粒度。这就是另一个重点，你知道，你在无服务中得到你需要的东西，为你需要的东西付费。是的，这说得通。所以有些事情，我会说是有点直观的。例如，MySQL，你知道，亚马逊有RDS，他们会为你处理MySQL。但是，在那个粒度级别上，你仍然在分配单个机器。只是亚马逊在处理MySQL的安装、更新和所有这些。但你仍然必须去问亚马逊，我想要这台机器，我想要那台机器。而且它运行的是MySQL，那不是你的代码，对吧？所以Lambda，我认为对人们来说是另一个复杂性级别。我认为这真的很，很难让人理解。你知道，我的机器上有这个Python文件，它在我机器上的某个安装中运行，在一台本地机器上。而我不知何故必须把这个东西“传送”到云端，我该如何处理依赖关系和其他所有事情呢？
+
+29
+00:17:50.000 --> 00:18:30.000
+yeah if you could just kind of explain a little bit like you know now lambda does other things too i think it does javascript it does you know i think anything you can run in docker and so how do people sort of like take what they're doing that runs, works on their laptop and sort of teleport that to Lambda? Like, how do they do that efficiently? That's a great question. I want to start by saying it's not there's no magic over here. Usually the process of taking something just from my laptop or my existing application and moving it to serverless requires a different line of thought because serverless is really about microservices. You know, we talked about the Lego pieces.
+所以，是的，如果你能稍微解释一下，比如，现在Lambda也做其他事情了，我想它支持JavaScript，我想它支持任何你能在Docker中运行的东西。那么人们是如何把他们在笔记本电脑上运行、能工作的东西“传送”到Lambda的呢？他们是如何高效做到这一点的？这是一个很好的问题。我想先说，这里没有什么魔法。通常，把某个东西从我的笔记本电脑或现有应用程序直接拿到并转移到无服务器的过程，需要一种不同的思维方式，因为无服务器完全是关于微服务的。你知道，我们讨论过积木块。
+
+30
+00:18:30.000 --> 00:19:17.000
+So you can no longer have a VM that has a database and, you know, some cache and some code and all of that in the same VM or it's breaking down to DynamoDB and Redis and Lambda, and it forces you to adopt microservices. Some call it nanoservices today just because of the number of services. So if you have a big monolith, moving to microservices and serverless requires work, requires mindset shift. Once you get there, you map. Which is very healthy, I would say, in an architectural view. You decouple the different business logic and the point that you have.
+所以你不能再拥有一台虚拟机，它上面有数据库、一些缓存和一些代码，所有这些都在同一台虚拟机里，或者它被拆解为DynamoDB、Redis和Lambda，它迫使你采用微服务。现在有些人因为服务的数量而称之为毫服务（nanoservices）。所以如果你有一个巨大的单体应用，转向微服务和无服务器需要工作，需要思维模式的转变。一旦你到了那里，你就会进行映射。从架构的角度来看，我会说这非常健康。你将不同的业务逻辑和你的关注点解耦。
+
+31
+00:19:17.000 --> 00:19:40.000
+And then you say, okay, this is my storage and my data access. And this is where I'll put it. And it will be DynamoDB. We'll front it by a Lambda that will actually do the data crunching or transformation that is needed. And we'll add, you know, queues in the middle just to make sure there are no dependencies, and we decouple that.
+然后你说，好的，这是我的存储和数据访问。这就是我将放置它的地方。它将是DynamoDB。我们会在前面放一个Lambda，它将实际进行所需的数据处理或转换。我们会在中间添加，你知道，队列，只是为了确保没有依赖关系，我们将它们解耦。
+
+32
+00:19:40.000 --> 00:20:01.000
+And at the end of the day, you'll take all of this, you'll upload that to the cloud, and you fire a request request and it will run. But I think that to your question, if you have just like, you know, 100 lines of code, taking them from the laptop to a Lambda, for example, it's super simple. It's literally like 20 minutes to get this hiring.
+归根结底，你将获取所有这些，将其上传到云端，然后触发一个请求，它就会运行。但我认为对于你的问题，如果你只有，你知道，100行代码，把它们从笔记本电脑拿到Lambda，例如，超级简单。让它运行起来简直只需要20分钟。
+
+33
+00:20:01.000 --> 00:20:31.000
+You put the code out there in AWS console and you hit run. If you're talking about a monolith, that requires more decoupling. Yeah, that makes sense. So what do you think have been sort of the, like, what are some interesting stories or interesting challenges you've faced or seen other companies face when they go to serverless, especially companies that have already built something that might be like a monolith architecture. What are some really interesting challenges you found? Yeah, so I think, you know, I think in general,
+你把代码放到AWS控制台里，然后点击运行。如果你说的是一个单体应用，这就需要更多的解耦。是的，这说得通。那么你认为有哪些，比如，当它们转向无服务器时，你面临过或看到其他公司面临过哪些有趣的故事或有趣的挑战，特别是那些已经构建了可能是单体架构的公司的公司？你发现了哪些非常有趣的挑战？是的，所以我认为，你知道，总的来说，
+
+34
+00:20:31.000 --> 00:21:12.000
+and that's a problem of, I think, everybody today. Everybody want to do, you know, microservices, serverless Kubernetes, you choose it, but everybody's talking about that. In reality, getting out of the monolith is really hard extremely hard not because of the architectural pain because they're you know there's always something more important more critical and it takes time it's refactoring so we see a lot a lot of new projects you know they have they say okay we have the legacy. Legacy will continue and we'll break it bit by bit. And that's one approach, by the way. Let's take this part
+这也是我认为今天所有人的问题。每个人都想做，你知道，微服务、无服务器、Kubernetes，你挑吧，但每个人都在谈论这个。实际上，摆脱单体应用真的很难，极其难，不是因为架构上的痛苦，因为他们，你知道，总是有更重要、更关键的事情，而且这需要时间，需要重构。所以我们看到很多很多新项目，你知道，他们说，好吧，我们有遗留系统。遗留系统将继续存在，我们将一点一点地把它拆解。顺便说一句，这也是一种方法。让我们把这部分
+
+35
+00:21:12.000 --> 00:21:45.000
+and tear it off and make this serverless and this part and gradually doing that. But we see a lot of new projects that are born to microservice, born to serverless, and a lot of startups starting up as serverless. So that would be the most common use case today. Yeah, that makes sense. Totally makes sense. Yeah, I think one of the challenges in terms of the paradigm is that you don't have something that's available 24-7, right?
+剥离出来，把它变成无服务器的，再把那部分剥离出来，逐渐地这样做。但我们也看到很多新项目一出生就是微服务、一出生就是无服务器，很多初创公司一开始就是无服务器的。所以这将是今天最常见的用例。是的，这说得通。完全说得通。是的，我认为在范式方面的一个挑战是，你没有一个24小时7天全天候运行的东西，对吧？
+
+36
+00:21:45.000 --> 00:22:20.000
+In other words, you don't have a machine in the cloud that can just sit there idle, but it's ready at any moment. And so you really have to think in terms of signals and events and triggers, and you have to think in this way. I mean, personally, like one of the challenges I saw in the beginning was there was something that I wanted every day around midnight to do this really big computation. And like lambdas are designed to do kind of relatively small things. They're not designed to wake up every day and do something that takes two hours.
+换句话说，你在云里没有一台可以静静呆在那里但随时准备响应的机器。所以你真的必须用信号、事件和触发器的角度去思考，你必须以这种方式思考。就我个人而言，比如我刚开始时面临的一个挑战是，我希望每天午夜左右做这个非常大的计算。而Lambda的设计初衷是做一些相对较小的事情。它们不是为了每天醒来做一个需要两个小时的事情而设计的。
+
+37
+00:22:20.000 --> 00:23:07.000
+Right. And so what I ended up having to do was to wake up, you know, at midnight, decide what I want to do, which you can do pretty quickly and then create a bunch of messages. They have this thing in Amazon called SQS, like a queuing system, you know, queue up a bunch of these messages of all these little work package descriptions and then like a whole bunch of lambdas will just start picking things off of that queue until it's empty and you know any one item on the queue could be done in a in a minute or two and so that actually required a really big refactoring because i used to just say okay it's midnight you know wake up like you used to have a cron uh you know something in cron tab that just wakes up this Python
+对吧。所以我最终不得不做的是，在午夜醒来，决定我想做什么（你可以很快地完成这一步），然后创建一堆消息。他们在亚马逊有一个叫做SQS的东西，就像一个排队系统，你知道，将所有这些小工作包描述的消息排成队列，然后一大堆Lambda就会开始从该队列中挑选东西，直到队列为空。你知道队列上的任何一个项目都可以在一分钟或两分钟内完成。所以这实际上需要进行非常大的重构，因为我过去常常只是说，好吧，现在是午夜，你知道，醒来，就像你以前在cron中有一个，你知道，在cron tab中的某个东西，它只是唤醒这个Python
+
+38
+00:23:07.000 --> 00:23:39.000
+program. And then, you know, Patrick and I used to work together at Lockheed and, you know, I write research code, Patrick writes real code, right? So my research code would spin up and it's just one giant Python file and it would run for, you know, two hours and something and it would stop. And so, you know, and so that ended up being a really big change. But when I was done with that change, I was so much happier with the result because the two hour thing, you know, would crash sometimes. And if it crashed at one point nine hours, that's super frustrating.
+程序。然后，你知道，帕特里克和我以前在洛克希德马丁公司一起工作，你知道，我写研究代码，帕特里克写真正的代码，对吧？所以我的研究代码会启动，它只是一个巨大的Python文件，它会运行，你知道，两个多小时，然后它会停止。所以，你知道，所以这最终成了一个非常大的改变。但当我完成这个改变后，我对结果感到高兴得多，因为那个两小时的任务有时会崩溃。如果它在1.9小时的时候崩溃了，那就超级令人沮丧。
+
+39
+00:23:39.000 --> 00:24:27.000
+Right. And so this, you know, you farm this out to a bunch of lambdas. And even if, you know, what would be the last item in my database, if that would actually crash, it actually doesn't matter because I had factorized it down. And the other, you know, 1.9 hours that that work is committed, and I just have to debug the part that failed. So this is similar to what we were talking about with Guillermo on Next.js. Some of these things can seem kind of opinionated. It's like, oh, why can my Lambda only run in five minutes, whatever the time that is. But actually, when you follow those sort of rules, which seem really rigid at first, what you end up with is actually something that's way more beautiful than when you started. And people who have made their entire life work
+对吧。所以这个，你把这个分派给一堆Lambda。而且即使，你知道，我数据库里的最后一个项目崩溃了，其实也没关系，因为我已经把它因子化（factorized）了。而那项工作的前1.9小时已经提交了，我只需要调试失败的那部分。这类似于我们和Guillermo在Next.js上谈论的内容。其中一些事情可能看起来有点固执己见（opinionated）。就像，哦，为什么我的Lambda只能运行五分钟，不管那个时间限制是什么。但实际上，当你遵循这些乍一看似乎非常死板的规则时，你最终得到的结果实际上比你开始时要美妙得多。那些把一生都奉献给
+
+40
+00:24:27.000 --> 00:24:47.000
+on creating a beautiful developer experience, they made those rules with that in mind. And so usually if you follow them, you end up with something a lot nicer. I completely agree. And I think the others, and we actually, I'll give an example of one of our customers that actually did pretty much the same.
+创造美好开发者体验的人，他们在制定这些规则时就考虑到了这一点。所以通常如果你遵循它们，你最终会得到好得多的东西。我完全同意。我认为其他的，我们实际上，我举一个我们的客户的例子，他实际上做了几乎同样的事情。
+
+41
+00:24:47.000 --> 00:25:31.000
+He had like a huge task, several hours, that was rendering of images. And he decided to go serverless and he broke this into exactly the same model, by the way. You know, small messages that you can digest. But the side effect, I'm not sure it was a side effect, actually, but what happened, he was able also to create parallelization of the execution. So he all of a sudden could run 500 lambdas at the same concurrent time. So he could get the job done in a matter of minutes compared to hours just because we broke it in smaller pieces. So that's another, I think, something that you get out of modeling this and decoupling
+他有一个巨大的任务，需要几个小时，那就是渲染图像。他决定采用无服务器，并把这个任务拆解成了完全相同的模型，顺便说一句。你知道，可以被消化的小消息。但副作用，我不太确定这算不算副作用，但发生的情况是，他还能够创建并行的执行。所以他突然可以同时并发运行500个Lambda。因此，与过去几个小时相比，他能在几分钟内完成工作，仅仅因为我们把它拆成了更小的部分。所以这也是另一个，我认为你可以从这种建模、解耦
+
+42
+00:25:31.000 --> 00:26:21.000
+and building it in microservices or a different mindset. Yeah, that makes sense. So yeah, so a lot of people will probably want to know, if you run something on your desktop, you can just create a log file. And so, you know, you can have a log file for every day. And every time you run this job, you get a log file. Now you've, you've sort of exploded this into all of these lambdas. And so you have to be really diligent and, and, and careful about how you do the logging so that you can recover. Especially, you might have 99% success, but that 1% is a crash that you would have seen. Now you have to sort of go digging in the haystack to find it.
+和在微服务中构建或不同的思维方式中获得的好处。是的，这说得通。所以，是的，很多人可能会想知道，如果你在桌面上运行某些东西，你可以直接创建一个日志文件。所以，你知道，你每天都可以有一个日志文件，每次你运行这个作业时，你都会得到一个日志文件。现在你把这个东西“爆炸”拆解成了所有这些Lambda。所以你必须非常勤奋、非常小心地处理日志记录，以便能够恢复。特别是，你可能有99%的成功率，但那1%是你会遇到的崩溃。现在你必须在草垛里捞针来找到它。
+
+43
+00:26:21.000 --> 00:27:16.000
+And so what's been your experience with sort of being able to instrument things like Lambdas? Yeah, I think you're touching one of the most painful points when it comes, in general, to distributed services and microservices. Usually, you can just go to a server, a monolith server, open the log file, and understand what happened in a sequential way. That breaks when you're working in distributed environment microservices, especially when you have thousands or millions of events and requests every minute. And this is where a concept called distributed tracing comes in. And the concept is fairly simple. The concept is we want to mark every one of our logs in a, let's say, unique identifier that identifies which requests this log belongs to.
+那么，在检测像Lambda这样的东西方面，你的经验是什么？是的，你触及了分布式服务和微服务中最痛苦的痛点之一。通常，你只需转到服务器、单体服务器，打开日志文件，然后以顺序的方式了解发生了什么。当你运行在分布式环境微服务中时，这种方式就会失效，特别是当你每分钟有成千上万或数百万个事件和请求时。这就是所谓的分布式追踪（distributed tracing）的概念介入的地方。这个概念相当简单。这个概念是，我们希望用一个，比方说，唯一标识符来标记我们的每一个日志，这个标识符能够识别这个日志属于哪个请求。
+
+44
+00:27:16.000 --> 00:28:31.000
+So if I have a request going across 20 services, I want all of them to be colored green, which means this is request 555567. And then I can take it to, let's say, an elastic and search for that request ID. And boom, I have all of the story of that request end-to-end. That's critical for anyone who wants to go microservices with more than just a couple of requests per second. Because if you don't do that, you really are not able to find the logs. You just have many, many logs, millions of logs, and you can't understand where is one transaction starting and when is it ending. Yeah, just to kind of explain that with an example. So we've talked about batch jobs and breaking that up. But the majority of serverless is going to be, you know, a response to something like a web request or something like that. So imagine you send a file to them, some JPEG file, then they need to do a bunch of pre-processing on that file.
+所以如果我有一个跨越20个服务的请求，我希望它们全部被染成绿色，这意味着这是请求555567。然后我可以把它带到，比方说，Elastic中，并搜索该请求ID。然后，轰的一下，我端到端地拥有了这个请求的所有故事。对于任何想要在每秒不仅仅只有几个请求的情况下使用微服务的人来说，这是至关重要的。如果你不这样做，你真的无法找到日志。你只是有很多很多的日志，数百万个日志，你无法理解一个事务是从哪里开始的，又是在哪里结束的。是的，为了用一个例子来解释这一点。所以我们讨论了批处理作业和将其拆分。但无服务器的大多数情况将是，你知道，对诸如网页请求或类似事情的响应。所以想象一下，你向他们发送一个文件，一些JPEG文件，然后他们需要对该文件进行大量的预处理。
+
+45
+00:28:31.000 --> 00:29:02.000
+Maybe they'll look for faces of your family so that you can find them later. And there's all this work that has to happen. And so there's many different steps there. Some of it is image processing. Some of it is storing things in a database, storing the image in some kind of data store. And so any one of those steps could fail. And also any one of those steps could fail and it's not their fault. So in other words, imagine the system that accepts my image somehow has an issue with
+也许他们会寻找你家人的脸，以便你以后可以找到他们。这里有很多工作必须发生。所以这里有很多不同的步骤。其中一部分是图像处理。其中一部分是将东西存储在数据库中，将图像存储在某种数据存储中。因此，任何这些步骤都可能失败。而且任何这些步骤都可能失败，并且这不是他们的错。换句话说，想象一下接受我的图像的系统不知何故在
+
+46
+00:29:02.000 --> 00:29:45.000
+casing and converts the file name to uppercase. And we're using the file name to key on things and then sends the wrong key to my Lambda. So then my Lambda goes to grab the image. It's not there and it crashes, but it wasn't the Lambda's fault per se. It was just that the system that sent the Lambda that image, you know, had an error in it. Right. And so, and as you said, there's millions of these happening. And let's assume they're not all failing in this way, just a small percentage. So, having that unique ID that just follows this request through all these different systems allows you to say, oh, at the very end, when I went to store, you know, there's this face in this image.
+大小写上出了问题，并将文件名转换为大写。而我们正在使用文件名作为键（key）来进行索引，然后将错误的键发送给我的Lambda。于是我的Lambda去抓取图像。它不在那里，然后它崩溃了，但这本身并不是Lambda的错。只是向我的Lambda发送该图像的系统，你知道，里面有一个错误。对吧。而且，正如你所说，有数百万个这样的事情发生。我们假设它们并非都以这种方式失败，只是一小部分。所以，拥有那个能够贯穿所有这些不同系统的唯一ID，能让你说，哦，在最后，当我存储时，你知道，图像里有这张脸。
+
+47
+00:29:45.000 --> 00:30:16.000
+When I went to store that, it crashed. But that actually happened because on the browser, I let someone upload a WebP file. And actually, we don't support that. And so I actually need to fix something on the client side because of a bug I found way down in the pipe at the end of the pipeline. And so, yeah, having that having that if you don't have that ID, it's almost impossible side because of a bug I found way down at the end of the pipeline. And so, yeah, if you don't have that ID, it's almost impossible to connect all those dots. Absolutely. So, yeah, I think this is a core
+当我试图存储它时，它崩溃了。但那实际上发生是因为在浏览器上，我让某人上传了一个WebP文件。实际上，我们不支持这一点。所以我实际上需要修复客户端上的某些东西，因为我在管道末端很远的地方发现了一个Bug。所以，是的，拥有那个，如果你没有那个ID，几乎是不可能……因为我在管道末端很远的地方发现了一个Bug。所以，是的，如果你没有那个ID，几乎不可能把所有这些点连接起来。绝对是的。所以，是的，我认为这是
+
+48
+00:30:16.000 --> 00:30:47.000
+concept of logging, monitoring, debugging of serverless and microservices. And it forces you to have monitoring, debugging of serverless and microservices. And it forces you to plan. So, if you are architecting this entire process, like you mentioned, you need the different development teams to know that for every service that you're using, they need to remember to get a request ID from the service calling them
+无服务器和微服务的日志记录、监控、调试的核心概念。它迫使你进行规划。所以，如果你在架构整个这个过程，就像你提到的，你需要不同的开发团队知道，对于你使用的每个服务，他们需要记住从调用他们的服务获取请求ID，
+
+49
+00:30:47.000 --> 00:31:09.000
+and to pass that request ID downstream to the next service, to the next user, and get this within their logs. And that's a way to handle, to your question, to handle logs and logging in general in those environments, in a serverless and microservice environment. But that's also the challenge,
+并将该请求ID向下游传递给下一个服务，传递给下一个用户，并将其记录在他们的日志中。这就是处理你的问题的方法，即在这些环境中，在无服务器和微服务环境中处理日志和日志记录的一般方法。但这也是挑战所在，
+
+50
+00:31:09.000 --> 00:31:50.000
+because getting this process, procedure in place across different teams and organizations is really, really hard to get people to remember to do that, to get them to do that for new services, to chase after them. And this is where some companies, bigger companies like Netflix, like Airbnb, Google, of course, and others are basically doing that internally on their own. And they have the processes and tools and instrumentation that help them do that. And in some cases, there are other companies that are providing that service automatically, so that's taking the burden off the actual developers doing that.
+因为在不同的团队和组织中落实这个过程和程序真的非常非常难，要让人们记住去这样做，让他们为新服务这样做，去追着他们。这就是一些公司，像Netflix、Airbnb、谷歌以及其他一些公司，基本上在内部自己做这件事的地方。他们拥有帮助他们做到这一点的流程、工具和仪器。在某些情况下，还有其他公司在自动提供该服务，这减轻了实际开发人员这样做的负担。
+
+51
+00:31:50.000 --> 00:32:47.000
+Or there are some open framework, open tools that allow you to do that yourself and not inventing the word. That makes sense. What about just logging more broadly? So, you know, people know right now, if they write a Python program, they type print, you know, hello world, and they see hello world on the screen, right services all log to the same product, logging product, which is called CloudWatch. CloudWatch, let's say if you output something to the console from a hollow load from the Lambda, you will get that and you'll be able to see that. I think the main thing is that you're getting a lot of things into there,
+或者有一些开放的框架、开放的工具，可以让你自己动手做，而不必重新发明轮子。这说得通。更广泛的日志记录呢？所以，你知道，人们现在知道，如果他们写一个Python程序，他们输入print，你知道，hello world，他们会在屏幕上看到hello world，对吧？服务都记录到同一个产品，即日志产品，叫做CloudWatch。CloudWatch，比方说，如果你从Lambda的hello load向控制台输出某些东西，你就会得到它，并且能够看到它。我认为主要的事情是，你正在把很多东西弄进去，
+
+52
+00:32:47.000 --> 00:33:08.000
+but it exists. It's just like you're not logging into a server to check the log file on a server or SSHing into a server. You go to a, as a service, logging system called CloudWatch where they are getting all the logs from everywhere, all the services aggregated and allow you to watch them. Got it. Got it.
+但它存在。这就像你不需要登录到服务器去检查服务器上的日志文件或通过SSH连接到服务器。你去一个作为服务的日志系统，叫做CloudWatch，他们在那里获取来自各个地方的所有日志，所有聚合的服务，并允许你查看它们。明白了。明白了。
+
+53
+00:33:08.000 --> 00:33:26.000
+Okay. That makes sense. Cool. And so, yeah, I see your point. So now it almost becomes like, and I think you mentioned Elastic earlier. Yeah. It's almost like you need a search engine for your logs because you're doing things at such an extraordinary scale that it becomes very difficult to like,
+好吧。这讲得通。太棒了。所以，是的，我明白你的意思。现在它几乎变成了一种，我想你之前提到了Elastic。是的。这几乎就像是给你的日志找一个搜索引擎，因为你们处理事情的规模实在太庞大了，以至于很难像，
+
+54
+00:33:26.000 --> 00:33:42.000
+you can't just read all of it. Exactly. You need a search engine and you need a way to search by, like you need the request IDs or the trace IDs that we talked about to know what to search for. So exactly. God, I see. Oh, now it makes sense. So basically you say, okay, in Elastic or MySQL
+你不能只是把所有东西都读一遍。没错。你需要一个搜索引擎，你需要一种通过以下方式搜索的方法，比如你需要我们讨论过的请求 ID 或跟踪 ID 来了解要搜索的内容。所以，没错。天哪，我明白了。哦，现在说得通了。所以基本上你说，好吧，在 Elastic 或 MySQL
+
+55
+00:33:42.000 --> 00:34:15.000
+or one of these things, you say, you know, give me all of the logs from this request ID, you know, let's say sorted by time. And now you see a whole window of this request ID that might span many different lambdas and machines and operating systems and everything. And maybe even the browser, if you're pulling, if you're dumping logs from a browser to the server. And so you can see this whole history, like, OK, on this machine, this happened. On this machine, this happened. Over here, on this service, this happened. And then here's a crash.
+或者其中一个服务里，你说，你知道，把这个请求 ID 的所有日志都给我，你知道，比方说按时间排序。现在你看到了这个请求 ID 的整个时间窗口，它可能跨越了许多不同的 lambda、机器、操作系统以及各种东西。甚至可能还有浏览器，如果你正在提取，如果你正在把浏览器里的日志转储到服务器上的话。所以你可以看到这个完整的历史记录，就像，好吧，在这台机器上，发生了这个。在这台机器上，发生了这个。在这里，在这个服务上，发生了这个。然后这里是一个崩溃。
+
+56
+00:34:15.000 --> 00:34:43.000
+And I can kind of watch all of it. Exactly. On this non-machine, but exactly. Yeah, and all of that is on a separate serverless thing. So actually, what about crashes? So if something crashes in any of these things, like in a Lambda, what actually happens? That's a great question. So this is where things get, I would say, kind of like Twilight Zone.
+我差不多可以把这一切都看在眼里。没错。不是在这台非机器上，而是——没错。是的，所有这些都在一个单独的无服务器（serverless）组件上。那么，崩溃怎么办？如果这些东西中的任何一个崩溃了，比如在 Lambda 中，实际上会发生什么？这是一个很好的问题。所以，这就是事情变得，我想说，有点像《阴阳魔界》的地方。
+
+57
+00:34:43.000 --> 00:35:05.000
+Because I think, as you mentioned at the beginning, there are servers, and basically Lambdas are running on top of, in the case of Amazon, on top of AWS container, where you don't have access to, you don't see it, which is running on a virtual machine, on EC2, and that's software, and that EC2 can crash, that EC2 can run out of memory,
+因为我认为，正如你在开始时提到的，有服务器，基本上 Lambda 是在顶部运行的，以亚马逊为例，在 AWS 容器顶部运行，你无权访问，你看不到它，它在虚拟机上运行，在 EC2 上，那是软件，而那个 EC2 可能会崩溃，那个 EC2 的内存可能会耗尽，
+
+58
+00:35:05.000 --> 00:35:28.000
+that containers can crash. And that's really the infrastructure of the Lambda. So first of all, it happens. I want to say very clearly, nothing is bulletproof. So it happens to any cloud provider. In some cases at the beginning, three, four, five years ago, the request execution of the Lambda actually disappeared all of a sudden,
+容器可能会崩溃。这确实是 Lambda 的基础设施。首先，这种情况确实会发生。我想非常明确地指出，没有什么东西是绝对万无一失的。所以这会发生在任何云服务提供商身上。在某些情况下，在开始时，三、四、五年前，Lambda 的请求执行实际上突然消失了，
+
+59
+00:35:28.000 --> 00:36:00.000
+which was very frustrating because you couldn't even track what was going on. You didn't know there was a crash. It just disappeared. This got better, and now you got more indication that there was a problem. It's not solved yet. But again, these are the places where tooling allows you to understand what happens. So monitoring tool Lumigo is one of them, but others are allowing you to identify such cases and they let you know there was a crash over here
+这非常令人沮丧，因为你甚至无法追踪正在发生的事情。你不知道发生了崩溃。它就这么消失了。这种情况有所改善，现在你有更多的迹象表明出了问题。它还没有完全解决。但是，再次强调，这些是工具允许你了解发生什么的地方。监控工具 Lumigo 就是其中之一，但其他工具也允许你识别这种情况，它们会让你知道这里发生了崩溃，
+
+60
+00:36:00.000 --> 00:36:16.000
+with this Lambda, even though maybe the cloud provider couldn't get it to report because everything crashed over there. But since this is an external vendor, external service, seeing, you know, like starts and doesn't see end, can identify this never ended
+带着这个 Lambda，即使云服务提供商可能无法让它报告，因为那里的所有东西都崩溃了。但是由于这是一个外部供应商、外部服务，看到了，你知道，比如开始了但没有看到结束，就可以识别出这个请求从未结束，
+
+61
+00:36:16.000 --> 00:36:42.000
+and there was a crash. And I'll talk about that. Oh, interesting. So that, got it. Okay, so if like your Python program throws an exception, and so this is like a relatively benign crash, then in this case, I guess CloudWatch, you might be able to see in CloudWatch, you know, that Python failed or something like that. But you're saying, you know, it could get even more gnarly where something crashes,
+并且发生了崩溃。我会谈谈这个。哦，有意思。所以，明白了。好吧，如果你的 Python 程序抛出了异常，这是一个相对良性的崩溃，那么在这种情况下，我想 CloudWatch，你也许可以在 CloudWatch 中看到，你知道，Python 失败了或类似的情况。但你是说，你知道，情况可能会变得更加棘手，某些东西崩溃了，
+
+62
+00:36:42.000 --> 00:37:31.000
+you know, your program might've been fine, but something crashes environmentally. And, and that is, yeah, that, that sounds really difficult to debug. And so, so you're saying something, uh, some monitoring tool can say, well, you know, I'm following this request and I'm watching out for this request and, you know, I didn't see a crash, you know, on our end or anything like that i just saw this request disappear and so you know maybe we need to rerun it or there's all sorts of different mitigation strategies but at least you have visibility into that you can say okay i'm sure you know it's been three hours you know i'm sure something unhealthy has happened with this request yeah and to your point since lambda today only only runs 15 minutes, then you can know that after 15 minutes, worst case. Yeah, that makes sense. Totally makes sense.
+你知道，你的程序可能没问题，但环境崩溃了。而且，是的，这——这听起来非常难以调试。所以，你是说某些东西，呃，一些监控工具可以说了，好吧，你知道，我正在跟踪这个请求，我正在密切关注这个请求，而且，你知道，我没有看到崩溃，你知道，在我们这边或类似的地方，我只是看到这个请求消失了，所以，你知道，也许我们需要重新运行它，或者有各种不同的缓解策略，但至少你对它有可见性，你可以说，好吧，我确信，你知道，已经过去三个小时了，你知道，我确信这个请求发生了某种不健康的事情。是的，正如你所说，既然 Lambda 现在只运行 15 分钟，那么你就可以知道，在最坏的情况下，15 分钟后。是的，这说得通。完全说得通。
+
+63
+00:37:31.000 --> 00:38:06.000
+And so what about like, I know for doing mobile development, there's things like Bugsnag, Rollbar. There's these things that can package up exceptions and send them to a server really quickly before the machine dies, right? Or before your app dies. And so is there something like that for Lambda? Something where I can get all of the crashes in some kind of dashboard? Yeah, so I want to say that I think your point is very valid.
+那么，我知道在做移动端开发时，有像 Bugsnag、Rollbar 这样的工具。有一些工具可以在机器死掉之前，或者在你的应用死掉之前，把异常打包并非常快速地发送到服务器，对吧？那么 Lambda 有类似的东西吗？某种可以让我从某种仪表盘中获取所有崩溃的东西？是的，我想说，我认为你的观点非常正确。
+
+64
+00:38:06.000 --> 00:39:06.000
+Those needs don't go away when you go serverless. You still need very detailed information and fast about every exception. The main thing is that you need to get the context. One service out of 100 failing, what does that mean to my application? You have to have the connectivity, the distributed tracing. So you need basically both. It's not that distributed tracing solves that and you don't need Rollbar or Centpure or others anymore. You need everything. So this is why things are getting more and more interesting and complex. And yet there are the modern tools that are out there dealing with serverless monitoring and serverless distributed tracing will do both. of health exceptions of the application, like you mentioned, and also of the infrastructure,
+当你转向无服务器架构时，这些需求并没有消失。你仍然需要关于每个异常的非常详细且快速的信息。最主要的是你需要获得上下文。100 个服务中有一个失效了，这对我的应用程序意味着什么？你必须具备连通性，即分布式追踪。所以你基本上两者都需要。并不是说分布式追踪解决了这个问题，你就不再需要 Rollbar 或 Sentry 或其他工具了。你什么都需要。这就是为什么事情变得越来越有趣和复杂的原因。然而，市面上存在的现代工具，处理无服务器监控和无服务器分布式追踪的工具，会兼顾这两者。应用程序的健康异常情况，就像你提到的，还有基础设施的，
+
+65
+00:39:06.000 --> 00:39:22.000
+you know, with different, you know, timeouts and things that are really common in those environments. And number three will allow you, like you mentioned in Rollbar, to drill down into a specific exception and get all the details that you need in order to understand the root cause,
+你知道的，带有不同的，你知道的，超时和那些在这个环境中真正常见的事情。第三点将允许你，就像你在 Rollbar 中提到的那样，深入钻取到一个特定的异常中，并获得你理解根本原因所需的全部详细信息，
+
+66
+00:39:22.000 --> 00:39:43.000
+you know, and go upstream, understand what happened and fix that. So this is really what the industry is experiencing in terms of what's changing in the realm of a monitoring. We see that kind of like coming together of the different domains and just starting to see modern tools that encapsulate all of those. Cool, that makes sense.
+你知道，然后往上游追溯，了解发生了什么并解决它。这就是行业在监控领域发生变化方面真正经历的事情。我们看到不同领域的这种融合，并开始看到将所有这些都封装起来的现代工具。酷，这说得通。
+
+67
+00:39:43.000 --> 00:40:07.000
+So we could jump into, I think we should end on monitoring and security. But before we do that, we could put a bookmark in that for the moment. Let's jump into securing Lambdas. So I know that there's VPCs, there's virtual private, what's the C for? Connection or network? No, cloud. Oh, cloud. Okay.
+所以我们可以跳到，我想我们应该以监控和安全结束。但在我们这样做之前，我们可以暂时给它做个书签。让我们跳进保护 Lambda 的环节。所以我知道有 VPC，有虚拟私有，那个 C 是什么代表？连接还是网络？不，云。哦，云。好的。
+
+68
+00:40:07.000 --> 00:40:40.000
+But there's these virtual private clouds where you have your own protected address space. And so people can't just call your Lambda with arbitrary inputs and all of that. So from a networking perspective, I can see that as obviously being super important, but also pretty comprehensive. So what other things do people need to do to keep Lambda secure so that they're not leaking really important information or allowing intruders to call their functions
+但是有这些虚拟私有云，你拥有自己的受保护地址空间。所以人们不能仅仅用任意输入来调用你的 Lambda，诸如此类。因此，从网络的角度来看，我可以看到这显然超级重要，而且也非常全面。那么，人们还需要做哪些其他事情来保证 Lambda 的安全，这样他们就不会泄露非常重要的信息，或者允许入侵者调用他们的函数
+
+69
+00:40:40.000 --> 00:41:17.000
+and DOS attack them and stuff like that? Right. So I think the main concept with microservices in general and Lambda specifically is to be very aware and to have a well-defined roles for every service, for every microservice. So my service is doing, let's say your example, my service is allowing a picture to be uploaded to the website. That's what my microservice does.
+并对其实施 DOS 攻击之类的？好的。所以我想微服务总体上以及 Lambda 特别的核心概念是，对每个服务、每个微服务都要有高度的觉知和定义明确的角色。所以我的服务正在做，比方说你的例子，我的服务允许将图片上传到网站。这就是我的微服务所做的事情。
+
+70
+00:41:17.000 --> 00:41:52.000
+It's one out of 50 that allow my application to run. And if that's my sole definition of the microservice, and it's not allowed to do anything else, it should be very strict, then I can also apply very strict security policy to that microservice. Because there's no reason for that microservice, let's say, to access some remote server. And there's no reason for that microservice to start sending information. So by having microservice environments, and specifically with Lambdas, for example,
+它是让我的应用程序运行的 50 个服务中的一个。如果这就是我的微服务的唯一定义，并且它不允许做任何其他事情，它应该非常严格，那么我也可以对该微服务应用非常严格的安全策略。因为该微服务没有理由，比方说，去访问某个远程服务器。而且该微服务也没有理由开始发送信息。因此，通过拥有微服务环境，特别是对于 Lambda 来说，例如，
+
+71
+00:41:52.000 --> 00:42:32.000
+by having a very clear task of what that Lambda does, you can define through security groups, through IAM roles, which are different security definition, very granular, least privileged security concept or rules for that service. And then when this is, like you get the example with a container, when it's very clear and kind of packaged with a security, then I don't really care if that resides within a VPC or outside of VPC has access to the world or not because the security is very very tight and goes along with that service
+通过对该 Lambda 的工作任务有非常清晰的定义，你可以通过安全组、IAM 角色（它们是不同的安全定义）为该服务定义非常细粒度、最小特权的安全概念或规则。然后，当这个，就像你用容器举的例子一样，当它非常清晰并且与安全性打包在一起时，我真的不在乎它驻留在 VPC 内部还是 VPC 外部，是否有权访问外部世界，因为安全性非常非常紧密，并且与该服务形影不离。
+
+72
+00:42:32.000 --> 00:43:30.000
+so that's a concept of security for microservices that is very very popular. Oh that makes sense, I didn't think about that but yeah that makes a ton of sense so basically you have these different identity roles and so for example the the the queue which queues up images to be um scanned for faces you know that queue might require it to add or remove from that queue might require a role like you know that the the scan faces. And so most of the system, most of these microservices, you know, they don't have that permission. And so, you know, yeah, this, you know, you hear so much about, you know, people, they hack into. And actually, I think, Patrick, I think we have lined up in the future, someone who actually is a, uh, I think a white hat hacker. I think that's the term, like someone who hacks things, but for,
+所以这是微服务安全的一个非常非常流行的概念。哦，这说得通，我之前没想过，但是是的，这太合理了。基本上你有这些不同的身份角色，所以例如，那个将图片排队以供扫描人脸的队列，你知道，该队列可能需要添加或删除该队列可能需要一个角色，比如，你知道，扫描人脸。所以系统的大部分，大部分微服务，你知道，它们没有那个权限。所以，你知道，是的，这个，你经常听到关于，你知道，人们，他们黑进去。事实上，帕特里克，我想我们未来安排了一个人，他实际上是一个，呃，我想是一个白帽黑客。我想这是这个词，就像一个黑客，但是为了，
+
+73
+00:43:30.000 --> 00:43:56.000
+uh, to, to cause good, um, to, to kind of help, you know, secure things. But so Patrick, I have no background in hacking, um, or anything like that, but, but, you know, you hear stories of, you know, they come in, they hack and then they get everything. It's like, oh, they downloaded your entire source code repository and your, repository and they select star your whole database or MySQL dumped your whole database. And they have everything. And they ransomed all your machines. So you have to pay them Bitcoin to get them back.
+呃，为了做好事，呃，为了某种程度上帮助，你知道，确保安全。但是帕特里克，我对黑客没有任何背景，呃，诸如此类，但是，但是，你知道，你听到这样的故事，他们进来，他们黑客攻击，然后他们拿走了所有东西。就像，哦，他们下载了你的整个源代码库和你的，代码库，他们对你的整个数据库或 MySQL 执行了 select star，转储了你的整个数据库。他们拥有一切。他们勒索了你所有的机器。所以你必须付给他们比特币才能把它们拿回来。
+
+74
+00:43:56.000 --> 00:44:30.000
+And so serverless seems like, we talked about how you have all these sort of complexities because of the distributed nature of it. But it's also, it can even be sort of self-healing where, you know, if you start getting a lot of errors saying, hey, so-and-so service is trying to access all of these things and they're getting blocked, you'd have some count of how many access control violations. If you see that go through the roof, you know right away that you need to lock everything down.
+所以无服务器看起来像，我们讨论过由于其分布式特性，你拥有所有这些复杂性。但它也可以是某种自我修复的，你知道，如果你开始收到大量错误，说，嘿，某某服务正试图访问所有这些东西，而它们被阻止了，你就会有一些访问控制违规次数的统计。如果你看到这个数字冲上天际，你就会立刻知道你需要锁定所有东西。
+
+75
+00:44:30.000 --> 00:45:00.000
+And so it seems like if you go serverless, you're inherently just much more protected from some of these massive attacks like you hear. There was the one on Target last year. And so you could avoid a lot of that. Yeah, I think that you need to be aware of that and think about that in order to be really protected. And I'll explain why. Because one of the promises of serverless is you don't need to deal with scaling. You know, we got you covered, say AWS, Microsoft, Google.
+所以看起来，如果你采用无服务器架构，你天生就能更好地免受你所听到的那些大规模攻击的影响。去年对 Target 的那次攻击就是这样。所以你可以避免很多这种情况。是的，我认为你需要意识到这一点并在脑海中考虑到这一点，以便真正受到保护。我会解释原因。因为无服务器的承诺之一就是你不需要处理扩展。你知道，我们搞定了，AWS、微软、谷歌说。
+
+76
+00:45:00.000 --> 00:45:29.000
+And this is great, right? Because during the night, nobody accesses my site. So no point for me to pay for a server. And during the day or during Black Friday, my sales fix goes like 500x of what I do. And I don't want to keep servers up and running all the time. So it's really, really adjusted. But at the same time, attacks and Black Fridays can look very similar.
+这太棒了，对吧？因为在夜间，没有人访问我的网站。所以我没有理由为服务器付费。而在白天或黑色星期五，我的销售额激增到我平时业务的 500 倍。我不想一直让服务器保持运行状态。所以它真的、真的很契合。但与此同时，攻击和黑色星期五看起来非常相似。
+
+77
+00:45:29.000 --> 00:45:58.000
+And the cloud provider will allow you to grow. So sometimes we have the notion of serverless environment that there's a concept in security called the denial of service, where you try to attack a server and try to take him down by flooding him with requests until he cannot serve legitimate users. In serverless, that usually doesn't happen because you'll get more and more firepower from the cloud provider.
+而云服务提供商会允许你增长。所以有时我们对无服务器环境有一种看法，在安全领域有一个概念叫做拒绝服务，即你试图攻击一个服务器，试图通过向其发送海量请求来使其瘫痪，直到它无法为合法用户服务。在无服务器中，这通常不会发生，因为你会从云服务提供商那里获得越来越强大的火力。
+
+78
+00:45:58.000 --> 00:46:28.000
+It will just cost you more. So some call this denial of wallet instead of denial of service. I was thinking denial of credit score, yeah. Yeah, that might also be very good. But my point is that you can adjust with it. You can handle this. You can decide where are my limits, and it's very easy to define the limits, you probably need to have, again, monitoring of your costs to raise a flag
+它只会花掉你更多的钱。所以有人把这叫做钱包拒绝（denial of wallet）而不是拒绝服务。我在想信用评分拒绝，哈哈。是的，那也可能非常好。但我的观点是你可以随之调整。你可以处理这个问题。你可以决定我的极限在哪里，而且定义极限非常容易，你可能需要再次强调，对你的成本进行监控以发出警报，
+
+79
+00:46:28.000 --> 00:46:48.000
+when you go high wire and, hey, something wrong here and get a pay to duty about that. The only thing is this is not out of the box, but out of the box, you need to have this mindset, like you mentioned, in order to be aware that I need to think about that and implement something. Yeah, that makes sense. That's a really good call out.
+当你的开支飙升时，嘿，这里出了问题，然后为此触发一个 PagerDuty 告警。唯一的事情是这不是开箱即用的，但在开箱即用之外，你需要有这种心态，就像你提到的那样，以便意识到我需要考虑这一点并实现一些东西。是的，这说得通。这是一个非常好的指出。
+
+80
+00:46:48.000 --> 00:47:11.000
+Cool. Yeah, we touched on a lot of really, really good things here. So let's dive into Lumigo here. So we talked about how to monitor. We talked about the breadcrumbs and the request ID. And so what does Lumigo do to make a lot of this kind of easier for folks? So I think, you know, when we started Lumigo,
+酷。是的，我们在这里探讨了很多非常非常好的事情。所以让我们深入了解 Lumigo。我们讨论了如何监控。我们讨论了面包屑和请求 ID。那么 Lumigo 做什么来让这一切对人们来说更容易呢？所以我想，当我们创办 Lumigo 时，
+
+81
+00:47:11.000 --> 00:47:36.000
+this is exactly what we had in front of us. Like seeing all of this, everything, all of our talk actually is complex. It's complex to implement, especially if you're not an expert in this. And honestly, most people have so much to do that they shouldn't be dealing with that. They shouldn't be dealing with their business logic,
+这正是我们面对的。就像看到所有这些，所有这些，我们所有的讨论实际上都很复杂。实现起来很复杂，特别是如果你不是这方面的专家的话。老实说，大多数人有很多事情要做，他们不应该处理这些。他们不应该处理他们的业务逻辑，
+
+82
+00:47:36.000 --> 00:48:17.000
+exactly like what the serverless concept is about. So we built Lumigo with that mindset of allowing the team, the developers, to get that offloaded to us. So with Lumigo, we allow you to have this breadcrumbs or end-to-end view of every transaction. And we developed the technology to do that without any code changes on your side, without any change to the data, and without deploying agents. Which sounds really weird, because how do we do that?
+正如无服务器概念所倡导的那样。所以我们带着这种心态构建了 Lumigo，允许团队、开发人员将这些卸载给我们。通过 Lumigo，我们允许你拥有每个事务的面包屑或端到端视图。我们开发了这项技术，无需你修改任何代码，无需对数据进行任何更改，也无需部署代理。这听起来真的很奇怪，因为我们是怎么做到的？
+
+83
+00:48:17.000 --> 00:48:56.000
+That's kind of like the first thing that the developers asked me. Yeah, definitely. Yeah, so it's a lot of algorithm, deterministic algorithm, that we developed over the last three or four years. Yeah, definitely. if you don't want to add a request ID along the way. And this is the core deep technology of Flumigo. So we managed to do that for you without touching code or data. And that's a magic. And we do it to all the main services today.
+这可以说是开发者问我的第一件事。是的，绝对的。是的，所以这是大量的算法，确定性算法，我们在过去三四年里开发的。是的，绝对的。如果你不想一路上添加请求 ID 的话。这就是 Flumigo 的核心深度技术。所以我们设法为你做到这一点，而无需触碰代码或数据。这就是魔法。而且我们今天对所有主要服务都这样做。
+
+84
+00:48:56.000 --> 00:49:38.000
+Can you double click on that? Cause I'm trying to wrap my head around it. So, okay. So I say, I want to upload a photo. So your user ABCD says you want to upload a photo. The request comes in. The photo gets uploaded to some S3, you know, signed URL or something. And then now, you know, we kick off a bunch of serverless. We put a bunch of things onto a queue saying, you know, crop this photo 10 different ways, you know, look for faces in the photo, right? And so I feel like if you don't put, and so those serverless functions, because of the encapsulation we want from we talked about earlier, they don't necessarily even have the user ID who wanted to upload the photo in them. They just get a request, here's a photo.
+你能详细讲讲那个吗？因为我正在努力理解它。好吧。所以我说，我想上传一张照片。所以你的用户 ABCD 说你想上传一张照片。请求进来了。照片被上传到某个 S3，你知道，签名 URL 或类似的东西。然后现在，你知道，我们启动了一堆无服务器。我们把一堆东西放到一个队列中，说，你知道，用 10 种不同的方式裁剪这张照片，你知道，在照片中寻找人脸，对吧？所以我觉得如果你不放，而且那些无服务器函数，因为我们前面讨论过的我们要的封装，它们甚至不一定拥有想要上传照片的用户 ID。它们只收到一个请求，这里有一张照片。
+
+85
+00:49:38.000 --> 00:49:59.000
+And so I feel like, yeah, if you don't put the request ID, it seems almost impossible to connect the dots, right? Yeah, you're absolutely right. So first of all, that's the magic. And let me now take the charm of the magic and explain how we do that. Okay. But don't tell anyone. All right, yeah, no one's listening.
+所以我觉得，是的，如果你不放请求 ID，感觉几乎不可能把这些点连接起来，对吧？是的，你完全正确。所以首先，这就是魔法。现在让我揭开魔法的面纱，解释我们是如何做到这一点的。好吧。但是别告诉任何人。好吧，没人听着。
+
+86
+00:49:59.000 --> 00:50:41.000
+Just kidding. The main concept is, and by the way, just before I hit that, think of that. Let's zoom in on what you mentioned, writing the image to S3, and that triggers some Lambda to start working. Even if you want to get a request ID across, you can't because that's a file. Where do you put a request ID to go across s3 but it's a yeah right it's a big problem regardless even if you you know you want to do that in a service environment that's really really yeah just to yeah just to explain that real quick so so you know the way things work when you upload things like photos and videos from your phone it doesn't
+开个玩笑。核心概念是，顺便说一句，在我说到那点之前，想想这个。让我们放大到你提到的那一点，将图像写入 S3，然后触发一些 Lambda 开始工作。即使你想跨服务获取请求 ID，你也做不到，因为那是个文件。你把请求 ID 放在哪里才能穿过 S3？但它是一个，是的，没错。这是一个大问题，无论如何，即使你，你知道，你想在一个无服务器环境中这样做，那真的、真的很——是的，为了——是的，只是为了快速解释一下——所以，你知道，事情的工作方式是，当你从手机上传照片和视频等内容时，它不会
+
+87
+00:50:41.000 --> 00:51:15.000
+go through a server you know so the server that's serving you this website or whatever, they're not actually taking your entire video and moving it into S3 for you. They're giving you this, what they call a signed URL. And so they're basically giving you permission to directly upload something to Amazon. And then the Lambda, that's something we didn't cover, but Lambdas are triggered. And so the trigger can be based off a message that's sent by something else,
+通过服务器，你知道，为你提供这个网站或任何东西的服务器，实际上并没有拿走你的整个视频并为你将其移入 S3。它们给你提供这个，他们称之为签名 URL 的东西。所以它们基本上赋予了你直接将东西上传到亚马逊的权限。然后 Lambda，这是我们没有涵盖的内容，但是 Lambda 是被触发的。因此，触发可以基于由其他东西发送的消息，
+
+88
+00:51:15.000 --> 00:51:46.000
+or they can also be triggered off changes to your S3 or changes to your environment. They can be triggered off a change to your database. And so, as Erez was saying, this Lambda fired because it saw a file in S3 and it has no idea how that file got there. Exactly. And even if you want getting a request ID across, it's not your API, it's not your server, you cannot implement that. And the way we do it,
+或者它们也可以由对 S3 的更改或对环境的更改触发。它们可以由数据库的更改触发。正如 Erez 刚才所说，这个 Lambda 被触发是因为它在 S3 中看到了一个文件，它根本不知道那个文件是怎么到那里的。没错。而且即使你想跨服务获取请求 ID，它也不是你的 API，它不是你的服务器，你无法实现这一点。而我们做到这一点的方式，
+
+89
+00:51:46.000 --> 00:52:28.000
+we have a lot of cybersecurity expertise and backgrounds, and we found a way to identify that the request, the file that was written has some attribute as part of it. There are metadata of the file. There are metadata of the request. There are actual data points going in. And all of this exists also and available for the Lambda that get triggered from the fact that that file was written to S3. So that information is available from both sides of S3
+我们拥有大量的网络安全专业知识和背景，我们找到了一种方法来识别所写入的请求、文件本身包含某些属性。文件的元数据。请求的元数据。正在进入的实际数据点。所有这些对于从该文件被写入 S3 这一事实中被触发的 Lambda 来说，也都是存在且可用的。因此，这些信息可以从 S3 的两侧获得，
+
+90
+00:52:28.000 --> 00:52:53.000
+for someone, you know, some platform like Lumigo. And through algorithms that we developed, we were able to infer, just by looking on the existing data, metadata, and other signals, that this is the same request. So we infer that. We kind of build this, call it virtual request ID that doesn't exist anywhere,
+对于某个（你知道，像 Lumigo 这样的平台）来说是这样的。通过我们开发的算法，我们能够仅仅通过查看现有的数据、元数据和其他信号，推断出这是同一个请求。所以我们推断出了这一点。我们有点构建了这个，称之为虚拟请求 ID，它在任何地方都不存在，
+
+91
+00:52:53.000 --> 00:53:11.000
+but we know that it's the same request and it's 100% deterministic. So that's, you know, it's very, very technical. Sorry for that, but that's a really... No, that's super cool. Yeah, I mean, I think like one, you know, it's very, very technical. So sorry for that, but that's a really good. No, that's super cool. Yeah. Yeah. I mean, I mean, I think like one, you know, simple way to think about it.
+但我们知道这是同一个请求，并且是 100% 确定的。所以，你知道，这非常、非常技术性。很抱歉，但这真的是……不，这超级酷。是的，我的意思是，我觉得像一个，你知道，简单的方法来思考它。
+
+92
+00:53:11.000 --> 00:53:38.000
+I'm sure this is not, I'm sure what you're doing is more complicated than this, but you can imagine the system that gave that person permission to, you know, write to that, to that file. So that request, if we have that information, then maybe that request has a user ID in it or something like that, or at least we can remember that request. And then when we see the file show up, we can sort of connect the dots that way.
+我确信这不是，我确信你们正在做的事情比这更复杂，但你可以想象授权该人写入该文件的系统。所以那个请求，如果我们有这些信息，那么也许那个请求中有一个用户 ID 或类似的东西，或者至少我们可以记住那个请求。然后当我们看到文件出现时，我们可以通过这种方式把点连接起来。
+
+93
+00:53:38.000 --> 00:53:55.000
+But yeah, to your point, I mean, to do it in a way that, it's one thing if you're building the program, but to do it for somebody else and you don't know what program they're running, that I think is really challenging. So that's pretty wild that it's able to do that. Yeah. And that's, you know, it took us a lot of time.
+但是，是的，正如你所说，我的意思是，以一种这样的方式来做，如果你正在构建程序是一回事，但为别人做，而且你不知道他们在运行什么程序，我认为这真的很有挑战性。所以它能够做到这一点真是太疯狂了。是的。而且，你知道，这花了我们很多时间。
+
+94
+00:53:55.000 --> 00:54:39.000
+It took us almost three, more than three years to build and cover all the services. And I think that's, you know, one core of what Omegle does. So basically, simplifying this, after five minutes, no code changes, no deployment, no agents, you have a full view of your, let's call it AWS architecture and request end to end. Every request, you click on it, all of a sudden you see dozens of services align and you see the request story from one end to the other end. And that's one core. The other is what you mentioned is about identifying issues.
+我们花了将近三年，三年多的时间来构建和覆盖所有的服务。我认为这是，你知道，Omegle（译者注：原文如此，应为 Lumigo）的核心之一。所以基本上，简化这个过程，五分钟后，无需修改代码，无需部署，无需代理，你就可以获得你的，我们称之为 AWS 架构和端到端请求的完整视图。每个请求，你点击它，突然间你看到几十个服务对齐，你看到请求从头到尾的故事。这是核心之一。另一个就是你提到的识别问题。
+
+95
+00:54:39.000 --> 00:55:13.000
+So we know to alert when things go wrong. So it's application issues, it's infrastructure issues, you mentioned the crashes that are elusive in the infrastructure, out of memory latencies, so many things that you need to care about in serverless and microservice environment, we got this out of the box. So you get alerts, you click on that, you dive to see the request end-to-end, you see the actual data passing across because we record the data. And by having this as a developer,
+所以我们知道在事情出问题时发出警报。所以它是应用程序问题，是基础设施问题，你提到了基础设施中难以捉摸的崩溃、内存不足延迟，你在无服务器和微服务环境中需要关心的许多事情，我们开箱即用就拥有了这些。所以你会收到警报，点击它，深入查看端到端请求，你会看到流经的实际数据，因为我们记录了数据。作为一名开发人员，通过拥有这个，
+
+96
+00:55:13.000 --> 00:55:57.000
+usually it will take you minutes to figure out what the root cause and plan effects. Very cool. So, okay, so there's no agent, which is really interesting. So I guess the way that the integration here with Lumigo must be through some kind of like cloud formation or Terraform or something like that, where we create a role for Lumigo and then Lumigo goes in and adds some services of their own? How does someone actually get it set up? Yeah, so I think you got it. The main point is a cloud formation including an IMO. So basically when you onboard, Lumeco is a self-serve platform.
+通常你只需要几分钟就能弄清楚根本原因并规划影响。太酷了。所以，好吧，所以没有代理，这真的很有趣。所以我想这里与 Lumigo 的集成一定是通过某种 CloudFormation 或 Terraform 或类似的东西，我们在其中为 Lumigo 创建一个角色，然后 Lumigo 进去并添加他们自己的某些服务？人们究竟如何进行设置？是的，我想你懂了。核心点是包含 IAM 的 CloudFormation。基本上当你入驻时，Lumeco（译者注：原文如此，应为 Lumigo）是一个自助平台。
+
+97
+00:55:57.000 --> 00:56:24.000
+You can go to it and click start an account. And it's literally four clicks to be fully connected. Again, no deployment that you need to do. But what happens in those four clicks is, number one, exactly what you said. You click and allow Lumigo to get information from the cloud, your logs, configuration, things like that. That's an IML wrapped in a cloud formation,
+你可以访问它并点击创建一个账户。只需要四次点击就可以完全连接。同样，不需要你做任何部署。但在那四次点击中发生的事情是，第一，完全如你所说。你点击并允许 Lumigo 从云端获取信息，你的日志、配置诸如此类。这是一个包裹在 CloudFormation 中的 IAM，
+
+98
+00:56:24.000 --> 00:56:46.000
+exactly like you mentioned. The second point is that Lumigo, you decide which of the Lambdas and services you want Lumigo to observe and to monitor. And on those services, we have an integration specifically with AWS that is called Lambda Layer. And this allows us through code libraries
+完全如你所说。第二点是 Lumigo，你决定想要 Lumigo 观察和监控哪些 Lambda 和服务。在这些服务上，我们有一个专门与 AWS 集成的功能，叫做 Lambda Layer。这允许我们通过代码库
+
+99
+00:56:46.000 --> 00:57:13.000
+to listen to the requests going in and out of every service. And through that, allow us to do the magic of connecting the dot, identifying, allow you to see what data passes. So those two concepts are what's really building the technology, allowing us to show you all of that. Ah, cool. That makes sense. And so what about on databases? Can Lumigo connect the dots between Lambda
+来监听进出每个服务的请求。并通过这一点，让我们能够施展连接各点的魔法，识别，让你看到什么数据在传递。这两个概念真正构建了技术，让我们能够向你展示所有这些。啊，酷。这说得通。那么数据库呢？Lumigo 能把 Lambda
+
+100
+00:57:13.000 --> 00:57:32.000
+and DynamoDB requests? Yeah, that's actually a pretty popular one. So think of a Lambda trying to write, writing a record to a DynamoDB, and this can also trigger another Lambda to do something else. Right. So it's exactly the same
+和 DynamoDB 请求之间的点连接起来吗？是的，这实际上是一个非常受欢迎的功能。想象一下一个 Lambda 试图写入，向 DynamoDB 写入一条记录，这也可以触发另一个 Lambda 来做其他事情。对。所以这和 S3 的概念完全一样。
+
+101
+00:57:32.000 --> 00:57:50.000
+as S3 concept. It happens to be very complicated in terms of DynamoDB but it's the same way as we figured S3, we figured DynamoDB out and we figured all of the main AWS services. So DynamoDB, S3, we figured DynamoDB out, and we figured all of the main AWS services. So DynamoDB, S3, Kinesis, API Gateway, Step Functions,
+在 DynamoDB 方面它碰巧非常复杂，但就像我们搞定 S3 一样，我们搞定了 DynamoDB，我们搞定了所有主要的 AWS 服务。所以 DynamoDB，S3，我们搞定了 DynamoDB，我们搞定了所有主要的 AWS 服务。所以 DynamoDB，S3，Kinesis，API Gateway，Step Functions，
+
+102
+00:57:50.000 --> 00:58:15.000
+SQS, SNS, you know, everything that everybody uses, we are able to do that, again, automatically without the code changes or data changes. Cool. This is awesome. Yeah, I'm totally going to check this out. Yeah, I have some internal projects i can try this out and report back actually this this dive into something really interesting so what's what's the sort of um you know we have a lot of folks who are you know students college
+SQS，SNS，你知道，每个人都在使用的所有东西，我们都能够做到，同样，自动完成，无需修改代码或数据。酷。这太棒了。是的，我绝对要去看看这个。是的，我有一些内部项目可以尝试这个并汇报结果，事实上，这——这深入探讨了一些非常有趣的事情。那么，有什么样的一种，呃，你知道，我们有很多用户，你知道是学生、大学生，
+
+103
+00:58:15.000 --> 00:59:01.000
+students high school students who are just getting started in the field who are changing careers and so you know for people who are hobbyists what are the sort of opportunities in Lomigo like what's the pricing like and all of that yeah so first and foremost you know we built Lomigo initially for the community so we have a very um generous community tier which is absolutely free and it's you know it's hosted by Lomigo So you don't need to deploy anything. But if you're a student, if you have a private project, or even if you want to run this within your company and your volumes are low, less than 150,000 requests per month,
+高中生刚刚进入这个领域，正在转行，所以，你知道，对于业余爱好者来说，Lumigo 有什么样的机会，比如定价是怎样的，诸如此类？是的，首先也是最重要的，你知道，我们最初是为社区构建 Lumigo 的，所以我们有一个非常，呃，慷慨的社区层，它是完全免费的，而且你知道，它是由 Lumigo 托管的。所以你不需要部署任何东西。但如果你是一名学生，如果你有一个私人项目，或者甚至如果你想在你的公司内部运行它并且你的吞吐量很低，每月少于 15 万个请求，
+
+104
+00:59:01.000 --> 00:59:26.000
+you should just connect and run it. It's for free. And we have many, many, many such companies and users. And that's a great way for us to contribute to the community and get connected with the community. And again, we don't think twice about whether to use this. Some use it for actually live debugging of their production.
+你只需要连接并运行它。它是免费的。我们有许多、许多、许多这样的公司和用户。这是我们回馈社区并与社区建立联系的好方法。而且，再次强调，我们不会考虑两次是否要使用它。有些人实际上用它来对他们的生产环境进行实时调试。
+
+105
+00:59:26.000 --> 01:00:06.000
+Many students, for example, use it as part of their development process. So if I want to develop something during the development, I want to run a test. And if you run it and just go to Lumigo and try to understand, was it successful? Did it fail? How did it evolve across the different services. And this really, really gets you to debug your dev environment much faster. So very easy to start for free. Very cool. Yeah, that's awesome. And so the free tier, is it for like a month or is it unlimited? It's just free as long as you don't exceed the quota. Exactly.
+例如，许多学生将其作为开发过程的一部分。因此，如果在开发过程中我想开发一些东西，我想运行一个测试。如果你运行它并访问 Lumigo 并试图了解，它成功了吗？它失败了吗？它如何在不同的服务之间演变。这真的、真的能让你更快地调试你的开发环境。所以免费开始非常容易。太酷了。是的，这太棒了。那么免费层，它是针对一个月的还是无限期的？只要不超过配额就一直是免费的。没错。
+
+106
+01:00:06.000 --> 01:00:23.000
+It's not limited in time. Oh, very cool. Cool. Yeah, I'll definitely check this out. I will check this out. I will report back on Twitter and let people know how this goes. Yeah, I have a number of side projects that are really hard to debug
+它在时间上没有限制。哦，太酷了。酷。是的，我一定会去看看这个。我要去看看这个。我会在 Twitter 上汇报并让大家知道进展如何。是的，我有许多在 Lambda 上运行的副项目，这些项目调试起来非常困难。这真的、真的很酷。所以让我们稍微聊聊 Lumigo 这家公司。Lumigo 成立多久了，现在 Lumigo 有多少人？是的，我们已经成立三年半了。我们大约有，不是大约，我们现在有 30 个人左右。我们大多数人都是位于以色列特拉维夫的开发人员。
+
+107
+01:00:23.000 --> 01:00:56.000
+that are running on Lambda. This would be really, really cool. So let's talk about Lumigo, the company, a little bit. How long has Lumigo been around, and how many folks are at Lumigo right now? Yeah, so we've been around for three and a half years. And we're around, not around, we're 30-ish people now. Most of us are developers based in Tel Aviv in Israel.
+是的，这就是我们。酷。你们在寻找实习生还是全职员工？如果是的话，你们主要在哪些地理位置寻找，诸如此类？是的，我们在成长，我们正在寻找想要加入的人。我们主要寻找全职员工。我们的开发和产品团队位于特拉维夫。我们一直在寻找更多的人。我们现在正在美国设立一个办公室，或者目前是一个虚拟办公室。
+
+108
+01:00:56.000 --> 01:01:42.000
+And yeah, that's us. Cool. And so are you looking for interns or full-time folks? And if so, where geographically are you looking and all of that? Yeah, so we're growing and we're looking for people who want to join. Mostly we're looking for full-time employees. We have the development and product team based in Tel Aviv. And we're always looking for additional people. We're now opening an office, or for now, a virtual office in the U.S.
+我们终于要在那里发展我们的销售组织了。酷。是的。这是一个令人兴奋的阶段。除此之外，我一直在寻找，我会称之为无服务器爱好者的人，真正深入研究无服务器的人，
+
+109
+01:01:42.000 --> 01:02:06.000
+And we're going to have our sales organization finally starting to grow sales organization there. Cool. Yeah. Yeah. It's an exciting stage. And beyond that, I am always looking for, I would call it serverless enthusiasts, people that really dig into serverless,
+热爱它是什么，热爱社区，想要成为我们在社区内的代表，帮助社区，在会议、大会上发言，他们写博客。我们的很多工作都是面向社区的。我们有很多见解可以贡献给社区。所以我一直在寻找想要做这件事的人，自由职业者
+
+110
+01:02:06.000 --> 01:02:33.000
+that love what it is, the community, that want to be our representative within the community, help the community, speak in sessions, in conferences, they create blogs. This is a lot of our work is toward the community. We have a lot of insights to contribute that to the community. So I'm always on the lookout for either people that want to do this, freelancers
+或是全职，但如果你热爱无服务器并且正在做一些有趣的事情，那是我很乐意听到的。酷。是的，我的意思是，这是一件经常出现的事情，所以对于那些听众来说，也许这是他们听到的第一集，这真的很好，
+
+111
+01:02:33.000 --> 01:02:52.000
+or full-time, but if you love serverless and you're doing something interesting, that's something that I would love to hear about. Cool. Yeah, I mean, this is something that comes up in a recurring way and so it's really good just to you know for people who are listening maybe this is their first episode they've
+但对每个人来说，如果你想进入这个行业，建造很多很酷的东西，我认为这就是，你知道，永恒的建议，对吧。就是，你知道，如果你想决定首先学习哪个编程语言，那就去构建一些东西，然后，你知道，在谷歌上搜索一下，比如，其他人也构建了类似的东西。他们应该使用什么语言？总是从一个目标开始。所以如果，如果你对，
+
+112
+01:02:52.000 --> 01:03:59.000
+heard um but really for everybody you know if you want to get into this industry you know build lots of cool stuff i mean that is i think the the, the, you know, um, eternal advice, right. Is, is, you know, um, you know, if you want to decide which programming language you want to learn first, we'll build something and, and then kind of, uh, you know, Google around like, okay, other people have built similar things. What language should they use? Kind of always start from a goal. And so if, if, if you're interested in, um, you know, doing monitoring and serverless, and if this stuff really fascinates you and sort of being sort of this phantom of the opera, but instead of a million different organs or keyboards, you have a million different lambdas, and you've sort of mastered this craft, then you start building stuff. Especially with Lambda, the AWS is a very generous free tier. Lomigo is a very generous free tier. There is nothing stopping anyone out there from building something. And you could build a website that could scale to handle a million people a month without having to do a whole bunch
+你知道，做监控和无服务器感兴趣，如果这些东西真的吸引了你，并且成为歌剧魅影，但不是数百万个不同的风琴或键盘，你拥有数百万个不同的 lambda，并且你已经掌握了这门手艺，然后你开始构建东西。特别是对于 Lambda，AWS 有一个非常慷慨的免费层。Lumigo 有一个非常慷慨的免费层。没有什么能阻止任何人出去构建一些东西。你可以构建一个网站，其规模可以处理每月一百万人，而无需做大量额外的工作。你可以构建一些只有你和你的父母喜欢的东西，然后如果它明天走红，它就，它仍然管用。与那些 Hacker News 上的文章相反，你知道，它们走红了，然后把网站搞挂了。如果你在无服务器上构建它，你的网站就不会那样。所以，绝对地，你知道，外面的朋友们，去看看这项技术。我认为这太棒了。所以，那么 Lumigo 这家公司有什么独特之处？所以你知道，是不是有什么，你知道，你们去进行了一次非常独特的务虚会（retreat），或者有什么，你知道，也许是办公桌排列的方式，或者公司的创立方式，关于这家公司的一些很酷的花絮。
+
+113
+01:03:59.000 --> 01:04:43.000
+of extra work. You could build something that just you and your parents like, and then if it goes viral tomorrow, it just, it still works. As opposed to like half of these hacker news articles where, where, you know, they go viral and it kills the site. You know, your site won't do that if you build it on serverless. So, so definitely, you know, folks out there, you know, check this technology out. I think's awesome so um so what is what is uh something unique about lumigo the company so you know is there something that uh you know is there like a uh retreat that you all do that's that's really unique or is there is there something you know maybe the way the desks are lined up or the way the company was founded some some kind of cool
+这是一个很好的问题。我不知道这是否像你希望的那样酷，但我认为让 Lumigo 至少在今天与众不同的是，Lumigo 的几乎任何人，在几乎任何服务、任何部门，都是活跃的或前任开发人员。这甚至包括那些通常与工程无关的部门。这只是因为那是核心社区，那是我们与之互动的群体。所以我会说，你在 Lumigo 看到的是非常有趣的个人资料，
+
+114
+01:04:43.000 --> 01:05:29.000
+tidbit about the company. That's a great question. I don't know if that's as cool as you hope for, but I think that what makes Lumigo, at least today, different is that almost anyone in Lumigo, in almost any service, any department, is active or former developer. And that goes also to departments which usually are not related to engineering. That's just because that's the core community, that's the people that we interact with. So that's really interesting, I would say, profiles that you see in Lumigo, the same
+人们拥有相同的背景。但也许一个开发人员决定他想尝试销售、尝试营销或尝试产品。我认为这就是 Lumigo 仍然有点不同的地方。我不确定随着
+
+115
+01:05:29.000 --> 01:05:45.000
+background of people. But maybe a developer decided he wants to try sales or try marketing or try product. And that's I think what Lumigo is still a bit different. I'm not sure we can maintain that as
+我们有 100 或 200 名员工时是否还能保持这一点，但我们仍然非常、非常与众不同。酷。这太棒了。是的，这完全引起了共鸣。我想我喜欢这样的公司，它们真正支持
+
+116
+01:05:45.000 --> 01:06:02.000
+we have 100 or 200 employees, but we're still very, very much differentiated. Cool. That's awesome. Yeah, it totally resonates. I think that I love companies like this that are there to really support
+开发人员，因为你真的觉得你在帮助自己的同行，你有点像在进行自我消费（dogfooding），你在构建一些你自己也想要的东西，这真的很酷。没错。太棒了。是的，非常感谢，我的意思是，我认为我们在介绍无服务器方面做得非常棒。如果外面的朋友有任何问题，或者如果他们想，你知道，参加这个免费试用，或者如果他们想就你谈论的事情联系你并进行跟进，联系 Lumigo 的好方法是什么，联系你的好方法又是什么？你只需，你知道，访问我们的网站并点击开始，你知道这超级简单，你不需要和任何人说话，并且你知道……
+
+117
+01:06:02.000 --> 01:06:47.000
+developers because you really feel like you're helping your really support developers because you know you really feel like you're kind of helping your own you're sort of like dogfooding uh something you're building something that you would want to have yourself which is really cool exactly great yeah thank you so much i mean i think we did an awesome job covering serverless if folks out there have any uh questions or if they want to you know get on this free trial or if they want to ping you about something that you talked about and kind of follow up, what are good ways to reach Lumingo and also good ways to reach you? you can just you know go to our website and click on start and you know it's super easy you don't need to talk to anyone and you know
+开发者，因为你真的觉得你在帮助，你真的支持开发者，因为你知道你真的觉得你有点在帮助你自己的团队，你有点像是在用自己的产品，嗯，你在构建你自己也想要拥有的东西，这真的很酷，完全正确，太棒了，是的，非常感谢，我的意思是，我觉得我们在涵盖无服务器架构方面做得非常棒，如果外面的朋友们有任何问题，或者如果他们想参加这个免费试用，或者如果他们想就你谈论过的事情联系你并进行跟进，有什么好方法可以联系 Lumingo 以及有什么好方法可以联系你？你只需要去我们的网站，点击开始，你知道的，这超级简单，你不需要和任何人说话，你知道的
+
+118
+01:06:47.000 --> 01:06:55.000
+five minutes to connect and that's free for the free tier so you can just go and do that if you want to ask deeper questions on
+有五分钟的交流时间，而且免费层是免费的，如果你想就此深入提问，可以直接去操作
+
+119
+01:06:55.000 --> 01:07:05.000
+serverless on Lumigo or in general on this domain please please ping me I really really enjoy talking to more and more people
+关于 Lumigo 的无服务器架构或者这个领域的通用问题，请随时联系我，我非常非常喜欢和越来越多的人交流
+
+120
+01:07:05.000 --> 01:07:43.000
+in our community, and we love to help where we can because we have a lot of serverless expertise in Lumigo. We have what's called Serverless Heroes by AWS within the company, and we actually manage to help from time to time to, not just to our customers and users. So feel free to approach with any question. The best way to reach me would be through either LinkedIn or Twitter. Sending a direct message would probably be the easiest.
+在我们的社区中，我们乐意在力所能及的地方提供帮助，因为我们在 Lumigo 拥有丰富的无服务器专业知识。公司里有 AWS 授予的所谓“无服务器英雄”，我们不仅对客户和用户，而且不时也能提供各方面的帮助。所以随时可以带着任何问题来找我。联系我的最好方式是通过 LinkedIn 或 Twitter。发送私信可能是最简单的途径。
+
+121
+01:07:43.000 --> 01:08:15.000
+Cool. Yeah. And we'll post in the show notes, you know, the website and also your contact information and all of that. So check out the show notes for all the details. We'll also post to where you could get on the trial and everything. Cool. Thank you again, Erez. This is a amazing episode. We covered a ton of really good topics here. I guess just the last bit of takeaway from my end, and then I'll hand it over to you, is definitely start with serverless. It can feel overwhelming because you don't have
+酷。是的。我们会在节目文稿中发布网址、你的联系方式以及所有这些信息。所以请查看节目文稿了解所有详情。我们还会发布你可以试用的链接等等。酷。再次感谢你，Erez。这是一期精彩的节目。我们在这里探讨了大量非常好的主题。我想我的最后一点心得，然后我就把话筒交给你，绝对是从无服务器开始。它可能会让人感到不知所措，因为你没有
+
+122
+01:08:15.000 --> 01:08:52.000
+just a console right there. You don't see the logs right there. But I can tell you as someone who's built a lot of different things, it's so much easier to maintain. And in fact, the things that I've built on the cloud are still there. And a lot of the hobbies that I've built on my desktop, even the desktop doesn't exist anymore. It's just in a trash heap somewhere because it's 20 years old or something. So hardware fails, serverless stuff seems to last a long time. And operating systems change, but your serverless function is containerized. You don't have to worry about that. So check it out. Definitely, definitely good to learn.
+一个直接摆在那里的控制台。你看不到直接在那里的日志。但我可以告诉你，作为一个构建过很多不同东西的人，它维护起来要容易得多。事实上，我在云端构建的东西现在都还在。而我在桌面上构建的很多业余项目，甚至桌面本身都不复存在了。它只是在某个地方的垃圾堆里，因为它已经有 20 年左右的历史了。所以硬件会失效，无服务器的东西似乎能持久存在。操作系统会变，但你的无服务器函数是容器化的。你不需要担心这一点。所以去了解一下吧。绝对、绝对值得去学习。
+
+123
+01:08:52.000 --> 01:09:19.000
+You know, you could be a beginner, you could be intermediate. One thing I tend to be, you know, I have a reputation for being extremely frugal. And one of the reasons I didn't get into serverless was because I didn't want to pay even like 17 cents a month or something like that. That is ridiculous. So don't be like me. Don't do that. Spend the like $1 a month or $10 a month or, you know, to have something, you know, have the peace of mind, have something that runs in the cloud.
+你知道，你可以是初学者，也可以是中级水平。我往往有一个特点，你知道的，我以极其节俭而闻名。我没有涉足无服务器的原因之一，是因为我甚至不想支付每月 17 美分左右的费用。这太荒谬了。所以不要像我一样。不要那样做。花上每月 1 美元或 10 美元左右，或者，你知道的，为了买个安心，去搞一个在云端运行的东西。
+
+124
+01:09:19.000 --> 01:10:00.000
+You know, they handle so much for you. And for things like Lumico that are free, I mean, it's a no-brainer. Try this out. You will have trouble debugging. I mean, I can speak from experience. When you're passing a lot of this information around, it makes debugging a challenge. But it's a challenge you're going to have to learn if you're going to get a career in this industry. Well, maybe, you know, I know Patrick does a lot of embedded stuff, so he might scoff at that. But, you know, if you're building a website or building one of these big services, you know, that's a skill you're going to need to learn anyways. And so definitely try this out. And Erez, I'd love to head off to you. What are your sort of closing
+你知道，他们为你处理了太多事情。对于像 Lumigo 这样免费的东西，我的意思是，这根本不用多想。试一试吧。你在调试时会遇到麻烦。我的意思是，我可以凭经验说。当你传递大量这类信息时，调试会成为一项挑战。但如果你想在这个行业获得职业生涯，这是你必须要学会的挑战。好吧，也许，我知道帕特里克做很多嵌入式的东西，所以他可能会对这一点嗤之以鼻。但是，你知道，如果你在构建网站或构建这些大型服务之一，你知道，这是你无论如何都需要学习的技能。所以一定要试一试。Erez，我很想把话题交给你。你有什么样的总结
+
+125
+01:10:00.000 --> 01:10:20.000
+thoughts? Yeah, I really, I want to echo what you mentioned. Starting with serverless, first of all, it's fun. So go try it because it's fun. It's fun seeing how fast you can build things. There are great, great workshops out there. You can take a two-hour,
+想法？是的，我真的很想呼应你刚才提到的。从无服务器开始，首先，它是很有趣的。所以去尝试吧，因为它很有趣。看到你能以多快的速度构建出东西，这很有趣。外面有非常棒的工作坊。你可以参加一个两小时、
+
+126
+01:10:20.000 --> 01:10:41.000
+three-hour workshop that really takes you step-by-step. And all of a sudden, you have an application that orders taxes or something, and it only took two hours. And that's simple. And that's straightforward. And then you basically, a lot of people fall in love at this stage and then start to investigate what they can do more.
+三小时的工作坊，它真的会带你一步一步来。突然之间，你就有了一个可以处理税务或类似事情的应用，而且只花了两个小时。这就很简单。也很直观。然后你基本上，很多人在这个阶段就爱上了它，然后开始探索他们还能做些什么。
+
+127
+01:10:41.000 --> 01:11:00.000
+But start small. Try it out. Actually, when it slumbers, I think you have 1 million invocation for free from AWS. So it's, you know, even Jason, even you can try it without the 70%. So, yes, I think that's what I want to echo. Definitely go and try it.
+但要从小处着手。尝试一下。实际上，在 Lumigo，我认为 AWS 提供了 100 万次免费调用。所以，你知道的，连杰森，甚至你也可以不用花那 70% 的钱去尝试。所以，是的，我想这就是我想要呼应的。一定要去尝试一下。
+
+128
+01:11:00.000 --> 01:11:27.000
+Cool. Thank you again for coming on the show, Erz. We really appreciate it. Thank you very much, Jason and Pratik it was a pleasure music by Eric Barndaller programming throwdown is distributed under a Creative Commons Attribution Share Alike
+酷。再次感谢你来到节目中，Erez。我们非常感激。非常感谢，杰森和普拉蒂克，非常荣幸。片头音乐由 Eric Barndaller 提供。《编程脱口秀》采用知识共享署名-相同方式共享发布
+
+129
+01:11:27.000 --> 01:11:32.000
+2.0 license. You're free to share, copy, distribute, transmit the work, to remix, adapt the work, but you must provide an attribution to Patrick and I, and share alike in kind. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+2.0 协议授权。你可以自由共享、复制、分发、传输作品，进行演绎和改编，但你必须向我和帕特里克提供署名，并以相同方式共享。本期节目暂无评论。点击字幕中的任意句子即可留下评论。

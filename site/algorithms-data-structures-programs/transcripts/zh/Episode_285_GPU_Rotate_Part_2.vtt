@@ -1,0 +1,236 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:37.000
+No, no, I agree with you. It's incredible also how I think this is one of the interesting things and nice things about GPU programming is that an algorithm that can be so simple to understand and so intuitive as a rotate can get so complicated when it comes to implementing it if you want to achieve the best performance. That's basically the beauty of GPU programming, that everything is so intricate. I mean, it's definitely a property of GPU programming, but if you think about the implementation of rotate on the CPU, like, it's very, very complex as well. Like, before I knew about iterator category tag dispatching,
+不，不，我同意你的看法。GPU 编程还有一个不可思议且美妙的地方在于，像旋转（rotate）这样理解起来如此简单、直观的算法，在想要实现最佳性能时，其实现过程会变得异常复杂。这基本上就是 GPU 编程的魅力所在，一切都如此错综复杂。我的意思是，这绝对是 GPU 编程的一个特性，但如果你想想 CPU 上 rotate 的实现，其实也是非常非常复杂的。比如，在我了解迭代器类别标签分派（iterator category tag dispatching）之前，
+
+2
+00:00:37.000 --> 00:01:10.000
+you'd think it's just a bunch of swaps, which I guess it is at the end of the day. But depending on the iterator category, it's dispatching to like a bunch of different implementations. Anyway, so just like rotate visually, very simple. But like, not just on the GPU, but also on the CPU. You know, it's like the algorithm rabbit hole that never ends. Welcome to ADSP, the podcast, episode 285 recorded on. May 5th,
+你可能会觉得这只是一堆交换操作，我想归根结底确实如此。但根据迭代器类别的不同，它会分派到一堆不同的实现中。总之，就像 rotate 从视觉上看非常简单一样，但不仅在 GPU 上，在 CPU 上也是如此。你知道，这就好像是一个永无止境的算法兔子洞。欢迎来到 ADSP 播客，我是第 285 期，录制于 2026 年 5 月 5 日。
+
+3
+00:01:10.000 --> 00:01:19.000
+2026. My name is Connor and today with my co-host, Bryce, we continue part three of our five-part chat with Marco, our fellow NVIDian.
+我是 Connor，今天我的联席主持是 Bryce，我们将继续与我们的 NVIDIA 同事 Marco 进行五部分对话的第三部分。
+
+4
+00:01:19.000 --> 00:01:36.000
+In today's episode, we continue our discussion of a GPU implementation of the algorithm rotate. All right, so we're gonna rotate to rotate. And this is actually going to be episode 285. We'll lose the listeners
+在今天的节目中，我们继续讨论算法 rotate 的 GPU 实现。好了，我们要开始旋转了。这实际上将是第 285 期节目。当我们在几周后打乱顺序发布这期节目时，
+
+5
+00:01:36.000 --> 00:01:51.000
+in a couple weeks when we release this out of order. And so now we are going to rotate back to our GPU rotate. Do we want to, I guess we'll add MVComp at the end. We'll save the questions for the end. And we'll just pick up where we left off
+我们就会失去听众。所以现在我们要转回我们的 GPU rotate。我们是要，我想我们会在最后加上 MVComp。我们把问题留到最后。然后我们将从两周前录制时
+
+6
+00:01:51.000 --> 00:02:12.000
+when we recorded two weeks ago. And so where we left off was that we had covered the first implementation of rotate on the GPU. And then we had to pause because Bryce was late. We never, we'd actually, I do know that you managed to pick up Ramona because I saw a video that you sent me. And so Ramona is safe and sound at home.
+中断的地方继续。我们当时讲到的是，我们已经介绍了 GPU 上 rotate 的第一个实现。然后我们不得不暂停，因为 Bryce 迟到了。我们从来没有，其实我确实知道你成功接到了 Ramona，因为我看到了你发给我的视频。所以 Ramona 安然无恙地在家。
+
+7
+00:02:12.000 --> 00:02:25.000
+Anyways, back over to you. Marco. Tell us about the second GPU rotate implementation. Why do we need to? Not only that, I managed to, I did bring flowers. Yeah. Anyways, over to you, Marco. All right.
+不管怎样，话筒交回给你，Marco。给我们讲讲第二个 GPU rotate 的实现吧。为什么我们需要？不仅如此，我还成功带了花。对。不管怎样，交给你了，Marco。好的。
+
+8
+00:02:25.000 --> 00:02:57.000
+So, do you want to do a recap on why we needed a long algorithm and how the short algorithm works? Let's do that, yes. In the short algorithm, it's called short because you're assuming that the rotate distance is going to be less than the size of the tile. that you use for tiling the array for parallelizing the memory movement. And so in the short algorithm, how it works is that each block of threads is going to get a tile starting from the back of the array and moving forwards.
+那么，你想回顾一下为什么我们需要长算法（long algorithm）以及短算法（short algorithm）是如何工作的吗？我们来回顾一下吧。是的。在短算法中，之所以叫短，是因为你假设旋转距离将小于用于分块数组以并行化内存移动的块（tile）的大小。所以在短算法中，它的工作原理是：每个线程块将从数组的末尾开始向前获取一个 tile。
+
+9
+00:02:57.000 --> 00:03:35.000
+And then they get a tile, they cache it into shared memory. They set a flag flagging that that tile has been cached and another thread block can override that memory location. And then they look at the flag of the tile that they are going to overwrite to make sure that they are not overwrite. make sure that they are not overwriting memory that has not been read yet, and then they can store the tile in its destination and move on to the next tile. And so since you're moving the tiles in a spatial order from the back forwards, in a specific, in a situation where your road day distance is large enough that you cannot cover that road day distance with the amount of
+然后它们获取一个 tile，将其缓存到共享内存（shared memory）中。它们设置一个标志，表明该 tile 已被缓存，另一个线程块可以覆盖该内存位置。然后它们查看即将覆盖的 tile 的标志，以确保它们没有在覆盖，确保它们没有覆盖尚未被读取的内存，然后它们就可以将 tile 存储到其目标位置并移动到下一个 tile。因此，由于你是按空间顺序从后向前移动 tile，在你的旋转距离足够大，以至于无法用你
+
+10
+00:03:35.000 --> 00:04:17.000
+tiles that you're processing at the same time, you're going to have a deadlock because all of your blocks of threats that are waiting for the flags to be released in order to store something are going to be waiting indefinitely because there's not enough blocks running in order to make that work. And so that's why it's called a short algorithm. This is a very interesting property of this particular algorithm, you know, that if you, you have this linear parameter, how much you're going to shift by. And if you go over a certain size, then you have to switch to a completely different implementation strategy. And that shift point is like going to be some unintuitive number
+同时处理的 tile 数量来覆盖该旋转距离的情况下，你将会遇到死锁（deadlock），因为所有等待释放标志以存储某些内容的花费了资源的线程块都将无限期地等待，因为没有足够的运行块来使之工作。这就是为什么它被称为短算法。这是这个特定算法的一个非常有趣的特性，你知道，如果你有这个线性参数，即你要移动多少。如果你超过了一定的规模，那么你必须切换到一个完全不同的实现策略。而这个转变点会是一个很不直观的数字，
+
+11
+00:04:17.000 --> 00:04:44.000
+that's just like a property of the underlying hardware and the underlying degree of concurrency. I just find that's like a very fascinating property. I don't think that any of our other core algorithms have a similar property in that they have some linear parameter like this. That just so, it's almost like, you tell me that there's these two very different implementations, it's almost as if maybe one could imagine them,
+它只底层硬件和底层并发度的一个属性。我只是觉得这是一个非常迷人的属性。我不认为我们的任何其他核心算法具有类似的属性，即它们有这样一个线性参数。这太……就好像，你告诉我这两个截然不同的实现，几乎就像人们可以想象它们是不同的算法一样，你知道吗？
+
+12
+00:04:44.000 --> 00:05:08.000
+they're different algorithms, you know? Like in other circumstances where it's not a linear parameter, we would probably have two different named algorithms. But in this case, because the interface, like there's no reason to surface this in the interface because it's just this like linear parameter. Like why if it's, you know, a thousand versus a thousand and one do I need to call a completely different API?
+在其他不是线性参数的情况下，我们可能会有两个不同名称的算法。但在这种情况下，由于接口——没有理由在接口中暴露这一点，因为它只是这样一个线性参数。如果它是一千与一千零一的区别，为什么我需要调用一个完全不同的 API？
+
+13
+00:05:08.000 --> 00:05:46.000
+Yeah, it's just fascinating to, I really think this is very unique in our parallel algorithms library design. I mean, maybe there's some other analogy that you can think of that I can't. No, no, I agree with you. It's incredible also how I think this is one of the interesting things and nice things about GPU programming is that an algorithm that can be so simple to understand and so intuitive as a rotate can get so complicated when it's, comes to implementing it if you want to achieve the best performance. Yeah. That's basically the beauty of GPU programming that everything is so intricate.
+是的，这真的很迷人，我真的认为这在我们的并行算法库设计中是非常独特的。我的意思是，也许你能想到一些我没有想到的其他类比。不，不，我同意你的看法。不可思议的是，我认为这也是 GPU 编程有趣且美好的地方之一：像 rotate 这样易于理解和直观的算法，在想要实现最佳性能时，实现起来会变得如此复杂。是的。这基本上就是 GPU 编程的魅力所在，一切都如此错综复杂。
+
+14
+00:05:46.000 --> 00:06:21.000
+Well, I think it's you can almost, I mean, it's definitely a property of GPU programming. But if you think about the implementation of rotate on the CPU, like, it's very, very complex as well. Like before I knew about iterator category tag dispatching, you think it's just a bunch of swaps, which I guess it is at the end of the day. But depending on the iterator category, it's dispatching to like a bunch of different implementation of which, you know, the generalization of GCD, which, you know, I've gotten comments on videos before is like, GCD isn't used for anything. It's like, well, it's actually used for a lot of stuff. And it's, and it's not just on integers. You can think of it on, like, sequence lengths.
+嗯，我想你可以几乎，我的意思是，这绝对是 GPU 编程的一个特性。但如果你想想 CPU 上 rotate 的实现，比如，它也非常非常复杂。在我知道迭代器类别标签分派之前，你可能会觉得它只是一堆交换操作，我想归根结底确实如此。但根据迭代器类别的不同，它会分派到一堆不同的实现中，其中，你知道，GCD 的泛型化（我在视频的评论中看到过有人说 GCD 没有用于任何东西，实际上它被用于很多东西），并且它不仅限于整数。你可以把它想象成序列长度。
+
+15
+00:06:21.000 --> 00:06:56.000
+And anyway, so just like rotate visually, very simple, but like not just on the GPU, but also on the CPU. You know, it's like the algorithm rabbit hole that never ends. Yeah, yeah, for sure. And so, yeah, so that's basically that. And then you need to switch. to the long algorithm. And so actually it's very similar, quite similar in terms of the memory movement and the implementation. It's just that now you no longer process the tiles in spatial order, because if you did that, you would deadlock. And so now you need to say, let's say we start at the tile that's at the back.
+总之，就像 rotate 视觉上非常简单一样，但不仅在 GPU 上，在 CPU 上也是如此。你知道，这就好像是一个永无止境的算法兔子洞。是的，是的，确实如此。所以，是的，基本上就是这样。然后你需要切换到长算法。实际上，在内存移动和实现方面它非常非常相似。只是现在你不再按空间顺序处理 tile 了，因为如果你那样做，就会死锁。所以现在你需要说，假设我们从后面的 tile 开始。
+
+16
+00:06:56.000 --> 00:07:41.000
+Then we know that the tile that's at the back, it's going to override the tile that's wherever. And then that tile is going to overwrite another tile. So you start creating this dependency chain of how do you need to process tiles in order to minimize the distance between them whenever processing and minimize the possibility of a deadlock. Yeah, so now, of course, now that our road day distance is large, we also need to tile the part that we are moving into the back. So in the short algorithm, since we knew that our rotate distance was less than the size of a tile, we wouldn't bother with that. We just said, OK, the last tile in the ones that we're processing is the one that takes care of moving the first elements into the back. But now, since our rotate distance is large,
+然后我们知道，后面的那个 tile 将会覆盖位于某处的 tile。然后那个 tile 又会覆盖另一个 tile。所以你开始创建这个依赖链：为了在处理时最小化它们之间的距离并最小化死锁的可能性，你需要按什么顺序处理 tile。是的，所以现在，当然，既然我们的旋转距离很大，我们还需要对我们要移到后面的部分进行分块。所以在短算法中，既然我们知道旋转距离小于 tile 的大小，我们就不会操心这个。我们只是说，好吧，在我们处理的那些 tile 中，最后一个 tile 负责将前几个元素移到后面。但现在，既然我们的旋转距离很大，
+
+17
+00:07:41.000 --> 00:08:12.000
+we also need to tile all of the elements that go into the back, because that's now a big part of our array. And we would lose a lot of performance if we did it. And so now in the implementation, those tiles that are going to be rotated into the back are going to be negative tiles. So the tile that starts at the beginning of the array is tile minus 1, and then you go to tile minus 2, minus 3, minus 4, until you get to the boundary where the road day distance is, and then you start with the positive tiles, which start at 0,
+我们还需要对进入后面的所有元素进行分块，因为这现在是我们数组很大的一部分。如果我们不这样做，我们会损失很多性能。所以在实现中，那些将被旋转到后面的 tile 将是负数 tile。所以从数组开头开始的 tile 是 tile -1，然后你依次是 tile -2、-3、-4，直到到达旋转距离的边界，然后你从正数 tile 开始，它们从 0 开始，
+
+18
+00:08:12.000 --> 00:08:43.000
+and so on. And so how the implementation now works is that you create a dependency map, so to speak. So you calculate, this is basically a mathematical calculation where if you know the array size, the tile size, and the road day distance, for any time, you can mathematically find out which tiles it is going to override. So which memory location is going to overwrite. And so you do that for every tile. And once you have that, you basically start at tile zero.
+以此类推。现在实现的运作方式是，你创建了一个依赖映射（dependency map），可以这么说。所以你计算出——这基本上是一个数学计算，如果你知道数组大小、tile 大小和旋转距离，对于任何 tile，你都可以在数学上找出它将覆盖哪些 tile。也就是它将覆盖哪个内存位置。所以你对每个 tile 都这样做。一旦你有了这个，你基本上从 tile 0 开始。
+
+19
+00:08:43.000 --> 00:09:07.000
+And let's say tile zero overrides tile minus one and tile minus two. Then, since you know that it's going to override those, you start at tile zero and then you go on to minus one. And then you see, okay, which tile does tile minus one overwrite? overrides tile 30. And so you jump to tile 30. And then tile 30 overrides tile 50 or whatever. And you do that.
+假设 tile 0 覆盖了 tile -1 和 tile -2。然后，既然你知道它会覆盖这些，你就从 tile 0 开始，然后进入 -1。接着你看，好的，tile -1 覆盖了哪个 tile？它覆盖了 tile 30。所以你跳转到 tile 30。然后 tile 30 覆盖了 tile 50 或诸如此类的东西。你就这样做。
+
+20
+00:09:07.000 --> 00:09:46.000
+And so you have this dependency chain that you follow until you've covered all of the tiles. And so you do this on the CPU and then you pass this, you copy this array onto the GPU. And so now, instead of processing the tiles in spatial order, you process these tiles along the dependency chain. And so that way you're minimizing the possibility of a deadlock. And so this is basically the only. change. In terms of the memory movement is the same. It's the same in terms of that you cache into shared memory, you free the override flag, and then you look at your dependencies override flags in order to write to the destination. What changes is how you process the tiles and in which
+于是你有了这个依赖链，你沿着它一直跟进，直到覆盖了所有的 tile。你把这个在 CPU 上做好，然后把这个数组复制到 GPU 上。所以现在，你不再按空间顺序处理 tile，而是沿着这个依赖链来处理这些 tile。这样一来，你就最大限度地减少了死锁的可能性。所以这基本上是唯一的改变。在内存移动方面是一样的。在将数据缓存到共享内存、释放覆盖标志，以及为了写入目标而查看依赖项的覆盖标志方面，它是一样的。改变的是你如何处理 tile 以及你以什么顺序来做这件事。但这也是另一个有趣的事情，它也不是对死锁免疫的，因为对于某些数组大小和旋转距离，你可以得到这样一个依赖链：一个 tile 与它为了覆盖而需要被释放的最远依赖项之间的距离，实际上比你驻留在 GPU 上的线程块数量还要大，因此你再次会遇到死锁，所以你实际上需要第三个实现，也就是朴素实现（naive implementation），在那里你只是天真地去做：你只是通过复制第一个元素来做旋转……
+
+21
+00:09:46.000 --> 00:10:55.000
+order you do that. But this is also another interesting thing that it's also not impervious to deadlocking, because for certain array sizes and rotate distances, you can get a dependency chain where the distance between one tile and its furthest dependency that it needs to be freed in order to override is actually larger than the number of third blocks that you have on your on your GPU resident so you would again have a deadlock and so you actually need a third implementation that is then the naive implementation where you just do it naively you just do the road date by copying the first element I'm sorry you lost me on the third third one I don't I don't know I don't know I'm not seeing the deadlock. Can you explain this to me again? Yeah. So you understand how now we're using this dependency chain so that we process them in the order that they are going to be needed to be processed, so to speak. Because if tile zero is overriding tile minus one and tile minus two, for it to be able to override them as, or for it to be able to override them and not deadlock, after a threat
+抱歉，我在第三个那里听不懂了，我、我不懂、我不懂，我没看到死锁在哪里。你能再给我解释一遍吗？好的。所以你理解了为什么我们现在使用这个依赖链，以便我们按照它们需要被处理的顺序来处理它们，可以这么说。因为如果 tile 0 覆盖了 tile -1 和 tile -2，为了让它能够覆盖它们，或者为了让它能够覆盖它们而不死锁，在抓住 tile 0 的线程块之后，你希望下一个线程块去抓住 tile -1 和 -2，这样你就释放了 tile 0，它就可以继续并存储到它的位置上。这就是依赖图的概念。你理解这个概念了吗？你有一个可视化视图吗？有的。
+
+22
+00:10:55.000 --> 00:11:31.000
+block grabs tile zero, you want the next threat blocks to grab tiles. minus 1 and minus 2, so that you free up, tile 0, and it can move on and store into its location. And so that's the concept of the dependency graph. That you get the concept of them. Do you have a visual? Yes. I know we're not, I know we're not supposed to ask in the podcast, but. Yeah, yeah, I know. This is, the listener is going to have to visualize it, but I can, I can show you a visual. The listener may not be, the listener may not be as, as tired as I I am.
+我知道我们不应该在播客里问，但是……是的，是的，我知道。听众将不得不靠想象，但我可以给你展示一个可视化视图。听众可能不像我这么累。
+
+23
+00:11:31.000 --> 00:11:42.000
+Connor, maybe please can give me an exception. I mean, I was thinking that, you know how Wikipedia for at least the sort algorithms, they have all these really nice animations of like, you know,
+Connor，也许你能给我开个特例？我是觉得，你知道维基程序（Wikipedia）上至少对于排序算法，它们都有所有这些非常漂亮的动画，比如（归并排序或冒泡排序），这里针对两种不同的实现如果也有一个等效的动画，展示 tile 按照依赖顺序被复制，如果你能在播客中展示出来，那可能会简单一个数量级，但你不能。我的意思是，如果我们有视频格式的话我们可以，但我们现在没有。所以，从技术上讲，这是在录制的。我们讨论过这个。我们有，是的。一旦 Bryce 和我都退休了——你知道，无论什么时候，几十年后——也许我们会添加视频。
+
+24
+00:11:42.000 --> 00:11:59.000
+merge or bubble sort, that it's an equivalent animation for the two different implementations here that show the tiles being, you know, copied in the dependency order would probably be like an order of magnitude easier if you could show that in a
+好吧，所以你能看到屏幕。好的，我想基本上我可以描述我们所看到的。我们看到一个有 10 个 tile 的数组，我们想把它旋转 3 个半 tile。对。我们是怎么做到的呢？我们首先创建这个依赖表，其中每个 tile 将作为——如果你把它想象成一个哈希映射（hash map），tile 编号将是键（key），而值（value）将是该 tile 覆盖的 tile 列表。例如，由于 tile 0 总是要进入数组的前端，因为它是旋转距离之后的第一个，它将总是覆盖 tile -1，后者是数组开头的第一个 tile。所以键将是 tile 0，值将是 tile -1。
+
+25
+00:11:59.000 --> 00:12:35.000
+podcast, which you cannot. I mean, we could if we had a video format, but we don't right now. So, I mean, technically this is being recorded. We've talked about it. We have, yeah. Once both Bryce and I retire and, you know, whenever that is, a couple decades, maybe we'll add video. Okay, so you can see the screen. Okay, so I guess basically I can describe what we're seeing. So we're seeing an array that has 10 tiles where we want to rotate it by three and a half tiles. Right. And so how we do this is that we first create this dependency table where each tile is going
+如果我们对所有的 tile 都这样做，我们现在就有了依赖映射，我们现在从 tile 0 开始依赖链。如我们所说，tile 0 覆盖了 tile -1。所以我们把那个加入到我们的依赖链中。然后我们看 tile -1，从访问哈希映射中，我们看到在我们的例子中它覆盖了 tile 3。所以我们把 tile 3 添加到我们的处理顺序或依赖图中。
+
+26
+00:12:35.000 --> 00:13:07.000
+to have as there, if you think of it as a hash map, the tile number is going to be the key and the value is going to be a list of the tiles that that tile overrides. So for example, since tile zero, it's always going to be going into the front of the array because it's the first one after our rotate distance, it is always going to be overwriting tile minus one, which is the first tile at the beginning of the array. And so the key would be tile zero, and the value would be tile minus one.
+然后我们看 tile 3，tile 3 覆盖了 tile -4 和 tile 0。所以我们添加 -4。但由于 tile 0 之前已经被处理过了，我们不需要再次添加它，所以我们不添加。然后我们看 tile -4，我们一遍又一遍地这样做。什么是处理？如果零依赖于负一，那你怎么能在负一之前处理零呢？不，好吧，这里零依赖于负一体现在：为了让抓住 tile 0 的线程块能够继续其处理，
+
+27
+00:13:07.000 --> 00:13:35.000
+And so if we do this for all of our tiles, we now have our dependency map, and we now start the dependency chain in tile zero. And so tile zero, as we've said, overrides tile minus one. And so we add that one into our dependency chain. And then we look at tile minus one, and then from accessing the hash map, we see that it overrides tile three in our example. And so we add tile three to our processing order or to our dependency graph.
+它需要某个其他人、某个其他线程块已经抓住了 tile -1 并将其缓存了。因为如果不是这样，它将覆盖这里原本的东西。所以，在你抓取 tile 0 之后，你在等待某人去抓取 tile -1？完全正确。好的。所以这个处理顺序只是为了让它运行得更快。嗯，是为了让它运行得更快，但也是为了让它不发生死锁。
+
+28
+00:13:35.000 --> 00:14:10.000
+And then we look at tile three, and tile three overrides tiles minus four and tile zero. And so we add minus four. But since tile zero has already been processed earlier, we don't need to add it again, so we don't add it. And then we look at tile minus four, and we do that on and on. What does processing mean? If zero depends on negative one, then how do you process zero before negative one? No, well, what zero depends on negative one in the sense that in order for the threat block that has grabbed Tile Zero to be able to continue with its processing,
+因为想象一下，在我们的例子中，我们只有三个处理器。假设我们从前面开始，为了简单起见。那么我们将抓取 tile -1、-2、-3。但 tile -1 会试图去覆盖一个没有其他处理器在抓取的东西，所以它会死锁。所以它有双重作用。当你构建这个处理顺序时，它有一个自然的模式。所以你其实不需要构建一个列表，对吧？你可以只对这个模式进行编码？不，我确实构建了一个列表。如果有的话就好了。这是我想进一步研究的事情，看看有没有一种方法可以在数学上计算出处理顺序，
+
+29
+00:14:10.000 --> 00:14:36.000
+it needs someone, some other thread block, to have grabbed Tile minus one and have cached it. Because if not, it's going to override whatever was here. So while, so after you grab Tile Zero, then you're waiting for somebody to grab tile negative 1? Exactly. Okay. And so this is just the processing order is to make this go faster. Well, it's to make this go faster, but also to make it not deadlock.
+而不需要实际去计算它。我想知道处理顺序是否可以做成一个惰性迭代器（lazy iterator），这样你就可以动态生成这个列表。Connor，Connor，也许可以考虑能生成这种序列的那种惰性迭代器。他正在努力攻克它，各位。我不太完全——嗯，当你最初问那个问题时，我挑了挑眉毛，我在脑子里想，我不太完全理解你的，所以你想要这个。所以，所以，所以，这个序列，0、负 1、
+
+30
+00:14:36.000 --> 00:15:16.000
+Because imagine in our example that we only had three processors. And let's say we started in the front, just to make it simple. Then we would grab tiles minus 1, minus 2, minus 3. But tile minus 1 would be one thing to overwrite something that no other processes. processor is grabbing, so it would deadlock. So it has that twofold. When you build this processing order, there's a natural pattern to it. So you don't have to actually build a list, right? You can just encode the pattern? No, I do build a list. It would be nice. This is something that I want to investigate a bit further, whether there's a way of mathematically calculating the processing order
+3、负 4、6、2、负 3、5、1、负 2、4 的处理顺序。想出某种扩展到该序列的惰性迭代器调用。我的意思是，这样做懒惰（lazily）的目标是什么？问题在于，现在，在实际实现中，你在 CPU 上计算这个处理顺序，然后在 GPU 上分配一个包含这个处理顺序的数组，这就是你用来让线程块抓取 tile 的东西。它们根据这个处理顺序来抓取 tile。如果不需要这样做，那就太理想了。
+
+31
+00:15:16.000 --> 00:15:50.000
+without actually calculating it. I wonder if the processing order, if you can make it like a lazy iterator so that it like you generate the list on the fly. Connor, Connor, maybe can can think about the type of lazy iterator that would spawn this sort of sequence. He's cranking on it, folks. I don't fully, well, I raised an eyebrow when you asked that initially and I was thinking in my head, I don't fully understand what you're, so you want this. So, so, so this, this sequence of, the sequence of the processing order of zero, negative one,
+并且一个线程块可以说，好吧，我想，现在我想处理处理顺序中的第五个 tile。如果线程块有一种方法可以计算出处理顺序中的第五个 tile 是哪个，而不需要经历所有这些，那就太好了，因为那样做成本会非常高。我的意思是，生成它的方式其实很简单：一旦你有了键值对的依赖表，你就可以从零开始顺着它找，对吧？你从零键到零值，这将成为你要查找的下一个键。但一旦你到达这个依赖图的末尾，事情就会变得有点复杂，因为那时你在表中会有一些有两个条目的项。就像有负四、零、零。有两个的很少。在实际实现中，大多数 tile 都会覆盖两个 tile。
+
+32
+00:15:50.000 --> 00:16:27.000
+3, negative 4, 6, 2, negative 3, 5, 1, negative 2, 4. Like, come up with some lazy iterator invocation that expands to that. I mean, what's the goal of doing this lazily? The thing is that right now, in the actual implementation, you calculate this processing order on the CPU, and then you allocate an array on the GPU that contains this processing order, and that's what you use so that the thread blocks grab tiles. They grab tiles according to this processing order. And it would be ideal if you didn't have to do that.
+为什么会这样？好吧，好吧，也许不是大多数，我想，大概。但你为什么会覆盖两个 tile 呢？你难道不总是只覆盖一个 tile 吗？不，因为在这里，例如，由于我们的数组大小是三半个 tile，最后一个负 tile 将是局部的。因此，无论谁覆盖它，都不会完全覆盖，所以它会跳进两个 tile 中。
+
+33
+00:16:27.000 --> 00:17:28.000
+And a thread of blocks could say, okay, I want to, right now I want to process the fifth tile along the processing order. And it would be nice if the thread block had a way of calculating which tile is the fifth one along the processing order without having to go through all of this, because then this would be super costly. I mean, and it's pretty simple the way that this is generated in that, once you have your dependency table of, like, key value pairs, you're just following it, starting at zero, right? You go from the zero key to the zero value, which is then going to be your next key that you look up. But it does get a little complicated once you get to the end of this dependency graph, because then you have some entries that have two in the table. Like there's negative fours, zero, there's zero. There's very little that have two. In real implementations, most tiles would be overwriting two tiles.
+现在，如果我们把你限制在没有部分 tile 的情况下，那么我觉得想象如何为这个编写一个惰性迭代器就会变得更容易。是的，而且我猜它可能不会影响通用性。是的。来吧，Connor。搞点 APL 或者别的什么出来。另一个问题是，你也不希望在 GPU 上生成依赖表，因为现在我们只有 10 个 tile，
+
+34
+00:17:28.000 --> 00:17:52.000
+Why is that? Well, okay, maybe not most, I think, probably. But why are you ever overriding two tiles? Aren't you just ever overriding one tile? No, because here, for example, since our array has a size of three and a half tiles, the last negative tile is going to be partial. And so whoever overrides it, it's not going to override fully, and so it's going to jump into two tiles.
+但你必须想象，对于一个 1 GB 的数组，你有成千上万个 tile，所以生成这个依赖表将比实际做旋转花更多的时间。所以这有点像个问题。等等，你是说你不想在 GPU 上这样做？不。所以处理顺序的生成和依赖表的生成是在 CPU 上进行的。然后作为处理顺序的数组，你把它复制到 GPU 上，然后你在 GPU 上进行实际的旋转。
+
+35
+00:17:52.000 --> 00:18:25.000
+Let's for right now, I think for, if you limit yourself to the case of no partial tiles, then I think it becomes easier to imagine how you could write a lazy iterator for this. Yeah, and it probably doesn't affect generalized ability, I would guess. Yeah. Come on, Connor. Crank out some, crank out some APL or something. The other problem is also that you don't want to have to generate the dependency table on the GPU either, because right now we only have 10 tiles,
+而你刚才说你想把依赖表的生成留在 CPU 上，但是顺序……不，我想找到一种不用生成依赖表的方法。比如，我想找到这样一种方式：一个线程块说它想要处理处理顺序中的第五个 tile，在我们的例子中是 tile 6。而问题是，是否有一种方法可以计算出，如果我们从零开始，处理顺序中的第五个 tile 是 tile 6，而不需要生成完整的依赖表或我们需要到那一点的部分依赖表，也不用遍历依赖图。那……是的，我明白了。
+
+36
+00:18:25.000 --> 00:18:52.000
+but you have to imagine that for an array of a gigabyte, you have tens of thousands of tiles, and so generating this dependency table would take more time than actually doing the road date. And so that's kind of the problem. So wait, you said you don't want to do that on the GPU? No. So the processing order generation and the dependency table generation takes part on the CPU. And then the array that is the processing order, you copy it to the GPU, and then you do the actual rotation on the GPU.
+哇。这似乎是可能的，但很难找到那种数学上的……现在，我脑子里缺乏细胞来思考这个问题。不过，我1觉得我们都应该考虑一下这个。我之前说过，我想不出一个与此类似的算法，但我刚刚确实想到了一个算法，我觉得它可能不完全相似，但也许属于同一个家族。这个算法就是转置（transpose）。转置与 rotate 的相似之处在于，这两个算法
+
+37
+00:18:52.000 --> 00:19:37.000
+And you were saying you want to keep the dependency table generation on the CPU, but the order... No, I want to find a way of not having to generate the dependency table. Of, let's say, I want to find a way where a thread block says it wants to process the fifth tile along the processing order, which in our case is tile six. and the question is, would there be a way of calculating that the fifth tile along the processing order, if we start at zero, is tile six without generating the full dependency table or the partial dependency table that we would need up up until that point, and doing the, and like walking along the dependency graph. That's... Yeah, I see.
+都纯粹是数据移动，并且两个算法都有某种数据重用模式，但比如在 L2 级别上，它们会有某种数据重用模式。然而，这两个算法都只从全局内存（global memory）中加载每个元素一次，并存储每个元素一次。现在，关于转置的另一件我觉得有点意思的事情是，当你转置时，你有点像在做一个局部转置，然后，你做一个，你知道的，全局转置。就像你加载一个 tile，在 tile 内部进行转置，
+
+38
+00:19:37.000 --> 00:20:13.000
+Wow. It seems like it could be possible, but it's hard to kind of find the mathematical... Now, I lack brain cells right now to be able to think through this. However, I think we should both think about this. I have another, I said earlier, I can't think of an algorithm that's sort of similar to this, but I did just think of an algorithm that I don't think it's similar, but maybe it's in the family. And the algorithm is transpose. And the similarity that transpose has to rotate is that both algorithms,
+然后你把那个 tile 写回到某个新的位置，某个新的转置后的位置。我不知道。这种模式的某些东西让我联想到了 rotate。我觉得这里面可能有一些相似之处。我们在 cup 中没有像转置这样的算法，没有纯粹的转置，但是……而且你能原地（in-place）进行转置吗？
+
+39
+00:20:13.000 --> 00:20:49.000
+are purely data movement, and both algorithms have like some data reuse pattern, but like at the L2 level, they would have some data reuse pattern. However, both algorithms only ever, you know, load each element once and store each element once from like global memory. Now, the other thing about transpose that I think is a little bit interesting is so when you transpose, you sort of do like a local transpose, and then, you do like a, you know, a global transpose. Like you load a tile, you transpose within the tile,
+我不确定。我不知道通常的实现是原地进行的，还是只是分配了一个新数组。因为很难想象对于足够大的矩阵这能做到。嗯，我的意思是，实际上，如果你采取类似的方法，对吧？比如，如果我知道，对于任何给定的 tile，我知道那个 tile 要去哪里。所以我认为也可以做同样的事情，同样的依赖关系的事情。是的，但问题是，因为我也考虑过这一点，用于做一个按位转置（bit-plan transpose），这与正常的转置非常相似，
+
+40
+00:20:49.000 --> 00:21:10.000
+and then you like write right back that tile to some new look, to some new transposed location. I don't know. Something about that pattern sort of reminded me or of rotate. I felt like maybe there was some similarities there. We don't have like a transpose algorithm in cup, just like a pure transpose, but. And can you do the transpose in place?
+在那里你基本上是，如果你有一串字符，然后你转置它们，使得现在你有该字符最高有效位一个接一个，然后是第二个最高有效位，依此类推。在这种情况下，你基本上有一个无限的依赖链，其中一切都依赖于一切，所以你总是会死锁，因为你没有足够的并行度来覆盖一切，基本上是这样。我不知道用正常的转置会不会是这种情况。
+
+41
+00:21:10.000 --> 00:21:46.000
+I'm not sure about that. I don't know if the usual implementations do it in place or if they just allocate a new array. Because it's hard to imagine that it could be done for large enough matrices. Well, I mean, actually, I think if you took a similar approach, right? Like, if I know, for any given tile, I know where that tile is going to go. And so I know the same thing, the same dependency thing can be done, I think. Yeah, but the problem is, because I thought about this also for, doing a bit plan transpose, which is very similar to a normal one,
+我不这么认为。我认为在二维或诸如二维矩阵转置的情况下，如果我把所有东西都切成 tile，第 i 行第 j 列的 tile 将被写入第 j 行第 i 列的 tile 中。所以如果我加载 tile IJ，那么我必须等待某人加载 tile JI。而你的依赖顺序那套东西可能会对此有帮助。
+
+42
+00:21:46.000 --> 00:22:13.000
+where you're just basically, if you have an array of characters, you're then transposing them so that you now have the most significant bit of the character, one after the other, then the second most significant bit, and so on. And in that case, you basically have an infinite dependency chain where everything depends on everything, and so you always would have a deadlock, because you wouldn't have enough parallelism to cover everything, basically. I don't know if that would be the case with the normal transfer.
+是的，实际上，看起来这些 tile 只是彼此依赖。所以这实际上会使事情变得非常简单，因为你实际上永远不会死锁。你将能够只加载两个 tile，然后就这样做。是的，是的。所以也许比那更简单。也许你就可以那样做。不错。
+
+43
+00:22:13.000 --> 00:22:40.000
+I don't think so. I think in the case of a 2D or like a 2D matrix transpose, if I break everything up until tiles, like the tile, the ith jth tile is going to be written into the jeth ith tile. And so if I load tile IJ, then I have to wait for somebody to load tile jai. And your dependency order thing may help with that.
+是的，是的，好主意。也许你就可以那样做。有趣。Connor，你一直很安静。不，不，我一直在思考处理的事情，也许我们应该单独出一期节目来讨论是否有算法来做这件事，但我觉得你可能需要设定更多的约束条件，对吧？而且，这也是不明确的，因为在某种情况下，比如你总是会遇到这种情况：当存在局部 tile（partial tile）时，你总是
+
+44
+00:22:40.000 --> 00:22:59.000
+Yeah, actually, it seems like the tiles would be just dependent upon one another. And so that would actually make it very easy because you would actually never deadlock. You would be able to just load both tiles and then just do it that way. Yeah, yeah. So maybe it's simpler than that. Maybe you can just do it that way. Nice.
+会遇到一个键指向多个值的情况，对吧？这就是棘手的地方，对吧？因为你——好吧，这是棘手的原因之一，因为你不能——就像如果每个键只指向一个值并且所有这些值都是唯一的，那么你就可以保证一切都是一一对应的，你不需要担心诸如“这个在前面是不是已经被覆盖过了”之类的问题，就像我们在一个键是 3 指向负 4 和 0 的情况一样，0 在开头已经发生过了，而这个有两项。不管怎样，我觉得这个问题的简化版本肯定是可能的。但不管怎样，也许我们会推迟这个讨论，因为我确信我们在 GPU Rotate、实现方案 2、转置和 Rotate 之间跳来跳去时已经把
+
+45
+00:22:59.000 --> 00:23:27.000
+Yeah, yeah, that's a good point. Maybe you could just do it that way. Interesting. Connor, you've been very quiet. No, no, I've been thinking about the processing. thing and maybe we should have a separate episode on is there an algorithm to do this but i feel like you might need to put more constraints in place right and also too it's unclear right because in the case like are you you're always going to have when there is a like partial tile you're always
+听众给听晕了。我们这期录音差不多快到半小时大关了。我们是不是应该，我不知道，现在切掉它？请务必查看这些节目笔记，无论是在你的播客应用中还是在 ADSP thepodcast.com 上，都可以找到今天节目中提到的任何内容的链接，以及一个 GitHub 讨论的链接，你可以在那里留下你的想法、评论和问题。感谢收听。希望你喜欢，祝你有美好的一天。低质量，高数量。这就是我们播客的标语。那不是我们的标语。我们的标语是“带有信息点缀的混乱”。本集还没有评论。点击转录文本中的任何句子即可发表评论。
+
+46
+00:23:27.000 --> 00:24:12.000
+going to have the case where you've got a single key pointing to multiple values right and that's what makes it tricky right because you don't well it's one of the things that makes it tricky because you're not able, like if every key only points to one value and all of those values are unique, then you're guaranteed that like everything is one to one and you don't need to worry about, like, has this already been covered before in the case where, you know, we have a key here that's three pointing to negative four zero, like the zero already happened at the beginning and this one has two. Anyways, I feel like a simpler version of this problem, it's definitely possible. But anyways, like, maybe we'll defer that because I'm sure we've lost
+就会出现一个键指向多个值的情况，对吧？这就是棘手的地方，因为如果每个键只指向一个值且所有这些值都是唯一的，你就能保证一切都是一一对应的，不需要担心之前是否已经覆盖过这种情况，比如我们这里有一个键3指向负四和零，而零在开头已经出现过了，这里还有一个2。总之，我觉得这个问题的简化版肯定是可行的。但不管怎样，也许我们会先把这个放一放，因为我确信我们已经
+
+47
+00:24:12.000 --> 00:24:17.000
+the listener in between bouncing around from GPU Rotate, Implementation Number 2, and Transpose, back to Rotate. We're at the, I don't know, almost half hour mark of this part of this recording. Should we, should we, I don't know, slice this now? Be sure to check these show notes, either in your podcast app or at ADSP thepodcast.com for links to anything we mentioned in today's episode as well as a link to a get-up discussion where you can leave thoughts, comments, and questions. Thanks for listening. We hope you enjoyed and have a great day. Low quality, high quantity. That is the tagline of our podcast. That's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+在GPU旋转、第二种实现方案、转置以及再次旋转之间来回跳跃时，把听众给绕晕了。我们这期录音差不多已经进行到半小时左右了。我们是不是应该，是不是应该，把这段切分一下？请查看播客应用中的本期节目文稿，或者访问 ADSP thepodcast.com，获取我们今天节目中提到的一切内容的链接，以及可以留下想法、评论和问题的 GitHub 讨论区链接。感谢收听。希望你们喜欢，祝大家有个美好的一天。质量不高，数量管够。这就是我们播客的标语。不对，那不是我们的标语。我们的标语是“撒上信息糖屑的混乱”。本集还没有评论。点击文稿中的任意句子即可发表评论。

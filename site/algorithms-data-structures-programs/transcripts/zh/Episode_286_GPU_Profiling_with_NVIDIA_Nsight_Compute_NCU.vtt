@@ -1,0 +1,376 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:58.000
+So I think it's starting from Ampier, you have these asynchronous loads that allow you to load from global memory to shared memory without having to go through registers. And so your threads just issue those loads and then can move on to doing something else. And then you have to synchronize in it to make sure that that has already happened. And so using that is also a very powerful way of increasing and making sure that you're saturating the memory bandwidth. And then apart from that, it's just making sure. that you're not using too many instructions and being too inefficient because that can also be that can also hurt the performance. And another thing that I also find very useful when profiling is the warp stall analysis. Welcome to ADSP the podcast episode 286 recorded on
+所以我想，从 Ampere 开始，你有这些异步加载，允许你从全局内存加载到共享内存，而不需要通过寄存器。因此，你的线程只需发出这些加载指令，然后就可以继续做别的事情。然后你必须在其中进行同步，以确保这件事已经发生。因此，使用这种方法也是一种非常强大的方式，可以提高并确保你正在使内存带宽饱和。除此之外，就是确保你没有使用太多的指令并且过于低效，因为这也会损害性能。我在进行性能分析时发现的另一个非常非常有用的工具是 warp 停顿分析。欢迎收听 ADSP 播客第 286 期，录制于
+
+2
+00:00:58.000 --> 00:01:33.000
+May 5th, 2026. My name is Connor and today with my co-host, Bryce, we continue our chat with Marco fellow Invidian. In this episode, we chat about profiling, with NICU, the GPU Rotate algorithm, and much more. And we'll call this part three of the GPU Rotate story, where we can, and we'll throw the MV Comp explanation at the end and the questions at the end, but then start this off by talking about, and I guess it doesn't need to be specifically for GPU Rotate,
+2026年5月5日。我是 Connor，今天与我的联合主持人 Bryce 一起，我们继续与英伟达同仁 Marco 聊天。在本期节目中，我们聊到了性能分析、NICU、GPU 旋转算法等等。我们将这部分称为 GPU 旋转故事的第三部分，我们可以在最后加入对 MV Comp 的解释以及问答，但首先我们从讨论开始，我想这不一定非要针对 GPU 旋转，
+
+3
+00:01:33.000 --> 00:02:09.000
+but as I mentioned in episode 284, I believe it was, that a part of this presentation, you started going through and showing the, basically results of running NICU on these algorithms and then you started making adjustments to your algorithm based on what you saw from NICU. I'm not sure how well that's going to translate to a podcast format, but selfishly I'm interested to hear that again and then also talk about like just general tips and techniques for if you are trying to design a algorithm to run efficiently at the speed of light on a GPU.
+正如我在第 284 期节目中提到的（如果我没记错的话），在那次演讲的一部分中，你开始展示在这些算法上运行 NICU 的结果，然后你根据从 NICU 看到的情况开始对你的算法进行调整。我不确定这能多大程度上转化为播客的形式，但出于私心，我很想再次听到这些，然后也聊聊一些通用的技巧和技术，如果你正试图设计一个在 GPU 上以光速高效运行的算法，
+
+4
+00:02:09.000 --> 00:02:37.000
+what are the like low-hanging fruit things to look at? What are the non-low-hanging fruit things? And see where we go from there. Yeah. Yeah, I would say the first thing is measuring or finding out what the speed of light is, because that depends on the algorithm. But I would say most algorithms or most implementations are going to be memory throughput bound. And so that's the thing that is going to be limiting you from getting faster,
+有哪些唾手可得的低垂果实可以看？有哪些不是唾手可得的内容？然后看看我们从哪里继续。是的。是的，我会说第一件事是测量或弄清楚光速是多少，因为这取决于算法。但我会说大多数算法或大多数实现都将是内存吞吐量受限的。所以这就是限制你变得更快的因素，
+
+5
+00:02:37.000 --> 00:03:02.000
+that you saturate the memory throughput of the GPU. And so usually whenever you have your initial implementation, so that's how I started. I had my idea of how I would do this, and then I implemented that idea in a simple way, and then I added tests to make sure that a simple way worked. And then once I had a working implementation, that's how I started optimizing.
+即你使 GPU 的内存吞吐量饱和。所以通常每当你有初始实现时——这就是我开始的方式。我有了如何做到这一点的想法，然后我以简单的方式实现了这个想法，接着我添加了测试以确保简单的方式能够工作。一旦我有了可工作的实现，我就开始进行优化。
+
+6
+00:03:02.000 --> 00:03:33.000
+For me, that's a very good way of doing it, that you just start with something simple, and then you go step by step and try to optimize it and make it better. And so, yeah, I had my initial implementation, run NICU on it, and then I knew that what I wanted to do was saturate the memory bandwidth, and that was what was going to be the speed of light and the limiting factor. And so in terms of the GPU, whenever you're doing memory operations, you want to make sure that you're doing wide memory operations
+对我来说，这是一种非常好的做法，你从简单的事情开始，然后一步一步地尝试优化它，让它变得更好。所以，是的，我有了最初的实现，在其上运行 NICU，然后我知道我想做的是使内存带宽饱和，这将是光速和限制因素。因此，就 GPU 而言，每当你进行内存操作时，你都要确保你正在执行宽内存操作，
+
+7
+00:03:33.000 --> 00:04:12.000
+so that every thread is accessing or loading as many bytes as possible in one request. And then you also want to make sure, well, for that, you need to make sure that the alignment is correct. And then you want to make sure that you have enough threads, loading stuff at the same time, because that's what you need in order to have enough memory movement happening so that you actually saturate the memory bandwidth. And then you also need to make sure that when you're storing the memory, you also are doing wide stores and you have those stores aligned. So in terms of memory movement, it's always a game of kind of adapting your algorithm
+这样每个线程在一个请求中就能访问或加载尽可能多的字节。然后你还要确保，为此，你需要确保对齐是正确的。接着你还要确保你有足够的线程同时加载东西，因为这是你拥有足够内存移动发生以实际使内存带宽饱和所需要的。然后你还需要确保当你存储内存时，你也在执行宽存储并且这些存储是对齐的。所以在内存移动方面，这始终是一个调整你算法的游戏，
+
+8
+00:04:12.000 --> 00:04:53.000
+so that you can use the specific alignment and also very wide memory movement so that you can actually saturate the GPU. And so for me it was basically that. It was just looking at NICU. It has, I mean, for me, to be honest, it's the best profiler I've used in terms of CPU, GPU profiling. just have a memory workload analysis section where it tells you how wide are your accesses, how many bytes are you accessing compared to how many bytes you actually need, because it could be the case that you are, it looks like you're saturating the memory bandwidth of the GPU, but you're, let's say your array is of only one gigabyte, but due to how you're accessing the array,
+这样你就可以使用特定的对齐以及非常宽的内存移动，从而真正使 GPU 饱和。对俺来说基本上就是这样。它只是看着 NICU。它拥有——我的意思是，老实说，就 CPU 和 GPU 性能分析而言，它是我用过的最好的性能分析器。它有一个内存工作负载分析部分，告诉你你的访问有多宽，与你实际需要的字节数相比你正在访问多少字节，因为可能会出现这种情况：看起来你正在使 GPU 的内存带宽饱和，但比方说你的数组只有一吉字节，但由于你访问数组的方式，
+
+9
+00:04:53.000 --> 00:05:29.000
+the amount of memory that you're moving is actually 10 gigabytes. Then it could look like your algorithm is performing the best it can, but it actually isn't because it's moving around way more memory than it needs to. So one way, do you ever use, you know the insight, compute, memory workload analysis chart? Yeah, that's, yeah, my favorite tool for this. Yeah, yeah, 100%. So there, you have, so on the GPU, you basically have these things called sectors, which is kind of the granularity that the GPU moves memory around.
+你移动的内存量实际上是 10 吉字节。那么看起来你的算法发挥了最佳性能，但实际上并没有，因为它移动了比实际需要多得多的内存。所以有一个方法，你用过吗，你知道 Nsight Compute 的内存工作负载分析图表吗？是的，那是，是的，我最喜欢的工具。是的，100%。所以在那里，你在 GPU 上基本上有被称为扇区（sectors）的东西，这是 GPU 移动内存的粒度。
+
+10
+00:05:29.000 --> 00:06:05.000
+And a sector is going to be 32 bytes and a cash line is going to be four sectors. And so in this memory workload analysis, you get a metric that's called the amount of sectors per request. And this tells you per request of a warp or of a warp scheduler, how many sectors are you moving around and how many sectors are you using? So you want to maximize that. I have a much simple, like what I do is I just look at how much memory traffic is there from global memory into L2 and then from L3. 2 to L1, and just like if that's more than I expect, like for mem copy, you know,
+一个扇区是 32 字节，一个缓存行是四个扇区。所以在这种内存工作负载分析中，你会得到一个称为每个请求的扇区数的指标。这会告诉你，对于一个 warp 或一个 warp 调度器的每个请求，你正在移动多少扇区以及你正在使用多少扇区。所以你想最大化这个指标。我有一个简单得多，我做的是我只看从全局内存到 L2 然后从 L2 到 L1 的内存流量是多少，
+
+11
+00:06:05.000 --> 00:06:20.000
+if you do an uncoelisk mem copy, like of like two gigs in memory, you'll see like two gigs from global memory into L2, and then you'll see like eight gigs from L2 to L1, and it's like, okay, something weird's happening there. Yeah. Or actually, sorry, I take
+如果这比我预期的要多，比如对于 memcopy，你知道，如果你做一个不对齐的 memcopy，比如在内存中有两个吉，你会看到来自全局内存到 L2 的两个吉，然后你会看到来自 L2 到 L1 的大约八个吉，然后就像，好吧，那里发生了奇怪的事情。是的。或者实际上，抱歉，我收回刚才的话，如果它在进行不对齐的访问，你甚至会从全局内存到 L2 看到超过两个吉的移动。
+
+12
+00:06:20.000 --> 00:06:47.000
+that back, if it's doing an uncoquolest access, you'll even see it from global memory to L2, you'll see more than two gigs of movement. Yeah, exactly. And so for me in this specific algorithm, it was looking mostly at the memory workload analysis. And so you want to make sure that you're loading just as much memory as you need and not more, that you're loading at as many sectors as you can per request, because that's the most efficient way of loading.
+是的，完全正确。所以对我来说，在这个特定的算法中，它主要看的是内存工作负载分析。所以你想确保你加载的内存恰好是你需要的那么多，不多不少，每个请求加载尽可能多的扇区，因为那是最高效的加载方式。
+
+13
+00:06:47.000 --> 00:07:13.000
+And then obviously, if you're loading on the newer architectures, you want to use these asynchronous loading methods so that you can overlap the loading of memory with doing other stuff with your threads. So I think it's starting from Ampier, you have these asynchronous loads that allow you to load from global memory to shared memory without having to go through registers. And so your threads just issue those loads
+然后显然，如果你在更新的架构上加载，你会想使用这些异步加载方法，以便你可以将内存加载与线程执行的其他事情重叠。所以我想从 Ampere 开始，你有这些异步加载，允许你从全局内存加载到共享内存，而不需要通过寄存器。因此，你的线程只需发出这些加载指令，
+
+14
+00:07:13.000 --> 00:07:43.000
+and then can move on to doing something else. And then you have to synchronize in it to make sure that that has already happened. And so using that is also a very powerful way of increasing and making sure that you're saturating the memory bandwidth. And then apart from that, it's just making sure that you're not using too many instructions and being too inefficient because that can also be, that can also hurt the performance. And another thing that I also find very useful when profiling is the warp stall analysis.
+然后可以继续做别的事情。然后你必须在其中进行同步，以确保这件事已经发生。因此，使用这种方法也是一种非常强大的方式，可以提高并确保你正在使内存带宽饱和。除此之外，就是确保你没有使用太多的指令并且过于低效，因为这也会损害性能。我在进行性能分析时发现的另一个非常非常有用的工具是 warp 停顿分析。
+
+15
+00:07:43.000 --> 00:08:22.000
+So that also gives you or gives me a lot of information of what is the bottleneck in my implementation right now. So the warp stall analysis tells you at which places in the code are my threads and my warps waiting on some dependency, on some instruction to be finished, or something like that, and what type of weight is it? So they could be waiting on a load from global memory. They could be waiting because a certain compute pipeline is being utilized too much, and so they are waiting for that to free up, and so on. And so from that, you can find out what is holding me back from getting better performance
+这也会给你或给我很多关于我目前的实现中瓶颈是什么的信息。因此，warp 停顿分析会告诉你代码中的哪些地方，我的线程和 warp 正在等待某些依赖项、某些指令完成或类似的事情，以及这是什么类型的等待。所以它们可能在等待来自全局内存的加载。它们可能在等待，因为某个计算流水线被过度使用，所以它们在等待该流水线空闲，等等。通过这些，你可以找出是什么阻碍了你获得更好的性能，
+
+16
+00:08:22.000 --> 00:09:21.000
+and what do I need to change in my implementation. And so for me, I would say those are the main things. Again, in terms of memory movement, it's always adapting your algorithm so that you can use these wide memory loads that also need a wide alignment. And sometimes the algorithm is not at first sight is not really adaptable to that, but you can use some tricks in order to make sure that you can do these types of memory movement. I mean, that's all probably very, very useful for those that are GPU curious when it comes to algorithm design. The main question that stood out is you mentioned that there's certain APIs that are architecture-specific. So, you know, starting from Amper, you know, implied in that is that, you know, before Amper, you don't have these APIs. What is the, you know, typical solution for people that are writing these algorithms at this level?
+以及我需要在实现中改变什么。所以对我来说，我会说这些是主要的事情。再次强调，在内存移动方面，它总是调整你的算法，以便你可以使用这些同样需要宽对齐的宽内存加载。有时该算法乍一看并不是真正适应这一点的，但你可以使用一些技巧来确保你可以进行这些类型的内存移动。我的意思是，对于那些对 GPU 好奇的人来说，在算法设计方面，这一切可能都非常非常有用。突出的主要问题是你提到有些 API 是特定于架构的。所以，你知道，从 Ampere 开始，这意味着，你知道，在 Ampere 之前，你没有这些 API。对于在这一层编写这些算法的人来说，典型的解决方案是什么？
+
+17
+00:09:21.000 --> 00:10:07.000
+like do we have backward compatible like if it recognizes the architecture it does one thing or obviously it recognizes the architecture but if it notices your you know amper or greater it does this asynchronous thing if not it does some you know less efficient thing or do people uh you know just assume that you know you're on an ampere or blackwell and they simplify their life like what are because i imagine uh you know for people that are doing this you're probably not running a single workload across different architectures, but you might have, you know, different sets of older GPUs and newer GPUs, and ideally you'd like it if your program ran across all of them. Yeah, what do you, what do people do typically? Yeah. So this is basically why CCCL exists. So in my implementation,
+比如说，我们是否有向后兼容性，如果它识别出架构，它就会做一件事，或者显然它识别出架构，但如果它注意到你是 Ampere 或更高版本，它就会做这种异步的事情，如果不是，它就会做一些效率较低的事情，还是人们只是假设你在 Ampere 或 Blackwell 上然后简化他们的生活？因为我想象，你知道，对于做这件事的人来说，你可能不会在不同的架构上运行单个工作负载，但你可能会有不同组的旧 GPU 和新 GPU，理想情况下，你希望你的程序能够在所有这些 GPU 上运行。是的，大家通常怎么做？是的。这基本上就是 CCCL 存在的原因。所以在我的实现中，
+
+18
+00:10:07.000 --> 00:10:48.000
+I'm using a function called Kuda MemCopyAsync. And this is a function that you give it the source and destination pointers of the memory that you want to copy and you give it the amount of memory that you want to copy and so on, and then it finds the most efficient way of doing it. And so on Ampier, it uses a certain instruction that is called LDGSTS, which means load global store share, which is one of these asynchronous memory operations. And then on Hopper and Blackwell, in case the alignment is correct, it uses something called the TMA, which is the tensor memory accelerator. And this is also another, it's basically like another type of cost.
+我使用了一个名为 cudaMemcpyAsync 的函数。这是一个函数，你向其提供要复制的内存的源指针和目标指针，你向其提供要复制的内存量等，然后它会找到最有效的方法来完成它。所以在 Ampere 上，它使用了一条名为 LDGSTS 的特定指令，意思是加载全局存储共享，这是这些异步内存操作之一。然后在 Hopper 和 Blackwell 上，如果对齐正确，它会使用一种称为 TMA（张量内存加速器）的东西。这也是另一个，它基本上就像另一种成本引擎，
+
+19
+00:10:48.000 --> 00:11:22.000
+engine that allows you to copy from global memory to shared memory. And so my tip in that case is use already these libraries that have taken a lot of effort and a lot of pain in order to make them as efficient as possible and just read into how you need to structure your data to make the best use of those functions. But yeah, I think in most cases for a lot of stuff, it has already been implemented and it has been implemented very efficiently. so you should try to use existing libraries as much as you can. I see.
+允许你从全局内存复制到共享内存。所以在这种情况下，我的建议是：使用那些已经投入了大量精力和痛苦来使其尽可能高效的现有库，并深入研究你需要如何构建数据才能充分利用这些函数。但是，是的，我认为在大多数情况下，对于很多事情，它已经实现了，而且实现得非常高效，所以你应该尽可能尝试使用现有的库。原来如此。
+
+20
+00:11:22.000 --> 00:11:56.000
+So if you choose the right API, it'll do the complicated stuff behind the scenes. Yes, but you still have to, for example, let's say you are on Hopper and you are using this Kudamm copy asing function, but for some reason, you are not giving it a pointer that is 16 byte aligned, which is what you would need to use the TMA. then Kudamem copy a thing cannot do it for you and so it's going to use a less efficient way of moving memory. So you still need to know what the correct alignment is and so on
+所以如果你选择了正确的 API，它就会在幕后做那些复杂的事情。是的，但你仍然必须这样做，比如说，你在 Hopper 上，你正在使用这个 cudaMemcpyAsync 函数，但由于某种原因，你没有给它一个 16 字节对齐的指针（使用 TMA 所必需的），那么 cudaMemcpyAsync 就不能为你做到这一点，因此它将使用效率较低的内存移动方式。所以你仍然需要知道正确的对齐方式等，
+
+21
+00:11:56.000 --> 00:12:20.000
+in order for the function to actually do the most efficient thing. So there is some stuff that you can get wrong. And this is why one of the reasons why we created Kutail, because Kutail automates all of this for you and lowers down to the most optimal memory movement strategy given the constraints of your hardware and the constraints of the arrays that you're dealing with in terms of alignment,
+以便函数能够真正做最高效的事情。所以有些事情你还是可能会弄错。这也是我们创建 cuTile 的原因之一，因为 cuTile 为你自动完成了所有这一切，并在给定硬件约束以及你在对齐、
+
+22
+00:12:20.000 --> 00:12:40.000
+you know, strides, shapes, etc. And dimensionality. So do you think actually Bryce that Kutile would get the memory movement in the rotate, just the memory movement, because you need to think that, for example, for the global to shared memory movement, I'm using, I don't know,
+步幅、形状等方面所处理的数组约束的情况下，将其降低到最优的内存移动策略。所以你真的认为 cuTile 能搞定 rotate 中的内存移动吗，仅仅是内存移动，因为你需要考虑，例如，对于全局到共享内存的移动，我使用的是，我不知道，
+
+23
+00:12:40.000 --> 00:13:11.000
+I guess you are aware of what overcopying is, where you extend your array virtually so that you can copy whole sectors. And so I use that. And then for copying from shared memory back to global memory, I need to use some funnel shifts and so on in order to get it to the correct alignment. And so you think that Kutail would be like the implementation is flexible enough that it can handle any type of alignment with the best performance. I'm not sure.
+我想你知道什么是过度复制（overcopying），即你虚拟扩展数组以便复制整个扇区。我用了这个。然后对于从共享内存复制回全局内存，我需要使用一些 funnel shift 等等来使其达到正确的对齐。所以你认为 cuTile 的实现会足够灵活，能够以最佳性能处理任何类型的对齐吗？我不确定。
+
+24
+00:13:11.000 --> 00:14:15.000
+I had one part of the company telling me that you basically on Blackwell needed to use TMA for all memory band with bound kernels. And I had another part of the company telling me that you only really need to use it for kernels that use the tensor course. And so I wrote this thing called Pressure Bench, which was a synthetic benchmark with a configurable amount of registrules. your pressure because one of the advantages of TMA is that it saves you register pressure because it goes straight to share a memory without going through registers. And so I wrote this little benchmark and I did some experiments and the results are kind of a lot more complicated than and with a no clear winner than you might expect. and the decision tree for how Kutal decides to lower here,
+公司里有一部分人告诉我，在 Blackwell 上，你基本上需要对所有内存带宽受限的内核使用 TMA。公司里还有另一部分人告诉我，你实际上只需要对使用张量核心的内核使用它。所以我写了一个叫 Pressure Bench 的东西，这是一个具有可配置寄存器压力的合成基准测试。你的压力，因为 TMA 的优点之一是它节省了寄存器压力，因为它直接进入共享内存而不通过寄存器。所以我写了这个小基准测试并做了一些实验，结果比你预期的要复杂得多，也没有明显的赢家。
+
+25
+00:14:15.000 --> 00:14:39.000
+I don't know. I think it'd be worth benchmarking to see, you know, for this particular type of access pattern, I don't know. I really don't know. I think the thing, I guess what I'm trying to get at is one thing that we've seen a lot with Kutail and Triton is that the vectorized load stores
+cuTile 如何决定在这里进行 lowering 的决策树，我不知道。我觉得值得进行基准测试来看看，你知道，对于这种特定类型的访问模式，我不知道。我真的不知道。我觉得，我想我要表达的是，我们在 cuTile 和 Triton 上看到很多的一个情况是，向量化加载存储
+
+26
+00:14:39.000 --> 00:14:56.000
+can often do quite well on Blackwell. Like Kutail generates really good vector ads, like better than Kubb vector ads in some cases with just vectorized those in stores.
+通常在 Blackwell 上表现相当不错。就像 cuTile 生成非常好的向量指令，在某些情况下比通过纯向量化加载和存储生成的 cuBB 向量指令还要好。
+
+27
+00:14:56.000 --> 00:15:37.000
+I think the situation's very muddied right now. you know uh there's not as clear of a winner as i thought there was going to be yeah yeah i've already seen a i've also seen a couple of presentations talking about using the tma or using vectorized lows and so on and that tma is not always or is often actually not better than doing that so yeah i think to be honest it's surprising how complex and how complicated it is to saturate the memory bandwidth on these modern gpues that is also another reason why people should be using libraries because the amount of effort that it takes in order to get the maximum performance
+我认为现在的形势非常混浊。你知道，并没有我想象的那么清晰的赢家。是的，是的，我已经看到了一些讨论使用 TMA 或使用向量化加载等的演讲，并且 TMA 并不总是或者实际上经常没有那么做更好。所以，是的，说实话，在这些现代 GPU 上使内存带宽饱和是多么复杂和繁琐，这令人惊讶，这也是人们应该使用库的另一个原因，因为获得最高性能所需的工作量
+
+28
+00:15:37.000 --> 00:16:36.000
+is very very large this reminds me of an unrelated well quasi related hence why it reminds me of it and I made this uh Perf Wars YouTube video a month ago a couple weeks ago and it was solving a trivial problem that I profiled across several languages and for every single, there was three different implementations, like, solutions. One uses, one used a sort, one used a partition, and the other one was just basically reduction and construction. And, or like a reduce and then, you know, creation of some sequence. And in every single one of the solutions, one of my favorite array language is BQN1, including the sort, like the sort in BQN, which is an interpreted language,
+非常非常大。这让我想起了一个不相关的，嗯，准相关的，所以它让我想起了这个，我在一个月前、几周前制作了这个 Perf Wars YouTube 视频，它解决了一个我在几种语言中进行性能分析的微不足道的问题。每一个实现都有三种不同的实现，或者说解决方案。一个使用排序，一个使用分区，另一个基本上是归约和构造。或者像归约然后，你知道，创建某个序列。在每一个解决方案中，我最喜欢的数组语言之一 BQN（包括排序，像 BQN 中的排序，它是一种解释型语言）
+
+29
+00:16:36.000 --> 00:16:58.000
+was faster than the O3 compiled like Rust and C++ solutions. And a lot of people in the comments and on GitHub were whining saying, that's not fair, you're not comparing the same thing because the reason why BQM was faster is it would recognize that you were sorting a Boolean array, and that's why you can go
+比 O3 编译的像 Rust 和 C++ 的解决方案还要快。评论区和 GitHub 上的很多人都在抱怨，说这不公平，你没有在比较相同的东西，因为 BQN 更快的原因此在于它会识别出你正在对一个布尔数组进行排序，这就是为什么你可以从排序转变为分区，
+
+30
+00:16:58.000 --> 00:17:13.000
+from a sort to a partition, because a partition is basically just, just a predicate sort. And so if you recognize that you have a bullion array, you don't actually have to do a full sort. You can just do a partition. And then I realized what I was doing is like, actually, it might just be easier to do like a pop count,
+因为分区基本上就是，就是一个谓词排序。因此，如果你识别出你有一个布尔数组，你实际上不必进行完整的排序。你只需做一个分区。然后我意识到我在做什么，其实，做类似 pop count 的事情可能更简单，
+
+31
+00:17:13.000 --> 00:17:36.000
+count the number of bullions and then just construct, you know, your final string. And BQN has basically like bit-packed vector optimizations for whenever you encounter bullion arrays. And on top of that, when you sort a Boolean array, it just does this pop, it doesn't even sort. It does this pop count and like construction behind the scenes.
+计算布尔值的数量然后直接构造，你知道，你的最终字符串。BQN 基本上具有针对你遇到布尔数组时的位打包向量优化。最重要的是，当你对布尔数组进行排序时，它只是做这个 pop，甚至都不排序。它在幕后做这个 pop count 和构造。
+
+32
+00:17:36.000 --> 00:17:52.000
+And on top of that, it has a bunch of SIMD vectorized, optimized code because it's implemented on top of this other language called Singeli that is like, does all these massive like SIMD generated code paths. And so everybody, or not everybody,
+最重要的是，它有一堆 SIMD 向量化优化的代码，因为它是建立在另一个名为 Singeli 的语言之上的，该语言做了所有这些大规模的 SIMD 生成代码路径。所以每个人，或者不是每个人，
+
+33
+00:17:52.000 --> 00:18:09.000
+a lot of people in the comments were just like, that's not fair. You're comparing apples to oranges. Like you can go and write that SIMD code and C++ and Rust and like you should be comparing that. And I was like, what are you talking about? Like, I'm comparing what I'm capable of writing.
+评论区里的很多人都只是说，这不公平。你是在拿苹果和橘子作比较。就像你可以去用 C++ 和 Rust 编写该 SIMD 代码一样，你应该比较那个。然后我就想，你在说什么？我在比较我有能力编写的东西。
+
+34
+00:18:09.000 --> 00:18:37.000
+Yes, you could, and the reason this reminds me of this is because when you mentioned that, like, there's all these dispatching to the TMA or to some other, you know, underneath Kuta Mem copy, Async Mem Copy. And then also like Kutal and Kutahel are doing these things. It makes me think that like, you know, there's some people thinking that like, oh, well, Kutal is unfair because it's automatically doing that stuff, whereas if I wanted to, I could go in hand optimize this stuff myself.
+是的，你可以，这让我想起这件事的原因是，当你提到，在 cudaMemcpyAsync 背后有所有这些对 TMA 或其他东西的分派时。还有像 cuTile 和 cuAHEL 也在做这些事情。这让我觉得，你知道，有些人会觉得，哦，好吧，cuTile 是不公平的，因为它自动做了这些事情，而如果我想的话，我可以自己进去手动优化这些东西。
+
+35
+00:18:37.000 --> 00:18:52.000
+But it kind of just misses the point. The point is that you want to give people either a language or a library that is easy to use, and hopefully the naive thing that you would like to express your problem or algorithm is going to give you the most efficient thing
+但这有点抓不住重点。重点是你希望为人们提供一种易于使用的语言或库，并且希望你用来表达你的问题或算法的朴素方法能够为你提供最高效的东西，
+
+36
+00:18:52.000 --> 00:19:11.000
+and like saying that like, oh, I could have gone and spun up some SIMD-optimized C++ code that would have been the equivalent of this and did bitpacking and whatnot, that misses the entire point, right? It's just that what is the easiest path to, like, getting this either as code on the screen or in this case, like, on the GPU?
+而说什么“哦，我可以去搞一些 SIMD 优化的 C++ 代码，那将等同于这个并进行位打包什么的”，这就完全抓错了重点，对吧？问题仅仅在于，获得这个作为屏幕上的代码，或者在这个例子中，像在 GPU 上，最简单的路径是什么？
+
+37
+00:19:11.000 --> 00:19:26.000
+And, yeah, I don't know. But I don't know. It makes me think that, like, you know, we're encouraging people use the libraries, but then there's going to be some, like, you know, Kuda Ninja Andy out there being like, well, I can do something faster than Kutile because, you know, I know how to use TMA the best.
+而且，是的，我不知道。但我不知道。这让我觉得，我们鼓励人们使用库，但总会有一些 Kuda 忍者安迪跳出来说，嗯，我可以做得比 cuTile 更好，因为我知道如何最好地使用 TMA。
+
+38
+00:19:26.000 --> 00:20:04.000
+And the goal is we're trying to make it simple for people, not like yeah I don't know I'm not sure if you guys have thoughts on that stuff no no it's a hundred percent the case and I think as the architectures get more and more complex it's more and more it's more and more relevant to hide all of that stuff under the wood because I think even now if you wanted to implement something as simple as a vector ad for example and make it be reached speed of light on blackwell it would probably take you a good amount of Whereas if you use Kutile, I think Brice said that it was even better than Kopp.
+而我们的目标是让人们的生活变得简单，而不是像，是的，我不知道你们对这些事情有什么看法。不，不，100%是这样的，而且我认为随着架构变得越来越复杂，把所有这些东西隐藏在底层会变得越来越重要和相关。因为我认为即使现在，如果你想实现一个像向量加法这样简单的事情，并使其在 Blackwell 上达到光速，你可能需要花费相当多的精力。而如果你使用 cuTile，我想 Bryce 说它甚至比 CoP 还要好。
+
+39
+00:20:04.000 --> 00:20:39.000
+And probably implementing it in Kutail would take you 10 minutes, 15 minutes. So that's basically why that's the future probably for those sorts of workloads. But then it's not the case for everything. I can think of a lot of things where you couldn't express that in Kutail. And so you're still going to need that lower level abstraction. All right, folks, I'm, um, this is a business business bed time. We got eight minutes left, eight minutes left, and the eight minutes is reserved. Connor. Reserved four.
+而且在 cuTile 中实现它可能只需要你花 10 分钟、15 分钟。所以这基本上就是为什么对于这类工作负载，这可能是未来。但这并非适用于所有事情。我能想到很多你无法在 cuTile 中表达的事情。因此你仍然需要那种较低级别的抽象。好了，各位，我，嗯，这是业务时间。我们还剩八分钟，还剩八分钟，这八分钟是留给 Connor 的。留给。
+
+40
+00:20:39.000 --> 00:21:30.000
+Yeah, I mean, you could have, you could have replied to Marco's Slack message last week, Bryce, last week. And then I forgot too. And then I was like, oh, yeah, we got to do this on Tuesday or Wednesday. And I realized that when it was like 8 a.m. this morning and I was on a short run. And I was like, wait, it is. Tuesday. What do you call a short run, Connor? That was what I was going to ask. Today was seven kilometers, which is definitely the shortest run I've gone on in a long time because my legs hurt from the race that I ran. But anyways, enough about that. We've only got seven minutes left now. So we had the two questions from Alpha Strata, whose name is Jir. And that's all the information we have about this person on GitHub. And the two questions were, and there was a comment afterwards says, I hope this
+是的，我的意思是，你可以，你上周本可以回复 Marco 的 Slack 消息的，Bryce，上周。然后我也忘了。然后我就想，哦，对了，我们得在周二或周三做这个。然后我意识到是在今天早上 8 点左右，当时我正在进行短跑。然后我就想，等等，今天是星期二。你管什么叫短跑，Connor？这就是我要问的。今天是七公里，这绝对是我很长一段时间以来跑得最短的一次，因为我跑完比赛后腿疼。总之，闲话少说。我们现在只剩七分钟了。所以我们有两个来自 Alpha Strata 的问题，他的名字叫 Jir。这就是我们在 GitHub 上关于这个人的所有信息。这两个问题是，后面还有一个评论说，我希望这个
+
+41
+00:21:30.000 --> 00:22:04.000
+GitHub discussion for asking more questions before the guest comes on becomes more of a thing. We will do our best. Maybe we'll even just post on the socials. Here's our next guest. So because this happened to be split apart, we said, Marco said at the end, if you guys got questions, feel free to ask them and we're more than happy to answer them. Anyways, this person says, do more of that. We'll do our best. Question number one. And I actually didn't really under these, well, the second question is obvious. But the first question I didn't understand. Super Speed benchmarks inbound for a Hadamard slash spinkwant or similar.
+用于在嘉宾来临前提出更多问题的 GitHub 讨论能变得更加流行。我们会尽力而行的。也许我们甚至会在社交媒体上发布：这是我们的下一个嘉宾。所以因为这碰巧被拆开了，我们说过，Marco 在最后说，如果你们有问题，随时可以提出来，我们非常乐意回答。总之，这个人说，多搞点这个。我们会尽力的。第一个问题。我实际上真的没有理解这些，嗯，第二个问题很明显。但第一个问题我没听懂。针对 Hadamard/spinkwant 或类似内容的超高速基准测试正在路上。
+
+42
+00:22:04.000 --> 00:22:44.000
+Does that mean anything to you? Not to me. A Hadamard is a type of matrix, right? No, at Hadamard, I think you have the Hadamard product, which is a sort of inner product. And then I think you also have the Hadamard Transform, which is another type of... I think a Hadamar Transform is something to do with quantum mechanics. It is a type of matrix. It is a type of matrix. It's a square matrix. A Hadamar matrix is a square matrix whose entries are all either plus one or minus one. And whose rows are mutually orthogonal.
+这听起来对你有什么意义吗？对我没有。Hadamard 是一种矩阵，对吧？不，Hadamard，我想你有 Hadamard 乘积，这是一种内积。然后我想你还有 Hadamard 变换，这是另一种……我认为 Hadamard 变换与量子力学有关。它是一种矩阵。它是一种矩阵。它是一个方阵。Hadamard 矩阵是一个方阵，其元素全都是正一或负一。并且其行是相互正交的。
+
+43
+00:22:44.000 --> 00:23:14.000
+And then a Hadamar product is sort of a dot product and maybe you implement that with a rotate, no idea. But then what's the second thing? A spin? spin quint s p i n q u a and t or spin quant l-lm quantization with learned rotations so since it has the word rotation in it maybe it has something to do with rotation so i just asked chat chv t i would have asked jemini folks but it's been down today um
+然后 Hadamard 乘积有点像点积，也许你用 rotate 来实现它，不知道。但第二个东西是什么？a spin？spin quint s p i n q u a n t，也就是 spin quant 带有学习旋转的 LLM 量化。所以既然它有 rotation 这个词，也许它和 rotation 有关？所以我只是问了 ChatGPT，本来想问 Gemini 大家的，但它今天挂了……
+
+44
+00:23:14.000 --> 00:23:58.000
+and there's a bottom line at the end that says spin quant style methods depend directly on what people are calling gp u rotate oh so i guess maybe, so feedback for Alpha Strata, please ask a better, more clear question in the future. But I think the question is, is there going to be benchmarks for these two different calculations or things that could potentially be enhanced by an in-place GP rotate, which I guess the answer is maybe if Marco feels like it? I am working on adding the rotate to Cobb. And so once that is in Cub, everyone can go benchmark whatever they want with the road date.
+并且最后有一行底线说：spin quant 风格的方法直接取决于人们所说的 GPU rotate。哦，所以我想也许，所以对 Alpha Strata 的反馈，请在未来提出更好、更清晰的问题。但我认为问题是，是否会有针对这两种不同计算或可能通过原地 GPU rotate 增强的事物的基准测试？我想答案可能是：如果 Marco 有心情的话？我正在致力于将 rotate 添加到 Cub 中。所以一旦它进入 Cub，每个人都可以用 rotate 去对任何他们想测的东西进行基准测试。
+
+45
+00:23:58.000 --> 00:24:16.000
+All right. And then the second question is much easier. Where's the code? I guess we just answered that. It's inbound for Cub. At some point in the next couple of months, I guess. Okay. And stuff shows up in Cub on GitHub way before it gets released.
+好的。然后第二个问题容易得多。代码在哪里？我想我们刚刚回答了。它正在进入 Cub 的路上。我想在未来几个月的某个时候。好的。而且东西在发布到 GitHub 上很久之前就会出现在 Cub 中。
+
+46
+00:24:16.000 --> 00:24:39.000
+So if you want to go mess around with this, it could be available. if you want to go look at the GitHub repo. Should we do a brief? I know Bryce wants to go to sleep, but we haven't talked about NV-comp, and that was Bryce's question from like four episodes ago now. All right, Marco, tell us briefly about MV-comp, and then we'll call it a day.
+所以如果你想去搞砸这个，它可能会可用。如果你想去看看 GitHub 仓库的话。我们应该做一个简短的吗？我知道 Bryce 想去睡觉，但我们还没有谈论 NV-comp，那是 Bryce 大约在四期节目前提出的问题。好的，Marco，给我们简单讲讲 NV-comp，然后我们就收工吧。
+
+47
+00:24:39.000 --> 00:25:25.000
+So NV-comp is basically a library that implements many compression algorithms and compression formats on the GPU, so that in case your application has to move data from the GPU to the CPU or loads data from the disk to the GPU in large quantities, NVCOM is probably something that can help you speed up your end-to-end performance, because usually when loading memory from disk to GPU, the large bottleneck is going to be that CPU-GPU interconnect. And so if you could compress your data so that it takes up less. space, you have less time transporting it from the CPU to the GPU, and then you can decompress
+所以 NV-comp 基本上是一个在 GPU 上实现许多压缩算法和压缩格式的库，这样如果你的应用程序必须将数据从 GPU 移动到 CPU，或者大量地从磁盘加载数据到 GPU，NVCOMP 可能可以帮助你加速端到端性能，因为通常从磁盘加载内存到 GPU 时，主要的瓶颈将是 CPU-GPU 互连。因此，如果你能压缩你的数据使其占用较少空间，你从 CPU 传输到 GPU 的时间就会减少，然后你就可以在 GPU 上非常快地将其解压缩，通过这种方式你可以获得一些性能。所以我们实现了通用算法。
+
+48
+00:25:25.000 --> 00:25:58.000
+it very fast on the GPU, and that way you can get some performance. And so we have general purpose algorithms implemented. So, for example, we have deflate implemented, which is what's underneath G-SIP and C-LIP. We have C-standard implemented, LC-4, Snappy, which are kind of these general-purpose algorithms that usually work well for any kind of data. And then we have some other high performance, more specialized algorithms like ANS, which is an entropy encoder that's very fast.
+例如，我们实现了 deflate，这是 GZIP 和 ZLIB 底层的技术。我们实现了 C-standard、LZ4、Snappy，这些都是通常对任何类型的数据都表现良好的通用算法。然后我们还有一些其他的高性能、更专用的算法，比如 ANS，这是一种非常快的熵编码器。
+
+49
+00:25:58.000 --> 00:26:44.000
+And then also BitComp, which is for floating point data specifically, and Cascaded, which is for database and like data, data table type of data and columnar data. And so, yeah, that's basically the library. in case you move a lot of data around between CPU, GPU, GPU, and disk, this is something that could help you speed up your performance, basically. Nice. I mean, we might have to have you back, and then we can talk about compression algorithms for a whole three or four episodes. That is a big, big rabbit hole for sure. Well, we are supposedly, allegedly, the algorithms plus data structures podcast.
+还有专门针对浮点数据的 BitComp，以及用于数据库、数据表类型数据和列式数据的 Cascaded。所以，是的，这个库基本上就是这样。如果你在 CPU、GPU 和磁盘之间移动大量数据，这可以帮你在性能上提速，基本上就是这样。太棒了。我的意思是，我们可能得请你回来，然后我们可以花整整三四期节目来讨论压缩算法。那绝对是一个非常非常大的无底洞。好吧，我们据说是，号称是算法加数据结构播客。
+
+50
+00:26:44.000 --> 00:27:35.000
+equals programs podcast um anyways bryce is falling asleep so we got a we got to wind this down uh enjoy the rest of paris are you coming back to america or are you avoiding america you know these days and just trying to stay abroad uh no i'm i'm coming back to new york as soon as a possible can all right um also if i may if i may ask for a a guest recommendation i think perfect one that I would really like to, like, hear talk about that I don't get to hear about enough is Dwayne Merrill, which I think Connor, you probably know since he's from NV Research. Yeah, yeah, he's on the PSA programming systems and applications. That's the research team that I work on. I mean, technically we had Jared Hobrock on, who is the individual behind
+等同于程序的播客。无论如何，Bryce 快睡着了，所以我们得结束了。祝你在巴黎余下的时间玩得开心。你是要回美国，还是这几天在避开美国，只想留在海外？不，不，我一能离开就会尽快回到纽约。好的。另外，如果我可以，如果我可以要一个嘉宾推荐，我认为我真的很想听、很想聊但没听到足够的完美人选是 Dwayne Merrill，我想 Connor 你可能认识，因为他是来自 NV Research 的。是的，是的，他在 PSA（编程系统与应用）工作。那是我工作的研究团队。我的意思是，从技术上讲，我们邀请过 Jared Hobrock，他是当年
+
+51
+00:27:35.000 --> 00:28:18.000
+thrust back in the day. It was, ooh, I'm going to, it's not just Jared. It was Jared, and do you remember his name, Bryce, the guy that went to Google? Nathan Bell is the name that I was looking for. So we talked to Jared and, you know, Thubb's twin is Cub and Duane is the guy behind Cub. So yes, we can't, I mean, pending he wants to come on, but knowing Dwayne, I'm sure he would be happy to. Yeah, I think for me it's just, I don't know, I've already seen, I mean, I think he invented the DeCoppel lookback algorithm that the prefix scanning is based on. he's done a lot of work on interesting algorithms, and he seems to be a guy that really,
+Thrust 背后的个人。那是，哦，我要，不仅仅是 Jared。那是 Jared，你还记得他的名字吗，Bryce，那个去 Google 的家伙？Nathan Bell 是我在找的名字。所以我们和 Jared 聊过，你知道，Thrust 的孪生兄弟是 Cub，而 Dwayne 是 Cub 背后的那个人。所以是的，我们不能，我的意思是，假设他愿意来，但了解 Dwayne 的话，我确信他会很乐意。是的，我觉对我来说只是，我不知道，我已经看过，我的意思是，我想他发明了 Decoupled Lookback 算法，前缀扫描就是基于该算法的。他在有趣的算法上做了大量工作，他似乎是一个真正的人，
+
+52
+00:28:18.000 --> 00:28:40.000
+I would just be interested to know how his head works and how he comes up with the ideas for these algorithms and so on. So the thing that we were going to, the thing to do of her going to do that, Sean Baxter and Dwayne worked together at NV Research back in the day. And like back in the early days of InV Research, Sean says, it's like at the time, you know, they were looking into sorting algorithms.
+我只是有兴趣了解他的大脑是如何工作的，以及他是如何想出这些算法的想法的等等。所以我们要做的，要做的事情是，Sean Baxter 和 Dwayne 过去曾在 NV Research 一起工作过。就像在 NV Research 的早期，Sean 说，当时，你知道，他们正在研究排序算法。
+
+53
+00:28:40.000 --> 00:28:56.000
+and Sean investigated the merge sort path and Duane investigated the radix sort path and I think it'd be fun to have both them on and talk about like what was it like in those good old days back before Kuta had product market fit
+Sean 研究了归并排序路径，而 Dwayne 研究了基数排序路径，我认为把他们两个都请来聊聊，在 Kuta 获得产品市场契合度之前的那些美好旧时光里，那是什么感觉，一定很有趣。
+
+54
+00:28:56.000 --> 00:29:12.000
+and just you know because they both they walked down the two different paths of the sorting tree well I guess okay only one of them walked down the tree based path that's a sorting joke rough
+而且你知道，因为他们俩走的是排序树的两条不同路径。好吧，我想，只有其中一个人走了基于树的路径，那是一个排序笑话。粗糙，
+
+55
+00:29:12.000 --> 00:29:30.000
+rough yeah we'll have we'll have Dwayne on first and then because Sean has already been on was it just that one time oh we can have Sean on to talk about our respective thoughts on the
+粗糙。是的，我们会先请 Dwayne 来，然后因为 Sean 已经来过了，是就那一次吗？哦，我们可以请 Sean 来谈谈我们对各自的想法的看法。
+
+56
+00:29:30.000 --> 00:29:52.000
+the Moby Dick semi-musical thing that we saw at the Brooklyn Academy of Music that was half in German half in English all right we'll put that on topic stack, but I think Sean's only been on that one time, but he is responsible for one of, I think, our most highest viewed episodes, which was the entitled, the like C++ versus rust,
+我们在布鲁克林音乐学院看过的那个白鲸半音乐剧的东西，那是半德语半英语的。好的，我们会把它列入话题清单，但我想 Sean 只来过那一次，不过他负责我们浏览量最高的一集，题目叫做《C++ 对比 Rust 对比 Carbon 对比 Circle》。我不认为我们后来请过他。我们讨论过再次邀请他，但好吧，我们先做 Dwayne，然后做 Sean，然后我们会问他们想邀请谁。无论如何，我们解放你了，Bryce。谢谢你，Marco。这太棒了。我期待着不久后能在 Cub 中看到原地 GPU rotate。是的，希望，而且我猜你住在西班牙。所以我们以后会在某个时候见面吗？但我刚才，我前几天才意识到我在某个视频通话上。你不去西班牙吗？
+
+57
+00:29:52.000 --> 00:30:29.000
+versus carbon versus circle. And I don't think we've had them on. We've talked about having them on since, but all right, we'll do Dwayne, then we'll do Sean, and then we'll ask them who they want to have on. Anyways, we free you, Bryce. Thank you, Marco. This has been a blast. I look forward to seeing in place GPU in Cubs sometime soon. And yeah, we'll hopefully, and I guess you're based in Spain. So will we ever meet at some point? But I was just, I just realized the other day I was on like some video call. You're not going to Spain?
+你再也不会去西班牙了吗，我们还会见面吗？好吧，这很有趣。我前几天和某人进行视频通话。那是和 Asher Mancinelli 一起。然后我们邀请了另一个人，查尔斯，我记得是这个名字。然后我就说，哦，很高兴认识你，Asher。然后我就说，哦，其实我从来没见过 Asher 本人。我们已经开这些会好几年了。我认识 Asher，我不知道，可能接近半个十年，可能比那稍微少一点。
+
+58
+00:30:29.000 --> 00:30:58.000
+You'd never go to Spain again and will we ever meet? Well, it's just funny. I was on a video call with someone the other day and then it was with Asher Mancinelli. And then we had invited another guy, Charles, I believe, was his name. And I was like, oh, yeah, nice to meet you, Asher. And then I was like, oh, yeah, I've actually never met Asher in person. We've been having these meetings for like several years now. And I've known Asher, I don't know, maybe close to half a decade, maybe a little less than that.
+我们从来没有见过面。而且我们在同一家公司工作。但他住在俄勒冈州。除非我们做演讲，否则我们不会去 GTC。而且他没去 GTC。他没去 GTC，我唯一去现场的时候是为了现场研究。你指的是哪个 Asher？Asher Mancinelli。
+
+59
+00:30:58.000 --> 00:31:17.000
+And we've never met in person. And we work for the same company. But he works in Oregon. And we don't get to go to GTC unless we're speaking. And he wasn't at GTC. wasn't at GTC, and the only time I go on site is for research on site. Which Asher do you mean? Asher Mancinelli.
+哦，我们绝对应该请他来。我和他合作很多。哦，是的，是的。他上过我的另一个播客 Raycast。但我们完全不知道。我不知道你们两个是好朋友。是的，是的。他有一个 YouTube 频道，里面有一堆 BQN 加 Kuda 类似的工作。
+
+60
+00:31:17.000 --> 00:31:35.000
+Oh, we should totally have him on. I'm working with him a lot. Oh, yeah, yeah. He was on Raycast, my other podcast. But we had no idea. I had no idea you two were buddies. Yeah, yeah. He has a YouTube channel with a bunch of BQN plus Kuda like work.
+噢，我们绝对应该邀请他来。我和他合作很多。噢，对，对。他上过Raycast，我的另一个播客。但我们完全不知道。我完全不知道你们俩是好朋友。对，对。他有一个YouTube频道，上面有很多BQN加Kuda之类的内容。
+
+61
+00:31:35.000 --> 00:31:50.000
+Yeah, yeah. There's like a small cohort. And we added Charles. Shout out to Charles. He is a K enthusiast, which is another one of the array languages. Which Charles? I want to get his name right. I believe it's Charles Hall.
+对，对。这里有一个小圈子。我们还加入了 Charles。向 Charles 致敬。他是一个 K 语言的爱好者，那是另一种数组语言。哪个 Charles？我想把他的名字弄对。我坚信是 Charles Hall。
+
+62
+00:31:50.000 --> 00:32:07.000
+Okay. I thought you meant modal Charles. We should also have modal Charles on at some point. Add it to the queue. It's just going to be a guess from here on now, folks. But yeah, anyways, there's like a small cohort. I think people would probably like that better than Bryce Hot Takes. Well, no, we still got to get Bryce Hot Takes.
+好的。我还以为你指的是 Modal Charles。我们以后也应该请 Modal Charles 来上节目。把它加到队列里。各位，从现在开始这纯粹是瞎猜了。不过，总之，这有一个小圈子。我觉得大家可能比听 Bryce 的热辣言论更喜欢这个。好吧，不，我们还是得搞 Bryce 的热辣言论。
+
+63
+00:32:07.000 --> 00:32:36.000
+I mean, that's probably only like, there's like probably 10% of our listeners. They only, you know, tune in just for the occasional Bryce hot take. Anyways, and also, I have to stay entertained, you know. I've been doing this for 290 episodes straight, you know, and I'm about to have a kid. If these things get boring, you know, I'm sorry, ADSP listeners, but I'll just, I'll just be asking Bryce here. Bryce, you find some content, send it to me. I'm just going to post that. No intro, no anything.
+我的意思是，那可能只占，大概只有我们 10% 的听众。他们只，你知道的，为了偶尔的 Bryce 热辣言论才收听。总之，而且，我得保持娱乐性，你知道的。我连续做了 290 期节目了，你知道的，我马上就要有孩子了。如果这些东西变得无聊了，你知道的，对不起，ADSP 的听众们，但我会，我会直接去问这里的 Bryce。Bryce，你找点内容，发给我。我直接就发布。没有开场白，什么都没有。
+
+64
+00:32:36.000 --> 00:33:11.000
+This is just the content you're going to live with for the first year of me being a father. It's just Bryce rambling to himself while walking down New York with absolutely terrible. I'm just going to make an AI, I'm going to make an AI Connor. I'm going to make, I'm going to just make a distill skill for Connor to. Have you heard about that? So apparently, apparently this is a thing in China where at some companies, people are writing like distill skills to like distill. what their co-workers do into a skill so that they can go to their management and be like,
+这就是我在当父亲的第一年里，你们得忍受的内容。这只是 Bryce 一边在纽约走着，一边自言自语，内容绝对糟糕透顶。我打算做一个人工智能，我要做一个人工智能 Connor。我要做，我只是要为 Connor 做一个提炼技能来……你听说过那个吗？所以显然，显然在中国这是一种现象，在一些公司里，人们在编写类似提炼技能的东西，来提炼他们同事的工作内容变成一项技能，这样他们就可以去找管理层，然后说：
+
+65
+00:33:11.000 --> 00:33:41.000
+hey, look, you can fire this person, but you should keep me around because I'll help you, you know, automate away more of my coworkers. So I'll just do that. Coming from the guy that said earlier, yeah, it is, it is hard to be empathetic for the guys there, the girls that aren't doing AI and then to the... No, no, no, I thought I took a pretty empathetic take despite saying that. Listen, we got to fire Joe. We got a clod skill that does his whole job.
+嘿，看，你可以开掉这个人，但你应该留着我，因为我会帮你，你知道的，把我的更多同事自动化掉。所以我就会那么做。这话从刚才说“对，对，对那些不做人工智能的家伙们、姑娘们没有同情心很难，然后到……”的人嘴里说出来……不，不，不，我觉得尽管那样说了，我还是采取了一种相当有同情心的态度。听着，我们得开掉 Joe。我们有个能搞定他整份工作的 Claude 技能。
+
+66
+00:33:41.000 --> 00:33:54.000
+He's out. You're going to get me canceled. Bro, you're going to get yourself canceled. You're going to get yourself canceled. You know what? Maybe I will. Maybe I will. All right.
+他被淘汰了。你这是要让我被取消资格啊。兄弟，你这是要让自己被取消资格。你这是要让自己被取消资格。你知道吗？也许我会吧。也许我会的。好吧。
+
+67
+00:33:54.000 --> 00:34:06.000
+I got to talk to me. Anyways, go to bed. Thank you, Marco. This was a blast. I hope we do meet at some point, whether that's in Spain. Or, yeah. A GDC? Hopefully.
+我得跟我自己谈谈。总之，去睡觉吧。谢谢你，Marco。这太棒了。我希望我们能在某个时间见面，不管是去西班牙。还是，对。GDC？希望如此。
+
+68
+00:34:06.000 --> 00:34:21.000
+And where? at GTC. I also want to go to GTC. Yeah, yeah, yeah. I don't know. I don't know if it's ever going to happen. I've been here for what, six plus years. But anyways, we'll find an event. There is a couple conferences in Spain.
+还有哪里？在 GTC。我也想去 GTC。对，对，对。我不知道。我不知道这会不会发生。我已经在这里待了六年多了，对吧？不过总之，我们会找到一个活动的。西班牙有几场会议。
+
+69
+00:34:21.000 --> 00:34:36.000
+If we weren't having a kid, I'd be in, I think I mentioned that last time. Malaga, Malaga. Malaga. And I was in Cadeve a couple years ago. And I love Spain. I love Spain. I love Spain. Great place to run. Great place to run.
+如果我们没有孩子，我就会去了，我想我上次提到了。马拉加，马拉加。马拉加。我几年前去过卡迪夫。我爱西班牙。我爱西班牙。我爱西班牙。跑步的好地方。跑步的好地方。
+
+70
+00:34:36.000 --> 00:35:00.000
+And the weather there is fantastic, much better than Canada, much better than America. Arguably better than California as well, because it gets a little chilly, but I don't think Spain ever gets chilly, to my knowledge. It does. It does? It does, all depends, of course, of the location. It's very mountainous, Spain, you know? Is it? Oh, that's true. That's, what's his name?
+那里的天气棒极了，比加拿大好得多，比美国好得多。可以说比加利福尼亚也要好，因为加州有点冷，但据我所知西班牙从来不会冷。会的。会吗？会的，当然这取决于地理位置。西班牙有很多山，你知道的。是吗？哦，那是真的。那是，叫什么来着？
+
+71
+00:35:00.000 --> 00:35:14.000
+Best Ultra Runner in the world, arguably. Philean Jornet. Oh, I thought you were going to mention, like, you know, like, famous. mountainous Spain problem from Napoleon. No, no, no. We're mentioning Killian... He says...
+可以说是世界上最好的越野跑者。基利安·霍内特（Kilian Jornet）。哦，我还以为你要提，你知道的，比如拿破仑带来的西班牙山区著名难题呢。不，不，不。我们提到的是基利安……他说……
+
+72
+00:35:14.000 --> 00:35:34.000
+He says from France. How do you pronounce? It's Killian Horne or Jorne? I think it's Killian Jorne. But he's from Catalonia. And so in Catalonia, they have a different dialect for a different language, basically, which is called Catalonian.
+他说他来自法国。怎么发音？是 Killian Horne 还是 Jornet？我认为是 Killian Jornet。但他来自加泰罗尼亚。所以在加泰罗尼亚，他们有一种不同的方言或基本上是另一种语言，叫做加泰罗尼亚语。
+
+73
+00:35:34.000 --> 00:36:15.000
+And so I guess maybe it's... it's spoken in another in another way but i mean he lives in norway so he lives in norway well he grew up in spain though because i've listened to podcasts and he's he's like a genetic freak in that like his parents used to take him on like hikes and runs like in the mountains and so his ability like they did some study on him once and it found that he naturally changes his gate during his like ultra runs and runs so that he is like shifting what muscle in his leg and his leg and he is like shifting what muscle in his leg he's using like from mile to mile so that he like doesn't tire out as quick as quickly and i'm just like whoa my guy like that's insane he's like a all right for the third
+所以我猜也许它是……用另一种方式说出来的，但我的意思是，他住在挪威，所以他住在挪威，不过他在西班牙长大，因为我听过播客，他就像是一个基因怪才，他的父母过去常常带他在山里徒步和跑步，所以他的能力……有一次他们对他进行了一项研究，发现他在超长距离跑步时会自然地改变步态，这样他就可以在每英里之间切换他腿部使用的肌肉，这样他就不会那么快感到疲惫，而我当时的想法是：哇，老兄，这太疯狂了。他就像是个……好吧，第三次
+
+74
+00:36:15.000 --> 00:36:41.000
+fourth time thank you once again this has been a blast how i'm going to edit this nobody knows um be sure to check these show notes either in your podcast app or at a ds p the podcast dot com for links to anything we mentioned in today's episode as well as a link to a get-up discussion where you can leave thoughts comments and questions thanks for listening we hope you enjoyed and have a great day. Low quality, high quantity. That is the tagline of our podcast. It's not
+第四次，再次感谢。这太棒了。我要怎么剪辑这个，没人知道嗯，一定要在你的播客应用中或在 adsp the podcast.com 上查看这些节目笔记，里面有今天节目中提到任何内容的链接，还有一个 GitHub 讨论链接，你可以在那里留下想法、评论和问题。感谢收听，希望你喜欢，祝你有美好的一天。低质量，高质量。这就是我们播客的标语。不是
+
+75
+00:36:41.000 --> 00:36:46.000
+the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+这个标语。我们的标语是带有信息点缀的混乱。本集还没有评论。点击文稿中的任何句子即可留下评论。

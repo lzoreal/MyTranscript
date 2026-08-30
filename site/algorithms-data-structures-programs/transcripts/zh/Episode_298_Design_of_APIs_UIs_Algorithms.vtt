@@ -1,0 +1,261 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:36.000
+in designing these APIs for the algorithm that work and the algorithms need to fit together, right? And need to fit together well. And you want people who are using your code to, when they try the obvious thing, you want it to work and you want it to work well with good performance, with good composability. And conversely, when they try, you know, you want the easy things to be easy. and the slightly more esoteric things to be possible. But you don't want the dangerous things to be easy.
+在设计这些API时，为了让算法能够正常工作，算法之间需要相互配合，对吧？而且需要配合得很好。你希望使用你代码的人，在尝试显而易见的操作时，能够顺利运行，并且能够凭借出色的性能和良好的组合性运行得很好。相反，当他们尝试时，你知道的，你希望简单的事情保持简单。而稍微深奥一点的事情也能实现。但你又不想让危险的事情变得轻而易举。
+
+2
+00:00:36.000 --> 00:01:19.000
+You don't want them to accident, to do something which looks fine but falls off a performance cliff. Welcome to ADSP, the podcast, episode 298, recorded on July 22, 2006. My name is Connor, and today with my co-host, Ben. We chat about the design of APIs, UIs, algorithms, and more. We should talk in future because you work. on algorithm libraries. Right? You still work on that? Yeah, yeah.
+你不会希望他们不小心做出一些看似正常，但性能却会断崖式下跌的事情。欢迎收听 ADSP 播客，第 298 期，录制于 2006 年 7 月 22 日。我是康纳（Connor），今天与我的联合主持人本（Ben）一起。我们聊了聊 API、UI、算法等的设计。我们以后应该聊聊，因为你从事的是算法库的工作。对吧？你现在还在做这个吗？对，对。
+
+3
+00:01:19.000 --> 00:01:35.000
+So in some way. I don't know which variant of that you work on right now, but so we should talk about the design of the APIs for those kind of things because most of what I a lot of what I do these days is API design and I
+所以从某种程度上来说。我不知道你现在具体在做哪个变体，但我们应该讨论一下这类东西的 API 设计，因为我这大部分、很大一部分工作都是 API 设计，而且我
+
+4
+00:01:35.000 --> 00:02:05.000
+I look at the code my team is writing you know, just to bring this back to what the podcast and theory is about. I look at the code my team is writing and I see where they are having difficulties issues. Sometimes they don't even know they're having them, right? Because because they know how to do C++ plus, they know how this works. They don't see that this can work an easier way or a different way that would make it mesh better with something else. Things like that, particularly in the realm of like, and these are like
+我看着团队编写的代码，你知道的，为了回归本期播客的理论主题。我看着团队编写的代码，发现他们在哪些地方遇到了困难和问题。有时他们甚至没有意识到自己遇到了问题，对吧？因为因为他们懂 C++，他们知道这是怎么运作的。他们没有看到这种工作方式其实可以更简单，或者有另一种方式能让它与其他部分更好地融合。诸如此类的事情，尤其是在诸如
+
+5
+00:02:05.000 --> 00:02:36.000
+sometimes small, small API things. And I'm wondering if, you know, you have the same experience in designing these APIs for the algorithmic work and the algorithms need to fit together, right? And need to fit together well. And you want people who are using your code to, when they try the obvious thing, you want it to work and you want it to work well with good performance, with good composability.
+有时是小型、小型的 API 问题。我想知道，你（你知道的）在为算法工作设计这些 API 时是否有同样的经历，算法需要相互配合，对吧？而且需要配合得很好。你希望使用你代码的人，在尝试显而易见的操作时，能够顺利运行，并且能够凭借出色的性能和良好的组合性运行得很好。
+
+6
+00:02:36.000 --> 00:02:59.000
+And conversely, when they try, you know, you want the easy things to be easy and the slightly more esoteric things to be possible, but you don't want the dangerous things to be easy. You don't want them to accident, to do something which looks fine but falls off a performance cliff, right? Things like that. So I'm wondering how much of that you do in your day-to-day.
+相反，当他们尝试时，你知道的，你希望简单的事情保持简单，稍微深奥一点的事情也能实现，但你又不希望危险的事情变得轻而易举。你不会希望他们不小心做出一些看似正常，但性能却会断崖式下跌的事情，对吧？诸如此类的事情。所以我想知道你的日常工作中有多大比例是这样的。
+
+7
+00:02:59.000 --> 00:03:15.000
+Yeah, we definitely, maybe that's where the next time we record, we should talk about just design in general, because it's interesting. As soon as you started talking about API design, it made me think about your talk title, easy to use, hard to misuse. Right. That's not my title.
+是的，我们绝对有，也许这就是我们下次录音时应该聊的话题，只聊聊总体上的设计，因为这很有意思。一谈到 API 设计，我就想起了你的演讲标题：易用，难误用。对吧？那不是我的标题。
+
+8
+00:03:15.000 --> 00:03:32.000
+That's Scott Myers, but... Well, I mean, you borrowed it. I mean, it's a title for one of my talks. Right, yeah. I didn't originate that term. I have been doing a ton of outside of my day job, like app design and U.S. design. Mm-hmm.
+那是斯科特·迈尔斯（Scott Myers）的，不过……好吧，我的意思是，你借用了它。我的意思是，这是我的一场演讲的标题。对，没错。这个词不是我发明的。除了日常工作之外，我还做了大量应用设计和用户体验（UX）设计。嗯。
+
+9
+00:03:32.000 --> 00:03:48.000
+And I've started to realize that, like, and also on top of that, like, I want, there was a talk that probably the most, the best talk that I saw, at NDC Toronto back in a couple months ago was a UX talk. We might have even mentioned it on a past podcast. I'll find it. I'll link it in the show notes.
+我开始意识到，不仅如此，我还希望……我看到过的最好的一场演讲，是几个月前在多伦多 NDC 大会上看到的一场关于 UX 的演讲。我们甚至可能在过去的播客中提到过它。我会找到它，并把它链接到本期节目文稿中。
+
+10
+00:03:48.000 --> 00:04:09.000
+I can't remember the guy's name. But it was just basically like rattling through different like design principles. Like, you know, if you change the color of a font on a table of words, you know, that pops out more. Things honestly that seem kind of obvious. It's like why are you throwing some guy's name on that principle? Like that's just obvious. But like I guess maybe some things that are obvious to some people are not to others.
+我想不起来那家伙的名字了。但它基本上就是快速过了一遍不同的设计原则。比如，你知道的，如果你改变单词表格中字体的颜色，你知道的，它就会更加突出。老实说，这些事情看起来有点显而易见。这就好比，你为什么要把某人的名字安在这个原则上？这不是很明显吗。但我想，或许对某些人来说显而易见的事情，对其他人并非如此。
+
+11
+00:04:09.000 --> 00:04:30.000
+And there's a nice philosophical discussion in there of like, especially being in research. You know, it's like, well, something has to be novel. But like everyone's, the novelty of something is informed by one's experience. And like what I think is like, yeah, novelist relative. Yeah, someone else might think something. Oh, that's really novel. And I think, well, that's just obvious. Like, there's nothing novel about it.
+这里面有一个很好的哲学讨论，尤其是身处研究领域。你知道的，这就好比，有些东西必须具有创新性。但对每个人来说，新颖性是由个人的经验决定的。比如我认为的——是的，新颖性是相对的。是的，其他人可能会觉得有些东西“哦，这真的很有新颖性”，而我认为“嗯，这不是很明显吗，没有什么新颖性可言”。
+
+12
+00:04:30.000 --> 00:05:02.000
+It's just like an obvious outcome of like the last two steps that I took. Anyways, and the things that I've noticed is that, like, I have an ex, it. both when it comes to API design, but also just UX design. I am so opinionated, but opinionated because obviously there's a way that this thing should work, the number of buttons that I have to click, you know, the difficulty of navigating to some feature. Some things that, like, this information that I know the app knows, like from the metrics it has, but it's just not showing me. And...
+这只是我采取的最后两个步骤的显而易见的结果。无论如何，我注意到的是，无论是涉及 API 设计还是仅仅是 UX 设计，我都非常有主见。之所以有主见，是因为很明显，这东西就应该这样运作：我必须点击的按钮数量，你知道的，导航到某个功能的难度。有些事情，比如这些我明明知道应用通过其指标已经掌握的信息，但它就是不显示给我。而且……
+
+13
+00:05:02.000 --> 00:05:13.000
+So you've been doing... You described it as UX design? Yeah. Does that include U.I design? Well, so I guess U. UX? Have you been doing that as well? I mean, so UX is user experience,
+所以你一直在做……你把它描述为 UX 设计？是的。这包括 UI 设计吗？嗯，所以我想 UX 是……你最近也在做这个吗？我的意思是，UX 是用户体验，
+
+14
+00:05:13.000 --> 00:05:27.000
+UI is user interface. You know, those to me seem like I'm making a Vend diagram. Be careful what you say now because I have friends who are UX designers and they would, if you say UI and UX are the same thing, they'll be
+UI 是用户界面。你知道的，在我看来，它们就像是在画一个维恩图。现在说话可得小心了，因为我有朋友是 UX 设计师，如果你说 UI 和 UX 是一回事，他们会
+
+15
+00:05:27.000 --> 00:05:55.000
+banging on your door. Well, maybe we should get some of them and bring them on the podcast because like I was making a master card symbol with my two hands to represent a Venn diagram that's an extremely overlapping Venn diagram was what kind of just mind. Because that's the thing is like a user interface in my opinion, and obviously I'm not a designer, although I will say in today's age, I feel like more and more of what I do on a daily basis is design. Like whether it's designing an API or whether it's designing
+敲你的门。好吧，也许我们应该请其中几位来上播客，因为我刚才用两只手比划了一个万事达卡标志来代表维恩图，那是一个重叠度极高的维恩图，刚才脑子里就是这么想的。因为这就是问题所在，在我看来，用户界面——虽然我显然不是设计师，但我可以说，在当今时代，我觉得我日常工作中越来越多的内容都是设计。无论是设计一个 API，还是设计
+
+16
+00:05:55.000 --> 00:06:35.000
+the user interface of an app that I'm working on or whether I'm designing like that, because that's the thing is a user interface. I think, I mean, I could be wrong. We got to bring the experts on, but is massively informed by the user experience that I want. I think a very broad way to describe the difference might be just to say that, and I could be wrong in this, but it seems like one way to describe the difference might be to say that user experience is a higher level concern, right? User experience is about the flows of what happens in an application when the user has a task in mind, for example.
+我正在开发的应用程序的用户界面，或者我正在设计的诸如此类的东西，因为这就是用户界面。我认为——当然我可能是错的，我们得请专家来——它在很大程度上是由我想要的用户体验所决定的。描述两者区别的一个非常宽泛的方法或许就是说——尽管我可能说得不对——描述区别的一种方法似乎是说，用户体验是一个更高层次的关注点，对吧？用户体验关乎当用户心中有某个任务时，应用程序中会发生什么样的流程，例如。
+
+17
+00:06:35.000 --> 00:07:20.000
+high-level thing. I want to do this. How does the application enable that guide me through it? UI, it seems to me, might take into account many more low-level kind of design things like, things like Fitzlaw, you know, to be very, very basic about it, you know, which come into UI design and not so much into UX design, maybe. That's the way I think about it. I could be wrong, you know, I need to talk to my friends who know these things. we should yeah we should put a we should put a pin in this and uh and definitely talk about this because yeah honestly like inside my i had you know with the inner monologue that is never ends with myself like i have all these like names for what like what i what do i do you know on paper i'm a research
+高层次的事情。我想做这个。应用程序如何实现这一点并引导我完成？而 UI，在我看来，可能会考虑到更多低级的设计细节，比如像菲茨定律（Fitts's law）这样非常非常基础的东西，你知道的，这些东西属于 UI 设计，而不太属于 UX 设计。这就是我的看法。我可能是错的，你知道的，我需要和懂这些的朋友聊聊。我们应该……对，我们应该把这个问题悬置起来，呃，一定要讨论一下，因为说实话，在我内心深处……你知道，那场永无止境的内心独白里……我为自己所做的事情起了各种各样的名字。从纸面上看，我在工作中的职位是研究
+
+18
+00:07:20.000 --> 00:07:53.000
+scientist at work but then like outside of work i do a ton of like development and you know hobby projects and i've got this podcast i've got a youtube channel and anyways internally i've started referring to myself as a dashboard designer. Like, it's so easy to throw up these dashboards now that, and anyways, I've been thinking a ton about design and that, like, there is something to be said, certain people, I think, naturally develop a better design sense. And I think... Have you been reading any of the, quote, design literature?
+科学家，但下班后，我做了大量的开发和爱好项目，我经营着这个播客，还有一个 YouTube 频道。不管怎样，在内心里，我开始称自己为仪表盘设计师。你看，现在要弄出这些仪表盘是如此容易，总之，我一直在深入思考设计，那就是——有些人的确会自然而然地培养出更好的设计感。我认为……你读过任何所谓的“设计文献”吗？
+
+19
+00:07:53.000 --> 00:08:09.000
+No. I have a long list of books, which include books from you. I still have not read the design of everyday design. things. Is that one of them? Yeah. Yeah. And you should also read the designer. Is it the design of... There's a sort of follow-up which sort of argues the other side.
+没有。我有一长串的书单，里面包括你的书。我还是没有读过《日常设计的反思》（The Design of Everyday Things）。是其中之一吗？对。对。你还应该读一读……是关于……的那本吗？还有一本后续作品，它从另一个角度进行了论证。
+
+20
+00:08:09.000 --> 00:08:42.000
+The design of not beautiful things, but emotional things. Something like that. But that's Don Norman. You know, that's only one aspect and a fairly small one these days of that is considered good design. There are loads of other things. You know, you should read Christopher Alexander, you should read probably things like, I don't know, just some things on my bookshelf. About Face. You know, there's, I forget the name of the book, UI Design for Programmers, I think, back in the day.
+关于不那么美观的事物，而是关于情感化设计的事物。诸如此类。但那是唐·诺曼（Don Norman）的作品。你知道的，这只是被认为是优秀设计的一个方面，而且在当今看来是相当小的一个方面。还有很多其他内容。你知道的，你应该读读克里斯托弗·亚历山大（Christopher Alexander），你可能还应该读一些，我不知道，就我书架上的一些书。比如《About Face》。你知道的，我忘了那本书的名字了，好像是《程序员的 UI 设计》（UI Design for Programmers）之类的。
+
+21
+00:08:42.000 --> 00:08:54.000
+There's things like, don't make me think. I don't know. And I don't know the current state of the U.X. slash UI design literature. Don't make me think. So I should stop talking. About Face. Is that a font type book?
+还有诸如《别让我思考》（Don't Make Me Think）之类的书。我不知道。我也不知道目前 U.X / UI 设计文献的现状。《别让我思考》。所以我应该闭嘴了。《About Face》。那是讲字体的书吗？
+
+22
+00:08:54.000 --> 00:09:24.000
+Ben's looking back at his bookshelf of. Actually, no. The Essentials of Interaction Design, Alan Cooper. Essentials of Interactive. But if you want a book about fonts, two books I can recommend. One's called Just My Type. That's kind of a popular science style book about fonts. But the other one, if you really want to know about fonts,
+本正回头看他的书架……其实不是。《交互设计精髓》（The Essentials of Interaction Design），作者是阿兰·库珀（Alan Cooper）。交互设计的精髓。但如果你想要一本关于字体的书，我可以推荐两本。一本叫《我的字》（Just My Type）。那是一本关于字体的通俗科学风格的书。但另一本，如果你真的想了解字体，
+
+23
+00:09:24.000 --> 00:09:43.000
+and probably the most beautiful book, one of the most beautiful books in the past century that's ever been published. Bringhurst is the author. Robert Bringhurst, I think, and I forget the name of the book, but it is absolutely, you can probably bring that really quick.
+而且可能是最美的一本书，过去一个世纪出版的最美的书之一。作者姓布林格斯特（Bringhurst）。罗伯特·布林格斯特（Robert Bringhurst），我想是的，我忘了书名了，但它绝对是……你大概可以很快查出来。
+
+24
+00:09:43.000 --> 00:09:59.000
+The elements of typographic style? That's the one. The elements of typographic style. That is a must read if you're interested in typefaces. Yeah, we could probably talk for, I mean, like I said, we will resume this conversation.
+《印刷样式元素》（The Elements of Typographic Style）？就是这本。《印刷样式元素》。如果你对字体感兴趣，这是一本必读的书。是的，我们大概可以聊上——我的意思是，就像我说的，我们会继续这个对话。
+
+25
+00:09:59.000 --> 00:10:51.000
+about not just API design, but just, I feel like, yeah, like these, like what you said, like easy to use, hard to misuse. But also, too, there's this kind of like, like I said, it's one of these things. It's like it's percolating or cultivating in my brain and it's not fully formed. But it's like now that I'm in the control of designing a bunch of stuff, it's like I have expected behaviors of the way things work. Right. And so often now, like, you don't realize it when, or I mean, you do realize it, but you've just trained your brain to silence the voice of like, like, so, you know, one of the apps is a podcast player. I've used a bunch. And like, I didn't realize, but many times in using the app on a daily basis for hours at a time, like, so many things are not what I expect.
+不仅讨论 API 设计，而且我觉得，是的，就像你说的，这些东西，比如“易用，难误用”。但同样，也有这样一种感觉——就像我说的，这是其中之一。它正在我的脑海中酝酿或发酵，尚未完全成形。但现在，既然我掌控着许多东西的设计，我就对事物的工作方式有了期望的行为模式。对吧。因此，现在很多时候，你不会意识到——或者说，我的意思是，你确实意识到了，但你已经训练你的大脑去压抑那种声音，比如——你知道的，其中一个应用是一个我经常使用的播客播放器。而且——我没有意识到，但在日常使用该应用的几个小时里，有那么多的事情并不像我预期的那样。
+
+26
+00:10:51.000 --> 00:11:23.000
+But you just, you learn how to navigate to the places. Right. what you know now. They weren't what you expected to start with. But then as soon as you put yourself in a designer like role, you now realize that wait a second, every single time my, there's a voice in my head saying like, well, how come it, how come it did that? How come it's not showing me this? How come I have to hit three buttons to get to this? How come I'm not just doing it this way, actually? Like, sure, it's never been done before, but like the world's your oyster. You can do anything you want. If you're designing it yourself, you realize that actually that voice, that voice is constantly
+但你只是学会了如何导航到相应的地方。对吧。基于你现在的认知。一开始它们并不是你所期望的。但一旦你把自己置身于设计师的角色中，你现在就会意识到，等一下，每一次，我的脑海里都有一个声音在说：“怎么会这样？为什么它不向我要这个？为什么我必须按三个按钮才能到这儿？为什么我不能直接用这种方式来做？”确实，这可能以前从未有人做过，但世界是广阔的。你可以做任何你想做的事。如果你是自己设计，你就会意识到，实际上那个声音——那个声音在全天候不断地
+
+27
+00:11:23.000 --> 00:11:58.000
+saying things throughout the day, whether it's when you're programming, whether it's when you're opening the handle to some door and you realize that, oh, that's like, that's the one that I always remember from you, from watching one of your talks. I think you mentioned that the, well, that's, yeah, that's from Don Norman, yeah. Oh, yeah, that's right. Yes, the design of fire doors, I think, is what you're very much. Where it's, you should never have a handle if you need to push. It should just be a flat panel. Right. And that's, that's, uh, that's the law in many countries for fire doors specifically. Fire doors have to open outwards, you know, they have to basically open in response to a
+说着各种事情，无论你是在编程，还是在去拉某扇门的把手时，你突然意识到，哦，那就像……那是我从你的一场演讲中一直记住的例子。我想你提到过，那……哦，是的，那是唐·诺曼的观点，没错了。哦，对，没错。是的，防火门的設計，我想这就是你经常提到的。上面本不该有把手，如果你需要推的话。它应该只是一块平整的面板。没错。在许多国家，这专门是针对防火门的法律规定。防火门必须向外开，你知道的，它们必须能够对
+
+28
+00:11:58.000 --> 00:12:16.000
+crush of people against them. Right. Yeah. And anyway, so it's small things like that where like, you know, I heard that from you or in one of your talks at one point. And now anytime I, because you have that experience, if not on a daily basis, on a weekly basis, like you go to open a door and then you go to pull it and then you have to, you have to push.
+人群向外拥挤的情况做出开启反应。对吧。是的。无论如何，就是这样的小事情，你知道的，我从你那里或者在你的某场演讲中听到了这一点。现在每当我去……因为你有那种体验，如果不是每天，那也是每周——比如你去开门，然后习惯性地去拉它，结果发现你必须去推。
+
+29
+00:12:16.000 --> 00:12:25.000
+But there's a handle there. So the handle makes you, it's a pulling mode. You don't grab a handle. to push it, you grab a handle to pull it. Right. And it affords pulling. Yeah. Yeah.
+但那里却有一个把手。所以把手让你觉得这是一个“拉”的模式。你不会为了推而去抓把手，你抓把手是为了拉。对吧。它提供了“拉”的意图。是的。是的。
+
+30
+00:12:25.000 --> 00:12:47.000
+Like, yeah, the affordances of things. Anyways, and it's like there's this voice that you have. And the affordances in code also is a thing. Absolutely. Absolutely. And like, you know, you take it into, yeah, into the array language space as well, which is like I have this whole other thing of like the primitives, which is, you know, the primitives in an array language are the same thing as the vocabulary in an algorithm library, right?
+比如，是的，事物的可供性（affordances）。无论如何，这就好比你有这样一种内在的声音。代码中的可供性也是真实存在的。绝对的。绝对的。而且，你知道的，你也可以把它带入数组语言的领域，这就好比我还有另一套关于原语（primitives）的看法——数组语言中的原语，其实就等同于算法库中的词汇表，对吧？
+
+31
+00:12:47.000 --> 00:13:35.000
+The things that you provide people with affect, you know, how they will build their solutions. And even as far as like, you know, for a while I used to say that, you know, you shouldn't bundle a binary operation with a generic algorithm because, you know, it. Because it colors the idea of what that algorithm is limited to. Adjacent difference is the poster child. But then on top of that, like I basically added a caveat to that in that you should in your library also. provide specializations. So like if you could have written accumulate without specifying stood colon colon plus plus or stook colon colon plus, you should you shouldn't allow, they don't encode the binary operation, but also provide an algorithm called sum. Yes. Because the fact that I have to go stood
+你提供给人们的东西会影响他们如何构建自己的解决方案。甚至在某种程度上——有一段时间我曾经说过，你不应该将二元操作与通用算法捆绑在一起，因为，你知道的。因为这会局限人们对该算法应用范围的理解。“相邻差分”（Adjacent Difference）就是典型的例子。但不仅如此，我基本上对此补充了一个前提条件：你在库中也应该提供特化版本。因此，如果你在编写 `accumulate` 时没有指定 `std::colon::plus`，你就不应该……它们没有硬编码二元操作，但也应该提供一个名为 `sum` 的算法。是的。因为事实上我必须去敲出 `std::colon::colon::accumulate`、括号、`std::colon::colon::plus`、以及作为初始值的零，这无形中增加了使用的成本，每次都让我感到恼火。而大多数时候，我只是想把我的数字列表加起来。而且，而且，而且，你知道的，它是一个零整数类型，我不需要去影响任何其他东西的类型。无论如何，你知道的，这些事情，就像你对它们培养出越来越坚定的看法：好吧，你知道的，不要硬编码它，但也要添加这些额外的功能。这体现在生活的方方面面。体现在你进出的门上。体现在你使用的 API 上。是的。是的。在工程学中，在软件工程中，
+
+32
+00:13:35.000 --> 00:14:14.000
+colon colon colon accumulate per end stood colon colon plus with zero for the initial value, it now like changes the cost of using that and it irritates me every time. And most of the time, I just want to add up my list of numbers. And, and, and, you know, it is with a zero integer type and I don't need to affect the type of whatever. Anyway, so it's, you know, these things, it's like, you know, you develop stronger and stronger opinions of like, okay, you know, don't encode it, but also add these extra things. And it's in all facets of life. It's with doors that you're entering. It's with APIs you're using. Yeah. Yeah. And with engineering, with, with software engineering,
+在 API 设计中，这有着明确的纪律性。而且这同样……你知道的，它从物理世界、现实世界中借鉴了大量内容来运用到设计设计中，因为你必须做类似的事情。你必须考虑到，嗯，用户要来使用我的 API。他们心中有着某种想要完成的事情。
+
+33
+00:14:14.000 --> 00:14:25.000
+with API design, there's a definite discipline to it. And it's the same, you know, it takes a lot of, it takes a lot of things from sort of physical,
+对吧。对吧。他们试图对数据进行排序，或者，你知道的，获取前 10 个数据，诸如此类。他们在努力做某事。他们有一个想要解决的问题。他们将使用我的 API 来做到这一点。
+
+34
+00:14:25.000 --> 00:14:37.000
+real world to design design because you have to do the same sorts of things. You have to think about, well, a user is coming to use my API. They have in mind something they want to do.
+他们将如何做到这一点？使用哪些东西会显而易见吗？这会很容易吗？它会为他们带来所有正确的结果吗？他们需要花多长时间才能弄清楚这一点？你知道的，你刚才说的，当你戴上设计师的帽子时，你在这些应用程序中注意到的所有小烦恼——也许你已经使用了几年，当你在日常模式下使用它们时，你已经习惯了。
+
+35
+00:14:37.000 --> 00:14:49.000
+Right. Right. They're trying to sort their data or, you know, get the top 10 or whatever it might be. They're trying to do something. They've got a problem they're trying to solve. They're going to use my API to do it.
+你不会注意到它让你在这里多点了一次，在那里多按了一下，诸如此类的。但同样，一个仅仅称职、合理、满足你的所有基本要求、能完成工作的产品的区别，与一个绝对顶尖、甚至使用起来很有趣的产品的区别，往往就是那些微不足道的小细节，对吧？你知道的，与此相关的一个想法我经常有，那就是，世界上那些真正优秀的系统和产品，往往不是为初学者设计的，对吧？
+
+36
+00:14:49.000 --> 00:15:16.000
+How are they going to do that? Is it going to be obvious which things to use? Is it going to be easy? Is it going to have all the right outcomes for them? And how long is it going to take them to figure that out? And, you know, that you were saying earlier, like the kind of, when you put on a designer hat, all the sort of minor irritations that you notice in these apps that maybe you've been using for a few years and when you use them in a day-to-day mode, you've just gotten used to it.
+它们可能不是为初学者设计的。当然，如果它们能让初学者轻松上手，那是很有帮助的。但是，再次回到游戏领域，我看到过。有时在游戏中，你知道的，之所以为初学者设计，是因为你希望人们想要轻松地玩你的游戏、使用你的系统或使用你的 API。你为初学者设计。我认为这是错误的观点。我认为世界上最好的、最好的系统是为“永远的中级用户”设计的。关于“永远的中级用户”这个概念，我在设计方面思考得很多，
+
+37
+00:15:16.000 --> 00:16:00.000
+You don't notice that it's making you do an extra click here, an extra press there or whatever. But also, you know, so the difference between a sort of product that is merely adequate, reasonable, ticks all the boxes that you want to do, gets the job done, and a product that is absolutely top of the line, fun to use even, you know, is those tiny things. a lot of the time, right? You know, and so related to this is a thought I often have, which is that, you know, the really good systems and products in the world often are not designed for beginners, right?
+你知道的，因为我使用的最好的系统、最好的程序和最好的产品都有这种特点，你知道的，在使用了一周或两周后，你就不再是初学者了，你知道的，初学者阶段非常非常短暂，但中级阶段可以持续一生。
+
+38
+00:16:00.000 --> 00:16:41.000
+They might not be designed for beginners. Now, it's helpful if they're easy for beginners to get started. But, and again, to loop back to games, I saw. there sometimes in games like, you know, designing for beginners because you want people to, want it to be easy to play your game or use your system or use your API. You design it for the beginner. I think that's the wrong outlook. I think the best, the best systems out there in the world are designed for the perpetual intermediate. The idea of the perpetual intermediate is one that I think about a lot in terms of design,
+你知道的，你可以无限期地成为中级用户。而且，你知道的，好的产品是那些既能支持你作为中级用户所需的功能，又能让你一直不断地发现这些新事物、发现做事更好方法的产物。是的，这是一个非常非常有趣、引人深思的想法。比如，是的，我在某些方面绝对是一个中级用户，一个永远的中级用户，比如 Audacity（音频编辑软件）。对吧。
+
+39
+00:16:41.000 --> 00:17:01.000
+you know, because the best systems and the best programs and the best products that I use kind of have that flavor, you know, you're not a beginner after you've used it for a week or two weeks, you know, the beginner phase is very, very small, but the intermediate phase can go on a lifetime.
+我不是 Audacity 专家，但我知道如何做我需要做的事情。每隔一段时间，我确实会学到一些新东西，你知道的，如果你需要的话——在你拼接了音轨之后，如果你想重新把它们连接起来，这样你就不用每次都去按 Ctrl+J 了，你知道的——这就是另一回事了，它有一半时间都有快捷键我不知道，但我确信你知道的，是的。但每隔一段时间，你就会学到一个新东西，而且你知道，在以初学者身份使用那个新功能一周之后，你已经把它整合到你的工作流程中了。是的，这是一个非常有趣的话题，我们下次会深入探讨。我的意思是，我觉得我们应该停止假装了，因为我们已经花了
+
+40
+00:17:01.000 --> 00:17:25.000
+You know, you can be an intermediate user indefinitely. And, you know, the good products are the ones that support what you need in terms of an intermediate, but also allow you to discover these new things, these better ways to do things all the time. Yeah, that's a very, very interesting thought provocative. Like, yeah, I'm definitely an intermediate, perpetual intermediate with a few different, like audacity, for instance. Right.
+过去 25 分钟一直在谈论这个话题，现在这可能已经成了一期节目。我刚才在想，你知道的，15 分钟前，我还想着“我们会把这个对话悬置起来”，然后 15 分钟后，我们实际上就录成了这个多期 API 设计系列的第一集。还有很多东西可以聊。对，对，对。说实话，我已经变成了——这就是问题所在，因为我称自己为……在脑海里，我称自己为所谓的“设计师”。
+
+41
+00:17:25.000 --> 00:18:02.000
+I am not an audacity expert, but I know how to do what I need to do. And every once in a while, I do learn something, you know, if you need to, after you've spliced tracks and you want to rejoin them so that you don't always. have to move control j you know like and that's the that's the other thing is it has shortcuts half the time that i don't know but i'm sure that you know yeah but every so often you learn a new thing you and you know after after a week of being a beginning with that new thing you've integrated into your workflow yeah a very interesting conversation topic that we will next time dive deeper into i mean i feel like we should stop pretending because we're spending
+我开始在意——这个我一生都在压抑的声音，实际上除了在处理 PowerPoint 这样的事情时，声音才被允许放大之外。但在我生活的其他所有方面，你只是觉得，抱怨手机上的某个应用并不重要。因为你无法改变现状。它只是个应用。难道你要写信给团队说：“嘿，请帮我改改这个吗？”我确实考虑过给 Spotify 团队发邮件，问他们：“为什么你们的播客队列形同虚设，或者说这么糟糕？你们是世界上排名第一的播客播放器。
+
+42
+00:18:02.000 --> 00:18:27.000
+the last 25 minutes talking over this this now probably is an episode I was thinking like, you know, 15 minutes ago, I was like, we'll put a pin in this conversation and then 15 minutes later, like we have ourselves actually the first episode of this multi-episode NPI design. There's a lot more to talk about. Yeah, yeah, yeah. And honestly, I've become like, that's the thing is because I call, like, in my head, I'm calling myself this like quote unquote designer.
+难道你们这里就没有人深入思考过这些事情吗？”好吧，另一件发生的事情，在企业层面上、在资本主义层面上发生的事情是，产品往往是不同的，在某些方面客观上更糟糕，但为了不同而不同是必须的。因为，你知道的，这就好比——这有点类似——如果你想进入可口可乐制造行业，你不会去尝试生产可口可乐。你不会去尝试复制可口可乐。你会试图让自己脱颖而出。对吧。与可口可乐竞争生产可口可乐是没有意义的。
+
+43
+00:18:27.000 --> 00:19:00.000
+I've started to care, like, this voice that I've silenced my whole life, really, except for when it comes to things like PowerPoint, you know, the voice is allowed to talk very loudly. But for all other aspects of my life, you just kind of, it's not important to whine about some app on your phone. Because like you can't affect change. It's just the app. You know, what are you going to write the team and say, hey, please change this for me? I actually did think about emailing the Spotify team to be like, why is your podcast queue like non-existent slash so terrible? You're like the number one podcast player in the world.
+是的。所以很多时候我们在软件中看到的是不同的产品，在某些我们可以挑剔的方面，它们客观上比其他产品更糟糕。有时这个问题——作为用户，你想要解决的问题，在软件中表示它的方式已经被解决得非常非常好了。这款软件很棒。但是，但是，你知道的，因为你无法在某个平台上使用它，或者你无法在企业环境中使用它，等等。你在其他地方得到的替代品并不是那么好。当然，在某些方面，有些是主观的。
+
+44
+00:19:00.000 --> 00:19:36.000
+Like, do you have no one here that thinks deeply about this stuff? Right. Well, the other thing that happens, the thing that happens, the thing that. happens at a corporate level, at a capitalist level, is that products often are different and objectively worse in some ways, but they have to be different for the sake of being different. Because, you know, it's a sort of thing like, you know, it's kind of related is like if you wanted to go into the cola making business, you wouldn't try and make Coke. You wouldn't try and copy Coke. You try and differentiate yourself. Right. There's no point competing with Coke at making Coke.
+有些是因为你习惯了。但有些则不然。有些实际上是客观的。有些只是你可以说：这个、这个、这个就是不如另一个好。而且我不知道为什么，因为这是一个在 20 年前就已经解决的问题。好吧，区别在于它们必须不同，因为它们在市场上就是需要有所不同，诸如此类，你知道的。这也许就是区别所在。
+
+45
+00:19:36.000 --> 00:20:18.000
+Yeah. And so a lot of times what we see in software is different products, which are, you know, in some ways that we can pick on objectively worse than other products. Like sometimes the problem has been, the problem you want to solve as a user, the way to represent that in the software has been solved very, very well. And this software is great. But, but, you know, because you can't, you can't use it on this platform or you. You can't use it in a corporate environment or whatever. The offering you get elsewhere is not as good. And in some, you know, some of it is subjective, of course.
+有时区别在于，嗯，它们是由那些对自己的领域不够了解、不知道这是一个已被解决的问题的人制造的。是的，这是这段对话的另一个方面，就像是为自己设计东西和为大众设计东西是两回事。是的。但作为用户，当你遇到一个产品，它勉强过得去，但却十分笨拙，而你只会想：
+
+46
+00:20:18.000 --> 00:20:40.000
+Some of it is what you used to. But some of it is not. Some of it is actually objective. Some of it is just you can say this, this, this doesn't do this as well as this other thing. And I don't know why, because this was a solved problem 20 years ago. Well, the difference is they had to be different because they just had to be different in the market or something like that, you know. That's maybe the difference.
+为什么它这么笨拙？我们明明知道该怎么做——这已经解决了，有更流畅的方式来做这件事，你知道的，简直就像只要花五分钟思考一下就能告诉你如何更流畅地完成它，但没有，你们依然坚持发布这样的东西。
+
+47
+00:20:40.000 --> 00:21:07.000
+Sometimes the difference is, well, it was made by people who don't know their field well enough to know that this is a solve problem. Yeah, that's a whole other aspect of this conversation is like, there's designing something for yourself and then there's designing something for population. Yeah. But that is the most annoying thing as a user when you, when you come up against a product and it's okay. but it's just clunky and you just think
+是的，好吧，现在我非常、非常期待我们的新系列，叫做——我不知道——“设计 101”还是什么的。好吧，我们会为它想出一个比“设计 101”更性感的名称。设计……你有什么好名字吗？设计……比如押头韵的名字。
+
+48
+00:21:07.000 --> 00:21:21.000
+why is it so clunky we know how to do this like this has been solved there are much smooth ways to do this you know it's almost like five minutes thought would tell you how to do this much more smoothly but no you persist in shipping this thing
+ADSP，代表着算法设计超能力（Algorithm Design Superpowers）。就是这样，就是这样！我们一直在为不同的东西想各种名字。好吧，那就结束这一期吧。这大概是三部曲中的第三部分了。本来打算做成两部分的，但正如你所提到的，我们一直在喋喋不休地谈论设计的事情，而且实际上——也许还有软件产品的算法设计。哦，这就对了，这就对了，这就对了！
+
+49
+00:21:21.000 --> 00:21:37.000
+yeah all right well now I'm very I'm very excited for our new series called I don't know design 101 or I don't know well come up with a sexier name for it than design 101 design you got any good names design like an alliteration
+这就是 ADSP。请务必查看节目文稿，无论是在你的播客应用中还是在 adsp the podcast.com 网站上，都可以找到我们在本期节目中提到的任何内容的链接，以及一个 GitHub 讨论区的链接，你可以在那里留下你的想法、评论和问题。
+
+50
+00:21:37.000 --> 00:22:03.000
+ADSP and that stands for algorithm design superpowers there you go there we go we've got we've always back naming different things all right well end this this is probably part three of three parts I was going to be two parts but then as you mentioned we just kept on talking about the design thing and and actually maybe the algorithmic design of software products oh there you go there you go there you go
+感谢收听。希望你们喜欢，祝你们有美好的一天。我是反大括号（the anti-brace）。本期节目暂无评论。点击转录文本中的任意句子即可留下评论。
+
+51
+00:22:03.000 --> 00:22:15.000
+that's ADSP. Be sure to check these show notes, either in your podcast app or at ADSP the podcast.com for links to anything we mentioned in today's episode, as well as a link to a get-up discussion where you can leave thoughts, comments, and questions.
+这就是ADSP。请务必查看播客应用中或adsp the podcast.com网站上的本期节目shownotes，获取我们今天提到的任何内容的链接，以及可以留下您的想法、评论和问题的GitHub讨论链接。
+
+52
+00:22:15.000 --> 00:22:20.000
+Thanks for listening. We hope you enjoyed and have a great day. I am the anti-brace. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+感谢收听。希望大家喜欢，祝您有美好的一天。我是反大括号。本期节目暂无评论。点击文稿中的任意句子即可发表评论。

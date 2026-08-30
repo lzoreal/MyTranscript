@@ -1,0 +1,736 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:13.000
+Hey everybody, here to talk about a really, really important topic. We've talked about Docker in the past and containerization. But one thing that's really important is how do you run this container? How do you run it at scale? How do you get these containers to talk in concert with each other? How do you replicate a lot of these things? And so your Kubernetes is something that Patrick and I both use day to day. I think I probably have to use it a lot more than Patrick does. It tends to be more of a cloud thing and less of an embedded thing. But it's extremely, extremely important being able to do all of that, orchestrate all of that and know kind of how that works. It also there's a large tie in to these big cloud providers.
+大家好，今天来聊一个非常非常重要的话题。我们过去聊过Docker和容器化。但真正重要的一点是，你如何运行这个容器？你如何在规模化场景下运行它？如何让这些容器彼此协同通信？如何复制其中很多东西？所以Kubernetes是帕特里克和我日常都在使用的工具。我想我使用的频率可能比帕特里克高得多。它往往更偏向云端，而不是嵌入式。但能够做到所有这一切、编排这一切并大致了解其运作原理，这是极其极其重要的。它也与这些大型云服务提供商有着紧密的联系。
+
+2
+00:01:13.000 --> 00:01:51.000
+They do a lot of heavy lifting for you. And so that makes it kind of a bit of a steep learning curve. And we're extremely fortunate to have Craig Box, VP of Open Source and Community at Armo, and one of the people who was there on day one of Kubernetes at Google here on the show. So thank you so much, Craig, for coming on the show. Thank you both for having me. Cool. And so before we do a deep dive into Kubernetes, why don't you give us a quick background? What did you study in school? You know, what happened after that?
+它们为你做了很多繁重的工作，这使得它的学习曲线变得有点陡峭。我们非常荣幸地请到了Craig Box做客节目，他是Armo开源与社区副总裁，也是谷歌Kubernetes第一天就在场的元老之一。非常感谢Craig能来参加节目。谢谢两位的邀请。太棒了。那么，在我们深入探讨Kubernetes之前，能给我们简单介绍一下你的背景吗？你在学校学的什么专业？之后又发生了什么？
+
+3
+00:01:51.000 --> 00:02:19.000
+And what was sort of the path that led you to being on the initial kind of Kubernetes team? Yeah, so my dad bought home a VIC-20 when I was under five, I guess. And back in those days, obviously, it was if you want to play a game, you get a book out and type the game in. And that never really led to a love of programming for me is an interesting thing that I found is that as I moved on through computers and PCs and so on through my teenage years, I was always interested in making the computer do things and tying things together and running bulletin boards and all that
+是什么样的经历让你最终加入了最初的Kubernetes团队？好的，我不到五岁的时候，我爸爸带回家一台VIC-20微型计算机。在那个年代，显而易见，如果你想玩游戏，就得拿出一本书把游戏代码敲进去。这并没有真正让我对编程产生热爱。我发现一件有趣的事情是，随着我在青少年时期接触计算机和PC等设备，我一直对让计算机执行任务、把东西连接起来、运行公告板系统以及所有诸如此类的事情感兴趣。
+
+4
+00:02:19.000 --> 00:02:59.000
+kind of thing. But I never really had a love for programming, for actually asking the computer to do new things. It was something that I studied to some degree at university. I did a computer science degree, but I always found that the amount of effort that it took to really learn and remember the things that you needed to know to get really good at something, it just wasn't really my strong suit. And I was much more interested in being in the outside world and seeing people and so on. And so I ended up working in IT consulting roles, doing a bunch of system administration stuff, getting early on into what I think would become DevOps, so using programming concepts and having that kind of background and applying it to systems administration and so on. Moved to Canada and worked at a software
+但对于编程本身，也就是真正要求计算机去执行新任务，我从来没有真正产生过热爱。我在大学里在某种程度上学习过这个。我读的是计算机科学学位，但我总是发现，要真正学会并记住那些精通某项技能所需的知识，所花费的精力并不是我的强项。我对走出去接触真实世界和人更感兴趣。因此，我最终从事了IT咨询角色，做了一堆系统管理员的工作，很早就接触了我认为后来会变成DevOps的东西——也就是运用编程概念并带着这种背景将其应用到系统管理等领域。搬到加拿大后，我在那里的一家软件公司工作了几年，负责安装和部署。
+
+5
+00:02:59.000 --> 00:03:43.000
+company there for a couple of years doing installation and deployment. So where did you grow up then? Probably somewhere in Europe? No, no, somewhere in New Zealand, right? The other end of the world. Oh, okay. Wow. Very cool. Through a turn of events is where I end up again today, but in the down under. Now, I seem to remember, I mean, it's probably not true anymore, but I seem to remember that New Zealand, that Oceania, if I'm saying Oceania, but it has a really poor internet and so you have high latency and lag spikes and all of that. Is that true? Is that kind of like a whole different experience being on the internet? And what's it like today? Is it just homogenous now? The university that I went to, the University of Waikato, was the first place
+那你是在哪里长大的呢？大概是欧洲的某个地方？不，不，是新西兰的某个地方吧？地球的另一端。哦，好吧。哇，太酷了。通过一系列机缘巧合，我今天又回到了南半球。现在，我记得——虽然这可能已经不是事实了——我记得新西兰、大洋洲（如果我没说错的话）的互联网非常糟糕，所以延迟很高、有网络卡顿等等。这是真的吗？在互联网上的体验是不是完全不同？现在的感觉是怎样的？现在已经完全同质化了吗？我去的大学，怀卡托大学，是新西兰第一个连接到互联网的地方。我相信我们当时整个国家和互联网只有一个2400或4800 bps的连接。
+
+6
+00:03:43.000 --> 00:04:26.000
+in New Zealand to be connected to the internet, I believe we had a 24 or 4,800 BPS connection for the entire internet and country at one point. It has got substantially better, but fair enough to say it's far away. It's a long distance and there are cables now. There are decent fiber cables running from New Zealand to Australia and Hawaii and so on. But there definitely used to be a sort of a culture of like, what's mirrored locally. You can download stuff within New Zealand and that's free, but international traffic costs a lot of money. But as for today, it's basically we're chatting over the web today. We've got high def video and it's all flat rate. And so we've caught up, but it is in a lot of ways, New Zealand's distance from the rest of the world can, it's made it its own economy.
+情况已经有了实质性的改善，但说它很远倒也是实话。距离很远，而且现在有海底光缆了。从新西兰到夏威夷和澳大利亚等地的优质光缆已经铺设好了。但过去确实有一种“本地镜像”的文化。你可以在新西兰境内下载东西，那是免费的，但国际流量要花很多钱。至于今天，我们今天基本上就是通过网络在聊天。我们有高清视频，而且都是固定费率。所以我们已经赶上了，但在很多方面，新西兰与世界其他地方的距离，造就了它独特的经济。
+
+7
+00:04:26.000 --> 00:04:51.000
+One thing I remember was my father worked for, he's, my father's recently just finished 50 years working, or he hasn't finished, he's still working, but he's been 50 years at the National Telco of New Zealand. And so I used to go around with him when I was young and he'd go and look at the little telephone exchanges and things. And there was a rack of equipment in one of them that I remember asking him about when I must have been under 10. But it was what we call over here EFTPOS, which is basically debit cards
+我记得的一件事是，我父亲为——他，我父亲最近刚刚完成了50年的工作生涯，或者说他还没结束，他还在工作，但他在新西兰国家电信公司已经干了50年。所以我小时候经常跟他到处跑，他会去看那些小型电话交换机之类的地方。其中一个机房里有一个设备机架，当我还不到10岁时，我记得曾向他打听过这个设备。我们在这里称之为EFTPOS，基本上就是借记卡
+
+8
+00:04:51.000 --> 00:05:07.000
+and being able to do electronic payments and so on. And that was actually tested in New Zealand because they say New Zealand's got this population of people that's sort of a bit disconnected from everybody else, but they're really forward-looking and they're really interested in trying new things. So sometime in the 80s, that was when they were rolling that out they they tested that first
+以及能够进行电子支付等等。这实际上是在新西兰进行测试的，因为他们说新西兰的人口有点与世隔绝，但他们非常有远见，对尝试新事物真的很感兴趣。所以在80年代的某个时候，当他们推出这项技术时，他们首先在新西兰进行了测试，
+
+9
+00:05:07.000 --> 00:05:46.000
+in new zealand just to see if the technology would work well that's super cool you know patrick and i worked at a place on on the east coast where um when you were there for 50 years you got a gold badge um was that was that actually gold like was there even like a laminate of gold right there it's just colored gold no i think it was just a color okay i asked my dad if they gave him a gold watch and they've given him a him and mom a weekend away so that's uh they're gonna do that sometime probably more useful after 50 years he's earned it yeah these days well like if you gave me an analog thing with hands and said what's the time on this i can't do that That's a skill that I never really mastered.
+看看这项技术是否行之有效。太酷了。你知道，帕特里克和我在东海岸的一个地方工作过，在那里，当你在那儿工作了50年，你会得到一枚金质徽章。那是——那是真正的金子吗？上面甚至还有一层金压膜吗？它只是金色的吗？不，我想它只是个颜色。好吧。我问我爸他们有没有给他一块金表，他们给了他和妈妈一个周末的度假机会，所以——他们大概会在某个时候去吧。在干了50年之后，这可能更有用，这是他应得的。是的，如今，好吧，如果你给我一个带指针的模拟时钟，然后问我“这个几点了？”，我做不到。那是我从未真正掌握的技能。
+
+10
+00:05:46.000 --> 00:06:11.000
+I can work it out. I can look at it and say, which hand is it or something. But our parents' generation, they'll look at it and say, it's quarter past 12 or whatever. It's an instant thing for them. But because we had digital clocks growing up, it was never really necessary, I found. Yeah. I mean, before the show, the pre-show, we were talking about our kids and and my uh my older oldest kid is uh studying time and they still use analog clocks to you know teach to teach time and so i had to go back and
+我能算出来。我可以看一眼然后说，哪根针是哪根针之类的。但我们父母那一代人，他们看一眼就会说，现在是12点一刻什么的。对他们来说这是瞬间反应出来的。但因为我们从小接触的是数字时钟，我发现这其实从来都不是必需的。是的。我的意思是，在节目开始前，也就是预热阶段，我们还在聊我们的孩子，我的——我的大儿子正在学习看时间，他们仍然用模拟时钟来，你知道，教孩子们认识时间，所以我不得不回过头来
+
+11
+00:06:11.000 --> 00:06:54.000
+kind of remember oh yeah when it's you know a quarter of the way through the clock that's 15 minutes and all that stuff i had i had one of those shower thought moments a while back i thought well if if humans had evolved with six fingers on each hand rather than five, how much easier would time and math have been? Because we've got all this stuff that's time and so on is divided by six and 12 and 360 and so on. And then everything to do with math is divided by 10 because that's how many fingers we've got. And if only those two things have been the same, what more could society have achieved? That's true. I wonder if the base 60 thing was arbitrary. I wonder what we'd have to do some epistemology to figure out what caused that. I have two different thoughts on that,
+在脑子里重新理清：哦，对，当指针走过表盘的四分之一时，那就是15分钟，诸如此类的东西。我前段时间有过那种“淋浴时的顿悟”时刻。我想，如果人类进化出来的是每只手有六根手指，而不是五根，那时间和数学该变得多么简单啊？因为我们所有的关于时间的东西都是按6、12、360等等来划分的。而所有与数学相关的东西都是按10来划分的，因为我们有十根手指。如果仅仅是这两件事是一致的，社会本可以取得多么巨大的成就啊？确实如此。我在想，以60为基数这件事是随意的吗？我在想，我们得做一些认识论研究才能弄清楚是什么导致了这一点。对此我有两种不同的看法，
+
+12
+00:06:54.000 --> 00:07:35.000
+but we'll save them for another podcast. All right. Sounds good. Okay. So New Zealand, and then you went to Canada from New Zealand. And so your first IT job was in Canada. No, no. I worked in New Zealand for a few years. The thing about New Zealand is because it's such a small country, most of the people here work in a small business of some sort. There's not a lot of big companies over here. People who want to start big companies tend to go live overseas and not come back like I did to some degree. But they say that something like 95% of the population in New Zealand work for a company with 50 or fewer employees. And so there is an awful lot of small businesses, an awful lot of farming and agricultural and
+但我们把它留到另一期播客再聊吧。好的，听起来不错。好吧。所以是新西兰，然后你从新西兰去了加拿大。所以你的第一份IT工作是在加拿大？不，不。我在新西兰工作了好几年。新西兰的情况是，因为它是一个很小的国家，这里大多数人都在某种小型企业工作。这里没有太多大公司。想要创办大公司的往往会选择去海外生活，然后不像我这样在某种程度上又回来了。但据说新西兰大约95%的人口都在雇员50人或以下的公司工作。所以这里有大量的小型企业，大量的农业、畜牧业以及
+
+13
+00:07:35.000 --> 00:08:07.000
+tourism kind of stuff. Some tech these days, a few tech companies and startups, but it's definitely not a thing that people do. You do tend to go overseas if you want to go and work in the big industry. Got it. And so how did you make your way into Google? Was this like someone kind of reached out to you and said, hey, I know you're at IT Company X, Google's hiring. What did that look like? Yeah, it looked like a series of sort of, let's say, coincidences and so on. But I ended up working for canada for a couple
+旅游业相关的东西。如今也有一些科技产业、少数科技公司和初创企业，但它绝不是人们的首选。如果你想去大行业工作，你往往还是会选择去海外。明白了。那你后来是怎么进入谷歌的呢？是因为有人联系你，说“嘿，我知道你在IT公司X，谷歌正在招聘”？当时是什么情况？是的，那看起来是一系列，比方说，巧合等等。但我最终在加拿大工作了
+
+14
+00:08:07.000 --> 00:08:45.000
+of years we moved there because we didn't want to go to england or new zealanders always go to england and so after two years in canada we're like right it's too cold here it snows we don't get hockey let's go to england and so i went over there worked for what was called the symbian foundation it's a play do you guys remember like the old Nokia phones and Symbian and S60 and so on? It was a very good operating system for low-powered devices that was overtaken by the fact that all of a sudden devices got powerful enough to run real code and you could just take Linux, Unix and so on and run it on a smartphone by around 2007, whenever the iPhone came out. And what Nokia had tried to do around that time was basically
+几年。我们搬到那里是因为我们不想去英国——新西兰人总是去英国。所以在加拿大呆了两年后，我们觉得：好吧，这里太冷了，下雪，而且我们没有冰球，我们去英国吧。所以我去了英国，在所谓的塞班基金会（Symbian Foundation）工作。你们还记得诺基亚的旧手机、塞班系统（Symbian）以及S60之类的东西吗？对于低功耗设备来说，这是一个非常优秀的操作系统，但它后来被这样一个事实所击败：设备突然变得足够强大，能够运行真正的代码了，大约在2007年iPhone问世时，你只需采用Linux、Unix等系统，就可以直接在智能手机上运行它们。当时诺基亚试图做的事情基本上是
+
+15
+00:08:45.000 --> 00:09:26.000
+open source the whole thing and put it into a company whose goal it was to share it with all the other vendors and to make it available to people almost as a non-profit. And that all went well until, of course, the iPhone and the Android came about. But at that job, I started doing a lot of cloud stuff. So I was getting all of our hosting infrastructure, setting that up in Amazon. All of our email and so on was with Google. We had Google search appliances. And so I was quite early on in doing public cloud things. And that led me to work at a consultancy for a few years, helping other people do cloud things. And we were partners with Google cloud at that point. So I knew a lot of the team there. And then after a few years in that role,
+把整个系统开源，并把它放进一家旨在与所有其他供应商共享的公司，几乎作为一个非营利组织向人们开放。这一切进行得很顺利，直到iPhone和Android出现。但在那份工作中，我开始接触很多云计算相关的内容。我负责搭建我们所有的托管基础设施，并在亚马逊（AWS）上进行配置。我们的所有电子邮件等都托管在谷歌。我们有谷歌搜索设备（Google Search Appliance）。所以我很早就开始涉足公共云计算业务。这促使我在一家咨询公司工作了几年，帮助其他人做云计算的事情。当时我们是谷歌云的合作伙伴，所以我认识那里的很多团队。在那个岗位上工作了几年之后，
+
+16
+00:09:26.000 --> 00:10:05.000
+the Google business had sort of moved on to the point where it had a public cloud first of all it was the email the google apps and so on and then as they built out more cloud things it became sort of more in line with with what i was doing and it was sort of ready for me to join cool it makes sense so symbian so they open sourced everything. And just to follow that thread, what's the longest lasting thing to come out of that? Has someone taken something from that and put it into something else? Did parts of it make it into Android or anything that you know happened there? It was a strange sort of ahead of its time process, because I remember that it was a thing called the beagle bone which is like an
+谷歌的业务已经发展到了这样一个地步：它有了公共云。首先是电子邮件、谷歌应用（Google Apps）等，然后随着他们构建更多云服务，业务变得更加符合我当时在做的事情，我也准备好加入他们了。酷，这说得通。所以对于塞班，他们开源了所有东西。顺便顺着这个思路问一句，从那里面诞生的最持久的东西是什么？有没有人拿走其中的一部分并把它放进其他东西里？它的某些部分最终进入了Android，或者你知道发生了什么吗？这是一个很奇怪的、超越时代的过程，因为我记得有一个叫BeagleBone的东西，它是一个
+
+17
+00:10:05.000 --> 00:10:49.000
+embedded board a little bit like a raspberry pi or a little bit like a the fpga development boards you get and so on but like the idea was that the release team there was going to try and take the symbian stuff and port it to a thing that everyone could play with and i didn't really get that at the time because it predated the raspberry pi and the whole industry of stuff that's popped up around that but it was really just how could we build the stuff so that it would be able to be used by Nokia and largely Asian manufacturers. There are a lot of people in Japan, Sony, Ericsson were still using Symbian at that time and so on. But then all those people started using Android effectively. So the entire market fell away. Nokia used it for a couple of years time.
+嵌入式板卡，有点像树莓派（Raspberry Pi），或者有点像你买的FPGA开发板之类的那种东西。当时的想法是，那里的发布团队打算把塞班的东西移植到一个每个人都可以折腾的东西上。我当时其实并不能理解，因为它比树莓派以及围绕它涌现的整个产业还要早，但它实际上只是在思考：我们如何构建这些东西，以便诺基亚和很大一部分亚洲制造商能够使用它。当时日本有很多人，索尼爱立信当时还在使用塞班系统等等。但随后所有这些人实际上都开始使用Android了。因此整个市场崩溃了。诺基亚又用了一两年，
+
+18
+00:10:49.000 --> 00:11:29.000
+Nokia sort of bought everything back in house. they didn't own the trademark anymore but they still for the last releases they did did their own stuff in-house and there isn't really any history to that or any legacy in some strange way it's odd because it just it exists it's still out there someone has mirrored the code that was released on github but i have no indication that it's useful today in a way that's perhaps different to things like the the scion pocket organizers that predated symbiont symbiont actually derived from the software that powered those and there is still a cult following of people who who like retro computer things who care about that but i guess that just the way mobile phones have evolved and so on, like you hear a story about someone buying a shrink-wrapped original iPhone
+诺基亚基本上把所有东西都收回内部了。他们不再拥有商标权，但在最后几次发布时，他们仍在内部做自己的事情，而且那段经历并没有留下什么历史或遗产。从某种奇怪的角度来看，这很奇怪，因为它只是存在着，它依然还在那里。有人镜像了在GitHub上发布的代码，但我没有任何迹象表明它在今天还有用——这也许与早于塞班的Psion掌上电脑不同，塞班实际上正是衍生自驱动那些设备的软件。现在仍然有一批喜欢复古计算机文化、关心这些的人。但我想，正是移动电话演变的方式，就像你听到有人最近以6万美元的价格买下一部未拆封的原版iPhone一样，
+
+19
+00:11:29.000 --> 00:11:52.000
+for $60,000 recently, but you're never going to hear of people going and using them for fun. People and the way that they'll go and play with their Commodores or Ataris or whatever, there's not really that for mobile phones. So it is sort of a bit of an evolutionary dead end. Yeah, that makes sense. I think the form factor, you know, it's incredibly convenient for when you're on the go, but for your leisure time, it's not that convenient.
+你永远不会听到有人为了好玩而去使用它们。人们会去把玩他们的Commodore、Atari或其他老式电脑，但移动手机并没有这种待遇。所以它在某种程度上有点像是一个进化的死胡同。是的，这说得通。我认为这种外形尺寸，你知道的，当你出门在外时极其方便，但对于你的闲暇时间来说，它就没那么方便了。
+
+20
+00:11:52.000 --> 00:12:16.000
+So yeah, I think it totally makes sense. Maybe, you know, we're just not ready yet. You know, maybe 10, 20 years from now, there'll be like a huge group of folks who love like retro phones in the same way we love retro computers. So it might come. I'll hold out for that. Yeah, you've really got to think about the backend and the things that are required. I'm sure that's something that'll come up as we talk more about what propelled Kubernetes
+所以是的，我认为这完全说得通。也许，你知道的，我们只是还没准备好。你知道的，也许从现在起10年、20年之后，会有一大群人像我们热爱复古电脑那样热爱复古手机。所以这可能会发生。我拭目以待吧。是的，你真的必须考虑到后端以及所需的东西。我相信，当我们进一步讨论是什么推动了Kubernetes的
+
+21
+00:12:16.000 --> 00:12:46.000
+success. All of those old computers I mentioned before are self-contained. You get a disk or you get a modern disk emulator system and you plug it in and the software is there. In most cases, it doesn't need to connect out to any kind of external service. There's nothing else you have to worry about. Whereas today, if you could get an old phone running, even if you get the old iPhones, some of them don't support the modern TLS standards required to connect to modern websites. Some of them don't have the APIs that are required to talk to the modern iCloud backend.
+成功时，这会是一个经常被提起的话题。我之前提到的所有那些旧电脑都是自包含的。你拿一张磁盘或者一个现代的磁盘模拟系统插上去，软件就在那里。在大多数情况下，它不需要连接到任何外部服务。没有什么需要你担心的。然而在今天，如果你能让一部旧手机运行起来，即使你拿到了老款iPhone，其中一些也不支持连接现代网站所需的现代TLS标准。其中一些甚至没有与现代iCloud后端通信所需的API。
+
+22
+00:12:46.000 --> 00:13:07.000
+So you could get out your original iPhone, iPod Touch or whatever, but you probably can't use it as a web browser unless you go through some kind of proxy that's deliberately made to support that. It'll be even more true of the older devices. Yep, that makes sense. And then that's not even getting into the App Store and whether all of your apps now require a certain API.
+所以你可以拿出你的第一代iPhone、iPod Touch或别的什么，但你可能无法将其用作网页浏览器，除非你通过某种刻意为其提供支持的代理。老设备的情况就更不用说了。是的，这说得通。这甚至还没说到应用商店，以及你所有的应用现在是否都需要某个特定API。
+
+23
+00:13:07.000 --> 00:13:48.000
+And so I don't know how possible it is to even get an older version of an app. It's probably not possible or at least not easy. I will say where there is a will, there's a way. There was a device made by a Canadian company, which was sort of a cable modem attached or a cable TV network attached microcomputer in the early 80s. And they kind of resurfaced recently because someone had been hoarding hundreds of them, new old stock and boxes that they were selling now. And so all of the people who are interested in old computers are like, right, we're going to buy one of these. And so it turns out that they found some of the original people who built the backend service and were running it at the time.
+所以我不知道获取旧版本应用的可能性究竟有多大。这大概是不可能的，或者至少不容易。我想说的是，有志者事竟成。有一家加拿大公司曾制造过一种设备，那是80年代初连接到有线调制解调器或有线电视网络的小型计算机。它们最近又重新浮出水面，因为有人囤积了数百台全新的库存原装未拆封机器。所以所有对老式电脑感兴趣的人都觉得：对，我们要买一台这个。结果证明，他们找到了当初构建后端服务并在此期间运行它的部分元老。
+
+24
+00:13:48.000 --> 00:14:18.000
+And a museum in Toronto had done a bit of work to figure this out, or it was either a museum or university. But now there are people who are sort of reverse engineering everything required to make these things useful again and to get them going. So even these weird, obscure things, and I have to say, this is largely propelled by communities around places like YouTube. There are the YouTube people who are interested in old computers. They get these things, they unbox them, and then two or three of them, turns out, are interested enough in programming to find the right people, connect them together. And then all of a sudden, they move
+过多伦多的一家博物馆做了一些工作来弄清楚这一点，要么是博物馆，要么是大学。但现在有些人正在对使这些东西重新变得有用、让它们重新运行所需的一切进行逆向工程。所以即使是这些奇怪、晦涩的东西——我必须说，这很大程度上是由像YouTube这样的地方周围的社区推动的。有些YouTube播主对老电脑很感兴趣。他们拿到这些东西，开箱，然后发现其中两三个人对编程有足够的兴趣，能够找到合适的人并将他们联系在一起。然后突然之间，它们就从博物馆展品变成了实用的东西。不是那种你每天都会用的东西，而是我们在播客里偶尔会谈论的东西。
+
+25
+00:14:18.000 --> 00:15:00.000
+on from being a museum piece to a useful thing. Not something you're going to use every day, but something we might talk about on a podcast every now and then. Yeah, that makes sense. Very cool. So Google is spinning up Google Cloud and you're kind of an early adopter there. And so I guess at some point, was it the kind of thing where you were such a power user that it got their attention or was it more of a personal connection? what kind of kind of led you into google i knew people who worked there and had worked there for years personally but then i also was as a working at a consulting company i was helping companies adopt google so i was helping customers get on board largely around email migration so you've
+是的，这说得通。非常酷。所以谷歌正在筹建谷歌云，而你恰好是那里的早期采用者。所以我想在某个时候，是因为你是个超级用户引起了他们的注意，还是更多地基于个人联系？是什么促使你加入了谷歌？我个人认识在那里工作并已经工作多年的人，但我也在一家咨询公司工作，帮助企业采用谷歌云。所以我在帮助客户上手，主要是围绕电子邮件迁移。所以如果你
+
+26
+00:15:00.000 --> 00:15:38.000
+got someone who's had 80 000 users using mic Exchange, and there is some process and IT needs in order to get them migrated over to Google. And quite often there's a bit of programming and scripting required to migrate all their systems that were using those old APIs and so on. So the company that I was working at, I was leading the development arm. So it was, people were doing these workplace migrations and then they'd need to have utilities written. They'd need to figure out how they were going to integrate some new piece of software because the thing that they used to have with Exchange obviously doesn't work anymore if they're moving away from on-premises email and moving to cloud email.
+有一个拥有8万名使用微软Exchange的用户的企业，为了将他们迁移到谷歌，就需要经历一些流程并满足一些IT需求。通常情况下，迁移他们那些使用旧API等系统的所有东西，需要编写一些程序和脚本。所以我当时工作的公司里，我领导着开发部门。情况就是，人们在做这些工作场所迁移，然后他们需要编写实用工具。他们需要弄清楚如何集成一些新的软件，因为如果他们放弃本地电子邮件转向云端电子邮件，他们过去在Exchange中使用的东西显然就无法正常工作了。
+
+27
+00:15:38.000 --> 00:16:10.000
+So I worked in London at this time and I worked with the, there was probably only five or six people who were in the Google Cloud go-to-market team, the sales and sales engineering and so on. And there were a few more in other countries in Europe, but it was all still enough that we could probably have been on the same bus at the time. And I had, I don't remember if it was a recruiter reach out or anything, but I sort of knew that they were looking to hire and had some conversations with them and ended up finding a role there, which worked out well for me. Cool, that makes sense. And so, yeah, kind of walk us through,
+所以我当时在伦敦工作，我与谷歌云上市（go-to-market）团队的仅有的五六个人一起工作，这个团队负责销售和售前工程等。欧洲其他国家还有更多人，但当时的人数加起来，我们可能刚好能坐满一辆公交车。我不记得当时是不是有招聘人员主动联系我，但我大致知道他们在招人，并和他们进行了一些交流，最终在那里找到了一份工作，这对我来说结果很不错。酷，这说得通。所以，是的，大致给我们讲讲，
+
+28
+00:16:10.000 --> 00:16:28.000
+you know, your experience with Kubernetes, you know, on day one. So what was that whole thing like? You know, what kind of led to that? And how did you get kind of roped into that? Yeah, so again, depends how you define day one. I got involved with Kubernetes when it was a internal Skunkworks project at Google.
+你在第一天接触Kubernetes的经历。整个过程是怎样的？是什么促使了这一切？你又是怎么被拉进这个项目里的？是的，再次说明，这取决于你如何定义“第一天”。我参与Kubernetes时，它还是谷歌内部的一个秘密研发（Skunkworks）项目。
+
+29
+00:16:28.000 --> 00:16:53.000
+And as I involved, so the first trip I did as a person working on the Google Cloud team in the UK, I went for a team meeting that was over in Seattle. And I remember thinking two things at this point. The first one was, we've got all these hexagon logos. Someone should really make a version of the game settlers of katan that uses all these cloud logos as hexagons and bring it out and so on no no one ever did that it would have been a great thing but the second thing was there were people around the
+我是这样参与进来的：作为英国谷歌云团队的一员，我进行第一次出差是去西雅图参加一个团队会议。我记得当时心里想了两件事。第一件是：我们有这么多的六边形标志。真应该有人把桌游《卡坦岛》（Settlers of Catan）做成一个版本，把这些云服务的标志都当作六边形放进去，然后发布出来。结果当然是谁也没这么做。那本会是个很棒的主意。但第二件事是，我听到周围的走廊里有人在谈论一个叫“7号项目”（Project Seven）的东西，这是谷歌当时正准备发布的某种容器集群的构想。我想我应该去了解一下。所以我花了一些时间去研究它，弄清楚将会发生什么。
+
+30
+00:16:53.000 --> 00:17:13.000
+corridors talking about this thing called project seven this sort of container cluster idea thing that google was looking at releasing i think i should should look in on that so i spent some time looking in on that figuring out what was going to happen. And that was all development was all happening on the other side of the world for me. But the thing that we were doing to sort of help prepare customers and people to use it at that point
+而所有的开发工作对我来说都是在世界的另一端进行的。当时我们为了帮助客户和人们做好使用它的准备而做的事情是——
+
+31
+00:17:13.000 --> 00:17:25.000
+is as we see people, and the role I had was really talking to existing Google customers and figuring out how we could get them to do more with our products. And in large part, what we would need to do to make the products actually good enough for them to large part, what we would need to do to make
+正如我们看到的，我当时的角色实际上是与现有的谷歌客户交谈，并找出如何让他们用我们的产品做更多事情。很大程度上，我们需要做的是让产品真正对他们来说足够好用，
+
+32
+00:17:25.000 --> 00:18:04.000
+the products actually good enough for them to use, what things we would need to develop to make it suit their use case as we were building out the cloud. And so at that point, I was going to people and saying, hey, you should go and look at this Docker thing, but I can't really tell you why. Six months from now, hey, it's going to get really interesting. But it was really telling people that this was the pattern. This was sort of how Google would operate things internally. A lot of the thing that drew people to Google at that early time was companies who wanted to be like Google, especially around the email and communication thing. A lot of these companies saw Google as this great multicolored university campus, land of milk and honey or so on. It had what they perceived to be really high employee satisfaction and was this really cool
+弄清楚我们需要开发什么功能来满足他们的用例，因为我们在构建云平台。所以在那时，我会去找人并说：“嘿，你应该去看看这个Docker的东西，但我现在还不能真正告诉你为什么。六个月后，嘿，它会变得非常有趣。”但它确实是在告诉人们，这就是模式。这大致就是谷歌内部运营事物的方式。在早期吸引人们来到谷歌的很大一部分原因，是那些渴望变得像谷歌一样的公司，特别是在电子邮件和通信方面。许多这样的公司把谷歌看作是一个色彩斑斓的大学校园、流淌着奶与蜜的土地等等。它拥有他们心目中极高的员工满意度，是一个非常酷、富有创新精神的地方。很多传统企业公司会想：“好吧，如果我们把电子邮件系统换成和谷歌一样的东西，也许我们就会感觉自己有点像谷歌，也能沾染一点那样的光环。”
+
+33
+00:18:04.000 --> 00:18:38.000
+and innovative place. And a lot of these more state enterprise companies thought, well, hey, if we just change our email system to the same thing that Google uses, maybe we'll feel a little bit like Google and have a bit of that rub off on us. So technically I think it was sort of the same thing as like a lot of people thought, hey, we're going to use the same system that Google used. And I would not recommend that to people, obviously. There is a reason that these big organizations grow their own internal system that fits exactly the space that they have. But the thing that Google was doing was taking lessons that learned from that and trying to build something that was general and could be applied to everybody else. And that was really
+所以从技术上讲，我认为这和很多人想的一样——“嘿，我们要使用谷歌用过的同一套系统”。显然，我不会向人们推荐这样做。这些大机构开发出完全适合他们自身空间的内部系统是有原因的。但谷歌当时在做的事情，是汲取其中的经验教训，并试图构建一些通用的、可以应用到其他所有人身上的东西。而这正是当人们谈论Borg——当时谷歌内部系统时所指的——它不只是把那个东西开源并向所有人开放，而是构建一个能够满足当时人们实际需求的新东西。
+
+34
+00:18:38.000 --> 00:19:19.000
+when you hear people talk about Borg, which is the internal system at Google at the time, it wasn't just open source that thing and make it available to everyone it was build something new that met people where they were at the time so let me let's let's like i pause a little bit on this so i uh i vaguely remember borg so i remember there's uh something called borg control language it was like a dedicated language it was very similar to python i mean this is going back a decade so my knowledge is really fuzzy but yeah don't they like when you get assimilated they wipe your memory or something so you may not remember yeah borg was developed at the time when people had just obviously come off watching a very particular series of star trek
+所以，让我稍微停一下，我隐约记得Borg。我记得有个叫“Borg控制语言”（Borg Control Language）的东西，它是一种专用语言，非常类似于Python。我的记忆已经是一十年前的事了，所以非常模糊。但他们不是会说，当你被同化时，他们会抹去你的记忆什么的，所以你可能不记得了？是的，Borg开发的时候，人们显然刚看完电视上热播的某个特定系列的《星际迷航》（Star Trek）。所以当它被使用了10年或15年之后，你就会发现所有这些新入职的学生都在问：“这到底是个什么Borg东西？我知道软件是干什么的，但我get不到这个笑话。”
+
+35
+00:19:19.000 --> 00:19:56.000
+which had been on tv and so then when it's been in use for 10 or 15 years you've got all these new students coming in like what what the hell is this borg thing like i know what the software is but i don't get the joke yeah yeah exactly yeah and so i think yeah you'd specify everything in this borg control language and then it would go off and do that thing and so you know now that you know i'm kind of putting it all together it does it is similar so so was was kubernetes uh it was probably a total rewrite it wasn't the kind of thing where you forked it. No, Borg was written in internal dialect of C++ that Google used to its standards of a time and so on, and to fit a very Google-shaped problem.
+对，完全是这样。所以我想，是的，你会用这种Borg控制语言指定所有东西，然后它就会去执行那个任务。所以，现在你（把这些线索）串联起来了，它确实很相似。那么，Kubernetes是一个完全重写的产品吗？它不是那种你派生（fork）出来的项目吧？不，Borg是用谷歌当时标准的C++内部方言编写的，用以适应高度“谷歌化”的问题。
+
+36
+00:19:56.000 --> 00:20:29.000
+It was an evolution of things that came together. A lot of the people who did that work and who worked on the subsequent system, Omega, which was sort of a second system attempt if you want to to rewrite it second systems don't go very well we've all read the book i hope and so a lot of that work basically went into making borg better overall so that's that's another interesting evolutionary dead end we can talk about but the some of those people were involved so you you hear names like um brian grant who was one of the leads of Omega, and Tim Hocken worked on the low level stuff in Borg, and Dawn Chen, for example, people worked on very early days in the Borg
+它是各种元素汇聚演变而来的产物。许多做过这项工作以及参与后续系统Omega（如果你想称之为重写的第二次系统尝试的话——我们都读过那本书，我希望如此，而“第二系统”通常结果都不太好）的人……因此，很多这方面的工作基本上都用来让Borg整体变得更好。所以这是另一个有趣的进化死胡同，我们可以聊聊这个，但其中一些人参与了进来。所以你会听到一些名字，比如Omega的负责人之一布赖恩·格兰特（Brian Grant），蒂姆·霍肯（Tim Hogg）在Borg底层工作，唐晨（Dawn Chen）例如，在Borg系统的早期就参与其中。他们是一群研究谷歌如何解决将此类云产品提供给云客户这一问题的人。
+
+37
+00:20:29.000 --> 00:21:04.000
+system, were one group of people who were looking at how Google could solve the problem of making something like this available to cloud customers. And then on the other hand, you had the cloud team and people who had worked on various things in search and so on internally and moved on to the cloud project. And they were looking outside at the rise of Docker. They were saying, well, people are all of a sudden starting to do things a little bit like Google is on one hand. So they're using these container principles and so on, which were largely popularized, if not invented in part by Google to make Borg work.
+另一方面，你拥有云团队以及内部从事过各种搜索等工作、后来转向云项目的人。他们正在审视外部Docker的崛起。他们一方面认为，人们突然开始做一些有点像谷歌的事情。所以他们正在使用这些容器原则，而这些原则在很大程度上是由谷歌普及（即使不是部分由谷歌发明）以使Borg得以运行的。
+
+38
+00:21:04.000 --> 00:21:35.000
+And then there were also people on the outside who had built Borg-like things. People like yourselves who had been at Google gone somewhere else and said, hey, I missed that system, which made it really easy for me to deploy things at scale. I'm going to build a version of this. One of the most famous ones is Mesos, which was built by people who had interned at Google or had worked there and then studying at UC Berkeley, gone on to work at Twitter and so on. And they're like, well, we need something like this. And collectively, I think the Twitter people found the Berkeley project and said, all right, we're going to work together on this and build something that was
+然后外面也有人构建了类似Borg的东西。比如你们这样的人，曾在谷歌工作过又去了别的地方，然后说：“嘿，我想念那个能让我非常容易地在大规模部署东西的系统，我要自己做一个版本。”其中最著名的是Mesos，它是由曾在谷歌实习或工作过、后来在加州大学伯克利分校学习、去推特（Twitter）等公司工作的人构建的。他们觉得：“我们需要这样的东西。”集体来看，我认为推特的人发现了伯克利的项目，并说：“好吧，我们要在这个项目上合作，构建一个非常相似的东西。”
+
+39
+00:21:35.000 --> 00:22:15.000
+very similar. And so the team of people who were working on the cloud side were people like Joe Bader and Brendan Burns, and they were building proofs of concept and sort of sample projects and so on to say, all right, well, how could we do something based on Docker that worked in this kind of way? And really it was when those two teams came together, when those two groups of people said, all right, we can do things, we know how it was done at Google at scale, and more importantly, why it was done, then that can be made useful. And also I think the input of people who didn't ever use that system or people who knew what was going on outside. And like to say, Google at that point as a new entry into the public cloud infrastructure market, they really needed to make things
+因此，在云端工作的团队是由乔·贝达（Joe Beda）和布伦丹·伯恩斯（Brendan Burns）等人组成的，他们在构建概念验证和示例项目等，以探讨：“好吧，我们如何基于Docker做一些以这种方式运行的东西？”实际上，正是当这两支团队走到一起时——当这两群人说“好吧，我们可以做到，我们知道谷歌是如何大规模完成这一切的，更重要的是，为什么我们要这么做”——它才能变得有用。同时我也认为，那些从未用过该系统的人或了解外部情况的人的输入同样重要。而且正如我所说，谷歌当时作为公共云基础设施市场的新进者，他们真的需要使产品与人们正在使用的东西保持兼容。他们不能像亚马逊那样，直接决定或独断专行地规定：“你们必须使用这些API并以这种方式做事。”
+
+40
+00:22:15.000 --> 00:23:02.000
+compatible with what people were using. And they couldn't just determine, here are the terms or dictate the terms if you want to say, you to use these apis and do things in this way that people like amazon could do at the time yeah that makes sense so these sort of great minds came together and formed project seven and at some point i guess was there like a meeting that you went in like a dark room shadowy figures you know altar in the center of the room and they they introduced your project seven no no the um as again you you two may have seen like the way you learn about things at google is you just find the design document and you follow along and and read what's going on and you join mailing lists and see what happens one thing i will say is that i was always very
+是的，这说得通。所以这些伟大的头脑走到一起，组成了7号项目（Project Seven）。在某个时候，我想，是不是有过这样一场会议：你走进一个黑房间，里面有神秘的人影，房间中央摆着一个祭坛，然后他们向你介绍了7号项目？不，不。再次说明，正如你们两个可能见过的，你在谷歌了解事物的方式就是找到设计文档，跟着阅读里面正在发生的事情，加入邮件列表，然后看会发生什么。我要说的一点是，我一直与谷歌内部的团队保持相当距离，特别是云部门中负责这些东西所有工程实现的团队。我在谷歌几乎整个职业生涯都在英国工作。
+
+41
+00:23:02.000 --> 00:23:44.000
+separate from the teams at Google, especially in the cloud division who were doing all the engineering of this stuff. I was based in the UK for almost all of my career at Google. And the work that I did on this was largely like whenever people wanted to find out what was going on, how real customers wanted to do things or real use cases of this kind of stuff. But quite often the engineering teams would come out to Europe and they'd say, right, we want to talk to a bunch of customers. And I would know who I'd been working with and so on and connect these people together, bring a lot of feedback, do a lot of demonstrations and public events and so on and bring my own feedback. And that's sort of how that led me into developer relations and developer advocacy kind of roles. But then I ended
+我在这上面做的工作在很大程度上是：每当人们想弄清楚到底发生了什么、真实客户想如何做事或这类东西的真实用例是什么时，工程团队经常会来到欧洲，他们会说：“好吧，我们需要和一堆客户谈谈。”而我会知道我一直在和谁合作等等，然后把这些人连接起来，带来大量的反馈，做大量的演示和公共活动等等，并带回我自己的反馈。这在某种程度上引导我走向了开发者关系（DevRe1）和开发者倡导者的角色。但后来，随着我们将产品化，随着我们将其从一个开源项目转变为Google Kubernetes Engine（GKE），我最终担任了上市（go-to-market）负责人角色，协助产品化这些东西，并真正弄清楚客户想要什么、需要什么，以及组织活动。
+
+42
+00:23:44.000 --> 00:24:20.000
+up, as we productized that, as we moved it from being this open source thing to being Google Kubernetes Engine or GKE, ended up in sort of go-to-market lead roles and helping out how we can productize some of this stuff and how we can really figure out what customers want and need and put together events. At KubeCons, for example, we used to do these customer advisory boards. We would get the really early adopters who were really keen on this and talk to them and figure out what we needed and then get the things which the next group of people would just find standard in a year's time and keep that process running yeah got it that makes sense so just so i understand the timeline so there there
+例如，在KubeCon大会上，我们过去常常举办这样的客户咨询委员会。我们会找到那些对这项技术非常热衷的真正早期采用者，与他们交谈，弄清楚我们需要什么，然后把这些东西拿来——下一批人在一年后会觉得这些东西理所当然——并让这个流程持续运转。明白了，这说得通。所以为了让我理清时间线，有一个叫Docker Compose的东西，它是出现在Kubernetes之后，还是有什么别的故事？不，Docker Compose，我要说它是在Kubernetes之前出现的。Docker Compose是一种表达方式，意思是我希望这三四个或任意数量的容器被放置在单台机器上。所以我的应用、我的三层架构应用是由这三部分组成的，但它们位于不同的容器中。它们都在一个地方一起运行。真正分发它们并在多台机器上运行它们的东西，有一个叫Docker Swarm。
+
+43
+00:24:20.000 --> 00:25:02.000
+is like docker compose did that come out out after Kubernetes or what's the story there? No, Docker Compose, I'm going to say it came out before Kubernetes. And Docker Compose is a way of saying, I want these three or four containers or however many to be co-located together on one single machine. So my application, my three-tier thing is made up of these three things, but they're in different containers. They all run together in one place. The thing that actually distributes them and runs them across multiple machines, there was a thing called Docker Swarm. And I have a suspicion that that came out at or around exactly the same time Kubernetes did, because in the early days, it was sort of announcements were made at Docker's conferences. There were three or four systems that
+就像 Docker Compose 一样，它是 Kubernetes 之后出来的吗？还是怎么回事？不，Docker Compose，我可以说它比 Kubernetes 出现得早。Docker Compose 的作用是：我希望这三四个容器或任意数量的容器部署在同一台单机上。所以我的应用程序，我的三层架构由这三部分组成，但它们在不同的容器里。它们都在同一个地方一起运行。真正实现将它们分发并在多台机器上运行的技术，曾经有一个叫 Docker Swarm。我怀疑它推出的时间与 Kubernetes 大致相同，因为在早期，相关公告是在 Docker 的会议上发布的。当时有三四个系统
+
+44
+00:25:02.000 --> 00:25:41.000
+all came out around the same time some of them were in-house systems from various vendors spotify had one called helios for example that were again like hey we've got this great docker engine which allows us to put things together in containers now we need a way to manage the life cycle of them across multiple machines in the kind of way that we know that borg does this is before it was ever publicized or a big deal was made never to mention the thing by name outside for example but again lots of people are coming on through through google yeah i don't know if we're more worried about google's lawyers or star trek's lawyers at that point that's true got it cool okay that makes sense that kind of i've seen
+我怀疑它推出得和Kubernetes完全在同一时间，因为在早期，公告都是在Docker的会议上发布的。当时有三四个系统几乎同时问世，其中一些来自各大厂商的内部系统，比如Spotify有一个叫做Helios的系统，它们同样都在表达：“嘿，我们有了这个伟大的Docker引擎，它允许我们将东西放入容器中，现在我们需要一种方式来跨多台机器管理它们的生命周期，就像我们知道Borg所做的那样。”这甚至是在它被公开宣传或大肆宣扬、在外面绝对不提那个名字之前——例如，尽管许多人都是通过谷歌加入进来的。是的，我不知道当时我们更担心的是谷歌的律师还是《星际迷航》的律师。确实如此。
+
+45
+00:25:41.000 --> 00:26:04.000
+docker compose i've used it occasionally but I've never written anything in it. It's more just if I'm looking at some open source GitHub project and they're using, I guess, Docker Swarm or Compose, whatever it is, but definitely I've spent the vast majority of time on Kubernetes. So yeah, I think maybe now's a good time to kind of explain to the audience, what is Kubernetes according to Craig?
+明白了，酷，好吧，这说得通。我大致见过Docker Compose，偶尔用过，但我从没用它写过什么东西。更多时候，如果我在看某个开源的GitHub项目，而他们正在使用——我猜是Docker Swarm或者Compose，随便哪个吧——但毫无疑问，我绝大多数的时间都花在了Kubernetes上。所以，是的，我想现在可能是向观众解释一下的好时机：在Craig看来，究竟什么是Kubernetes？
+
+46
+00:26:04.000 --> 00:26:45.000
+What exactly is a kubernetes well yeah so kubernetes well for starters it's it's this weird greek word that no one can even agree on the right way to pronounce wait really but i didn't know that i mean it kind of makes sense yeah it kind of makes sense you know now that i looked at the phonetics so what is kubernetes the greek word actually is it a person's name or uh no it is this is going to blow your mind jason but it is if you think about the the word cybernetic or if you think about governance and governing something the word gubernatorial so these all come from the same greek word kubernetes which
+什么是 kubernetes 啊，好吧，那么 kubernetes，首先它它是一个奇怪的希腊语词汇，甚至没有人能就正确的发音达成一致。等一下，真的吗？我以前不知道。我的意思是从某种程度上说这讲得通。是的，现在我看了它的语音学，这确实讲得通。那么 kubernetes 这个希腊词到底是什么？它是一个人的名字，还是……呃，不，这会让你大开眼界，杰森。但它如果你想想“控制论（cybernetic）”这个词，或者如果你想想治理和管理某事，也就是“州长（gubernatorial）”这个词，这些都来自同一个希腊词 kubernetes，
+
+47
+00:26:45.000 --> 00:27:29.000
+means helmsman that means the person steering a boat so someone like you think of the command and control sense like governing something or or someone that is where the idea of cybernetics came from as well and that explains the uh the icon as well because the icon is if i remember correctly the icon for kubernetes is like a let's see if i can look it up it is like a a wheel like thing and yeah yeah i'm looking at it right now i mean this is terrible radio but take our word for it or go look it up the kubernetes icon is like a uh a seven-sided polygon is it's a It's the helmsman, like the helm of a ship, the steering wheel. No, that's the wheel, but I'm saying the blue part.
+意思是舵手。也就是掌舵船只的人。所以就像你联想到的那种指挥和控制的意义，比如治理某事或某人，控制论（cybernetics）这个词的想法也是从那里来的。这也可以解释那个图标，因为图标是——如果我没记巧的话——kubernetes 的图标就像是一个……让我看看我能不能查到它。它就像是一个轮子一样的东西。是的，是的，我正在看着它。我的意思这是个糟糕的广播，但相信我们的话，或者去查一下。kubernetes 的图标就像是一个……呃，一个七边形。是吗？它是舵手，就像船的舵，也就是方向盘。不，那是轮子，但我是指蓝色部分。
+
+48
+00:27:29.000 --> 00:28:00.000
+Heptagon. Okay. I didn't know that word. Heptagram would be the star. Yeah, so for folks out there listening, it's a heptagon, a blue heptagon with like a, yeah, exactly, a ship's wheel in white. Yeah. So the helm logo, the wheel, ship's wheel on the logo obviously refers back to the name. And the seven sides is the seven, the Project 7 codename of Kubernetes from before that.
+七边形。好吧。我不知道那个词。“七角星（Heptagram）”才是那个星星。是的，所以对正在听节目的各位来说，它是一个七边形，一个蓝色的七边形，里面有一个……是的，完全没错，是一个白色的船舵。是的。所以舵的标志，也就是那个轮子，标志上的船舵显然是指回了这个名字。而这七个边代表的是七个，也就是 Kubernetes 在那之前的 Project 7 代号。
+
+49
+00:28:00.000 --> 00:28:28.000
+Oh my gosh. How did I not put that together? So yeah. So actually the project seven where there are six other attempts because i mean there was borg there was omega where there are like four other attempts before they went to kubernetes do did you two watch star trek in the 80s and 90s i am not a trekkie patrick are you a trekkie yeah i did always understand the reference to borg but i missed that other folks missed it. Oh, wow. That was double. Oh, sorry. I never paid attention that people probably didn't know what it meant.
+我的天哪。我怎么没有把这些联系起来？所以，是的。实际上，Project 7 是因为有其他六次尝试——因为，我是说，之前有 Borg，有 Omega，在他们转向 kubernetes 之前大概有其他四次尝试。你们俩在 80 年代和 90 年代看过《星际迷航》吗？我不是一个星际迷航迷，帕特里克，你是吗？是的，我确实一直听得懂关于 Borg 的梗，但我错过了其他人没听懂这一点。哦，哇。那是双重的。哦，抱歉。我从来没有注意到人们可能不知道它是什么意思。
+
+50
+00:28:28.000 --> 00:28:51.000
+So that was probably an astute observation. It's not only the Borg thing. It's that, and I didn't watch it myself, but I think it was Deep Space Nine. They had this Borg character called Seven of Nine. Oh. So that's, that's where the seven thing comes from. The, the idea was, it was a, I think they pitched it, and I apologize for this, is a prettier version of Borg. Oh, I see. Got it.
+所以这可能是一个敏锐的观察。不仅仅是 Borg 的梗。还有这个——我自己没看过，但我认为是在《深空九号》里。他们有一个叫“九之七（Seven of Nine）”的 Borg 角色。哦。所以，这就是那个“七”的来源。当时的想法是——我为这个说法道歉——它是 Borg 的一个更漂亮的版本。哦，我明白了。懂了。
+
+51
+00:28:51.000 --> 00:29:28.000
+Interesting. So now folks at home, the reason why Kubernetes logo is a heptagon is because of 7 of 9 from Deep Space Nine. That's amazing. Okay, so we got as far as the name. So sorry, I got us totally sidetracked there. So what is is it manages things that run in multiple places that are disconnected from each other.
+有趣。所以现在听节目的各位，Kubernetes 标志之所以是一个七边形，是因为《深空九号》里的九之七。太棒了。好吧，我们聊到了名字。真抱歉，我把话题完全带偏了。那么它到底是做什么的呢？它管理在多个相互断开的地方运行的东西。
+
+52
+00:29:28.000 --> 00:30:04.000
+And it works in the model where you submit to an API server what it is that you actually want to have the state of your cluster be. So it's a declarative system versus what you may have used before, which is imperative where you say, please make this thing happen. You say to the system, I would like this to be the outcome, and you leave it to decide. That was one of the things that really blew my mind about Kubernetes. And to this day, I wonder what happens when it can't diff something? What if you provided a YAML file?
+它的工作模式是：你向一个 API 服务器提交你实际希望集群处于的状态。所以它是一个声明式系统，而不同于你以前可能用过的那种命令式系统——在命令式中，你会说：请让这件事发生。而在声明式中，你对系统说：我希望这是最终结果，然后由它自己去决定。这是关于 Kubernetes 真正让我大开眼界的事情之一。直到今天，我还在想，当它无法对比差异（diff）时会发生什么？如果你提供了一个 YAML 文件，会怎么样？
+
+53
+00:30:04.000 --> 00:30:45.000
+Actually, just to backtrack a little bit so the way that this is actually implemented is you you provide a yaml which is similar to json you know one of these structured files you provide a yaml file to to the kubernetes api and say this is the state of the world and so it looks at the current state looks at your yaml file and the thing i was always wondering i'd love to get your take on it, is how does it know how to go from A to B? What if you just do something really, really different and it just can't seem to get you there? Well, if you think about the common use case again, so you have a Kubernetes cluster, which has an API server, and then it has a number of worker nodes. So it has
+其实，稍微回溯一下，其实际的实现方式是：你提供一个 YAML（类似于 JSON，你知道的，这种结构化文件之一）。你向 Kubernetes API 提供一个 YAML 文件，并说“这就是世界的状态”。然后它会查看当前状态，查看你的 YAML 文件。我一直想知道、很想听听你们看法的是：它是如何知道如何从 A 走到 B 的？如果你做了一些非常非常不同的事情，而它似乎无法让你到达那里，会怎么样？嗯，如果你再次想想常见的用例：你有一个 Kubernetes 集群，它有一个 API 服务器，然后有许多工作节点（worker nodes）。所以它有
+
+54
+00:30:45.000 --> 00:31:25.000
+these places where it can ask computers to do things. You will give the API server an instruction that says, I want to run a web server. And you give that to the server and it says, all right, well, I know I've got this many machines because they will report to me regularly and say, here I am, and this is what I have running on me and so on you have asked for a web server you've specified that it needs to have two cpus and it needs to have 256 megs of ram so probably not going to be hard to find somewhere in the cluster to put this but you can get larger workloads and more of them and so on and then knowing what it knows about the state of the environment it'll say right i'm going to ask this node to start it over there and it'll send that instruction out and then
+这些可以让计算机去执行任务的地方。你会给 API 服务器一个指令，说：“我想运行一个网络服务器（web server）。”你把这个指令交给服务器，它会说：“好的，嗯，我知道我有这么多机器，因为它们会定期向我汇报说：‘我在这儿，这是我上面正在运行的东西’等等。”你请求了一个网络服务器，你指定它需要有两个 CPU，需要有 256 兆的内存。所以在集群里随便找个地方放下这个东西应该不难。但你可能会有更大的工作负载，而且数量更多等等。然后，根据它对环境状态的了解，它会说：“好的，我要让这个节点在那个地方启动它。”它会把这个指令发送出去，然后
+
+55
+00:31:25.000 --> 00:32:07.000
+it will update the status to basically say I have scheduled this thing, I've asked it to run. It passes, actually puts an object there. When the node checks next time, it says there is new work available for me. I have been asked to do a thing. It will then start that running. If it can't start that running, it will update and say I couldn't do that. Perhaps you asked with a container image that you spelt wrong, and so it couldn't do it. It enters the state that it calls a crash loop back off, which is the most fun thing for anyone involved in Kubernetes to have to debug. But that's basically saying, I couldn't do this. I'm going to try again. And it waits a little while, and it tries again. And if it fails, then it waits a little while longer, and it tries again, and so on. so you can get into situations where things don't work but basically
+它会更新状态，基本上是说：“我已经调度了这个东西，我已经请求它运行了。”它实际上是在那里放了一个对象。当节点下次检查时，它会说：“有给我的新工作。我被要求做一件事。”然后它会启动那个程序。如果它无法启动那个程序，它会更新并说：“我做不到。”也许你请求时带了一个拼写错误的容器镜像，所以它无法运行。它进入了一个被称为“崩溃循环退避（crash loop back off）”的状态，这是任何参与 Kubernetes 调试的人觉得最好玩的事情。但那基本上是在说：“我做不到这个。我要再试一次。”然后它等一会儿，再试一次。如果失败了，它就会等更长一点时间，再试一次，以此类推。所以你可能会遇到事情行不通的情况，但基本上
+
+56
+00:32:07.000 --> 00:32:56.000
+it updates the status of the object to say i couldn't do that thing yeah yeah that makes sense yeah i think the you know the the schema of the yaml is is kind of like uh i'm sure there's some way where you can trick it or get it confused but but in general you're right i mean most of the time someone says here's a yaml and so it just creates a bunch of stuff and the next time around here's a yaml and like now i'm using two cpus instead of three cpus and so it's like a relatively straightforward diff yeah so there's three different parts to an api object in kubernetes so you have the metadata which is things like the name of the object, and then any labels that are used on it. Labels are important because that's sort of a way you do queries across things that can be more than one of. And then you have its spec and its status.
+它会更新对象的状态，说它做不到那件事。对，对，这说得通。是的，我想，你知道，YAML 的模式（schema）有点像……我确信某种程度上你可以戏弄它或把它搞糊涂，但总的来说你是对的——大多数时候，有人说“这是一个 YAML”，于是它就创建了一堆东西；下一次，又是一个 YAML 类似于“现在我用的是两个 CPU 而不是三个 CPU”，所以它是一个相对直接的 diff。是的，所以 Kubernetes 中的一个 API 对象有三个不同的部分：你有元数据（metadata），比如对象的名称，以及上面使用的任何标签（labels）。标签很重要，因为这是跨越可以有多个实例的事物进行查询的一种方式。然后你有它的规范（spec）和状态（status）。
+
+57
+00:32:56.000 --> 00:33:31.000
+So the spec is what you actually want. And in the case of you want to run containers on an environment, it'll be wrapped up in a thing called a pod. A pod is the minimum unit of scheduling of stuff in Kubernetes. It can have one container in it, but it can have more as well. So you might want to say these two containers always run together. This is my web server, and this is the agent that processes its logs, or it gets the files to serve from Git, for example. Those two things are always required together. So the pod is the minimum unit of thing that you schedule. So for a pod object inside Kubernetes, you will say what the specification is, the spec,
+所以 spec 就是你实际想要的东西。如果你想在一个环境中运行容器，它会被包装在一个叫做 Pod 的东西里。Pod 是 Kubernetes 中调度事务的最小单位。它里面可以有一个容器，但也可以有多个。所以你可能会想说：这两个容器总是协同运行。这是我的网络服务器，这是处理它的日志的代理，或者例如它从 Git 获取要服务的文件的代理。这两个东西总是需要在一起。所以 Pod 是你调度的最小单位。因此，对于 Kubernetes 内部的一个 Pod 对象，你要说明它的规格是什么，也就是 spec，
+
+58
+00:33:31.000 --> 00:33:57.000
+and it might be that it has this particular container image and it has this much CPU and RAM and it has these security settings, for example. And then the status object should effectively say the same stuff, but it might turn out that you've made a change and that hasn't updated yet. And so if you make a change, it will do some magic diffing and so on and say, all right, well, I'm submitting a new object with the same name as the last one. What are the things I need to change?
+它可能具有这个特定的容器镜像，拥有这么多的 CPU 和 RAM，并且具有这些安全设置等等。然后状态（status）对象应该有效地说明相同的事情，但结果可能是你做了更改，而那还没有更新。所以如果你做了更改，它会做一些神奇的 diff 等等，并说：“好的，嗯，我正在提交一个与上一个同名的新对象。我需要更改哪些东西？”
+
+59
+00:33:57.000 --> 00:34:30.000
+I need to make a change to its labels. That's just an API server thing. I need to give it more CPU. Well, in that case, what I need to do is tear down the old one and instruct a new one to run and so on. So there are possibly some cases where it can get confused and it'll probably just mark it as, again, crash loop back off or something and put a log entry as to why it is. But it's quite uncommon because of the structure of only a few different things that matter inside each object that you can get it so confused that it wouldn't be able to do anything. I've never really heard of that yeah that makes sense one of the things that blew my mind with with kubernetes
+我需要更改它的标签。这只是一个 API 服务器的事情。我需要给它更多的 CPU。嗯，在这种情况下，我需要做的是拆除旧的，并指示一个新的来运行等等。所以可能存在一些情况下它会糊涂，它可能只会把它标记为，再次强调，crash loop back off 或类似的东西，并放一个日志条目说明原因。但这种情况相当少见，因为每个对象内部只有少数几个不同的重要部分，你很难把它搞糊涂到什么都做不了的地步。我真的没听说过这种事。是的，这说得通。Kubernetes 带给我的震撼之一，或者说真正令人惊讶的事情之一是，
+
+60
+00:34:30.000 --> 00:35:05.000
+or one of the things that was really surprising was i kept seeing m core everywhere i was like what is this finally i looked it up and it was milli cores you can actually say like i want you know this process to use you know uh you know one four 400th of a core or something. You can get very, very specific, which is really good because you are running these things at really large scale and you need to be able to coordinate and orchestrate. All of that speaks to the reason that Google wanted this kind of system and the reason that it thought Kubernetes would be relevant to people.
+我到处都能看到 m core。我在想：这到底是什么？最后我查了一下，原来是毫核（milli cores）。你实际上可以这样说：我想要（你知道的）这个进程使用（你知道的）一个核心的四百分之一左右之类。你可以变得非常非常具体，这真的很棒，因为你是在非常大的规模上运行这些东西，你需要能够进行协调和编排。所有这些都说明了为什么 Google 想要这种系统，以及为什么它认为 Kubernetes 会与人们息息相关。
+
+61
+00:35:05.000 --> 00:35:49.000
+And this is something which I find very interesting. The reason that Google wanted to do this kind of thing is it's not running one instance of a web server. It's running 20 million. It's running whatever big number you can think of. They used to talk in public conversations about a small cell would be on the order of tens of thousands of machines. And you might deploy something like the backend for Google Calendar, and you're going to need tens of thousands of replicas of that. And you just think, well, if we assume the backend for serving any application takes a couple of hundred megs per user or something, and there's millions of people concurrently hitting it from every country in the world all the time, you need an awful lot of stuff for this kind of scale. And you also need to have that for anything new that launches on day one. Google never had the luxury of saying,
+而这也是我觉得非常有趣的一点。Google 想要做这种事情的原因是，它运行的不是一个网络服务器实例，而是运行 2000 万个。它运行着你能想到的任何大数字。他们在公开谈话中曾说过，一个小单元（cell）的规模大约是数万台机器。你可能会部署类似 Google 日历（Google Calendar）后端的东西，你需要它的数万个副本。你就会想，好吧，如果我们假设为任何应用程序提供服务的后端每个用户需要几百兆左右的内存，并且世界上每个国家的数百万人每时每刻都在并发地访问它，为了这种规模，你需要极其大量的资源。而且对于第一天推出的任何新东西，你也需要具备这种能力。Google 从来没有这种奢侈的待遇，即：
+
+62
+00:35:49.000 --> 00:36:30.000
+all right, well, I'm going to launch a thing quietly. And then unless it was on some kind of wait list, everyone in the world knew about it immediately and everyone would come and hit the things. You need to scale things up pretty quickly, but that's very expensive. Like you've got to run millions of replicas of things over the course of time. And so they wanted to be able to pack more things into the fewer number of machines. So it's not so much, I have 10,000 calendar backends and I need one machine each to run them. I need 10,000 machines. It's, hey, I can schedule them on a smaller number of machines or in the space that I have left over when these things aren't doing anything, I can run batch workloads and so on. So the real workload, the real reason that Google had for having Borg was
+好吧，我要悄悄地推出一个东西。然后，除非它在某种等待名单上，否则全世界每个人都会立即知道它，并且每个人都会涌来访问它。你需要相当快地扩展规模，但这非常昂贵——随着时间的推移，你必须运行数百万个事物的副本。所以他们希望能够在更少数量的机器中打包更多东西。所以与其说“我有 10,000 个日历后端，我需要每台机器运行一个”，不如说“我需要 10,000 台机器”；而是“嘿，我可以把它们调度到更少数量的机器上，或者在这些东西闲置时剩下的空间里，我可以运行批处理工作负载等等”。所以，Google 拥有 Borg 的真正工作负载、真正原因其实是
+
+63
+00:36:30.000 --> 00:36:58.000
+to get more out of the number of machines that they had using this API system that drove it all. And that was the thing that we thought people would want to use Kubernetes for. People would want to do more with their infrastructure. Famously, we talked about the reason that we launched it at the time was when the people who had been building Google Compute Engine, Craig McClackie, who was one of the PMs on that, who went on to launch Kubernetes, they would go to the Google backend team, basically,
+通过这个驱动这一切的 API 系统，从他们拥有的机器数量中榨取出更多价值。这就是我们认为人们会希望使用 Kubernetes 的原因。人们会希望用他们的基础设施做更多事情。众所周知，我们当时谈到推出它的原因之一是，当构建 Google Compute Engine 的那些人——克雷格·麦克拉基（Craig McClackie），那是那里的产品经理之一，后来去推出了 Kubernetes——他们基本上会去找 Google 的后端团队，
+
+64
+00:36:58.000 --> 00:37:10.000
+and say, all right, hey, we're selling out of this compute stuff. People are buying it. We need some more, please. And they'd say, well, hang on. You're only using 5% of the CPU. Say, well, that's fine. We sell these CPUs to people.
+然后说：“好的，嘿，我们的计算资源快卖光了。人们在买。请给我们多提供一些。”然后他们会说：“嗯，等等。你们只使用了 5% 的 CPU。”他们说：“好吧，没关系。我们把这些 CPU 卖给人们。”
+
+65
+00:37:10.000 --> 00:37:34.000
+They buy 100% of a CPU. They only use 5%. They're paying for the whole thing, but that's what they're using. And that was just so anathema to how Google thought about things. Like, we need to pack more, and you should be able to get 70%, 80% utilization out of that CPU, because you need to do that at that kind of scale. But it turned out that the thing that people actually couldn't do back then, and remember, this is around 2014, is they just couldn't deploy software. They couldn't reliably say,
+他们买了一个 CPU 的 100%，但他们只用了 5%。他们为整件事付了钱，但这就是他们所使用的。这与 Google 对事物的看法简直是格格不入。就像是：我们需要打包更多，你应该能够从该 CPU 中获得 70%、80% 的利用率，因为在那种规模下你必须这样做。但事实证明，人们当时真正做不到的事情——记住，这大概是在 2014 年——是他们根本无法部署软件。他们无法可靠地说：
+
+66
+00:37:34.000 --> 00:37:54.000
+hey, I want to run the thing and have 10,000 copies of it running and start and upgrade them and so on. Simply just having an API that enabled doing that, you could be as inefficient as you want in the first instance. That's a problem we'll solve later on. We just can't make our thing run. And that was the thing that really got people interested in Kubernetes, was it was just a really well thought out
+“嘿，我想运行这个东西，并让它的 10,000 个副本运行起来，还要启动和升级它们等等。”仅仅拥有一个能够做到这一点的 API，你在一开始就可以随心所欲地低效。那是我们以后会解决的问题。我们只是无法让我们的东西运行起来。而这正是让人们真正对 Kubernetes 产生兴趣的地方，因为它是一个真正深思熟虑的、
+
+67
+00:37:54.000 --> 00:38:35.000
+declarative API for managing software at scale. The fact that you could then later on at scale say, I'm going to only use 400 millicores for this rather than a whole cpu or something that's a nice to have that people can get to later on yeah i mean one of the things that i remember a story i'm not gonna say any specifics here but uh there was a time where um you know we were running something there's a team running something at Google. And basically, every time someone made a request, it created a thread, like an OS level thread, and it never closed it. And so after maybe what 10,
+用于大规模管理软件的声明式 API。事实上，你随后可以在规模化之后说：“我要为这个只使用 400 毫核，而不是整个 CPU 或类似的东西”，这只是一个锦上添花的功能，人们以后可以再去实现。是的，我是说，我记得的一个故事——我这里不会说任何具体细节——但曾几何时，……你知道的，我们在运行一些东西，有一个团队在 Google 运行一些东西。基本上，每当有人发出请求时，它就会创建一个线程，比如操作系统级别的线程，而且它从不关闭它。所以在大约，呃，
+
+68
+00:38:35.000 --> 00:39:13.000
+20,000 people hit one of these endpoints, it would crash because the OS would just run out of handles. And it ran for years like that. like that because Borg or Kubernetes under the hood just said, okay, well, this one crashed, let's spin up another one. And it always had enough running that we didn't have to worry about that bug for a while. Yeah, there are many different ways to succeed. Yeah, and that is something that I think, you know, it ties into a conversation I was having a little while ago with somebody where you can make the case that what really
+20,000 人访问这些端点之一后，它就会崩溃，因为操作系统会耗尽句柄。它就这样运行了好几年，
+
+69
+00:39:13.000 --> 00:40:09.000
+matters to your company are your KPIs, you know, your key metrics for your company. You know, yeah, I mean, as engineers, like it pains us to see like, you to see unclosed threads. It was eventually fixed. But the time in between when people were fighting other fires that were really making big gains in the company metrics, that was made possible because Kubernetes was able to throw them that life preserver you know and i think uh to your point it's like just out of sight out of mind of this these like massive replica sets uh allows you to really prioritize things that you wouldn't be able to otherwise yeah there's a lot to be said about like you can be inefficient but you need to be up. And when people started thinking about SRE concepts, which were publicized by Google
+因为底层的 Borg 或 Kubernetes 只是说：“好吧，这个崩溃了，让我们再启动一个。”而且它总是运行着足够多的实例，以至于我们有一段时间不必担心那个 Bug。是的，成功的方法有很多种。是的，我认为这与我不久前和某人进行的对话联系在一起，你可以证明，对你的公司真正重要的是你的 KPI（关键绩效指标），你知道的，你公司的关键指标。你知道的，是的，我的意思是，作为工程师，看到未关闭的线程让我们感到痛苦。它最终被修复了。但在人们疲于扑灭其他真正能为公司指标带来巨大收益的“大火”的间隙，正是因为 Kubernetes 能够向他们抛出这个救生圈，才使得这一切成为可能。我认为，正如你所说的那样，这就像是眼不见心不烦，这些海量的副本集（replica sets）让你能够真正优先处理那些否则你无法处理的事情。是的，有很多话要说，比如你可以效率低下，但你必须保持运行。当人们开始思考 SRE（网站可靠性工程）概念时——这些概念是 Google 在 Kubernetes 左右的同一时期公开的——
+
+70
+00:40:09.000 --> 00:40:41.000
+around the same time as Kubernetes, it enabled the industry to understand the difference between an SLO and an SLA. A lot of people in enterprise think, oh, I've got this SLA, which says basically, all right, well, the company will give me back some money if they're not online for the amount of time that they say they will be and normally measured in sort of percentage of uptime but the thing that actually matters is being able to say here's my objective i hope to be up for this amount of time and the sla is really only the monetary piece on top of it is to say right this is what i will give you if not and so then you need to know how you're going to measure those
+它让整个行业理解了 SLO（服务质量目标）和 SLA（服务等级协议）之间的区别。企业中的许多人认为，“哦，我有这个 SLA，它基本上说：如果他们在他们说的时间内没有上线，公司会退给我一些钱”——通常以正常运行时间的百分比来衡量。但真正重要的是能够说：“这是我的目标，我希望在线这么长时间。”而 SLA 实际上只是之上的金钱部分，是说：“好吧，如果没有达到，我会赔给你这些。”所以你需要知道你将如何衡量这些
+
+71
+00:40:41.000 --> 00:41:14.000
+things you need some sort of indicator and your internal teams can say, all right, well, hey, if we are meeting these goals, we might be burning money to do it, but we're meeting the goals and that's important. And it might be that how much it costs to fix that costs more than the amount we'd have to pay out in the course of an SLA breach, for example. So you need to factor these things in holistically and you need to look overall at the costs of running things, especially when they're in a sort of pay-as-you-go cloud environment, if you want to be a successful business. Yep. Yep. That makes sense. And yeah, to your point, people get so bogged down
+事情，你需要某种指标，你的内部团队可以这样说：“好吧，嘿，如果我们达到了这些目标，我们可能会为此烧钱，但我们达到了目标，这很重要。”修复它所需的成本可能比我们在违反 SLA 的过程中必须支付的赔偿金还要多。因此，如果你想成为一个成功的企业，你需要整体地将这些因素考虑进去，并且你需要全面地看待运营成本，尤其是在即用即付费的云环境中。没错。没错。这说得通。是的，正如你所说，人们在部署软件时陷入得太深，以至于他们无法专注于让他们取得成功的业务部分。我是说，是的，在 Kubernetes 之前，我的意思是，有太多的恐怖故事了。让我讲个简短的。这不是来自 Google 的。这是来自另一家公司的。这个人告诉我，他们有一个 Java jar 文件。对于那些不知道的人来说，jar 文件字面意思就是一个带有 Java 字节码的
+
+72
+00:41:14.000 --> 00:41:36.000
+in deploying software that they couldn't focus on the part of the business that makes them successful. I mean, yeah, before Kubernetes, I mean, just so many horror stories. Let me have a quick one. This is not from Google. This is from another company. This person told me that they had a Java jar file. And for people who don't know, a jar file is literally just a zip file
+zip 文件。他们部署软件的方式是：他们拿着 Java 字节码（.class 文件），解压 jar 文件，把它们放进去，然后在生产服务器上重新打包压缩。
+
+73
+00:41:36.000 --> 00:42:27.000
+with Java bytecode in it. And the way that they were deploying their software was they were taking their Java bytecode, their.class files, and they were unzipping the jar file putting them in there and then re-zipping it on the production server um and so at no point did anybody know what the code on the server was because everyone was doing this concurrently and so yeah i mean this is what people were doing even in you know 2014 i mean i think uh you know it mean, I think we forget so easily with Docker and Kubernetes, we forget how hard it was to deploy things and what sort of wonky things people did when they didn't have any other way. That said, I run a website which is running PHP code from pre-year 2000 probably and largely hasn't changed in that time.
+所以在任何时候，都没有人知道服务器上的代码是什么，因为每个人都在同时这样做。所以，是的，我的意思是，这就是人们甚至在 2014 年还在做的事情。我的意思是，我想……你知道的，我想我们很容易忘记 Docker 和 Kubernetes 的出现，我们忘记了部署东西有多么困难，以及当人们没有其他方法时会做出多么古怪的事情。话虽如此，我运营着一个网站，它运行的 PHP 代码大概可以追溯到 2000 年之前，并且从那时起基本没有改变过。
+
+74
+00:42:27.000 --> 00:42:41.000
+And I'm not going to tell you what it is because I'm sure it's full of security holes and you'd really be able to get offline very easily. But it still works. And there's a lot to be said about it. I'm never going to put it in a container and I'm never going to change anything about it because it's just a thing from the past
+我不会告诉你它是什么，因为我确信它充满了安全漏洞，你很容易就能把它搞瘫痪。但它仍然在运行。关于这一点有很多话要说。我永远不会把它放进容器里，也永远不会改变关于它的任何事情，因为它只是过去的一个事物，
+
+75
+00:42:41.000 --> 00:43:09.000
+that pleases my heart that it's still there. And there's a lot to be said about things that were really easy. Like the whole idea of things like PHP made it possible just to FTP a bunch of stuff to a server and have it work. And simple is useful on one hand. And there's a whole bunch of complexity that's introduced. We could go on for hours about the trade-offs here. It's like this Kubernetes is complex and it's got all these bells and whistles and so on. And there are easier tools. And what is the right thing to do? The answer depends entirely on your use case. And it's an
+它让我感到欣慰，它还在那里。关于那些非常简单的事物，有很多话可说。就像 PHP 这类东西的整个想法，使得将一堆东西通过 FTP 传输到服务器上并让它运行成为可能。简单在某种程度上是有用的。而且引入了一大堆复杂性。我们可以花几个小时讨论这里的权衡。就像 Kubernetes 很复杂，它有所有的这些花哨功能等等。还有一些更简单的工具。什么是正确的事情要做？答案完全取决于你的用例。而且这也是一个
+
+76
+00:43:09.000 --> 00:43:51.000
+investment question as well. It's like, do you want to be in the ecosystem where you can hire people who understand Kubernetes and can work on stuff from day one? Or do you think that by building something in-house for you that you perceive to be simpler, then you're going to be able to win in the long run? You have to make these, and they really do come down to being business decisions. Yep. Yep. That makes sense. One of the things that I think Kubernetes saves people a lot of time and ultimately money is the way that the different containers or the instances of the containers can talk to each other. So I mean So that was one of the things that really is very intuitive to me is in your YAML file, you name this replica set,
+投资问题。就像是：你想进入那个生态系统中吗？在那里你可以雇用到懂 Kubernetes 并且从第一天起就能上手工作的人？还是你认为通过为自己构建你认为更简单的内部系统，你就能在长期内胜出？你必须做出这些决定，它们确实归结为商业决策。没错。没错。这说得通。其中一件事——我认为 Kubernetes 为人们节省了大量时间，并最终节省了金钱——就是不同容器或容器实例之间互相通信的方式。所以，这意味着，这是对我有很强直觉的事情之一：在你的 YAML 文件中，你给这个副本集命名，
+
+77
+00:43:51.000 --> 00:44:16.000
+I guess is what it's called, or this process. You name this database. And then in your actual application code, you can say connect to data, like HTTP colon database. And so under the hood, Kubernetes knows, oh, database actually means this other part of your deployment. And I thought that the whole networking part of it was extremely well done for something that's really complicated.
+我想这就是它的名字，或者是这个进程。你给这个数据库命名。然后在你的实际应用程序代码中，你可以说连接到数据，比如 HTTP 冒号数据库。因此在底层，Kubernetes 知道“哦，数据库实际上意味着你部署的这另一个部分”。对于一个非常复杂的东西来说，我认为它的整个网络部分做得非常出色。
+
+78
+00:44:16.000 --> 00:44:39.000
+This is another huge difference from Borg. The way that Borg worked is it ran a thing called the Borg name service, where everything that started up your 10,000 calendar instances would all register with the Borg name service, where everything that started up your 10,000 calendar instances would all register with the Borg name service. And then the load balancer or whatever it is that needs to know where these things are would have to have a client library that knew how to talk to that service. And then it would say, all right, where are the back ends for this?
+这是与 Borg 的另一个巨大区别。Borg 的工作方式是：它运行一个名为 Borg 名称服务（Borg name service）的东西，你在那里启动的 10,000 个日历实例都会在 Borg 名称服务中注册。然后，负载均衡器或任何需要知道这些东西在哪里的人，必须拥有一个知道如何与该服务通信的客户端库。然后它会说：“好的，这个的后端在哪里？”
+
+79
+00:44:39.000 --> 00:45:19.000
+And it would get back its 10,000 requests and so on. And it could, in theory, this I think was implemented a bit later on, but the system basically could say, not only here are 10,000 requests and so on. And it could, in theory, this I think was implemented a bit later on, but this system basically could say, not only here are 10,000 replicas, but here's how busy they all are. And so it could then be used to make load balancing decisions based on utilization, for example. And that worked, but it required you to write custom software for everything. The internet as a whole has a way of finding out where a service is running for better or for worse. It's called DNS. And so the difference in how Kubernetes operates is it basically has a programmable DNS server baked into it. You create an object, a different object inside Kubernetes called a service. And then we go back to those labels we talked about
+然后它会拿回它的 10,000 个请求等等。理论上，我认为这个功能是稍后一点才实现的，但该系统基本上可以说：“不仅这里有 10,000 个请求等等。”理论上，我认为这个功能是稍后一点才实现的，但这个系统基本上可以说：“不仅这里有 10,000 个副本，而且它们都这么忙碌。”因此，它随后可以用于基于利用率等因素做出负载均衡决策。这行得通，但它要求你为每样东西编写自定义软件。整个互联网有一种方法可以查明服务在哪里运行，不论好坏。它叫做 DNS。所以 Kubernetes 运作方式的不同之处在于，它基本上内置了一个可编程的 DNS 服务器。你在 Kubernetes 内部创建一个对象，一个不同的对象，叫做服务（Service）。然后我们回到我们之前讨论过的那些标签。
+
+80
+00:45:19.000 --> 00:45:54.000
+before. We've got deployed labels on top of everything and say, this is a calendar, name equals calendar, version equals 2.0, samples equals dev or something. And so you can make a service that says target all of the things that are the calendar, or you can make one that says target all of the things that are the dev version of the calendar or the dev version at two or version three or so on. So you can target which those things are and select that group. And then you can associate a name with that. And so you might say, connect to dev calendar service, and then it will return you the IP addresses for that whole list of things. And then your software
+我们在所有东西上面部署了标签，并说：“这是一个日历，name 等于 calendar，version 等于 2.0，samples 等于 dev 等等。”所以你可以创建一个服务，说“目标是所有属于日历的东西”，或者你可以创建一个服务，说“目标是所有属于日历的开发版本，或者是版本 2 的开发版本，或者是版本 3 等等”。所以你可以定位这些东西是什么，并选择那个组。然后你可以将一个名称与该组关联起来。所以你可能会说“连接到 dev calendar 服务”，然后它会返回整个列表的 IP 地址。然后你的软件
+
+81
+00:45:54.000 --> 00:46:40.000
+can decide, does it run Robin between them or whatever it wants to do, but it just does that with DNS. And the benefit is that if you have software that has no idea it's running on Kubernetes, it just works. You say engine X is is my load balancer, balance between these services, like it knows how to do that. You didn't have to rewrite your front end, you didn't have to compile on any kind of Kubernetes name server thing to work, everything kind of worked the way you'd expect it to. Yep, yeah, super clever. I mean, one thing that on the flip side, one thing that at least I found as a user of Kubernetes really complicated was ingress. So, you know, Kubernetes, because it has its own DNS server, it's almost like its own, you know, intranet. And so then when, you know, you, Joe Schmo on the outside wants to talk to a Kubernetes
+可以决定：是在它们之间进行轮询（round robin），还是做它想做的任何事情，但它只是通过 DNS 来做到这一点。这样做的好处是，如果你的软件完全不知道它正在 Kubernetes 上运行，它也能直接工作。你说 NGINX 是我的负载均衡器，在这些服务之间进行负载均衡，它知道该怎么做。你不需要重写你的前端，你不需要编译任何类型的 Kubernetes 名称服务东西来让它工作，一切都按照你预期的方式运行。没错，超级聪明。我的意思是，有一件事，另一方面，至少我作为一个 Kubernetes 用户发现非常复杂的一点，就是 Ingress（入口）。所以，你知道，Kubernetes 因为它有自己的 DNS 服务器，它几乎就像它自己的内部网（intranet）。然后，当你在外面的小明想要跟一个 Kubernetes
+
+82
+00:46:40.000 --> 00:47:22.000
+service, now you get into like cluster IP and node port and and load balancer and which do i pick and why and and oh it doesn't work and and you know why this is a problem it's because we haven't all moved to ipv6 yet yep that's right if it was ipv6 we would just that was not a serious suggestion well but i mean yeah i actually love ipv. I don't know enough about why we don't have it yet. I mean, I'd love to get your take on it. You probably know a lot more than I do, but it would solve a lot of problems. I think the answer is because IPv4 works and people are incentivized to keep it working. That said, Kubernetes now does support v6 largely and so do all the cloud vendors.
+服务对话时，你就会遇到 ClusterIP、NodePort 和 LoadBalancer，我该选哪个？为什么？噢，它不生效，你知道为什么这是个问题吗？因为我们还没有全部迁移到 IPv6 啊！没错，就是这样。如果那是 IPv6，我们就会……那不是个严肃的建议。好吧，但我其实很喜欢 IPv6。我对我们为什么还没有使用它了解得还不够多。我很想听听你的看法。你可能比我知道得多得多，但这能解决很多问题。我想答案是因为 IPv4 能用，而且人们有动力让它继续能用。话虽如此，Kubernetes 现在很大程度上确实支持 v6 了，所有的云厂商也都支持。
+
+83
+00:47:22.000 --> 00:48:02.000
+But I think that while v4 is good enough then it's going to keep being the answer but i will explain what i meant by that so first of all you mentioned this a bit like an internet it is a cloud in and of itself like it has apis it configures you can start things running it is to all intents and purposes as complex and does all the same things that a cloud vendor does that open stack didack did, that Amazon or Azure or Google do when you say create me an instance of things. So you have to think about it in terms of that level of complexity. And then you also have to think about it in terms of the complexity of how am I going to layer Kubernetes on top of a second cloud and so on. In order to solve these
+但我认为，只要 v4 够用，它就会一直是那个答案。不过我会解释一下我刚才那个意思：首先，你提到它有点像一个内部网，它本身就是一个云——它有 API，它可以进行配置，你可以启动正在运行的东西。在所有实际意图和目的上，它和云厂商所做的事情一样复杂，做着同样的事情——当你说“为我创建一个实例”时，OpenStack 做过，亚马逊、Azure 或 Google 也都在做。所以你必须从那种复杂程度来思考它。然后你还必须从“我将如何在第二个云之上层叠 Kubernetes”之类的复杂程度来思考它。为了解决这些
+
+84
+00:48:02.000 --> 00:48:48.000
+naming problems and make everything work with DNS like we talked about, one of the very early decisions that was made with Kubernetes is that every pod, those things I mentioned before that are one or more containers together, every pod in a Kubernetes environment needs to have its own IP address. To give it a DNS record, you need to have an IP address, for example. So there are not enough internal IP addresses in some companies, I'm sure Google are included, to do things at that kind of scale. And there are not enough RFC 1922 addresses to not conflict when you have enterprises who are running lots of different clusters and so on. So you need to have these little islands of netted environment, if you will, like many
+命名问题并使一切都能通过 DNS 工作（就像我们刚才讨论的那样），Kubernetes 早期做出的决定之一是：每个 Pod——我之前提到的那些由一个或多个容器组成的东西——Kubernetes 环境中的每个 Pod 都需要有自己的 IP 地址。例如，要给它一个 DNS 记录，你需要有一个 IP 地址。因此，某些公司的内部 IP 地址不够用（我确信 Google 也包括在内）无法在那种规模下做事。而且没有足够的 RFC 1922 地址来避免在运行许多不同集群的企业中发生冲突。所以你需要拥有这些联网环境的小岛，如果你愿意的话，就像许多
+
+85
+00:48:48.000 --> 00:49:15.000
+businesses already have. And to get from the outside internet to that, you need to have some sort of gateway. And that's effectively what an ingress was. It was the idea of being able to define a programmable gateway to say someone on the internet is going to call into this. They're really only going to need to hit one or two ip addresses like they were before in an enterprise situation but then that needs to fan out and be aware of everything inside and be able to make calls into my NATed environment so when you think ingress like for anyone in the old world
+企业已经拥有的一样。要从外部互联网访问该环境，你需要某种网关。这实际上就是 Ingress 的作用。它的理念是能够定义一个可编程的网关，以表明互联网上的某个人将调用这个服务。在企业情况下，他们实际上只需要像以前一样访问一两个 IP 地址，但随后这需要分发出去，并了解内部的一切，并能够调用我处于 NAT 后面（NATed）的环境。所以当你想到 Ingress 时，对于旧世界里的任何人来说，
+
+86
+00:49:15.000 --> 00:49:44.000
+you think NAT it kind of works the same way it would be great to say there was a world where all of those ip addresses inside kubernetes were globally routable or were available everywhere. Some people may choose to run their Kubernetes environments like that. That sets you up to all of the problems that you have with other networking where you think, all of a sudden I have to worry. All these things I was running internally are now possibly internet addressable and you really have to think about security. You've got a lot of free security by running gateways and that and so on.
+你会想到 NAT，它的工作方式有点类似。如果能有一个世界，让 Kubernetes 内部的所有 IP 地址都是全球可路由的，或者在任何地方都可用，那就太好了。有些人可能会选择那样运行他们的 Kubernetes 环境。这会让你陷入与其他网络相关的所有问题中，你会想：突然之间我不得不担心了。所有这些我在内部运行的东西现在可能都可以通过互联网寻址了，你真的必须考虑安全性。通过运行网关和 NAT 等等，你获得了许多免费的安全性。
+
+87
+00:49:44.000 --> 00:50:26.000
+So it's possible. It would be more possible with v v6 but it's something you really have to pay attention to that's a real actually i want to pause there for a second you're totally right i mean even if we had ipv6 you know for security reasons you'd almost certainly still have a nat layer and then you're not you're back to the same problem, you've got to have a firewall layer at least. But I think v6 was designed in the 80s, back when the internet was still very academic and the idea of everyone running services on their own local machine and so on was well accepted. But we're very much pivoted to a world where you put your servers and your hosting in a server hosting environment. And anything I'm running on my local machine is more likely to be something I'm developing
+所以这是可能的。用 v6 的话会更有可能，但这是你真正需要注意的事情。这是一个真正的……实际上我想在这里暂停一下，你完全说得对，即使我们有了 IPv6，出于安全原因，你几乎可以肯定仍然会有一个 NAT 层，然后你又回到了相同的问题，你至少得有一个防火墙层。但我认为 v6 是在 80 年代设计的，当时互联网还非常学术化，每个人都在自己的本地机器上运行服务等想法是被广泛接受的。但我们已经极大地转向了一个世界：你将你的服务器和托管放在服务器托管环境中。我在本地机器上运行的任何东西，更有可能是我正在开发的
+
+88
+00:50:26.000 --> 00:50:42.000
+or something that's insecure. And I don't like the idea of anyone on the internet being able to route to things I'm running locally. There's the trust situation, the threat model has changed substantially since it was defined. And maybe that's one of the reasons why people think, well, hey, that's a huge advantage of v6,
+东西，或者是某些不安全的东西。我不喜欢互联网上的任何人都能路由到我在本地运行的东西的想法。信任情况、威胁模型自从它被定义以来已经发生了实质性的变化。也许这就是人们认为“嗯，嘿，那是 v6 的一个巨大优势”的原因之一，
+
+89
+00:50:42.000 --> 00:51:20.000
+which actually turns out not to be relevant in 2023 yeah that makes sense okay yeah so that makes sense so basically uh you know you don't want to make every pod accessible from the outside and so the ones the services that you do want accessible you have to set up an ingress rule and that's where you get into those different variants node port and cluster IP and all of that stuff. Yeah. And all of that basically relates to how does the machine, the pod that's running the ingress on, how does it talk to, how do you expose those things? And it might be that you have an external load balancer that's sort of unaware of the Kubernetes environment. And it just
+但事实证明它在 2023 年并不相关。是的，这说得通。好吧，是的，这说得通。所以基本上……你不想让每个 Pod 都能从外部访问，所以对于你确实想要访问的服务，你必须设置一个 Ingress 规则，这就是你接触到那些不同变体（NodePort、ClusterIP 等等）的地方。是的。所有这些基本上都与机器、运行 Ingress 的 Pod 如何进行通信、以及你如何暴露这些东西有关。情况可能是这样的：你有一个外部负载均衡器，它对 Kubernetes 环境一无所知。它只需要
+
+90
+00:51:20.000 --> 00:52:09.000
+has to say, here are the cloud ip addresses of some machines do i make that service available on a named port on the sorry a numbered port on the machine that i can then route to or does the ingress run inside kubernetes and it can just use the the objects like it was harder over time now the ingresses and the load balances that power them and so on are generally more aware and the cloud providers are able to expose the internal kubernetes ip addresses to their load balancers so these were things you had to worry about a lot in the early days they were just how do i route things and deal with the fact there might be four or five different things on my physical server machine four or five different kubernetes pods who all think they're running a service on port 80. And only one of them could run on port 80 of the underlying machine as far as the external network
+说：这里有一些机器的云 IP 地址，我是否可以在机器上的指定端口（抱歉，是编号端口）上使该服务可用，以便我随后可以路由到它？或者 Ingress 在 Kubernetes 内部运行，它可以直接使用这些对象？随着时间推移，情况变得更好了，现在的 Ingress 以及为它们提供支持的负载均衡器等通常具有更高的感知能力，云厂商能够将内部的 Kubernetes IP 地址暴露给他们的负载均衡器。所以在早期，这些是你不得不担心很多的事情。它们只是：我该如何路由事情，并应对物理服务器机器上可能存在 40th 或四五个不同事物的事实——四五个不同的 Kubernetes Pod，它们都认为自己在 80 端口上运行服务。就外部网络而言，
+
+91
+00:52:09.000 --> 00:52:46.000
+was concerned. Got it. Yeah, that makes sense. Cool. So if somebody wants to, you know, get started, let's say I have, you know, maybe we'll use your example, you know, I have a PHP site and I have a, you know have Postgres or MySQL backend. And I've decided I want to take the plunge, move this onto Kubernetes. How do people, what do you recommend for people? How do they learn Kubernetes and then how do they get started quickly? It pains me to say that I don't know. And I think the answer might be I don't know. And I think the answer might be, I don't know anymore,
+其中只有一个可以在底层机器的 80 端口上运行。明白了。是的，这说得通。酷。所以如果有人想要……开始，比方说我有……也许我们用你的例子，我有（你知道的）一个 PHP 网站，我有一个（你知道的）Postgres 或 MySQL 后端。我决定孤注一掷，把它迁移到 Kubernetes 上。人们该怎么做？你对大家有什么建议？他们如何学习 Kubernetes，然后又如何快速上手？我很痛苦地说我不知道。我想答案可能是：我不知道。我想答案可能是：我不再知道了，
+
+92
+00:52:46.000 --> 00:53:16.000
+because like one of the things that I did in the early days at Google was help contribute to producing courses on how to learn Kubernetes. And they basically start by saying, here's, here's a pod and here's how you run it. And here's how you expose it and so on. And they leave a lot out at the beginning. And at the end. The bit they leave out at the beginning is, how do I actually get my stuff into a container? If I have a PHP application today, I upload the files or I edit them on the server and so on. They are there.
+因为我在 Google 早期做的事情之一就是帮助参与制作关于如何学习 Kubernetes 的课程。它们基本上从以下内容开始：这里有一个 Pod，这是运行它的方法，这是暴露它的方法等等。它们在开始时遗漏了很多东西。在结尾时也遗漏了很多。它们在开始时遗漏的是：我究竟该如何把我的东西放进一个容器里？如果我今天有一个 PHP 应用程序，我会上传文件或者在服务器上编辑它们等等。它们就在那里。
+
+93
+00:53:16.000 --> 00:53:52.000
+They are not, they're on the same machine as the web server, but they don't come packaged with it because I just use the server's package management system to install PHP and Apache or Nginx or whatever. But so then you need to think, well, how am I going to get the engine? And then how am I going to download the files that need to be with that to serve it? And how am I going to group those things together and then deploy them? And so the first thing I would sort of suggest to people is, is this a thing you need to do? Like, are there services like you can use Google Cloud Storage and Amazon S3 and so on to do static hosting really easily?
+它们不是，它们跟网页服务器在同一台机器上，但它们并没有打包在一起，因为我只是用服务器的包管理系统来安装 PHP 和 Apache 或 Nginx 之类的。但是然后你需要考虑，嗯，我要怎么获取这个引擎？然后我怎么下载需要跟它一起运行、用来提供服务的文件？我怎么把这些东西组合在一起，然后部署它们？所以我首先想对大家说的一点是，这真的是你需要做的事情吗？比如，有没有现成的服务，像你可以用 Google Cloud Storage 和 Amazon S3 之类来非常轻松地做静态托管？
+
+94
+00:53:52.000 --> 00:54:35.000
+Hosting files without running a server to do it yourself is largely a solved problem. And there are also functions, containers as a service, solutions and so on that if you just have a container that serves stuff that you want to upload they can handle all the scaling of things for you so one thing i would say is if you have that sort of desire to do a thing and learn it that's great and if you know that your problem is going to scale and need this kind of thing that's great too but the first thing i would say is figure out if you have a kubernetes shaped problem because you don't need to use that for everything can you double click on that so So if there's a service that takes your container, runs it at scale for you, where's the gap there between that and Kubernetes? So there's a value gap. First of all, the vendor who does that will
+不用自己跑服务器来托管文件，这基本上是个已经解决的问题。另外还有各种函数、容器即服务（CaaS）等解决方案，如果你只需要一个容器来托管你想上传的东西，它们可以帮你处理好所有的扩展问题。所以我想说的一点是，如果你有那种想去折腾、去学习某种东西的愿望，那当然很好；如果你知道你的业务会增长、会需要这种技术，那也很棒。但我首先要说的是，先搞清楚你面对的是不是一个非得用 Kubernetes 才能解决的问题，因为你没必要在所有事情上都用它。能深入讲讲这个吗？也就是说，如果有一个服务能接管你的容器、帮你按需自动扩缩容，那它和 Kubernetes 之间到底有什么差距呢？这里存在一个价值差距。首先，提供这种服务的厂商会
+
+95
+00:54:35.000 --> 00:55:08.000
+charge you more for that because they are solving a problem for you. And then you lose a bunch of control. You don't know where it runs you can't necessarily say i would like this container and or this part and that one to run on the same physical node because i value the fact that they are close together as far as latency is concerned and so on so you you get some trade-offs but then it's sort of a convenient it's like heroku versus running on your own server or anything like that it's you do these things. You can operate in a shared environment. You can get some economies of scale, but you lose the control.
+向你收取更多费用，因为他们在帮你解决问题。然后你会失去很多控制权。你不知道它在哪里运行，你也不一定能指定“我希望这个容器和那个容器（或者这个 Pod 和那个 Pod）运行在同一个物理节点上”，因为你在乎它们在延迟等方面靠得很近，诸如此类。所以你会有所权衡，但它比较方便，有点像 Heroku 对比自己管服务器，或者类似的东西。你可以做这些事，可以在共享环境中运行，能获得一些规模效应，但你失去了控制权。
+
+96
+00:55:08.000 --> 00:55:23.000
+So what is that service called on GCP, the one that runs your container? Yeah, Google Cloud Run. Google Cloud Run is sort of like a second version, if you will. There was a thing called Google Cloud Functions, first of all, which was basically upload some code.
+那么 GCP 上那个运行容器的服务叫什么来着？对，Google Cloud Run。Google Cloud Run 有点像是第二代产品（如果你愿意这么称呼的话）。最开始有个东西叫 Google Cloud Functions，基本上就是上传一些代码。
+
+97
+00:55:23.000 --> 00:55:54.000
+And that in itself was, you may remember App Engine. There's been an evolution of sort of upload code and it'll start a server and run it for you to upload code and it will sort of build a container and run it for you somewhere to upload a container and then it will run it for you wherever got it okay and so we have kind of a like set of stones here. So, you know, and again, you're totally right. People should not put everything into Docker and Kubernetes like wrote. Right. I mean, there should be, you know, reason.
+这个本身嘛，你可能还记得 App Engine。这算是一个演进过程：从最早的上传代码、它帮你起个服务器运行，到上传代码、它帮你打包成容器并在某处运行，再到直接上传一个容器、然后它无论在哪都帮你把它跑起来。明白了，好。所以我们这里有一套像垫脚石一样的东西。而且，你知道的，你完全没说错。大家不应该像背教条似地把所有东西都塞进 Docker 和 Kubernetes 里。对吧。我的意思是，这么做总得有理由。
+
+98
+00:55:54.000 --> 00:56:37.000
+But let's let's let's say it's an academic exercise and someone's kind of motivated to do it. And the first step is, you know, get your thing running in Docker and basically stop your web service, Docker run your container and make sure it does basically the same thing. That's maybe, you know, step zero here. And then step one would be run on Google Cloud Run. Yeah, let's back up a little, if you would. When you talk about any kind of migration you quite often talk about lifting and shifting a thing and then improving it to make it work so in our example before we've got a postgres backend and the php web service or something so let's look at
+不过，让我们假设这只是一次学术练习，有人就是很有动力去这么做。第一步是，你知道的，让你的应用在 Docker 里跑起来，基本上就是停掉你的 Web 服务，用 Docker 运行你的容器，确保它做的事情跟原来基本一样。这大概可以是，嗯，这里的第零步。然后第一步就是在 Google Cloud Run 上运行。好的，如果可以的话，我们稍微倒退一点。当你谈到任何类型的迁移时，你经常会听到“搬迁上云（Lift and Shift）”，然后才是改进它以使其更好地工作。所以在我们刚才的例子里，我们有一个 Postgres 后端和一个 PHP Web 服务或者别的什么，所以让我们来看看
+
+99
+00:56:37.000 --> 00:57:15.000
+the database like you can just say all right i'm going to stop my provider my app get install postgres i'm going to shut that down and then i'm going to Docker run Postgres instead. So now all of a sudden I just have to worry about a slightly different life cycle and how I deal with the data and so on. But largely I'm still doing the same thing that I did before. So that's the lift and shift part, especially if you're moving from say on-premises to cloud while you're doing this. Then the next piece is, all right, well, could I just use some sort of magic back-end hosted database service you still end up with a database that's running on a single machine or you're clustering it so it runs on with replicas on many different machines but there are now services that
+数据库。你可以直接说：“好了，我要停掉我的服务商或我的应用，`apt-get install postgres`，我把那个关掉，然后改成用 Docker 运行 Postgres。”所以现在，突然之间，我只需要关心一个略有不同的生命周期，以及我如何处理数据等等。但在很大程度上，我依然在做我之前做的事情。所以这就是“搬迁上云”的部分，特别是当你在这个过程中从本地机房（on-premises）迁移到云端时。接下来的一步是：“好吧，我是不是可以直接用某种神奇的后端托管数据库服务？”但你最终得到的依然是一个运行在单台机器上的数据库，或者你把它做成集群，让它带着副本运行在许多不同的机器上。然而，现在有一些服务
+
+100
+00:57:15.000 --> 00:57:52.000
+basically have magic distributed back-ends and can speak the postgres protocol and so on so you may eventually decide the management of applications on Kubernetes is hard enough, that the management of data where you have to worry about like this is a disk image and it may be big and it may need to be reattached to a different machine if the scheduler says, hey, this node's coming down, I'm going to run somewhere else. We didn't really touch on the sort of redundancy features and high availability and so on. But you need to be able to handle your workload moving around. And that gets more complicated when you're dealing with it, having static attached data. Kubernetes has principles for dealing with this,
+基本上拥有神奇的分布式后端，并且支持 Postgres 协议等等。所以你最终可能会觉得，在 Kubernetes 上管理应用已经够难了，而管理数据则还要担心诸如“这是一个磁盘镜像，它可能很大，而且如果调度器说‘嘿，这个节点要下线了，我要去别的地方跑了’，它可能需要重新挂载到另一台机器上”之类的问题。我们刚才其实没有怎么触及高可用、冗余特性之类的话题。但你需要能够处理你的工作负载四处迁移的情况。当你处理静态挂载的数据时，这就变得更加复杂了。Kubernetes 有处理这种情况的原则，
+
+101
+00:57:52.000 --> 00:58:30.000
+but you may decide again from business reasons that I just don't want to worry about that. If you are running a big enough scale or you want to run on your own premises, you don't have that kind of cloud service and so on. Yes, you will want to investigate that, but I don i don't think there is a simple like there is obviously here's how we do it in a lab environment but there's not one answer and it's it's so frustrating we used to have the same problem people would say to google like i want to store some data like great we've got and again i don't work at google anymore so please excuse me if i get this wrong but we've got big table and spanner and cloud sql and cloud storage and firestore and whatever it's like well you've got to go through a decision tree and say well
+但你可能出于商业原因再次决定——我就是不想操心这个。如果你运行的规模足够大，或者你想在自己的机房里运行，你没有那种云服务等等，是的，你会想要去研究这些。但我认为没有一个简单的……显然，在实验室环境里我们是这么做的，但并没有唯一的答案，这太让人沮丧了。我们过去也有过同样的问题，人们会问谷歌：“我想存点数据”——“太棒了，我们有……”（再次声明，我不在谷歌工作了，如果我说错了请见谅）——我们有 Bigtable、Spanner、Cloud SQL、Cloud Storage、Firestore 等等。这就好像，你得经历一棵决策树，然后问：
+
+102
+00:58:30.000 --> 00:58:53.000
+what kind of data is it how frequently is it going to be accessed how frequently is it going to be rolled and do people want to query it by column or by row and so on you've got to think about these things whereas a lot of people who are just dealing with fun stuff at home it's like well my sql can deal with all of that as long as you've got under 100 megs of data. Don't worry about it. Good problems to have. Yeah, good call out. I think, actually, double click a little bit on that.
+“这是什么类型的数据？访问频率如何？更新频率如何？人们是想按列查询还是按行查询，诸如此类。”你得考虑这些事情。而许多只是在家搞点好玩东西的人则会想：“嗯，只要你的数据在 100 兆以下，MySQL 就能搞定这一切。别担心。”这是幸福的烦恼。对，说得好。我觉得，实际上可以再深入探讨一下这个。
+
+103
+00:58:53.000 --> 00:59:19.000
+You touched on something there with the persistence. I think a Docker container, just for the audience, is read-only. It's not like while Docker is running your container, you can go and modify the container itself. It's like you created this frozen snapshot. And so if you need to persist anything, it has to go somewhere else. And if you're a web server, that's usually a database.
+你刚才在持久化（persistence）方面触及了一点。我想对听众说的是，Docker 容器默认是只读的。并不是说在 Docker 运行你的容器时，你可以跑进去修改容器本身。它就像是你创建了一个冷冻的快照。所以如果你需要持久化任何东西，它必须存放在别的地方。如果你是个网页服务器，那通常是数据库。
+
+104
+00:59:19.000 --> 00:59:46.000
+But if you're a database, that's not an option. So yeah, how does that work? Yeah, so what you how does that work? Yeah. So, so what you said is true enough. It's true in the sense of like a VM image that you instantiate that image is read only. But once you've instantiated it, you've basically copied it to a disk and so on. But the, you, you can attach writable volumes to a running container. And so the way that you handle this in Kubernetes basically is you say, I need to have a certain amount of disk
+但如果你本身就是个数据库，那这就行不通了。所以，是的，这到底是怎么运作的？是的，那么你……这到底是怎么运作的？是的。所以，你刚才说的大体上是对的。从你实例化一个虚拟机镜像的意义上来说是对的，那个镜像是只读的。但一旦你实例化了它，你基本上把它复制到了磁盘上等等。不过，你可以在运行中的容器里挂载可写卷（writable volumes）。所以在 Kubernetes 中处理这个问题的方法，基本上就是说：我需要一定容量的磁盘，
+
+105
+00:59:46.000 --> 01:00:15.000
+and the abstractions that Kubernetes provides say like, I would like to have a 20 gigabyte volume or two terabyte volume or whatever. And then because Kubernetes knows what it's running on, it's configured to run on top of your cloud or your OpenStack or VMware or whatever environment, it calls out to the underlying system and says, give me two terabytes of whatever your flavor of disk is. And it also has storage classes that you can configure to say it can be SSD backed or it
+并且 Kubernetes 提供的抽象层会说：我想要一个 20 GB 的卷，或者 2 TB 的卷，诸如此类。然后，因为 Kubernetes 知道它运行在什么上面——它被配置为运行在你的云、OpenStack、VMware 或其他任何环境之上——它会调用底层系统并说：“给我 2 TB 的磁盘，随便是你们哪种类型的。”它还拥有你可以配置的存储类（storage classes），你可以指定它是基于 SSD 的，
+
+106
+01:00:15.000 --> 01:01:00.000
+can be spinning disk or whatever. And then it will attach that volume to the machine. Because remember underneath this all is still VMs or computers basically. So it does whatever network attachment tool it has, or you might say, I want a local disk. And this all is still vms or computers basically so it does whatever network attachment tool it has or you might say i want a local disk and this thing is like useful for cache data but it's not a network disk and that's there straight away and then it maps that through so that is accessible at whatever path in your container so you just have to say as the person who's written the app write to slash slash data. And then you trust that Kubernetes will have mapped something there to you. How does that work with replicas? Like, let's say I have, you know, yeah, three replicas and they're all going up and coming down at the same time. Like, yeah, how does that work? So what you want to do is to have the data persist,
+还是机械硬盘（spinning disk）之类的。然后它会将该卷挂载到机器上。因为记住，这背后的底层仍然基本上是虚拟机或计算机。所以它会执行它拥有的任何网络挂载工具，或者你也可以说：我想要一块本地磁盘。这东西对于缓存数据之类很有用，但它不是网络磁盘，而且它立刻就能用。然后它会把这个映射过去，这样它在你的容器里的任何路径下都是可访问的。所以作为写出这个应用的人，你只需要说：写入 `/app/data` 或类似路径。然后你信任 Kubernetes 会在那里为你映射好某些东西。这在有副本的情况下是怎么运作的？比如，假设我有，嗯，三个副本，它们都在同时启动和下线。就像，这到底是怎么运作的？所以你想做的是让数据持久化，
+
+107
+01:01:00.000 --> 01:01:37.000
+but you also now have to have, like, it's not just enough to say this data, like you have replicas one, two, and three, and you actually have disks one, two, and three, and they have to stay associated with each other. You can't just move the things around. It'll confuse things. So this was something that got added early on in Kubernetes. So you talked before about replica sets and so on. That's a way of saying, I just want n copies of the same thing running wherever. If you want to say this one is important and it's ID number zero and the next one is ID number one and it's the first replica and so on, there is an object called a stateful set where you can basically say all the things in this have
+但你现在还得处理——仅仅说“这些数据”是不够的，比如你有副本 1、2、3，实际上你还有磁盘 1、2、3，它们必须保持彼此关联。你不能随便把这些东西挪来挪去。这会把事情搞乱。这是 Kubernetes 早期加入的一个功能。你刚才提到了副本集（replica sets）等等。那是一种表达“我只想在某处运行同一东西的 n 个副本”的方式。如果你想说：这个很重要，它是编号 0 号，下一个是编号 1 号，它是第一个副本，依此类推，有一个叫做状态副本集（stateful set）的对象，你基本上可以说：这里的所有东西都有
+
+108
+01:01:37.000 --> 01:02:38.000
+an order and they have disks which will be assigned in that order and if things get moved around this disk and that particular volume will, that pod will always stay together and then we move together and if it is shut down it gets rescheduled somewhere else the system underneath it will say to the disk controller i need that named volume not just any two terabyte volume i need that one because that's the one that's got my data on it uh makes sense yeah that's a huge amount of complexity i mean with docker locally you know you can mount paths on your local machine and that gets you pretty far. But it's the same thing if your machine dies and you're out of luck. With something like Kubernetes, you're protected from that. gone to talk about security as well. There are so many different knobs here that you can turn to do things, but it's a toolkit that you can use. And some people have published some patterns as like, here's a good way to manage databases. You might hear people talk about a thing called an operator
+一个顺序，并且它们拥有按该顺序分配的磁盘。如果事情被重新调度，这个磁盘、那个特定的卷、那个 Pod 将始终保持绑定在一起，然后一起移动。如果它被关闭了，它会在其他地方重新调度，底层的系统会对磁盘控制器说：“我需要那个命名的卷，不只是随便什么 2 TB 的卷，我需要那一个，因为那上面有我的数据。”这说得通。是的，这带来了巨大的复杂度。我的意思是，在本地用 Docker 时，你知道的，你可以把本地机器上的路径挂载进去，这就已经能满足很多需求了。但同样地，如果你的机器挂了，那你也就倒霉了。有了像 Kubernetes 这样的东西，你就得到了保护，免受这种风险。我们接下来还要谈谈安全性。这里有太多不同的旋钮供你调节来做各种事情，但它终究是一个你可以使用的工具包。有些人已经发布了一些模式，比如：“这里有一种管理数据库的好方法。”你可能会听到人们谈论一个叫
+
+109
+01:02:38.000 --> 01:03:15.000
+in Kubernetes. And that basically is a piece of software that knows how to manage another piece of software. And so, for example, it might be, let's talk about Postgres again. You might say, I want a Postgres database. And then you create a custom Kubernetes object that the operator has provided for you and says, give me a database of this type and with this many replicas and so on. And then it knows how to translate that into instructions to create this stateful set and to set up permissions and so on and deal with that. And it also adds application specific things like you might want to know how to back up an application. If you just say, hey, back up to this particular operator, how you back up
+Operator 的东西，它存在于 Kubernetes 中。这基本上是一段知道如何管理另一段软件的软件。所以，举个例子，让我们再次谈谈 Postgres。你可能会说：我想要一个 Postgres 数据库。然后你创建了一个由 Operator 为你提供的自定义 Kubernetes 对象，并说：“给我一个这种类型、带有这么多副本等等的数据库。”然后它就知道如何将其转化为指令，去创建这个状态副本集、设置权限等等并处理好这些。它还添加了特定于应用的功能，比如你可能想知道如何备份一个应用。如果你只是说：“嘿，备份到这个特定的 Operator，”你备份
+
+110
+01:03:15.000 --> 01:03:56.000
+Postgres is different to how you back up MySQL or etcd or anything. So the same kind of patterns, especially around databases, exist and they're out there but then again there are also five or six different people who make postgres operators so you have a a world of choice and there's not always a golden path cool makes sense so is an operator like a macro for kubernetes is that is it the right analogy or is it something else we've talked a lot about controllers in the sense that you upload an object to kubernetes and then the the controller is the thing for a replica set or whatever that takes that object and actually does the thing an operator is the combination of a custom object and a custom controller that relate
+Postgres 的方式跟备份 MySQL、etcd 或其他任何东西的方式是不同的。所以同样类型的模式，尤其是围绕数据库的模式，是存在的，而且就在那里。但话说回来，也有五六家不同的公司在制作 Postgres Operator，所以你拥有丰富的选择，而且并不总只有一条康庄大道。酷，说得通。那么 Operator 就像是 Kubernetes 的宏吗？这个比喻对不对，还是说它是别的什么东西？我们讨论了很多关于控制器的内容，意思是你上传一个对象到 Kubernetes，然后控制器——不管是针对副本集还是别的什么的控制器——就会获取该对象并真正去执行那个操作。而 Operator 则是自定义对象和自定义控制器的结合，它们与某个特定事物相关，
+
+111
+01:03:56.000 --> 01:04:20.000
+to a certain thing so you could sort of think about it as a macro in the the really old sense of word processor macros or so on but it is a convenience thing that's sort of custom to take those things that are not just for, like the built-in controllers operate containers, the operators operate databases or things that you might want to stamp out more than one of a thing. Cool. Yeah, that makes sense.
+所以你可以把它想象成一种宏，就像老式文字处理软件里的宏那样，但它是一个为了特定目的而设的便捷工具，用来处理那些不仅仅是——比如内置的控制器操作的是容器，而 Operator 操作的是数据库或你可能需要批量创建多个实例的东西。酷。是的，这说得通。
+
+112
+01:04:20.000 --> 01:04:47.000
+Oh, you know, another thing that I found useful when I was learning about Kubernetes was the local Kubernetes. There's Minikube and Kind and these other things where you can run sort of like a very lightweight Kubernetes on your own machine. What's your take on those? Is that a good pattern for people to follow when they're getting started? Yeah. Again, there are lots of different ways you can do development kind of work. You can say,
+哦，你知道的，我在学习 Kubernetes 时发现有用的另一件事是本地 Kubernetes。有 Minikube、Kind 和其他一些工具，你可以在自己的机房或机器上运行一种非常轻量级的 Kubernetes。你对这些有什么看法？对于刚开始上手的人来说，这是一个好的实践吗？是的。同样，你可以用很多不同的方式来进行开发工作。你可以说：
+
+113
+01:04:47.000 --> 01:05:27.000
+I'm going to run a local Kubernetes cluster and test everything against that and then do integration somewhere else. Or you can say, I'm going to run a development Kubernetes cluster for my team and every member of my team gets their own slice of that cluster to do work on. It is pretty easy to do a combination of those things. If you are using or paying for the Docker Enterprise or the Docker Desktop product, sorry, they have built-in Kubernetes. You've got Minikube and so on, which are VM-based things that can run locally. They give you effectively a single node Kubernetes environment, but that's enough to test a lot of things and to say, what does it look like? Especially if you're taking an application that wasn't Kubernetes aware and putting it
+我要运行一个本地的 Kubernetes 集成测试集群，针对它测试所有东西，然后再去其他地方做集成。或者你可以说：我要为我的团队运行一个开发用的 Kubernetes 集群，让团队里的每个人都在该集群里分得自己的一小片空间来干活。把这些方法结合起来其实很容易。如果你正在使用或购买了 Docker Enterprise 或 Docker Desktop 产品，抱歉，它们内置了 Kubernetes。你还有 Minikube 之类基于虚拟机并在本地运行的工具。它们为你提供了一个实质上是单节点的 Kubernetes 环境，但这足以测试很多东西，并看看它长什么样。特别是当你把一个原本不具备 Kubernetes 意识的应用放进
+
+114
+01:05:27.000 --> 01:06:01.000
+in this environment. It is a good start. It's not going to deal with the fact that moving from monolith or local application to a distributed system, all of a sudden, things that were function calls that would guarantee to succeed are now RPCs that might fail or might time out or anything like that. There are lots of things that you have to think about that even running Kubernetes locally isn't going to replicate, but it's a useful tool in the tool chest. Yeah, it makes sense. And you touched on this a little bit earlier. I wanted to go back to it, securing Kubernetes. And you have a NAT, so that's providing
+这个环境中时。这是一个很好的开始。它无法解决这样一个事实：从单体应用或本地应用迁移到分布式系统时，突然之间，以前保证成功的函数调用现在变成了可能会失败、可能会超时等等的 RPC。有很多事情是你必须考虑的，即使在本地运行 Kubernetes 也无法完全复制这些问题，但它是工具箱里一个很有用的工具。是的，这说得通。你刚才稍微提了一下，我想回过头来谈谈它：Kubernetes 的安全性。你有一个 NAT，所以它为你提供了一定程度的网络安全性。但是当人们在搭建服务时，有哪些事情是应该放在雷达范围内的呢？是的，分析师和那些赚钱的人，他们总是在吓唬大家。他们说配置错误是导致服务中断的最大原因之一，也是导致安全漏洞等问题的最大原因之一。里面有太多不同的设置和东西
+
+115
+01:06:01.000 --> 01:06:24.000
+you some level of network security. But what are the things that folks should have on their radar when they're standing things up? Yeah, the analysts and the people who make money, they're scaring people. They say that the misconfigurations are one of the biggest causes of outages, one of the biggest causes of security breaches and so on. There are so many different settings and things
+你可以在 Kubernetes 内部进行配置。总的来说，Kubernetes 默认并不是安全的——你可以让某个代理以机器上 root 用户的身份运行，然后由它启动其他东西，所以如果你不作说明，你完全可以在机器上拥有 root 权限。因此，你应该明确指出：我需要以一个低权限的用户来运行这个东西。很多人会说：我才不这么做呢，因为我很懒，而且如果我是 root 用户它就能跑起来，如果不是就不行。每一种软件交付方式其实都是这样的。所以你首先需要做的是，清楚自己在运行什么。而做到这一点的最好方法，就是让软件来帮你做这件事。我现在参与一个叫做
+
+116
+01:06:24.000 --> 01:07:00.000
+you can configure inside kubernetes not generally kubernetes isn't secure by default like you can say run this thing an agent that is root on the machine then starts the thing running so you can be root on the machine if you don't say otherwise so you should say i need to run this thing as a lower security user and a lot of people will say i'm not going to do that because I'm lazy and it works if I'm rude and it doesn't if I'm not. And that's true of every kind of software delivery. So the first thing you need to do is be aware of what you're running. And the best way to be aware of it is to have software do that for you. I work now on an open source project called
+Cubescape 的开源项目，它刚刚加入了 CNCF 沙箱。这是一个基本上能够验证你的集群状态、或者验证你将为集群部署的配置的工具，它会对照一系列不同的规则来检查这些配置。你可以根据外部指南来定义这些规则，比如美国国家安全局（NSA）以及发布各种指南的政府机构所制定的规范，它们会告诉你：以下是如何管理你的 Kubernetes 环境的一些最佳实践。然后你可以进行验证，并说：嘿，这个对我很重要，那个不重要，诸如此类。这解决了配置层面的简单情况。现在我们还要面对另一个现实，那就是我们在运行软件，而这些软件在很大程度上
+
+117
+01:07:00.000 --> 01:07:37.000
+Cubescape, which has just joined the CNCF sandbox. It's a tool that basically can validate the state of your cluster or can validate the things that you're going to deploy for your cluster and lends it against a bunch of different rules, which you can define based on either external guidelines of the NSA and various other government organizations that publish things to say, here are some best practices for how you should manage your Kubernetes environment. And then you can validate and say, hey, that matters to me, that doesn't, and so on. That handles the easy case of the configuration of things. Now we also have to deal with the fact that we are running software, which in large part
+来自第三方源。你通常不会自己去构建一个 Postgres 容器。你是直接拿别人的。而且现在运行软件比以前容易多了。你遇到了以前都有的所有问题，只不过它们被放大了。你打算如何处理漏洞？你打算如何处理这样一个事实：这个特定的——
+
+118
+01:07:37.000 --> 01:07:57.000
+comes from third-party sources. You're not generally building your own Postgres container. You're taking it from someone else. And it's so much easier to run software than it used to be. You now have all the same problems that you had, but they're scaled up. What are you going to do with vulnerabilities? What are you going to do with the fact that this particular,
+保持所有东西的版本一致很容易，但如果你现在遇到了一个 CVE（通用漏洞披露），你可能会有 10,000 个可以被攻击利用的容器。所以你还需要像 Cubescape 那样用于处理漏洞、检查每台机器上有什么、以及什么需要修复的功能。我们目前正在这方面做大量工作，以确保能够告诉大家：突然之间，你对一台机器做任何安全扫描，它都会说一切都崩溃了。这台机器上有 10,000 个漏洞或者别的什么，但事实证明，其中可能只有一小部分是真正需要立即处理的。
+
+119
+01:07:57.000 --> 01:08:30.000
+so it's easy to keep them all at the same version, but if you have a CVE now, you might have 10,000 containers that can be exploited. And so then you also need like cubescapes functionality for handling vulnerabilities and looking at what's on each machine and what needs to be remediated and we're doing a bunch of work at the moment in that to make sure to make it possible to tell people like all of a sudden you do any kind of security scan on a machine and it's going to say everything is broken. There's 10,000 vulnerabilities in this machine or something, but it turns out maybe only a few of them are really important to deal with straight away.
+并且有些漏洞是可被利用的，或者有些漏洞位于经常被执行的代码路径中。所以我们目前正在投入大量精力来研究如何确定你需要修复哪些问题的优先级。因此，你确实需要意识到这一点，这在任何环境中都是如此，但在像 Kubernetes 这样的环境中，通过程序化手段来了解正在发生的事情要容易得多。是的，这说得通。有一件事我想确保自己弄明白了。不知怎么的，我最后启动了一个服务，外面的人居然可以访问到。这根本不是我的本意。我只想让员工访问它。
+
+120
+01:08:30.000 --> 01:09:05.000
+And some of them are exploitable or some of them are in a code path that gets run frequently. So we're putting a lot of work at the moment into how we can prioritize what things you need to fix. So you do need to be aware that's true of any environment, but it's a lot easier to do it programmatically and know what's going on in an environment like Kubernetes. Yeah, that makes sense. One thing that I want to make sure I kind of get this right. Somehow I ended up spinning up a service where people could access it from the outside. And that wasn't my intention at all. I wanted only employees to
+你就是当今那 95% 配置错误的人之一。而且，是的，让我印象深刻的不是我搞砸了 Kubernetes，那是显而易见的。让我印象深刻的是，我公司的 IT 或云平台团队在大概五分钟左右就联系了我。我的意思是，这太不可思议了，就像救护车级别的响应速度。他们说：“嘿，你有这个服务吗？”我当时还想：“对啊，挺骄傲的。”然后他们说：“哦，是这样的，现在任何人都能看到你的网站了。”我说：“哦，好吧，那我们把它关掉吧。”我当时对他们反应的速度感到非常惊叹，
+
+121
+01:09:05.000 --> 01:09:45.000
+access it. You are one of today's 95% misconfigurations. And yeah, the thing that impressed me was not that I messed up Kubernetes, that was very obvious. But the thing that impressed me was that the IT or cloud platform folks at my company reached out to me in maybe like five minutes or something. I mean, it was unbelievable, like ambulance level turnaround time. And they're like, Hey, you have this service? And I was like, Yeah, pretty proud of it. Like, Oh, yeah. So it turns out, you know, anyone can look at your website right now. I was like, Oh, okay, let's let's turn that off. And I was just so impressed with how quickly, you know, so I started asking questions
+所以我开始问问题。他们说他们基本上有这样一个监控系统，它连接到一个数据库，然后有一个触发器，在 Slack 上私信他们，然后他们在 Slack 上私信我。整个过程简直太惊艳了。这也表明了安全性有多么重要，以及如果你用正确的方式去做，它的价值在哪里。我所在的公司 Armo，就在 KubeScape 引擎之上构建了这样一套系统。但我认为让 Kubernetes 在这种环境中更令人担忧的具体原因是，如果你想想过去在机器上部署软件的日子——比如 20 年前你托管某个东西时，如果有人找到了一种在你的机器上获取 Shell 权限的方法，他们不太可能能够影响网络上的任何其他机器。然而今天，如果你在一台运行 Kubernetes 的机器上，要说“好，我拿下了这台机器”，那可太容易了。很有可能在这台机器上的某个地方，有一些网络凭证，我可以用来做一些事情，比如用来调用我的云服务商去拉取一个对象什么的。如果这些凭证的权限范围没有被恰当地限定，那么我就可以指示云服务商启动更多的机器并开始挖比特币。或者，如果 Kubernetes API 对象没有正确配置，我就可以说：连接到
+
+122
+01:09:45.000 --> 01:10:27.000
+and they were saying that they have, you know, basically they have this monitoring system and it goes to this database and then there's a trigger and, you know, DM them on Slack and then they DM me on Slack. The thing was just phenomenal. And it also, it kind of showed how important security is and how you could do it right and with the value there. My company, Armo, builds such a system on top of the KubeScape engine. But the specific things that I think make Kubernetes more of a concern in this kind of environment is if you think about deploying your software on machines in the old days, like if someone had found a way to get a shell on your machine 20 years ago when you were
+Kubernetes 服务器，告诉它开始运行 10,000 个 Pod 来挖比特币。有太多方法可以让你的——我本来只是遭遇了一个简单的漏洞、别人能读到我的网页服务器，结果现在演变成了一种完全不同类型的问题，因为我们拥有了这种自动化。正因为这里存在着所有的自动化，才意味着你必须比以往更加关注这些环境的安全性，在过去它们没这么让人操心时可不是这样的。是的。没错。这完全说得通。是的。我的意思是，这甚至是一种我压根没想过的攻击方式。但你是对的。我的意思是，紧接着你会发现，
+
+123
+01:10:27.000 --> 01:11:00.000
+hosting something, it's unlikely they would be able to influence any other machine on the network. Whereas today, if you're in a machine that runs Kubernetes, it's very easy to say, right, I've got onto this machine. Chances are that somewhere on this machine, there's some network credentials, which I'm able to use to, like I use to call into my cloud provider to pull an object or something. If those credentials are not adequately scoped, then I can instruct the cloud provider to spin up more machines and start mining Bitcoin. Or if the Kubernetes API objects are not correctly configured, I can say, connect to the
+你每个月在云服务上花掉 10 万美金左右，而代价是让别人挖到了一堆比特币。总是比特币。不是门罗币（Monero）或其他别的什么。总是比特币。我认为就我而言，门罗币早就该给比特币让位了。
+
+124
+01:11:00.000 --> 01:11:29.000
+Kubernetes server, tell it to start running 10,000 pods to start mining Bitcoin. There are so many ways that your, I have a simple breach and someone can read my web server, can now turn into some other kind of problem because we have this automation. And it's the fact all this automation is here that means you have to pay more attention to securing these environments than you did when they were less a concern. Yep. Yep. That totally makes sense. Yeah. I mean, that's an attack that I hadn't even thought about. But you're right. I mean, next thing you know,
+对，那是仅有的另一种。哦不，还有以太坊。我对那个了解没那么多。这真是太遗憾了，因为加密货币本来有非常实际的应用场景，并且可以让银行服务惠及那么多
+
+125
+01:11:29.000 --> 01:11:45.000
+you're spending like 100K a month or something on cloud so that someone else can get a bunch of Bitcoin. It's always Bitcoin. Not Monero or anything. It's always Bitcoin. I think that Monero should diet Bitcoin as far as I'm concerned.
+本来无法获得银行服务的人。但我们最终只是烧掉了大把大把的电力，推高了显卡的价格，并且助长了犯罪。监管机构很难透过所有这些负面现象看到其中的积极意义。我不知道我们该如何将这两者剥离开来，并从中创造出好的结果。是的。我觉得我现在可以把这话讲出来了。这就像是尸体已经凉得足够久了，我可以说了：我一直觉得，你知道的，Web 2.0 太棒了。它有所有这些互动媒体，所有这些酷炫的东西，你知道的，你会看到地下
+
+126
+01:11:45.000 --> 01:11:58.000
+Yeah, that's the only other one. Oh no, there's Ethereum. I don't know as much about that. It's such a shame because the cryptocurrency has such practical use cases and can make banking available to so many people
+的人们从地下走出来，变得病毒式传播等等。然后在我看来，金钱某种程度上把它给毁了。现在的情况变成了：哦，你知道的，我必须把我的节目标题全部改成大写字母，这样才能获得更多点击；或者，哦，我需要——我必须在这个平台或那个平台上。你经常会收到这样的邮件：你需要去 TikTok，你知道的。所以它变得非常商业化。因此我一直觉得 Web 3.0 就是：让我们把毁了 Web 2.0 的那个东西拿过来，然后从那儿开始。让我们围绕它建一座城堡。这就好像：让我们再次从巨额资金开始。我可以把另一个播客的时间全用来讲我对
+
+127
+01:11:58.000 --> 01:12:31.000
+for whom it was not otherwise available. But we've just ended up burning a whole bunch of electricity, pushing up the price of graphics cards and enabling crime. And it's hard for regulators to see past all of those things to the good in this. And I don't know how we can separate those two things and make a good out of it. Yeah. I feel like I can say this now. It's like the body has been cold long enough for me to say this, but I always felt like, you know, web 2.0 is awesome. It's like all this interactive media, all this cool stuff, you know, and you're seeing like underground
+这个的看法等等，但是出于对你的听众的尊重，此时此刻我只想做一个表情——那个“天哪，我是个 YouTube 封面”的表情，虽然他们看不见。这就是广播的魅力，这也是播客的麻烦所在。 yep， yep。不过，嗯，是的，那个挖比特币的梗太搞笑了。不过这是个悲剧，它可能会变得极其昂贵。是的，它让人们从网络犯罪中获利的方式变得前所未有，这在多年前是并不太突出的。嗯，我本来只是想说，站在硬币的另一面，当有人收到一张十万美元的账单时会发生什么？我的意思是，我不知道你方不方便谈论这个，但我一直很好奇，你知道的，某个人——比如像我们这样的人，手头并没有
+
+128
+01:12:31.000 --> 01:13:12.000
+people coming out from the underground and going viral and everything. And then in my opinion, money kind of ruined it. And now it's like, oh, you know, I have to make my show title in all caps so that I get more clicks or, oh, I need to like, I have to be on this platform or that platform. You were constantly getting emails like, you need to be on TikTok, you know. And so it's just become very commercial. And so I always thought Web 3.0 was like, let's take the thing that ruined Web 2.0 and let's start there. Let's like build a castle around it it's like let's start with the big money again i could spend i could fill another podcast with opinions
+十万美元现金，然后谷歌突然跑来催收——如果可以的话，这种情况实际会怎么处理？再次声明，我不在谷歌工作。我曾在那里工作过一段时间。我没有明确参与过任何类似的事情，但我见过很多关于云服务商的故事——不仅仅是谷歌，所有的云服务商基本上都说：如果这是一个诚实的失误，或者如果能追溯到一个 Bug、或者某种本不应该发生的事情，并且被足够快地检测到，那么在很多情况下，厂商会直接把这笔账单勾销（write off）。这通常也是一种明智的成本考量。如果你作为个人发现有人利用了你并做了某种特定的事情，而你觉得自己并没有做错什么，并且你在互联网上有足够大的
+
+129
+01:13:12.000 --> 01:13:54.000
+on this and so on but uh in deference to your listeners at this point i'm just going to make the the face the oh my god i'm a youtube thumbnail face which they won't be able to see great radio here that's the trouble with podcasts yep yep but uh yeah that um yeah the mining bitcoin thing is hilarious it's a tragedy though it can get extremely expensive yeah it's made it possible to profit from cybercrime in a way that wasn't hugely relevant years ago well i was just gonna say on the other side of the fence what happens when someone gets a hundred thousand dollar bill i mean i don't know if you're on liberty to talk about this but i always was curious you know someone someone gets exploited in this way and it's someone you know like us we don't have a
+喇叭（影响力），你大概可以制造足够大的声量，让大家对这家厂商望而却步，以至于厂商会说：“这笔损失我自己吞了。”这说得通。我敢打赌他们也拥有某种模式识别机制。所以如果他们看到 10,000 个 Pod 在挖比特币，他们大概甚至可以主动联系你，告诉你有什么可疑的事情正在发生。我的意思是，我不会把这作为你的安全计划，但他们可能确实有类似的东西。是的。而且再次声明，有些区别可能适用于谷歌。我不是 100% 确定，但你并不一定希望云服务商知道你在虚拟机里运行着什么。
+
+130
+01:13:54.000 --> 01:14:32.000
+hundred thousand dollars sitting around and then google comes like trying to collect like what actually happens there if you could say again i don't at Google. I did for some time. I wasn't involved in anything like this explicitly, but I have seen a lot of stories with cloud vendors, not just Google, but all of them basically say, if it's an honest mistake or if there's something that could be tracked down to a bug or something that probably shouldn't have happened and it was detected soon enough, then in a lot of cases, the vendor will write the bill off. And that's generally a good calculation as well. If you as an individual find that someone has exploited you and done a certain thing, and you don't feel you did anything wrong, and you have a big enough
+这里存在一个信任边界等等。你可以做任何你想做的事，并且确信别人没有在窥探。有很多理由（有好的也有坏的）来解释为什么会这样。但总的来说，如果你在云上运行某些东西，服务商知道你消耗了多少 CPU，但他们不应该看到里面运行的是什么——当然，除非你做了某些事情，比如安装了一个导出日志的代理之类的，而这是你主动选择去做的。所以某些信息是可用的，他们可以使用这些信息。而且，再次强调，也许通过模式识别——如果节点突然开始向外发送它们以前没有发送过的网络连接。那是
+
+131
+01:14:32.000 --> 01:15:11.000
+megaphone on the internet, you can probably make enough noise to put people off that vendor, such that the vendor will say, I'm going to eat that loss myself. That makes sense. I bet they also have like certain pattern recognition things. So if they see, you know, 10,000 pods mining Bitcoin, they probably can even reach out and tell you something fishy is going on. I mean, I wouldn't count on it. I wouldn't make that your security plan, but they probably have something like that. Yeah. And again, there are some distinctions that may have applied at Google. I'm not 100% sure, but you don't necessarily want a vendor to know what you are running in your VMs.
+你可能不一定希望服务商去查看这些连接里的内容，但他们可以给你发个 PING，说：“嘿，你的机器突然开始喷射出以前没有过的流量了。这是你应该去检查一下的事情。”所以答案就在中间某个地方。你自己确实必须承担一些责任。是的，这说得通。所以我们聊了 Armo 和 Cubescape，大家绝对应该去看看。那么就 Armo 而言，产品就在那里，你知道的，我们有很多用户是职场的专业人士、Kubernetes 的使用者，我认为他们能从中获得巨大的受益。我们还有很多
+
+132
+01:15:11.000 --> 01:15:45.000
+There is a trust boundary and so on. You can do whatever and know that the people aren't looking in it. There are lots of reasons, good and bad, why that is the case. But in general, if you're running something on a cloud, the vendor knows how much cpu you're using but they shouldn't be able to see what is running unless of course you do something like install an agent which exports logs or whatever and you make a choice to do that so some information is available and they can use that and again pattern recognition perhaps if all of a sudden nodes start saying spending out sending out network connections that they weren't before. That is
+正在学习的学生，他们想要——对他们来说，这就像是“2023 工作模拟器”。那么 Armo 有没有免费层（free tier）呢？你知道的，有哪些选项是提供给他们的呢？是的，所以 Cubescape 是一个开源项目。它是你在集群内部运行的工具，它会生成报告等等，这完全是开源的。我们确实看到很多正在学习的人、学生等等来到这里，想要参与进来，并对这个项目进行黑客式的修改，这太棒了。而后端服务——也就是把事情可视化、向你展示昨天、今天和明天的状态等等的那部分——也就是 Armo 平台，它对于最多 10 个工作节点（worker nodes）是免费的，
+
+133
+01:15:45.000 --> 01:16:20.000
+something that you may not necessarily want the provider to be looking at what is in those connections, but they could ping you and say, Hey, all of a sudden your machines are spraying out traffic that they weren't before. That's the thing you should go and look at. So somewhere in the middle is the answer. You do have to have some responsibility there yourself. Yeah, that makes sense. So we talked about Armo and, you know, CubeScape. So definitely folks should check this out. So in terms of Armo, the product is there, you know, we do have a lot of folks who are working professionals who are, who are, who are Kubernetes users, who I think could benefit greatly from this. We also have a lot
+而且永远免费。所以如果你是在小规模运行、或者在进行实验等等，我们非常乐意你连接到那里进行可视化并查看发生了什么。它还可以让你查看集群内部访问控制的配置等等。然后很显然，随着你的规模越来越大，我们会跟你谈谈定价方案。但总的来说，Cubescape 项目
+
+134
+01:16:20.000 --> 01:16:59.000
+of students who are learning and they want to, you know, for them, it's like job simulator 2023. And so is there like a free tier at Armo? You know, what is the what are some of the options for them? Yeah, so so kubescape is an open source project. It's the thing you run inside your cluster, and it generates reports and so on. And that's entirely open source. We do see a lot of people learning and students and so on coming and wanting to get involved and so on and that's entirely open source we do see a lot of people learning and students and so on coming and wanting to get involved and hack on the project as well which is fantastic the back-end service which visualizes things and shows you here's the state as it was yesterday and today and tomorrow and so on that is the the ammo platform that is free for up to 10 worker nodes
+正试图构建安全工具链，我们希望成为一个端到端的平台，帮助你保护 Kubernetes 环境的安全。我们在 Armo 看到有很多安全厂商在这个领域做事情，但那真的只是一种事后的附加想法，它不是开源的，也不是核心业务。而我们所做的不同之处在于，我们致力于将我们拥有的所有东西都开源。我们希望这是一个被广泛采用的平台，就像当今 Kubernetes 生态系统的许多其他插件一样。如果我们发展到一个阶段，证明你仅仅运行开源工具就已经足够快乐了，我们有很多人是在他们的 CI 管道中、或者作为 GitHub Action 之类的在运行它。他们从未接触过
+
+135
+01:16:59.000 --> 01:17:23.000
+and that's free forever so if you're running at a small scale or experimenting or so on you're you we're more than happy for you to connect up there and visualize and see what's going on. And it also lets you see the configurations of access control inside your clusters and so on. And then obviously the bigger you get and so on, we'll talk to you about pricing plans. But overall, the Cubescape project
+你可以选择付费购买的服务。那也很棒。我们真的希望这个工具能够对所有人开放和易用。酷。这说得通。那么这家公司本身呢？有什么有趣的事情能让 Armo 在众多工作地点中脱颖而出吗？可以是特定的团队远足活动、差旅政策、或者是你们的吉祥物——是什么让你们与众不同？嗯……几乎所有人都住在以色列，而我在新西兰。我想这某种程度上已经足够让我们与众不同了。是的，等等，那是怎么发生的？怎么发生的呢？我本来是打算回英国的，但家庭情况使得我在今年至少目前不太可能回去了。不过总的来说，这是一个打造远程公司的情况，这某种程度上
+
+136
+01:17:23.000 --> 01:18:02.000
+is trying to build out security tooling and we want to be a sort of an end-to-end platform that helps you secure your kubernetes environments and we saw at armo the number of security vendors were doing stuff in this space but it was really just sort of an afterthought it wasn't open source or it wasn't the key business and the difference we're doing is we're committed to making everything we have open source. We want this to be a platform that's adopted just like many other add-ons for the Kubernetes ecosystem are today. And if we get to a point where it turns out that you're happy enough running just the open source things, we get a lot of people who are running it in their CI pipelines or as a GitHub action or something. They never touch
+是一种证明方式——他们拥有核心的人员。每当你把以色列和网络安全放在同一个句子中时，每个人脑海中都会形成自己的看法，但该地区在培训人们成为这个领域的专家方面做了大量工作，然后很显然，还要与 Kubernetes 生态系统进行交互。就像我一样，我懂安全，但这并不是我的专业背景。
+
+137
+01:18:02.000 --> 01:18:50.000
+the service that you can choose to pay for. And that's great too. We really want this to be accessible and available to everybody. Cool. That makes sense. And what about the company? What is something kind of interesting that kind of sets Armo apart from other places to work? It could be certain outings you do, it could be a travel policy, be your mascot you know what is something that sets you apart yeah well um almost everyone is in israel and i'm in new zealand i think that sort of sets us apart enough to some degree yeah is that uh wait how did that happen how how that happened was uh i did have an intention to be back in england and a family situation has sort of made that unlikely at this point this year at least but but overall it was a case that they're building a remote company and this is sort of
+这是你可以选择付费的服务。这也是极好的。我们非常希望这个工具能够让每个人都能接触到并使用。太棒了。这说得通。那公司本身呢？Armo 有什么独特之处，让它区别于其他工作场所？可以是你参加的某些活动，可以是差旅政策，也可以是你的吉祥物，你知道有什么特别之处吗？是的，嗯……几乎所有人都以色列，而我在新西兰，我觉得这在某种程度上已经足够让我们与众不同了。是的，那是……等等，这是怎么发生的？发生这种情况是因为……我本来打算回英国的，但家庭情况使得目前（至少今年）这变得不太可能，但总的来说，这是因为他们正在构建一家远程公司，这可以说是
+
+138
+01:18:50.000 --> 01:19:13.000
+a way to to demonstrate that like they have had a core of people and everyone when you say Israel and cyber security in the same sentence everyone sort of builds their own opinion in their head but there's a lot of work gone on in terms of training people up in that part of the world to, to be experts in this space, but then obviously interacting with the Kubernetes ecosystem. Like I have, I understand security, but it wasn't my professional background.
+一种展示方式，就像他们核心团队的成员一样，当你把以色列和网络安全放在同一个句子里时，每个人心里都会有自己的看法，但在世界上的那个地区，为了把人们培养成这个领域的专家，已经做了大量的工作，然后显而易见的就是与 Kubernetes 生态系统进行交互。就像我一样，我懂安全，但它不是我的专业背景。
+
+139
+01:19:13.000 --> 01:19:49.000
+My background was in Kubernetes and my background was in DevOps and so on. And those are the people that they're targeting. And I was the best person to help them with that. And there wasn't a problem to them that I was going to be working remotely and attending events and doing online stuff and so on. And they've been really great about that. Cool. And so we do actually have a lot of listeners in Israel, which is awesome. But for folks who aren't in Israel, that's right. For folks who aren't in Israel, are there more remote opportunities? You know, is there a careers page that they should check out and what does that look like and also is there are there internships for students and what does
+我的背景是Kubernetes、DevOps等等。而这正是他们的目标受众。我是帮助他们完成这一任务的最佳人选。对我来说，远程工作、参加活动以及从事线上工作等都不是问题。他们在这方面做得真的很好。太棒了。因此，我们在以色列确实有很多听众，这太棒了。但是对于不在以色列的朋友们，没错。对于不在以色列的朋友，是否还有更多的远程机会呢？你知道，是否有一个他们应该查看的职业页面，那是什么样的，还有，是否有针对学生的实习机会，以及
+
+140
+01:19:49.000 --> 01:20:34.000
+that look like the kind of two separate questions there is a careers page i am hiring at the moment and may still be at the time you're listening to this podcast but i don't know whether or not the job description is up but i'm looking for another developer advocate or someone for our team who's writing and telling people about interesting stuff in the Kubernetes ecosystem. So find me in the show notes and ping me if that's something that you're interested in. In terms of internships and so on, we have been as a CNCF project participating in a thing called the LFX Mentorship Project, which is the Linux Foundation, basically pay three or four times a year a stipend to a bunch of students around the world to contribute to open source projects. It's a little bit like the Google Summer of Code, if you've heard of that. We're looking at possibly
+那是什么样的？这是一个包含两个部分的问题，确实有一个职业页面。我目前正在招聘，在你听到这个播客的时候可能还在招，但我不知道职位描述是否还挂在网上。不过我在寻找另一个开发者布道者，或者我们团队中能够写作并向人们介绍Kubernetes生态系统中趣事的人。所以，如果你对此感兴趣，请在节目大纲中找到我并联系我。至于实习等方面，作为一个CNCF项目，我们一直参与一项名为LFX导师计划的项目。Linux Foundation基本上每年会向全球的一批学生支付三到四次津贴，让他们为开源项目做贡献。这有点像Google的开源夏令营，如果你听说过的话。我们也在考虑可能
+
+141
+01:20:34.000 --> 01:21:00.000
+participating in that too. But that's a way we basically give a chance to people to get involved in a paid capacity in an open source project and build up their skills working with the community, working with the maintainers of a project and so on. We are currently working with three different mentees and we're getting some really good results and hopefully we're helping them in their journey as they work towards becoming professional programmers. Very cool. That is awesome.
+参与其中。但这是一种让我们基本上有机会让人们以带薪身份参与开源项目，并培养他们与社区合作、与项目维护者合作等技能的方法。我们目前正与三位不同的实习生合作，并且取得了非常好的成果，希望我们能在他们成为专业程序员的旅程中提供帮助。太棒了。这太棒了。
+
+142
+01:21:00.000 --> 01:21:57.000
+Yeah. I mean, I'm fascinated with Kubernetes and security. I think that, you know, that incident that happened to me and the fact that, you know, they turned it around so quickly at my company showed me, you know, how dangerous it is, also how important it is. I think it's a great area. Folks out there, if you are graduating soon, or if you're looking for internships, other opportunities, definitely check out the show notes. We'll have all the details in that. And yeah, I just wanted to say thank you, Craig. This is an amazing interview. You kind of covered really Kubernetes start to finish. We talked about how people can get started. There is a lot of complexity. We didn't have time to dive into like Helm and all these other things, but there's a rabbit hole there. And maybe there's a future show there. But we gave folks the right ingredients to get started. And I can tell you, I kind of wish these tools were there. I always did distributed machine learning. My whole PhD was on that. And
+是的。我的意思是，我对Kubernetes和安全性非常着迷。我认为，你知道，发生在我身上的那起事件，以及他们在我公司迅速扭转局面的事实，向我展示了，你知道，它是多么危险，同时也说明了它是多么重要。我认为这是一个很好的领域。各位，如果你们即将毕业，或者正在寻找实习机会和其他机会，一定要查看节目大纲。我们将在其中提供所有详细信息。是的，我只是想对克雷格说谢谢。这是一次非常棒的采访。你基本上从头到尾全面涵盖了Kubernetes。我们讨论了人们如何开始。这里面有很多复杂性。我们没有时间深入探讨Helm和所有这些其他东西，但那是一个无底洞。也许以后还会有节目涉及。但我们为人们提供了入门所需的正确要素。我可以告诉你，我真希望当时就有这些工具。我以前一直从事分布式机器学习。我的整个博士学位都是关于这个的，而且
+
+143
+01:21:57.000 --> 01:22:39.000
+I really wish that these tools were there because I was manually copying C++ binaries around and using Slurm and MPI and all these painful things. Unzipping jar files. Unzipping jar files, yep. So definitely, I think it behooves people to really learn Docker and Kubernetes as early as possible. Just like it behooves people to learn source control. And so, yeah, definitely, if you have any questions about anything you heard, don't hesitate to email us, programmingthrowdown at gmail.com. We can also kind of pass your question around. Otherwise, you could also reach Craig on Twitter.
+我真的很希望当时有这些工具，因为我当时在手动复制C++二进制文件，使用Slurm、MPI和所有这些令人痛苦的事情。解压jar文件。解压jar文件，是的。所以毫无疑问，我认为人们越早学习Docker和Kubernetes越好。就像人们有必要学习版本控制一样。所以，是的，如果你对听到的任何内容有任何疑问，请随时给我们发电子邮件：programmingthrowdown@gmail.com。我们也可以帮你转发问题。或者，你也可以在Twitter上联系克雷格。
+
+144
+01:22:39.000 --> 01:23:00.000
+You can follow Craig and see what he's talking about on Twitter, twitter.com slash Craigbox. And we'll put all of that in the show notes. I used to host a very popular podcast on Kubernetes. And since leaving Google, I have pivoted to writing a mediocre newsletter, which has my thoughts on the Kubernetes ecosystem every now and then. And until such time as I am more permanently
+你可以在Twitter上关注克雷格，看看他在聊些什么，网址是twitter.com/Craigbox。我们会把所有这些都放在节目大纲里。我过去曾主持过一个非常受欢迎的关于Kubernetes的播客。自从离开Google后，我转向写一份平庸的时事通讯，偶尔发表我对Kubernetes生态系统的看法。直到我更永久地
+
+145
+01:23:00.000 --> 01:23:34.000
+behind the mic again, I will encourage people to catch up with the Kubernetes ecosystem and news in the industry by reading the substack, which you'll find a link to on my Twitter page as well. Great. And we'll put that link on the show notes as well to save people a click if they want to go straight there. One last kind of administrative thing. Ironically, we are actually uploading all the episodes to YouTube. I talked about this on my Twitter. The reason we're doing it is to get captions. YouTube is amazing at giving captions in a zillion different languages.
+再次坐在麦克风前之前，我将鼓励大家通过阅读Substack来了解Kubernetes生态系统和行业新闻，你也可以在我的Twitter页面上找到它的链接。太棒了。我们也会把这个链接放在节目大纲中，如果大家想直接去的话，可以省得点一下。最后还有一个行政方面的事情。具有讽刺意味的是，我们实际上正在将所有剧集上传到YouTube。我在Twitter上谈过这件事。我们这样做的原因是获取字幕。YouTube在提供各种语言的字幕方面表现得非常惊人。
+
+146
+01:23:34.000 --> 01:24:05.000
+I'm constantly getting emails, you know, hey, do you have captions? Do you have captions in Russian? Do you have captions in Spanish? And Transistor, which is our hosting company, recently offered, or maybe they've always had it, but I recently found the YouTube integration button. I hit the big red button. Now all the episodes are up there on YouTube. Definitely give it a listen, especially if you're wanting to read what we're talking about. Thank you again, Craig. It's an awesome time. I really appreciate you coming on the show and I really look forward to seeing how things go at Armo.
+我经常收到电子邮件，嘿，你们有字幕吗？你们有俄语字幕吗？你们有西班牙语字幕吗？我们的托管公司Transistor最近提供了一个YouTube集成按钮（也许他们一直都有，但我最近才发现）。我点击了那个巨大的红色按钮。现在所有的剧集都已经在YouTube上了。一定要去听听，特别是如果你想阅读我们谈论的内容的话。再次感谢克雷格。这是一段美妙的时光。非常感谢你能来参加节目，我非常期待看到Argo的发展。
+
+147
+01:24:05.000 --> 01:24:10.000
+So thank you so much. Thank you both again very much. It's been an absolute pleasure. Music by Eric Barndaller. Programming Throwdown is distributed under a Creative Commons Attribution Sharealike 2.0 license. You're free to share, copy, distribute, transmit the work, to remix, adapt the work, but you must provide attribution to Patrick and I and sharealike in kind. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+非常感谢你们。再次非常感谢两位于此。这绝对是一次荣幸。音乐由Eric Barndaller制作。Programming Throwdown在知识共享署名-相同方式共享2.0协议下发布。你可以自由分享、复制、分发、传输作品，进行混音和改编，但你必须注明我和帕特里克的署名，并以相同方式共享。本期节目目前还没有评论。点击文稿中的任意句子即可发表评论。

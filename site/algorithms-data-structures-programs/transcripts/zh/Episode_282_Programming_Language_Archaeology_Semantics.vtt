@@ -1,0 +1,321 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:12.000
+Well, so the archaeology part is not necessarily like just the observation that this is surprising, but the question of why is this the case, right? Why are bitwise operations lower precedence than relational operations, right? And so I did some archaeology. You know, I look back and usually when we're talking about C++, usually we have to look back to the languages B and BCPL. Welcome to ADSP, the podcast, episode 282 recorded on March 30th, 2026. My name is Connor, and today with my co-host, Ben, we chat about programming, language, archaeology, semantics, and more. I want to go back to talking about something you mentioned earlier, which is programming language archaeology, which is fascinating, right? Not just from the point of view of, like, algorithmic and functional influences, but I think just from a point of view of, like, syntax, actually.
+考古学这部分其实不单单是去观察“这很令人惊讶”，而是去探究“为什么会这样”，对吧？为什么位运算的优先级会比关系运算低，对吧？所以我做了一些考古工作。你知道的，我回顾了一下，通常当我们谈论C++时，我们通常得追溯到B语言和BCPL语言。欢迎来到第282期ADSP播客，本期节目于2026年3月30日录制。我是康纳，今天我和我的联合主持人本一起聊聊编程、语言考古学、语义学等等。我想回到你之前提到的话题，也就是编程语言考古学，这真的很迷人，对吧？不仅仅是从算法和函数影响的角度，我认为单单从语法角度来看也是如此。
+
+2
+00:01:12.000 --> 00:02:18.000
+like how you know we say things like oh it's a C style syntax language and everyone kind of knows what that means right but there's tons of little things that go into that somebody in my meetup asked the other day you know what and this perennial this perennial sort of stumbling block which is why are the the bitwise operators such low precedence bitwise being like the single pipeway in C versus the single yeah single ampersand for and single pipe for bitwise or and X or is the carrot right what and those are I think I'm right in saying lower precedents than relational operators in C and in C plus plus that sounds right and and that is surprising to most people when they first when they first meet it certainly I think it's surprising and it is sort of a continual seems like a whart in the language, right? It seems like a stumbling block that you always have the perens around.
+就像你知道的，我们有时会说“哦，这是一种C风格的语法语言”，每个人大概都知道这意味着什么，对吧？但其中包含着海量的小细节。我的一位 meetup 朋友前几天问我，你知道吗？还有这个老生常谈的绊脚石，那就是为什么位运算符的优先级会这么低？在C语言中，位运算符指的是单竖线，而在C++中也是单竖线。好吧，就是用于按位或的单竖线，以及用于按位与的单和号，而按位异或则是那个尖号，对吧？这些运算符——如果我没记错的话——在C和C++中，它们的优先级比关系运算符还要低。听起来确实如此。对于初次接触它们的人来说，这大多会感到意外。我当然觉得这很意外，而且它在语言中似乎是一个持续存在的“瑕疵”，对吧？它似乎成了一个你总得加上括号的绊脚石。
+
+3
+00:02:18.000 --> 00:02:42.000
+Because you think of bitwise being very low level, you might think of it binding very tightly as an operation, right? I guess. I mean, honestly, the way that I use those are typically when they're being overloaded. Like 100%. The most often I've used one of those is in ranges because they overload them. But every once in a while, I guess, I used to at a certain point of time,
+因为你觉得位运算是非常底层的，你可能会认为它作为一种运算会结合得非常紧密，对吧？我猜是的。说实话，我通常只在这些运算符被重载时才会使用它们。百分之百是这样。我最常使用它们的地方是在 ranges（区间库）里，因为它们重载了这些运算符。但偶尔，我想，在某种特定的时期里，
+
+4
+00:02:42.000 --> 00:03:15.000
+the, you know, checking for odd and even kind of thing. But then compilers now optimize to that anyways, right? So you can just do mod two and you can be pretty confident that it's going to convert to the bitwise version. You don't need to pull the bit tricks for those kind of simple things. Strength reduction has been a thing in optimizing compilers for decades. But I mean, you would, you use this stuff, I imagine, much, much more than I do. So I guess, yeah, I'll take your word that it's surprising.
+你知道的，会用它们来检查奇偶性。但现在的编译器无论如何都会对此进行优化，对吧？所以你直接用取模2就行了，而且你可以相当确信它会被转换为位运算的版本。对于这种简单的操作，你不需要搬出位运算的把戏。在优化编译器中，强度削减（strength reduction）技术已经存在了几十年。不过我的意思是，相比我而言，你想象中肯定会更多、更多地使用这些东西。所以我想，是的，我暂且相信你的说法，这确实很令人意外。
+
+5
+00:03:15.000 --> 00:03:59.000
+Well, so the archaeology part is not necessarily like just the observation that this is surprising, but the question of why is this the case, right? Why are bitwise operations lower precedence than relational operations, right? And so to answer that question, now I should say that I don't know the, you know, this is not fact what I'm about to say. but this is plausible based on what I've looked into, right? And so I did some archaeology. You know, I look back and usually, when we're talking about C++, usually we have to look back to the languages B and BCPL.
+考古学这部分其实不单单是去观察“这很令人惊讶”，而是去探究“为什么会这样”，对吧？为什么位运算的优先级会比关系运算低，对吧？为了回答这个问题——现在我得说，我并不清楚……我接下来要说的话并非板上钉钉的事实，但这基于我的研究所得是合情合理的，对吧？所以我做了一些考古工作。你知道的，我回顾了一下，通常当我们谈论C++时，我们通常得追溯到B语言和BCPL语言。
+
+6
+00:03:59.000 --> 00:04:37.000
+And I think in those languages, I think in BCPL and in languages of that time, bitwise operations were not represented in the language typically. because remember this was before, this was before types, as we know them today. This was before machines with 8 bits or 16 bits or power of 2 bits. There were a lot of 36-bit machines in that time. And these were languages which treated, in the case of BCPL, I think, memory cells as it acted on memory cells, right?
+我想在那些语言中——我认为在BCPL以及那个时代的语言中，语言里通常并没有表示位运算的东西。因为记住，这是在……这在我们今天所知的“类型”出现之前。这是在拥有8位、16位或2的幂次位数的机器出现之前。那个时代有很多36位的机器。在BCPL的例子中，这些语言把内存单元当作……它们是对内存单元进行操作的，对吧？
+
+7
+00:04:37.000 --> 00:04:59.000
+It was not the idea of an int or a float. There was, here's your memory cell. It's got data in it. That's your one type, sort of thing. And so these languages had arithmetic operations. They had Boolean operations, but they hadn't yet distinguished between Boolean operations and bitwise operations.
+当时并没有整型（int）或浮点型（float）的概念。有的只是：“给你一个内存单元，里面存着数据。”这可以说是你唯一的类型。所以这些语言拥有算术运算，它们有布尔运算，但它们当时还没有区分布尔运算和位运算。
+
+8
+00:04:59.000 --> 00:05:21.000
+Okay. Right? There was no distinction between double ampersand for a Boolean and and single ampersand for a bitwise end. Because back in those days, it was the same thing pretty much. And so I think it's even the case that in the early days, yes, I think I was reading in the early days of C,
+对吧？双和号表示布尔与，单和号表示按位与，它们之间没有任何区别。因为在那个年代，这两者几乎是一回事。所以我认为甚至在早期，是的，我记得我读过，在C语言的早期，
+
+9
+00:05:21.000 --> 00:05:53.000
+C didn't have Bitwise operations. They were introduced, I mean, fairly early on the C's lifetime at this point, but still, not absolutely originally. You know, it's something that needed to be sort of discovered and added into the language. And when they were added, they were naturally thought of as just the same as the Boolean operations, and so they got the same precedence. Again, I don't know any of this to be fact, but this seems to me to be plausible.
+C语言其实并没有位运算。这些运算是在C语言生命的相当早期被引入的，但无论如何，它们并不是绝对一开始就有的。你知道的，这是某种需要被“发现”并添加进语言里的东西。当它们被添加进来时，人们自然而然地认为它们和布尔运算是一样的，所以它们就获得了相同的优先级。再次声明，我不知道这些是否为历史事实，但这在我看来是合情合理的。
+
+10
+00:05:53.000 --> 00:06:38.000
+But I love looking back at this sort of thing and, you know, looking back at little syntactic elements like that. A lot of things happened with B because BCPL was fairly, you know, again, the computing hardware at that time was different than today. You didn't have home computers, right? They were different even than in the 80s. You didn't have home computers. You didn't have 8-bit computers. No, you had university installations. You had military installations. You had various computers that were given to you on a, on a lease basis, right? You had mainframes and things like that. And at the time of B and C coming along,
+但我很喜欢回顾这类事情，你知道的，去研究诸如此类的小型语法元素。B语言身上发生了很多事情，因为BCPL相当……还是那句话，当时的计算硬件和今天是不同的。你当时没有家用电脑，对吧？它们甚至和80年代的电脑都不同。你没有家用电脑，也没有8位数（应为8位）电脑。不，你拥有的是大学机房，是军事设施。你通过租赁的方式获得各种各样的电脑，对吧？你有大型机（mainframe）之类的东西。而在B语言和C语言诞生的时候，
+
+11
+00:06:38.000 --> 00:07:12.000
+The world was just starting to move into sort of smaller computers, if you like. Just starting to move away from big industrial installations, where you just lease the computer from IBM or whatever and move more towards. Oh, actually, now the university can afford to buy its own mini computer or whatever, you know, the PDP 10, the PDP 11, things like that. And it was starting to get new hardware. like the PDP 11, I think it was, had new hardware to deal with floating point.
+世界才刚刚开始转向某种较小的计算机，如果你愿意这么称呼的话。才刚刚开始摆脱那种大型工业机房——你只需向IBM或其他公司租赁电脑——并开始转向……哦，事实上，现在大学有能力购买自己的小型计算机（mini computer）了，比如PDP-10、PDP-11之类的机器。而且它开始拥有新的硬件，比如我记得PDP-11拥有用于处理浮点数的新硬件。
+
+12
+00:07:12.000 --> 00:07:35.000
+That is the origin of types, or one origin of types in C. If you're writing a language to support this hardware, well, now the hardware has integer instructions and floating point instructions. And so you need different types. You need to have an interno float type so that your compiler knows which instruction to output.
+这就是类型的起源，或者说是C语言中类型的起源之一。如果你正在编写一种语言来支持这种硬件，好吧，现在的硬件拥有整数指令和浮点指令。所以你需要不同的类型。你需要有整型或浮点型，这样你的编译器才知道该输出哪条指令。
+
+13
+00:07:35.000 --> 00:08:02.000
+Mm-hmm. And then going from BCPL to B was a massive, massive sort of cut down. Ken Thompson had to trim every corner he knew how to in order to fit B into the machine. Right? I think he had sort of 16K or something, which is incredible to think about today. Yeah. Right. You have 16K to write the compiler.
+嗯哼。从BCPL过渡到B语言是一次极其巨大、极其彻底的精简。肯·汤普逊（Ken Thompson）不得不削减他所能想到的每一个角落，以便把B语言塞进那台机器里。对吧？我想他大概只有16K左右的内存，今天想来这简直不可思议。是的。对吧？你只有16K的内存来编写编译器。
+
+14
+00:08:02.000 --> 00:08:36.000
+But that's the reason, for example, we have. equals for assignment and equals equals for comparison. Ken Thompson, I think, wrote that. So he had to have two different operators. And he wrote, I think, that in an average program, assignment is about twice as frequent as comparison. And so an operator half the size makes sense. It's sort of this mindset of how to save every bite of space
+但这就是为什么，举个例子，我们拥有用单个等号表示赋值、用双等号表示比较的原因。我想是肯·汤普逊写下了这些。所以他必须使用两个不同的运算符。而且他写道，我想是在一个平均规模的程序中，赋值的频率大约是比较的两倍。所以一个长度减半的运算符是有道理的。这是一种如何尽可能节省每一个字节空间的思维方式。
+
+15
+00:08:36.000 --> 00:09:04.000
+you possibly can. And so having to make decisions like that. Yeah, that stuff, I never thought about that. And it's also the reason why we have, you know, initialization being the same thing as assignment, you know, using the equal sign for both, which is a very, they are two different, different fundamental operations, right? Yeah, yeah. And there are languages like small talk, you know, has two different, many array languages.
+因此不得不做出这样的决定。是的，这些东西，我以前从没想过。这也是为什么我们会有……你知道的，初始化和赋值是同一回事，两者都使用等号，这其实是非常……它们是两种不同、截然不同的基本操作，对吧？是的，是的。有些语言像Smalltalk，你知道的，有两套不同的系统，许多数组语言也是如此。
+
+16
+00:09:04.000 --> 00:09:25.000
+They have two different symbols for, they call them a size. and change. Yeah. That stuff is very curious. I mean, we have the same. We're two people that both have the Gene Samet history of programming languages book, which, I don't know. Yeah, that was even earlier, of course. That book finishes at 1969, I think.
+它们针对……它们有两个不同的符号，分别用来表示大小和更改。是的。这些东西非常奇妙。我的意思是，我们也有。我们俩都拥有吉恩·萨梅特（Gene Samet）的那本《编程语言历史》书，我不知道……是的，那本书当然还要早得多。那本书好像是以1969年结束的。
+
+17
+00:09:25.000 --> 00:10:04.000
+Yeah, yeah. And I actually, for some reason, I thought APL only got a small mention, but there's a whole section on APL. I don't know why at one point, because I remember first flipping through it when I got it. And I was like, what? I can't believe this. But that was a labor on. I realized that was a mistake. I mean, this makes me think of you mentioned, or at least at some point have brought up the Cajori volumes of the history of mathematical notation. Oh, yeah. Yeah. And I forgot to, there was a couple things that I was going to mention since the last time we chatted. One of them is that I discovered upon our last conversation that in Iverson's notation as a tool of thought,
+是的，是的。而且不知为何，我过去以为APL只占了很小的篇幅，但其实里面有一整章都是关于APL的。我不知道为什么当时会这么想，因为我记得刚拿到书时翻阅过它。当时我想：什么？我简直不敢相信。但那是后来的事了。我意识到那是一个错误。我的意思是，这让我想起了你曾提到过的事——或者至少在某个时候提起过——卡茹里（Cajori）的《数学符号史》两卷集。哦，是的。是的。我忘了……自从我们上次聊天以来，有几件事我本打算提一提的。其中之一就是，在上次对话后我发现，在艾弗森（Iverson）的图灵奖论文《作为思维工具的符号体系》（Notation as a Tool of Thought）中，
+
+18
+00:10:04.000 --> 00:10:31.000
+Turing Award paper, he made. mentions Kajori in the final section of the paper. And I can't remember if we were talking about it, about, you know, the pedmas. We were talking about it. We were. And now the thing is, this is probably the fourth time I've talked about it since then, because on my other Array Language podcast, I've been bringing it up, is that Iverson actually comments, and it's documented in a couple different places, that the reason for pedmas,
+他在论文的最后部分提到了卡茹里。我不记得我们当时是不是在讨论这个了，关于那个……先乘除后加减（PEMDAS）法则。我们确实在讨论。我们聊过。现在的问题是，自那以后这可能是我第四次谈论这个话题了，因为在我的另一个数组语言播客里，我一直在提起这件事：艾弗森实际上评论过——并且这在几个不同的地方都有记载——PEMDAS背后的原因，
+
+19
+00:10:31.000 --> 00:11:08.000
+the motivation for it is for concise representation of polynomials. Right. And that's you can, and I never really notice this is that you omit the multiplication in when you're writing polynomials, right? Coefficient go next to variable names. Sure. You just write 2x or 3x or whatever it is. You don't write 2 times X. And but the reason that Iverson brought up Cajori is that he, it's not really a criticism, but he says, you know, Cajori doesn't actually make much mention of parentheses in the, it's mostly just about the evolution of primitives. And the reason I bring this all up is one, because we were talking about
+它背后的动机是为了简洁地表示多项式。对吧？你可以……我以前从未真正注意到这一点，就是在写多项式时，你会省略乘法符号，对吧？系数紧挨着变量名写。当然。你直接写 2x、3x 或其他什么。你不会写 2 乘以 x。而且艾弗森之所以提到卡茹里，是因为他——这其实算不上批评，但他说，你知道的，卡茹里在书中其实并没有对括号做太多提及，书中主要讲述的还是图元的演变。我之所以把这些全搬出来，一是因为我们之前讨论过它，
+
+20
+00:11:08.000 --> 00:11:49.000
+it before, but when you were saying the equal and double equals, you know, my APL brain is like, well, you know, really the arrow character is nicer in a sense for assignment. And then you can reserve the equal and the not equal to, which we, left pointing arrow. Yeah, left pointing arrow. Yeah, some languages do that, do that. For at one point. Initialization. Or, for assignment. But then that made me think is like, how do we end up with the keyboards that we ended up with, you know? Like, we were missing so much stuff. Like, we don't have a multiplication. Like, how did we end up with a keyboard that doesn't have, like, four of the most common binary operations, yet we ended up with like at and, you know, it just, anyways. And so,
+但当你在说单等号和双等号时，你知道的，我的APL大脑就在想，嗯，你知道的，从某种意义上说，箭头字符其实更适合用于赋值。然后你就可以把等于号和不等于号留出来，也就是我们……左箭头。是的，左箭头。是的，有些语言会这么做，在某个阶段会这样做。用于初始化。或者用于赋值。但这就让我想到，我们是怎么搞出最终那些键盘布局的呢？你知道的？就像我们丢失了太多东西。比如我们没有乘法符号。我们怎么会落得这样一个键盘：它没有四则运算中最常见的二进制运算符里的一半，反而弄出了像 @ 符号这样的东西，你知道的，总之……
+
+21
+00:11:49.000 --> 00:12:18.000
+like, yeah, I guess we have asterisk for multiply, which we co-opted. We have, and this is, yeah, I mean, even like, I think we were mentioning this last time. I mentioned it in passing. Like, computers are fundamentally, the interfaces to computers we've known for these last 50 years have been sort of stuck in one dimension. You know, the terminal is a one dimensional input output. You get the line, right? When you're typing stuff, it's on the line.
+就像，是的，我想我们有星号用来表示乘法，我们把它借用过来了。我们有……这确实是，我的意思是，甚至就像我们上次提到的那样。我顺便提过。就像计算机从根本上来说，这过去50年来我们所知的计算机界面一直被困在单一维度里。你知道的，终端是一种一维的输入输出设备。你得到的就是一行代码，对吧？当你输入东西时，它们都在一行上。
+
+22
+00:12:18.000 --> 00:12:47.000
+You don't really, and this is true of most certainly mainstream programming languages today. Like, it's lines. It's not, the second dimension is not something we get to use. So we don't write fractions, right? When we do division, we have the slash. Yeah. Which is kind of a way of shoehorning division onto one line. You don't get to just naturally write a fraction.
+你真的无法……当今绝大多数主流编程语言确实如此。它们是一行行的。第二维度并不是我们能够利用的东西。所以我们不写分数，对吧？当我们做除法时，我们使用的是斜杠。是的。这其实是一种把除法硬塞进单行里的方法。你没法直接很自然地写出一个分数。
+
+23
+00:12:47.000 --> 00:13:09.000
+Yeah. I mean, someone was commenting that, that, you know, the division sign is actually rarely used because, you know, people use the slash or they use the way that you write a fraction. But it's like, my thought is like, well, that's because it's not on the keyboard. If we had put it on the keyboard, you know, but I guess when people, maybe that's like the history of the keyboard is that initially when it was designed, it was for writing, it wasn't for mathematics and programming.
+是的。我的意思是，有人评论说，除号其实很少被使用，因为人们要么用斜杠，要么就用写分数的方式。但我的想法是，那是因为键盘上没有除号。如果我们把它放到键盘上，你知道的，但我想当人们……也许这就是键盘的历史：最初设计它的时候是为了写作，而不是为了数学和编程。
+
+24
+00:13:09.000 --> 00:13:42.000
+Yeah, maybe. And so now we're stuck with these strange glyphs that mean, some of them mean things only because they've meant, they've had to mean that in the computer age, right? Division itself, you know, back in the 1800s, I think it was common to use a colon for division, right? Which persists today in the sense of a ratio. You write down a ratio, you use a colon, right? That is historically the symbol for division, right?
+是的，也许吧。所以现在我们被困在了这些奇怪的字形里，其中有些之所以有意义，仅仅是因为它们在计算机时代不得不被赋予这种含义，对吧？除号本身，你知道的，在19世纪，我记得用冒号来表示除法是很常见的，对吧？这一点在当今的“比率”概念中依然存在。你写出一个比率时，你会用一个冒号，对吧？历史上那就是除法的符号，对吧？
+
+25
+00:13:42.000 --> 00:14:25.000
+Because the ratio is a division. And then we have things like, you know, percent sign for mod, which as far as I can tell, it's used because we had to use. something and and that's probably only been, I don't know which language introduced the percent sign for modulus operation, but it can't be much before 1970, I'm thinking. Yeah, interestingly, is that, is that the case? Does Jay, does Jay use the percent sign for division? It might, give me a second, I can check. One percent two is zero point five, yeah. So the J language uses it for division, because arguably, It looks closer to the division symbol than the slash does.
+因为比率就是一种除法。然后我们还有诸如用百分号来表示取模之类的东西，据我所能查到的，之所以使用它，是因为我们当时不得不使用某个符号……而且这大概也就是……我不知道是哪款语言首次引入了百分号来表示求余运算，但我琢磨着这绝不会早于1970年太多。是的，有趣的是，真的是这样吗？是这样的吗？J语言是不是用百分号来表示除法？可能是的，给我几秒钟，我查一下。1%2等于0.5，是的。所以J语言用它来表示除法，因为可以说，它看起来比斜杠更接近除号。
+
+26
+00:14:25.000 --> 00:14:56.000
+It kind of does, yeah. It's such a bad place we've ended, in my opinion. You know, shocking that the APL programmer thinks that the symbols, but, you know, like the double asterisk for exponentiation, you know, and I think there's some languages that actually use the carrot for exponentiation, but it's just like, and you know, the not equal to. But even that is strange, right? It's sort of like you'd write superscript if you were writing it down with a pencil.
+确实有点像，是的。我们最终落得这样一个糟糕的境地，依我之见。令人震惊的是，一个APL程序员竟然认为这些符号……但你知道的，就像用双星号来表示求幂，你知道的，而且我想有些语言实际上用尖号来表示求幂，但这就像是……你知道的，还有不等于号。但即便如此也很奇怪，对吧？如果你用铅笔把它写下来，它有点像是上标。
+
+27
+00:14:56.000 --> 00:15:21.000
+Yeah. You wouldn't use a carrot to indicate ordinary exponentiation. Yeah, none of it makes sense. I mean, my favorite is the disagreement or the proliferation of not equal to operators. Because that one probably has the most non-uniformity. You know, most languages do exclamation equal. some do slash C syntax
+是的。你不会用一个尖号来表示普通的求幂运算。是的，这全都没道理。我的意思是，我最喜欢的是不等于运算符的分歧或泛滥。因为那个符号可能具有最高的不统一性。你知道的，大多数语言使用感叹号加等号。有些语言用斜杠加等号，这是C语言的语法吗？
+
+28
+00:15:21.000 --> 00:15:32.000
+Is that C? Is that where it comes from? Yeah, slash equal Well, I don't know Again, it's probably in B It might be in BCPL I don't know, I'd have to look it up But most things
+那是C语言吗？这是它诞生的根源吗？是的，斜杠加等号。好吧，我不知道。再说一次，它可能存在于B语言中。它也许在BCPL里，我不知道，我得去查查。但大多数事物……
+
+29
+00:15:32.000 --> 00:15:47.000
+Most things in C don't come from C Originally, they come from B or maybe BCPL But like I said, moving from BCPL to B was a massive cut down job So a lot of syntax, small syntax element got changed at that point But yeah, some languages
+C语言中的大多数东西最初并不是来自C语言。它们来自B语言，或者可能是BCPL。但就像我说的，从BCPL过渡到B语言是一次极其彻底的精简工作。所以在那个节点上，许多语法、微小的语法元素都发生了改变。不过是的，有些语言，
+
+30
+00:15:47.000 --> 00:16:17.000
+they use the diamond, you know, less than greater than... Yeah, less than greater than... Haskell uses slash equal to, which, you know, arguably might be better because if you, if you overstrike those two symbols, you end up with, you know, a not equal to. And I know there's like, there's like four other ones of... And some languages even have multiple operators for not equal to, you know? It's just like... And not equal to is, of course, the same thing as X or, if you're talking...
+它们会使用菱形符号，也就是小于号加大于号……是的，小于号加大于号……Haskell使用的是斜杠加等号，你知道的，这可以说更好，因为如果你把这两个符号重叠打印在一起，最终就会得到一个不等于号（$\neq$）。我知道还有其他大约四种……有些语言甚至有多种用于表示不等于的运算符，你知道的？这简直就像是……而不等于，当然，如果你讨论的是布尔运算的话，它其实就等于异或（XOR）。
+
+31
+00:16:17.000 --> 00:16:40.000
+about Boolean. Oh, yeah. Right? So, and that's why, that's, that's maybe why I see a language is derived from it don't have, like you have bitwise and or X-Or, you have logical and an or, but no logical X-Or, but logical X-O is not equal to. Right. Yeah, there's, there's some cute APL expressions that make use of that fact.
+哦，是的。对吧？所以，这就是……这也许就是为什么C语言及其衍生语言没有……就像你有按位与、按位或或按位异或，你有逻辑与和逻辑或，但没有逻辑异或，不过逻辑异或其实就是不等于。对吧？是的，有一些很巧妙的APL表达式就利用了这个事实。
+
+32
+00:16:40.000 --> 00:17:21.000
+Anyways, I do agree that doing these little archaeology things and, you know, finding where the names of things come from and syntactic curiosities. That's what I've, that came out of that pedmas discussion and the follow-up discussions that I had that you weren't there for was that I have to, I have to internalize Chesterson's fence because I've always given ped-mass a hard time. And I think it was in my conversation with you where I said, you know, maybe I should go and figure out, you know, if was there a reason. And that was, I was talking with Adam, panelists on a raycast about the word arbitrary. and that, you know, we kind of throw that around too loosely, and it's like, and then we actually got into a debate about the definition of the word arbitrary.
+总之，我确实认为做这些微小的考古研究，找出事物的名称从何而来以及各种语法奇观，是很有意义的。这就是我从那场关于PEMDAS的讨论以及后来你不在场的后续讨论中所得出的结论：我必须内化切斯特顿的栅栏（Chesterton's fence）原则，因为我过去总是对PEMDAS百般苛求。我想正是在我和你的那次对话中我说过，“你知道的，也许我应该去弄清楚，看看这其中是否有某种原因。”那是我和一位名叫亚当的ArrayCast节目嘉宾谈论“任意的（arbitrary）”这个词时聊到的，
+
+33
+00:17:21.000 --> 00:17:54.000
+He was saying that it is, you know, if it's due to personal preference, that actually is arbitrary. And I, I preferred the random or on a whim definition, but a lot of the things that... Okay, well, it's definitely not random. Random is wrong. Random is right now. Because if you look up the definition of arbitrary, one of them is random or on a whim. And so wait, were you saying that that, well, since you brought this up, arbitrary means it was arbitrated, right? And so it was a decision was made.
+我们当时谈到这个词被我们用得太松散了，然后我们实际上就这个词的定义展开了一场辩论。他说，如果一个决定是由于个人偏好做出的，那其实就是任意的。而我更喜欢“随机的”或“心血来潮的”这一定义，但许多事情……好吧，它绝对不是随机的。随机这个词现在用错了。随机才是对的。因为如果你去查“arbitrary”的定义，其中之一就是随机的或心血来潮的。等等，你是说……既然你提到了这个，这个词的意思是经过仲裁的（arbitrated），对吧？所以它是经过某种决策做出的。
+
+34
+00:17:54.000 --> 00:18:23.000
+And that that's all that arbitrary means, I think. Jesus, English is way too complicated. You're saying, I, we, if we're going to go back to that. Arbitrary define. Is there another one that says it, I suppose it carries a sign mean of like disinterested, right? because a judge, one who arbitrates, is supposed to be disinterested. Supposed to not have an interest in the outcome. And so, in that sense, arbitrary jibes with that.
+我认为这就是“arbitrary”的全部含义。天哪，英语太复杂了。你是说，如果我们要回到那个话题的话……定义arbitrary。是不是还有另一个释义，我猜它带有一种类似“不偏不倚、公正无私”的含义？因为法官——一个进行仲裁的人——本该是不偏不倚的。本该对结果不抱任何偏私。从这个意义上说，“arbitrary”与此相契合。
+
+35
+00:18:23.000 --> 00:18:57.000
+Okay, so according to Miriam Webster, we've got three different definitions. The first one, chosen decided, etc., seemingly at random or on a win, rather than in a reasoned or methodical way. two, not restrained or limited in the exercise of power. Okay. And then there's a third one which is the, it says law next to it. It says depending on individual discretion, parentheses, as of a judge, end parentheses, and not fixed by law. Do any of those match the arbitrator? Okay.
+好吧，根据韦氏词典，我们有三个不同的定义。第一个是：看似随机或心血来潮地选择、决定等，而不是以一种理性的或有条理的方式。第二个是：在行使权力时不受约束或限制。第三个是带有“法律”标签的定义：取决于个人自由裁量权（括号里写着“如法官”，括号结束），不由法律固定。这些定义里有哪一个符合仲裁者的含义吗？好吧。
+
+36
+00:18:57.000 --> 00:19:27.000
+That makes sense. Yeah, that third one matches arbitrated. So depending on... Depending on the wishes of a judge, of an arbitrator. discretion. What does discretion mean now? The quality of having or showing discernment. This is what I've decided, too, that LLMs have done, you know? Now that we got these things doing our work for us, or some of us, now I spend all these times answering philosophical questions of what did I really mean when I ask the LLM to do something? And now I'm spending all this time
+这就说得通了。是的，第三个定义符合“经过仲裁的”。所以它取决于……取决于法官、仲裁者的意愿。自由裁量权。现在自由裁量权又是什么意思？具备或展现出洞察力的品质。这也是我最近想通的一点，大语言模型（LLM）已经把事情变成这样了，你知道吗？既然我们有了这些东西来替我们完成工作——或者替某些人完成工作——现在我把所有这些时间都花在了回答哲学问题上：当我要求LLM做某事时，我真正想表达的到底是什么？现在我花了大把时间，
+
+37
+00:19:27.000 --> 00:20:01.000
+looking up the precise meaning of these words. Well, yeah, in general, we have to be careful there. I mean, as much as I just made the argument that arbitrary for the meaning of arbitrate, we do need to be careful in reductive etymology, let's say, because that's not really how English works, is it? Yes, I mean, famously the word literal, no longer just means literal, because everybody uses it not in the literal sense, and so now it has two different definitions, one of which is essentially, not literally.
+去查阅这些词语的确切含义。好吧，是的，总的来说，我们在那里必须小心谨慎。我的意思是，尽管我刚刚用“arbitrary”源自“arbitrate”的含义进行了论证，但在还原论词源学（reductive etymology）方面我们确实需要保持谨慎，可以说是这样，因为英语的运作方式其实并非如此，不是吗？是的，我的意思是，著名的“literally”一词，不再仅仅意味着“字面意义上”，因为每个人都在非字面意义的语境下使用它，所以它现在有了两个不同的定义，其中一个基本上就是“并非字面意义”。
+
+38
+00:20:01.000 --> 00:20:29.000
+Figurative. One is figurative, yeah. Arbitrate means to settle the dispute. Yes, because there are any number of words in everyday life, which have completely become disconnected from their original etymologies, and the meaning now is completely different. So then in your mind, arbitrary... But etymology is a sort of side project of my sense.
+比喻义。一个是比喻义，是的。“Arbitrate”的意思是解决争端。是的，因为日常生活中存在着无数的词汇，它们已经完全脱离了其最初的词源，现在的含义已经截然不同了。那么在你心目中，“arbitrary”……但词源学其实只是我个人的一个小副业。
+
+39
+00:20:29.000 --> 00:20:54.000
+Well, I mean, one of my favorite quotes of all time is from Kevlin Henney, who in one of his talks mentions, you know, the phrase, which I always took issue with, and he's the only person that I've ever heard of mention it, is, you know, it's just semantics. And he's like, what are you talking about? That's all there is is semantics. If we can't agree on semantics, we're just talking around in circles. And I've always thought the same thing. It's like, if we can't agree on what the words mean, you know, it's like the classic,
+好吧，我的有史以来最喜欢的名言之一来自凯夫林·亨尼（Kevlin Henney），他在自己的一场演讲中提到过一个短语——我一直对它颇有微词，而他是唯一一个我听说过提及此事的人——那个短语就是“这只是语义问题”。而他的反应是：“你在说什么？语义就是全部所在。如果我们无法就语义达成一致，我们就是在原地绕圈子。”我一直也这么认为。这就好像，如果我们无法就这些词语的含义达成一致，你知道的，这就如同经典场景：
+
+40
+00:20:54.000 --> 00:21:25.000
+you get in an argument, and then someone says, you know, well, you know what I meant. And it's like, well, clearly I didn't because we wouldn't be having this disagreement if I knew what you meant. Anyway, so where are we now? The word arbitrary in your mind doesn't necessarily... Well, I offered one potential idea of it. If you said to me something is arbitrary, I normally would distinguish between arbitrary and random. That's one thing I would do.
+你和人吵起架来，然后有人说：“好吧，你知道我什么意思的。”这就好比：“很显然我不知道，因为如果我知道你的意思，我们就不会起争执了。”不管怎样，我们现在聊到哪了？在你心目中，“arbitrary”这个词并不一定……好吧，我提出了一个潜在的想法。如果你对我说某事是arbitrary，我通常会区分arbitrary和random（随机）。这是我会做的一件事。
+
+41
+00:21:25.000 --> 00:21:46.000
+Random has a mathematical meaning. Random means decided by chance, right? arbitrary means simply chosen arbitrated in some way. Not the same thing to me. Okay, yeah. So, well, I mean, so Mary. Although in loose usage, people say random all the time to mean arbitrary. I get that.
+Random有其数学含义。Random的意思是由机会决定，对吧？而arbitrary仅仅意味着以某种方式进行了选择和仲裁。在我看来，这两者不是一回事。好吧，是的。所以，虽然在通俗用法中，人们经常用random来指代arbitrary，我明白这一点。
+
+42
+00:21:46.000 --> 00:22:30.000
+Yeah, yeah. I mean, well, this is honestly, like, I don't know. Maybe the listener does not care at all. But I find this so fascinating, that, like, what is actually the definition, like, you know, should we, what should we agree when what we're talking? about here is like, you know, I thought that pedmas didn't have good motivating reasons for being the like, right. Now, so that's another distinction is that like there's no good, there can't be a good reason for why they chose this because clearly like the APL model of order of operations is linear. It's simpler, it's better. And so when I when I would call pedmas arbitrary,
+是的，是的。我的意思是，老实说，我不知道。也许听众根本不在乎。但我发现这太迷人了，就像，真正的定义到底是什么？你知道的，我们是否应该……当我们在这里谈论时，我们应该达成什么共识？这里的情况是，我原以为PEMDAS没有充分的动机去成为那样的规则。
+
+43
+00:22:30.000 --> 00:22:51.000
+I'm essentially trying to say is like there can't be a good motivating reason. So you meant capricious. Capricious. All right. Well, here we go, folks. The limits. You meant arbitrary capricious rather than arbitrary reasoned. Governed by governed or characterized by sudden, irrational or unpredictable impulses or whims.
+现在，这是另一个区别，那就是没有充分的理由——不可能有什么好理由来解释他们为什么会这样选择，因为很明显，像APL那样的运算顺序模型是线性的，它更简单，也更好。所以当我把PEMDAS称为arbitrary时，
+
+44
+00:22:51.000 --> 00:23:12.000
+Not in the second division, not supported by the weight of evidence or established rules of law. Capricious. You thought it was on a whim. you thought somebody just liked it? I thought that... You didn't think there was reasoning behind it. I thought, I don't know if I necessarily thought it was on a whim, even though that was, you know, the first definition of arbitrary.
+我本质上是想说：不可能存在什么充分的动机。所以你想说的是“capricious”（反复无常的）。Capricious。好吧，各位，这就是极限了。你指的是capricious（反复无常的），而不是带有理性色彩的arbitrary（任意的）。受突然的、不理性的或不可预测的冲动或心血来潮所支配或特征化。
+
+45
+00:23:12.000 --> 00:23:34.000
+Okay. There clearly wasn't a good motivation, you know, like for the definition, for some definition of the word good. But that's why in that conversation we had last time, I literally said maybe I should go and try and figure out. Was there actually, like odds are, even if it was, you know, maybe bad reasoning then or bad reasoning now. It might have been good reasoning at the time.
+不在第二分类中，不受证据分量或既定法律规则的支持。Capricious。你原以为它是心血来潮的。你以为某人只是单纯喜欢它？我以为……你认为这背后没有什么推理过程。我以为——我不知道我是否一定认为它是心血来潮的，尽管那是arbitrary的第一个定义。
+
+46
+00:23:34.000 --> 00:23:55.000
+Maybe it still is good reasoning. And you can argue whether, you know, expression of polynomials is good reason. But the point being is, is someone thought, like put thought and care into making a decision? We should not at all use the word arbitrary. There might be some other word that is like you disagree with the motivation or reason. I see. So I'm not sure. Is there an adjective or a word for that kind of?
+好吧。这里显然没有什么令人信服的动机，你知道的，为了某个对“好”字的定义。但这就是为什么在我们上次的那场对话中，我 literalmente（字面/直译）说过，也许我应该去试着弄清楚：这背后是否真的存在某种原因？十有八九，哪怕它当时看起来是……也许那是当时的糟糕推理，或者是现在的糟糕推理。它在当时可能是有充分理由的。
+
+47
+00:23:55.000 --> 00:24:13.000
+I don't know. Well, and a lot of things are reasonable. At the time. Famously in programming. And the reasons that apply at any given time do not necessarily apply 40, 50 years later. Yes. Yeah. I mean, that's the...
+也许它现在仍然是合理的理由。你可以争论多项式的表达是否算是一个好理由。但重点在于，有人曾经为此付出过思考和用心去做出决定。我们根本不应该使用“arbitrary”这个词。可能还有另一个词可以用来形容你不同意其动机或理由的情况。我明白了。所以我不确定。有没有哪个形容词或词汇可以用来形容那种……
+
+48
+00:24:13.000 --> 00:24:29.000
+So for historical reasons, you know, we say... We say it's like that for historical reasons. So we've got to look up a word. So there's arbitrary, which, you know, we got so many definitions for. I just... I don't ever going to use that word again. There's random. Maybe I should start saying alliator.
+我不知道。好吧，编程中有很多事情都是合理的。在当时。众所周知，在编程领域是这样的。在特定时期适用的理由，不一定适用于40年或50年之后。是的。我的意思是，这就是……
+
+49
+00:24:29.000 --> 00:24:50.000
+instead of Randallie? My goodness, man. Supposedly I play Scrabble. What is... A-L-E-A-T-O-O-Y. From the Latin Alia, a dye, or dice. Everybody knows the Latin alia. Depending on an uncertain event or contingency
+所以由于历史原因，你知道，我们说……我们说出于历史原因它就是这样的。所以我们得去查个词。这里有“arbitrary”，你知道的，我们有这么多的定义。我只是……我再也不会用这个词了。这里有“random”。也许我应该开始用“aleatory”（偶然的、碰运气的）来代替randomly了？天哪，老兄。据说我玩过拼字游戏（Scrabble）。什么是……A-L-E-A-T-O-R-Y（aleatory）。源自拉丁语“alea”，意为骰子。人人都懂拉丁语“alea”。取决于不确定的事件或偶发因素，
+
+50
+00:24:50.000 --> 00:25:18.000
+as to both profit and loss, or relating to luck and especially to bad luck. So if random now means arbitrary, Alliatorie, maybe now is a good word for random. True, true, truly random. Decided by the roll of a dice. Well, my evolving thought now is that any time we use the word arbitrary, specifically when, you know, a lot of the conversations I have are programming-related or design related.
+既关乎利润也关乎损失，或者与运气有关，尤其是与厄运有关。所以如果“random”现在意味着“arbitrary”，那么“aleatory”现在或许是个用来表示“random”的好词。真的，真的非常随机。由掷骰子决定。好吧，我不断演变的想法是，任何时候当我们使用“arbitrary”这个词时，特别是当——你知道的，我进行的很多对话都与编程或设计相关。
+
+51
+00:25:18.000 --> 00:25:51.000
+Arbitrary is never actually the word, I think, that we're really, I mean, I guess if you're using it, I mean, that's the thing. To go back to Kevlin Henney's, it's just semantics. It's just like, I had a definition for arbitrariness. arbitrary. Adam had a definition for arbitrary. You had a definition for arbitrary. And they're all, I wouldn't even say subtly different. They're all just, you know, one is like, oh, it's my personal preference. I thought it was kind of random. And you thought it was, no, it's just a decision being made. Yeah. They're all related, sure. But they all have different shades of meaning. But that is, you know,
+我认为“arbitrary”其实绝不是我们真正想表达的词。我的意思是，如果你在用它的话，那就是这样。回到凯夫林·亨尼的话，“这只是语义问题”。这就好比：我对arbitrariness（任意性）有我自己的定义。亚当有他对arbitrary的定义。你也有你对arbitrary的定义。而且它们——我甚至不会说它们有微妙的区别，它们全都是……你知道的，一个觉得“哦，这是我的个人偏好”，另一个觉得“我觉得它有点随机”，而你觉得“不，这只是一个做出的决定”。是的。它们当然都有关联，没错。但它们都有着不同色彩的含义。不过，（笑）你知道的，
+
+52
+00:25:51.000 --> 00:26:41.000
+that's one of the great things about English is that shades of meaning, you know, English has synonyms, which many languages to a first approximation don't have. Right. And synonyms in English can draw shades of meaning. And it's still a problem for us. Yeah. It's funny because when I was editing that episode, and I mentioned Orwell in 1984 and their reduced vocabulary. And I was like, I mentioned, well, and I've matured and I know that it's a beautiful. When I was editing it, I was like, do I really? Is that actually true? Like, not the maturing part, but just there's a part of my brain that really does think that there's something nice about a regular communication language that doesn't have. the subtle differences, you know, you know, for poetry, it's great for, for communicating, like, quickly and we're all on the same page, as we have seen here with the definition of the word
+这就是英语的伟大之处之一，也就是那些含义的色彩。英语拥有同义词，而许多语言在第一近似下是没有同义词的。对吧。英语中的同义词可以勾勒出含义的细微差别。但这依然给我们带来了问题。是的。真搞笑，当我剪辑那一期节目时，我提到了奥威尔的《1984》以及其中精简的词汇量。当时我想……我提到了，随着我日渐成熟，我知道那是一种美妙……当我剪辑它的时候，我在想：我真的是这么想的吗？这其实是真的吗？倒不是指成熟的那部分，而是我脑海深处确实有这样一部分，它真的认为那种有着常规沟通语言、没有细微差别的语言挺不错的，你知道的，你知道的，对于诗歌来说它很棒，对于快速沟通、让所有人都处于同一频道来说也很棒，正如我们在这里讨论“arbitrary”这个词的定义时所看到的那样。
+
+53
+00:26:41.000 --> 00:27:16.000
+arbitrary. What is my, the, the code report, cinematic, you know, podcast universe has just evolved to talking about the definition of the word arbitrary. I look forward to your next podcast, your new podcast on the language and the meanings in mathematical communities. I mean, I've got too many podcasts. I mean, you know, I can just, I can repurpose the algorithms podcast for, I mean, there's something to be said about talking about programming, language, archaeology, and then also etymology. It's, it's one in the one.
+我的……代码报告，电影，你知道的，播客宇宙刚刚演变成了探讨“arbitrary”这个词的定义。我期待你的下一个播客，你关于数学社区中的语言和含义的新播客。我的意思是，我的播客已经太多了。我的意思是，你知道的，我可以把算法播客重新包装一下，我的意思是，谈论编程语言考古学，然后顺便聊聊词源学，这两者其实是一回事。
+
+54
+00:27:16.000 --> 00:27:48.000
+Yeah. Well, if we want to bring it back to algorithms, you know, let's talk about the algorithm, algorithmic description in place. That has a very specific meaning to algorithms, right? If we say that an algorithm is in place, and the meaning is not what most people think of. Most people programming C++ would think of an algorithm being in place, and it has a certain meaning to them, right?
+好吧，如果我们想把话题拉回算法，你知道的，让我们来谈谈“原地算法（in-place）”这个概念。这个词在算法领域有着非常具体的含义，对吧？如果我们说一个算法是“原地的”，它的含义并不是大多数人所想的那样。大多数编写C++的人会认为一个算法是“原地”的，这在他们心中有着某种特定的含义，对吧？
+
+55
+00:27:48.000 --> 00:28:30.000
+It means it doesn't use extra space. But when it comes to actually tying down what that means, that's where the definition has to be made in algorithm. mathematical algorithm land, right? Because you can't just say it doesn't use extra space, because every algorithm uses extra space in some way. Like, you need a stack frame to run it. You need a counter-variable, which necessarily is sort of the logarithmic number of bits of the size of the collection, right? So you are using, in some sense, in a very pure sense, you are using some kind of extra space.
+这意味着它不使用额外的空间。但当真正去界定这意味着什么时，正是在这里，我们必须在数学算法的世界里对定义做出严格的限定，对吧？因为你不能简单地说它不使用额外空间，因为每个算法在某种程度上都在使用额外空间。比如，你需要一个栈帧（stack frame）来运行它。你需要一个计数器变量，它必然占用与集合大小成对数关系的比特数，对吧？所以你在某种意义上——在一个非常纯粹的意义上——你确实在占用某种额外的空间。
+
+56
+00:28:30.000 --> 00:29:08.000
+But so the definition of an in-place algorithm is an algorithm which only uses, I think it's polylog extra space. Polylog. And I don't remember the exact meaning of polylog. But polylog arithmetic. In other words, what I just said, like, you can't use, it's sort of intuitive that if you have an algorithm which works in place on the ray, you're not going to have a second array that it needs for working space, right, of the same size. But you are going to have counter variables. You are
+因此，“原地算法”的定义是一个仅使用……我想是多对数（polylog）级别额外空间的算法。多对数。我不记得“polylog”的确切含义了。但它是多对数算术。换句话说，正如我刚才所说，你不能使用……直觉上，如果你有一个在数组上原地工作的算法，你不会需要第二个同样大小的数组作为工作空间，对吧？但你将拥有计数器变量，
+
+57
+00:29:08.000 --> 00:29:51.000
+going to have sort of a sort of constant space extra, right? And more than that, you're going to have a logarithmic space extra because counter variables measured in bits. I mean, measuring in bits is logarithmic. Right, right. Right. you do have a logarithmic number of bits required to represent the size of your collection, like I said. So, you know, there are specific definitions of these terms like in place. In place is the one that brings to mind. I mean, that's nice, you know, having a precise, you know, it's kind of like the specification of an algorithm in where it says, I feel like we're missing that for better, for worse, in English.
+你将拥有某种常数级别的额外空间，对吧？不仅如此，你还将拥有对数级别的额外空间，因为计数器变量是以比特为单位来衡量的。我的意思是，以比特为单位来衡量就是对数的。没错，没错。没错。正如我所说，你确实需要对数数量的比特来表示你的集合大小。所以，你知道的，诸如“in-place”（原地）之类的术语都有着具体的定义。“In-place”就是那个最先跳进脑海的词。我的意思是，这挺好的，拥有一个精确的……这有点像是对算法规范的描述，其中写道：我觉得在英语中，不论好坏，我们正缺失这种精确性。
+
+58
+00:29:51.000 --> 00:30:12.000
+Well, you know, now we're back to, like, does it matter to most people? most of the time, no, it doesn't matter. Like, it's fine to have this intuitive understanding what in place means. We know it's not going to allocate extra space. We know it's going to be able to run on the array we have. Fine, right? We don't need to think most of the time about, you know,
+好吧，你知道的，现在我们又回到了这个问题：这对大多数人来说重要吗？大多数时候，这并不重要。拥有对“原地”含义的这种直觉理解是没问题的。我们知道它不会分配额外的空间。我们知道它能够在我们现有的数组上运行。这就够了，对吧？大多数时候我们不需要去思考，你知道的，
+
+59
+00:30:12.000 --> 00:30:52.000
+the precise amount of extra space it's going to use in bits in a stack frame. Right? We, we subordinate that unnecessary detail for a different, abstraction, right? We're happy with the idea that an in-place algorithm, yeah, I can use a counter-variable. Why wouldn't I be able to do that? Like, we don't give it a second thought in everyday programming, and that's fine. Yeah, I guess the question is, is when does it matter? And probably when you start talking about, you know, the, for lack of a better word, standardese, you know, of an algorithm spec, or more importantly, uh, compiler specification or whatever,
+它在一个栈帧中将要精确使用多少比特的额外空间。对吧？我们为了另一种抽象，而将这些不必要的细节从属化了，对吧？我们乐于接受这样一种观点：一个原地算法，是的，我可以使用一个计数器变量。为什么我不能这么做呢？我们在日常编程中对此根本不会多想，而这完全没问题。是的，我想问题在于：它在什么时候才真正重要？可能就是当你开始讨论——恕我直言——算法规范的“标准规范（standardese）”，或者更重要地，编译器规范之类的内容时，
+
+60
+00:30:52.000 --> 00:31:08.000
+then you end up in these conversations where it's it's much more important to be precise and be on the same page about what a word means right? Yes. Like we don't have any fuzzy language around linear rhythmic, quadratic. Like
+你才会陷入这些对话中，在那些语境下，做到精确并就一个词的含义达成共识要重要得多，对吧？是的。就像我们在“线性（linear）”、“对数线性（logarithmic）”、“二次方（quadratic）”这些词周围没有任何模糊语言一样。
+
+61
+00:31:08.000 --> 00:31:25.000
+that is, that means the same thing to everyone, right? But when you start talking about the word readable or arbitrary now we're in much more of like subjectivity land. Someone mentioned there was a guess we should have on that has done studies about program language design
+那对每个人来说都意味着同一件事，对吧？但当你开始谈论“可读的（readable）”或现在的“任意的（arbitrary）”时，我们就大大陷入了主观性的世界里。有人提到，我们应该邀请一位曾做过编程语言设计研究的嘉宾来节目做客
+
+62
+00:31:25.000 --> 00:31:56.000
+and has conducted like studies on what makes something more learnable or readable. And yeah, we should maybe reach out to that individual. That would be interesting. Anyways, we've blown by, I mean, we were chatting before, but as usual, part for the course. But this has been great as always. Yeah, maybe we will try to, whether it's that guest or a different guest, start bringing on some guests because the feedback from the, the end of year kind of wrap up was everybody loves this content,
+并且进行了一些研究，探讨是什么让某些内容更易学或更易读。是的，我们也许应该联系一下那个人。那会很有趣。无论如何，我们已经聊了很久，我是说，我们之前在聊天，但和往常一样，这也是意料之中的事。不过一如既往，这次聊得很棒。是的，也许我们会尝试，无论是那位嘉宾还是另一位嘉宾，开始邀请一些嘉宾来节目，因为从年终总结那里的反馈来看，大家都非常喜欢这方面的内容，
+
+63
+00:31:56.000 --> 00:32:15.000
+but they also love hearing from people at different companies and whether it's on programming language stuff or, you know, whatever their area of expertise is. Be sure to check these show notes either in your podcast app or at ADSP thepodcast.com for links to anything we mentioned in today's episode, as well as a link to a get-up discussion where you can leave thoughts, comments, and questions. Thanks for listening.
+但他们也很喜欢听来自不同公司的人分享，无论是关于编程语言的事情，还是，你知道的，他们各自的专业领域。请务必在你的播客应用中或访问 ADSP thepodcast.com 查看本期节目的shownotes（节目笔记），获取今天节目中提到任何内容的链接，以及可以留下你的想法、评论和问题的 GitHub 讨论区链接。感谢收听。
+
+64
+00:32:15.000 --> 00:32:20.000
+We hope you enjoyed and have a great day. I am the anti-brace. Yeah. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+希望你喜欢，祝你有美好的一天。我是反大括号派。是的。本期节目暂无评论。点击文字稿中的任意句子即可留下评论。

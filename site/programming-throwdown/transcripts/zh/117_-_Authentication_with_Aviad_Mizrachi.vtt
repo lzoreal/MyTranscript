@@ -1,0 +1,591 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:07.000
+Hey everybody. So, you know, when you get to your house, you know, or the place where you live, you have your key, you kind of turn it in the lock, and you get in. And if someone else has a different key, or if they don't show up with a key, they can't get into your house. And this seems pretty straightforward, right? And also, you know, if you give your key to somebody else, they can get into your house, right? So authentication sort of in the real world makes a ton of sense, right? But authentication over the internet where you're sending this information to all these different computers so it could get to its destination, that seems pretty wild. And it seems pretty unclear like how that can actually work and how that can be safe. And so
+大家好。所以，你知道的，当你到达你的家，或者你居住的地方时，你有你的钥匙，你把它转动锁里，然后你进去了。如果其他人有不同的钥匙，或者他们没有带钥匙来，他们就无法进入你的家。这看起来很简单，对吧？而且，你知道的，如果你把钥匙给别人，他们也可以进入你的家，对吧？所以，现实世界中的身份验证在某种程度上非常有意义，对吧？但是互联网上的身份验证，你需要把这些信息发送到所有这些不同的计算机上，以便它能到达目的地，这看起来相当疯狂。并且它看起来很不明确，这到底是怎么运作的，以及它怎么能是安全的。所以
+
+2
+00:01:07.000 --> 00:01:49.000
+it's a really interesting topic. I'm really fascinated by it. And we have an expert. We have Abyad Mizrahi on the show, who's the CTO of Front Egg, to kind of dive really deep into this and talk about authentication, how it actually works. So thank you so much for coming on the show, Abyad. Yeah, thank thank you guys. Thank you for having me. Cool. So yeah, before we kind of really dive deep on the technical stuff, it'd be really great to hear, you know, kind of your background and, you know, your kind of experiences and what kind of path you took to get you where you are now working on Front Egg, which is a kind of platform that handles authentication and a bunch of other things.
+这是一个非常有趣的话题。我对此非常着迷。我们有一位专家。我们请到了 Front Egg 的首席技术官 Abyad Mizrahi 来到节目中，深入探讨这个话题，并讨论身份验证以及它实际上是如何工作的。非常感谢你来到节目，Abyad。是的，谢谢你们。谢谢你们邀请我。酷。所以，在我们深入探讨技术问题之前，听到你的背景，以及你的经历，以及你是通过什么路径走到现在并致力于 Front Egg（一个处理身份验证和其他一系列事情的平台）的工作，这真的很棒。
+
+3
+00:01:49.000 --> 00:02:19.000
+But what's kind of your background in computer science? Yeah, sure. So I've been coding professionally for the last 20 years. I've been working on really exciting projects. And with the era of everything moving to the web, like I shifted my expertise. I started coding, like, as I said, professionally when I was 20, just out of the army in Israel.
+但是你在计算机科学方面的背景是什么？是的，当然。我从事专业编程已经有 20 年了。我一直在从事非常令人兴奋的项目。随着一切向网络迁移的时代，我转变了我的专业领域。正如我所说，当我 20 岁、刚离开以色列军队时，我开始从事专业编程。
+
+4
+00:02:19.000 --> 00:03:15.000
+Started walking my way up with C++ and.NET, which was really hot these days. But around, I would say, five to eight years where everything shifted around the web and products started evolving, we saw a lot of the flows really becoming the same. So I was working on a few really interesting projects, both developer, R&D leader, architect, R&D manager. Actually, the last two years before founding Frontec with my co-founder, Sagi, we met at Checkpoint, which is one of the Israeli largest cybersecurity companies. And we had a privilege of leading a platform for SaaS application, basically founding a platform for SaaS application and leading it.
+我开始通过 C++ 和当时非常热门的 .NET 逐步提升自己。但大约在五到八年前，当一切都转向网络并且产品开始演变时，我们看到许多流程确实变得非常相似。所以我一直在从事几个非常有趣的项目，担任过开发者、研发负责人、架构师、研发经理。实际上，在我与联合创始人 Sagi 共同创立 Frontec 之前的最后两年里，我们在 Checkpoint（以色列最大的网络安全公司之一）相遇。我们有幸领导了一个针对 SaaS 应用的平台，基本上是为 SaaS 应用创立了一个平台并领导了它。
+
+5
+00:03:15.000 --> 00:03:47.000
+And then when it hit us that all the things that we had to develop up until that point are pretty repetitive. So we will touch on authentication in a bit, but you develop authentication, the same flows all over again, the same multi-factor, the same security policies, the same user management invite, the same session timeouts, okay? And that's only like the tip of the iceberg because you have to develop everything
+然后，当我们意识到直到那个时候我们必须开发的所有东西都非常重复时。所以我们稍后会谈到身份验证，你开发身份验证，一遍又一遍地经历相同的流程，相同的多因素验证，相同的安全策略，相同的用户管理邀请，相同的会话超时，好的？这只是冰山一角，因为你必须开发一切
+
+6
+00:03:47.000 --> 00:04:07.000
+in a self-serve mode. And basically, everything is being very repetitive in today's world. And this is pretty much the reason that around two years ago, before the COVID hit us, we founded FrontEdge, which our mission is basically to fight this repetitive,
+以自助服务的模式。基本上，当今世界的一切都非常重复。这也就是大约两年前，在新冠疫情爆发之前，我们创立 FrontEdge 的原因，我们的使命基本上是打击这种重复性，
+
+7
+00:04:07.000 --> 00:04:37.000
+to give back the power to developers to focus on what really matters and to provide our expertise around everything that is very much like it's the core of the product, but it's actually not the core of the product. It's something that you must have, but it actually, it's not the reason that you founded a company for. So this is a front end. We can elaborate later on what exactly we're doing, if that makes sense. Yeah, that totally makes sense.
+将权力交还给开发者，让他们专注于真正重要的事情，并提供我们在各个方面的专业知识，这些东西在很大程度上就像是产品的核心，但实际上又不是产品的核心。它是你必须拥有的东西，但实际上，它并不是你创立公司的原因。这就是 Front End。如果合适的话，我们稍后可以详细说明我们在做什么。是的，这完全说得通。
+
+8
+00:04:37.000 --> 00:05:36.000
+Yeah, I think it's a really good point. I mean, very few people want to dedicate a ton of time and energy really perfecting their login, right? The login is ultimately to identify and secure, you know, people's identity and information so that then you can provide them some kind of service, right? Which is, that's the part that most companies are really interested in. But then they feel really compelled to pay a lot of attention to it because if someone can compromise it, I mean, we saw this with Target and we saw this with even I think able to get authenticated as basically anybody you want and then taking all the data. You don't hear as much about SQL injection and these kind of attacks.
+是的，我认为这是一个非常好的观点。我的意思是，很少有人愿意投入大量的时间和精力来真正完善他们的登录，对吧？登录的最终目的是识别和保护人们的身份和信息，以便随后你可以为他们提供某种服务，对吧？这是大多数公司真正感兴趣的部分。但随后他们感到非常有必要对此给予高度关注，因为如果有人能够窃取它——我的意思是我们在 Target 身上看到了这一点，我们甚至看到，我认为，能够把自己验证为你想要的任何人然后拿走所有数据。你不会经常听到关于 SQL 注入和这类攻击的消息。
+
+9
+00:05:36.000 --> 00:06:52.000
+I mean, most of the attacks that, and I'm not a cybersecurity expert by any means, but most of the attacks that at least I see in the news are things where the authentication system has been compromised. You know, I think that that it's something extremely, extremely important, but also something that's not central to sort of the core mission of many companies. And so it seems like a great thing to build, you know, kind of a service around. And also, there's so many different intricacies to it. There's, you know, social login, there's login through a phone number, there's email and password somebody out, right? All of that stuff is just adds so much complexity to the developer experience. So you, you touch, you touch the exact point of why this is not as simple as, as you may think. So I had the privilege of, you know, managing a lot of very talented R&D developers over the years. And when you ask, developers can be a little bit of show-offs.
+我的意思是，大多数攻击——我绝不是网络安全专家——但我至少在新闻中看到的大多数攻击，都是身份验证系统被攻破的情况。你知道，我认为这极其极其重要，但对于许多公司的核心使命来说又不是中心。所以围绕它构建一个服务似乎是一件很棒的事情。而且，它有太多的复杂性。有社交登录，有通过电话号码登录，有电子邮件和密码，对吧？所有这些都为开发者体验增加了太多的复杂性。所以你触及了为什么这并不像你想象的那么简单这个确切的点。多年来，我有幸管理了许多非常有才华的研发开发者。当你问时，开发者可能会有点爱显摆。
+
+10
+00:06:52.000 --> 00:07:27.000
+And when you ask them, okay, we want to build a new product. Obviously, a new product always starts with the sign-up and the login. They say, yeah, this is very easy. We do email. We do a password. we give them a reset password link and yeah, and we can close it. I would say it would take me around the week. But then when you dig in a little bit deeper, you start considering how do I send the passwords over? Where do I keep them? How do I keep them?
+当你问他们，好的，我们想构建一个新产品。显然，一个新产品总是从注册和登录开始。他们说，是的，这非常容易。我们做电子邮件。我们做密码。我们给他们一个重置密码的链接，是的，我们可以搞定。我想这大概会花我一周的时间。但当你深入一点挖掘时，你开始考虑我如何发送密码？我把它们放在哪里？我如何保管它们？
+
+11
+00:07:27.000 --> 00:07:44.000
+How do I maintain these tokens? How do I maintain these email templates? Okay. What kind of MFA method should I choose? Do we go with TOTPs? Do we go with SMS? Do we go with emails? Like in Checkpoint, one of the things the security research team did
+我如何维护这些令牌？我如何维护这些电子邮件模板？好的。我应该选择哪种 MFA 方法？我们是用 TOTP 吗？我们是用短信吗？我们是用电子邮件吗？就像在 Checkpoint 一样，安全研究团队做的事情之一
+
+12
+00:07:44.000 --> 00:08:19.000
+was proving that sms is like hijackable in no time and then you okay so maybe sms is not a better so let's let's dive in and start identifying which which mfa method should we use now today that with the rise of FIDO keys. FIDO is like the new thing to adopt. And then which kind of SSO would you choose? How do you handle our flow? How do you handle SAML flows? How do you handle OpenID Connect flows? How do you audit all of this
+就是证明短信可以在短时间内被劫持，然后你就会觉得，哦，也许短信不是一个好方法，所以让我们深入研究并开始确定我们应该使用哪种 MFA 方法。如今随着 FIDO 密钥的兴起。FIDO 是要采用的新事物。然后你会选择哪种 SSO？你如何处理我们的流程？你如何处理 SAML 流程？你如何处理 OpenID Connect 流程？你如何审计所有这些
+
+13
+00:08:19.000 --> 00:08:58.000
+for the compliance and regulations? How do you handle multi-tenancy? How do you handle multi-tenancy? How do you handle security policies? And then it becomes like this project that, you know, it started with the developers saying, yeah, it's going to take me a week. And then you find yourself three months later in a tech debt that you started and then you don't know when it's going to be finished. And then, yeah, this is the reason I think that, like, authentication has become a little bit of, you know, there are great companies out there that are doing that.
+为了合规和法规？你如何处理多租户？你如何处理多租户？你如何处理安全策略？然后它就变成了这样一个项目，你知道的，它以开发者说“是的，这会花我一周时间”开始。然后三個月后你发现自己陷入了一开始的技术债务中，并且你不知道什么时候才能完成。然后，是的，这就是我认为身份验证已经变得有点——你知道的，外面有很棒的公司在做这件事的原因。
+
+14
+00:08:58.000 --> 00:09:44.000
+And it's become a little bit of commodity because, like, the simple stuff is simple to solve. And today a lot of companies are are working around authentication there are nice open sources around it and and you you really need to know your way when you're choosing these tools to see what exactly is the different which method do you want to go with and and to provide a perfect user experience for your customers? Because today, the user experience is as important as the security aspect of the product. Yeah, that makes sense. I think it was LinkedIn posted that basically every step someone has to take to create a LinkedIn account,
+它已经变得有点像大宗商品了，因为简单的事情很容易解决，今天很多公司都在围绕身份验证工作，周围有很好的开源资源，当你选择这些工具时，你真的需要知道自己的方向，看看究竟有什么不同，你想选择哪种方法，并为你的客户提供完美的的用户体验。因为今天，用户体验与产品的安全性同等重要。是的，这说得通。我认为 LinkedIn 发布过这样一个数据：基本上每个人创建 LinkedIn 账户所必须采取的每一个步骤，
+
+15
+00:09:44.000 --> 00:10:23.000
+every single step churns something like 10 or 20% of the people. Now, like maybe, you know, at least for the first step, maybe a lot of those are bots, right? But I mean, at some point you get to like, yeah, where a lot of real people say, oh, well, if I have to give my phone number and I have to give it again, and then they have to text me and I have to answer the text. Like the more of these steps you have, the fewer people are going to be on your platform. But at the same time, you know, you need to have a platform that's secure. Otherwise, then once it's compromised, it's very hard to build the brand back. Yeah, we should we should unpack a lot of this. So well, I definitely want to put a bookmark in
+每一个步骤都会流失大约 10% 或 20% 的人。现在，也许，你知道的，至少对于第一步来说，其中许多可能是机器人，对吧？但我的意思是，在某些时候你会发现，很多真实的人会说，哦，好吧，如果我必须提供我的手机号码，我必须再次提供它，然后他们必须给我发短信，我必须回复短信。你拥有的这些步骤越多，留在你平台上的的人就会越少。但与此同时，你知道，你需要拥有一个安全的平台，否则，一旦它被攻破，就很难重建品牌了。是的，我们应该解开很多这样的谜团。所以，我一定要在
+
+16
+00:10:23.000 --> 00:10:56.000
+MFA and multi-factor authentication. We should talk about that. But first let's just talk about when someone types a password on the internet, how does that password get to the server without somebody just seeing it along the way and then just having your login information? You know, like how does that work? How do you basically give your keys to 100 other computers without someone just being able to get into your house? Yeah. So if we're touching on that, so there are several ways to, let's talk about the RESTful
+MFA 和多因素认证上做一个书签。我们应该讨论这个。但首先我们只谈谈当某人在互联网上输入密码时，该密码是如何在没有人一路看到它然后拥有你的登录信息的情况下到达服务器的？你知道，这到底是如何运作的？你基本上是如何在不让任何人能够进入你的家的情况下把钥匙交给其他 100 台计算机的？是的。所以如果我们谈到这一点，有几种方法，让我们谈谈 RESTful
+
+17
+00:10:56.000 --> 00:11:31.000
+flow. So there are two main methods to send data to the server. So it's either query param, or if you are doing a post, it's through a post body. So the query param, not the good way to go with. Basically, two reasons here. Like URLs are going and there have been transients along the way and they have been cached, which is really, really bad. Yeah. Just to give a bit more background here. So the query param is when you type a URL into
+流程。所以向服务器发送数据有两种主要方法：要么是查询参数（query param），如果你在做 POST，就是通过 POST 主体（post body）。所以查询参数，不是一个好方法。这里基本上有两个原因。像 URL 一路都在传输并且沿途被缓存了，这真的非常非常糟糕。是的。为了在这里提供更多背景信息。所以查询参数是当你输入一个 URL 到
+
+18
+00:11:31.000 --> 00:12:19.000
+your browser, sometimes you'll see this, you'll see like question mark, item equals 13 or question mark foo equals bar, right? And what that is, is actually it's sending, in addition to the URL, like google.com, anything after that question mark, it goes to the same URL, but it's like extra data. So you could say, mywebsite.com slash login, question mark, a whole bunch of things, A equals B, C equals D, E equals F. I think they're separated by commas or something. And then it'll still go to the login endpoint, but it'll get all of those things, those query parameters. The problem is everyone on the way can just see all of those in plain text. Yeah, that's one problem. And the second
+你的浏览器时，有时你会看到这个，你会看到问号，item 等于 13 或者问号 foo 等于 bar，对吧？那是什么，实际上它是发送的，除了 URL 之外，像 google.com，那个问号后面的任何东西，它去往相同的 URL，但它就像额外的数据。所以你可以说，mywebsite.com 斜杠 login，问号，一堆东西，A 等于 B，C 等于 D，E 等于 F。我想它们是用逗号或其他东西分隔的。然后它仍然会去到登录端点，但它会得到所有这些东西，那些查询参数。问题是沿途的每个人都可以以纯文本形式看到所有这些。
+
+19
+00:12:19.000 --> 00:12:54.000
+problem is that the browsers are maintaining our history. So that means that every URL that you are pushing basically is being saved on histories, especially if you are typing that on the browser bar. So that means it's automatically saved on the cache of the browser. And that's really bad. So I would say that there are two major points that you want to pay attention to when you're sending passwords through the internet.
+是的，这是一个问题。第二个问题是浏览器正在维护我们的历史记录。这意味着你推送的基本上每一个 URL 都被保存在历史记录中，特别是如果你是在浏览器栏中输入的话。这意味着它会自动保存在浏览器的缓存中。这真的很糟糕。所以我想说，当你通过互联网发送密码时，有两个主要点需要注意。
+
+20
+00:12:54.000 --> 00:13:37.000
+So first of all, I would recommend always using post body. Okay. Posts normally are not cached. This is good. So always use a post body and always make sure that when you are sending data to your endpoint, it's an HTTPS SSL with a legitimate certificate. Because that means that you are less prompt for men in the middle of text with SSL certificates. So if you have to send passwords through the internet, Passbody and SSL is mandatory.
+首先，我建议始终使用 POST 主体。好的。POST 通常不会被缓存。这很好。所以总是使用 POST 主体，并且始终确保当你向端点发送数据时，它是带有合法证书的 HTTPS SSL。因为这意味着在使用 SSL 证书时，你不太容易遭受中间人攻击。因此，如果你必须通过互联网发送密码，POST 主体和 SSL 是强制性的。
+
+21
+00:13:37.000 --> 00:14:10.000
+Yeah, I'm going to take a crack at this and then you definitely fill in the gaps here because I'm sure I'm going to mess this up. But I think the way SSL works is the browser itself has some type of key or something like that from a bunch of registrars. And so when you download the browser, you get sort of ways to encrypt data. And then when you go to an HTTPS site, the browser encrypts the data
+是的，我要尝试解决这个问题，然后你一定要填补这里的空白，因为我确信我会搞砸。但我认为 SSL 的工作方式是浏览器本身拥有来自一堆注册机构的某种密钥或类似的东西。所以当你下载浏览器时，你会得到加密数据的方法。然后当你访问一个 HTTPS 网站时，浏览器会加密数据
+
+22
+00:14:10.000 --> 00:14:32.000
+and sends it to the server. And then the server is able to, using these same services like Let's Encrypt or these other ones, it's able to decrypt that data. And I think it has something to do with the fact that you downloaded the browser and the browser has some special information. That's what allows you to encrypt something without having to
+并将其发送到服务器。然后服务器能够使用这些相同的服务（如 Let's Encrypt 或其他服务）解密该数据。我认为这与你下载了浏览器并且浏览器有一些特殊信息这一事实有关。这就是允许你在不需要在互联网上请求权限的情况下加密某些东西的原因，
+
+23
+00:14:32.000 --> 00:15:08.000
+basically ask for permission over the internet, which there's sort of a chicken and an egg there, right? And so the HTTPS kind of gets around that through the browser. Did I get that right? Yeah, that's correct. So the browser is responsible for the encryption and the endpoint, which is basically the server, is responsible for the SSL termination, which basically means get an encrypted data, decrypt it, make sure that it's valid, and basically handle it. Yeah, so it's kind of like someone, you know, to use the key analogy, it's kind of like, you
+那里有点像先有鸡还是先有蛋的问题，对吧？所以 HTTPS 通过浏览器绕过了这一点。我理解对了吗？是的，这是正确的。浏览器负责加密，而端点（基本上是服务器）负责 SSL 终止，这基本上意味着获取加密数据，解密它，确保它是有效的，并基本上处理它。是的，所以这有点像某人，你知道的，用钥匙的比喻，这有点像，你
+
+24
+00:15:08.000 --> 00:15:52.000
+know, you let someone into your house. This is the browser that you downloaded. You let someone into your house. They give you like a special encryption tool. Right. And then now if you want to send a key to somebody through the mail or something like that you would somehow like the letter the envelope you know needs that tool to open and so you know you might give a letter to the postman who gives it to someone else who gives it to someone else but none of them have that tool that that person came into your house and gave you and so they can't open that letter even even though they have it. And so then eventually it gets to the server. The server can also talk to that person who went into
+让某人进入你的家。这是你下载的浏览器。你让某人进入你的家。他们给你一个特殊的加密工具。对吧。然后现在如果你想通过邮件或其他方式将钥匙发送给某人，你就会以某种方式让信件、信封需要那个工具才能打开，所以你知道你可能会把一封信给邮递员，邮递员把它给别人，别人又把它给别人，但他们都没有那个人来到你家里给你的那个工具，所以他们打不开那封信，即使他们拥有它。所以最终它到达了服务器。服务器也可以与那个去过你家
+
+25
+00:15:52.000 --> 00:16:37.000
+your house and gave you the tool and the server can decrypt it. And so in this way, even though you're going over the internet and so many people are seeing your password, they're seeing an encrypted version of it that they can't untangle. That's 100% correct. in Dota, makes it much more trustable, even along with we'll touch base a little bit on the way that we are handling authentication and what are the methods, do we use session based, do we use JWTs but like jumping
+并给你工具的人对话，服务器可以解密它。通过这种方式，即使你正在通过互联网，有那么多人看到你的密码，他们看到的也是一个他们无法解密的加密版本。这是 100% 正确的。在 Dota 中，这使得它更值得信赖，甚至连同我们将稍微触及我们处理身份验证的方式以及有哪些方法，我们是使用基于会话的，还是使用 JWT，但是跳过
+
+26
+00:16:37.000 --> 00:17:03.000
+a few minutes before that when we are signing authentication keys, normally that's the way that we are doing it. We're signing with some private key that only the server has. And we are giving the public key to everyone just so they can verify the authenticity of this server. Cool. That makes sense. Yeah. So let's unpack some more of this.
+在签署身份验证密钥之前的几分钟，通常这就是我们正在做的方式。我们用只有服务器拥有的某个私钥进行签名。我们把公钥给每个人，只是为了让他们可以验证这个服务器的真实性。酷。这说得通。是的。所以让我们解开更多这方面的谜团。
+
+27
+00:17:03.000 --> 00:17:33.000
+So you talked about M know, we talked about, you talked about MFA, multi-factor authentication. What is that all about? Yeah. So passwords are easily hackable. Okay. So most of us do not get our browsers advisors on breach passwords. So we are using the same password for all of the websites. So if password, and then basically that means
+所以你谈到了M，你知道的，我们谈到了，你谈到了MFA，也就是多因素身份验证。那究竟是什么？是的。密码很容易被黑客破解。好吧。因此，我们大多数人并没有从浏览器那里得到关于密码泄露的警告。所以我们在所有网站上都使用相同的密码。因此，如果密码，这就意味着
+
+28
+00:17:33.000 --> 00:17:53.000
+that we are trusting the server or the endpoint or the service that we're using to maintain our password security. Most of them do, okay? But some of them, you just mentioned SQL injection. Some of them do not store our password securely. And storing it securely means at least
+我们信任我们所使用的、负责维护密码安全的服务器、端点或服务。大多数服务器确实做到了，好吧？但其中一些，你刚才提到了SQL注入。有些服务器并没有安全地存储我们的密码。安全地存储意味着至少要在数据库中
+
+29
+00:17:53.000 --> 00:18:40.000
+hashing and salting them on the database. So they are not easily, I would say, reversely engineered. So if the service that we're using and we send our password to didn't maintain it properly, that means that it's easily hackable. And once one service is hacked, that means that if we reuse the same password all over again on the other services, for example, our banking account, our LinkedIn account, our banking account, our LinkedIn account, our Facebook account, our Twitter account, et cetera, et cetera, that means that the attacker can potentially go and hack all the other accounts by a very simple operation,
+对它们进行哈希和加盐处理。这样它们就不容易被逆向工程破解。因此，如果我们使用的服务以及我们发送密码的服务没有妥善维护它，这就意味着它很容易被黑客攻击。一旦某个服务被黑，这就意味着如果我们把相同的密码在其他服务上反复使用，例如我们的银行账户、领英账户、Facebook账户、推特账户等等，那就意味着攻击者可以通过一个非常简单的操作，去黑掉所有其他账户，
+
+30
+00:18:40.000 --> 00:19:18.000
+by going on a rich passwords database and going and trying. So this is where MFA comes into place, where basically there is another level of authentication that you have to prove that you are actually the originator of the request by proving another, we call it, position on the authenticity. So, for example, I tried, I onboarded MFA on my account, and let's say that my password was breached. So we have an attacker, on the other hand,
+即访问泄露的密码数据库并进行尝试。这就是MFA发挥作用的地方，基本上它有另一层身份验证，你必须通过证明另一个我们称之为真实性凭证的东西，来证明你确实是请求的发起者。例如，我尝试在我的账户上启用MFA，假设我的密码泄露了。另一方面，我们有一个攻击者
+
+31
+00:19:18.000 --> 00:20:07.000
+who is trying to log in to my bank, okay? So he has my email, and he has my password, and he types it in and they are correct but now he is facing another level of challenge we have to to prove that a code which is being sent let's say you take the easy but not secure way of sms so now he has to type an SMS number that is sent to my phone. Okay. So first of all, I got this SMS. I immediately know that someone is trying to log in to my account and I'm probably going to change my password after that. But that blocks the attacker from actually logging into my account because I have another level of authentication that needs to prove that basically
+正试图登录我的银行，好吧？所以他有我的电子邮件，他有我的密码，他输入了这些信息，而且是正确的，但现在他面临着另一层挑战，我们必须证明一个正在发送的代码，假设你采取了简单但不安全的短信方式，所以现在他必须输入发送到我手机上的短信验证码。好吧。首先，我收到了这条短信。我立刻就知道有人在试图登录我的账户，之后我可能会更改密码。但这阻止了攻击者真正登录我的账户，因为我有另一层身份验证需要证明
+
+32
+00:20:07.000 --> 00:20:58.000
+who is trying to login is actually me. So that we have several methods of multi-factor authentication. I mentioned the TOTP, which is one of the most popular today before before the videos came into place, TOTP basically means use of either Google Authenticator or Microsoft Authenticator. There are tons of authenticator apps available for download from any app store. And the idea is that you are being assigned with a number, six digits number for 30 seconds. It's based on a seed. And the idea is that it's based on the same seed that is running on the server, okay, based on times.
+尝试登录的人确实是我。所以我们有几种多因素身份验证的方法。我提到了TOTP，这是目前最流行的身份验证方法之一，在各种应用程序出现之前，TOTP基本上意味着使用谷歌身份验证器或微软身份验证器。有大量的身份验证器应用程序可供从任何应用商店下载。其核心理念是，系统会为你分配一个数字，一个持续30秒的六位数。它基于一个种子。其构想是，它基于在服务器上运行的相同种子，并根据时间生成。
+
+33
+00:20:58.000 --> 00:21:35.000
+And right after the authentication, you have to type in another number. A number that is available only from your authenticator application. So that's a TOTP. There are several other methods such as SMS, which is the same. You're sending an SMS to the phone number that you signed up with. You just mentioned that phone numbers are not information that we likely want to share with the services that we're using. We feel more comfortable by installing an app on our device
+在身份验证之后，你必须输入另一个数字。一个只能从你的身份验证器应用程序中获取的数字。这就是TOTP。还有其他几种方法，比如短信，原理是一样的。你向你注册时使用的手机号发送一条短信。你刚才提到，手机号不是我们愿意与所使用的服务共享的信息。我们在设备上安装应用程序会感觉更舒服
+
+34
+00:21:35.000 --> 00:22:14.000
+and not sharing the phone number with the services. This is why SMS is not that popular. And it's easily hackable so just like just go into your favorite search engine and search for sms hijacking and sms mfa yeah i think the uh the one i remember i'm sure there's a ton of them but the one i remember was when Jack Dorsey, who is the CEO of Twitter, correct me, feel free to look up the article. But I think what happened is somebody called Verizon and said that they needed to transfer a number.
+并且不与服务共享手机号。这就是为什么短信没有那么流行。而且它很容易被黑客攻击，就像你只要去你最喜欢的搜索引擎搜索“短信劫持”和“短信MFA”。是的，我想我记着的那个——我确信有很多这样的案例，但我记得的一个是，推特首席执行官杰克·多西（Jack Dorsey）遭遇的事件，如果我记错了请纠正我，大家也可以随时去查阅这篇文章。但我想发生的事情是，有人打电话给威瑞森（Verizon），说他们需要转移一个电话号码。
+
+35
+00:22:14.000 --> 00:22:50.000
+And they were actually able to, with very little proof, transfer Jack Dorsey's personal cell phone to their cell phone. So they had Jack Dorsey's phone number. And so I'm assuming they started just getting calls. People were trying to call the CEO of Twitter. We're now calling this random person. And what they did with that is they kicked into the MFA. They tried to log in as Jack. And then when they couldn't, they said, oh, I forgot my password. Send me a text with a reset link. And so Twitter did did that they clicked the link they changed the password and now they have the ceo of twitter's you know twitter account
+他们实际上在证据非常少的情况下，成功把杰克·多西的个人手机号转移到了他们自己的手机上。所以他们有了杰克·多西的电话号码。因此我猜测他们开始接到电话。原本试图给推特CEO打电话的人，现在打给了一个陌生人。他们利用这一点触发了MFA。他们试图以杰克的身份登录。当他们登录失败时，他们说，哦，我忘记密码了，请给我发一个带有重置链接的短信。于是推特照做了，他们点击了链接，更改了密码，现在他们就掌控了推特的CEO的（你知道的）推特账户。
+
+36
+00:22:50.000 --> 00:23:30.000
+and um and so they posted all these things i don't remember where they posted i'm sure it was terrible or i think they asked for bitcoin or something i don't remember but but uh but yeah so you can see how that's a massive massive problem and so with sms you're relying on the phone company being able to secure your phone number. And it hasn't been that good about that. Yeah, exactly. But, you know, when we are discussing MFA and when we are discussing security and authentication and authorization, there is a constant tension between product and security. Right. constant tension between product and security, right?
+然后他们发布了各种言论，我不记得他们发布到哪里了，我确信那很糟糕，或者我觉得他们索要了比特币之类的，我不记得了，但无论如何，你可以看到这这是一个巨大、巨大问题，因此使用短信时，你是在指望电话公司能够保护你的手机号码。而他们在这一点上一直做得不够好。是的，完全正确。但是，你知道，当我们讨论MFA，当我们讨论安全、身份验证和授权时，产品和安全之间一直存在着一种持续的拉锯战。对吧。产品和安全之间存在着持续的拉锯战，对吧？
+
+37
+00:23:30.000 --> 00:24:15.000
+So the security guys want everything to be as secure as possible. No one can log in. No one can sign up without verifying their email address. MFA, yeah, they must use Google Authenticator, et cetera, et cetera. But, you know, sometimes product defines by the security level. Because I'll give you an example with my mother, which is a very technologist person, but I couldn't get her to install an Authenticator app on her phone. She feels much more easy with SMS, although I explained several times that SMS is not good for her. But even the bank account
+因此，安全人员希望一切都尽可能安全。没有人能够登录。如果没有验证电子邮件地址，任何人都无法注册。MFA，是的，他们必须使用谷歌身份验证器等等。但是，你知道，有时产品是由安全级别来定义的。因为我可以给你举个例子，我母亲是一个非常不懂技术的人，但我无法让她在手机上安装身份验证器应用。她觉得短信更容易接受，尽管我多次向她解释短信对她不安全。但甚至连银行账户
+
+38
+00:24:15.000 --> 00:24:55.000
+requires her SMS because they say, well, with the type of people that are going into the bank, you cannot expect everyone to know what an authenticator app is. So you have to do some compromises in order, you know, for the product to be usable. So, you know, that's always the tension with MFA. MFA is just the beginning of it. You know, session timeouts is just the beginning of it. Session timeouts is just another sample of it. There's always a tension between product guys and security guys. And the truth is probably somewhere in the middle. Now it's more towards the security.
+也要求她使用短信，因为他们说，考虑到去银行办理业务的人群类型，你不能指望每个人都知道什么是身份验证器应用。所以你必须做出一些妥协，你知道的，以便让产品具有可用性。所以，你知道，这始终是MFA面临的张力。MFA只是这一切的开始。你知道，会话超时只是其中的开始。会话超时只是它的另一个例子。产品人员和安全人员之间总是存在张力。而真相可能介于两者之间。现在它更偏向于安全方面。
+
+39
+00:24:55.000 --> 00:25:20.000
+Today with PLGs, for example, I just mentioned it. With PLGs, you're not required to verify your email anymore. You sign up, you type in your password. I can sign up as Jason, okay, with your email. You'll get an email, but I'll be able to log in because I typed in my password. Obviously, after three days, if I didn't verify my account, my account will be deleted by,
+如今，以PLG（产品驱动增长）为例，我刚才提到了。在PLG模式下，你不再需要验证你的电子邮件。你注册，然后输入密码。我可以以杰森的名义注册，好吧，用你的邮箱。你会收到一封邮件，但我能够登录，因为我输入了密码。显然，三天后，如果我没有验证我的账户，我的账户将会被删除，
+
+40
+00:25:20.000 --> 00:26:06.000
+but that's, you just mentioned with the LinkedIn research, there is constant tension on providing like the best user experience. And sometimes security is just another hustle on the way. So this is something that we are constantly facing from the product side and from the security side. Yeah. You know, actually it just hit me, you know, when you, when you're saying it, yeah. So, you know, I have an email that's totally available. Anyone can get, can get access to it. And so because of that and, and, and, and show, you know, I, I tend to get a lot of strange emails and yeah, I have gotten emails that were kind of effectively from, from products I've never used, but, but, you know, they, they, they sounded like they knew me. And yeah, I think what's going
+但正如你刚才提到的领英研究，在提供最佳用户体验方面存在持续的张力。有时安全只是路上的又一个麻烦。所以这是我们从产品端和安全端不断面临的问题。是的。你知道，其实我突然想到了，当你在说这些的时候，是的。所以，你知道，我有一个公开的电子邮件，任何人都可以访问。正因为如此，我往往会收到很多奇怪的邮件，是的，我确实收到过一些邮件，它们实际上来自我从未使用的产品，但它们听起来好像很了解我。是的，我想发生的事情是
+
+41
+00:26:06.000 --> 00:26:53.000
+on there is, yeah, people are using my email and then logging into some type of product, and then they're able to do things while they're unverified. Of course, I never verify. That would be crazy. But I get the email asking me to verify. And then, yeah, it's a really good point. I never really connected all the dots. But yeah, until you're verified, you know, many products will let you do things, but, but maybe not everything. And, and, and there's very good reason for that because yeah, there's definitely people who have used my email address and I guess done as much as they could, uh, unverified before, um, uh, before maybe their maybe their accounts finally get banned or I don't know what happens? Yeah, I think there is a main reason why email verification today with the PLG world,
+人们在使用我的电子邮件，然后登录某种产品，接着他们能够在未经验证的情况下做一些事情。当然，我从来不验证。那太疯狂了。但我收到了要求验证的邮件。然后，是的，这是一个非常好的观点。我从来没有把所有这些线索串联起来。但是，是的，在你验证之前，你知道，许多产品会允许你做一些事情，但可能不是全部。而且，这有非常充分的理由，因为确实有人使用过我的电子邮件地址，我想他们在账户最终被封禁之前，在未验证的情况下尽可能多地做了事情，或者我不知道会发生什么？是的，我认为今天在PLG世界中，电子邮件验证之所以有一个主要原因，
+
+42
+00:26:53.000 --> 00:27:39.000
+email verification is not that popular. So first of all, yeah, we've seen it ourselves. There was a drop of conversions when we requested people to verify their email address. Okay? And there are tons of researchers about it. But even if we do ask them to verify their email, with so many services around, you know, temp email and that kind of stuff. You never know who the user really is because everyone can go on the internet, type in 10-minute email, temp email address. They can set up an email address for one day. Okay.
+电子邮件验证并不是那么受欢迎。首先，是的，我们自己也看到了。当我们要求人们验证他们的电子邮件地址时，转化率下降了。好吧？并且有大量关于这方面的研究。但即使我们要求他们验证邮箱，由于周围有这么多的服务，你知道，临时邮箱以及诸如此类的事情。你永远不知道用户到底是谁，因为每个人都可以上网，输入10分钟邮箱、临时邮箱地址。他们可以设置一个只用一天的电子邮件地址。好吧。
+
+43
+00:27:39.000 --> 00:28:26.000
+They can work with that email address for one day and experiment any product. So it's not that it's on the contrary of security, but you know, email verification is not that mandatory in the PLG world. Yeah. Yeah. That makes sense. I guess it only becomes an issue if then I wanted to use that service and someone else is already using it with my email address. And I guess at that point, I'd have to call in or something like that. So this is exactly where single sign-on step is into the play. Because let's say that someone is using your, I don't know, your Gmail address or any other Outlook address. So this is where they will never be able to log in with your credential through SSO because you are the only
+他们可以使用该电子邮件地址一天并体验任何产品。因此，这并不是与安全背道而驰，但你知道，在PLG世界中，电子邮件验证并非强制性的。是的。这讲得通。我想只有当我想使用该服务而其他人已经用我的电子邮件地址在使用它时，这才会成为一个问题。我想在那个时候，我得打电话或者做类似的事情。所以这正是单点登录（SSO）发挥作用的地方。因为假设有人在使用你的，我不知道，你的Gmail地址或任何其他Outlook地址。这就是为什么他们永远无法通过SSO用你的凭据登录，因为你是唯一一个
+
+44
+00:28:26.000 --> 00:29:29.000
+one that can log in through the address on SSO. Yeah. Can you dive into that? I actually don't know what SSO is. I've heard the name, but I don't know much about it. Can you dive into that? Yeah, sure. So SSO stands for single sign-on and there are several methods of single sign-on. And there are several methods of single sign-on where OAuth is by far the most popular one. We refer to a social initiated login, and that goes all the way to much more complex protocols like another subset of OAuth, which is OpenID Connect. And obviously, SAML, which is, we call it the enterprise single sign-on. And the idea of single sign-on stands for you have one identity, okay? And that can be your Google identity, your Microsoft identity, your GitHub identity, or your Okta identity, okay, as an enterprise organization.
+可以通过SSO中的地址登录的人。是的。你能深入讲讲吗？我其实不知道什么是SSO。我听说过这个名字，但我对它了解不多。你能详细讲讲吗？当然可以。SSO代表单点登录（Single Sign-On），单点登录有几种方法。单点登录有几种方法，其中OAuth是目前最受欢迎的一种。我们指的是社交发起的登录，这甚至延伸到了更复杂的协议，比如OAuth的另一个子集，即OpenID Connect。显然，还有SAML，我们称之为企业级单点登录。单点登录的理念代表着你拥有一个身份，好吧？这可以是你的谷歌身份、微软身份、GitHub身份或Okta身份，好吧，作为一个企业组织。
+
+45
+00:29:29.000 --> 00:30:25.000
+And on each product that you are using or on each service that you are using, you should be able to log in with the same identity. And that's good for several reasons. So first of all, the first reason is that you have one password to remember one mfa to set up okay and all the other services are basically relying on the same identity provider so it stands for you have one identity provider if you are doing login with google google is your identity provider if you are doing login with Microsoft, Microsoft is the identity provider. And basically, you can see every application, what scopes it is using for your service, etc.
+在你使用的每个产品上，或者在你使用的每个服务上，你都应该能够用同一个身份登录。这在几个方面都很好。首先，第一个原因是你只有一个密码需要记住，只有一个MFA需要设置，好吧，所有其他服务基本上都依赖于同一个身份提供商。这意味着你有一个身份提供商，如果你使用谷歌登录，谷歌就是你的身份提供商，如果你使用微软登录，微软就是身份提供商。基本上，你可以看到每个应用程序正在为你的服务使用哪些范围等。
+
+46
+00:30:25.000 --> 00:31:02.000
+And so that's from the identity standpoint. for protocols like SAML and organizational single sign-on, the IT administrator of the account can basically, once you decide to leave the organization, so it's very popular in the B2B applications, once you leave the organization, the IT administrator of the organization needs to delete you from one repository, and that's the identity provider repository whether it's gsuit or azure ad or octa they delete you once and then you lose basically access to all of the other products you logged into as the employee of this
+所以这是从身份的角度来看的。对于像SAML和组织单点登录这样的协议，该账户的IT管理员基本上可以在你决定离开组织时（这在B2B应用程序中非常流行），一旦你离开组织，组织的IT管理员就需要从一个存储库中删除你，那就是身份提供商存储库，无论是G Suite、Azure AD还是Okta，他们把你删除一次，然后你基本上就会失去你作为该员工登录的所有其他产品的访问权限
+
+47
+00:31:02.000 --> 00:31:37.000
+organization that's basically the whole idea around single sign-on and enterprise single sign-on, which basically gives the power back to the IT administrator and to the identity provider to maintain all of the authentication flows. Got it. Okay. I think I get it. So the idea is, effectively, from a developer standpoint, it's kind of a handoff type thing where someone types in a password. I don't know if you do it on the client side or on the server side, but you get someone's...
+组织，这基本上就是单点登录和企业单点登录的核心理念，它基本上将权力交还给了IT管理员和身份提供商，以维护所有的身份验证流程。明白了。好的。我想我懂了。所以这个想法实际上是，从开发人员的角度来看，这是一种交接类型的事情，有人输入密码。我不知道你是在客户端还是在服务器端这样做，但你获取了某人的...
+
+48
+00:31:37.000 --> 00:32:06.000
+Actually, you probably don't get someone's password, but you somehow are able to show somebody content from Google and Google asks them for the password. And then Google tells you, yeah, this person is good to go. And then you trust that Google has done the right thing. And so once Google tells you this person is logged in and they are this email address, then they're in at that point. Correct. So the way it actually works is that you are
+实际上，你可能没有获取某人的密码，但你不知何故能够向某人展示来自谷歌的内容，然后谷歌向他们索要密码。接着谷歌告诉你，是的，这个人没问题。然后你信任谷歌做了正确的事情。因此，一旦谷歌告诉你这个人已经登录并且他们是这个电子邮件地址，那么从那一刻起他们就进去了。正确的。所以它实际运作的方式是
+
+49
+00:32:06.000 --> 00:32:40.000
+clicking, so we can dive into that. You click on the login with, let's say Google, for example, you click on the login with Google button on the application that you're trying to go into. Then you are being redirected to the Google authentication, you're being taken out of the application. Okay. So you've been redirected with the client ID of the application, which asked for this identity, but you are being redirected to Google. You type your password in Google. Okay.
+你点击，我们可以深入探讨这个。你点击，比方说使用谷歌登录，你点击你试图进入的应用程序上的“使用谷歌登录”按钮。然后你被重定向到谷歌身份验证，你被带离了应用程序。好吧。所以你带着应用程序的客户端ID被重定向，该客户端ID请求了此身份，但你被重定向到了谷歌。你在谷歌中输入你的密码。好吧。
+
+50
+00:32:40.000 --> 00:33:15.000
+Not in the application. The application has no idea what is your password. It knows only your email. And then basically once you are redirected back to the application, the application is doing some kind of token exchange with Google to get your actual identity. And that would be the email and most most of the times your entire profile and then basically that means that you are logged in to this application using google okay so that means
+而不是在应用程序中。应用程序根本不知道你的密码是什么。它只知道你的电子邮件。然后基本上，一旦你被重定向回应用程序，应用程序就会与谷歌进行某种令牌交换，以获取你的实际身份。这将是电子邮件，而且大多数时候是你的整个个人资料，这意味着你使用谷歌登录了这个应用程序，所以这意味着
+
+51
+00:33:15.000 --> 00:34:06.000
+still the application is the one that generates the authentication token for you but the identity provider that is being responsible to providing the multi-factor authentication for you, or the identity provider that is being responsible for the password maintenance is Google, not the application. Today's sponsor for Programming Throwdown is SignalWire. SignalWire is a pretty awesome company that allows developers to use multiple languages to call their APIs and deliver low latency video and audio technology. So imagine if you're building an application or a website and you want to host an interactive event like a charity event that they supported for the American Cancer Society where they're able to have multiple rooms, people interacting in the rooms,
+应用程序仍然是为你生成身份验证令牌的一方，但负责为你提供多因素身份验证的身份提供商，或负责维护密码的身份提供商是谷歌，而不是应用程序。Programming Throwdown今天的赞助商是SignalWire。SignalWire是一家非常棒的公司，它允许开发人员使用多种语言来调用他们的API，并提供低延迟的视频和音频技术。因此，想象一下，如果你正在构建一个应用程序或网站，并且你想举办一个互动活动，比如他们为美国癌症协会支持的慈善活动，他们能够在其中拥有多个房间，人们在房间里互动，
+
+52
+00:34:06.000 --> 00:34:29.000
+like a video conference call, but like way more tailored to your specifications and so much more flexibility and the APIs that enable you to do that. They're already being used by large TV studios, film companies, Fortune 500. These are all things that are definitely been battle tested. And today we are happy to have them as a sponsor of Programming Throwdown.
+就像视频会议通话一样，但比你的规格要求定制得多，API的灵活性也高得多，使你能够做到这一点。它们已经被大型电视制片厂、电影公司、财富500强企业使用。这些都是绝对经过实战检验的东西。今天我们很高兴有他们作为Programming Throwdown的赞助商。
+
+53
+00:34:29.000 --> 00:35:16.000
+Yeah, SignalWire provides expert support from the real OGs of software-defined telecom. These are the original geeks of that technology. SignalWire is a complete unified platform for integrating video as well as voice and messaging capabilities into any app. You could try it today at SignalWire.com and use code THROWDOWN for $25 in developer credit. So you go to SignalWire.com and use the code THROWDOWN at SignalWire.com today to receive $25 in developer credit. Now back to our episode. Got it. Okay. That makes sense. Yeah. And I think people are starting to, at least I'm starting to understand now why you need session tokens, which is something we should talk about. You talked about session timeout. And so all of this
+是的，SignalWire为软件定义电信领域的真正OG提供专家支持。这些是该技术的鼻祖。SignalWire是一个完整的统一平台，用于将视频、语音和消息功能集成到任何应用程序中。你今天就可以在SignalWire.com上试用它，并使用代码THROWDOWN获得25美元的开发者信用额度。所以你今天就可以访问SignalWire.com并在SignalWire.com上使用代码THROWDOWN，以获得25美元的开发者信用额度。现在回到我们的节目。明白了。好的。这说得通。是的。我想人们开始——至少我开始理解为什么你需要会话令牌了，这是我们应该讨论的事情。你谈到了会话超时。所以所有这些
+
+54
+00:35:16.000 --> 00:36:07.000
+that we're talking about, there's a lot of steps to this, a lot of complexity. There's reaching out to Google and coming back. And so you don't want to do this every single time someone wants to access anything on your website. And so that's where the session token comes in. So you basically, and please fill in the gap here, but I think basically the way it works is once you've all agreed on something, then you can create this token, which is good enough. Once you have this session token, that's all you need to be authenticated. And so in that sense, it's kind of vulnerable, right? If I can go to your computer and get on your browser and start copying the session tokens out of there, then I can be you, right? And so because it's insecure, it has a timeout. So maybe it only lasts for a day. So at most, I can masquerade.
+我们一直在谈论的，这其中有很多步骤，非常复杂。有联系谷歌然后返回的过程。所以你肯定不想在每次有人想要访问你网站上的任何内容时都这样做。这就是会话令牌（session token）发挥作用的地方。所以你基本上，请在这里填补空白，但我认为它的运作方式基本上是，一旦你们就某些事情达成一致，你就可以创建这个令牌，这就足够了。一旦你有了这个会话令牌，这就是进行身份验证所需的一切。从这个意义上说，它其实是有点脆弱的，对吧？如果我能走到你的计算机前，打开你的浏览器，并开始把里面的会话令牌复制出来，那么我就可以变成你，对吧？而且正因为它是不安全的，所以它有一个超时机制。也许它只能持续一天。所以最多，我可以伪装成你。
+
+55
+00:36:07.000 --> 00:36:36.000
+If I stole your laptop or something, at most, I can masquerade as you for a day. As long as I stole the laptop, that's different. If I somehow just stole the browser cookies from your laptop, then I could masquerade as you for a day. But eventually, that session token will expire. And so you'll have to go through this process again of authenticating. And at that point, then you wouldn't be able to be as that person. Is that kind of how the session stuff works?
+如果我偷了你的笔记本电脑之类的话，我最多也只能伪装你一天。只要我偷了笔记本电脑，情况就不同了。如果我不知怎么地只是从你的笔记本电脑里偷了浏览器Cookie，那么我就可以伪装你一天。但最终，那个会话令牌会过期。所以你必须再次经历这个身份验证过程。在那之后，你就不能再以那个人的身份行事了。会话机制大概就是这样运作的吗？
+
+56
+00:36:36.000 --> 00:37:26.000
+Yeah, so that's correct. So the most, there's the OWASP top 10, which is the best security practices for, you can take the best security practices from there of how to maintain the best security for your website. And XSS, I don't remember the exact number, but I believe it's number three. We can check it out. But XSS, you know, can be easy,
+是的，完全正确。所以，有一个OWASP Top 10，这是最佳安全实践，你可以从中采用最佳安全实践来为你的网站维护最佳安全性。至于XSS，我不记得具体数字了，但我相信它是第三名。我们可以查证一下。但XSS，你知道，可能很容易，
+
+57
+00:37:26.000 --> 00:38:38.000
+but normally what you can do with XSS, what you want to do with XSS, and XSS stands for cross-site scripting, you want to hijack your victim's access token. why you know whenever whenever i speak with someone about how to maintain access tokens how to how to create like the most secure authentication mechanism around it xss always comes into play as you don't want to play around xss so i've seen a lot of developers and they are usually the same developers that say, yeah, I can do it in a week that would keep the access tokens on the local storage. And that's like rule number one of do's and don't do's. That's the rule number one in the don't do's. Yeah, because that means that every attacker which gets access to your application can just hijack your local storage, gets the access token, and then, yeah, totally, he can be you. So usually there are several guidelines around it. But the idea is to have stored the access tokens in memory for the application. So the less likely to be stolen and stole the so normally JWTs are made of access tokens and
+但通常你可以用XSS做什么，你想用XSS做什么——XSS代表跨站脚本攻击（cross-site scripting）——你是想劫持受害者的访问令牌。这就是为什么，每当我与别人交流如何维护访问令牌、如何围绕它创建最安全的身份验证机制时，XSS总是会出现，你绝对不想在XSS上掉以轻心。所以我见过很多开发人员，他们通常也是那些说“是的，我可以在一周内搞定”的开发人员，他们会将访问令牌保存在本地存储（local storage）中。这简直是不该做的事情中的第一条禁忌。这是绝对不能做的事中的第一条。是的，因为这意味着能够访问你应用程序的每个攻击者都可以直接劫持你的本地存储，获取访问令牌，然后，完全可以，他就能变成你。所以通常围绕这一点有几个准则。但核心思想是将应用程序的访问令牌存储在内存（memory）中。这样被盗的可能性较小，通常JWT由访问令牌和
+
+58
+00:38:38.000 --> 00:39:22.000
+refresh tokens. So normally for web application or for modern web application, what we recommend is storing the refresh tokens as HTTP only cookies. So HTTP only cookies are cookies that cannot be accessible to any JavaScript, which makes it very hard for the attacker to get them because the browser protects them and do not give access to potential attackers. And then protecting through a course, which is course original protection to the other part of the refresh tokens. That usually makes up a legitimate protection
+刷新令牌（refresh tokens）组成。因此，通常对于Web应用程序或现代Web应用程序，我们建议将刷新令牌存储为仅HTTP Cookie（HTTP only cookies）。因此，仅HTTP Cookie是任何JavaScript都无法访问的Cookie，这使得攻击者很难获取它们，因为浏览器会保护它们，不让潜在攻击者访问。然后通过CORS（跨域资源共享）进行保护，即对刷新令牌的另一部分进行CORS源保护。这通常构成了对任何Web应用程序的合理保护，
+
+59
+00:39:22.000 --> 00:39:48.000
+for any web application. And that means that your access token is likely to be safe on the application. And yeah, I did mention JWTs. JWTs is one of the most common ways of maintaining tokens today. So up until a few years ago, we used what we just called session tokens.
+并且这意味着你的访问令牌在应用程序上应该是安全的。是的，我确实提到了JWT。JWT是当今维护令牌最常见的方法之一。因此，直到几年以前，我们还在使用我们刚才所说的会话令牌。
+
+60
+00:39:48.000 --> 00:40:52.000
+So there is a central token repository, which was a single point of failure, and everyone needed to basically talk with in order to validate token. But today, with the rise of microservices and the asymmetric encryptions, the world has shifted around to JSON web tokens, which is the JWTs, which basically means that you get a JSON, which is normally the user data. You sign it using a private key and you give the public key to any microservice around it. And then basically you take off the responsibility from this central token repository and you provide the services with the way of validating the request. And that basically, you know, same as ours, pretty much changed the world of integration between companies, because once you can shift the same authorization header and the same JWT token between different
+所以当时有一个中央令牌存储库，它是一个单点故障，每个人基本上都需要与它进行通信以验证令牌。但今天，随着微服务和非对称加密的兴起，世界已经转向了JSON Web令牌，即JWT，这基本上意味着你得到一个JSON，它通常是用户数据。你使用私钥对其进行签名，并将公钥分发给周围的任何微服务。然后，你基本上将责任从这个中央令牌存储库中剥离出来，为各个服务提供验证请求的方法。这基本上，你知道，和我们的一样，改变了公司之间集成的世界，因为一旦你可以在不同的服务之间
+
+61
+00:40:52.000 --> 00:41:38.000
+services, you can shift it between different applications that can verify the same JWT token without any specific integration, okay, just by using a public key. And that's the, I think that's really changed the world of how we are doing, you know, integrations between applications and teams by simply sharing public keys. And that's a major change in the authentication world. Yeah, that makes sense what is the difference between a session token and a refresh token like why does the session token exist why not just have one token so the idea is that you know you wanna you wanna maintain
+传递相同的授权标头和相同的JWT令牌，你就可以在不同的应用程序之间传递它，它们可以在没有任何特定集成的情况下验证同一个JWT令牌，只需使用公钥即可。我认为这真的改变了我们通过简单共享公钥来进行应用程序和团队之间集成的方式。这是身份验证世界中的一个重大变化。是的，这说得通。会话令牌和刷新令牌有什么区别？为什么会话令牌会存在？为什么不只用一个令牌呢？所以这个想法是，你知道，你希望
+
+62
+00:41:38.000 --> 00:42:14.000
+the session tokens as short as possible and the refresh tokens as long as possible because session tokens basically give you or give the attacker access to your account they can do actions on behalf of the victims and that's why you want to keep an extra level of basically extra level of protection by just having the access tokens as short one. I don't know. You said a day. I think it's too much. An hour or something. I just made that up.
+尽可能缩短会话令牌的有效期，并尽可能延长刷新令牌的有效期，因为会话令牌基本上赋予了你或攻击者访问你账户的权限，他们可以代表受害者执行操作，这就是为什么你希望通过使访问令牌尽可能短来增加一个额外的保护层。我不知道。你刚才说了一天。我觉得这太长了。一个小时左右吧。我那是随口说的。
+
+63
+00:42:14.000 --> 00:42:43.000
+Don't take that as technical advice, please. No, no, no, no, no. But keeping them as short as possible and the refresh tokens are the one that are being used all the time to maintain the session active. And, you know, with the method I just, you know, we just discussed, the access tokens live in memory. You're not saving them on any local storage or something like that.
+请不要把这当作技术建议。不，不，不，不，不。但是要尽可能缩短它们的有效期，而刷新令牌是随时用来保持会话活跃的令牌。而且，你知道，通过我刚才讨论的方法，访问令牌是存活在内存中的。你不会将它们保存在任何本地存储或类似的地方。
+
+64
+00:42:43.000 --> 00:43:04.000
+That means that once you hit a page refresh, your session is gone. So the token is gone. So you have to refresh it in order to keep the session alive. And you don't want the user to re-authenticate every time he's doing a page refresh. And the refresh token takes care of the session longevity.
+这意味着一旦你刷新页面，你的会话就没了。所以令牌也没了。因此，你必须刷新它才能保持会话处于活动状态。你肯定不希望用户每次刷新页面时都重新进行身份验证。而刷新令牌则负责延长会话的寿命。
+
+65
+00:43:04.000 --> 00:43:33.000
+Okay. So that's the general idea of refresh tokens. I guess the thing I don't understand is how is the refresh token more secure? Like what's to stop someone from just stealing the refresh token instead of stealing the session token? So there are two reasons here. First of all, on the website, okay, on the single page application side, what we normally suggest is having the refresh token as part of an HTTP only cookie. Okay,
+好的。这就是刷新令牌的总体概念。我想我不明白的是，为什么刷新令牌更安全？是什么阻止了别人去偷刷新令牌而不是偷会话令牌呢？这里有两个原因。首先，在网站端，也就是单页应用程序（SPA）端，我们通常建议将刷新令牌作为仅HTTP Cookie的一部分。好吧，
+
+66
+00:43:33.000 --> 00:44:10.000
+so HTTP only cookie cannot be stolen through an XSS. Okay, they are usually protected. And if you add the course mechanism, so you're protected with course as well. So they cannot be stolen. And on the backend side for our flows, okay? So refresh tokens basically are being stored on the backend side, which is less likely to be stolen from any Redis or a local database around there. Oh, I think I get it. So I'm going to say it a little differently.
+所以仅HTTP Cookie无法通过XSS被盗。好吧，它们通常是受到保护的。如果你再加上CORS机制，那么你也受到了CORS的保护。所以它们是无法被盗的。而在后端我们的流程中，好吧？因此，刷新令牌基本上存储在后端，从Redis或本地数据库等地方被盗的可能性要小得多。哦，我想我明白了。所以我要换一种说法。
+
+67
+00:44:10.000 --> 00:44:46.000
+Tell me if I understand it. I'm paraphrasing or if I don't understand it. So the refresh token, you kind of pass that around once when you log in. And then after that, the server is the only person who has it. And so the attacker would have to grab it right when you're logging in which is hard to do and so and so now the server has the refresh token not you and so and so that now it can't be stolen did i get that right or no yeah that's part of it so first of all this the the server stores it and yeah, you get it only when you get the access token.
+如果我理解了，请告诉我；如果我没理解，也请告诉我。我是在用我自己的话复述。所以刷新令牌，你在登录时只传递一次。然后在那之后，服务器是唯一拥有它的人。所以攻击者必须在你登录的那一刻正好把它抓取走，这很难做到，所以现在服务器拥有刷新令牌，而不是你，所以现在它无法被盗。我理解对了吗？还是不对？是的，这是部分原因。首先，服务器存储了它，而且，是的，只有当你获得访问令牌时，你才会同时得到它。
+
+68
+00:44:46.000 --> 00:45:11.000
+So you get a pair. You get the access token and the refresh token. And the only way to get a new access token is by using the refresh token, which is being stored down there in the server. And if you're working on a browser side, so if you chose to put the refresh token as part of your application, as an HTTP- only cookie or something like that, it cannot be stolen as well because if you're using the best practices around course,
+所以你得到的是一对。你得到访问令牌和刷新令牌。而获取新访问令牌的唯一方法就是使用存储在服务器上的那个刷新令牌。如果你在浏览器端工作，如果你选择将刷新令牌作为应用程序的一部分，比如作为仅HTTP Cookie或类似的东西，它也是无法被盗的，因为如果你围绕CORS使用了最佳实践，
+
+69
+00:45:11.000 --> 00:45:54.000
+because it will only be sent to your endpoint for the refresh token purposes. So I guess if you have the refresh token as an HTTP only cookie, then is the session token like adding any value or is it just like a legacy thing at that point? No, no, no. Obviously you don't want to refresh the token on every action. Okay. So as I just mentioned, usually the refresh token will be sent only to the refresh endpoint. Okay. And you'll get a new access token. The old access token will be invalidated and the new access token will be generated. And as I mentioned, the access token
+因为它只会为了刷新令牌的目的而被发送到你的端点。所以我想，如果你把刷新令牌设为仅HTTP Cookie，那么会话令牌是否还能带来任何价值，还是说在那种情况下它只是一种遗留的东西？不，不，不。显然，你不想在每个操作上都去刷新令牌。好吧。正如我刚才提到的，通常刷新令牌只会发送到刷新端点。好吧。然后你会得到一个新的访问令牌。旧的访问令牌将失效，并生成新的访问令牌。正如我所提到的，访问令牌
+
+70
+00:45:54.000 --> 00:46:24.000
+should be used around your, I don't know, tens of microservices, around tens of different services that you are using and sometimes with different applications that you are using. And the idea is that access tokens are signed. So every microservice can basically validate them. And yeah, the idea of access tokens is here to stay because they provide an easy way for microservices
+应该用于你的，我不知道，几十个微服务中，用于你正在使用的几十个不同的服务中，有时还用于你正在使用的不同的应用程序中。这里的想法是，访问令牌是经过签名的。因此每个微服务基本上都可以验证它们。是的，访问令牌的存在是有其道理的，因为它们为微服务提供了一种简单的方法来验证它们，而不需要API网关之类的内容。现在我懂了。所以基本上，如果你没有访问令牌，你每次请求都得去访问谷歌。每次有人访问你页面的任何部分时，你都得带着刷新令牌出现。你必须回到谷歌并说，嘿，这个人合法吗？这个人合法吗？所以走这条路，一直这样做成本太高了。因此，会话令牌让你免于总是去访问SSO（单点登录）提供商。你可以定义该持续时间的长短。然后一旦过期，你再回到谷歌或任何人那里，
+
+71
+00:46:24.000 --> 00:47:02.000
+to validate them with the lack of API getaways or something like that. Now I get it. So basically, if you didn't have access tokens, you would have to go to Google every single request. You would show up with a refresh token every time someone visited any part of your page. You have to go back to Google and say, hey, is this person legit? Is this person legit? And so that route, it's just too expensive to keep doing that. And so the session token saves you from having to keep going to the SSO provider all the time. And you can define how long that duration is. And then once that expires, then you go back to Google or whoever
+并说，嘿，我需要另一个这样的令牌。没错。太棒了。哇。是的，我认为我们在这里讨论了大量非常非常好的信息。我们讨论了加密。我们讨论了令牌。我们讨论了登录。是的，我觉得这次讨论真的非常非常棒。
+
+72
+00:47:02.000 --> 00:47:21.000
+and say, hey, I need another one of these tokens. That's correct. Cool. Wow. Yeah, I think we covered a ton of really, really good information here. So we covered encryption. We covered tokens. We covered login. Yeah, I think this has been really, really great.
+老实说，很多这些问题都发自肺腑。我的意思是，这些都是我一直很好奇的事情，而你给出了精彩的回答。所以非常感谢。实际上，我这里的提问有点精疲力竭了。我的意思是，我真的觉得自己有了一个360度的全景视角。而且其中有一点是，我觉得我现在处于一种“有意识的无知”状态，而不是“无意识的无知”，我意识到如果我以后要做一个产品，绝对没有任何情况下我会去自己搞身份验证。是的。我的意思是，这就像，你知道，这个世界比我们刚才讨论的要深得多，而且令人惊奇的是，攻击者每天都在变得更聪明。身份验证和机制需要跟上这种步伐。
+
+73
+00:47:21.000 --> 00:48:08.000
+A lot of these questions, honestly, are just come straight from the heart. I mean, they're things I've always wondered and you have amazing answers. So thank you so much. Actually, I'm a little bit exhausted questions here. I mean, I actually feel like I have a 360 view. And one of the things too, is I think I'm now in a state of conscious ignorance as opposed to unconscious ignorance, where I realize that there's absolutely no circumstance by which I'm going to build my own authentication if I ever made a product. Yeah. I mean, it's like, you know, this world is going much more deeper than we just covered. And it's amazing that, you know, attackers are getting smarter every day. The authentications and mechanism needs to keep up with that.
+这就是为什么我们一直在谈论联盟（federations）、SSO、多因素认证（MFA）以及不同类型的多因素认证。以及如何恢复你的MFA设备？如何存储这些恢复代码？你知道，围绕这个有太多的事情了，当你刚开始时，你可能会有点迷茫，不知道为了做一个像样的解决方案，我们需要涵盖哪些内容，这真的有太多事情了。我的意思是，我在谈论五、六年前，有那么多事情需要照顾。是的，这就是为什么我绝不会，现在有了Frontend，这一切变得很简单。但即使在我接下来的旅程中，我也绝不会再独自构建这些东西了。尽管这其实挺有趣的，因为这就是我们现在正在做的事情。
+
+74
+00:48:08.000 --> 00:49:06.000
+So this is why we keep talking about federations and SSOs and multifactor and different types of multifactor. And how do you recover your MFA device? How do you store these recovery codes you know there are so many stuff around this that you kind of you know when i just started i i was a bit lost on the stuff that we had to cover in order to make like you know a decent solution and that's that's so many stuff, like I'm talking about five, six years ago, so many stuff to take care of. And yeah, that's the reason that I would never, you know, now with Frontenac, it's easy. But like, even on my next journey, I would never build this stuff alone again. Although it's kind of fun, because that's what we do now.
+是的，是的。我想，你知道，是的，我想这其中有一个前提条件。我的意思是，如果我的下一个项目是一个身份验证项目，那将完全不同。所以我认为这很迷人。但我也认为，是的，
+
+75
+00:49:06.000 --> 00:49:19.000
+Yeah, yeah. I think, you know, yeah, I guess there is a caveat. Yeah, I mean, if the next project I work on was an authentication project, that'd be totally different. And so I think it's fascinating. But I also think that, yeah,
+如果你的目标是，我不知道，构建一个打车应用之类的东西，千万不要说我可以在一周内搞定身份验证，除非你在使用第三方库，那或许你真能在一周内搞定。所以，让我们稍微深入探讨一下这个话题。给我们讲讲Frontend以及它是如何帮助进行身份验证的，还有你们提供的其他类似服务以及它是如何运作的。当然可以。如我所见，Frontend是一家成立两年的初创公司，当我们创立这家公司时，我们的想法是让开发人员能够基本重用一些服务，例如身份验证以及我们正在做的其他一些事情，这样他们就不必
+
+76
+00:49:19.000 --> 00:50:02.000
+if your goal is to, I don't know, build a taxi app or something like that, definitely don't say I can have authentication done in a week, unless you're using a third-party library, then maybe you can get it done in a week. So actually, let's dive a little bit into that. So tell us a bit about Front Egg and how it helps with authentication and other sort of services that kind of services that y'all provide and how that works sure so as i mentioned front egg is a two years old startup and when we founded the company the idea was to allow developers to basically reuse services such as authentication some other stuff that we are doing so they don't
+去处理我们过去一个小时讨论的这类问题了。而且，你知道，今天的身份验证几乎已经成了一种商品化的服务。有很多优秀的公司在做这件事。但我仍然看到一些关于如何去做、我需要做什么的问题。我看到很多开发人员试图自己动手做，结果失败了，但即便如此，我的意思是，因为它是
+
+77
+00:50:02.000 --> 00:50:32.000
+have to deal with these kind of questions that we just discussed for the past hour. And, you know, authentication today is pretty much a commodity. There are tons of great companies that are doing it. And still I see some questions around how to do it, what should I need to do. And I see a lot of developers that are trying to do it on themselves and then they are failing because of that but still i mean because it's nice it's
+现在的一种通用服务，有很多不同的服务，你知道，今天的公司希望专注于产品开拓市场（go-to market），他们希望更快地进入市场。这就是为什么当你在考虑自研还是购买（build versus buy）时，身份验证通常是首选要购买的东西。我们采取的方法略有不同，因为，是的，身份验证非常重要。但当你谈论B2B公司时，情况有点不同，因为身份验证很好，非常重要，但当你谈论B2B公司时，
+
+78
+00:50:32.000 --> 00:51:07.000
+now a commodity there are tons of different services and you know companies today they want to focus on the go-to market they want to get get to market faster. And that's why they are trying to build, when you think about build versus buy, authentication is the first one to basically buy. What we took is a different approach because, yeah, authentication is very important. But when you talk about B2B companies, it's a bit different because authentication is good is very important, but when you talk about B2B companies,
+情况有点不同，因为身份验证很好，你想确保你的用户是安全的，但是终端用户、你正在向其销售产品的公司会有大量的需求，他们希望产品能有不同的体验，而且主要围绕自助服务（self-servicedness），这就引出了不仅仅是身份验证的东西。例如，我们有一个客户希望强制他所有的账户和所有用户都使用MFA多因素认证，而另一个客户则不需要。
+
+79
+00:51:07.000 --> 00:51:40.000
+it's a bit different because authentication is good and you want to make sure that your users are safe, but there are tons of requirements from the end user side, from the companies that you are selling to, in terms of different experiences that you want to have with the product and mostly around self-servveness that brings it to more than just authentication. For example, we have one customer that wants MFA multifactor to be forced on all his accounts and all his users, and the other one doesn't want it.
+一个组织需要那种密码策略，而另一个组织想要另一种密码策略。一个组织需要社交SSO，而另一个组织需要Okta。第三个组织需要OpenID Connect。然后你有这么多事情需要去处理和应对。所以我们承担的责任是提供并使开发人员能够围绕企业身份验证集成这样的
+
+80
+00:51:40.000 --> 00:52:09.000
+And one organization requires that kind of password policy and the other one wants a different kind of password policy. And one organization requires social SSO and the other one requires Okta. And the third one requires OpenID Connect. And then you have so many stuff to go and work around it. So what we took upon ourselves is to provide and to enable developers to integrate such
+安全功能，比如社交SSO、MFA、整个用户管理功能、密码复杂度等等。我们试图将其简化到最多只需五行代码。
+
+81
+00:52:09.000 --> 00:52:26.000
+security features around authentication enterprises, so social SSO, MFA, the entire user management capabilities, password complexity, and all of this. And we try to keep it to as much as five lines of code.
+我发誓这真的是五行代码。你可以查看我们的网站。是的，你稍后可以查看我们的网站。React集成就是五行代码。对于Angular，我们不得不写稍微多一点的代码，但没关系。这里的理念是，我们考虑的是终端用户，好吧？因此，所有的身份验证库和
+
+82
+00:52:26.000 --> 00:52:46.000
+And I swear it's five lines of code. You can check our website. Yeah, you can check our websites later. The React integration is five lines of code. With Angular, we had to write a little bit more, but that's okay. And the idea is that we think about the end user, okay? So all of the authentication libraries,
+如今的公司，他们考虑的是基础设施。而我们承担起为终端用户着想的责任，好吧？并通过一种伟大的自助服务方法，为我们所服务的优秀公司的终端用户提供支持，
+
+83
+00:52:46.000 --> 00:53:02.000
+companies nowadays, they think about the infrastructure. We took upon ourselves to think about the end users, okay? And to provide the end users of the great companies that we are serving with a great self-service approach
+使他们能够，你知道，基本上使用所有这些功能并根据他们的需求进行定制。例如，我们提供用户管理管理员门户（admin portal），终端用户（例如我们公司、我们的客户所向其销售产品的那个组织）可以在其中邀请用户、为他们分配角色、接入SSO、查看审计日志、接入机器对机器（machine-to-machine）令牌等，因为我们经历过太多次关于实施SSO、
+
+84
+00:53:02.000 --> 00:53:37.000
+to enable them to, you know, basically use all of these features and to customize them to their needs. For example, we provide user management admin portal where the end user, for example, the organization that our company, like our customer sells to, can invite users, provide them with roles, onboard this SSO, see audit logs, onboard machine-to-machine tokens, et cetera, et cetera, because we had so many times about the pain that was involved in implementing SSO
+接入SSO、邀请用户、构建完美的个人资料、构建完美的MFA接入对话框以及构建完美的密码复杂度对话框所带来的痛苦。所以我们提供了这层额外的能力，我们称之为全栈API，它基本上以登录开始，但登录仅仅是个开始。它在顶部配有一个完美的管理员门户，以便从根本上服务于
+
+85
+00:53:37.000 --> 00:54:07.000
+and onboarding SSO and inviting a user and build the perfect profile and build the perfect MFA onboarding dialogues and build the perfect password complexity dialogue. So we give this extra layer of, we call it the full stack APIs, where basically it all starts with the login, but the login is only the start. It comes with a perfect admin portal on top of that to serve basically the end
+我们所服务的公司的终端用户。这就是Frontend的特别之处。是的，这非常合乎逻辑。我在想，大约一周前，我记得在想，你知道，前段时间有一些SQL注入攻击袭击了某些网站，最后他们下载了整个数据库。所以黑客最终下载了。所以关于SQL注入攻击，简单快速地说一下，它的工作原理是，你知道，SQL是代码，但当你进行SQL查询时，你知道，你通常传递的代码是被解释执行的。所以你将你的代码作为字符串传递给SQL服务器，服务器执行该代码然后将结果传回给你。正因为它是一个字符串，所以没有什么
+
+86
+00:54:07.000 --> 00:54:52.000
+users of the companies that we are serving. And that's basically what's special about Frontend. Yeah, that makes a lot of sense. I was thinking about, about a week ago, I remember thinking about, you know, there was a SQL injection attack that hit some website a while back, and they ended up downloading their entire database. So hackers ended up downloading. So just a really quick thing on SQL injection attack, the way it works is, is, you know, SQL is code, but when you make a SQL query, you know, you typically pass it's interpreted. So you pass your code as a string over to the SQL server, and that server executes that code and then passes you back the result. And because it's a string, there's nothing
+能阻止你使用基本的字符串操作，比如我们在高中都学过的东西，比如拿这个字符串，把它加到那个字符串上。但问题是，当这些字符串被构建时，如果有用户输入来决定该字符串的内容，那么最终有人可能会附加一个字符串。比如他们可能会把他们的用户名设为，你知道的，某种能闭合注释的东西，或者某种告诉SQL刚刚发生的一切都是注释的东西。而我真正的用户名是，你知道的，删除数据库之类的。如果你直接把这个传给服务器，你就失去了一切。所以曾发生过一次SQL注入攻击，有人能够下载数据库的全部内容。这就是审计变得非常重要的地方，对吧？所以，
+
+87
+00:54:52.000 --> 00:55:41.000
+to stop you from just using basic string operations, like things we all learned in high school, like take this string, add it to that string. But the problem is those strings, when they're being constructed, if there's user input that's deciding the content of that string, then someone can end up basically adding a string. Like maybe they make their username, you know, something that closes a comment or something that tells SQL that everything that just happened was a comment. And my actual username is, you know, delete the database or something like that. And if you just pass that straight to the server, you lose everything. So there was a SQL injection attack where someone was able to download the entire contents of the database. And that is where auditing would be really important, right? So I
+我的意思是，另外，你知道，不犯那个错误也很重要，但即使你有一个犯了那个错误の開発人员，你会看到，你知道的，40GB的出站流量，或者希望少得多，你会看到当有人对整个数据库进行单次查询时，会出现高速度的大量出站流量，你可以抓住这一点，并且，你知道，下载40GB没那么快发生，所以你可以抓住它，并且，你知道，也许这个人只得到了数据库的10%，对吧？所以拥有审计日志真的非常非常重要。这是另一个不这样做的更强有力的动机，对吧？所以就像，人们不想关心
+
+88
+00:55:41.000 --> 00:56:21.000
+mean, also, you know, having not making that error is important but but even if you if have a developer who makes that error you're going to see you know 40 gigabytes of egress or hopefully a lot less than you're going to see a high velocity a lot of egress when someone makes a single query for the entire database and you can catch that and you know downloading 40 gigabytes doesn't happen that quickly so you could catch that and And, you know, downloading 40 gigabytes doesn't happen that quickly. So you could catch that and hopefully, you know, maybe the person only gets 10% of the database, right? And so having audit logs is really, really important. And it's another thing, there's an even stronger incentive not to do it, right? So like, it's like people don't want to concern
+登录本身，他们真的更不想关心去审计登录。这就像是离你想构建的社交媒体网站更远的一层。所以，是的，我认为添加审计是一个非常好的附加功能。是的。你知道，你知道我们对审计是怎么说的吗？所以当我们使用审计日志时，当真的出了问题时，这才是我们使用审计日志的时候，因为通常情况下，我的意思是，它就那么呆在那里，但当事情发生时，你开始翻阅审计日志，看看谁更改了什么，到底是怎么回事，我的意思是，有人能够登录并触及这个配置。是谁更改了这个配置？
+
+89
+00:56:21.000 --> 00:57:05.000
+themselves with login, they really don't want to concern themselves with auditing the login. Like it's it's another layer that is even further away from, you know, building the social media website you want to build. Right. And so, yeah, I think I think adding auditing is a really nice add on. Yeah. You know, you know what we say about auditing. So when when we use audit logs, when something really goes wrong, that's when we use audit logs because normally, I mean, it just sits there, but when something happened, you start going over the audit logs to see who changed what, how the heck, I mean, someone is being able to log in and touch this configuration. And who changed this configuration?
+我们在过去几年里从Checkpoint那里看到了很多这种情况，一切都必须经过审计，看看是谁更改了允许任何流量通过防火墙的设置。是的，登录审计是绝对必要的，但这只是开始，因为你要确保审计任何所做的配置更改，因为这也是一个至关重要的需求，特别是对于网络安全公司，特别是对于高度监管的公司。好吧，审计日志就像是业务的精髓，你要确保自己100%合规地应对所有这些变更，因为当出现问题时，
+
+90
+00:57:05.000 --> 00:57:54.000
+We saw it a lot over the previous years with Checkpoint where everything had to be audited for who changed to allow any traffic through the firewall. And yeah, audits for login are pretty necessities, but that's only the start because you want to make sure that you audit any change of configuration that is being made because that's a critical necessity as well, especially for cybersecurity companies, especially for highly regulated companies. Okay, audit logs is like the essence of the business and you want to make sure that you are 100% compliant with all of these changes because when something goes wrong,
+你最好手头上有这些信息。是的，完全在理。而且，是的，一旦你有了审计日志，或者真正有了任何形式的日志，你就可以开始进行监控，无论是手动监控还是自动化监控。你希望尽早拥有这些东西。事后再加上去要难得多。完全正确。在Frontend的这个职位上，我有幸与许多CDO、
+
+91
+00:57:54.000 --> 00:58:27.000
+you better have this information in hand. Yeah, yeah, totally makes sense. And yeah, as soon as you have an audit log or really a log of any form, then you can start doing monitoring, either manual monitoring, automated monitoring. And you want to have that stuff early. It's much harder to build it in later. Totally, totally. Out of this position in Frontec, I had a privilege of talking with a lot of CDOs,
+研发副总裁（VPRNDs）以及多种角色的负责人进行了交谈。甚至还与几位CISO（首席信息安全官）交谈过。你知道，CISO的视角总是最让我着迷的，因为我遇到过一些CISO告诉我，有时候我宁愿选择，你知道，在有CISO的大公司里，他们有代理CISO，他们必须审查产品，虽然不是最好的，但它涵盖了，你知道我的检查清单，因为这样我晚上就能睡个好觉。我们看到很多公司，你知道，面临这些问题，因为这就像是一种挣扎，一方面，你希望确保开发产品，因为产品就是上帝，产品才能把你带进这些会议中。但另一方面，如果你不开发这些必要的功能，你就无法通过CISO认证。所以，你知道，在初创公司里，
+
+92
+00:58:27.000 --> 00:59:36.000
+VPRNDs, you know, in multiple roles. And even talking with several CISOs. And, you know, the CISO's perspective is always the one that fascinates me the most because I've met some CISOs that told me, I rather sometimes pick, you know, in larger companies with CISOs, with acting CISOs, they have to review the product, which is not the best one, but it's covering, you know, my checklist, because then I can sleep well at night. And we see a lot of companies, you know, facing these, because it's like, it's like a kind of a struggle, because on one hand, you want to make sure that you develop the product, because product product is God and the product is what that's going to bring you into these meetings. But on the other hand, if you don't develop these necessities, so you won't pass the CISA certification. So, you know, in startups,
+你不知道该把重点放在哪里。这确实是我交谈过的许多公司真正感到的挣扎。是的，这说得通。……之间的关系是什么？事实上，等等，在我问那个问题之前，还有一个问题。这在移动端上是如何运作的？所以，你知道，我们聊了很多关于Web的内容，对于Web来说这很容易，因为你可以把人引导到谷歌。但如果你是一个应用程序（App），
+
+93
+00:59:36.000 --> 00:59:56.000
+you don't know what to focus on. That's a real struggle for a lot of companies I talk with. Yeah, that makes sense. What's the relationship between... Actually, wait, before I ask that question, another question. How does this work on mobile? So, you know, we talked a lot about web and with web, it's easy because you can send the person to Google. But if you're an app,
+你知道，当身处App内部时，用户怎么能只在那里把他们的密码打给谷歌呢？或者Frontend是如何处理这一点的？所以我总是说，我们就是我们。因此，有几种，今天的Electron应用，你几乎很难看出Web应用程序和Electron应用程序有什么区别。所以你得到的体验几乎是一样的。
+
+94
+00:59:56.000 --> 01:00:21.000
+you know, how can a person then just be typing their password to Google while it's in the middle of an app? Or how does FrontEdge handle that? So what I always say is that ours is an hour. So there are several, today with the Electron apps, you hardly see any difference between web application and Electron application. So you get pretty much the same experience.
+Frontend的处理方式是，我们是Web原生的，但对于移动应用程序，我们通过一套丰富的REST API来处理，这些API基本上负责OAuth、访问令牌和刷新令牌。这就是核心思路。MFA在移动应用中是个不同的问题，因为我们是从不同的地方获取它的，但，是的，它并不是说是一个完全不同的世界。明白了，是的，这说得通。所以，另一件事是，嗯，现在有某种，我看到变得越来越
+
+95
+01:00:21.000 --> 01:00:58.000
+Front Egg handles it through, we are web native, but for the mobile applications we handle it through a rich set of REST APIs that basically take care of this AWAP and access tokens and refresh tokens. And that's the idea. MFA is a different issue in mobile application because we get it from different place but yeah it's it's not like it's different world got it yeah that makes sense and so the the other the other thing was um there's now like uh something i'm seeing becoming more
+流行的一个东西，这种叫做“无头CMS（headless CMS）”的概念，据我理解，它有点像夹在应用程序后端和数据库之间的一层。所以它会做一些事情，比如为你的所有图片生成缩略图。它有一个用于手动添加更多内容的UI。因此它也处理大量的用户数据。那么Frontend是如何与这种无头CMS现象产生关联的呢？它与这个兼容吗？它算是对这种现象的一种诠释吗？或者它们之间根本有什么联系吗？是的，我必须承认我没有太深入研究无头CMS。没有很好的答案，因为我必须更深入地挖掘它，我们目前并不涵盖它，你知道的，为了这次录音的需要，所以我觉得这段可以剪掉。当然，当然。
+
+96
+01:00:58.000 --> 01:01:52.000
+popular this this idea of this like headless cms which is basically, as I understand it, it's kind of a layer that sits in between the application backend and the database. And so it'll do things like generate thumbnails for all your images. It has a UI for adding more content manually. And so it also handles a lot of user data. And so how does Frontend relate to this headless CMS phenomenon? Is it compatible with that? Is it sort of a take on that? Or is there a relationship there at all? Yeah, I have to say that I didn't cover so much of headless CMS. There's no good answer because I have to dig deeper into it we currently do not cover it you know for the sake of this recording so i think this one can be cropped sure sure
+这很合理。是的，是的，我也只是刚刚开始了解它，所以，是的，现在有Jamstack的崛起，对吧，是的，没错。所以Jamstack有点伴随着无头CMS出现。这就是我所了解到的。Jamstack更多地用于Web，但我看到一些无头CMS也在使用Jamstack。我们还没有进入这个世界。所以，你知道的。是的，这说得通。那么作为一家公司的Frontend呢？你知道，在Frontend的一天是怎样的？你做的一件有什么独特之处的事情，是什么让在Frontend工作真正不同于在其他初创公司、大公司或其他地方工作？然后，在聊完这个之后，了解一下你们是否在招聘，是实习生岗位、全职岗位还是都有，这会很不错。整个情况是怎样的？当然。
+
+97
+01:01:52.000 --> 01:02:50.000
+that makes sense yeah yeah i also i'm just learning about it and so uh yeah today there is the rise of jamstack yeah right yeah yeah So Jamstack goes a little bit with the headless. This is what I read about. Jamstack is more for the web, but I've seen some headless CMS using Jamstack. We still didn't go into this world. So, you know. Yeah, that makes sense. So what about Front Egg as a company? You know, what is a day like at Front Egg? What's something you do that's kind of unique that really kind of makes working at Front Egg different than working at another startup or another big company or something like that? And then also, after talking about that, it'd be good to see, are you guys hiring and is it sort of interns, full-time? So what does that whole thing look like? Yeah, sure.
+所以我必须说，Frontend的团队，你知道，就像这里的第二个家庭，回顾这两年，想想我们建立的团队，这真是太棒了。而且公司真的在成长。我们大约有25名员工，其中22人在以色列特拉维夫。优秀的团队划分为全栈团队，团队之间的协作非常惊人。我们有一个非常活跃的WhatsApp和Slack频道，每个人都在拿CTO开玩笑，因为他选择了JavaScript作为首选语言。我们有一些人……好吧，我得插一句。为什么不用TypeScript？是的，是的。
+
+98
+01:02:50.000 --> 01:03:39.000
+So I have to say that this team in front of, you know, the second family here, looking at these two years and thinking about the team that we built, it's amazing. And the company is really growing. We are around 25 employees, 22 of them in Israel, in Tel Aviv. Great teams splitting up to full-stack teams with amazing collaboration between the teams. We have a very lively WhatsApp and Slack channels where everyone is giving it to the CTO for choosing JavaScript as the preferred language. And we have guys that... Okay, I have to interject here. Why not TypeScript? Yeah, yeah.
+显然，我们在使用TypeScript。一切都是……哦，好吧。一切都是TypeScript，但我们有几个.net和Java大神一直在向CTO抱怨，你为什么选择TypeScript，让我们用Java做点东西吧。然后我们有JavaScript的家伙们说，是的，我就是觉得JavaScript是最好的。然后，是的，大部分笑话都围绕着这个展开。这真的是一个很棒的氛围，一个工作起来很有趣的氛围。有一种“我们是一个团队”的伟大感觉，大家想要通过构建这些通用的东西来改变开发人员的生活，为开发人员提供伟大的服务。是的，我们在招聘。我们正在特拉维夫招聘几名全职全栈开发人员。我们也在寻找产品和产品营销人才。所以，是的，这通常是Frontend的一天，通常在周四以一堆冰淇淋和威士忌结束这一周而告终。哦，太棒了。是的，我喜欢有一个地方可以发搞笑表情包，我记得以前我很长时间以前在
+
+99
+01:03:39.000 --> 01:04:15.000
+Obviously, we are using TypeScript. Everything is... Oh, okay. Everything is TypeScriptcript but we have several dot net and java gurus are sticking up to the cto why did you choose typescript and let's do let's do stuff in java and then we have the the javascript guys were saying yeah i'm gonna know javascript is the best and then yeah most of the jokes goes around it. And it's really like a great atmosphere and funny atmosphere to work in. And like a great feeling of one team who wants to change the life of developers,
+谷歌从事MapReduce工作，我在谷歌，当时我正在做MapReduce，嗯，你知道，我们会用C和C++编写所有东西，有一次有人在办公室贴了这样一张图片，那是某种类似于《美国达人秀》或《英国达人秀》的节目。上面是一个可以用弓箭射击并用脚射中靶心的人。这就是在C++中写代码的真实感觉。是的，我想也许在Java中也会是一样的感觉，只是要漫长得多。就像你必须有一个弓箭工厂、一个脚的工厂，然后还有一个靶心工厂，然后，是的，每当有什么事情不顺利时，这在Java中是绝不会发生的，我说，是的，
+
+100
+01:04:15.000 --> 01:04:54.000
+building this generic stuff and providing the great service for developers. And yeah, we are hiring. We are hiring several full-stack developers full-time in Tel Aviv. We are looking for products as well and product marketing. So yeah, that's usually a day in Frontag, which concludes usually on Thursday with a bunch of ice cream and whiskeys to conclude the week. Oh, nice. Yeah, I love having an outlet for for funny memes i remember we i used to work on on map produce a long time ago i used to i was at
+是的，它确实会发生，然后当有些事情在Java中行不通时，因为我们也有Java的SDK，所以当有什么新东西，是的，这在JavaScript或TypeScript中是绝不会发生的。然后，所有的办公室都围绕着这个开玩笑。所以这挺搞笑的。酷。太棒了。所以，你刚才说你们在寻找像产品营销这样的角色。为了总结一下，你们有实习岗位，还是只招全职，还是两者都有？
+
+101
+01:04:54.000 --> 01:05:34.000
+google and i was working on map produce and um you know we would write everything in you know c and c plus plus and at one point somebody put this picture up in the office of someone it was one of these kind of america's got or Britain's Got Talent type shows. And it was somebody who could shoot a bow and arrow and hit a bullseye with their foot. And that's kind of what coding in C++ really felt like. And yeah, I think maybe in Java, it would be the same thing, except much longer. Like you would have to have a bow factory and a foot factory and then a you know bullseye factory and yeah so whenever whenever something doesn't go well it would never happen in java i say yeah
+具体情况是怎样的呢？我们目前正在寻找全职人员。我们肩负着很多责任，我们希望尽可能多地完成工作。所以我们目前正在寻找全职人员，包括研发部门的全栈开发。我们的主要技术栈是Node.js TypeScript和前端的React TypeScript。我们有几个，因为我们是一个开发人员平台，
+
+102
+01:05:34.000 --> 01:05:59.000
+yeah it would and then when something didn't work in java well because we have sdks in java as well so when something new yeah it would never happen in JavaScript or in TypeScript. And then, yeah, all the offices like around it. So it's pretty funny. Cool. That's awesome. And so, so there are, you said you're looking for like, you know, product marketing and these type of roles. I just to recap, so are there internship or is it full-time only or both?
+所以我们有几个Angular、Vue、Python，你知道，一堆SDK，但主要的，大概90%、85%会围绕React和JavaScript。而在产品营销和产品角色方面，则是推动这些想法向前发展，并支持研发和整个公司构建这个伟大的平台。是的，这说得通。
+
+103
+01:05:59.000 --> 01:06:26.000
+Or what's the deal there? So we are currently looking for full-time. We have a lot of our shoulders on our shoulders and we want to get as much done as possible. So we are currently looking for full-times, both on the R&D for full-stack development. Our main stack is Node.js TypeScript and React TypeScript for the front end. We have several because we are a developer platform,
+有一件事我们没有涵盖，我想回到这个话题来作为收尾，那就是你们的产品产品有哪些？为了在这里提供一些背景信息，我们有两类主要的听众，对吧？有一部分人要么在读高中、大学，要么刚毕业，或者他们正在进入这个行业。他们正在成为专业开发人员。那么你们为他们准备了什么？比如说爱好开发者。然后你们又为企业客户准备了什么，人们如何才能开始切入这两者中的任意一种角色呢？是的。首先，因为我们相信产品驱动增长（PLG），我们相信自下而上。这意味着我们有一个非常慷慨的免费增值（freemium）计划和一个非常活跃的Slack社区开局。
+
+104
+01:06:26.000 --> 01:06:53.000
+so we have several Angular, Vue, Python, you know, a bunch of SDKs, but the main like 90%, 85% would be around React and JavaScript. And on the product marketing and product roles, it's like moving these ideas forward and support R&D and the entire company for building up this great platform. Yeah, that makes sense.
+所以基本上你从Frontend得到的是开箱即用的、完全可定制的登录框和管理员门户，它基本上涵盖了你围绕身份验证和单点登录所需的一切。这包括所有社交登录、使用谷歌登录、使用GitHub登录、个人资料管理等等，以及SSO。基本上对于企业客户，我们提供基于审计日志和完全可定制的组织分割的产品。这意味着如果你集成Frontend，
+
+105
+01:06:53.000 --> 01:07:52.000
+One thing we didn't cover, I want to go back to just to wrap this up, to conclude it, is what are your offerings, product offerings? And so just to give a bit of background here, we have two kind of main sort of factions of listeners, right? There's folks who are in either high school or college or their post-college or, but they are, you know, just getting into the industry. They're becoming professional developers. And so what do you have for them? Let's say hobbyists. And then also what do you have for them, let's say hobbyists, and then also what do you have for enterprise customers and how would people get started in either of those roles? Yeah. So first of all, because we believe in product-led growth, we believe in bottom-up. So that means that we have a very generous premium plan and a very active Slack community.
+基本上你为你的客户提供了定义他们自己的安全策略的能力，而不需要你为他们去做。这就是我们坚信的PLG模式和我们坚信的自助服务，为你的终端用户提供在审计日志端、定制安全策略端、接入MFA、接入企业SSO方面自己定制和控制一切的能力。
+
+106
+01:07:52.000 --> 01:08:22.000
+So basically what you get from Frontag is out of the box, fully customizable login box and admin portal, which covers basically everything you need around authentication and single sign-on. And that includes all the social logins, login with Google, login with GitHub, profile management, et cetera, et cetera, SSOs. And basically for the enterprise customers, we have an offering which is based on audit logs and a fully customizable organization splits. So that means that if you are integrating FrontEd,
+所以基本上，你从 Frontag 获得的是开箱即用、完全可定制的登录框和管理后台，它基本涵盖了身份验证和单点登录所需的一切。这包括所有社交登录、使用 Google 登录、使用 GitHub 登录、个人资料管理等等，以及单点登录（SSO）。基本上，对于企业客户，我们提供基于审计日志和完全可定制的组织划分的产品。这意味着如果你在集成 FrontEd，
+
+107
+01:08:22.000 --> 01:08:50.000
+basically you provide your customers with an ability to define their own security policies without you needing to do it for them. That's the PLG motion that we strongly believe in and the self-servience that we strongly believe in, providing your end users with the ability to customize and control everything on their own, on the audit log side, on customized security policy side, onboarding MFA, onboarding enterprise SSO,
+基本上，你让客户能够定义他们自己的安全政策，而无需你为他们去做。这就是我们坚信的 PLG（产品驱动增长）模式和自助服务理念，让你的最终用户能够自行定制和控制一切，包括审计日志、自定义安全政策、接入 MFA 以及接入企业 SSO。
+
+108
+01:08:50.000 --> 01:09:30.000
+such as Okta and that kind of stuff. And even in Jari, so most of our offering is as a service. We have dedicated deployments, which are available on our enterprise plan as well, which can be covered as hand charts or Docker Compose. So that depends, like most of our, you know, we call it a garage-based startups will start with either our freemium plan or with our startup program, and then they will evolve to what we call a plan which is more sophisticated, which includes the audit logs and all the other advanced capabilities as well.
+比如 Okta 之类的。甚至在 Jari 中，我们的大多数产品都是即服务。我们有专用的部署，这在我们的企业计划中也提供，可以通过 Helm Chart 或 Docker Compose 来部署。所以这取决于，比如我们大多数人，你知道的，我们称之为车库创业公司，他们会从我们的免费计划或我们的创业计划开始，然后他们会发展到我们称之为更复杂的计划，其中包含审计日志以及所有其他高级功能。
+
+109
+01:09:30.000 --> 01:10:22.000
+Cool. It makes sense. So if you're listening to this and you're building your first web app or you are prototyping something and you want to send it to a friend and it's a web or a mobile app or even an electron desktop app you know you can you can use front egg it's uh totally free to use you know uh to to get started with but then you know let's say your app really takes off you hit the front page of new york times or something and now all of a sudden everyone's hitting your site and you really need to start keeping track you have attackers that are attacking your site then you can upgrade to the premium plan without having to rewrite the whole API or anything like that and get all those extra features that become really important as you scale. That's correct. Yeah. And usually we don't limit anything to get started. Everything is open and
+酷。这很有道理。所以如果你在听这个，并且你正在构建你的第一个网络应用，或者你正在制作一个原型，你想把它发给朋友，无论是一个网页、移动应用，还是一个 Electron 桌面应用，你知道的，你可以使用 Front-egg，它完全免费使用，你知道的，可以用来开始。但随后，假设你的应用真的火了，你上了《纽约时报》的头版之类的，突然之间所有人都在访问你的网站，你真的需要开始进行跟踪，有攻击者在攻击你的网站，那么你可以升级到高级计划，而不需要重写整个 API 或做类似的事情，并获得所有这些在规模扩大时变得非常重要的额外功能。
+
+110
+01:10:22.000 --> 01:10:41.000
+then we just, we make sure that you have everything that you need before we start like talking about commercial side of business, yeah. Cool, yeah, that's awesome. Yeah, that parallels a lot of the, you know, the folks that we've talked to. I think it's a really, really good business model. You know, I think the magic there,
+没错。是的。而且通常我们在开始时不会限制任何东西。一切都是开放的，然后我们确保在开始讨论商业方面的业务之前，你拥有你需要的一切，是的。酷，是的，太棒了。是的，这与我们交谈过的许多人的情况非常相似。我认为这是一个非常非常好的商业模式。你知道，我认为其中的魔力在于，
+
+111
+01:10:41.000 --> 01:11:16.000
+we talked about this in prior shows, but this always fascinates me. So I'll bring it up again is the magic is kind of figuring out where to draw the line. I think for this particular product, you know, drawing the line at the audit logs and all of that, I think is very, very natural. And it fits nicely because at the end of the day, like it's a, it's a, you're providing a valuable service and at some point you need to charge it. And I think, yeah, I think that's the right place to be because by that time somebody has gotten you know so much value out of it that that i think that they would be happy to you know contribute back yeah i agree most of the time it
+我们在以前的节目中讨论过这一点，但这总是让我着迷。所以我再提一下，魔力有点在于弄清楚如何划清界限。我认为对于这个特定的产品，你知道，在审计日志等所有方面划清界限，我认为是非常非常自然的。而且它很契合，因为归根结底，这是一个，你提供了一个有价值的服务，在某些时候你需要收费。而且我认为，是的，我认为这是正确的位置，因为到那个时候，某人已经从中获得了如此多的价值，以至于我认为他们会很高兴回馈，是的，我同意，大多数时候它
+
+112
+01:11:16.000 --> 01:11:44.000
+would be around the audit logs and the enterprise sso which means that you're probably selling to enterprises but yeah i mean you know we are talking with so many founders and around, you know, the third or the fourth year of your business, you're probably after 10 different versions of pricing if you're really good at it. So, you know, the pricing is the one thing that, you know, for me as an engineer,
+会围绕审计日志和企业级单点登录（SSO），这意味着你可能在向企业销售，但是的，我的意思是，你知道，我们正在与这么多创始人交谈，在你的业务大约第三年或第四年，如果你真的很擅长的话，你可能已经经历了 10 种不同的定价版本。所以，你知道，定价是一件事，你知道，对我来说作为一个工程师，
+
+113
+01:11:44.000 --> 01:12:02.000
+it's so hard to get it right. And there are so many experts and there are so many advisors, especially for a sophisticated platform like ours. So, yeah. Yeah, that makes sense. Cool. So, yeah, we covered a lot of really good. We covered technical. We covered product.
+要把它做好太难了。有这么多的专家，也有这么多的顾问，特别是对于像我们这样复杂的平台来说。所以，是的。是的，这说得通。酷。所以，我们涵盖了很多真正好的内容。我们涵盖了技术。我们涵盖了产品。
+
+114
+01:12:02.000 --> 01:12:44.000
+We covered FrontEnd as a company. I definitely encourage folks to check it out. The strongest encouragement from both of us is to not build your own login. Don't do it. I actually, I'm guilty of this. Many, many years ago, I made a trivia app. Actually, if people have gone through the archives, if they're new listeners, you've probably seen this episode where I talked about it. And yeah, I actually just passed the token as a query parameter. And when I was sending the app to somebody, the website to somebody to try out, all of a sudden they were me. And like I sent it to someone to try out and all of a sudden my score started going up and I couldn't really figure it out. And so thankfully, you know, it wasn't, I wasn't, you know, making a bank app or anything
+我们涵盖了作为一家公司的 Front-egg。我绝对鼓励大家去看看。我们两个人的强烈鼓励是不要自己构建登录功能。不要这样做。实际上，我对此也有罪。很多很多年前，我做一个问答应用。实际上，如果人们看过档案，如果他们是新听众，你可能看过我谈论这个的剧集。是的，我实际上只是把令牌作为查询参数传递。当我把应用发给某人，把网站发给某人去试用时，突然之间他们就成了我。就像我把它发给某人去试用，突然之间我的分数开始上升，我真的搞不懂为什么。所以谢天谢地，你知道，它不是，我不是在做一个银行应用或任何类似的东西，
+
+115
+01:12:44.000 --> 01:13:10.000
+like that. But yeah, I mean, I totally flubbed that. And you really don't want to be playing around with people's passwords. People did, you know, put in passwords to my trivia app that, you know, that they've used in their bank. And, you know, I didn't leak the password or anything. But still, I mean, when I kind of realized what was going on, it made me very nervous thinking about passwords. So don't make the same mistake. You know, it sounds like Front Egg is a really awesome service. I'm going
+但是，是的，我的意思是，我完全搞砸了。你真的不想拿别人的密码开玩笑。人们确实，你知道的，在我的问答应用中输入了他们在银行里用过的密码，你知道，我没有泄露密码什么的。但即便如此，当我意识到发生了什么事时，想到密码还是让我感到非常紧张。所以不要犯同样的错误。听起来 Front-egg 是一个非常棒的服务。我要去看看。
+
+116
+01:13:10.000 --> 01:13:49.000
+to check it out. I actually have, I'm always kicking around new projects. So I have one thinking about now I'm going to try Front Egg with it and we'll see how it goes. But thank you so much, Aviad, for coming on the show. We learned a ton. I love episodes like this. I personally learned a lot. And I'm like this. I personally learned a lot and I'm sure listeners learned a lot too. And folks can feel free to go to the show notes where we have an entire transcript of the show. Our producers will transcribe the entire show, which is awesome. So if there's any keywords, anything you didn't understand, you can go through that and then kind of Google anything that wasn't totally clear. But, but I think Avi, I did it. You did an amazing job of really
+我实际上一直在捣鼓新项目。所以我现在有一个想法，我打算用它来试试 Front-egg，看看效果如何。非常感谢 Aviad 来到节目中。我们学到了很多。我喜欢这样的节目。我个人学到了很多，我相信听众们也学到了很多。大家可以随意查看节目shownotes，里面有整期节目的文字记录。我们的制作人会把整期节目转录下来，这太棒了。所以如果有什么关键词，有什么你听不懂的地方，你可以浏览一下，然后谷歌搜索任何不是完全清楚的事情。但是，但是我认为 Avi，你做得非常棒，把这些
+
+117
+01:13:49.000 --> 01:14:48.000
+breaking it down for us. And thank you again for coming on the show. Thanks, Jason, for having me. Thank you guys. Cool. And thanks to all the listeners. Yeah, we've been doing two shows a month for a few months, as you may have noticed, if you're a Patreon subscriber, you know, I sent a special thank you to you to all of you folks for continuing to support us. Yeah, definitely. We'll post Aviad's Twitter and other stuff in the show notes. So if you want to reach out to him directly, we'll provide a way to do that. We'll also have links to Front Egg, so you can check that out. And everyone have a great couple of weeks and we'll see you later on in the month music by eric barn dollar programming throwdown is distributed under a Creative Commons Attribution Share Alike 2.0 license.
+为我们真正剖析了。再次感谢你来到节目。谢谢 Jason 邀请我。谢谢大家。酷。感谢所有的听众。正如你可能已经注意到的那样，如果你是 Patreon 订阅者，我们几个月来一直在每个月做两期节目，你知道的，我要对你们所有人继续支持我们表示特别的感谢。是的，绝对的。我们会在 shownotes 中发布 Aviad 的 Twitter 和其他信息。所以如果你想直接联系他，我们会提供一种方式。我们还会有 Front-egg 的链接，所以你可以去看看。祝大家接下来的几周过得愉快，我们这个月晚些时候见，Eric Barn 所作的音乐，Programming Throwdown 在知识共享署名-相同方式共享 2.0 协议下发布。
+
+118
+01:14:48.000 --> 01:14:53.000
+You're free to share, copy, distribute, transmit the work, to remix, adapt the work, but you must provide an attribution to Patrick and I and share alike in kind. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+你可以自由分享、复制、分发、传输作品，进行混音、改编作品，但你必须对帕特里克和我进行署名，并以相同方式共享。本期节目暂无评论。点击文字记录中的任意句子即可发表评论。

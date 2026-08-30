@@ -1,0 +1,196 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:01:06.000
+So loop fusion is when you take multiple loops and you combine them into a single loop. And loop fission is when you take a single loop and split it into multiple loops that iterate over the same index range as the original loop. Welcome to ADSP, the podcast episode 51 recorded on November 5th, 2021. My name is Connor and today with my co-host Bryce, we talk about the difference between efficiency and speed. Now, listener, strap in for Bryce's explanation of the difference between efficiency and speed. And I'll give a little 30-second intro. A couple episodes ago on, I think it was the combinatory logic episode, I was saying how if you fuse, you know, two algorithms into one using combinators, you're going to end up with faster code because doing a minimum element
+所以循环融合是指把多个循环合并为一个循环。而循环 fission 则是指把一个循环拆分成多个循环，这些循环遍历与原循环相同的索引范围。欢迎收听 ADSP 播客第 51 期节目，录制于 2021 年 11 月 5 日。我是康纳，今天我和我的联合主持人布莱斯将讨论效率与速度之间的区别。现在，听众朋友们，请系好安全带，听布莱斯解释效率与速度的区别。我先做一个 30 秒的小引子。在几期节目之前，我想是在组合子逻辑那一期，我说过如果你使用组合子将两个算法融合为一个，你最终会得到更快的代码，因为分别求最小值
+
+2
+00:01:06.000 --> 00:01:47.000
+and maximum element separately versus, you know, min-max element, which Ben Dean very, you know, astutely pointed out that, you know, you're never actually going to match that because the performance of min-max element has three over two n operations, which a fused one is still going to have two n. But anyways, that's besides the point. But thank you, Ben, for clarifying that. Bryce pointed out that like, well, it'll be twice as efficient, but not necessarily twice as fast. And in that episode, I don't think, I think in listening back to it, I don't think I fully grokked what Bryce meant by that. So now enter Bryce with his elaboration on efficiency versus speed.
+和最大值，与——如本·迪恩非常敏锐地指出的那样——min-max 元素相比，你实际上永远无法与之匹敌，因为 min-max 元素的性能是 3/2 n 次操作，而融合后的操作仍然是 2 n 次。不管怎样，这题外话了。不过谢谢本澄清这一点。布莱斯指出，这虽然效率会翻倍，但不一定速度会翻倍。在那期节目里，回听的时候我觉得我可能并没有完全领会布莱斯的意思。现在，请布莱斯详细阐述效率与速度的问题。
+
+3
+00:01:47.000 --> 00:02:42.000
+Yeah. So I like to think of this as, I'm not surprised that we are coming at this from different angles. Because I think you are much more of a theorist, a pure computer scientist. Whereas I am much more of a software engineer. And maybe that's even like too haughty a title, like a software plumber. You know, I sort of come at it from like the grounds up, like how does this thing actually run and work in production? Whereas you're much more the person to think about, you know, the whiteboard solution. And that's not meant as a dig. It's a little bit of a dig. A little bit of a dig. But so let's start off with an argument that I know you will
+是的。所以我觉得，我不惊讶我们是从不同的角度来看待这个问题的。因为我觉得你更像是一个理论家，一个纯粹的计算机科学家。而我更像是一个软件工程师。也许这个称呼甚至有点太高大上了，应该叫软件水管工。你知道的，我有点像是从底层出发，这个东西在生产环境中到底是怎么运行和工作的？而你更多是思考白板解决方案的那种人。这倒不是说是在挖苦。有点小挖苦。有点小挖苦。那么让我们从一个我知道你会
+
+4
+00:02:42.000 --> 00:04:10.000
+find compelling because I've made it before, which is the question of efficiency when it comes to parallelization. So we've told this story a few times on the podcast, but once on a drive from the south San Francisco Bay up to San Francisco, I explained to Connor how you could paralyze an inclusive scan. And the reason that Connor thought that it could not be paralyzed is because Connor was thinking about paralyzing the most efficient version of a scan algorithm. And I explained to him how you could implement a parallel scan that is work inefficient. That is, it's less efficient. It does more operations than a serial scan. But it doesn't matter that it does more operations because they can be done in parallel.
+觉得很有说服力的论点开始，因为我以前就提出过，也就是关于并行化时的效率问题。我们在播客里讲过好几次这个故事，有一次从旧金山湾区南部开车去旧金山时，我向康纳解释了如何并行化一个内含扫描。康纳之所以认为它不能并行化，是因为康纳当时在考虑并行化最有效率版本的扫描算法。而我向他解释了如何实现一个工作效率低下的并行算法。也就是说，它的效率较低，它比串行扫描做了更多的操作。但它做了更多操作也无所谓，因为它们可以并行完成。
+
+5
+00:04:10.000 --> 00:05:03.000
+So, you know, if you do n work in serial for some algorithm and you can paralyze it and, you know, paralyzing it means that you actually end up doing two times n work, that might be perfectly okay because if your goal is to get an answer faster, it doesn't matter if you're doing more work if that work can be done quicker because it's being done across multiple threads. So you understand that argument. Yes, you understand that in the case of, you know, thread parallelism, you know, being inefficient might be faster. Correct, yes. Okay. 100% on board. to almost every case that we encounter in the field. Because even when you're programming for a single thread, the hardware that you are running on is still actually parallel under the hood.
+所以，你知道的，如果你对某个算法串行执行 n 项工作，并且你可以将其并行化，而且并行化意味着你实际上最终做了两倍于 n 的工作，这可能完全没问题，因为如果你的目标是更快地得到答案，如果这些工作可以通过在多个线程上执行来更快完成，那么做更多的工作也无所谓。所以你理解这个论点。是的，你理解在线程并行的情境下，效率低下可能速度更快。没错，是的。好的。百分之百赞同。适用于我们在实际中遇到的几乎所有情况。因为即使你为单个线程编写程序，你运行的硬件在底层实际上也是并行的。
+
+6
+00:05:03.000 --> 00:05:47.000
+There is a part of your processor that loads data. There's a part of your processor that fetches instructions, that decodes instructions. There's a part of your processor that does adds. There's a part that does multiplies, et cetera, et cetera. And those parts can run in parallel. And so on every modern processor, your single-threaded code is actually being paralyzed under the hood at a level that you don't really see, in that the actual things that need to happen to make that serial thread,
+你的处理器中有一部分用于加载数据。有一部分用于获取指令、解码指令。有一部分用于执行加法。有一部分用于执行乘法，等等。这些部分可以并行运行。因此在每个现代处理器上，你的单线程代码实际上在底层都以一种你肉眼看不到的程度被并行化了，为了使这个单线程、
+
+7
+00:05:47.000 --> 00:06:29.000
+the serial set of operations that you want to do to make that actually execute, those things don't strictly happen in order, and some of them are overlapped and asynchronous. And so then again, we get to this idea that in some cases, things that are less efficient might actually be faster because efficiency isn't really our goal. Our goal is time to execution. So let's move on to this particular case of loop fusion and loop fission. Do you know what those terms mean?
+你想要执行的一系列串行操作能够真正执行，这些事情并不严格按顺序发生，其中一些是重叠且异步的。所以再次回到这个观点，在某些情况下，效率较低的东西实际上可能更快，因为效率并不是我们的真正目标。我们的目标是执行时间。所以让我们转向循环融合和循环 fission 的这个特定案例。你知道这些术语是什么意思吗？
+
+8
+00:06:29.000 --> 00:07:30.000
+Uh, we'll pretend for the sake of the listener that I don't know what loop fission is, uh, because this is the first time we were recording this. Um, I do know what loop fusion is though. Um, but tell me what is, what is the, what are they both and what is the difference? So loop fusion is when you take multiple loops and you combine them into a single loop. And loop fission is when you take a single loop and split it into multiple loops that iterate over the same index range as the original loop, or order of magnitude the same range as the original loop. And so you said you were familiar with loop fusion prior to this conversation.
+呃，为了听众起见，我们就假装我不知道什么是循环 fission 吧，呃，因为这是我们第一次录制这个。呃，不过我确实知道什么是循环 fission。呃，但告诉我，它们是什么，它们分别是什么，有什么区别？所以循环融合是指你把多个循环结合成一个单一的循环。而循环 fission 是指你把一个单一循环拆分成多个循环，这些循环遍历与原循环相同或数量级相同的索引范围。所以你刚才说你在这次对话之前就很熟悉循环融合了。
+
+9
+00:07:30.000 --> 00:08:29.000
+And that's not surprising because I think that loop fusion is perhaps the more intuitive of these optimizations. If I take two things that are iterations over N elements and I combine them together, you know, that's, that's probably a win, especially if the N elements that they're iterating over are the same set. If like, if, if the iterations are always accessing the same data, then combining those, those two loops together, you know, it seems like it'd just be a win, right? You're doing, instead of doing iterating through two n times, you're just iterating through n times. But in practice, that's not always the case. And sometimes it's better to have loops be separate or to even take existing loops that you have and to split them. And the primary reason why you do this is to get better locality of reference.
+这并不奇怪，因为我认为循环融合可能是这些优化中更直观的一个。如果我拿两个对 N 个元素进行迭代的东西并将它们结合在一起，你知道的，这很可能是一个赚到了的操作，特别是如果它们迭代的 N 个元素是同一组的话。如果，如果迭代总是访问相同的数据，那么将这两个循环结合在一起，你知道，这似乎就是稳赚不赔的，对吧？你不用遍历两倍 n 次，而只需遍历 n 次。但实际上，情况并非总是如此。有时最好将循环分开，甚至将你现有的循环进行拆分。你这样做的主要原因是为了获得更好的引用局部性。
+
+10
+00:08:29.000 --> 00:09:26.000
+I'll make the bold assertion that the vast majority of code in the wild is either memory latency or memory bandwidth bound. Which essentially means that all of your software is pretty much a fancy version of memcopy. The reason for this is because we've gotten very good at building processors that have a lot of compute throughput at a fairly low latency. The problem is getting the data to that execution hardware. And if you have a ton of data reuse, like, for example, a matrix multiplication, which has an O-N squared complexity, and therefore there's a lot of data reuse, then yeah, you might be able to saturate
+我可以做一个大胆的断言，野外绝大多数代码要么受限于内存延迟，要么受限于内存带宽。这本质上意味着你所有的软件几乎都是 memcopy 的花哨版本。之所以会这样，是因为我们非常擅长构建具有很高计算吞吐量且延迟相当低的处理器。问题在于如何将数据传送到该执行硬件。如果你有大量的数据重用，比如矩阵乘法，它具有 O-N 平方复杂度，因此有很多数据重用，那么是的，你也许能够饱和利用
+
+11
+00:09:26.000 --> 00:09:58.000
+your execution hardware, but that's not what the majority of applications look like. The majority of applications are, I read some sequence of data and I do something with it and then I go on and do something else or something like that. And so for most code, the determiner of your performance is going to be your memory access
+你的执行硬件，但大多数应用程序并不是这样的。大多数应用程序是：我读取一些数据序列，对它做点什么，然后继续做别的事情，诸如此类。因此，对于大多数代码来说，决定你性能的将是你的内存访问
+
+12
+00:09:58.000 --> 00:10:59.000
+patterns. And in particular, how efficiently you make use of your cache and your processor's ability to prefetch, etc., is going to have a huge impact on application performance. I'll give you a simple example. Let's imagine that we had two loops. And the first loop applies a transformation to one data array. The second loop also iterates over that same array, but it iterates over two other arrays, let's say, as well. So the first one accesses one array, the second one accesses three arrays, and one of those is the same as the first one.
+模式。特别是，你对缓存的利用效率以及处理器预取等能力，将对应用程序性能产生巨大影响。我给你举个简单的例子。假设我们有两个循环。第一个循环对一个数据数组应用转换。第二个循环也遍历同一个数组，但它还遍历另外两个数组，比方说。所以第一个访问一个数组，第二个访问三个数组，其中有一个与第一个相同。
+
+13
+00:10:59.000 --> 00:11:49.000
+So you might think, okay, well, we should fuse those because then we only have to access each element of that array, the array that both of them access, a single time, right? Yes. Okay. Now, here's the problem. When you fuse those loops, you might end up disrupting your memory access patterns. So one thing that you might end up doing is you might cause memory accesses that would previously hit in the cache to no longer hit in the cache. So pretty much all processors today do a pretty good job of prefetching the data that you need into the cache.
+所以你可能会想，好吧，我们应该将它们融合，因为这样我们只需要对两个数组共同访问的那个数组的每个元素访问一次，对吧？是的。好吧。现在，问题来了。当你融合这些循环时，你可能会最终破坏你的内存访问模式。你最终可能会做的一件事是，你可能会导致原本会在缓存中命中的内存访问不再在缓存中命中。所以几乎当今所有的处理器在将你需要的数据预取到缓存中方面都做得相当好。
+
+14
+00:11:49.000 --> 00:13:13.000
+And if you combine those two loops, now we have to prefetch even more data. Because of that, it's possible that we might have cache misses instead of going through the cache. So maybe that first loop, which just acts as the one array, maybe that loop was actually like really optimal and that loop, the compiler and the processor were going to always ensure that all of the data was prefetched before each iteration. And so it would always run out of cache and it'd be super fast. But by combining it with the second loop, now you're going to have a cache miss every time. And that's going to make your code run slower. And of course, this is even more likely to occur if you have loops that have completely unrelated data that you try to fuse together. Because then there's really no data reuse. You're just increasing the pressure on the cache of how many different things are going to fit in
+如果你把这两个循环结合起来，现在我们就必须预取更多的数据。正因为如此，我们可能会遇到缓存未命中，而不是穿过缓存。所以也许第一个循环，它只访问一个数组，也许那个循环实际上真的很优化，并且那个循环中编译器和处理器总是能确保在每次迭代之前预取所有数据。所以它总是能在缓存中运行完毕，而且速度超快。但通过把它和第二个循环结合起来，现在你每次都会遇到缓存未命中。这会使你的代码运行变慢。当然，如果你尝试将数据完全无关的循环融合在一起，这种情况就更可能发生。因为那样真的没有数据重用。你只是在增加缓存的压力，看有多少不同的东西能塞进
+
+15
+00:13:13.000 --> 00:14:06.000
+the cache with no real reuse between the two. But there's another thing that can happen too, which is a larger loop body can have increased register pressure. And you should really think about registers as being like an even faster type of cache. You know, let's say you got like a processor that has like six registers. Well, if each loop iteration only needs six temporary variables for its operations, then that's great. You never have to go to stack memory. Stack memory is always going to be slower than registers. Hopefully, your stack will be in cache. It usually is. But on a processor like a GPU,
+缓存里，而两者之间没有真正的重用。但还有另一件事也可能发生，那就是更大的循环体可能会增加寄存器压力。你真应该把寄存器看作是一种速度更快的缓存。你知道，假设你有一个只有六个寄存器的处理器。好吧，如果每个循环迭代只需要六个临时变量来完成其操作，那就太棒了。你永远不必去堆栈内存。堆栈内存总是比寄存器慢。希望你的堆栈会在缓存中。通常是的。但在像 GPU 这样的处理器上，
+
+16
+00:14:06.000 --> 00:14:40.000
+the difference in memory bandwidth and latency between registers and even the first tier of cache is pretty bad. Like on a GPU, spilling to stack is like really not good. You never want to do that. And that's why there's like a ton of registers on GPUs so that you can avoid doing that. So by combining those two loops, you might have caused operations that previously did not spill to the stack to have to spill to
+寄存器与哪怕是一级缓存之间的内存带宽和延迟差异都相当糟糕。就像在 GPU 上，溢出到堆栈真的是一件很不好的事情。你永远不想那样做。这就是为什么 GPU 上有大量的寄存器，这样你就可以避免这样做。因此，通过将这两个循环结合起来，你可能导致原本没有溢出到堆栈的操作不得不溢出到
+
+17
+00:14:40.000 --> 00:15:25.000
+the stack. And that will mean that there is more main memory traffic. And also that there are more things that need to be stored in the cache. And therefore, there's less room in the cache for the data arrays that you're accessing through. And there's another thing that can happen. So as I said, the modern processors are pretty good at prefetching all your data. And one of the ways they do this is they look at your access patterns and they can figure out linear and strided access patterns.
+堆栈中。这将意味着会有更多的内存流量。同时也意味着有更多东西需要存储在缓存中。因此，缓存中留给你要访问的数据数组的空间就变少了。还有一件事可能会发生。如我所说，现代处理器非常擅长预取你的所有数据。它们做到这一点的方法之一是查看你的访问模式，并且它们能够找出线性和跨步的访问模式。
+
+18
+00:15:25.000 --> 00:15:58.000
+They can be like, oh yeah, you know, like the last like 10 iterations, you accessed like this chunk of memory sequentially, or you access this chunk of memory with some fixed stride between each access. And so I better just assume that you're going to continue accessing that stream of memory and I'll just fetch where I think the next element's going to be. But if you're accessing a whole bunch of different
+它们可能会想：哦，是的，你知道，就像过去大概 10 次迭代一样，你按顺序访问了这块内存，或者你以每次访问之间固定的步幅访问了这块内存。所以我最好假设你会继续访问该内存流，并且我只去获取我认为下一个元素会在哪里。但如果你访问的是一大堆不同的
+
+19
+00:15:58.000 --> 00:16:34.000
+streams of memory, the processor has a limit to how many different streams it can track. And so it might reach that limit and it might no longer be able to keep track of all of your linear access patterns and prefetch accordingly. And then again, you'll have more cache misses. Yeah, and there's a few other, you know,
+内存流，处理器可以追踪的不同流的数量是有限制的。因此，它可能会达到该限制，并且可能再也无法追踪你所有的线性访问模式并进行相应的预取。然后你会再次遇到更多的缓存未命中。是的，还有其他一些，你知道，
+
+20
+00:16:34.000 --> 00:17:06.000
+ways and places in which these sorts of effects can come up. If you've got multidimensional loops, you can, you know, these caching effects can be even more pronounced because in the multidimensional loop, you will have a lot greater potential for reuse in the inner loop. And also, if you have something like an adjacent difference or any sort of stenciled operation
+这些效应可能会出现的途径和地方。如果你有多维循环，你可以，你知道，这些缓存效应甚至会更加明显，因为在多维循环中，你在内循环中有大得多的重用潜力。而且，如果你有类似相邻差分或任何类型的模板操作
+
+21
+00:17:06.000 --> 00:17:46.000
+where each iteration, you don't just access one element, but you access, you know, three or four or five different consecutive elements, like a window of elements, you know, if you fuse a bunch of loops together, then again, that's increasing pressure on the cache. And then it's possible that, you possible that you're exiting these five consecutive elements and maybe because of this loop fusion, the last of those consecutive elements got pushed out of cache by something else that got prefetched into cache because of all of the stuff that you're trying to do in this one loop.
+其中每次迭代，你不仅访问一个元素，而且访问，你知道，三个、四个或五个不同的连续元素，比如一个元素窗口，你知道，如果你把一堆循环融合在一起，那么同样，这会增加缓存的压力。然后很有可能，你很有可能正在退出这五个连续元素，并且也许因为这种循环融合，这些连续元素中的最后一个被其他东西挤出了缓存，而那个东西是因为你试图在这个循环中完成的所有事情而被预取到缓存中的。
+
+22
+00:17:46.000 --> 00:18:37.000
+Now, this isn't to say that loop fusion isn't ever a good optimization. I mean, in many cases, it is. But it's not always the right thing to do. And every compiler that does loop fusion has heuristics for when it's profitable to do so. And in some cases, a compiler will split your loops because it determined, hey, you know, if I take this complex loop that's doing like, you know, a ton of things, and if I just split it into like three loops that are much simpler, those three loops are going to run faster than the complex loop because those three loops are going to have really good, really simple and easy memory access patterns. And the processor is going to do a great job of prefetching the data for those three loops. And there's never going to be a cache miss.
+这并不是说循环融合永远不是一个好的优化。我的意思是，在很多情况下，它是。但它并不总是正确的做法。每个进行循环融合的编译器都有关于何时这样做有利可图的启发式方法。在某些情况下，编译器会拆分你的循环，因为它判定，嘿，你知道，如果我把这个做很多事情的复杂循环，如果我把它拆分成三个简单得多的循环，这三个循环将比复杂的循环运行得更快，因为这三个循环将具有非常好、非常简单且容易的内存访问模式。处理器将为这三个循环完美地预取数据。并且永远不会有缓存未命中。
+
+23
+00:18:37.000 --> 00:19:09.000
+Whereas this one giant loop that I have, it's a mess. And it's going to end up with a whole bunch of cache misses. So that makes sense for the most part. Although I will say your example where you had three arrays, one loop that was going over the first one and then another loop that was going over all three, including the first one. I mean, I would guess uh fusion in that case in most cases like
+然而，我拥有的这个巨大的循环是一团糟。它最终会导致一堆缓存未命中。所以大部分听起来很有道理。虽然我要说，在你举的那个有三个数组的例子中，一个循环遍历第一个数组，然后另一个循环遍历所有三个数组（包括第一个数组）。我的意思是，我猜呃在这种情况下，在大多数情况下融合
+
+24
+00:19:09.000 --> 00:19:40.000
+it would end up being faster right because like in if you had said you know a loop over uh array a and then a second loop over array b and c where the index is the same so you could still fuse it to me that's a lot more obvious that you could end up with cache misses, whereas where the first loop is just a subset of the data of the second loop. Isn't that, isn't like the second loop going to end up with just as like fusing the first loop
+最终会更快，对吧？因为就像如果你说过，你知道，一个循环遍历数组 a，然后第二个循环遍历数组 b 和 c，其中索引是相同的，所以你仍然可以融合它。在我看来，这更加明显，你最终可能会遇到缓存未命中，而第一个循环只是第二个循环数据的子集。难道不是吗？第二个循环难道不会最终像融合第一个循环那样
+
+25
+00:19:40.000 --> 00:20:43.000
+because it's a subset of like the data that you're fetching. Isn't that you're fetching, isn't that you're going to have the exact same cache miss whatever ratio or am I missing something? Fusing that first loop into the second loop might mean that the first loop, let's say that that first loop as written has great memory access patterns and is going to always prefetch great and run very fast. Fusing it into the second loop could mean that the operations that constituted that first loop will now cache miss because this second loop has more complex memory access patterns and it's trying to load more stuff into cache and some of the stuff starts to fall out of cache and isn't there when we expect it to be there. So it might make the first loop slower.
+因为它正是你要获取的数据的子集。难道不是吗？你在获取数据时，无论什么比例，难道不会遇到完全相同的缓存未命中吗？还是我漏掉了什么？将第一个循环融合到第二个循环中可能意味着第一个循环，比方说，按原样编写的第一个循环具有极好的内存访问模式，并且总是能很好地预取并运行得非常快。将其融合到第二个循环中可能意味着构成第一个循环的操作现在会发生缓存未命中，因为第二个循环具有更复杂的内存访问模式，它试图将更多东西加载到缓存中，并且其中一些东西开始脱落出缓存，在我们期望它在那里时却不在那里了。所以这可能会使第一个循环变慢。
+
+26
+00:20:43.000 --> 00:21:47.000
+It might also complicate the second loop. It will add additional register pressure to the second loop because there's a new operation that you have to perform. And that additional register pressure might mean that there's spills to stack, which might mean that now the stack has to be in cache where it previously didn't. And that means that fewer of the data elements would need to be in cache. And the combination of those two loops could also, you know, throw off the compiler's ability to recognize that it should, or not the compiler's, it might throw off the processor's ability to prefetch the right data because it's a more complex access pattern. You know, especially it could be the case if that first loop is something like an adjacent difference
+它还可能使第二个循环变复杂。它会增加第二个循环的额外寄存器压力，因为有一个你必须执行的新操作。而这种额外的寄存器压力可能意味着会向堆栈溢出，这可能意味着现在堆栈必须在缓存中，而以前不需要。这意味着需要放在缓存中的数据元素会变少。这两个循环的结合也可能，你知道，扰乱编译器识别它应该做什么的能力，或者说不是编译器，它可能会扰乱处理器预取正确数据的能力，因为这是一种更复杂的访问模式。你知道，特别是如果第一个循环类似于相邻差分，
+
+27
+00:21:47.000 --> 00:22:09.000
+where it's stenciled where it needs to access consecutive elements if you have a loop that is accessing consecutive elements you need to not only have the next element in cache you need to have some of the last elements in cache and you might need to have like the next one or two elements in cache and the last two or three elements in cache. And so combining those loops,
+如果它是模板化的，它需要访问连续的元素如果你有一个正在访问连续元素的循环，你不仅需要在缓存中有下一个元素，你还需要在缓存中有一些过去的元素，你可能还需要像下一个或两个元素在缓存中，以及过去的两个或三个元素在缓存中。所以结合这些循环，
+
+28
+00:22:09.000 --> 00:22:30.000
+maybe the second loop only needs to have each iteration. It only accesses one element from that array. You see what I'm saying? Right. No, yeah. So I guess that, yeah, the register pressure stuff makes total sense because of the increased operations. I guess you had not said this but i in my head when you were explaining that example was thinking that uh you know you had a
+也许第二个循环每次迭代只需要。它只访问该数组中的一个元素。你明白我的意思吗？对。不，是的。所以我想，是的，寄存器压力那些事完全说得通，因为操作增加了。我想你之前没说过这个，但在我脑海里，当你解释那个例子时，我以为呃你有一个
+
+29
+00:22:30.000 --> 00:23:16.000
+single index i uh and that was the only index that was being used for each of the arrays a b and c but uh if in the first loop like you said you you're looking at both index i plus you know two before and two afterwards and then in the second loop you're only using you know single like like you said if you're changing the data access pattern and it becomes more complex then that can i can see that yeah so that's i think i added uh criteria to your example that you'd never stated which is what caused the confusion you asked me a question the other day, which was, you know, don't you have to pay for the cost of the memory loads and stores anywhere, like in both cases? Like, you know, why does it matter?
+单一索引 i，并且那是被数组 a、b 和 c 中的每一个所使用的唯一索引，但是呃如果在第一个循环中，就像你说的，你既看索引 i 加上，你知道，前面两个和后面两个，然后在第二个循环中，你只使用，你知道，单个，就像你说的，如果你改变了数据访问模式并且它变得更复杂，那么我可以理解，是的。所以我想我在你的例子中添加了你从未说明的标准，这才是造成混淆的原因。你前几天问了我一个问题，那就是，难道你无论如何不都得付出内存加载和存储的代价吗，比如在两种情况下？就像，你知道，为什么这很重要？
+
+30
+00:23:16.000 --> 00:24:02.000
+The way that I had phrased the question, because it was related to a slightly different example, is that you've got one example where you have two loops and you're going to be loading things so you're iterating over an array and however many times you need to load things into cache you're going to have to do that twice because you've got two different loops so n times for the first loop n times for the second loop and in the fused example that potentially results in some cache misses anytime there's a cache miss that's going to result in another you know loading things into cache so like you know worst case or whatever you're going to end up with 2n you know of having to load things into cache so in both examples you have 2n uh you know times of loading things into the cache why is one more like say and you're saying like oh if we split it into two
+我当时这样措辞这个问题，因为它与一个略有不同的例子有关，那就是你有一个例子，其中有两个循环，你要加载一些东西，所以你要遍历一个数组，无论你需要将东西加载到缓存多少次，你都必须做两次，因为你有两个不同的循环——第一个循环 n 次，第二个循环 n 次；而在融合的例子中，这可能会导致任何时候发生缓存未命中时产生另一次（你知道的）将东西加载到缓存中，所以，你知道，最坏情况下或者随便什么，你最终会有 2n 次（你知道的）必须将东西加载到缓存中。所以在两个例子中，你都有 2n 次（你知道的）将东西加载到缓存中，为什么一个更……比如，你说如果我们把它拆分成两个
+
+31
+00:24:02.000 --> 00:24:45.000
+loops that's going to be potentially faster. And my question was like, I don't understand. Like if we're loading things into cache the same number of times, sure, one of them is due to some cache misses. But like why does it end up being so much more performant when you split it into two loops? Like that didn't make sense to me. And that brings us back to the start of our discussion where we talked about efficiency in the context of parallelism. And the intuition here is you are assuming that I have to wait for those memory loads in stores. That like, you know, there's some fixed costs that I always have to pay for those memory loads in stores. There's some fixed costs that I always have to pay for those memory loads
+循环，那可能会更快。我的问题是，我不明白。如果我们加载到缓存的次数是一样的，当然，其中一个是因为一些缓存未命中的原因。但为什么当你把它拆分成两个循环时，性能会提升这么多？这让我觉得讲不通。这就让我们回到了讨论的开头，我们在并行性的背景下谈论了效率。这里的直觉是，你假设我必须等待那些内存加载和存储。就像，你知道，有一些固定成本是我总是必须为这些内存加载和存储支付的。有一些固定成本是我总是必须为这些内存加载和存储支付的。
+
+32
+00:24:45.000 --> 00:25:50.000
+in stores. But the thing is, the processor, all processors, essentially, are parallel. There's this unit that's going to do the load in the store. And there's a unit that's going to do my computation. And they can operate asynchronously. And most modern processors, you know, a laptop or a phone CPU or server CPU, maybe not an embedded CPU, but most modern processors, GPUs too, will prefetch data for you. And many of them do this thing called out-of-order execution. And what that means is that in the best case, yes, you have to pay the cost for that load in store, but it's hidden from you because the processor has started that load before the data was needed.
+但问题是，处理器，所有的处理器，本质上都是并行的。有这样一个单元将要做加载和存储。还有一个单元将要做我的计算。它们可以异步操作。而且大多数现代处理器，（你知道，笔记本电脑、手机 CPU 或服务器 CPU，也许不是嵌入式 CPU，但大多数现代处理器，GPU 也是）会为你预取数据。它们中的许多都做了一件叫做乱序执行的事情。这意味着在最佳情况下，是的，你必须为该加载和存储支付代价，但它对你是隐藏的，因为处理器在需要数据之前就已经启动了该加载。
+
+33
+00:25:50.000 --> 00:26:22.000
+Like, let's say that that load takes a minute. Okay, let's say it takes a minute to load from main memory every time you do it. I don't care about that minute if the processor initiated the load a minute before I needed it. And if the load is happening asynchronously in the background and the data just happens to be there when I need it, then we're good. And that's the power of prefetching is the data just gets there into the cache when I need it.
+比方说，那个加载需要一分钟。好吧，假设每次你从主内存加载都需要一分钟。如果处理器在我需要它的一分钟前就开始了加载，我才不在乎那一分钟呢。如果加载在后台异步发生，并且当我需要时数据刚好就在那里，那我们就好了。这就是预取的力量，即自我需要时，数据刚好就到达了缓存中。
+
+34
+00:26:22.000 --> 00:27:44.000
+And you compare that to the case of the cache miss, where I have to actually go into main memory, and I have to wait for that operation. And I have to wait for the full latency of that And this doesn't just come up with data load in stores too. Division, for example, which is notoriously an expensive arithmetic operation on most processors. Usually your processor these days can usually do multiple adds and subtracts and multiplies per cycle. But usually something like a division can take, you know, 10, 20, 30 cycles, could even be a lot more than that. But if you only need to do a division every 30 cycles, then that's okay. You won't actually have to wait for it because assuming that you can have the data ready for that division 30 cycles ahead of time, then you can start it and you can go do 30 cycles of other work and then your division will be done
+你可以把它与缓存未命中的情况进行比较，在那种情况下，我必须实际进入主内存，并且我必须等待该操作。并且我必须等待该操作的完整延迟。这不仅会出现在数据加载和存储中。例如，除法，在大多数处理器上众所周知是一项昂贵的算术运算。通常你现在的处理器每个周期通常可以做多个加法、减法和乘法。但通常像除法这样的运算可能需要，你知道，10、20、30 个周期，甚至可能比这多得多。但如果你只需要每 30 个周期做一次除法，那也没关系。你实际上不必等待它，因为假设你能在提前 30 个周期时为该除法准备好数据，那么你就可以启动它，然后去干其他 30 周期的活，然后你的除法就完成了，
+
+35
+00:27:44.000 --> 00:28:04.000
+and then you're good. Whereas if you don't have that work to overlap, then you do have to spend the time waiting for that operation to come back. And we call this latency hiding. And the parallelism at this level is not something that's visible and exposed to programmers.
+然后你就搞定了。而如果你没有那些工作来进行重叠，那么你确实得花时间等待该操作返回。我们称之为延迟隐藏。并且这一级别的并行性并不是对程序员可见和公开的东西。
+
+36
+00:28:04.000 --> 00:28:33.000
+You don't have to think about how you write this because it's something that's visible and exposed to programmers. You don't have to think about how you write this because it's something that the processor and the compiler do for you. But I do think it's important to have the mental model of how this works and to understand that all processors are inherently parallel, even if you're programming to a single thread. And that can really have a big impact on your performance. Yeah. So basically, yeah, cache misses can mess up prefetching.
+你不需要考虑如何编写它，因为它是对程序员可见和公开的东西。你不需要考虑如何编写代码，因为这是处理器和编译器为你做的事情。但我确实认为，拥有其工作原理的心智模型并理解所有处理器本质上都是并行的（即使你是在为单个线程编程）是很重要的，这确实会对你的性能产生巨大影响。是的。所以基本上，是的，缓存未命中会搞砸预取。
+
+37
+00:28:33.000 --> 00:29:30.000
+And if prefetching is messed up, it's not going to be the same performance profile. Yeah. And I mean, usually it's more the other way around. It's usually the reason that you have a, there's two reasons to have it, that you'd have a cache miss. Reason number one is that the data that you needed to have was not prefetched because the processor did not figure out that it needed to prefetch it or because the processor figured out it needed to prefetch it, but the prefetch did not, it did not figure it out early enough. And then reason number two is the data was in the cache, but it got evicted from the cache because there's a lot of pressure on the cache because you need a lot more data than you can fit into your cache. And there's a number of strategies that you can use in that case. Like for example, one that comes up a lot in multidimensional loops is something called tiling, which gives you better control over
+如果预取被搞砸了，性能表现就不会一样。是的。我的意思是，通常情况恰好相反。通常你拥有缓存未命中的原因有两个。原因一：你需要的数据没有被预取，因为处理器没有弄清楚它需要预取，或者因为处理器弄清楚了它需要预取，但预取得不够早。原因二：数据在缓存中，但它被驱逐出缓存了，因为缓存承受了很大压力，你需要比能塞进缓存中多得多的数据。在这种情况下，你可以使用许多策略。例如，多维循环中经常出现的一种策略叫做分块，它能让你更好地控制
+
+38
+00:29:30.000 --> 00:30:10.000
+the amount of data that you need to have in cache. By controlling the size of your tile, you can control how many elements you need to have in cache. And then therefore you can make sure that you can fit all the things that you need in cache and not have to spell to the next level of cache or the main memory. Yep, makes sense. And more importantly, I think you nailed it, Bryce. 10 minutes. Yeah, although I got to go get dressed and then run to my thing.
+你需要放在缓存中的数据量。通过控制分块的大小，你可以控制你需要放在缓存中的元素数量。然后你就可以确保你能把所有需要的东西都塞进缓存，而不必溢出到下一级缓存或主内存中。是的，说得通。更重要的是，我觉得你抓住了要领，布莱斯。10分钟。是的，不过我得去换身衣服然后赶往我的活动了。
+
+39
+00:30:10.000 --> 00:30:15.000
+Thanks for listening. We hope you enjoyed and have a great day. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+谢谢收听。希望你们喜欢，祝有个美好的一天。这期节目目前还没有评论。点击文稿中的任意句子即可留下评论。

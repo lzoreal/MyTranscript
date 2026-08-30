@@ -1,0 +1,221 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:54.000
+you know, very high-end sushi place. I don't know if they have a Michelin star. Is it okay that we're here? I don't know if it's okay that we're here. And you remember, I remember you saying at one point, he's like, Connor, this is San Francisco. If you just act like you belong, they'll assume that we just IPO'd some like million dollar company and that we're like entrepreneurs and we're celebrating. welcome to adsp the podcast episode 37 recorded on june 30th 2021 my name is connor and on today's episode my co-host bryce describes how scans can be parallelized. We're going to talk about scans. Woo. Yeah. So first I'll tell the story. So God, when was this? Was it 2018? Maybe 2019?
+你知道的，那是一家非常高端的寿司店。我不知道他们有没有米其林星。我们在这里可以吗？我不知道我们在这里可不可以。你还记得吗，我记得你当时说过，他说，康纳，这是旧金山。如果你表现得像是属于这里，他们就会以为我们刚刚让某家价值百万的公司IPO了，我们是企业家，在庆祝呢。欢迎收听 ADSP 播客第 37 期，录制于 2021 年 6 月 30 日。我是康纳，在今天的节目中，我的联合主持布莱斯将讲解如何实现扫描（scan）的并行化。我们要聊聊扫描。呜。耶。所以首先我来讲讲这个故事。天哪，那是什么时候？是 2018 年吗？也许是 2019 年？
+
+2
+00:00:54.000 --> 00:01:26.000
+Is this the story where we drove to San Francisco? Yeah, it's the story where we drove to San Francisco. Haven't we already told this on the podcast before? I don't care. We're telling it again. So Connor and I are driving to a meetup in San Francisco. And I won't tell the sushi part of the story because I do think we've done that before. I may be lying. Maybe I'm going to tell the sushi part of the story. So we're driving up to San Francisco. This is pre-sushi to go to a C++ meetup. This was back in the days before covid when uh you know
+这是我们开车去旧金山的那次吗？对，就是我们开车去旧金山的那次。我们以前没在播客里讲过这个吗？我不在乎。我们再讲一遍。所以康纳和我正开车去旧金山参加一个聚会。而且我不会讲故事中吃寿司的部分，因为我觉得我们以前讲过那个。我可能在撒谎。也许我要讲寿司的那部分。所以我们正开车去旧金山。这是在吃寿司之前，去参加一个 C++ 聚会。那是新冠疫情之前的日子，呃，你知道的
+
+3
+00:01:26.000 --> 00:02:16.000
+you would go and see other human beings and that was a regular thing um and um we're driving and connor was not working at nvidia at the time and was um had not yet been introduced to the world of parallel uh programming i would say. And we were talking about parallel algorithms and Connor basically asked me something along the lines of, I don't see how you could possibly paralyze something like a partial sum or an inclusive scan. And I think that your reasoning for it is not at all surprising. Because first, let's think about reduce. So a reduction is something that seems like it's pretty clear
+你会去见其他的活生生的人，那是一件很平常的事，嗯，而且，嗯，我们开着车，康纳当时不在英伟达工作，而且，嗯，可以说是还没有接触到并行编程的世界。我们在谈论并行算法，康纳基本上问了我类似这样的话，我不明白你怎么可能把像部分和（partial sum）或包含性扫描（inclusive scan）这样的东西并行化。而且我认为你对此的推理一点也不令人意外。因为首先，让我们想想规约（reduce）。所以规约似乎是一件很清楚的事情
+
+4
+00:02:16.000 --> 00:02:41.000
+how you would parallelize it. A reduction is, hey, I want to add up all the elements in this sequence. And the idea behind a parallel reduction is you do it as a tree. If you have four elements, you have one thread adds the first two elements, another thread adds the next two elements, and then you take the results from both of those threads and you combine them together. And then you've got a final result that incorporates information from all four of the elements.
+你要怎么把它并行化。规约就是，嘿，我想把这个序列中的所有元素都加起来。并行规约背后的想法是，你把它当成一棵树来做。如果你有四个元素，一个线程把前两个元素相加，另一个线程把接下来的两个元素相加，然后你把这两个线程的结果结合在一起。接着你就得到了一个最终结果，它包含了所有四个元素的信息。
+
+5
+00:02:41.000 --> 00:03:38.000
+But for a scan, or a partial sum, as the non-parallel version is called in C++. The idea with a scan is that you're, you're producing a sum of all the elements, but you're also producing every intermediate sum. So, so the output is not one sum, but the output is an array of sums where the, you know, the first element in the output array is just the first element of the input. And the second element of the output array is the first element plus the second element. The third element of the output array is the first element plus the second element. The third element of the output array is the first element plus the second element plus the third element. And so because you need to produce all of those intermediate sums, it sort of seems like it might be a thing that you would have to do
+但对于扫描，或者说部分和，正如非并行版本在 C++ 中所称的那样。扫描的想法是，你正在，你正在生成所有元素的和，但你也在生成每一个中间和。所以，所以输出不是一个和，而是输出一个和的数组，其中，你知道，输出数组中的第一个元素就是输入的第一个元素。输出数组的第二个元素是第一个元素加上第二个元素。输出数组的第三个元素是第一个元素加上第二个元素。输出数组的第三个元素是第一个元素加上第二个元素。输出数组的第三个元素是第一个元素加上第二个元素加上第三个元素。所以因为你需要生成所有这些中间和，它看起来有点像是你必须做的事情
+
+6
+00:03:38.000 --> 00:04:12.000
+sequentially, right? Because you need every one of those intermediates. You can't sort of like do the tree-based thing that I just described for reduce. And so Connor sort of like asked me, like, I don't see how you could possibly do that. And we're in the car and we had just reached, I think we were taking 101 and we just reached a point where we needed to like transfer over to 280. And I did not care.
+串行地做，对吧？因为你需要每一个这样的中间值。你不能像我刚才为规约描述的那样去做基于树的事情。所以康纳有点像问我，就像，我不明白你怎么可能做到这一点。我们在车里，我们刚到，我想我们走的是 101 高速公路，我们刚到一个需要转到 280 高速公路的地方。而我根本不在乎。
+
+7
+00:04:12.000 --> 00:05:06.000
+I was just so excited that Connor had asked me this. And I think like I had just made some slides for this for a talk. And so I was like hundred percent ready to give him like a really good answer for it. And so I proceed to explain to him while I'm driving, uh, uh, the answer is don't, don't drive and teach people parallel programming kits. Um, and, uh, and I, I, I missed the turnoff and I, I think like I proceeded to miss like turns like three or four times and we basically ended up driving in a circle um uh uh through like freeway on ramps between these two highways until I had explained this insight to Connor um and then we got, we, we went up to the meetup and I think that was the day
+我只是太兴奋了，因为康纳问了我这个问题。而且我觉得我刚为这个做了一些演讲的幻灯片。所以我可以说是百分之百准备好给他一个非常好的答案了。于是我边开车边向他解释，呃，呃，答案是不要，不要一边开车一边教别人并行编程，嗯，而且，呃，我，我，我错过了路口，而且我想我接着错过了大概三四次路口，我们基本上最终在这些高速公路匝道之间绕着圈子开车，穿梭于这两条高速公路之间，直到我向康纳解释了这个见解，然后我们到了，我们去了聚会，我想那就是那一天
+
+8
+00:05:06.000 --> 00:05:50.000
+where we, where I had to, um, I had to bring my watch to, to get the battery fixed. And there was like a, like, you know, very high end sushi place. I don't know if they have a Michelin star, but, uh, if they don't know if they have a Michelin star, but, uh, if they don't, they probably deserve one. That was like two minutes walk away from the, from the, the, what the equally fancy watch place. And, uh, and I just like, like after we got done with the watch thing, I just walked out. I put, put to my phone. I'm like, that's good food. And I see the very nice sushi place. I'm like, we'll go in there. And then we walked in, we were both wearing like, you know, gym clothes, which is like our typical thing. And it was like maybe five.
+我和，我不得不，我不得不把我的手表拿去修电池。那里有一个，就像，你知道的，非常高端的寿司店。我不知道他们有没有米其林星，但是，呃，如果他们不知道有没有米其林星，但是，呃，如果没有的话，他们可能值得一颗。离那个同样高档的手表店大概步行两分钟。而且，呃，我只是像，就像我们在手表店弄完之后，我直接走了出来。我拿着我的手机。我说，那是好吃的。我看到了那个非常好的寿司店。我说，我们进去吧。然后我们走了进去，我们俩都穿着，你知道的，健身服，也就是我们的典型穿着。大概是五点左右。
+
+9
+00:05:50.000 --> 00:06:27.000
+And they looked at us and they were like, they did not think we were the class of people that belonged in their establishment. And they like showed us the menu because I think they were like, hmm, you probably don't understand that this is an expensive place and you're probably like some college kids who can't afford it. And then I asked them something like, you know, like, well, we only got like an hour. Can you like get us in real quick? And they accommodated us, I think, because we must have been in before their like first dinner wave. Like this is a place where normally you'd have to get like a reservation,
+他们看着我们，然后他们觉得，他们不认为我们是属于他们那类 establishment 的人。他们给我们看菜单，因为我想他们大概在想，嗯，你可能不明白这是一个昂贵的地方，你可能就像某些买不起的大学生。然后我问了他们一些问题，你知道的，比如，嗯，我们只有一个小时。你们能让我们快点进去吗？他们满足了我们，我想，因为我们一定是在他们第一波晚餐高峰到来之前进去的。这里通常需要你提前好长一段时间预订，
+
+10
+00:06:27.000 --> 00:06:44.000
+like a good chunk of time ahead of time. But they were just like, oh, like, you know, we're not really, we just opened up. We don't have any reservations for a while. These guys say they're just going to be an hour and they don't seem phased by the price. So, okay, we'll let them in. And we had a very nice omakase sushi dinner. And Connor was just sitting there the whole time,
+就像提前很久一样。但他们当时就觉得，哦，就像，你知道的，我们其实没怎么，我们刚开门。我们暂时没有什么预订。这几个人说他们只待一个小时，而且他们对价格一点也不吃惊。所以，好吧，我们让他们进来。我们吃了一顿非常棒的 omakase 寿司晚餐。而康纳全程就坐在那里，
+
+11
+00:06:44.000 --> 00:06:57.000
+just like shaking his head at like, I'm just sitting here in San Francisco eating super fancy sushi in my gym clothes with Bryce. And I just can't believe it. Those were in the days when Connor was still awestruck by me. Yes, I do. I do remember that.
+就像是在摇头，我想，我正坐在旧金山，穿着健身服和布莱斯一起吃超级高级的寿司。我简直不敢相信。那是康纳还在对我顶礼膜拜的日子。是的，我记得。我确实记得。
+
+12
+00:06:57.000 --> 00:07:15.000
+It's a very, very fond memory. And it was very surreal. Because that's the thing. At the time, I think we had sort of started to become friends. But I still, like, yeah, you were a person that I watched on YouTube videos, like, at CPPCon. And then just we happened to both be going to San Fran. He said, oh, do you want a ride?
+这是一段非常非常美好的回忆。而且感觉非常超现实。因为就是这样。当时，我觉得我们算是开始成为朋友了。但我还是觉得，是的，你是我在 YouTube 视频上看到的那些人，比如在 CPPCon 上。然后正好我们俩都要去旧金山。他说，哦，你想搭便车吗？
+
+13
+00:07:15.000 --> 00:07:51.000
+And then I asked you a question. And then before I knew it, I'm just like, is it okay that we're here? I don't know if it's okay that we're here. And I remember you saying at one point, he's like, Connor, this is San Francisco. If you just act like you belong, they'll assume that we just IPO'd some like million dollar company and that we're like entrepreneurs and we're celebrating. There's a lot of people that just walk into restaurants, you know, without fancy clothes and stuff. But yeah, it was a very surreal experience. We would not, we will not do that when we have fancy dinner in New York, though, because while it would be acceptable in San Francisco, not so much in New York.
+然后我问了你一个问题。然后在我意识到之前，我就在想，我们在这里可以吗？我不知道我们在这里可不可以。我记得你当时说过，他说，康纳，这是旧金山。如果你表现得像是属于这里，他们就会以为我们刚刚让某家价值百万的公司IPO了，我们是企业家，在庆祝呢。有很多人不穿盛装就直接走进餐馆，你知道的。但是的，这是一段非常超现实的经历。不过，当我们在纽约吃昂贵的晚餐时，我们不会，我们不会那样做，因为虽然在旧金山这是可以接受的，但在纽约就不太行了。
+
+14
+00:07:51.000 --> 00:08:22.000
+Well, but that was an interesting time in our friendship because that was the period in our friendship before you came to understand that, like how skilled you were as a speaker. Like that was a period where you were still, you know, you were really awestruck by, you know, like all the people who talk at conferences and what yet. And like you hadn't come to accept that you were really good at it too. And like I, as soon as I met you,
+嗯，但那在我们友谊中是一个有趣的时期，因为那是你开始明白之前的一段时期，就像你作为一名演讲者是多么熟练。那是一个你仍然，你知道的，你真的对那些在会议上发言的人等等感到无比敬畏的时期。而且就像你还没有接受其实你也很擅长这件事一样。而且就像我，一见到你，
+
+15
+00:08:22.000 --> 00:09:20.000
+I just like, like it's my superpower. I just like knew like Connor, like he's i just like like it's it's my superpower i just like knew like connor like he's got it like he's got this you know really unique um uh unique mind and he's just got the right skill set to like present talks and so i like i just knew at that point i'm not even sure i had given my first conference talk at that point it might have only been the meetup right i think it had been that was that was but so yeah so it must have been like 2008 yeah 2018 uh 2008 i was in high school you were probably too yes i i was also in high school yes that is correct yeah all right so let's um let me show you this algorithm um and i'll give you the explanation i'll give the audience the explanation that more or less I gave Connor. So I like to think about parallel algorithms and like this algorithm in particular in terms of communication of information. And that perhaps comes from my background working on
+我就觉得，就像这是我的超能力。我当时就觉得，就像康纳，他，我当时就觉得，就像这是我的超能力。我当时就觉得，就像康纳，他很厉害，就像他拥有这种非常独特的，呃，独特的思维，而且他拥有展示演讲的正确技能，所以我当时就知道了，我甚至不确定我当时是不是已经做过我的第一次会议演讲了，可能只是那个聚会吧？我想就是那个，那就是，但所以，是的，所以那一定是在 2008 年左右，耶，2018 年，2008 年我还在上高中，你可能也是。是的，我当时也在上高中，是的，那是对的，耶。好的，所以让我们，让我向你展示这个算法，我会给你解释，我会向观众解释我多多少少给康纳的解释。所以我想从信息交流的角度来思考并行算法，特别是这个算法。这也许来自于我在
+
+16
+00:09:20.000 --> 00:10:39.000
+distributed systems like HPX, where there was like, you know, you had to actually, you know, communicate information over the wire. So let's imagine we have like some input sequence. Let's just assume that it's nine values and there'll be characters And we're going to do a scan of strings. And the reason that we're going to do a scan of strings is because it is non-commutative, right? That A, like when you're doing string concatenation, A plus B is not equal to B plus A. And so I want to demonstrate that you can do a scan that can be paralyzed and does not require commutivity. So we've got an array of nine input characters, A through I. And the first thing we're going to do, which is almost always the first thing that you do in any parallel algorithm, is we're going to partition the input set into subproblems. And
+分布式系统（如 HPX）方面的工作背景，在那里，你知道的，你实际上必须，你知道的，通过网络通信信息。所以让我们想象我们有一些输入序列。我们假设它是九个值，它们将是字符，我们将对字符串进行扫描。我们之所以要对字符串进行扫描，是因为它是不可交换的（non-commutative），对吧？就像你在做字符串连接时，A 加 B 不等于 B 加 A。所以我想证明，你可以做一个可以并行化且不需要交换性的扫描。所以我们有一个包含九个输入字符的数组，A 到 I。我们要做的第一件事，几乎总是你在任何并行算法中做的第一件事，就是我们将输入集划分为子问题。并且
+
+17
+00:10:39.000 --> 00:11:14.000
+each subproblem will be assigned to some thread. So we'll take the first three characters of the input, A, B, and C, we'll give them to one thread. Then we'll take the next three characters, D, E, and F, we'll give them to another thread. Then we'll take the last three characters, G, H, and I, and we'll give them to a last thread. And so the result that we're looking for here is we're looking for, you know, the last element of the output is going to have the concatenation of all of these characters, which is going to be A, B, C, D, E, F, G, H, I.
+每个子问题将被分配给某个线程。所以我们将输入的头三个字符 A、B 和 C 给一个线程。然后我们取接下来的三个字符 D、E 和 F 给另一个线程。然后我们取最后三个字符 G、H 和 I，把它们给最后一个线程。所以我们在这里寻找的结果是，你知道的，输出的最后一个元素将包含所有这些字符的连接，这将是 A、B、C、D、E、F、G、H、I。
+
+18
+00:11:14.000 --> 00:11:53.000
+And the first element of the output will have like the string A, B. The third element of the output will be A, B, C, etc. All the way up to that last element, A, B, C, D, E, F, G, H, I. And that last element, it's sort of a little bit special because it is actually, it's the reduction of the entire sequence. So if you only cared about getting that last element, you would just use a std reduce here, not a scan. Although, would you use a reduce?
+并且输出的第一个元素将有像字符串 A、B。输出的第三个元素将是 A、B、C 等等。一直到最后一个元素，A、B、C、D、E、F、G、H、I。而最后一个元素，它有点特殊，因为它实际上是整个序列的规约。如果你只关心获取那个最后一个元素，你在这里只需使用 std::reduce，而不是 scan。虽然，你会用 reduce 吗？
+
+19
+00:11:53.000 --> 00:12:33.000
+Yeah, well, no, you wouldn't because you couldn't use std reduce because it assumes that your operation is commutative, which we've done a separate episode on. Connor will put a link in the show note to, uh, episode 25, the lost reduction. Yes. Um, so, um, okay. So, so now we've got our chunks. Um, and the first thing we're going to do, um, is that locally within each chunk, we are going to do a sequential scan of the elements in that chunk. And we're going to do that because, you know, what we need for each output element,
+是的，嗯，不，你不会，因为你不能使用 std::reduce，因为它假设你的操作是可交换的，我们已经为此录制了另一期节目。康纳会在节目说明中放置一个链接，指向第 25 期节目：迷失的规约。是的。所以，嗯，好的。所以，现在我们有了我们的块（chunks）。嗯，我们要做的第一件事，就是在每个块的内部，我们将对该块中的元素进行串行扫描。我们这样做是因为，你知道的，对于每个输出元素我们需要什么，
+
+20
+00:12:33.000 --> 00:13:17.000
+it needs information from all of the prior elements. So, you know, the third out in the first chunk, the third output element, which belongs to that first thread, it needs information from those first two elements. So the first two elements are A, well, it actually needs it from the first three elements. So the first three elements are A, B, and C. So it needs all three of those to be incorporated into its result. And likewise, the second element, it needs A and B to be incorporated into its result. And the first element of that chunk and the first element of the output, it just needs A.
+它需要来自所有先前元素的信息。所以，你知道的，第一个块中的第三个输出，第三个输出元素，它属于第一个线程，它需要来自前两个元素的信息。所以前两个元素是 A，嗯，其实它需要来自前三个元素。所以前三个元素是 A、B 和 C。所以它需要所有这三个元素都被合并到它的结果中。同样地，第二个元素，它需要 A 和 B 被合并到它的结果中。而那个块的第一个元素和输出的第一个元素，它只需要 A。
+
+21
+00:13:17.000 --> 00:14:11.000
+And so you can see getting the answer for just that first chunk is pretty easy. All we have to do is do an inclusive scan of that that chunk locally and then we'll be done. Now, when we go to that second chunk, it's a little bit more complicated because that second chunk, which starts at the fourth element, it needs information from the first chunk, right? In particular, it needs the summation from that first chunk. It needs to add ABC to all of the elements in its chunk. But we're not going to worry about that right now, because it also needs to do that local scan too. Because the last element of the second chunk, which would be the sixth output element, it needs to incorporate information from the fourth and fifth input elements. And those fourth and fifth elements
+所以你可以看到，仅为第一个块获取答案是非常容易的。我们要做的就是对该块进行局部的包含性扫描（inclusive scan），然后我们就完成了。现在，当我们转到第二个块时，它就有点复杂了，因为第二个块从第四个元素开始，它需要来自第一个块的信息，对吧？特别是，它需要来自第一个块的总和。它需要将 ABC 加到其块中的所有元素上。但我们现在不用担心这个，因为它也需要做那个局部扫描。因为第二个块的最后一个元素，也就是第六个输出元素，它需要合并来自第四个和第五个输入元素的信息。而第四个和第五个元素
+
+22
+00:14:11.000 --> 00:14:44.000
+belong in that chunk. So again, we can just do a local inclusive scan to add the information from those local elements into all of the output elements for that chunk. That's not going to be sufficient, but it'll be enough to get us started. So essentially what we do in this first step is each chunk is, or each thread does a inclusive scan locally over its chunk. And so after that,
+属于那个块。所以同样地，我们可以做一个局部的包含性扫描，将这些局部元素的信息加到该块的所有输出元素中。这还不够，但足以让我们开始。所以基本上我们在第一步中所做的是，每个块，或者说每个线程在其块上局部地做一个包含性扫描。所以在那之后，
+
+23
+00:14:44.000 --> 00:15:48.000
+the first thread, its three elements, it has A in the first one, then AB, then ABC. The second chunk, we have D, then DE, then DEF. The third chunk, we have G, then GH, then GHI. Okay. So now the challenge is we need to get information passed between these chunks. In particular, we need to get the last element of the first chunk, ABC, needs to be added into all of the elements after it. So that information, that summed result, ABC, needs to be sent from that first chunk to the second and third chunks. But we also need to send information from that second chunk to the last chunk because DEF needs to be added into the seventh, eighth,
+第一个线程，它的三个元素，第一个元素是 A，然后是 AB，然后是 ABC。第二个块，我们有 D，然后是 DE，然后是 DEF。第三个块，我们有 G，然后是 GH，然后是 GHI. 好的。所以现在的挑战是我们需要在这些块之间传递信息。特别是，我们需要让第一个块的最后一个元素 ABC，被加到它后面的所有元素中。所以这些信息，那个求和结果 ABC，需要从第一个块发送到第二个和第三个块。但我们也需要把信息从第二个块发送到最后一个块，因为 DEF 需要被加到第七、第八、
+
+24
+00:15:48.000 --> 00:16:58.000
+and ninth element. So each chunk needs to send its last element to the other chunks. And remember that last element, the last element of an inclusive scan is the sum of all the elements in that chunk. So essentially what we're saying is each chunk needs to send the sum of all of its elements to all of the chunks that follow it. So how are we going to do that? Well, what we're going to do is after each chunk does an inclusive scan, it's going to take that last element of its local inclusive scan and it's going to put it into some temporary storage. We're going to call that temporary storage the aggregates array. And so that aggregates array will have one element for each different chunk. So there will be one element for each different thread. And the threads can write concurrently their values into this aggregates array
+和第九个元素中。所以每个块都需要把它的最后一个元素发送给其他块。记住那个最后一个元素，包含性扫描的最后一个元素是该块中所有元素的总和。所以基本上我们所说的是，每个块都需要把它的所有元素的总和发送给所有跟随它的块。那么我们要怎么做呢？好吧，我们要做的就是，在每个块做一个包含性扫描之后，它将把其局部包含性扫描的最后一个元素放入某个临时存储中。我们把这个临时存储叫做聚合数组（aggregates array）。所以这个聚合数组将为每个不同的块有一个元素。所以每个不同的线程将有一个元素。并且线程可以并发地将它们的值写入这个聚合数组中，
+
+25
+00:16:58.000 --> 00:18:01.000
+because we assume that we allocated that aggregates array before we started this operation. So this aggregates array, it's an already existing storage. It's got one slot for each chunk. And during this phase, only one thread will write to each slot. So, we don't need any sort of mutex or anything here. Each thread can just write that summed value into that slot. Okay. So then after each thread has written its element into that aggregate slot, then we need some synchronization. And the reason we need some synchronization is that we need to transform that aggregates array and we can only do that after we know that everybody has written to it. So we insert some sort of barrier.
+因为我们假设我们在开始这个操作之前已经分配了那个聚合数组。所以这个聚合数组，它是一个已经存在的存储。它为每个块有一个槽位。在此阶段，只有一个线程会写入每个槽位。所以，我们这里不需要任何互斥锁（mutex）或类似的东西。每个线程只需将那个求和的值写入那个槽位即可。好的。那么在每个线程将其元素写入该聚合槽位之后，我们需要一些同步。我们需要同步的原因是我们需要转换那个聚合数组，而我们只有在知道所有人都已经写入之后才能做到这一点。所以我们插入某种屏障（barrier）。
+
+26
+00:18:01.000 --> 00:18:49.000
+And then after that barrier we know that two things are true. One, that each thread has completed the local inclusive scan of its chunk. And two, each thread has completed writing the sum of its chunk to that aggregates array and all threads can now see those sums in the aggregates array. So that aggregate array has the information that we need to add into each one of the chunks. But we need to transform that information a little bit. Because let's look at what's in that aggregates array in this little example we've been working on. So in this example we've been working on,
+然后在那个屏障之后，我们知道两件事是真实的。第一，每个线程都完成了其块的局部包含性扫描。第二，每个线程都完成了将其次块的总和写入该聚合数组的工作，并且所有线程现在都可以在聚合数组中看到这些总和。所以那个聚合数组拥有我们需要加到每个块中的信息。但我们需要对该信息进行一点转换。因为让我们看看在我们一直在处理的小例子中，那个聚合数组里有什么。所以在我们一直在处理的这个例子中，
+
+27
+00:18:49.000 --> 00:19:27.000
+that aggregates array has three slots. The first slot has the string ABC. The second slot has the string DEF. And the third slot has the string GHI. And let's think about that third chunk that we talked about before. So that third chunk needs to incorporate information from the first two chunks. In particular, that third chunk needs to add the strings ABC and DEF to all of its elements. So, you know, we could have it just read all of the elements in the
+那个聚合数组有三个槽位。第一个槽位有字符串 ABC。第二个槽位有字符串 DEF。第三个槽位有字符串 GHI。让我们想想我们之前讨论过的那个第三个块。所以那个第三个块需要合并来自前两个块的信息。特别是，那个第三个块需要将字符串 ABC 和 DEF 加到它的所有元素上。所以，你知道的，我们可以让它直接读取
+
+28
+00:19:27.000 --> 00:20:38.000
+aggregates array before it. But there's actually something a little bit more elegant that we can do, which is we can do another local inclusive scan. Specifically, we will do an inclusive scan over that aggregates array. And what that will do is that will give us an aggregates array that has the following values. The first element will be ABC, which is the sum of the, you know and the second chunk. And then the third slot in this aggregates array will have ABCDEFGHI, which is the sum of the entire string. And so then after that, we've done that inclusive scan. We now have this aggregates array that has one slot for each chunk that has the correct string for them,
+它前面的聚合数组中的所有元素。但实际上我们可以做一个稍微优雅一点的事情，那就是我们可以做另一个局部的包含性扫描。具体来说，我们将对那个聚合数组做一个包含性扫描。而这将做的是，它将给我们一个包含以下值的聚合数组。第一个元素将是 ABC，它是，你知道的，第一块和第二块的总和。然后这个聚合数组中的第三个槽位将有 ABCDEFGHI，它是整个字符串的总和。所以在那之后，我们做完了那个包含性扫描。我们现在有了这个聚合数组，它为每个块有一个槽位，其中包含正确的字符串，
+
+29
+00:20:38.000 --> 00:21:37.000
+or the correct value for them to add to all of their elements to complete the sum. For the second chunk, the element that it's going to use will be the entry in the aggregates array for the first slot, for the first chunk. And that entry has the string ABC, which is exactly what we need to add in. And then for the third chunk, it's going to use the second element of this aggregates array, which has the string ABCDEF, which is the sum of all of the elements from the first and second chunk, which again is exactly what we need to add into that third chunk. So after we've done this aggregates inclusive scan, and I should note, this is a thing that we do in a single thread because this is just a scan over a very small array of aggregates where there's just one for each thread.
+或者对它们来说正确的值，以便将它们加到它们所有的元素中以完成总和。对于第二个块，它将使用的元素将是聚合数组中第一个槽位（即第一个块）的条目。而该条目拥有字符串 ABC，这正是我们需要加进去的东西。然后对于第三个块，它将使用这个聚合数组的第二个元素，其中包含字符串 ABCDEF，它是第一块和第二块中所有元素的总和，这同样正是我们需要加到那个第三个块中的东西。所以在我们做完这个聚合的包含性扫描之后（我应该指出，这是我们在单个线程中做的事情，因为这只是对一个非常小的聚合数组的扫描，其中每个线程只有一个聚合值。
+
+30
+00:21:37.000 --> 00:22:26.000
+There's no real need for us to paralyze it. So we do this inclusive scan over the aggregates array in just a single thread. And then after that's done, we can go back to parallel operations. Now each one of the chunks in parallel can add the correction from the aggregates array or the remaining elements that it needs to incorporate into its results. So the first chunk doesn't actually have to do anything. It's a little bit special because it does not have any chunks that precede it. So it already has incorporated all information into its results.
+我们没必要真正对其进行并行化。因此，我们仅用单个线程对聚合数组进行包含性扫描。在此之后，我们可以恢复并行操作。现在，每个块都可以并行地从聚合数组中添加修正值，或者添加需要合并到其结果中的其余元素。因此，第一个块实际上什么都不用做。它有点特殊，因为它前面没有任何块。所以它已经将所有信息合并到了它的结果中。
+
+31
+00:22:26.000 --> 00:23:32.000
+The second chunk will read the value in the aggregates array from the first slot. And it will increment all of its elements by that. And it'll add it at the start. And so then after that, the fourth element, which belongs to the second chunk, will be ABCD. And the fifth element, which belongs to the second chunk, will be ABCDE. And then the sixth element will be ABCDEF, which is, again, exactly what we wanted. And the third chunk will do the same thing. It will take the second slot from the aggregates array, which contains a, b, c, d, e, f, and it will prepend that to all of the elements in its chunk. And then that gives us the final result. Because right now in that third chunk before the prepending, it has G and then it has GH and then it has GHI.
+第二个块将读取第一个槽位中聚合数组里的值。它将把它的所有元素都加上这个值。它会把它加在开头。所以在那之后，属于第二个块的第四个元素将是 ABCD。属于第二个块的第五个元素将是 ABCDE。然后第六个元素将是 ABCDEF，这同样正是我们想要的。第三个块会做同样的事情。它将取聚合数组中的第二个槽位，其中包含 a、b、c、d、e、f，并将其前置（prepend）到其块中的所有元素上。然后这就给了我们最终结果。因为现在在那个第三个块中，在进行前置之前，它有 G，然后有 GH，然后有 GHI。
+
+32
+00:23:32.000 --> 00:24:01.000
+And so after you add A, B, C, D, E, F to the front of all those strings, you'll have the correct result. And this algorithm, which is called the work-efficient parallel scan, it has these two phases. That first phase where we do the local inclusive scan, and we call that phase the upsweep, and the reason for that is because we start in parallel, and we do this operation in parallel,
+所以在你把 A、B、C、D、E、F 加到所有这些字符串的前面之后，你就会得到正确的结果。这个算法被称为工作高效的并行扫描（work-efficient parallel scan），它有两个阶段。第一阶段是我们做局部包含性扫描，我们把这个阶段叫做上扫（upsweep），这样叫的原因是因为我们并行开始，并且我们并行地做这个操作，
+
+33
+00:24:01.000 --> 00:24:51.000
+and then we propagate information up to this aggregates array. And then we do this operation in serial where we scan through the aggregates array. And then we go and do that second step where we add the scanned values from the aggregates array to each one of the chunks. And that second parallel phase is called the downsweep, because in that phase, we are taking this global information and we're fanning out in parallel again. And this is not the most efficient parallel inclusive scan algorithm. There's actually a single-pass algorithm, which was invented by some colleagues of mine, which we use in Thrust. But I think it's the most elegant one.
+然后我们将信息向上播报到这个聚合数组。然后我们在串行中做这个操作，我们通过聚合数组进行扫描。然后我们去执行第二步，将聚合数组中扫描好的值加到每个块中。第二个并行阶段被称为下扫（downsweep），因为在这个阶段，我们正在获取这个全局信息，并且我们再次并行地散开（fan out）。这不是最高效的并行包含性扫描算法。实际上有一个单遍（single-pass）算法，是由我的一些同事发明的，我们在 Thrust 中使用了它。但我认为它是最优雅的一个。
+
+34
+00:24:51.000 --> 00:26:12.000
+And we'll put some links in the show notes so that you can see the code here. But it's quite a clever little algorithm. And sort of the key secret sauce behind it is, you know, it's all about this information propagation. You know, you figure out, okay, well, there's some information that needs to be propagated that is local to each of these chunks. Within each one of these chunks, I need to add all of the elements, all the preceding elements need to be scanned. And that's completely local. Now, yes, I also need information from some other chunks, but I'm not going to worry about that until later. I'm going to do all the local work that I can first. And then later, we will communicate the information between each one of these chunks in a very compact form, the sum. And then I will propagate that information and update, increment all of my values with that information that I was previously missing.
+我们会在节目说明中放一些链接，以便你能在这里看到代码。但这是一个非常巧妙的小算法。其背后的关键秘密武器是，你知道的，这全关于信息传播。你知道的，你弄清楚了，好吧，有些信息需要传播，这些信息是每个块局部的。在每个块内部，我需要添加所有的元素，所有的前置元素都需要被扫描。那是完全局部的。现在，是的，我也需要来自其他块的信息，但我不会现在担心这个。我会先把所有我能做的局部工作做好。然后稍后，我们将在每个块之间以非常紧凑的形式——总和——进行信息通信。然后我将传播该信息并更新、递增我所有的值，使用我先前丢失的信息。
+
+35
+00:26:12.000 --> 00:26:53.000
+Yeah, I think that's the reason initially that it didn't seem parallelizable is because of that state. It's a stateful algorithm where you carry that state across when you think about it serially from like left to right. And you just have to make the jump to understand that, you know, you're doing a bunch of local scans. And then you take the state at each of the end of those chunks and then basically use that to get all the information that needs to be distributed to all the chunks to the right. And then you go ahead and do that. And I think that was one of the first questions that I asked too. And I was like, how is this, how is this fast? Because you're basically doing like two passes on the data plus another pass on the aggregate vector,
+是的，我认为最初它看起来不可并行化的原因就是因为那个状态。这是一个有状态的算法，当你从左到右串行思考时，你会随身携带那个状态。你只需要跨过这一步去理解，你知道的，你正在做一堆局部扫描。然后你取每个块末尾的状态，基本上用它来获取需要分发给右侧所有块的所有信息。然后你继续去做。我想这也是我问的第一个问题之一。当时我说，这怎么可能，这怎么会快呢？因为你基本上对数据进行了两次遍历，外加对聚合向量的另一次遍历，
+
+36
+00:26:53.000 --> 00:28:00.000
+at which point you were like, oh yeah, like most parallel algorithms are doing a lot more work. Like time complexity wise, it seems, you know, if you're coming from serial land that it's like oh that would be way worse but that's the whole point is that gpus eat yeah that kind of stuff for breakfast that it's it's okay to uh do more work um uh in apparel implementation in fact like that Like, that is a typical and unsurprising thing. One thing that commonly happens in more numeric algorithms that are similar to this is something called ghost zone exchange, where, hey, you know, like, I've got some local chunk, some local grid, and then I've got these neighboring grids, and I need information from these neighboring grids. And so what I'm going to have them do is I'm going to have those neighboring grids send me that information on the boundary regions. And then I will locally use that information and locally compute some of it. And then every so often those neighbors will send me new values.
+在那时你说，哦，是的，就像大多数并行算法都在做更多的工作一样。就时间复杂度而言，如果你来自串行世界，它看起来就像哦，那会糟得多，但这就是重点，GPU 会把那类东西当早餐吃，耶，在并行实现中做更多的工作是没问题的，事实上，那就像，那是典型且毫不意外的事情。在类似于此的更多数值算法中，常见的一件事情叫做幽灵区交换（ghost zone exchange），即，嘿，你知道的，我有一些局部块，一些局部网格，然后我有这些相邻的网格，我需要来自这些相邻网格的信息。所以我将让他们做的是，我将让那些相邻网格在边界区域把信息发送给我。然后我将在本地使用该信息并在本地计算其中的一部分。然后每隔一段时间，那些邻居会向我发送新的值。
+
+37
+00:28:00.000 --> 00:29:12.000
+But I will replicate some of those computations locally. And that's fine because the parallel algorithms are not always about efficiency of work. It's about speed. And so sometimes by doing more work across multiple threads, you can avoid communication bottlenecks. Yeah. And I mean, I think one of the other key innovations in thinking behind this parallel scan is the realization that you need commutivity. You can't swap A plus B with B plus A. But you are free to associate the operations in the way that you want. Right. And so, you know, I don't, when I'm in that like second or third chunk, I don't have to wait to get the data from the earlier chunks before I can start doing the second part of
+但我将在本地重复一些那样的计算。这没关系，因为并行算法并不总是关于工作的效率。它是关于速度的。所以有时通过在多个线程上做更多的工作，你可以避免通信瓶颈。是的。我的意思是，我认为思考这个并行扫描背后的另一个关键创新是认识到你需要交换性。你不能把 A 加 B 和 B 加 A 调换。但你可以自由地以你想要的方式结合这些操作。对吧。所以，你知道的，我不需要，当我在那个第二或第三个块中时，我不必等到从先前的块中获取数据后才能开始做
+
+38
+00:29:12.000 --> 00:29:52.000
+the sum. The only thing I have to do is make sure that when I add those accumulations from the earlier chunks with the local accumulations, I have to make sure that I do that in the right order. But I'm free to associate the operations as I wish, or I'm free to put the parentheses around the operations as I wish. Yeah. It's pretty awesome. Inclusive scan. Exclusive scan. Scans and reduces. They're the best. Yeah. We'll send around some links to the code and
+求和的第二部分。我唯一要做的是确保当我把先前块的累加值与局部累加值相加时，我必须确保我以正确的顺序这样做。但我可以自由地随心所欲地结合操作，或者我可以自由地随心所欲地在操作周围加上括号。是的。这太棒了。包含性扫描。排他性扫描（Exclusive scan）。扫描和规约。它们是最棒的。是的。我们会发送一些关于代码的链接，并
+
+39
+00:29:52.000 --> 00:30:09.000
+put it in the show notes. Are you familiar with, is there an episode in the future where we're going to talk about the shiny or newer single pass implementation? I do not know how that works at all. I do. And yeah, I think that could be a good episode.
+把它放在节目说明中。你熟悉吗，未来是不是有一期节目我们要讨论那个更闪亮、更新的单遍实现？我一点也不知道那是怎么工作的。我知道。而且是的，我觉得那会是一个很好的节目。
+
+40
+00:30:09.000 --> 00:30:40.000
+It's a little bit more complicated. That's why I don't use it as an example here because it's just like a little bit less elegant. Or I know, okay, I should take it back. It's a very elegant algorithm. It's a little bit trickier to explain. Yeah. So if you want to hear that explanation listeners just add us on twitter maybe we'll have billy o'neill on to chat about that because he's implemented that in um the microsoft parallel
+它稍微复杂一点。这就是为什么我在这里不把它作为例子的原因，因为它稍微没有那么优雅。或者我知道，好吧，我收回前言。这是一个非常优雅的算法。只是稍微比较难解释。是的。所以如果你想听那个解释，听众们，只需在 Twitter 上@我们，也许我们会请比利·奥尼尔（Billy O'Neill）来聊聊那个，因为他在微软并行
+
+41
+00:30:40.000 --> 00:31:13.000
+algorithms library which is as far as i know the the second you know major implementation because uh i don't know that anybody else is important other than our our thrust and cub library that'd be cool that'd be cool to have billy on i think also too someone someone requested that we have dave abrahams on who and then i think dave abrahams liked he hearted when i or i i responded saying yeah we can reach out and then then Dave Abraham's hearted that tweet. Oh, yeah. It would be really fun having Dave on. You never attended BoostCon where Dave was there.
+算法库中实现了这一点，就我所知，这是第二个（你知道的）主要实现，因为，呃，我不知道除了我们的 Thrust 和 CUB 库之外还有谁重要。那会很酷，请比利来会很酷。我想还有人要求我们请戴夫·亚伯拉罕斯（Dave Abrahams）来，然后我想戴夫·亚伯拉罕斯点了心形，当我——或者我回复说“是的，我们可以联系他”，然后戴夫·亚伯拉罕斯给那条推文点了心形。哦，是的。请戴夫来会真的很有趣。你从来没有去过戴夫也在的 BoostCon。
+
+42
+00:31:13.000 --> 00:32:12.000
+But, yeah, that was – I just – the other day I just found my – because I'm in the middle of moving and packing. I found my Boost con 2011 hat they gave out hats as swag and it's a boost pro hat which was the uh that was dave's consulting uh uh company um back when he was still doing boost stuff and uh it brought back memories better times yeah i've heard of the stories where Dave would be running between all the different talks. Yeah, it'd be interesting to hear his stories and his path to Swift. Yeah, those were the days when we could go to conferences and see each other. But maybe we're at the light of the end of the tunnel. It looks like maybe there's going to be some conferences and some things in the fall and the winter. Yep.
+但是，是的，那是——前几天我刚找到我的——因为我正处于搬家和打包的过程中。我找到了他们作为周边送出的 BoostCon 2011 帽子，这是一顶 Boost Pro 帽子，那是戴夫的咨询公司，嗯，当他还在做 Boost 相关的事情的时候，这勾起了回忆，更好的时光。是的，我听说过戴夫在所有不同演讲之间奔跑的故事。是的，听听他的故事以及他走向 Swift 的心路历程会很有趣。是的，那是我们能够去会议并互相见面的日子。但也许我们正处于隧道尽头的曙光中。看起来秋季和冬季可能会有一些会议和一些活动。是的。
+
+43
+00:32:12.000 --> 00:32:23.000
+And CPP North 2022. Yeah. Canada's first ever C++ conference. The best. The best ever. The first ever. Yeah. I won't be there.
+还有 CPP North 2022。是的。加拿大有史以来第一个 C++ 会议。最棒的。有史以来最棒的。有史以来第一个。是的。我不会去。
+
+44
+00:32:23.000 --> 00:32:28.000
+I got a particular talk that I think I'm going to save for that one. As the program chair, I'll review your submission, and we'll see if, you know. I'll be waiting for my embroidered invitation to arrive. Okay. Thanks for listening. We hope you enjoyed, and have a great day. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
+我有一个特定的演讲，我想留给那一个。作为节目主席，我会审核你的投稿，然后我们看看，你知道的。我会等着我的刺绣邀请函送达。好的。感谢收听。我们希望你喜欢，祝你有美好的一天。这期节目还没有评论。点击文稿中的任意句子来留下评论。
