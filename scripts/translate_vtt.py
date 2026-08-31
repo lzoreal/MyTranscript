@@ -51,7 +51,7 @@ RETRY_BASE = 10
 DEADLINE_COOLDOWN_SECONDS = _positive_int_env("DEADLINE_COOLDOWN_SECONDS", "2")
 RPM_LIMIT = _positive_int_env("RPM_LIMIT", "14")
 MIN_REQUEST_INTERVAL = 60.0 / RPM_LIMIT
-DAILY_REQUEST_LIMIT = _positive_int_env("DAILY_REQUEST_LIMIT", "1500")
+DAILY_REQUEST_LIMIT = _positive_int_env("DAILY_REQUEST_LIMIT", "15000")
 TEMPERATURE = float(os.environ.get("TEMPERATURE", "0.0"))
 USE_JSON_SCHEMA = os.environ.get("USE_JSON_SCHEMA", "true").lower() == "true"
 IN_ACTIONS = os.environ.get("GITHUB_ACTIONS") == "true"
