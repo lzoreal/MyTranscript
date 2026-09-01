@@ -119,7 +119,7 @@ RSS_HEADERS = {
 # 运行配置
 # ============================================================
 
-BATCH_SIZE = 100
+BATCH_SIZE = 500
 
 # PodScripts 请求间隔
 PODSEARCH_DELAY = 2
