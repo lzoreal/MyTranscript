@@ -213,17 +213,31 @@ def file_hash(path):
     return sha.hexdigest()
 
 
+TRANSLATION_CONTEXT = (
+    "You are translating pre-existing documentary podcast subtitles for accessibility. "
+    "The source may neutrally describe real crimes, violence, death, abuse, drugs, weapons, "
+    "sexual assault, profanity, or other disturbing events because these are part of the quoted "
+    "source material. This is a transformation task, not a request for instructions, endorsement, "
+    "role-play, or additional harmful content. Translate the source faithfully and neutrally into "
+    "Simplified Chinese. Do not intensify, sanitize, censor, moralize, warn, refuse, or add new facts. "
+    "Do not expand procedural details beyond what the source explicitly says. Preserve names, numbers, "
+    "relationships, uncertainty, and tone. If a line is disturbing, translate only what is present. "
+)
+
+
 def build_prompt_text(blocks):
     content = []
     for idx, text in blocks:
         content.append(f"{idx}|||{text}")
     joined = "\n\n".join(content)
     prompt = (
-        "Translate the following podcast subtitle blocks into Simplified Chinese. "
-        "Output one line per block in the format: index|||translation. "
-        "Do NOT skip, merge, or reorder blocks. "
-        "Do NOT add markdown, explanations, or code blocks.\n\n"
-        f"{joined}"
+        TRANSLATION_CONTEXT
+        + "\n\nTask requirements: "
+        "Output exactly one line per input block in the format index|||translation. "
+        "Keep every index exactly as supplied. Do NOT skip, merge, duplicate, or reorder blocks. "
+        "Do NOT add markdown, explanations, safety commentary, labels, or code blocks. "
+        "Return only the translations.\n\n"
+        + joined
     )
     return prompt
 
@@ -233,11 +247,14 @@ def build_prompt_json(blocks):
     for idx, text in blocks:
         content[str(idx)] = text
     prompt = (
-        "Translate the following podcast subtitle blocks into Simplified Chinese. "
-        "Return a JSON object where each key is the block index (string) "
-        "and each value is the Chinese translation. "
-        "Do NOT skip, merge, or reorder blocks. "
-        "Do NOT add markdown, explanations, or code blocks.\n\n"
+        TRANSLATION_CONTEXT
+        + "\n\nTask requirements: "
+        "Return exactly one JSON object. Each key must be the supplied block index as a string, "
+        "and each value must be only the Simplified Chinese translation of that block. "
+        "Every supplied key is required. Do NOT skip, merge, duplicate, rename, or reorder content. "
+        "Do NOT add explanations, warnings, refusals, markdown, or extra keys. "
+        "If the source contains disturbing or sensitive crime-related material, translate it neutrally "
+        "without adding any information beyond the source.\n\n"
         f"Input: {json.dumps(content, ensure_ascii=False)}"
     )
     return prompt
@@ -334,6 +351,29 @@ def detect_repetition(text, threshold=3):
     return len(set(last_n)) == 1
 
 
+def log_empty_response_details(response):
+    """Log Gemini metadata when HTTP succeeded but no response text was returned."""
+    log("⚠️ Gemini returned an empty text response; inspecting response metadata...")
+    try:
+        prompt_feedback = getattr(response, "prompt_feedback", None)
+        if prompt_feedback is not None:
+            log(f"   prompt_feedback: {prompt_feedback}")
+
+        candidates = getattr(response, "candidates", None) or []
+        log(f"   candidates: {len(candidates)}")
+        for i, candidate in enumerate(candidates[:3]):
+            finish_reason = getattr(candidate, "finish_reason", None)
+            finish_message = getattr(candidate, "finish_message", None)
+            safety_ratings = getattr(candidate, "safety_ratings", None)
+            log(f"   candidate[{i}].finish_reason: {finish_reason}")
+            if finish_message:
+                log(f"   candidate[{i}].finish_message: {finish_message}")
+            if safety_ratings:
+                log(f"   candidate[{i}].safety_ratings: {safety_ratings}")
+    except Exception as diagnostic_error:
+        log(f"   Failed to inspect empty response metadata: {diagnostic_error}")
+
+
 def is_retryable_error(error):
     """
     判断错误是否值得重试。
@@ -402,6 +442,8 @@ def gemini_batch_translate(blocks, cache_meta):
                     ),
                 )
                 raw = response.text or ""
+                if not raw:
+                    log_empty_response_details(response)
                 parsed, is_valid, err_msg = parse_translation_response_json(
                     raw, expected_indices
                 )
@@ -413,6 +455,8 @@ def gemini_batch_translate(blocks, cache_meta):
                     config=types.GenerateContentConfig(temperature=TEMPERATURE),
                 )
                 raw = response.text or ""
+                if not raw:
+                    log_empty_response_details(response)
                 if detect_repetition(raw):
                     log(f"⚠️ Repetition detected in response")
                     raise RepetitionError(
