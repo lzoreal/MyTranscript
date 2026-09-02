@@ -279,7 +279,6 @@ def build_response_schema(blocks):
         "type": "object",
         "properties": properties,
         "required": list(properties.keys()),
-        "additionalProperties": False,
     }
 
 
