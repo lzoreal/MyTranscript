@@ -270,6 +270,19 @@ def build_prompt_json(blocks):
     )
 
 
+def build_response_schema(blocks):
+    """Build a strict JSON schema with exactly one string field per cue index."""
+    properties = {}
+    for idx, _ in blocks:
+        properties[str(idx)] = {"type": "string"}
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": list(properties.keys()),
+        "additionalProperties": False,
+    }
+
+
 def build_single_block_prompt(block):
     idx, text = block
     return (
@@ -504,7 +517,15 @@ def gemini_batch_translate(blocks, cache_meta):
             return parsed
 
         except Exception as e:
-            if isinstance(e, (DailyLimitReached, IndexMismatchError, RepetitionError)):
+            if isinstance(
+                e,
+                (
+                    DailyLimitReached,
+                    IndexMismatchError,
+                    RepetitionError,
+                    ProhibitedContentError,
+                ),
+            ):
                 raise
             log(f"❌ Error: {e}")
             # 配额耗尽 —— 直接停止整个程序，不再重试
