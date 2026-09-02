@@ -54,6 +54,12 @@ MIN_REQUEST_INTERVAL = 60.0 / RPM_LIMIT
 DAILY_REQUEST_LIMIT = _positive_int_env("DAILY_REQUEST_LIMIT", "15000")
 TEMPERATURE = float(os.environ.get("TEMPERATURE", "0.0"))
 USE_JSON_SCHEMA = os.environ.get("USE_JSON_SCHEMA", "true").lower() == "true"
+# When Gemini blocks a batch at prompt level, locate the smallest offending cue
+# instead of repeatedly retrying the same large prompt.
+SENSITIVE_FALLBACK = os.environ.get("SENSITIVE_FALLBACK", "true").lower() == "true"
+SENSITIVE_MAX_DIAGNOSTIC_RETRIES = _positive_int_env(
+    "SENSITIVE_MAX_DIAGNOSTIC_RETRIES", "1"
+)
 IN_ACTIONS = os.environ.get("GITHUB_ACTIONS") == "true"
 
 if IN_ACTIONS:
@@ -122,6 +128,13 @@ class IndexMismatchError(Exception):
 
 class RepetitionError(Exception):
     pass
+
+
+class ProhibitedContentError(Exception):
+    def __init__(self, message, block_reason=None, block_reason_message=None):
+        super().__init__(message)
+        self.block_reason = block_reason
+        self.block_reason_message = block_reason_message
 
 
 QUOTA_ERROR_MARKERS = (
@@ -213,16 +226,21 @@ def file_hash(path):
     return sha.hexdigest()
 
 
-TRANSLATION_CONTEXT = (
-    "You are translating pre-existing documentary podcast subtitles for accessibility. "
-    "The source may neutrally describe real crimes, violence, death, abuse, drugs, weapons, "
-    "sexual assault, profanity, or other disturbing events because these are part of the quoted "
-    "source material. This is a transformation task, not a request for instructions, endorsement, "
-    "role-play, or additional harmful content. Translate the source faithfully and neutrally into "
-    "Simplified Chinese. Do not intensify, sanitize, censor, moralize, warn, refuse, or add new facts. "
-    "Do not expand procedural details beyond what the source explicitly says. Preserve names, numbers, "
-    "relationships, uncertainty, and tone. If a line is disturbing, translate only what is present. "
-)
+def _translation_context():
+    return (
+        "You are translating an existing transcript from a documentary or true-crime podcast. "
+        "This is a TRANSLATION task, not a request to create new content. "
+        "The source may contain sensitive or disturbing material, including descriptions or quotations "
+        "about crime, violence, injury, death, abuse, sexual assault, sexual content, minors, drugs, "
+        "weapons, self-harm, suicide, murder, or other upsetting events. "
+        "Translate only what is already present in the source. "
+        "Do not add facts, instructions, advice, encouragement, graphic embellishment, or procedural detail. "
+        "Do not turn the source into a how-to guide. Do not role-play. Do not endorse the events. "
+        "Do not moralize, warn, censor, sanitize, summarize, merge, or omit content merely because it is sensitive. "
+        "Preserve names, numbers, uncertainty, relationships, speaker meaning, and tone as faithfully as possible. "
+        "If the source contains a quotation, translate the quotation as a quotation. "
+        "Return only the requested translations."
+    )
 
 
 def build_prompt_text(blocks):
@@ -230,45 +248,38 @@ def build_prompt_text(blocks):
     for idx, text in blocks:
         content.append(f"{idx}|||{text}")
     joined = "\n\n".join(content)
-    prompt = (
-        TRANSLATION_CONTEXT
-        + "\n\nTask requirements: "
-        "Output exactly one line per input block in the format index|||translation. "
-        "Keep every index exactly as supplied. Do NOT skip, merge, duplicate, or reorder blocks. "
-        "Do NOT add markdown, explanations, safety commentary, labels, or code blocks. "
-        "Return only the translations.\n\n"
-        + joined
+    return (
+        _translation_context()
+        + "\n\nFor each subtitle block, output exactly one line in the format "
+        "index|||Simplified Chinese translation. "
+        "Keep every input index exactly once, in the same order. "
+        "Do not output English, commentary, markdown, headings, or code fences. "
+        "Do not combine two blocks into one translation.\n\n" + joined
     )
-    return prompt
 
 
 def build_prompt_json(blocks):
-    content = {}
-    for idx, text in blocks:
-        content[str(idx)] = text
-    prompt = (
-        TRANSLATION_CONTEXT
-        + "\n\nTask requirements: "
-        "Return exactly one JSON object. Each key must be the supplied block index as a string, "
-        "and each value must be only the Simplified Chinese translation of that block. "
-        "Every supplied key is required. Do NOT skip, merge, duplicate, rename, or reorder content. "
-        "Do NOT add explanations, warnings, refusals, markdown, or extra keys. "
-        "If the source contains disturbing or sensitive crime-related material, translate it neutrally "
-        "without adding any information beyond the source.\n\n"
-        f"Input: {json.dumps(content, ensure_ascii=False)}"
+    content = {str(idx): text for idx, text in blocks}
+    return (
+        _translation_context()
+        + "\n\nTranslate every value in the following JSON object into Simplified Chinese. "
+        "Return one JSON object with exactly the same keys. "
+        "Each value must contain only the corresponding Chinese translation. "
+        "Do not add or remove keys. Do not summarize, merge, or reorder the blocks.\n\n"
+        f"Input JSON: {json.dumps(content, ensure_ascii=False)}"
     )
-    return prompt
 
 
-def build_response_schema(blocks):
-    properties = {}
-    for idx, _ in blocks:
-        properties[str(idx)] = {"type": "string"}
-    return {
-        "type": "object",
-        "properties": properties,
-        "required": list(properties.keys()),
-    }
+def build_single_block_prompt(block):
+    idx, text = block
+    return (
+        _translation_context()
+        + "\n\nTranslate this single existing subtitle block into Simplified Chinese. "
+        "The number before the delimiter is an identifier, not part of the source text. "
+        "Return exactly one line: index|||translation. "
+        "Do not add any other text.\n\n"
+        f"{idx}|||{text}"
+    )
 
 
 def parse_translation_response_text(text, expected_indices):
@@ -351,29 +362,6 @@ def detect_repetition(text, threshold=3):
     return len(set(last_n)) == 1
 
 
-def log_empty_response_details(response):
-    """Log Gemini metadata when HTTP succeeded but no response text was returned."""
-    log("⚠️ Gemini returned an empty text response; inspecting response metadata...")
-    try:
-        prompt_feedback = getattr(response, "prompt_feedback", None)
-        if prompt_feedback is not None:
-            log(f"   prompt_feedback: {prompt_feedback}")
-
-        candidates = getattr(response, "candidates", None) or []
-        log(f"   candidates: {len(candidates)}")
-        for i, candidate in enumerate(candidates[:3]):
-            finish_reason = getattr(candidate, "finish_reason", None)
-            finish_message = getattr(candidate, "finish_message", None)
-            safety_ratings = getattr(candidate, "safety_ratings", None)
-            log(f"   candidate[{i}].finish_reason: {finish_reason}")
-            if finish_message:
-                log(f"   candidate[{i}].finish_message: {finish_message}")
-            if safety_ratings:
-                log(f"   candidate[{i}].safety_ratings: {safety_ratings}")
-    except Exception as diagnostic_error:
-        log(f"   Failed to inspect empty response metadata: {diagnostic_error}")
-
-
 def is_retryable_error(error):
     """
     判断错误是否值得重试。
@@ -404,6 +392,40 @@ def is_retryable_error(error):
         "unreachable",
     ]
     return any(kw in err_str for kw in retryable)
+
+
+def _get_prompt_block_reason(response):
+    feedback = getattr(response, "prompt_feedback", None)
+    reason = getattr(feedback, "block_reason", None) if feedback else None
+    message = getattr(feedback, "block_reason_message", None) if feedback else None
+    return reason, message
+
+
+def log_empty_response_details(response):
+    reason, message = _get_prompt_block_reason(response)
+    candidates = getattr(response, "candidates", None) or []
+    if reason:
+        log(
+            f"   prompt_feedback: block_reason={reason!s} "
+            f"block_reason_message={message!r} candidates={len(candidates)}"
+        )
+    else:
+        log(f"   prompt_feedback: none; candidates={len(candidates)}")
+    for i, candidate in enumerate(candidates[:3]):
+        log(
+            f"   candidate[{i}]: finish_reason={getattr(candidate, 'finish_reason', None)!s} "
+            f"finish_message={getattr(candidate, 'finish_message', None)!r}"
+        )
+
+
+def _raise_if_prompt_blocked(response):
+    reason, message = _get_prompt_block_reason(response)
+    if reason is not None:
+        reason_text = str(reason).upper()
+        if any(x in reason_text for x in ("PROHIBITED_CONTENT", "SAFETY", "BLOCKLIST")):
+            raise ProhibitedContentError(
+                f"Gemini prompt blocked: {reason_text}", reason_text, message
+            )
 
 
 def gemini_batch_translate(blocks, cache_meta):
@@ -443,7 +465,11 @@ def gemini_batch_translate(blocks, cache_meta):
                 )
                 raw = response.text or ""
                 if not raw:
+                    log(
+                        "⚠️ Gemini returned an empty text response; inspecting response metadata..."
+                    )
                     log_empty_response_details(response)
+                _raise_if_prompt_blocked(response)
                 parsed, is_valid, err_msg = parse_translation_response_json(
                     raw, expected_indices
                 )
@@ -456,7 +482,11 @@ def gemini_batch_translate(blocks, cache_meta):
                 )
                 raw = response.text or ""
                 if not raw:
+                    log(
+                        "⚠️ Gemini returned an empty text response; inspecting response metadata..."
+                    )
                     log_empty_response_details(response)
+                _raise_if_prompt_blocked(response)
                 if detect_repetition(raw):
                     log(f"⚠️ Repetition detected in response")
                     raise RepetitionError(
@@ -493,11 +523,72 @@ def gemini_batch_translate(blocks, cache_meta):
     return {}
 
 
+def translate_single_sensitive_block(block, cache_meta):
+    """Retry one blocked subtitle with the narrowest legitimate translation prompt."""
+    idx, text = block
+    expected = {idx}
+    for attempt in range(1, SENSITIVE_MAX_DIAGNOSTIC_RETRIES + 1):
+        daily_used = cache_meta.get("daily_requests", 0)
+        if daily_used >= DAILY_REQUEST_LIMIT:
+            raise DailyLimitReached(
+                f"Daily request limit reached: {daily_used}/{DAILY_REQUEST_LIMIT}"
+            )
+        cache_meta["daily_requests"] = daily_used + 1
+        _rate_limit_wait()
+        log(f"   🔎 Sensitive single-cue retry #{idx} (attempt {attempt})")
+        try:
+            response = client.models.generate_content(
+                model=MODEL,
+                contents=build_single_block_prompt(block),
+                config=types.GenerateContentConfig(temperature=TEMPERATURE),
+            )
+            raw = response.text or ""
+            if not raw:
+                log_empty_response_details(response)
+            _raise_if_prompt_blocked(response)
+            parsed, valid, err = parse_translation_response_text(raw, expected)
+            if valid:
+                return parsed
+            raise IndexMismatchError(err, parsed)
+        except ProhibitedContentError:
+            raise
+        except DailyLimitReached:
+            raise
+        except Exception as e:
+            if not is_retryable_error(e) or attempt >= SENSITIVE_MAX_DIAGNOSTIC_RETRIES:
+                raise
+            wait = RETRY_BASE * attempt + random.uniform(0, 3)
+            log(f"   ⏳ Single-cue retryable error, waiting {wait:.1f}s")
+            time.sleep(wait)
+    raise RuntimeError(f"Unable to translate single cue #{idx}")
+
+
 def safe_translate_batch(blocks, cache_meta):
     if not blocks:
         return {}
     try:
         return gemini_batch_translate(blocks, cache_meta)
+    except ProhibitedContentError as e:
+        if not SENSITIVE_FALLBACK:
+            raise
+        if len(blocks) == 1:
+            block = blocks[0]
+            try:
+                return translate_single_sensitive_block(block, cache_meta)
+            except ProhibitedContentError as single_error:
+                log(
+                    f"   🚫 Single cue #{block[0]} remains blocked "
+                    f"({single_error.block_reason}); preserving source text as fallback."
+                )
+                return {block[0]: block[1]}
+        log(
+            f"   🚫 Sensitive batch ({len(blocks)} cues) blocked by Gemini; "
+            "splitting only to localize blocked cue(s)"
+        )
+        mid = len(blocks) // 2
+        left = safe_translate_batch(blocks[:mid], cache_meta)
+        right = safe_translate_batch(blocks[mid:], cache_meta)
+        return {**left, **right}
     except IndexMismatchError as e:
         expected_indices = {idx for idx, _ in blocks}
         partial_result = {
@@ -779,6 +870,7 @@ def main():
     log(f"Model: {MODEL}")
     log(f"Temperature: {TEMPERATURE}")
     log(f"JSON schema: {USE_JSON_SCHEMA}")
+    log(f"Sensitive-content fallback: {SENSITIVE_FALLBACK}")
     log(f"Site dir: {SITE_DIR}")
     log(f"Max files: {MAX_FILES}")
     log(f"Max batch chars: {MAX_BATCH_CHARS}")
@@ -888,8 +980,8 @@ def main():
                         source,
                         target,
                         meta,
-                        current=processed_total + 1,   # 当前是本次任务第几集
-                        total=MAX_FILES                 # 本次任务总共要处理几集
+                        current=processed_total + 1,  # 当前是本次任务第几集
+                        total=MAX_FILES,  # 本次任务总共要处理几集
                     )
                     endgroup()
 
