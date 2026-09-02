@@ -369,7 +369,7 @@ def is_retryable_error(error):
 def gemini_batch_translate(blocks, cache_meta):
     global _last_request_time
     expected_indices = {idx for idx, _ in blocks}
-    use_json = USE_JSON_SCHEMA and len(blocks) <= 30
+    use_json = USE_JSON_SCHEMA and len(blocks) <= 60
 
     for attempt in range(1, RETRY_COUNT + 1):
         daily_used = cache_meta.get("daily_requests", 0)
