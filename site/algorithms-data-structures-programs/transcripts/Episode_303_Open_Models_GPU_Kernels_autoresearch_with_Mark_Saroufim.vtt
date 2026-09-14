@@ -1,0 +1,289 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:29.000
+Earlier this year, basically, sort of the great lock-in of Christmas, we came back from the kernel competition on NVF4, which was one of our most popular competition yet that we worked on with NVIDIA. And the fourth place winner was like, oh, hey, like, I've never written a kernel day in my life, but I have the fourth fastest colonel in the world for gems, and I'm like, what? And then, like, a few days later, someone's like, oh, like, I'm a high school teacher. I don't even know what a kernel is, but, like, I have the fifth fastest kernel for, like, a dual gem problem.
+
+2
+00:00:29.000 --> 00:00:48.000
+I'm like, thanks, Mark. And I'm like, okay, like, this is bizarre to me because it, and generally it felt like systems was this very gatekeeping thing. People are like, no, you're incorrect. People are like very grumpy. You know, sort of traditional vibe of the C++ programmer. Sorry for the sort of casual insult. But, but, you know, it was like not the most, like, friendly bunch because like there's sort of
+
+3
+00:00:48.000 --> 00:01:40.000
+a lot of rigor in a lot of ways you can shoot yourself on the foot. Welcome to ADSP, the podcast, episode 303 recorded on July 20th, 2006. My name is Connor. And today with my co-host, Bryce, we continue part two of our three-part chat with Mark Serafim. In this episode, we talk about open versus closed models, core auto-gpU mode, auto research, and more. I have two controversial questions for you, Mark. Question number one, what do you think about, you mentioned sort of the first, like, open models with a good license. What do you think about the state of open models versus closed models today?
+
+4
+00:01:40.000 --> 00:02:04.000
+Yeah, it's a good question. Let me see. Like, it is just remarkable, like, how quickly some of the best, like, Chinese models have gotten. Like, basically, it sort of there was, I think initially this hypothesis that what they're doing is at best distilling. And then you're like, okay, maybe not. Like, maybe they're actually pretty good. I think there's sort of, like, a lot of open questions, like, where are the flops coming from? Where is the data coming from?
+
+5
+00:02:04.000 --> 00:02:39.000
+I think those questions don't tend to get very clearly answered in the technical reports. But at least, like, as far as, like, on architecture, research innovation, I think I'm seeing sort of fairly world-class work. I will say I've never myself worked at a like a frontier lab like Open AI or Entropic. So I don't know like what they have and how much better it is. But like based on the evils, like it can't be like that much better. And so I don't know. I will say though that like one thing that's I found like a bit disappointing though is that like you know like you might say well like you should just use an open model.
+
+6
+00:02:39.000 --> 00:02:57.000
+but the definition of local alum has changed a lot in recent times where like it's basically, hey, you have a GB 200 note for your local alum. Like, yeah, okay, bro. Like, it's a $6 million machine for a year, you know? Like, what are you talking about? Like, who's actually going to rent this out? Like, maybe. But to me that this always seems like it's going to be a niche thing.
+
+7
+00:02:57.000 --> 00:03:30.000
+I do think there's something quite remarkable about like being able to sort of share like basically all requests in a batch with your friends basically or your company and then getting economies of scale out of that. But as far as I can tell, like managed inference providers would rather give you a managed deployment because it's just cheaper for them to do so as opposed to make you pay for usage, which is kind of like closer to what modal does. And generally, I think the pay for usage model to me is more economically aligned with your customers because you'll just get users and then you'll figure out like, how do I route them
+
+8
+00:03:30.000 --> 00:04:01.000
+tall to the same model, to the same priority, to the same batch. And if you're doing managed deployments, you're probably not going to do that. and there's going to be inherent waste and high margins because of it. But I think a lot of this is like, I think downstream of GPUs being scarce. So like if GPUs were not scarce, we wouldn't need these business models. I think paying for usage would be fine. So yeah, like in some sense, I think people, my sense is they overly focus on the like the weights question. But I also think there's like this whole ecosystem around it that like needs to like work out.
+
+9
+00:04:01.000 --> 00:05:00.000
+I heard an interesting theory based partially on first hand experience. And the theory was that one of the reasons why there's a perception of a quality gap between the closed models and the open models is because the closed models have one inference provider and they can ensure the quality of that inference setup. Whereas for the open models, it can be served in many different ways. And there can be, and I did not realize the degree to which this can have, like who's serving your. inference for your model can have an impact on the performance, especially around things like tool calls, et cetera. And I didn't realize that. And I've actually heard that some labs have changed their licensing a little bit, not to make them more closed, but to prevent them from being served in a way that would create this perception of, oh, this model is so bad because I tried it on this
+
+10
+00:05:00.000 --> 00:05:36.000
+one provider that did not have a proper setup. I mean, it's a good question. I mean, like, I, like, as I sort of think through this, I think there's like a bit of an like iceberg here, which is like if you're like, you know, one way you could be an inference provider is like, you just have GPUs and then you just like, you know, via LMSG lying and then you charge people for tokens. You know, like slightly, you know, deeper would be you're like, okay, I'll call a compiler and I'll like make sure kudographs are applied, you know, slightly deeper is, you know, maybe you write a few custom kernels here and there, you know, a bit deeper as you provide the fine-tuning service for your customers and then let them redeploy those.
+
+11
+00:05:36.000 --> 00:05:51.000
+And so you have to write some backwards kernels for them, which typically the Chinese labs do not provide. And then sort of the, but what I sort of like, and then what's interesting, even at this sort of, and then you have quantization, I think it's just very controversial because like people maybe don't mind being quantized,
+
+12
+00:05:51.000 --> 00:06:10.000
+but they'd like to know when they're being quantized, which is very bad because if you have some sort of like, let's say, priority queue thing going on. Like, okay, so let's do not manage the points. Let's say you're just like a normal user and you just hit a request to an inference. an endpoint. You may not even know if you're running on NVIDIA or AMD GPU, for instance. And then the numerics
+
+13
+00:06:10.000 --> 00:06:37.000
+might diverge slightly. And so it's not like you're being nerfed. It's just like the numerics diverged slightly. And maybe they were only like thoroughly tested on NVIDia. And then you get like an AMD in France and you're like upset basically. Another one is like, you know, like AMD has a bit more VRAM. And so now like the batch size might be like a bit bigger if you're serving multiple requests. And the kernels might not be batch invariant. And so now again, you're numeric change and you're like, oh, why am I getting nerfed?
+
+14
+00:06:37.000 --> 00:06:55.000
+And then finally, you could actually be getting quantized. Like, this is also like very problematic that like it's not sort of crystal clear. And I think why there's sort of sometimes on Twitter like some conspiracy theories around where people sort of say like, oh, like at 1am, Claude is quantizing us? Like, who knows? Like it could be like, is it running on Traynium? Is it running on like an H-100? Is it running on a GB300?
+
+15
+00:06:55.000 --> 00:07:22.000
+Like, is it like running, you know, on a CPU? Is it running with CPU offloading because it's running on an older generation A-100 that happens to be the data center. And so some of the layers are offloaded and computed on CPU. So there's sort of like a lot of unknowns, but I think a lot of it in my mind is like numerics suck. And as a vendor tries to make these straight off the safe cost, they might be creating numerics problems. And as a result, results won't be perfectly reproducible. And people might believe that they're getting nerfed.
+
+16
+00:07:22.000 --> 00:08:21.000
+But yeah, I mean, it's fascinating to me that. And one of the things that I think interesting here is the non-deterministic nature of LMs means that it's very hard to tell whether something changes. And it's fascinating to me how, you know, like, we call it like Opus 4.8, but like the Opus 4.8 that you got at one point in time might be different from what you get at a different point in time. And, you know, like in any other part of the software industry, like a version would have like a concrete meaning. And if you just suddenly change the version that you were serving to your customers, like that wouldn't be cool. But in this industry, it happens all the time. Yeah. And I like, I've noticed, like, all sorts, just even switching, like, same model between, like, different, like, endpoints and providers within Nvidia's, like, the hub, like, sometimes it's like a weird behavior and, like, could this be, could this be, like, how I'm getting routed to this model?
+
+17
+00:08:21.000 --> 00:09:04.000
+And, yeah, I didn't realize before I got more into this, like, the degree of complexity that goes into serving inference for a particular model and how it can impact the quality that you get out of it. Yeah, I mean, what I will say, though, like, I am sort of seeing some light at the end of the tunnel these days because... So we recently had, like, James Demil, like, the linear algebra legend from, like, LaPoc, come give us a talk. And, like, one of the things you mentioned, like, I was, like, asking my question in private, like, about, like, formal verification. Like, can't we just, like, have better guarantees of, like, ways of testing these kernels? Because just as a baseline for your viewers, the way a lot of kernels get tested today is basically using, like, absolute and relative tolerances, which basically means, like, let's be a lot of kernels. which basically means, like, let's say your output is a tensor, you iterate over all the elements of a tensor,
+
+18
+00:09:04.000 --> 00:09:20.000
+and then you sort of compare them to, like, reference to, like, let's say, your faster implementation, and then you're like, are they far apart from each other? And typically, if, like, I don't know, they're within 1 to the e minus 3 of each other, people go like, eh, it looks fine. But, like, what do you mean it looks fine? Like, basically 1 to e minus 3 is, like, very big.
+
+19
+00:09:20.000 --> 00:09:40.000
+And if it's, like, for Float 64, like, that's a more major issue than if it's for int 4. And so, like, what ends up happening is that, like, these values only ever increased. like if you look at by Twitch, for example, or most open source repos, A tolls and R tolls only ever increase because you usually get flakes to avoid the flakes, people just increase the tolerances. And we just don't have like a good way of knowing how to fix these problems because
+
+20
+00:09:40.000 --> 00:10:03.000
+we go like, oh, like, is it a Kuda driver thing? Is it like a library thing? Is it like a new bug in the kernel? And then like maybe the bug is okay because the performance speed up is okay, but maybe some customers are not okay with an 8% speed up if it changes the numerics slightly and maybe some are. Then, you know, there's like a long list of Pytroch issues that get open. end up of like, well, we're trying to, like, I have this CPU program that doesn't match my GPU
+
+21
+00:10:03.000 --> 00:10:27.000
+program. And then they're like, how come it's a bug? And you're like, well, it's not a bug because it turns out like, it's not like, Nvidia follows the entire I triple E format for like tensor cores. And like, that's just like something like we have to like understand and be okay with. But I think it's very counterintuitive like when you, when you first come across it. So just to bring it back to what James was saying, like what James's point was that like you cannot have element wise comparisons.
+
+22
+00:10:27.000 --> 00:10:57.000
+It's much superior to have like property-based testing. So for instance, we're doing a QR kernel. Like we just look at how orthogonal is Q and how triangles are. This is a much better way of doing like testing. And I think Lopac, it's like, again, it's like a shoulder of giant sort of thing. They've been thinking about correctness for decades. Whereas in deep learning, maybe we've been thinking about it for like nine years and we're not very good at it. And so this is like to me one area where we kind of need to look at what our predecessors did and then like understand like, you know, in some sense we know how far apart.
+
+23
+00:10:57.000 --> 00:11:38.000
+the floats are from each other. And so there's no, like, there's no secret there. And so, like, we should be able to just more rigorously think of how to set tolerances and what kinds of properties we expect our programs to have. And I just don't think we're there yet. Yeah, it's interesting. When I used to work on these astrophysics codes simulating, like, binary white dwarfs that'd be rotating around each other. And one of the ways that we checked for correctness was because this code was a code where it was rotating, it was very important to conserve angular momentum. So we would just, like, one of the checks was you sum up with very high precision the angular momentum across the whole grid. And, like, if you lose any angular momentum,
+
+24
+00:11:38.000 --> 00:12:16.000
+then, like, your simulation isn't respecting the most important, like, law of physics that you're trying to simulate here, which is, like, conservation. And that was just, like, a simple, like, just from the physics, like, tests, the property of the system that you wanted to enforce. And, like, you know, yeah, like, we looked at, like, residuals and, like, other errors and tolerances. But, like, that was like the key thing. Like as long as we're not, as long as we don't have outflows of this one property. And the interesting thing too was when you were designing that simulation, there's a bunch of different quantities that were evolving throughout the simulation, like radiation and energy. And it was very challenging, like you have to kind of pick in shoes,
+
+25
+00:12:16.000 --> 00:12:36.000
+like which of these are we going to preserve quality for? And like we knew that this one, this was the variable that like was most important that like, if we didn't conserve angular momentum, then the whole simulation would become numerically unstable. But there were other things where it was like, eh, you know, if a little bit of this leaks off the grid, it's okay.
+
+26
+00:12:36.000 --> 00:12:51.000
+Yeah. I mean, I like to compare this to how I remember us doing in Pi Torch in the Torche AHO project, how we do correctness testing for diffusion model quantization. And it would literally be, okay, well, you know, before the model gave a cat,
+
+27
+00:12:51.000 --> 00:13:06.000
+okay, we quantized, okay, still a cat. You know, like, this was sort of like, so this was the way correctness testing was done. And then you're like, well, is it like, it's a bit, yeah, it's a bit question mark. But like, I think that was sort of the state of the, maybe it's better now.
+
+28
+00:13:06.000 --> 00:13:21.000
+I don't want my diffusion friends to flame me. But like, but at least a year ago, this is what it was like. So there was another tough question I was going to have for you. But I'll ask a different question. So, okay, you said you've never worked at a Frontier Lab, but you're now working at Core Auto, which I don't know a lot about,
+
+29
+00:13:21.000 --> 00:13:54.000
+but I felt like there, from what I do know, your mission is like so appealing, so appealing to me right now as I am in search of automating all the things. So like, are you not working, you say you haven't worked yet at a frontier lab, but do you hope that the lab that you're at will eventually become a frontier lab? Like, what's the, is the mandate of Core Auto to, like, develop core technology that other labs would use? Or, like, is your goal, like, we're going to build a frontier model? Yeah, I mean, I think these things evolve quite a bit. But, yeah, I mean, like,
+
+30
+00:13:54.000 --> 00:14:19.000
+I think the lab's like mission is to build the world's most automated lab and then figure out how to automate the rest of the world. And I think like basically there's a few good proxies for this, which is like of course like, you know, how quickly can we speed run towards like building like a frontier model? I think it's just like a really key component. And because we're making a lot of bets on architecture research, it was based on like when you look at like the talent we have on the team,
+
+31
+00:14:19.000 --> 00:14:42.000
+it's just really critical that this set of researchers feels productive with the kinds of work they can run. And this is kind of where I come in, which is like on kernel alum generation. And so this I think is like a very key and underrated like pre-pre-rec, basically. I think of a lot of like auto research work, which is this like, hey, if you want to iterate on whether a research idea is good, but it's like four times slower than what it should be.
+
+32
+00:14:42.000 --> 00:15:10.000
+Like that's bad. You know, one notable example that, you know, we worked on, Rice was like, you know, the QR kernel. Like the context there is that like, actually, maybe maybe I should take step back. Let's like a step back. So the step back is when I first started working on GPU mode, my impression was that like the bottleneck for progress was like an educational bottleneck. Like basically people just don't know how GPUs work. And if we thought people how GPUs worked, and then we gave them sort of good problems along the way and then made them more and more ambitious
+
+33
+00:15:10.000 --> 00:15:32.000
+over time that people would figure out like how to use GPUs. And the interesting thing is that like basically near the end of our like and halfway through like GPU mode's journey, basically about a year ago. AI systems weren't very good at writing kernels. Like, they actually, they sucked. And the code they would generate would be incorrect. It would be slow. It would be sort of this hallucination between like Pytor,
+
+34
+00:15:32.000 --> 00:15:50.000
+and Kudha and Triton. It was just like wasn't like super coherent. And then like earlier this year, basically sort of the great, you know, the great lock-in of Christmas. We came back from this kernel competition on NVFP4, which was like one of our most popular competition yet that we worked on with NVIDIA. And like the fourth place winner,
+
+35
+00:15:50.000 --> 00:16:21.000
+was like, oh, hey, like, I've never written a kernel day in my life, but I have the fourth fastest colonel in the world for gems, and I'm like, what? And then, like, a few days later, someone's like, oh, like, I'm a high school teacher. I don't even know what a colonel is, but, like, I have the fifth fastest kernel for, like, a dual gem problem. Like, thanks, Mark. And I'm like, okay, like, this is bizarre to me because it, and generally, it felt like systems was this very gatekeeping thing. People are like, no, you're incorrect. People are, like, very grumpy. You know, sort of traditional vibe of the C++ programmer. sorry for the sort of casual insult.
+
+36
+00:16:21.000 --> 00:16:40.000
+But it was not the most friendly bunch because there's sort of a lot of rigor in a lot of ways you can shoot yourself on the foot. And so it makes sense that the community would be sort of more inaccessible and gaited like a lot of things. So here we are. We're now in a world where like turns out like AIs are better at teaching how GPUs work than I was as an educator over two years in GPU mode.
+
+37
+00:16:40.000 --> 00:17:17.000
+Yeah. And so like to me it was like, okay, well, like what do we do now? Right. And so looking at it, I'm like, okay, well, it seems that people just maybe aren't sure which problems are worth accelerating. And so this is kind of like now, like, my duty, I feel as an educator has become like telling people what are important problems to accelerate. And so the linear algebra kernels came about because we needed those for our research on like optimizers, specifically like a shampoo optimizer that like Ron, one of our one of our researchers like very passionate about. And so when I look at this, I'm like, okay, well, as long as we can sort of like very clearly formulate the problem and have like a, lot of facilities for reward hacking.
+
+38
+00:17:17.000 --> 00:17:43.000
+Like, we can make fairly consistent breakthroughs and systems. And once we do that, now, like, my research buddies can sort of, like, come up with all sorts of, like, cursed ideas. And instead of having to, like, recruit me, which traditionally they would need to do, like, I would need to go look at their code, understand the math, like, write the kernel. Now, like, I can just basically give them tools for anti-reward hacking, and then they can just, like, go cook. And then they're very productive and they never need to talk to me.
+
+39
+00:17:43.000 --> 00:18:16.000
+And this is great because then I can think of, like, more general problems. And I'm very passionate about the space for a few reasons. Like, I think it applies to like not just kernels, but like, you know, inference engine, systems code. You know, what will repos like Pytrochs look like in the future? There's so many applications. Like, you know, you can use auto research to optimize for performance. You can also use, like, if you have the same setup, the same guardrails, the same reward hack prevention, you can use it to simplify code, you know, like minimize the diff without regressing performance. You can use it to increase code coverage.
+
+40
+00:18:16.000 --> 00:18:34.000
+Like, anything that's a metric that you can, like, measure and quantify, you can then, like, automate. And all you need is, like, to have the guardrails and the correctness checks in place. And, yeah, I think, like, when I talk to people about auto research, I think they think I'm solely talking about just, like, performance optimization. They're not realizing just, like, how many,
+
+41
+00:18:34.000 --> 00:19:01.000
+anything that can be an iterative measurable process, you can automate. And then, like, you can build, you know, these processes, you can chain these different loops together and build these workflows. and yeah, it feels so incredibly powerful. I mean, yeah, I mean, at least like my observation here has been like, I just find the competitive leaderboard format to be a very powerful framing. Because like, so first off, like, you are, like, the way I think of it, like, very broadly
+
+42
+00:19:01.000 --> 00:19:25.000
+speaking is that like you set an eval, and the eval is still expensive because the eval ultimately needs to run on real GPUs. So it's like a real cost. But it's actually negligible relative to the token costs that people end up paying to, like, do really well in these things. And so, actually, yeah, I don't know if you're comfortable sharing. You're the most recent token expenses. Well, I've spent 300 billion tokens, I think, since the start of the year.
+
+43
+00:19:25.000 --> 00:20:11.000
+And there's various ways of accounting for the cost. But the thing that I, when I first got into this, I, too, was worried about the cost of running on the GPUs, of renting the GPUs. And I definitely, it is the case that I no longer worry about the cost of running in the GPUs, because relative to the token cost, it is, it is trivial. But if I had to guess, I would say that I think today for most problems, if you want to write like a speed of light kernel, it's, you know, in the thousands of dollars of inference at least, I think to do it to really. Like, if you just want like a decent one, you know, maybe you can get away with less. But the thing that's the thing that I'm starting to see changing and one thing that was an interesting thing from this weekend is I'm starting to see people getting results from the open models that are much cheaper.
+
+44
+00:20:11.000 --> 00:20:53.000
+Like one of the, the person from our group at the Europe Python sprint who has the best score on the Chillesky problem, it was actually one of the competitors. There were two, me and one other person who I think had the most experience. The other fellow, I think, didn't have as much experience with Kuda kernels, but he was using a variety of models, including some open models. And I haven't checked which of, which of the models he's been using is the winner. but I know I've started to see, been able to get meaningful results with open models, which could maybe lower the cost of this a lot. I think one of the problems is, you know, like, how do we, how do we, if you need to have a ridiculous amount of inference to do well in these competitions,
+
+45
+00:20:53.000 --> 00:21:20.000
+how do we, like, cede this out to researchers and people so that they can learn so that we can build up this skill set, it seems tough with the current costs. Yeah, I mean, I'm a bit more optimistic than you are. here's how I would think through this. Like basically, like, let's say you're trying to serve like an MOE on a node. Basically, if you're doing like very small batch size inference, then like only like a few of your experts are activated. And so the inference ends up being like quite fast.
+
+46
+00:21:20.000 --> 00:21:46.000
+But if you're like medium batch size, then like probably most of your experts will be activated. And so, but then if you have a lot of like users and a lot like a lot of requests, it might be as efficient to do that than to do the medium request scale because anyway, all your experts are activated. And so it's like one of those things. where like it seems that like these things do benefit from like economies of scale. But economies of scale not in terms of like I have like a 10,000 GPU cluster and I'm
+
+47
+00:21:46.000 --> 00:22:15.000
+intelligently routing things to them because that's just like not what I think a good chunk of inference providers are actually doing. Like I think they're doing much more managed deployments. I think it's like simpler to price and finance. Like you just pay them some margin on the price of a B200 and then you get like tokens back. So again like when I when I look at this to me, it's sort of a screen. like, well, as long as emphasis on one node and if there's like a few tricks that matter, like basically, goodographs, a few kernels, you know, quantization.
+
+48
+00:22:15.000 --> 00:22:45.000
+Like if that's it and there's no more secret sauce, then like why not just have like a node per small pod or team? Like to me, that seems like pretty economically feasible. If the models get to three trillion and stuff and this is what we're running, like maybe not, then you're basically because, you know, one thing I like to mention to people is like, distributed computing never became popular at home. You know, like, we have very powerful, like, laptops and phones, but we don't have, like, it's very rare for people to have a cluster at home that communicates.
+
+49
+00:22:45.000 --> 00:23:09.000
+So that, to me, feels like it'll always be, like, a niche thing. But, yeah, I mean, I'm more optimistic. And I think, like, there's this nice virtuous loop where, like, if the task is make the inference engine faster, you could presumably imagine having something really fast and custom-made. It's, like, one thing I think would be pretty cool as a GPU-mod working group. So if anyone's interested in tech-teaming on that, I'll probably work with them on it. A working group on what specifically?
+
+50
+00:23:09.000 --> 00:23:48.000
+Basically, having a very, like, basically, like a starter kit for a very cheap inference service that you can deploy at a company with, like, auto research that profiles the request. So, like, something like that, I think would be quite interesting. My dream is, my dream actually is a world in which when you get your next Nvidia system, like, and you install, like, you know, Kuda, there's like a little tool there that's just, hey, like, give me your existing kuda code and I'll just like port it to this GPU and make it fast. So I won't say the numbers on air, but I can show you guys. Here's my spend.
+
+51
+00:23:48.000 --> 00:24:22.000
+I thought it was going to go up a bit, but it's not, it's in the six figures. Can say that at least. So this is the amount. And then direct from Claude is direct from the anthropic subscription is 50 billion tokens. And then direct from the open-AIA subscription is 63 billion tokens. And then from our internal inference hub is 162 billion tokens. So that's like, maybe it's not 300 billion yet. But I don't know that this is entirely.
+
+52
+00:24:22.000 --> 00:24:44.000
+And let's see, that's like 113. And okay, it's close to 300 billion. That's through the start of the year. But also, I think one of the other things is that the token cost has gone down dramatically over time, and that's just been, as I've learned, the things that are wasteful that are being done during the process.
+
+53
+00:24:44.000 --> 00:25:03.000
+And I've started to see, like, increases in token efficiency. Yeah. I don't know. Connor, what are you at? Connor at one point was number seven on the internal, like, a codex leaderboard. I don't know. They don't show us the leaderboards anymore.
+
+54
+00:25:03.000 --> 00:25:30.000
+and I don't really track. I mean, I do a lot of auto research stuff too. You should tell Mark about the... I think most people now have, like, stopped talking about the limitations of models, but like you hear like, oh, it's not good for X. It's not good for Y. And it's like, no, like, it's good for everything now. It just, you haven't set up the correct, you know,
+
+55
+00:25:30.000 --> 00:25:49.000
+I don't know if you want to call it harness or agentic loops. system. Yeah. Mark left. I assume he's listening. He's got a separate. Well, you know, it's interesting. So I think most people have ceded that for these sorts of tasks, for a lot of tasks that, you know, yes, AI can do it.
+
+56
+00:25:49.000 --> 00:26:41.000
+The thing that I still hear is like, yeah, but design or style or like somebody gave me an example of like, well, you know, a model, an agent wrote a new function instead of using an existing function. Like it should have tried to leverage some existing function and like lift it. And it's like, and like, how do we prevent that without human review? And, and I was talking with some other people about it. And somebody was like, well, you know, you could like, it's not easy to build like a machine checkable way to check for style for that. But for that particular case, you know, we probably could. You could build a tool that looks at like, that like parses the AST of the language and then compares the similarity of different like entities in the code. And if your diff introduces a new thing that's very similar to some other thing, then you could
+
+57
+00:26:41.000 --> 00:27:19.000
+build a deterministic tool that says like, hey, you should have used this other tool. Like maybe we just haven't been trying hard enough to turn all of the like design sense and code style things into machine checkable rules. Maybe we can. This is kind of what makes working at a like a different to your lab. interesting is that like indeed I think as a user of these models like probably your best bet is coming up with like linters on top like basically and those linters could be other AI systems or they could just be like actual code but like to me when I hear the problem of like well the ais used to many trix up blocks or they like reinvent the wheel a lot of those are RL problems
+
+58
+00:27:19.000 --> 00:27:51.000
+for instance like which is basically if the reward is just solved the task yeah you know like code reuse doesn't really matter but like and defensibility like matters for RL because otherwise you get like syntax errors and those are bad and they like shoot down your reward. And so like I think there's quite a bit of interesting research to do like with reward shaping with like adversarial training. I think that make these things really interesting. But it's like one of those things where I expect like in the same way like hallucination was like a big problem until like it just seems like it's not right now, like post-thinking models
+
+59
+00:27:51.000 --> 00:28:12.000
+and like web search. I think a lot of these problems people are complaining about it around code reuse will be solved by like AI systems even without a harness. Like they'll just swallow their harness over time. It's just that the harness lets us explore their current capabilities without waiting for like a new model release. Yeah. And similarly, like, I mean, you could like come up with a kernel with like thousands of dollars,
+
+60
+00:28:12.000 --> 00:28:30.000
+but eventually, you know, like if you're like a smart human, like presumably you're not going through 30 billion tokens of like Kuda examples before you come up with like a good kernel. Yeah. But you do this much more efficiently. So I think there's also interesting stuff to be done on the search front here. And it's all, like, research I'm quite excited about and stuff, you know, I'm working on. Yeah, yeah.
+
+61
+00:28:30.000 --> 00:29:23.000
+I do think there's ways, like, to, to, I don't feel personally like I have fully cracked the search process, like, how to structure the, you know, the orchestration and, like, how to guide a model to actually, like, in particular, the thing that I think remains a challenge is, like, what do you do? How do you prevent a stall? and how do you, you both want to have depth in a search, but you want to have breath too, because maybe you've reached a local maximum, you know, and the thing that I still run into, and I've now heard lots of other people run into is just sort of sometimes you reach this point where you're on the search, this is really just for things where you're trying to really write the speed of light thing, where you, your automated process stalls out eventually. And I think part of it is if you don't shake.
+
+62
+00:29:23.000 --> 00:30:12.000
+the reward and the metric right, then like it can end up writing like spaghetti code. And like once it's written like 10,000 lines of slop and it's got lots of code that's like dead code in there, then it becomes hard for it to like evolve the code. And, uh, you know, at some point like maybe it makes like if I was a human, at some point I might go and start fresh. And it's like how do you properly guide the model like that it's time to go try a new approach? So, So the analogy I think of is like, it's almost like, it's going to be a weird analogy, so bear with me. It's almost like, let's say you had a light bulb and you're like, it's a lit light bulb and then you're throwing it in like a dark part of a room. To me, this is how I feel like auto research helps me, which is basically I have like an idea and I'd like to explore the limits of that idea, whether it's good.
+
+63
+00:30:12.000 --> 00:30:48.000
+But in terms of like idea generation, like what's been more helpful for me honestly has been like reading old books, which is just like, you know, I'm sure these are probably a. already in the corpus, they've been scanned or what have you. But it's like one of those things where like, like, you know, despite so many people doing Colonel LAM testing, for instance, I wasn't aware of any prior work that does property-based testing in the way like LAPAC does. So like there seems to be like a basic read the literature aspect here. And yes, you could tell they I read all the literature and do this. Like, yes.
+
+64
+00:30:48.000 --> 00:31:12.000
+But but but but but but but but but but but but but but but I think like it's still quite powerful to have a tool to the limits of how good and ideas. And then, you know, as you sort of get into war shaping, like, it's basically a conversation between you and the AI to figure out, like, what you actually want. And if it's desirable. I guess I may be, I may be, like, to an extreme here, where I, like, almost all of my work is, like, completely unsteered.
+
+65
+00:31:12.000 --> 00:31:42.000
+Like, I don't want to give the model. I don't want to be the one that comes up with the idea. I want the model to be the idea factory. And I have both noticed and fear giving it specific. specific steering or specific ideas or instructions because if I tell it, if I give it an example of like five things, like if I put in a skill an example of five things, it's going to pay a lot of attention to those five things. It's not going to try five things like those things. It's not going to necessarily use this example. It's really going to focus on those five things.
+
+66
+00:31:42.000 --> 00:32:24.000
+And if I, you know, if I'm truly searching for like a frontier kernel for something, I have a bunch of biases and I don't have. the capacity to generate ideas at the rate it does. And so I feel like it's very interesting to just let it unprompted search on its own. Let it cook. Yeah. So I will say like I do have some data for this. It's a bit out of date now. This is like February-based data. But at the time, I remember when we were working on the NVIDIA problems for NVFP-4, we were releasing solutions per problem, like whenever a problem concludes, we release solution. And they're all NVFP-4 problems. And before our competition, there was almost no NVF4 data on the public internet.
+
+67
+00:32:24.000 --> 00:32:56.000
+But then when Gounhurst released his NVF4, GemV, which is a very high-quality gem-V, in that problem, almost no AI system was in the top 10. No AI system in the top 10. But then as soon as they had Gowner's example, which is, oh, here's a minimal way of how you can use NVFP4 correctly, then all of a sudden everyone reused that trick and figured out how to auto-research it for a gem, for a gem, dual gem, group gem. and then the AIs were doing way, way better, basically, after that. But they needed the, like, if the token is truly rare in some sense, like a new hardware
+
+68
+00:32:56.000 --> 00:33:16.000
+feature, it hasn't done this work. But you're right. Like, I mean, you mentioned earlier, like, why can't you just plop an agent and then have it port all your code? Well, you know, like, one extreme version of this is just like plop the agent. And I don't know, it figures out like the ISO and it figures out that it should append the cutlass and the string of your kernels. And it should figure out all these things.
+
+69
+00:33:16.000 --> 00:33:43.000
+but like I think we all know aspirationally that this is where we'd like to get to. It's basically somewhere in between a performance engineer slash reverse engineer slash like it's sort of like these archetypes are becoming like one and the same. And if we could get like AIs to do that, I feel like that's it. Like basically kernel writing would be solved. Yeah. Be sure to check these show notes either in your podcast app or at ADSP thepodcast.com for links to anything we mentioned in today's episode as well as a link to a get up discussion where
+
+70
+00:33:43.000 --> 00:33:57.000
+you can leave thoughts, comments and questions. Thanks for listening. We hope you enjoyed. a great day. Low quality, high quantity. That is the tagline of our podcast. It's not the tagline. Our tagline is chaos with sprinkles of information.
+
+71
+00:33:57.000 --> 00:34:28.000
+And I actually know while I'm taking a little digression, I am baffled on what's going on with my internet right now. Supposedly like my Wi-Fi is down. Technically there's a green light on the Deco, but like I've been trying to like Google stuff while we've been chatting and like the internet doesn't work. And I had a banner at one point. on teams that said like teams is not able to verify your identity but like I don't actually know like somehow I'm getting Wi-Fi but there maybe there's some like authentication thing that's
+
+72
+00:34:28.000 --> 00:34:33.000
+like failing which is actually what's causing the Wi-Fi to fail anyways I'm here somehow seeing and hearing you guys so we'll keep going There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
