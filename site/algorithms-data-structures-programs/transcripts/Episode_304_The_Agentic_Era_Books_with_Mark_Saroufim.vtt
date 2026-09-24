@@ -1,0 +1,337 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:41.000
+Like, I think my take on events these days is just like the agentic area has made open-ended judging a bit cooked because it's like, how do you tell whether something is amazing versus not if it's just like if Claude once shot it? But if someone did a hill climb on a task that we can all collectively agree on is hard and made like a breakthrough, that's better than what I would do myself as like an advanced user. Like if they can just do that during the Akathon, like I'm very impressed. And so like, it just doesn't matter how they did it. It matters the output. So I think that I'm very open to. And I think it's going to become a lot more interesting doing it with open models this year because the open models are good finally at these tests.
+
+2
+00:00:41.000 --> 00:01:18.000
+I think it looks like they've been RLed on kernel data. And so I think it's going to be a lot more exciting than it was like a year ago. Welcome to ADSP, the podcast, episode 304, recorded on July 20th, 2006. My name is Connor. And today with my co-host, Price, we finish part three of our three-part conversation with Mark Serafam. In this episode, we continue our conversation about GPU mode, auto research, Mark's favorite books, and more.
+
+3
+00:01:18.000 --> 00:02:06.000
+The thing that really influenced me on this was one of the first things I did, and this was back in March, April, with Opus 4.7, which feels like a long time ago, was like auto research on cub's histogram. And that auto research, I didn't give it any steering. And it basically, that auto research popped out six different relatively novel algorithms two of them were like kind of existing, a twist on existing techniques, but the rest were like really kind of, I think, novel. They did build on like existing things from literature. This is the S-MM-Cash that Connor that we talked about in the last episode. Like certainly like caches, hash tables are like a thing that are in literature. And I think there of, you know, histograms are very similar to, to a hash table in some way.
+
+4
+00:02:06.000 --> 00:02:40.000
+So, you know, maybe there is actually some literature out there on this, particularly. technique, but it really did feel like it was a novel, it wasn't a completely novel idea, but it was a novel combination of ideas. And there was no chance I would have ever come up with that idea on my own. Yeah. I guess, I'm curious to ask you on this specific example, like, what was, what was it like trying to merge it back into Cup? I don't, because I don't know if you did it right now. I'm in the process doing that right now. So the interesting thing with that, with the cub histogram was the key like auto research run
+
+5
+00:02:40.000 --> 00:02:56.000
+was done in like I think the last auto research run I did for that was like end of May and so I came out of that with like the candidate code in kernels and what I've had to do since then is I was running auto research with
+
+6
+00:02:56.000 --> 00:03:27.000
+Cubs existing benchmark which handles which has basically like two different distributions and you know I knew I needed to do a much wider input characterization. So I constructed a whole lot more inputs. I constructed adversarial inputs. Me and the agent learned that in fact, the way that Cobb generated its histogram inputs for the benchmark have always been broken since the beginning of time. And the full like input characterization takes like
+
+7
+00:03:27.000 --> 00:04:11.000
+30 hours on a B200 to like really get good data. And with Cobb, there's the constraint that we really can't ship six different algorithms, one for this particular dynamic shape, one for that particular dynamic shape. And so I've done more like manual work. How come, by the way? Like was it because it's sort of a binary size? Yeah, yeah, yeah. So I needed really to pick, like, I was going to have to go with two algorithms, one for the small bin case and one for the large bin case. And there are a couple of like additional post-auto research optimizations that me and the agent did. And those things were basically, they weren't new algorithms. It was just like the right
+
+8
+00:04:11.000 --> 00:04:42.000
+combination of things, like combining the S-M-Cash with the existing privatized, you know, histograms in global memory. And then like, at one point, we turned off warp coalescing before you hit the S-M-Cash was like a big loss. But doing coalescing on spills from the cash was a big win. and like I just got it sort of nailed down and I've looked at the code a few times throughout this process I think there's two things I can try the first thing is I can try to run my simplify
+
+9
+00:04:42.000 --> 00:05:01.000
+skill and the simplify skill is basically minimize the bytes of code difference of non-common code difference from upstream the alternative I think would be to identify like a series of commits of like okay this is like the cue's like four PR we could break this down into four PRs
+
+10
+00:05:01.000 --> 00:05:32.000
+and let's let's just do the four PRs as like from Fresh. Like don't try to take the existing code and like reshape it into a PR, but just like using the existing code as a reference point, generate the PRs. And I think those PRs are going to go up sometime this month. And my guess is going to be that it will take two months or so to merge. I think it's in a shape now where it will be acceptable. Yeah, I mean the current code is,
+
+11
+00:05:32.000 --> 00:06:18.000
+it's a little bit of a mess. Like the single biggest problem was not following conventions in the code base. So like there was a convention for how tuning got done and it wasn't followed. And a good part of it was things that the model never could have known. For example, like, oh, you know, this is the way that we used to do the tuning in this part of code. But, you know, there's a new policy that's not documented anywhere for how we would do this. But the PR probably won't be accepted if it doesn't follow this new convention. Or like, there's, you know, there's this convention that we, if you want to have an algorithm that dynamically dispatches to, if you want to have a cub routine that can dynamically dispatches to two algorithms, like, we need to get a special sign off from someone.
+
+12
+00:06:18.000 --> 00:07:01.000
+And that's not documented in the code. So how, how could the model have ever known that? This is interesting. Like, basically, the, this sort of makes sense if you sort of assume, like, this is my guess, by the way, that like the cup team has been working on it for a while, that the original team hasn't. disbanded much. And so a lot of these sort of like unwritten rules are actually in people's heads and they all have internalized them and there's no reason to write docs because maybe the team doesn't grow very quickly. But then like in an age where you're forcing them to verbalize everything. They're like, oh, God damn it. Like this is so much work. I have to write docs now and have to write tests. Yeah. Yeah. I see it interesting. Yeah. But I think it will be very interesting to see whether we can get this landed because Cobb in particular is a really high barrier to land because
+
+13
+00:07:01.000 --> 00:08:00.000
+you need to be good across a really wide range of inputs and, you know, you can't like ignore edge cases. And so it'll be, I'm hopeful because I do think it's a, it's like a pretty big win for the, for the cases that it, like now I've gotten it to the point where essentially there's, there's no adversarial inputs that are really bad for it. There may be one left. I got to try that. Yeah. Have you done any auto research work that has landed upstream PRs and big projects that have a high bar for quality? Personally, no. I think around the time I left meta, there was like, I think an art, like a fused RMS norm, which was like the first AI generated kernel that was merged. But that was like not my work. That was like Laura, Laura's work on the kernel agent team. I do remember, though, the main experience we had at the time was that like the colonel was quite long. And so I think it was important to deslapify it.
+
+14
+00:08:00.000 --> 00:08:24.000
+I think there was sometimes a bit of an ideological debate between like, what's the point of deslopifying it? Like, just don't need it. To which, like, the Pytrarch core maintainers were like, what are you talking about? Because this is maintenance of that I need to understand every single line. I'm not sure which of those two stances is correct because, like, some of those Pitech people who felt very strongly by these things are just like no longer working on the team. And so, like, I actually don't know.
+
+15
+00:08:24.000 --> 00:08:58.000
+But kind of like one thing that stands out to me at least was like this one I think this is sort of a paraphrase from a talk by Terrance Tao So it's not exactly what he said but it's like what I came away with Which is that like he was sort of talking about like I mean let me just not that I'll just talk about kernels Like basically like my hypothesis is that typically by the time you're done writing a complicated kernel You already have simplified it multiple times because as you're writing something you're like evolving it you're fixing it And you've also like understood it. Like by the end of it, if you sort of like artisanly crafted something,
+
+16
+00:08:58.000 --> 00:09:27.000
+basically generating, understanding, simplifying is like in some sense the same act. But like if we're in an age where people are only doing generation, it becomes like I think a bit of a problem because like let's say your colonel introduces a race condition, but it's like non-deterministic. Well, you know, that really sucks for a model training run. But maybe it's forgivable for like a tiny little inference service that like runs some sort of speculative optimization. So there's like a risk-reward thing where like maybe there's some areas where
+
+17
+00:09:27.000 --> 00:09:56.000
+it need to be really paranoid and this is not acceptable. But generally, like when I broadly look at this, I just don't buy the people don't care because, you know, as we talked at the beginning of this episode on like, if people are freaked out about non-determinism, like, boy, are they going to be freaked out about like straight up in correctness books that are like non-deterministic as well. Like I think this is bound to cause conspiracy theories, especially at scale, right? Like if let's say 1% of your users only see something like that. So my broad take is like, I think we should solve the hard problem.
+
+18
+00:09:56.000 --> 00:10:26.000
+I don't think the solution is people are reading the code. That to me feels like, like, no, like, because let's say the QR problem. You know, at first I was like, hey, I'm going to sort of synthesize all the kernels by all 170 users. And I'm going to try to come up with like a beautiful QR kernel. You know, like I've yet to do this. It feels onerous every time I think about like sitting down and doing this exercise. but at the same time, if I just ask it at Kodak, and I'm like, hey, Godex, go, go, go, X, go, look at all these kernels and tell me what comes up.
+
+19
+00:10:26.000 --> 00:10:43.000
+In some sense, I don't even know, did it read everything? Did it, like, really understand, like, everything? Did it capture the key ideas? Like, maybe there's a slow kernel that had more elegant ideas. Will it really capture them or will really just prioritize the first, like, dozen kernels that are fast? Like, I'm not sure. Like, in some sense, like, I don't know what the model is doing.
+
+20
+00:10:43.000 --> 00:11:03.000
+Like, I can't inspect it. Like, so it does feel like it's an alien artifact. I tell it, go cook. but my hope is that we can sort of figure out how to come up with beautiful kernels from a large sum of fast but slop kernels. I just think like it's maybe in the beginning there's a bit more manual than we'd like,
+
+21
+00:11:03.000 --> 00:11:37.000
+but I'm fairly confident we can figure out good tooling for problems like this. So first of all, I gotta say, I find it very interesting, the proposition that a race condition, slightly buggy kernel that's like good 99% of the time, but in really fast. Maybe it's good enough in some cases. I didn't consider that before. Maybe it is. For inferences. So my goal in auto research here is to think about what's the process that I as a human would do. And I think that both
+
+22
+00:11:37.000 --> 00:12:18.000
+for humans and agents, it's very hard to optimize for multiple things at once. And every time that I've had to myself do like deep like kernel performance work, it's, almost always where I have a phase where I'm trying to reach speed of light. And during that phase, you know, I'm adding restrict places. I'm adding in assumes. I'm adding in this and that. I'm re-benchmarking. I'm trying things. I'm if-deffing stuff out. You know, I've got some dead code branches, et cetera. And then like, and then I reach performance. And I'm like, oh, great. This is the right thing. And then I've got this mess. And then what I do is, I go back and I'm like, okay, I'm going to delete all the if-defs.
+
+23
+00:12:18.000 --> 00:12:38.000
+I'm going to, you know, take out those, like, if I take out this as soon, is it fine? Okay. And, you know, and then I've always got like four versions of this code. And it's like, okay, well, like, I can delete this variant that I don't need anymore. And I can leave that variant. And it's like, I always do this process where I've first spent a bunch of time trying to find speed of light.
+
+24
+00:12:38.000 --> 00:13:16.000
+And then once you've found speed of light, then, like, you have an Oracle answer. And then I can try to write. better, cleaner versions. And so I think it's, to me, it is like a natural process to do this V-shaped thing, or maybe not V, or upside-down V, where like you're climbing up to find the fast thing, and then like you're climbing down to make it not so ugly. And I think one of the, you know, maybe I'm wrong about this idea that you, or I said that like you can't always optimize for two things at once. It's harder to optimize for multiple things, harder to optimize for multiple things, It's harder to opt us from multiple things.
+
+25
+00:13:16.000 --> 00:14:06.000
+And I think that's true, but I think part of that is just that we don't have the right reward metrics and safeguards in place. To me, if my auto research process always generating these like 10,000 line, you know, slop things that's got all this dead code over, that to me means I haven't put the right guardrails in place. I haven't put the right linters and the right things for code quality. and if I did more of that, then I could probably generate a better kernels. And also, I think that would help with the stalls. And yeah, not everything can be like deterministically checked or machine checked. The other thing is like I, so right now I have in my framework, you know, the model can go off. I let it, it can do a macro optimization, a micro optimization, and then a combine.
+
+26
+00:14:06.000 --> 00:14:23.000
+And I do have a fourth type called Simplify. and usually I don't let it run simplified during the main auto research loop but maybe I should. Maybe it should be simplifying as it goes. The reason I set it up this way is that I've, I guess I've always done some of the simplification as I go but usually I make a mess of things
+
+27
+00:14:23.000 --> 00:14:36.000
+until I find speed of light. Yeah, it's interesting like your harness is like your own process. Yeah. Yeah. I'm not sure. Like I think it's hard for me to say this is right or wrong. Like this seems like much more of a like personal choice.
+
+28
+00:14:36.000 --> 00:15:02.000
+So I can see argument, good arguments being made either way. Yeah, yeah. So, yeah, I find, I find the, the, the mission that, that you guys have at core automation is very complying to me, because, like, it seems, it seems very evident that, like, if you can make the model really good at automating the development of the model, then, like, you can, like, then it can do all the rest, right?
+
+29
+00:15:02.000 --> 00:15:31.000
+You can just sit back and sip tea. Oh, yeah. I mean, like, what's cool about it, it too is that like I again because like for me this is all new but like by virtue of focusing on like on a few problems I think it simplifies like a lot of things like you know we don't have to have like a model that's like necessarily generally capable at all sorts of things but it primarily needs to be good at things that are tasks in the lab so like you can think of every individual person in the lab is like an eval in some sense yeah and I think this is like very helpful framing
+
+30
+00:15:31.000 --> 00:15:51.000
+that you know when you look at like the kinds of tasks people do in the lab like it just it becomes very self-evident, like, how you should do the rest, that, like, let's say for kernels at least, like, none of the evils I know of open source, and I know this because I've also created a couple of them are, like, sufficient for what we want. And then it's, like, very cool thinking through, like, basically, like, how do you, like, basically what would, you know,
+
+31
+00:15:51.000 --> 00:16:07.000
+the way I explain this to my colleagues is, like, what evils would help us, like, aura farm really hard, you know? And then these tend to be, like, capabilities that you yourself think are really impressive. Yeah. Like, like, what do I think is at the limits of my capabilities? And if I can get our next release to do those things, you know,
+
+32
+00:16:07.000 --> 00:16:19.000
+then I think I'd be really, really proud of the work we did. Yeah. You know, another, the last point I'll touch on before I let everybody go and I'll go to sleep. You know, Connor, you mentioned earlier that like,
+
+33
+00:16:19.000 --> 00:16:33.000
+like the stuff you were doing, you know, like I stopped it because it wasn't valuable. And I, I just keep coming across places in which the usage data, that like the experimentation, like the,
+
+34
+00:16:33.000 --> 00:17:21.000
+the, the history of what has been tried is just so valuable. It's valuable for like one learning, like, you can analyze it, you can improve things, you can analyze how particular tools or frameworks are used. And like, once you have data at scale, like, you can learn a lot from that. It's, it's valuable for like simulating how, you know, how these long horizon tasks work, which can tell us a lot about how various frameworks and hardware might perform. And then it can be valuable for training models, for doing post-training and R.L. And it can be valuable for extracting, like, oh, like, maybe this is something that would be a good, you know, a good benchmark.
+
+35
+00:17:21.000 --> 00:17:51.000
+And I just, I think there's so much value in all this data. And like, that's one of the things I think is great about GPU mode is it's just, it's this, you know, it's this farm that's producing all of this super high value data, like open data that can all benefit from. I mean, Bryce, honestly, to me, it seems like the more you're talking, the more I get excited about this idea of like, why don't we just make it easier for people to compete in our competitions using open model tokens?
+
+36
+00:17:51.000 --> 00:18:22.000
+We can subsidize the tokens by picking the problems to be the kernels that show up in the open models. And we get this like nice recursive self-improvement loop with people doing, search over the best prompts collectively, because I think that's highly not obvious. For these sprints over the weekend, the Connor is definitely going to have to cut this part out. Because it was like advertised as like, come like we're going to do agentic engineering on this hard problem,
+
+37
+00:18:22.000 --> 00:18:49.000
+like they didn't have to learn anything about Kuta first. What they did was they had to learn how to set up auto research. And then like on the second day, once they'd produce some auto research results, then like we like sat down and I, talked to them about the problem and taught them a bit about GPU architecture and like they were able to learn more because they'd already accomplished something. They didn't know what they'd accomplished yet because the agent had accomplished before them. Yeah, but but but they got like that
+
+38
+00:18:49.000 --> 00:19:34.000
+sort of first like dopamine rush right. Like I made something faster. Definitely like one thing. I have this vision for like in the future of like doing I guess the way I know you said you weren't such a fan of like in person events but I'm imagining like GTC auto research academy where like you just like you have two hours every day where you come you give everybody unlimited inference for the week you come in for two hours every day and it's like a study group because you know you're like in between the study group meetings people are going and running stuff and producing results and then you come back and you check in and yeah i think it'd be i i think it'd be very valuable to have open tokens and i think people position open tokens as a public good is like this idea of like oh it's like it's good
+
+39
+00:19:34.000 --> 00:20:13.000
+But for me, it seems like it's insanely valuable to Invidia to do this. Yeah, like, basically, just to sort of be specific on the, like, I think my take on events these days is just like the agentic era has made open-ended judging a bit cooked because it's like, how do you tell whether something is amazing versus not if it's just like if Claude one shot it? But if someone did a hill climb on a task that we can all collectively agree on is hard and made it. like a breakthrough. That's better than what I would do myself as an advanced user. Like, if they can just do that during the Akathon, like I'm very impressed. And so like,
+
+40
+00:20:13.000 --> 00:20:32.000
+it just doesn't matter how they did it. It what matters is the output. So I think that I'm very open to. And I think it's going to become a lot more interesting doing it with open models this year because like the open models are good finally at these tests. I think it looks like they've been RLed on kernel data. And so I think it's going to be a lot more exciting than it was like a year ago. I want to pitch you on another idea I had,
+
+41
+00:20:32.000 --> 00:21:09.000
+which is, you know, you talked about the idea of having like a package, like, here's how to deploy a, you know, like an inference service to do this, like at your company. I've been thinking about this idea, well, you know, what we want to do is we need to, we need GPs for two things. We need GPs one to run the tests and the benchmarks. And two, we need GPUs to run the inference. And, you know, there's, like, web search is something that, like, runs, like, inference, like, you know, on the inference provider's side. Like, why couldn't we have, like, a, you know, inference provider side, like, tool call that just like, like, like, that's like
+
+42
+00:21:09.000 --> 00:21:36.000
+modal that just like runs the serverless thing there. And then like, if you're a company and you have like, you know, an 8XB200 machine, it can both run your inference and run your serverless, you know, e-vals. Because a lot of people seem gated on the GPU access to. Yeah, I think of these is like very related problems. It's just like, like, I would imagine more people would know what to do with tokens versus a GPU. So it's like, I would imagine like broader market appeal. Yeah. I mean, like, ultimately, I think the way
+
+43
+00:21:36.000 --> 00:21:53.000
+modal set up how you acquire GPU, I think this is the correct way to do it because it's very incentive aligned with your customers to charge per use. Like, it's an honest business. Basically, as the way I would frame it. And I think paying for access is dishonest because it's, I just, yeah,
+
+44
+00:21:53.000 --> 00:22:04.000
+like, because whether you use it or not, it's like, it's not great. I don't like it. Yeah. Yeah, it's like, if I could, like, my biggest thing within Nvidia right now is like, I need, like, I have this, stream of like free tokens from breath.
+
+45
+00:22:04.000 --> 00:22:22.000
+I just, if they could just make a serverless product, even if it's like a worst version of modal, then like I would not need to ask for as many tokens. And like, it could be so much more token efficient. By the way, I refreshed the, I refreshed the tokens for the profiling service again too.
+
+46
+00:22:22.000 --> 00:22:48.000
+Thank you, sir. Yeah. So I think there's enough in there to run through, to run through the end of July. But so when, how long does the optimizer contest run? the optimizer we don't know yet but we're thinking of making it run for a month okay i'm just going to keep refreshing the tokens for the profiling service until somebody tells me to stop okay that's that's wonderful yeah yeah i think we didn't get the chance to talk much about the optimizer competition but
+
+47
+00:22:48.000 --> 00:23:19.000
+i think it's pretty it's pretty sick actually yeah i'll tell you more about it next time yeah i'm very excited i started looking into it yeah it looks like it's going to be very cool okay do you mind if i just tell you about it for a bit yeah i think just okay so so the optimizer competition The sort of main idea was that we've been very interested in picking tasks where transformers obviously fall flat on their face. And so the task we picked is one that involves depth. It's basically like repeated squaring and modulo. You try to make any like the largest transformers run a wall on this task. It's going to run flat on.
+
+48
+00:23:19.000 --> 00:23:46.000
+It's going to fall flat on his face and it's going to try and cheat the task. And intrinsically, the only models that have like the right inductive biases to solve these problems are those that include like basically some form of looping. or adaptive depth, or like basically, and they basically involve like scaling training time compute to sort of like solve the task. And these are very exciting because if you sort of, if you maybe have a brief physics background, like a lot of these,
+
+49
+00:23:46.000 --> 00:24:05.000
+like anything that involves looping becomes like basically, it turns into mush, like basically, it just goes either to zeros or it goes to nan. Like the systems become very unstable. And so what we're very excited about here is we want people to come up with interesting like model architecture ideas to solve this very like, simply formulated but very nasty problem.
+
+50
+00:24:05.000 --> 00:24:24.000
+But because these architectures are quite unstable, they will also need to come up with sophisticated optimizers to solve this problem. And the sort of user experience we borrowed is the exact same as kernel bot. It's like you submit a single Python file and we run all of these evaluations for you. Right now we're basically going through like a trial period
+
+51
+00:24:24.000 --> 00:24:39.000
+where people are reward hacking us to death, which is okay. It helps us like have the rules be more robust. We're going to launch for real this Thursday. and the competition will be open for about a month and we're kind of excited to sort of see who comes out of the woodworks here. What's been interesting is that there's just like,
+
+52
+00:24:39.000 --> 00:24:52.000
+you know, there's like, it's sort of this interesting intersection between people that do complexity theory and model architecture where they will write very specific proofs as to things like, hey, like a diffusion model can't actually learn long sequence
+
+53
+00:24:52.000 --> 00:25:10.000
+like video generation. And I find this like to be really, really compelling and I just can't wait to see what people do. Generally for me, I think GPU mode really becomes healthier if people are aware of like frontier level problems. And this is like a frontier level problem that I think many, many people are interested in. So I think we made it very agent friendly.
+
+54
+00:25:10.000 --> 00:25:28.000
+The GPUs are all free. You get an hour of training time basically a day. So, you know, please have fun. The website is like one layer deeper.aI. And I think it's going to be like one of our most interesting challenges yet. And I'm very excited about it. Yeah. No, I think it's not being not being an ML person.
+
+55
+00:25:28.000 --> 00:25:51.000
+I like being more a kernel person than an ML person It's a little out of my depth But from what I've read up on it It looks like it's a very cool problem And I'm very excited to see what people will Will be able to do with it And it also seems like it's something that is probably not in the training set And is like a frontier problem that will really be able to see
+
+56
+00:25:51.000 --> 00:26:13.000
+What people can do with auto research for this Yeah Yeah All right one last one last question And it hopefully will be a short one because I know Bryce, you need to go to sleep because you're over in the Europe's. One of my, it's not really a hobby, but something I've been doing over the last several months is I, well, the details don't matter, but I listen to a lot of, no, no, tell us the details.
+
+57
+00:26:13.000 --> 00:26:43.000
+The details, all right, very quickly. I mean, I have a vibe-coded podcast player called Podgod, which was going to get released in the next couple weeks. But I've been using it since the beginning of February and it's phenomenal. One of the things that allows you to do is it allows you to follow personalities. So there's something called a personality meta podcast, which is just a curated feed of every single time that person goes on a different podcast because there are some people that I care about and I want to listen to any time they're being interviewed. But I don't want to have to go and listen.
+
+58
+00:26:43.000 --> 00:26:56.000
+Give an example. The person that I'm about to mention is Boris Churney. But the thing is, one, I don't know who that is. What? The creator of Claude Code? No, no idea. That's very sad. He's like, he's honestly would be my number one pick to have as.
+
+59
+00:26:56.000 --> 00:27:36.000
+like a future guest because every every time he is interviewed I think he has just like amazing takes but anyway so like there's a bunch of podcasts that one I don't want to subscribe to like there's like Sequoia has this like kind of there's a bunch of these like VC money podcasts but every once in a while they have someone interesting on so like I don't want to have to subscribe to this and then like basically just like download the thing and then delete it I just want the interviews anyways that's that's not long story short that's long story long whenever you to Boris Churney, like one out of every two podcasts, he gets like book recommendations, or he gives book recommendations. And they've been phenomenal. The first one that he recommended,
+
+60
+00:27:36.000 --> 00:28:15.000
+he actually mentioned in the Peter Man podcast, which is like a former, I think, Instagram or Facebook guy. And he's just been, it's great interviews. He interviewed Boris Churney. And then he mentions that during the interview for Anthropic, he ended up talking about some book by Greg Egan. You know, this is back in like Claude, I don't know, 3.7, 4.0 days. I immediately go to like whatever, chat chit, ask, like, what book is he referring to? And it ended up being permutation city. And that is like part of a trilogy that has diaspora and Schildschild. He, on a more recent podcast, mentioned Werner Vinges, A Fire Upon the Deep, which is in the Zones of Thought trilogy.
+
+61
+00:28:15.000 --> 00:28:44.000
+I'm like one down, two to go. I bring all of this up. Where's the question to ask you? So you wrote the robot overlord manual. and you're the first person actually that we've interviewed on this podcast, which is a little bit surprising. That is as high on AI as Bryce and I. We've interviewed some folks over the last little bit, but not like, not people that are sipping the Kool-Aid as much as we are. And so the answer to this question may be I don't have any recommendations.
+
+62
+00:28:44.000 --> 00:29:15.000
+My question is, do you have any book recommendations in general? And on top of that, specifically, I would love to know if you have, like, any recommendations in the space of, you know, future AI, like good, these kinds of good reads that, like, people like Boris Churny recommending. So over to you. Yeah, like, I mean, I love reading. Like, these are all my books. The listener can't see, but there's also, like, a bookshelf in the background with what looks like at least a couple hundred books there. So there's, like, a couple of other hundred that I've given away over the years.
+
+63
+00:29:15.000 --> 00:29:39.000
+But, yeah, I mean, I, like, I actually, like, I do, I had a tweet about this, which is, like, my 10 favorite books. Let me see. So I would say on the AAAA, like, okay, so these are the books that are most influential to me. There's 10 of them. So let me see. Maybe I can pick two for you. Well, we'll include the link to the tweet so you can get all 10. And feel free to just read all 10 off if you want.
+
+64
+00:29:39.000 --> 00:29:57.000
+Okay. It's a more interesting question. Okay. All 10. So my, like, the book that I think was like the most fun to me was a book called The Journey to the Ants. So it's a book about like ant-based intelligence. And the reason why I found it very interesting is because, like, the kinds of shit ants can do is pretty wild.
+
+65
+00:29:57.000 --> 00:30:26.000
+Like, for instance, like, you can have, like, the mother aunt, the queen, like, control the gender ratio of a population, control, like, people's tasks. Like, you can be a worker versus a warrior elastically based on the demands of the colony. And they all sort of spread this message between each other to sort of dictate. This is very contrary to how, like, human societies operate, where we're like, oh, I'm a colonel guy, and I will never not do colonels. Like, we're very inelastic. So it's like pretty remarkable for me to see an example of societies that were not this way.
+
+66
+00:30:26.000 --> 00:30:57.000
+And I think this book is wonderful. Another book I really love is visual group theory. So visual group theory and maybe I would add Burns Euclid here. What I found really lovely about these books is that like anything that's algebraic tends to be like very dry and like kind of unintuitive to read because you just see look at these long formulas. Both of these books are pretty like beautiful. They almost feel like pieces of art where people are sort of like going through like these arguments like very rigorously. And so for me, they really made me appreciate the idea of a beautiful explanation, which is like typically when I think of like my job,
+
+67
+00:30:57.000 --> 00:31:23.000
+I don't necessarily think of it as like producing like beautiful code or fast code. I think of it as being able to produce a good explanation for why the code is fast. Like that's kind of almost like my love language. Another book I've adored is the theory of fun. So the theory of fun is a book on why people like playing games. It's sort of like the sort of the main thesis of the book is that playing is basically the way we learn. So I've carried that a lot into my projects where I've tried to make a lot of the things
+
+68
+00:31:23.000 --> 00:31:38.000
+we've done with GPU mode fun and as a result, people end up learning more and might find it more valuable. So a lot of what I learned with GPU mode was basically early days of playing world of Warcraft and Workraft 3. So a lot of the lessons, funnily enough, do you apply? I would say two technical books that I've,
+
+69
+00:31:38.000 --> 00:32:03.000
+I think I'm going to skip over a couple of books, but two technical books that I think I highly recommend to everyone are game programming patterns and working with legacy code. Working with legacy code often surprise. rises people as one of my favorite books of all time. But I found it really wonderful when I'm just like plopped into like a monstrous code base, how do you sort of like quickly make sense of it? And like what are good design patterns to make codes like simpler and easier to reason about?
+
+70
+00:32:03.000 --> 00:32:31.000
+I think a lot of like my contributions in the past projects has been like going into a complicated code base and like understanding it and then figuring out how to develop features more quickly on top. I think a lot of these ideas will make a comeback if we're like basically in mountains of slop. Maybe yet another book that I've really enjoyed. Maybe maybe I'll give you two more. Like game theoretic foundations for probability and finance. It's not a finance book, even though it's in the title. It's a book about rewriting all the axiom of probability theory with game theory
+
+71
+00:32:31.000 --> 00:32:58.000
+in a way that makes them a lot more interpretable. And so I've also really enjoyed this kind of book because I've always enjoyed more wacky math. It just can help you build intuition. And if you didn't have like one notation, maybe you'll appreciate another. The last one is the structure and interpretation of classical mechanics. I'm sure many of you might have read the structure interpretation of computer programs. I thought that's what I thought you were going to say. I think this book is better because it basically goes over, like, it's right short programs
+
+72
+00:32:58.000 --> 00:33:33.000
+for physics written in LISP, and you basically end up with nature as like a short series of self-modifying LISP programs. It's one of those like books that like blow your mind the first time you read it. But like, again, like as we get into the age of auto research and architecture research, I suspect a lot of these ideas are making a big comeback. So these are things that I think are, you know, there's a lot more, but like maybe, you know, berserk and Necronomicon, maybe some pieces of fiction that I think are just like absolutely gorgeous. I've always been a sucker for like, there's some piece of knowledge that if you acquire it,
+
+73
+00:33:33.000 --> 00:34:02.000
+I don't know, you'll blow up because you'll be rendered mad. I don't know why, but it's like one of those things that I've always been like a sucker for this kind of like fantasy work. But yeah, all these books are phenomenal. And I'll share the full list if you like with you in a few minutes. But yeah, I think these are sufficiently out of distribution to give you better ideas. I mean, I feel bad we haven't asked our other past guests because that was amazing. Even better than, not that I had expectations for the quality of your answer, but even better than I expected.
+
+74
+00:34:02.000 --> 00:34:33.000
+Go ahead, Bryce. I have a related question, which is, it sounds like, it sounds like you have been a person who's played a lot of video games in the past. I'm wondering if you have recommendations for video games. Let me see. So what are the greatest games I've played? So one of the issues with like, I think the greatest game I've ever played is probably Dota 2, but I would not recommend you play it because it just will take over your life. So I think it's like an optimizer's dream in some sense and it teaches you how to never get mad
+
+75
+00:34:33.000 --> 00:34:52.000
+at anything because like it's very formative to be insulted at in like five different languages and still manage how to win a game. So it's very formative. But I would say like, I mean, if I'm thinking like games, that left like a deep impression on me. I would say recently, I would probably say it was like, Expedition 33 as like sort of a story-based game
+
+76
+00:34:52.000 --> 00:35:12.000
+like really left like a deep impression on me and I was like a big sucker for like role-playing games like growing up, you know, all the way ranging from like Pokemon to like Chrono Trigger. As a result, I've also really enjoyed Final Fantasy 16 recently. I've been playing Final Fantasy 7 as well, which I really enjoy. But yeah, otherwise, like these days, like I mostly spent a lot of time playing Slay the Spire,
+
+77
+00:35:12.000 --> 00:35:39.000
+but I also feel like I spent too much time doing it. If you give me an optimization puzzle, usually I can get obsessed with it. If you give me something that's fast and reflex-based, like Fury or Katana Zero, I'm also like a big sucker for those. I enjoy sort of this like flow feeling. And I think these are all games that will give you like a major, major sense of flow. So they're all treats if you haven't played them. So my actually, my oldest friend, the person that I've had the longest contact with,
+
+78
+00:35:39.000 --> 00:36:14.000
+is somebody I've never actually met in person. And he and I, I used to play a lot of muds, based games when I was a kid, and he and I played muds together. And in particular, my favorite type of mud was a role-play intensive mud, so that's where everybody has to be in character at all times. I primarily played either Star Wars or Lord of the Rings themed muds. And these were all like community run, multiplayer games, and nobody was really concerned about the fact that Star Wars and Lord of the Rings were IP that somebody else owned. But anyways, him and I were having this conversation the other day where it's a text-based game. Like,
+
+79
+00:36:14.000 --> 00:36:50.000
+It is, you could just like hook up, I'm sure, like a frontier model to it. And, you know, the problem of these games have today is like, you know, the NPCs are not particularly good and there's just not a lot of players. And him and I were talking about like, well, we could just make as many players as we want. You know, you could just like, you wouldn't even need to code them into the game. You could just connect an existing agent to an existing mud and just have it interact the game as it would any other player character. And I just like, I haven't been able to get this idea out of my head. and if I had more infinite inference, I would go build my like AI mud game
+
+80
+00:36:50.000 --> 00:37:06.000
+and I'm sure I'd have a blast with it. I think we should try it out because I think one hybrid idea I'd be very optimistic about would be something like an in-person Dungeons and Dragons game. Oh, yes. Like where the DM can basically choose to
+
+81
+00:37:06.000 --> 00:37:26.000
+like basically where there's a DM who's constantly prompting to try and anticipate where like things might go. That I'm really optimistic about. But I think a lot of the, I think issues I foresee with current alums is like post-compaction, maybe they'll lose everything. Like, they'll have no idea what the fuck's going on the game. We should do a whole, we should talk some other time about my thoughts on compa.
+
+82
+00:37:26.000 --> 00:37:52.000
+I think sometimes compaction helps and sometimes it hurts in the short. Yeah. The thing that's most valuable that I get, that happens at compaction is most harnesses on compaction will reread skills. And that can sometimes help because then it's like a reminder of like, were you following were you following like the prompts and skills that you were originally given? Anyways, I should go. It's getting very late here and we should let Mark get going.
+
+83
+00:37:52.000 --> 00:38:10.000
+Good night, Bryce. And thank you for inviting me, Bryce. It was a pleasure to chat with you. Be sure to check these show notes, either in your podcast app or at ADSP thepodcast.com for links to anything we mentioned in today's episode, as well as a link to a get-up discussion where you can leave thoughts, comments, and questions. Thanks for listening. We hope you enjoyed and have a great day.
+
+84
+00:38:10.000 --> 00:38:15.000
+Low quality, high quantity. That is the tagline of our podcast. It's not the tagline. Our tagline is chaos with sprinkles of information. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
