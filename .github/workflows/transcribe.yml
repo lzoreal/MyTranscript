@@ -1,22 +1,31 @@
+```yaml
 name: Auto Transcribe & Deploy Pages
 
 on:
   schedule:
     - cron: "0 5 * * 1"
+
   workflow_dispatch:
     inputs:
       podcast_slug:
-        description: '播客标识（如 how-we-made-your-mother）'
+        description: "播客标识（如 how-we-made-your-mother）"
         required: true
-        default: 'how-we-made-your-mother'
+        default: "how-we-made-your-mother"
+
       feed_url:
-        description: '播客 RSS 地址'
+        description: "播客 RSS 地址"
         required: true
-        default: 'https://rss.amperwave.net/v2/feed/audacynetwork/hwmym'
+        default: "https://rss.amperwave.net/v2/feed/audacynetwork/hwmym"
+
       model:
-        description: 'Whisper 模型'
+        description: "Whisper 模型"
         required: true
-        default: 'base.en'
+        default: "base.en"
+
+      gemini_model:
+        description: "Gemini 翻译模型"
+        required: true
+        default: "gemini-3.5-flash-lite"
 
 permissions:
   contents: write
@@ -31,26 +40,27 @@ jobs:
   transcribe:
     runs-on: ubuntu-latest
     timeout-minutes: 360
+
     steps:
       - uses: actions/checkout@v4
         with:
-            token: ${{ secrets.MY_CUSTOM_PAT }}
+          token: ${{ secrets.MY_CUSTOM_PAT }}
 
       - name: 同步到远程最新
         run: |
           git fetch origin
-          git checkout ${{ github.ref_name }}
-          # 工作区干净时，直接快进；如有意外差异则放弃本地（此时还没生成文件，安全）
-          git reset --hard origin/${{ github.ref_name }}
+          git checkout "${GITHUB_REF_NAME}"
+          git reset --hard "origin/${GITHUB_REF_NAME}"
 
       - name: 设置 BASE_URL
         run: |
-          REPO_NAME=$(echo "$GITHUB_REPOSITORY" | cut -d'/' -f2)
-          echo "BASE_URL=https://${GITHUB_REPOSITORY_OWNER}.github.io/$REPO_NAME" >> $GITHUB_ENV
+          REPO_NAME="${GITHUB_REPOSITORY#*/}"
+          echo "BASE_URL=https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}" >> "$GITHUB_ENV"
 
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
+          cache: pip
 
       - name: Cache ffmpeg
         id: cache-ffmpeg
@@ -67,30 +77,55 @@ jobs:
           tar -xf *.tar.xz -C ffmpeg-static --strip-components=2
           rm *.tar.xz
 
-      - run: echo "${{ github.workspace }}/ffmpeg-static" >> $GITHUB_PATH
-      - run: ffmpeg -version
+      - name: 添加 ffmpeg 到 PATH
+        run: echo "${GITHUB_WORKSPACE}/ffmpeg-static" >> "$GITHUB_PATH"
+
+      - name: 检查 ffmpeg
+        run: ffmpeg -version
 
       - name: 安装依赖
         run: |
-          pip install faster-whisper feedparser requests[socks] lxml deep-translator
+          python -m pip install --upgrade pip
+          pip install faster-whisper feedparser "requests[socks]" lxml google-genai
 
-      - name: 运行转录
+      - name: 检查 Gemini 配置
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ github.event.inputs.gemini_model || 'gemini-2.5-flash' }}
+        run: |
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "::error::请在仓库 Settings → Secrets and variables → Actions 中设置 GEMINI_API_KEY"
+            exit 1
+          fi
+          echo "Gemini model: $GEMINI_MODEL"
+
+      - name: 运行转录与翻译
         env:
           PODCAST_SLUG: ${{ github.event.inputs.podcast_slug || 'how-we-made-your-mother' }}
           FEED_URL: ${{ github.event.inputs.feed_url || 'https://rss.amperwave.net/v2/feed/audacynetwork/hwmym' }}
           WHISPER_MODEL: ${{ github.event.inputs.model || 'base.en' }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ github.event.inputs.gemini_model || 'gemini-2.5-flash' }}
+          BASE_URL: ${{ env.BASE_URL }}
         run: python -u scripts/transcribe.py
 
       - name: 提交状态与站点文件到 Git
         env:
-          MY_PAT: ${{ secrets.MY_CUSTOM_PAT }}  # 自定义秘钥名
+          MY_PAT: ${{ secrets.MY_CUSTOM_PAT }}
+          PODCAST_SLUG: ${{ github.event.inputs.podcast_slug || 'how-we-made-your-mother' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
           git add state.json site/
-          git diff --quiet && git diff --staged --quiet || git commit -m "auto: update ${PODCAST_SLUG:-default} transcripts []"
-          # 关键：替换远程地址，注入 PAT（假设 origin 为 https 协议）
-          git remote set-url origin https://${MY_PAT}@github.com/${GITHUB_REPOSITORY}.git
+
+          if ! git diff --cached --quiet; then
+            git commit -m "auto: update ${PODCAST_SLUG} transcripts"
+          else
+            echo "没有新的文件需要提交"
+          fi
+
+          git remote set-url origin "https://${MY_PAT}@github.com/${GITHUB_REPOSITORY}.git"
           git push
 
       - name: 上传 Pages artifact
@@ -101,10 +136,13 @@ jobs:
   deploy:
     needs: transcribe
     runs-on: ubuntu-latest
+
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+
     steps:
       - name: 部署到 GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+```

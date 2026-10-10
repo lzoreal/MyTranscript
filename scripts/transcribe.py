@@ -1,351 +1,469 @@
-import os
-import sys
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+Podcast RSS -> faster-whisper -> Gemini 分段翻译 -> 双语 VTT -> 增强 RSS / 网站
+
+必需环境变量：
+    PODCAST_SLUG
+    FEED_URL
+    GEMINI_API_KEY
+
+可选环境变量：
+    WHISPER_MODEL=base.en
+    GEMINI_MODEL=gemini-2.5-flash
+    BASE_URL=https://owner.github.io/repository
+    MAX_EPISODES=0                 # 0 = 不限制
+    TRANSLATE_BATCH_SIZE=20        # 每批最多多少条字幕
+    TRANSLATE_BATCH_MAX_CHARS=9000 # 每批英文总字符上限
+    TRANSLATE_MAX_RETRIES=3
+    TRANSLATE_BASE_DELAY=2
+    TRANSLATE_BATCH_DELAY=0.3
+    AUDIO_TIMEOUT=60
+    AUDIO_MAX_MB=1500
+
+依赖：
+    pip install faster-whisper feedparser requests lxml google-genai
+"""
+
+from __future__ import annotations
+
+import html
 import json
-import time
+import logging
+import os
 import re
-import random
+import sys
+import time
 import hashlib
-import threading
-import builtins
-from datetime import datetime, timezone
-from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
+import tempfile
 from pathlib import Path
+from typing import Any
+from urllib.parse import urlparse, unquote
 
 import feedparser
 import requests
-from faster_whisper import WhisperModel
 from lxml import etree
-
-# ============================================================
-# 日志
-# ============================================================
-
-_original_print = builtins.print
-
-
-def print(*args, **kwargs):
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-    _original_print(f"[{timestamp}]", *args, **kwargs, flush=True)
-
+from faster_whisper import WhisperModel
+from google import genai
+from google.genai import types
 
 # ============================================================
 # 配置
 # ============================================================
 
-PODCAST_SLUG = os.environ.get("PODCAST_SLUG", "default")
-FEED_URL = os.environ.get("FEED_URL")
-MODEL_SIZE = os.environ.get("WHISPER_MODEL", "base.en")
-BASE_URL = os.environ.get("BASE_URL", "").rstrip("/")
+PODCAST_SLUG = os.getenv("PODCAST_SLUG", "podcast").strip()
+FEED_URL = os.getenv("FEED_URL", "").strip()
+WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base.en").strip()
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+BASE_URL = os.getenv("BASE_URL", "").rstrip("/")
 
-USE_CHINA_PROXY = os.environ.get("USE_CHINA_PROXY", "true").lower() == "true"
-MAX_PROXY_ATTEMPTS = int(os.environ.get("MAX_PROXY_ATTEMPTS", "200"))
-PROXY_WORKERS = int(os.environ.get("PROXY_WORKERS", "20"))
-
-PROXY_TEST_TIMEOUT = int(os.environ.get("PROXY_TEST_TIMEOUT", "8"))
-AUDIO_CONNECT_TIMEOUT = int(os.environ.get("AUDIO_CONNECT_TIMEOUT", "8"))
-AUDIO_READ_TIMEOUT = int(os.environ.get("AUDIO_READ_TIMEOUT", "15"))
-DOWNLOAD_CHUNK_SIZE = int(os.environ.get("DOWNLOAD_CHUNK_SIZE", str(256 * 1024)))
-PROXY_CACHE_TTL = int(os.environ.get("PROXY_CACHE_TTL", "1800"))
-
-# 翻译设置
-TRANSLATE_BATCH_SIZE = max(1, int(os.environ.get("TRANSLATE_BATCH_SIZE", "5")))
+MAX_EPISODES = int(os.getenv("MAX_EPISODES", "0"))
+TRANSLATE_BATCH_SIZE = max(1, int(os.getenv("TRANSLATE_BATCH_SIZE", "20")))
 TRANSLATE_BATCH_MAX_CHARS = max(
-    200, int(os.environ.get("TRANSLATE_BATCH_MAX_CHARS", "1800"))
+    500, int(os.getenv("TRANSLATE_BATCH_MAX_CHARS", "9000"))
 )
-TRANSLATE_BATCH_DELAY = max(0.0, float(os.environ.get("TRANSLATE_BATCH_DELAY", "2.0")))
-TRANSLATE_MAX_RETRIES = max(1, int(os.environ.get("TRANSLATE_MAX_RETRIES", "6")))
-TRANSLATE_BASE_DELAY = max(1.0, float(os.environ.get("TRANSLATE_BASE_DELAY", "10")))
-TRANSLATE_MAX_DELAY = max(10.0, float(os.environ.get("TRANSLATE_MAX_DELAY", "300")))
+TRANSLATE_MAX_RETRIES = max(0, int(os.getenv("TRANSLATE_MAX_RETRIES", "3")))
+TRANSLATE_BASE_DELAY = max(0.1, float(os.getenv("TRANSLATE_BASE_DELAY", "2")))
+TRANSLATE_BATCH_DELAY = max(0.0, float(os.getenv("TRANSLATE_BATCH_DELAY", "0.3")))
+AUDIO_TIMEOUT = max(10, int(os.getenv("AUDIO_TIMEOUT", "60")))
+AUDIO_MAX_MB = max(1, int(os.getenv("AUDIO_MAX_MB", "1500")))
 
-if not BASE_URL:
-    gh_repo = os.environ.get("GITHUB_REPOSITORY", "")
-    if gh_repo and "/" in gh_repo:
-        owner, repo = gh_repo.split("/", 1)
-        BASE_URL = f"https://{owner}.github.io/{repo}"
-        print(f"⚠️ BASE_URL 未设置，从 GITHUB_REPOSITORY 推断: {BASE_URL}")
-
-SITE_DIR = Path("site")
+ROOT_DIR = Path(__file__).resolve().parent.parent
+SITE_DIR = ROOT_DIR / "site"
+STATE_FILE = ROOT_DIR / "state.json"
 PODCAST_DIR = SITE_DIR / PODCAST_SLUG
-TRANSCRIPTS_DIR = PODCAST_DIR / "transcripts"
-STATE_FILE = Path("state.json")
-PROXY_CACHE_FILE = Path(".china_proxy_cache.json")
+TRANSCRIPT_DIR = PODCAST_DIR / "transcripts"
+SITE_INDEX = SITE_DIR / "index.html"
 
-PODCAST_DIR.mkdir(parents=True, exist_ok=True)
-TRANSCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
+PODCAST_NS = "https://podcastindex.org/namespace/1.0"
+NSMAP = {"podcast": PODCAST_NS}
 
-BAD_PROXIES = set()
-BAD_PROXIES_LOCK = threading.Lock()
-PROXY_STOP_EVENT = threading.Event()
-PROXY_WINNER_LOCK = threading.Lock()
+USER_AGENT = "PodcastTranscriptBot/1.0 (+https://github.com/)"
 
-ABBREVIATIONS = (
-    r"\b(?:Mr|Mrs|Ms|Dr|Prof|Sr|Jr|vs|vol|vols|inc|etc|eg|ie|et al|"
-    r"st|ave|blvd|rd|dept|univ|No|pp|par|Ltd|Co|Corp|Plc|LLC|U\.S|"
-    r"U\.K|e\.g|i\.e)\."
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
 )
+log = logging.getLogger("podcast-transcriber")
 
-PROXY_API_URLS = [
-    (
-        "ProxyScrape",
-        "https://api.proxyscrape.com/v4/free-proxy-list/get"
-        "?request=display_proxies&proxy_format=protocolipport"
-        "&format=text&country=cn",
-    ),
-]
 
-GEOIP_URL = "https://ipwho.is/"
+# ============================================================
+# 通用工具
+# ============================================================
 
-PROXY_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/138.0 Safari/537.36"
+
+def ensure_directories() -> None:
+    TRANSCRIPT_DIR.mkdir(parents=True, exist_ok=True)
+    SITE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def safe_filename(value: str, max_length: int = 120) -> str:
+    """生成跨平台安全文件名。"""
+    value = html.unescape(value or "").strip()
+    value = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", value)
+    value = re.sub(r"\s+", " ", value)
+    value = value.strip(" .")
+    if not value:
+        value = "untitled"
+    return value[:max_length].rstrip(" .") or "untitled"
+
+
+def stable_id(*parts: str) -> str:
+    raw = "\n".join(str(p or "") for p in parts)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def load_state() -> dict[str, Any]:
+    if not STATE_FILE.exists():
+        return {"version": 1, "podcasts": {}}
+
+    try:
+        data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("state.json 根节点不是对象")
+        data.setdefault("version", 1)
+        data.setdefault("podcasts", {})
+        return data
+    except Exception as exc:
+        # 不自动覆盖损坏的状态文件，避免丢失已有进度。
+        raise RuntimeError(f"无法读取 {STATE_FILE}: {exc}") from exc
+
+
+def save_state(state: dict[str, Any]) -> None:
+    tmp = STATE_FILE.with_suffix(".json.tmp")
+    tmp.write_text(
+        json.dumps(state, ensure_ascii=False, indent=2),
+        encoding="utf-8",
     )
-}
+    tmp.replace(STATE_FILE)
 
 
-# ============================================================
-# State / 文件名 / 时间
-# ============================================================
-
-
-def load_state():
-    if STATE_FILE.exists():
-        with open(STATE_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {"podcasts": {}}
-
-
-def save_state(state):
-    with open(STATE_FILE, "w", encoding="utf-8") as f:
-        json.dump(state, f, ensure_ascii=False, indent=2)
-
-
-def get_podcast_state(state):
-    podcasts = state.setdefault("podcasts", {})
-    if PODCAST_SLUG not in podcasts:
-        podcasts[PODCAST_SLUG] = {
-            "feed_url": FEED_URL,
-            "processed": {},
-            "total_processed": 0,
-            "updated_at": None,
-        }
-    return podcasts[PODCAST_SLUG]
-
-
-def safe_filename(title):
-    keep = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_. "
-    filename = "".join(c if c in keep else "_" for c in title)
-    return filename.strip().replace(" ", "_")[:80] or "untitled"
-
-
-def format_vtt_time(seconds):
-    seconds = max(0.0, float(seconds))
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    secs = int(seconds % 60)
-    millis = int((seconds - int(seconds)) * 1000)
+def format_timestamp(seconds: float) -> str:
+    """秒数转换为 WebVTT 时间戳：HH:MM:SS.mmm。"""
+    milliseconds = max(0, int(round(float(seconds) * 1000)))
+    hours, remainder = divmod(milliseconds, 3_600_000)
+    minutes, remainder = divmod(remainder, 60_000)
+    secs, millis = divmod(remainder, 1000)
     return f"{hours:02d}:{minutes:02d}:{secs:02d}.{millis:03d}"
 
 
+def clean_text(value: str) -> str:
+    value = html.unescape(value or "")
+    value = value.replace("\ufeff", "")
+    return re.sub(r"\s+", " ", value).strip()
+
+
 # ============================================================
-# 句子切分与字幕重分段
+# RSS 解析与节目识别
 # ============================================================
 
 
-def split_sentences(text):
+def get_entry_audio_url(entry: Any) -> str:
+    """从 feedparser entry 中获取音频地址。"""
+    for enclosure in getattr(entry, "enclosures", []) or []:
+        href = enclosure.get("href") or enclosure.get("url")
+        mime = (enclosure.get("type") or "").lower()
+        if href and (
+            mime.startswith("audio/")
+            or not mime
+            or any(
+                ext in href.lower()
+                for ext in (".mp3", ".m4a", ".aac", ".ogg", ".wav", ".opus")
+            )
+        ):
+            return href
+
+    for link in getattr(entry, "links", []) or []:
+        href = link.get("href")
+        rel = (link.get("rel") or "").lower()
+        mime = (link.get("type") or "").lower()
+        if href and (rel == "enclosure" or mime.startswith("audio/")):
+            return href
+
+    return ""
+
+
+def entry_identity(entry: Any, audio_url: str) -> str:
+    guid = clean_text(getattr(entry, "id", "") or "")
+    if guid:
+        return guid
+    return stable_id(
+        clean_text(getattr(entry, "title", "") or ""),
+        audio_url,
+        clean_text(getattr(entry, "published", "") or ""),
+    )
+
+
+def get_feed_entries(feed_url: str) -> tuple[Any, list[Any]]:
+    log.info("读取 RSS：%s", feed_url)
+    parsed = feedparser.parse(feed_url)
+
+    if parsed.bozo and not parsed.entries:
+        raise RuntimeError(
+            f"RSS 解析失败：{getattr(parsed, 'bozo_exception', '未知错误')}"
+        )
+
+    if not parsed.entries:
+        raise RuntimeError("RSS 中没有找到节目条目。")
+
+    return parsed, list(parsed.entries)
+
+
+# ============================================================
+# 音频下载
+# ============================================================
+
+
+def download_audio(url: str, output_path: Path) -> Path:
+    """流式下载音频，限制最大文件大小。"""
+    if not url:
+        raise ValueError("节目没有音频 enclosure URL。")
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    max_bytes = AUDIO_MAX_MB * 1024 * 1024
+
+    headers = {
+        "User-Agent": USER_AGENT,
+        "Accept": "*/*",
+    }
+
+    log.info("下载音频：%s", url)
+
+    with requests.get(
+        url,
+        headers=headers,
+        stream=True,
+        timeout=(20, AUDIO_TIMEOUT),
+        allow_redirects=True,
+    ) as response:
+        response.raise_for_status()
+
+        content_length = response.headers.get("Content-Length")
+        if content_length:
+            try:
+                if int(content_length) > max_bytes:
+                    raise RuntimeError(
+                        f"音频大小超过限制：{int(content_length) / 1024 / 1024:.1f} MB"
+                    )
+            except ValueError:
+                pass
+
+        written = 0
+        with output_path.open("wb") as out:
+            for chunk in response.iter_content(chunk_size=1024 * 1024):
+                if not chunk:
+                    continue
+                written += len(chunk)
+                if written > max_bytes:
+                    raise RuntimeError(f"下载音频超过 {AUDIO_MAX_MB} MB 限制，已停止。")
+                out.write(chunk)
+
+    if not output_path.exists() or output_path.stat().st_size == 0:
+        raise RuntimeError("音频下载后文件为空。")
+
+    log.info("音频下载完成：%.1f MB", output_path.stat().st_size / 1024 / 1024)
+    return output_path
+
+
+# ============================================================
+# Whisper 转录与字幕切分
+# ============================================================
+
+
+def split_into_sentences(text: str) -> list[str]:
+    """
+    尽量按句末标点切分。
+    保留英文缩写的处理采用简单规则，不追求完美 NLP 分句。
+    """
+    text = clean_text(text)
     if not text:
         return []
 
-    protected = re.sub(
-        ABBREVIATIONS,
-        lambda m: m.group(0).replace(".", "##DOT##"),
-        text,
-        flags=re.IGNORECASE,
+    # 避免常见缩写中的句点被错误视为句末。
+    protected = text
+    abbreviations = {
+        "Mr.": "Mr<DOT>",
+        "Mrs.": "Mrs<DOT>",
+        "Ms.": "Ms<DOT>",
+        "Dr.": "Dr<DOT>",
+        "Prof.": "Prof<DOT>",
+        "St.": "St<DOT>",
+        "vs.": "vs<DOT>",
+        "e.g.": "e<DOT>g<DOT>",
+        "i.e.": "i<DOT>e<DOT>",
+    }
+    for old, new in abbreviations.items():
+        protected = re.sub(re.escape(old), new, protected, flags=re.IGNORECASE)
+
+    pieces = re.split(r"(?<=[.!?])\s+", protected)
+    results = []
+    for piece in pieces:
+        piece = piece.replace("<DOT>", ".").strip()
+        if piece:
+            results.append(piece)
+    return results
+
+
+def whisper_transcribe(audio_path: Path) -> list[dict[str, Any]]:
+    log.info("加载 Whisper 模型：%s", WHISPER_MODEL)
+
+    # GitHub-hosted Ubuntu runner 通常没有可用 NVIDIA GPU。
+    model = WhisperModel(
+        WHISPER_MODEL,
+        device="cpu",
+        compute_type="int8",
     )
 
-    parts = re.split(r"(?<=[.!?])\s+", protected)
-    return [p.replace("##DOT##", ".").strip() for p in parts if p.strip()]
-
-
-def resegment(raw_segments):
-    entries = []
-
-    for seg in raw_segments:
-        text = seg.text.strip()
-        if text:
-            entries.append(
-                {
-                    "start": float(seg.start),
-                    "end": float(seg.end),
-                    "text": text,
-                }
-            )
-
-    merged = []
-    buf = {"text": "", "start": 0.0, "end": 0.0}
-
-    for entry in entries:
-        if not buf["text"]:
-            buf = dict(entry)
-        else:
-            buf["text"] += " " + entry["text"]
-            buf["end"] = entry["end"]
-
-        if re.search(r'[.!?]["\']?$', buf["text"]):
-            merged.append(dict(buf))
-            buf = {"text": "", "start": 0.0, "end": 0.0}
-
-    if buf["text"]:
-        merged.append(buf)
-
-    final = []
-
-    for item in merged:
-        sentences = split_sentences(item["text"])
-
-        if len(sentences) <= 1:
-            final.append(item)
-            continue
-
-        total_chars = sum(len(s) for s in sentences) or 1
-        duration = max(0.0, item["end"] - item["start"])
-        cursor = item["start"]
-
-        for index, sentence in enumerate(sentences):
-            if index == len(sentences) - 1:
-                end = item["end"]
-            else:
-                end = cursor + duration * len(sentence) / total_chars
-
-            final.append(
-                {
-                    "start": cursor,
-                    "end": max(cursor, end),
-                    "text": sentence,
-                }
-            )
-            cursor = end
-
-    return final
-
-
-def write_bilingual_vtt(sentences, path):
-    with open(path, "w", encoding="utf-8") as f:
-        f.write("WEBVTT\n\n")
-
-        for item in sentences:
-            start = format_vtt_time(item["start"])
-            end = format_vtt_time(item["end"])
-            en = item.get("en", "").strip().replace("\n", " ")
-            zh = item.get("zh", "").strip().replace("\n", " ")
-
-            f.write(f"{start} --> {end}\n{en}\n{zh}\n\n")
-
-
-# ============================================================
-# 翻译模块：批量合并、限流退避、有限重试
-# ============================================================
-
-
-class TranslationError(RuntimeError):
-    """翻译服务持续失败或返回无法可靠拆分的结果。"""
-
-
-def is_retryable_translation_error(exc):
-    message = f"{type(exc).__name__}: {exc}".lower()
-
-    retry_markers = (
-        "toomanyrequests",
-        "too many requests",
-        "429",
-        "rate limit",
-        "timed out",
-        "timeout",
-        "connection",
-        "503",
-        "502",
-        "500",
-        "server error",
-        "temporarily unavailable",
-        "remote end closed",
+    segments, info = model.transcribe(
+        str(audio_path),
+        language="en",
+        task="transcribe",
+        beam_size=5,
+        vad_filter=True,
+        condition_on_previous_text=True,
     )
 
-    # GoogleTranslator 返回的常见网络/限流异常可重试。
-    return any(marker in message for marker in retry_markers)
+    log.info(
+        "开始转录：language=%s，预计时长=%.1f 秒",
+        getattr(info, "language", "unknown"),
+        getattr(info, "duration", 0.0) or 0.0,
+    )
 
-
-def translate_with_retry(text, translator):
-    """
-    对一次翻译请求进行有限重试。
-
-    达到最大重试次数后直接报错，不无限等待，
-    也不自动将失败批次拆成大量单句请求。
-    """
-    for attempt in range(1, TRANSLATE_MAX_RETRIES + 1):
-        try:
-            result = translator.translate(text)
-
-            if result is None or not str(result).strip():
-                raise TranslationError("翻译服务返回空结果")
-
-            return str(result).strip()
-
-        except Exception as exc:
-            if attempt >= TRANSLATE_MAX_RETRIES:
-                raise TranslationError(
-                    f"翻译失败，已达到最大重试次数 "
-                    f"{TRANSLATE_MAX_RETRIES}: {type(exc).__name__}: {exc}"
-                ) from exc
-
-            if not is_retryable_translation_error(exc):
-                raise TranslationError(
-                    f"不可重试的翻译错误: {type(exc).__name__}: {exc}"
-                ) from exc
-
-            delay = min(
-                TRANSLATE_BASE_DELAY * (2 ** (attempt - 1)),
-                TRANSLATE_MAX_DELAY,
-            )
-            delay += random.uniform(0.0, min(3.0, delay * 0.15))
-
-            print(
-                f"   ⚠️ 翻译请求失败 "
-                f"({attempt}/{TRANSLATE_MAX_RETRIES}): "
-                f"{type(exc).__name__}: {exc}"
-            )
-            print(f"   ⏳ {delay:.1f} 秒后重试...")
-            time.sleep(delay)
-
-    raise TranslationError("翻译流程意外结束")
-
-
-def build_translation_batches(sentences):
-    """按句数和字符数分批；单条超长句独立成批。"""
-    batches = []
-    current = []
-    current_chars = 0
-
-    for index, item in enumerate(sentences):
-        text = item.get("text", "").strip()
-
+    raw_segments: list[dict[str, Any]] = []
+    for segment in segments:
+        text = clean_text(segment.text)
         if not text:
             continue
-
-        estimated = len(text)
-
-        should_flush = current and (
-            len(current) >= TRANSLATE_BATCH_SIZE
-            or current_chars + estimated > TRANSLATE_BATCH_MAX_CHARS
+        raw_segments.append(
+            {
+                "start": max(0.0, float(segment.start)),
+                "end": max(float(segment.start) + 0.05, float(segment.end)),
+                "text": text,
+            }
         )
 
-        if should_flush:
+    if not raw_segments:
+        raise RuntimeError("Whisper 没有识别到任何语音内容。")
+
+    cues = resegment_whisper_segments(raw_segments)
+    log.info("转录完成：生成 %d 条英文字幕。", len(cues))
+    return cues
+
+
+def resegment_whisper_segments(
+    segments: list[dict[str, Any]],
+    max_chars: int = 180,
+) -> list[dict[str, Any]]:
+    """
+    将 Whisper 片段进一步拆成较适合阅读的句子。
+    若一个原始片段拆成多句，按字符长度近似分配时间段。
+    """
+    cues: list[dict[str, Any]] = []
+
+    for segment in segments:
+        text = segment["text"]
+        start = float(segment["start"])
+        end = float(segment["end"])
+        duration = max(0.05, end - start)
+
+        sentences = split_into_sentences(text)
+        if not sentences:
+            continue
+
+        # 长句再按逗号、分号等软切分，避免字幕过长。
+        expanded: list[str] = []
+        for sentence in sentences:
+            if len(sentence) <= max_chars:
+                expanded.append(sentence)
+                continue
+
+            parts = re.split(r"(?<=[,;:])\s+", sentence)
+            current = ""
+            for part in parts:
+                if not current:
+                    current = part
+                elif len(current) + 1 + len(part) <= max_chars:
+                    current += " " + part
+                else:
+                    expanded.append(current.strip())
+                    current = part
+            if current.strip():
+                expanded.append(current.strip())
+
+        if not expanded:
+            continue
+
+        weights = [max(1, len(s)) for s in expanded]
+        total_weight = sum(weights)
+        cursor = start
+
+        for index, sentence in enumerate(expanded):
+            if index == len(expanded) - 1:
+                cue_end = end
+            else:
+                cue_end = cursor + duration * weights[index] / total_weight
+
+            cue_end = max(cursor + 0.05, min(cue_end, end))
+            cues.append(
+                {
+                    "start": cursor,
+                    "end": cue_end,
+                    "en": sentence,
+                    "zh": "",
+                }
+            )
+            cursor = cue_end
+
+    # 修正浮点误差导致的时间倒退或重叠。
+    previous_end = 0.0
+    for cue in cues:
+        cue["start"] = max(previous_end, float(cue["start"]))
+        cue["end"] = max(cue["start"] + 0.05, float(cue["end"]))
+        previous_end = cue["end"]
+
+    return cues
+
+
+# ============================================================
+# Gemini 分段翻译
+# ============================================================
+
+
+def create_gemini_client() -> genai.Client:
+    if not GEMINI_API_KEY:
+        raise RuntimeError(
+            "缺少 GEMINI_API_KEY。请在 GitHub 仓库 Settings -> Secrets and variables "
+            "-> Actions 中添加 GEMINI_API_KEY。"
+        )
+    return genai.Client(api_key=GEMINI_API_KEY)
+
+
+def build_translation_batches(
+    cues: list[dict[str, Any]],
+    batch_size: int,
+    max_chars: int,
+) -> list[list[dict[str, Any]]]:
+    """按条数和字符数双重限制分批。"""
+    batches: list[list[dict[str, Any]]] = []
+    current: list[dict[str, Any]] = []
+    current_chars = 0
+
+    for cue in cues:
+        text = cue["en"]
+        text_len = len(text)
+
+        if current and (
+            len(current) >= batch_size or current_chars + text_len > max_chars
+        ):
             batches.append(current)
             current = []
             current_chars = 0
 
-        current.append((index, text))
-        current_chars += estimated
+        current.append(cue)
+        current_chars += text_len
 
     if current:
         batches.append(current)
@@ -353,946 +471,665 @@ def build_translation_batches(sentences):
     return batches
 
 
-def translate_batch(translator, batch):
-    """
-    合并多句为一个请求，成功后按专用标记拆分。
-
-    如果服务端改写了标记或返回的句数不一致，
-    不猜测句子对应关系，直接报错，防止字幕错位。
-    """
-    separator = "\nZXQSEPZXQ\n"
-    texts = [text for _, text in batch]
-    combined = separator.join(texts)
-
-    translated = translate_with_retry(combined, translator)
-    pieces = [piece.strip() for piece in translated.split(separator)]
-
-    if len(pieces) != len(texts) or any(not p for p in pieces):
-        raise TranslationError(
-            "批量翻译结果无法可靠拆分："
-            f"预期 {len(texts)} 条，实际 {len(pieces)} 条。"
-            "为避免字幕错位，已停止本次任务。"
-        )
-
-    return pieces
-
-
-def translate_sentences(sentences):
-    from deep_translator import GoogleTranslator
-
-    translator = GoogleTranslator(source="en", target="zh-CN")
-    results = [
-        {
-            **item,
-            "en": item.get("text", "").strip(),
-            "zh": "",
-        }
-        for item in sentences
-    ]
-
-    batches = build_translation_batches(sentences)
-    total_batches = len(batches)
-
-    if not batches:
-        print("   ℹ️ 没有需要翻译的句子")
-        return results
-
-    print(
-        f"   翻译设置：每批最多 {TRANSLATE_BATCH_SIZE} 句，"
-        f"字符上限 {TRANSLATE_BATCH_MAX_CHARS}，"
-        f"批次间隔 {TRANSLATE_BATCH_DELAY:.1f}s，"
-        f"最大重试 {TRANSLATE_MAX_RETRIES} 次"
-    )
-
-    for batch_number, batch in enumerate(batches, 1):
-        print(f"   🌐 翻译批次 {batch_number}/{total_batches}，" f"{len(batch)} 句")
-
-        try:
-            translated_pieces = translate_batch(translator, batch)
-
-        except Exception as exc:
-            # 不在此处逐句回退，避免批量请求失败后产生请求风暴。
-            raise TranslationError(
-                f"第 {batch_number}/{total_batches} 批翻译失败。"
-                "请稍后重试，或减小 TRANSLATE_BATCH_SIZE。"
-                f"原因：{exc}"
-            ) from exc
-
-        for (original_index, _), zh in zip(batch, translated_pieces):
-            results[original_index]["zh"] = zh
-
-        done_sentences = sum(len(b) for b in batches[:batch_number])
-        total_sentences = sum(len(b) for b in batches)
-
-        print(f"   ✅ 翻译进度：{done_sentences}/{total_sentences} 句")
-
-        if batch_number < total_batches and TRANSLATE_BATCH_DELAY:
-            time.sleep(TRANSLATE_BATCH_DELAY)
-
-    return results
-
-
-# ============================================================
-# RSS enclosure
-# ============================================================
-
-
-def get_audio_url(entry):
-    for enc in entry.get("enclosures", []):
-        href = enc.get("href", "") or enc.get("url", "")
-        type_ = enc.get("type", "")
-        clean_url = href.lower().split("?")[0]
-
-        if "audio" in type_ or clean_url.endswith(
-            (".mp3", ".m4a", ".wav", ".aac", ".ogg", ".opus")
-        ):
-            return href
-
-    return None
-
-
-# ============================================================
-# 中国免费代理与缓存
-# ============================================================
-
-
-def check_socks_support():
-    try:
-        import socks  # noqa
-
-        print("   ✅ PySocks 已安装，支持 SOCKS4/SOCKS5")
-        return True
-    except ImportError:
-        print('   ⚠️ 未检测到 PySocks；SOCKS 代理需要 pip install "requests[socks]"')
-        return False
-
-
-def is_socks_proxy(proxy):
-    return proxy.lower().startswith(
-        ("socks4://", "socks4a://", "socks5://", "socks5h://")
-    )
-
-
-def mark_bad_proxy(proxy):
-    with BAD_PROXIES_LOCK:
-        BAD_PROXIES.add(proxy)
-
-
-def is_bad_proxy(proxy):
-    with BAD_PROXIES_LOCK:
-        return proxy in BAD_PROXIES
-
-
-def load_proxy_cache():
-    if not PROXY_CACHE_FILE.exists():
-        return []
+def parse_json_array(text: str) -> list[Any]:
+    """容忍模型偶尔返回 Markdown 代码围栏。"""
+    text = (text or "").strip()
+    text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s*```$", "", text)
 
     try:
-        with open(PROXY_CACHE_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        if time.time() - data.get("created_at", 0) > PROXY_CACHE_TTL:
-            print("   ℹ️ 中国代理缓存已过期")
-            return []
-
-        proxies = data.get("proxies", [])
-        if not isinstance(proxies, list):
-            return []
-
-        print(f"   ♻️ 使用代理缓存：{len(proxies)} 个")
-        return proxies
-
-    except Exception as exc:
-        print(f"   ⚠️ 读取代理缓存失败：{type(exc).__name__}: {exc}")
-        return []
-
-
-def save_proxy_cache(proxies):
-    try:
-        with open(PROXY_CACHE_FILE, "w", encoding="utf-8") as f:
-            json.dump(
-                {"created_at": time.time(), "proxies": proxies},
-                f,
-                ensure_ascii=False,
-                indent=2,
-            )
-    except Exception as exc:
-        print(f"   ⚠️ 保存代理缓存失败：{type(exc).__name__}: {exc}")
-
-
-def get_china_proxies():
-    cached = load_proxy_cache()
-    if cached:
-        random.shuffle(cached)
-        return cached
-
-    print("🇨🇳 获取中国免费代理列表...")
-    all_proxies = []
-
-    for source_name, api_url in PROXY_API_URLS:
-        print(f"   📡 来源：{source_name}")
-
-        try:
-            response = requests.get(api_url, timeout=30, headers=PROXY_HEADERS)
-            response.raise_for_status()
-            text = response.text
-        except Exception as exc:
-            print(f"   ⚠️ {source_name} 获取失败：{type(exc).__name__}: {exc}")
-            continue
-
-        count = 0
-        for line in text.splitlines():
-            line = line.strip().replace(" ", "")
-            if not line:
-                continue
-
-            if "://" not in line:
-                line = "http://" + line
-
-            if not re.match(
-                r"^(http|https|socks4|socks4a|socks5|socks5h)://[^:]+:\d+$",
-                line,
-                re.I,
-            ):
-                continue
-
-            if line not in all_proxies:
-                all_proxies.append(line)
-                count += 1
-
-        print(f"      获取 {count} 个")
-
-    random.shuffle(all_proxies)
-    print(f"   📦 合计代理：{len(all_proxies)}")
-
-    if all_proxies:
-        save_proxy_cache(all_proxies)
-
-    return all_proxies
-
-
-def get_proxy_geoip(proxy):
-    if PROXY_STOP_EVENT.is_set():
-        return None
-
-    try:
-        response = requests.get(
-            GEOIP_URL,
-            timeout=PROXY_TEST_TIMEOUT,
-            proxies={"http": proxy, "https": proxy},
-            headers=PROXY_HEADERS,
-        )
-        response.raise_for_status()
-        data = response.json()
-
-        if not data.get("success", False):
-            return None
-
-        return {
-            "ip": data.get("ip"),
-            "country_code": data.get("country_code"),
-            "country": data.get("country"),
-        }
-
-    except Exception as exc:
-        print(f"   ❌ [{proxy}] GeoIP 失败：{type(exc).__name__}: {exc}")
-        return None
-
-
-# ============================================================
-# 音频验证与 SHA256
-# ============================================================
-
-
-def validate_audio_file(path):
-    if not path.exists():
-        raise RuntimeError("音频文件不存在")
-
-    size = path.stat().st_size
-    if size < 1024:
-        raise RuntimeError(f"音频文件异常：{size} bytes")
-
-    with open(path, "rb") as f:
-        header = f.read(32)
-
-    valid_audio = (
-        header.startswith(b"ID3")
-        or (len(header) >= 2 and header[0] == 0xFF and (header[1] & 0xE0) == 0xE0)
-        or (len(header) >= 12 and header[4:8] == b"ftyp")
-        or header.startswith(b"OggS")
-    )
-
-    if not valid_audio:
-        raise RuntimeError("下载内容不是已识别的音频格式")
-
-    return size
-
-
-def calculate_sha256(path):
-    sha256 = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            sha256.update(chunk)
-    return sha256.hexdigest()
-
-
-# ============================================================
-# 单代理完整下载
-# ============================================================
-
-
-def proxy_download_worker(index, total, proxy, audio_url, race_dir, headers):
-    if PROXY_STOP_EVENT.is_set() or is_bad_proxy(proxy):
-        return {"ok": False, "proxy": proxy, "stopped": True}
-
-    if is_socks_proxy(proxy):
-        try:
-            import socks  # noqa
-        except ImportError:
-            mark_bad_proxy(proxy)
-            return {"ok": False, "proxy": proxy, "reason": "未安装 PySocks"}
-
-    temp_path = race_dir / (
-        f"{index:04d}_{hashlib.md5(proxy.encode()).hexdigest()[:12]}.part"
-    )
-
-    try:
-        print(f"\n🚀 [{index}/{total}] 开始代理竞速：{proxy}")
-        geo = get_proxy_geoip(proxy)
-
-        if PROXY_STOP_EVENT.is_set():
-            return {"ok": False, "proxy": proxy, "stopped": True}
-
-        if not geo:
-            mark_bad_proxy(proxy)
-            return {"ok": False, "proxy": proxy, "reason": "GeoIP 请求失败"}
-
-        public_ip = geo.get("ip")
-        country_code = (geo.get("country_code") or "").upper()
-        country = geo.get("country") or ""
-
-        print(f"   🌍 [{proxy}] IP={public_ip} Country={country_code}")
-
-        if country_code != "CN":
-            mark_bad_proxy(proxy)
-            return {
-                "ok": False,
-                "proxy": proxy,
-                "reason": f"不是中国大陆 IP：{country_code}",
-            }
-
-        if PROXY_STOP_EVENT.is_set():
-            return {"ok": False, "proxy": proxy, "stopped": True}
-
-        total_bytes = 0
-        with requests.get(
-            audio_url,
-            timeout=(AUDIO_CONNECT_TIMEOUT, AUDIO_READ_TIMEOUT),
-            headers=headers,
-            proxies={"http": proxy, "https": proxy},
-            allow_redirects=True,
-            stream=True,
-        ) as response:
-            response.raise_for_status()
-            content_type = response.headers.get("Content-Type", "").lower()
-
-            print(f"   📡 [{proxy}] HTTP {response.status_code}")
-            print(f"   📦 [{proxy}] Content-Type：{content_type}")
-            print(f"   🔗 [{proxy}] 最终 URL：{response.url}")
-
-            if "text/html" in content_type:
-                raise RuntimeError("服务器返回 HTML")
-
-            with open(temp_path, "wb") as f:
-                for chunk in response.iter_content(chunk_size=DOWNLOAD_CHUNK_SIZE):
-                    if PROXY_STOP_EVENT.is_set():
-                        return {"ok": False, "proxy": proxy, "stopped": True}
-                    if chunk:
-                        f.write(chunk)
-                        total_bytes += len(chunk)
-
-        if PROXY_STOP_EVENT.is_set():
-            return {"ok": False, "proxy": proxy, "stopped": True}
-
-        validate_audio_file(temp_path)
-        digest = calculate_sha256(temp_path)
-
-        print(f"   ✅ [{proxy}] 完整下载成功，大小 {total_bytes / 1024 / 1024:.1f} MB")
-        print(f"   SHA256：{digest}")
-
-        with PROXY_WINNER_LOCK:
-            if PROXY_STOP_EVENT.is_set():
-                return {"ok": False, "proxy": proxy, "stopped": True}
-            PROXY_STOP_EVENT.set()
-            print("\n🏆 找到第一个完整下载成功的中国代理！")
-
-        return {
-            "ok": True,
-            "proxy": proxy,
-            "public_ip": public_ip,
-            "country_code": country_code,
-            "country": country,
-            "temp_path": str(temp_path),
-            "size": total_bytes,
-            "sha256": digest,
-        }
-
-    except Exception as exc:
-        mark_bad_proxy(proxy)
-        print(f"   ❌ [{proxy}] {type(exc).__name__}: {exc}")
-        return {"ok": False, "proxy": proxy, "reason": f"{type(exc).__name__}: {exc}"}
-
-
-# ============================================================
-# 多线程代理竞速
-# ============================================================
-
-
-def download_audio(audio_url, output_path):
-    headers = {
-        "User-Agent": PROXY_HEADERS["User-Agent"],
-        "Accept": "audio/mpeg,audio/*;q=0.9,*/*;q=0.8",
-    }
-
-    if not USE_CHINA_PROXY:
-        raise RuntimeError("USE_CHINA_PROXY=false：不允许使用 Runner IP 下载")
-
-    proxies = get_china_proxies()
-    if not proxies:
-        raise RuntimeError("无法获取中国代理，任务终止")
-
-    proxies = proxies[:MAX_PROXY_ATTEMPTS]
-    PROXY_STOP_EVENT.clear()
-
-    with BAD_PROXIES_LOCK:
-        BAD_PROXIES.clear()
-
-    race_dir = output_path.parent / ".proxy_race"
-    race_dir.mkdir(parents=True, exist_ok=True)
-
-    for old_part in race_dir.glob("*.part"):
-        try:
-            old_part.unlink()
-        except Exception:
-            pass
-
-    total = len(proxies)
-    worker_count = max(1, min(PROXY_WORKERS, total))
-
-    print("\n🏁 代理竞速开始")
-    print(f"   RSS enclosure：{audio_url}")
-    print(f"   代理总数：{total}")
-    print(f"   并发线程：{worker_count}")
-
-    executor = ThreadPoolExecutor(
-        max_workers=worker_count, thread_name_prefix="proxy-race"
-    )
-    pending = set()
-    next_index = 0
-    winner_result = None
-    completed_count = 0
-
-    def submit_next():
-        nonlocal next_index
-
-        while next_index < total:
-            proxy = proxies[next_index]
-            index = next_index + 1
-            next_index += 1
-
-            if is_bad_proxy(proxy):
-                continue
-
-            return executor.submit(
-                proxy_download_worker,
-                index,
-                total,
-                proxy,
-                audio_url,
-                race_dir,
-                headers,
-            )
-
-        return None
-
-    try:
-        while len(pending) < worker_count:
-            future = submit_next()
-            if future is None:
-                break
-            pending.add(future)
-
-        while pending:
-            done, pending = wait(pending, return_when=FIRST_COMPLETED)
-
-            for future in done:
-                completed_count += 1
-                try:
-                    result = future.result()
-                except Exception as exc:
-                    print(f"   ⚠️ Worker 异常：{type(exc).__name__}: {exc}")
-                    result = None
-
-                if result and result.get("ok"):
-                    winner_result = result
-                    PROXY_STOP_EVENT.set()
-                    break
-
-            if winner_result:
-                print("🛑 Winner 已产生，等待其他代理退出...")
-                break
-
-            while len(pending) < worker_count and not PROXY_STOP_EVENT.is_set():
-                future = submit_next()
-                if future is None:
-                    break
-                pending.add(future)
-
-            print(f"📊 进度：已完成 {completed_count}/{total}，运行中 {len(pending)}")
-
-    finally:
-        PROXY_STOP_EVENT.set()
-        executor.shutdown(wait=True, cancel_futures=True)
-
-    print("🧹 所有代理线程已退出")
-
-    if not winner_result:
-        for part_file in race_dir.glob("*.part"):
-            try:
-                part_file.unlink()
-            except Exception:
-                pass
-        try:
-            race_dir.rmdir()
-        except Exception:
-            pass
-        raise RuntimeError("所有中国代理均无法下载音频")
-
-    winner_proxy = winner_result["proxy"]
-    winner_temp = Path(winner_result["temp_path"])
-
-    if not winner_temp.exists():
-        raise RuntimeError("Winner 已产生，但 winner 临时音频不存在")
-
-    if output_path.exists():
-        output_path.unlink()
-
-    winner_temp.replace(output_path)
-
-    for part_file in race_dir.glob("*.part"):
-        try:
-            part_file.unlink()
-        except Exception as exc:
-            print(f"   ⚠️ 清理临时文件失败：{part_file}: {exc}")
-
-    try:
-        race_dir.rmdir()
-    except Exception:
+        value = json.loads(text)
+        if isinstance(value, list):
+            return value
+    except json.JSONDecodeError:
         pass
 
-    final_size = validate_audio_file(output_path)
-    final_sha256 = calculate_sha256(output_path)
+    # 尝试从回答中提取第一个 JSON 数组。
+    start = text.find("[")
+    end = text.rfind("]")
+    if start >= 0 and end > start:
+        value = json.loads(text[start : end + 1])
+        if isinstance(value, list):
+            return value
 
-    print("\n✅ 代理竞速完成")
-    print(f"   Proxy：{winner_proxy}")
-    print(f"   Public IP：{winner_result.get('public_ip')}")
-    print(f"   Country：{winner_result.get('country_code')}")
-    print(f"   Audio：{output_path}")
-    print(f"   Size：{final_size / 1024 / 1024:.1f} MB")
-    print(f"   SHA256：{final_sha256}")
+    raise ValueError("Gemini 没有返回有效的 JSON 数组。")
 
-    return {
-        "proxy": winner_proxy,
-        "public_ip": winner_result.get("public_ip"),
-        "country_code": winner_result.get("country_code"),
-        "country": winner_result.get("country"),
-        "sha256": final_sha256,
-        "size": final_size,
-    }
+
+def translate_batch_once(
+    client: genai.Client,
+    cues: list[dict[str, Any]],
+) -> list[str]:
+    """
+    每批发送一组英文字幕，要求模型按原顺序返回等长中文数组。
+    不允许模型修改时间戳；时间戳由程序在最终输出时原样生成。
+    """
+    source_texts = [cue["en"] for cue in cues]
+
+    prompt = (
+        "你是一名专业的英译简体中文字幕译者。\n"
+        "请把下方 JSON 数组中的英文字幕逐条翻译为自然、准确、易读的简体中文。\n"
+        "要求：\n"
+        "1. 严格按原顺序逐条翻译，一条英文对应一条中文。\n"
+        "2. 必须返回与输入数量完全相同的数组，不能合并、拆分、漏译或额外增加条目。\n"
+        "3. 保留人物姓名、专有名词、数字、语气、幽默和上下文含义。\n"
+        "4. 不要解释，不要添加译者注，不要返回英文原文。\n"
+        "5. 只返回合法 JSON 数组，数组每项为一个中文字符串；不要 Markdown 围栏。\n\n"
+        "待翻译字幕 JSON：\n" + json.dumps(source_texts, ensure_ascii=False)
+    )
+
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            temperature=0.2,
+            response_mime_type="application/json",
+        ),
+    )
+
+    translated = parse_json_array(response.text or "")
+
+    if len(translated) != len(source_texts):
+        raise ValueError(
+            f"字幕数量不匹配：输入 {len(source_texts)} 条，"
+            f"Gemini 返回 {len(translated)} 条。"
+        )
+
+    cleaned: list[str] = []
+    for index, item in enumerate(translated):
+        if not isinstance(item, str):
+            raise ValueError(f"第 {index + 1} 条翻译不是字符串。")
+
+        item = clean_text(item)
+        if not item:
+            raise ValueError(f"第 {index + 1} 条翻译为空。")
+
+        # 如果某项看起来明显未翻译，不接受整批结果。
+        # 专有名词、缩写、单词字幕可能本来就是英文，因此只检查较长句子。
+        source = source_texts[index]
+        if len(source) >= 18 and item == source:
+            raise ValueError(f"第 {index + 1} 条疑似未翻译。")
+
+        cleaned.append(item)
+
+    return cleaned
+
+
+def translate_batch_recursive(
+    client: genai.Client,
+    cues: list[dict[str, Any]],
+    depth: int = 0,
+) -> None:
+    """
+    先重试当前批次；多次失败后将批次二分，继续处理。
+    单条字幕仍失败时抛出异常，防止生成不完整译文。
+    """
+    last_error: Exception | None = None
+
+    for attempt in range(TRANSLATE_MAX_RETRIES + 1):
+        try:
+            translations = translate_batch_once(client, cues)
+            for cue, translation in zip(cues, translations):
+                cue["zh"] = translation
+            return
+        except Exception as exc:
+            last_error = exc
+            if attempt < TRANSLATE_MAX_RETRIES:
+                wait_seconds = min(
+                    60.0,
+                    TRANSLATE_BASE_DELAY * (2**attempt),
+                )
+                log.warning(
+                    "Gemini 批次失败（第 %d/%d 次）：%s；%.1f 秒后重试。",
+                    attempt + 1,
+                    TRANSLATE_MAX_RETRIES + 1,
+                    exc,
+                    wait_seconds,
+                )
+                time.sleep(wait_seconds)
+
+    if len(cues) > 1:
+        midpoint = len(cues) // 2
+        log.warning(
+            "批次重试仍失败，拆成两段继续处理（每段 %d / %d 条）。",
+            midpoint,
+            len(cues) - midpoint,
+        )
+        translate_batch_recursive(client, cues[:midpoint], depth + 1)
+        if TRANSLATE_BATCH_DELAY:
+            time.sleep(TRANSLATE_BATCH_DELAY)
+        translate_batch_recursive(client, cues[midpoint:], depth + 1)
+        return
+
+    source = cues[0].get("en", "") if cues else ""
+    raise RuntimeError(
+        f"单条字幕翻译最终失败，不能安全生成完整双语字幕。"
+        f"原文：{source[:160]!r}；最后错误：{last_error}"
+    ) from last_error
+
+
+def translate_cues_with_gemini(
+    cues: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """批量翻译所有字幕。任何条目未成功翻译都会让整集失败。"""
+    if not cues:
+        raise ValueError("没有可供翻译的字幕。")
+
+    client = create_gemini_client()
+    batches = build_translation_batches(
+        cues,
+        TRANSLATE_BATCH_SIZE,
+        TRANSLATE_BATCH_MAX_CHARS,
+    )
+
+    log.info(
+        "Gemini 翻译开始：%d 条字幕，%d 个初始批次，模型=%s。",
+        len(cues),
+        len(batches),
+        GEMINI_MODEL,
+    )
+
+    for index, batch in enumerate(batches, start=1):
+        log.info(
+            "翻译批次 %d/%d：%d 条字幕。",
+            index,
+            len(batches),
+            len(batch),
+        )
+        translate_batch_recursive(client, batch)
+
+        if TRANSLATE_BATCH_DELAY and index < len(batches):
+            time.sleep(TRANSLATE_BATCH_DELAY)
+
+    missing = [i for i, cue in enumerate(cues, start=1) if not cue.get("zh")]
+    if missing:
+        raise RuntimeError(f"翻译不完整，缺少中文的字幕序号：{missing[:20]}")
+
+    log.info("Gemini 翻译完成：%d 条字幕全部通过检查。", len(cues))
+    return cues
 
 
 # ============================================================
-# 查找下一集
+# 双语 VTT 输出
 # ============================================================
 
 
-def find_next_entry(entries, processed):
-    def sort_key(entry):
-        published = entry.get("published_parsed") or entry.get("updated_parsed")
-        return time.mktime(published) if published else 0
+def write_bilingual_vtt(cues: list[dict[str, Any]], output_path: Path) -> None:
+    """
+    每条字幕内先显示英文，再显示中文。
+    时间戳始终使用 Whisper 原始切分得到的时间，不交由 Gemini 改写。
+    """
+    if not cues:
+        raise ValueError("没有字幕，拒绝写出空 VTT。")
 
-    entries.sort(key=sort_key)
+    blocks = ["WEBVTT", ""]
 
-    for entry in entries:
-        guid = entry.get("guid") or entry.get("id") or entry.get("title")
-        if guid not in processed:
-            return entry
+    for index, cue in enumerate(cues, start=1):
+        en = clean_text(cue.get("en", ""))
+        zh = clean_text(cue.get("zh", ""))
+
+        if not en or not zh:
+            raise RuntimeError(f"第 {index} 条字幕缺少英文或中文，拒绝写出 VTT。")
+
+        start = format_timestamp(cue["start"])
+        end = format_timestamp(cue["end"])
+
+        if cue["end"] <= cue["start"]:
+            raise RuntimeError(f"第 {index} 条字幕的结束时间不晚于开始时间。")
+
+        blocks.extend(
+            [
+                str(index),
+                f"{start} --> {end}",
+                en,
+                zh,
+                "",
+            ]
+        )
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = output_path.with_suffix(output_path.suffix + ".tmp")
+    temp_path.write_text("\n".join(blocks).rstrip() + "\n", encoding="utf-8")
+    temp_path.replace(output_path)
+
+    log.info("已写出双语 VTT：%s", output_path)
+
+
+# ============================================================
+# 增强 RSS：添加 Podcasting 2.0 transcript 标签
+# ============================================================
+
+
+def find_item_guid(item: etree._Element) -> str:
+    guid = item.find("guid")
+    if guid is not None and guid.text:
+        return guid.text.strip()
+
+    link = item.find("link")
+    if link is not None and link.text:
+        return link.text.strip()
+
+    return ""
+
+
+def find_feed_item(
+    root: etree._Element, identity: str, title: str
+) -> etree._Element | None:
+    for item in root.xpath("//*[local-name()='item']"):
+        guid = find_item_guid(item)
+        item_title = item.findtext("title") or ""
+
+        if identity and guid == identity:
+            return item
+        if title and item_title.strip() == title.strip():
+            return item
 
     return None
 
 
-# ============================================================
-# 生成播客 RSS 与页面
-# ============================================================
+def add_transcript_tag(
+    item: etree._Element,
+    transcript_url: str,
+) -> None:
+    """为指定 RSS item 添加 podcast:transcript 标签，并避免重复。"""
+    tag_name = f"{{{PODCAST_NS}}}transcript"
+
+    for existing in item.findall(tag_name):
+        if existing.get("url") == transcript_url:
+            return
+
+    node = etree.SubElement(item, tag_name)
+    node.set("url", transcript_url)
+    node.set("type", "text/vtt")
+    node.set("language", "zh-CN")
+    node.set("rel", "captions")
 
 
-def generate_podcast_feed(pc_state):
-    print("🔄 生成播客 RSS feed...")
+def make_enhanced_feed(
+    feed_url: str,
+    completed_items: list[dict[str, str]],
+) -> Path:
+    """
+    下载并复制原始 RSS XML，给已生成字幕的节目添加 transcript 标签。
+    不修改原始音频 enclosure。
+    """
+    log.info("生成增强 RSS。")
 
-    response = requests.get(FEED_URL, timeout=60, headers={"User-Agent": "Mozilla/5.0"})
+    response = requests.get(
+        feed_url,
+        headers={"User-Agent": USER_AGENT},
+        timeout=(20, AUDIO_TIMEOUT),
+    )
     response.raise_for_status()
-    root = etree.fromstring(response.content)
 
-    ns_uri = "https://podcastindex.org/namespace/1.0"
-    atom_uri = "http://www.w3.org/2005/Atom"
-    itunes_uri = "http://www.itunes.com/dtds/podcast-1.0.dtd"
+    parser = etree.XMLParser(
+        recover=True,
+        remove_blank_text=False,
+        resolve_entities=False,
+        no_network=True,
+    )
+    root = etree.fromstring(response.content, parser=parser)
 
-    nsmap = dict(root.nsmap)
-    if nsmap.get("podcast") != ns_uri:
-        nsmap["podcast"] = ns_uri
-        new_root = etree.Element(root.tag, attrib=root.attrib, nsmap=nsmap)
-        new_root[:] = root[:]
-        new_root.text = root.text
-        new_root.tail = root.tail
-        root = new_root
+    if root is None:
+        raise RuntimeError("无法解析原始 RSS XML。")
 
-    channel = root.find("channel")
-    if channel is None:
-        print("⚠️ 未找到 channel")
-        return
-
-    feed_url = f"{BASE_URL}/{PODCAST_SLUG}/feed.xml"
-    title_elem = channel.find("title")
-
-    if title_elem is not None and title_elem.text:
-        original_title = title_elem.text.strip()
-        if "[Unofficial" not in original_title:
-            title_elem.text = f"{original_title} [Unofficial Transcripts]"
-            print(f"   RSS 标题：{title_elem.text}")
-
-    link_elem = channel.find("link")
-    if link_elem is not None:
-        link_elem.text = BASE_URL
-
-    image_elem = channel.find("image")
-    if image_elem is not None:
-        img_link = image_elem.find("link")
-        if img_link is not None:
-            img_link.text = BASE_URL
-        img_title = image_elem.find("title")
-        if img_title is not None and title_elem is not None:
-            img_title.text = title_elem.text
-
-    for atom_link in channel.findall(f"{{{atom_uri}}}link"):
-        rel = atom_link.get("rel")
-        if rel == "self" or rel in ("first", "last", "previous", "next"):
-            atom_link.set("href", feed_url)
-
-    new_feed = channel.find(f"{{{itunes_uri}}}new-feed-url")
-    if new_feed is not None:
-        new_feed.text = feed_url
-
-    processed = pc_state.get("processed", {})
-    removed = added = replaced_audio = 0
-
-    for item in channel.findall("item"):
-        guid_elem = item.find("guid")
-
-        if guid_elem is None or not guid_elem.text:
-            channel.remove(item)
-            removed += 1
+    # 若原始 XML 没有声明 podcast 命名空间，lxml 会在标签上声明；
+    # 这仍是有效 XML。
+    for completed in completed_items:
+        item = find_feed_item(
+            root,
+            completed.get("identity", ""),
+            completed.get("title", ""),
+        )
+        if item is None:
+            log.warning(
+                "增强 RSS 时未匹配到节目条目：%s",
+                completed.get("title", ""),
+            )
             continue
 
-        guid = guid_elem.text.strip()
-        if guid not in processed:
-            channel.remove(item)
-            removed += 1
-            continue
+        add_transcript_tag(item, completed["url"])
 
-        episode_state = processed[guid]
-        original_url = episode_state.get("enclosure_url")
+    output_path = SITE_DIR / PODCAST_SLUG / "feed.xml"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        if original_url:
-            enclosures = item.findall("enclosure")
-            if enclosures:
-                enclosure = enclosures[0]
-                old_url = enclosure.get("url", "")
-                if old_url != original_url:
-                    enclosure.set("url", original_url)
-                    replaced_audio += 1
-                    print(f"   🔗 恢复原始 enclosure：{original_url}")
-
-        vtt_filename = episode_state.get("vtt_filename")
-        if not vtt_filename:
-            continue
-
-        vtt_url = f"{BASE_URL}/{PODCAST_SLUG}/transcripts/{vtt_filename}"
-        existing = item.findall(f"{{{ns_uri}}}transcript")
-
-        if any(elem.get("url") == vtt_url for elem in existing):
-            continue
-
-        transcript = etree.SubElement(item, f"{{{ns_uri}}}transcript")
-        transcript.set("url", vtt_url)
-        transcript.set("type", "text/vtt")
-        transcript.set("rel", "captions")
-        added += 1
-
-    feed_path = PODCAST_DIR / "feed.xml"
-    etree.ElementTree(root).write(
-        feed_path,
-        pretty_print=True,
-        xml_declaration=True,
+    tree = etree.ElementTree(root)
+    tree.write(
+        str(output_path),
         encoding="utf-8",
+        xml_declaration=True,
+        pretty_print=True,
     )
 
-    print("💾 Feed 已保存")
-    print(f"   保留处理集数：{len(processed)}")
-    print(f"   删除未处理集数：{removed}")
-    print(f"   新增字幕标签：{added}")
-    print(f"   恢复原始 enclosure：{replaced_audio}")
-    print(f"   文件：{feed_path}")
-
-    total = pc_state.get("total_processed", 0)
-    display_name = f"{PODCAST_SLUG} (Unofficial)"
-
-    html = f"""<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{display_name} - Transcripts</title>
-<style>
-body {{ font-family:system-ui,-apple-system,sans-serif;max-width:720px;margin:40px auto;padding:0 20px;line-height:1.6;color:#333; }}
-code {{ background:#f4f4f4;padding:2px 6px;border-radius:4px;word-break:break-all; }}
-a {{ color:#0366d6; }}
-</style>
-</head>
-<body>
-<h1>🎙️ {display_name}</h1>
-<p><strong>原 RSS：</strong><a href="{FEED_URL}" target="_blank">{FEED_URL}</a></p>
-<p><strong>带字幕 Feed：</strong><br><code><a href="{feed_url}">{feed_url}</a></code></p>
-<p>已处理 <strong>{total}</strong> 集（中英双语字幕）。</p>
-<p>当前 Feed 只包含已经处理完成的集数。</p>
-</body>
-</html>
-"""
-    (PODCAST_DIR / "index.html").write_text(html, encoding="utf-8")
+    log.info("增强 RSS 已生成：%s", output_path)
+    return output_path
 
 
-def generate_master_index(state):
-    items = ""
+# ============================================================
+# HTML 索引生成
+# ============================================================
 
-    for slug, pc in state.get("podcasts", {}).items():
-        total = pc.get("total_processed", 0)
-        display_name = f"{slug} (Unofficial)"
-        items += (
-            f'<li><a href="{BASE_URL}/{slug}/">{display_name}</a> '
-            f"— 已处理 {total} 集 "
-            f'<small>(<a href="{BASE_URL}/{slug}/feed.xml">Feed</a>)</small></li>\n'
+
+def escape_html(value: str) -> str:
+    return html.escape(value or "", quote=True)
+
+
+def build_podcast_index(
+    title: str,
+    feed_url: str,
+    transcripts: list[dict[str, str]],
+) -> Path:
+    rows = []
+
+    for item in sorted(
+        transcripts,
+        key=lambda x: x.get("published", ""),
+        reverse=True,
+    ):
+        transcript_url = item.get("url", "")
+        rows.append(
+            "<li>"
+            f'<a href="{escape_html(transcript_url)}">'
+            f"{escape_html(item.get('title', 'Untitled'))}"
+            "</a>"
+            f"<small>{escape_html(item.get('published', ''))}</small>"
+            "</li>"
         )
 
-    html = f"""<!DOCTYPE html>
+    base = BASE_URL or ""
+    enhanced_feed_url = f"{base}/{PODCAST_SLUG}/feed.xml"
+
+    page = f"""<!doctype html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Podcast Transcripts Hub (Unofficial)</title>
+<title>{escape_html(title)} · 双语字幕</title>
 <style>
-body {{ font-family:system-ui,-apple-system,sans-serif;max-width:720px;margin:40px auto;padding:0 20px;line-height:1.6;color:#333; }}
-a {{ color:#0366d6; }}
-li {{ margin:8px 0; }}
+:root {{ color-scheme: light dark; }}
+body {{
+  max-width: 900px; margin: 2rem auto; padding: 0 1rem;
+  font: 16px/1.7 system-ui, -apple-system, "Segoe UI", sans-serif;
+}}
+h1 {{ line-height: 1.25; }}
+a {{ overflow-wrap: anywhere; }}
+li {{ margin: 0.9rem 0; }}
+small {{ display: block; opacity: .7; }}
+nav {{ margin: 1.5rem 0; }}
 </style>
 </head>
 <body>
-<h1>🎙️ Podcast Transcripts Hub (Unofficial)</h1>
-<p>以下播客均已自动生成中英双语 VTT 字幕。</p>
+<h1>{escape_html(title)}</h1>
+<p>英文原文与简体中文译文合并显示的 WebVTT 字幕。</p>
+<nav>
+  <a href="{escape_html(enhanced_feed_url)}">增强版 RSS Feed</a>
+  ·
+  <a href="{escape_html(feed_url)}">原始 RSS Feed</a>
+</nav>
+<h2>已生成字幕</h2>
 <ul>
-{items}
+{''.join(rows) if rows else '<li>暂无字幕。</li>'}
 </ul>
 </body>
 </html>
 """
-    (SITE_DIR / "index.html").write_text(html, encoding="utf-8")
+
+    output_path = PODCAST_DIR / "index.html"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(page, encoding="utf-8")
+    return output_path
+
+
+def rebuild_root_index() -> None:
+    """生成简单的站点总目录，列出 site/ 下的播客。"""
+    podcast_pages = []
+
+    if SITE_DIR.exists():
+        for index_file in sorted(SITE_DIR.glob("*/index.html")):
+            slug = index_file.parent.name
+            if slug == "assets":
+                continue
+            podcast_pages.append(
+                f'<li><a href="{escape_html(slug)}/index.html">'
+                f"{escape_html(slug)}</a></li>"
+            )
+
+    page = f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Podcast Transcript Library</title>
+<style>
+body {{ max-width: 900px; margin: 2rem auto; padding: 0 1rem;
+font: 16px/1.7 system-ui, sans-serif; }}
+li {{ margin: .7rem 0; }}
+</style>
+</head>
+<body>
+<h1>Podcast Transcript Library</h1>
+<p>自动生成的播客字幕目录。</p>
+<ul>{''.join(podcast_pages)}</ul>
+</body>
+</html>
+"""
+    SITE_INDEX.write_text(page, encoding="utf-8")
 
 
 # ============================================================
-# 主程序
+# 单集处理
 # ============================================================
 
 
-def main():
-    if not FEED_URL or not BASE_URL or not PODCAST_SLUG:
-        print("❌ 错误：需要设置 PODCAST_SLUG、FEED_URL、BASE_URL")
-        sys.exit(1)
+def process_episode(
+    entry: Any,
+    identity: str,
+    audio_url: str,
+) -> dict[str, str]:
+    title = clean_text(getattr(entry, "title", "") or "Untitled episode")
+    published = clean_text(
+        getattr(entry, "published", "") or getattr(entry, "updated", "") or ""
+    )
 
-    print(f"🎙️ 播客：{PODCAST_SLUG}")
-    print(f"📡 RSS：{FEED_URL}")
-    print(f"🌐 BASE_URL：{BASE_URL}")
-    print(f"🧠 模型：{MODEL_SIZE}")
-    print(f"🇨🇳 中国代理：{USE_CHINA_PROXY}")
-    print(f"🔀 最大代理尝试数：{MAX_PROXY_ATTEMPTS}")
-    print(f"🧵 并发线程：{PROXY_WORKERS}")
-    print(f"⏱️ GeoIP 超时：{PROXY_TEST_TIMEOUT}s")
-    print(f"⏱️ 音频连接超时：{AUDIO_CONNECT_TIMEOUT}s")
-    print(f"⏱️ 音频读取超时：{AUDIO_READ_TIMEOUT}s")
-    print(f"💾 代理缓存 TTL：{PROXY_CACHE_TTL}s")
-    print(f"🌐 翻译批量大小：{TRANSLATE_BATCH_SIZE}")
-    print(f"⏱️ 翻译批次间隔：{TRANSLATE_BATCH_DELAY}s")
-    print(f"🔁 翻译最大重试：{TRANSLATE_MAX_RETRIES}")
+    filename = safe_filename(title)
+    transcript_path = TRANSCRIPT_DIR / f"{filename}.vtt"
 
-    check_socks_support()
+    # 如果文件已存在但状态没写入，可避免重复消耗翻译额度；
+    # 这里仅在文件确实存在且有完整 VTT 内容时复用。
+    if transcript_path.exists():
+        existing = transcript_path.read_text(encoding="utf-8", errors="replace")
+        if existing.startswith("WEBVTT") and "-->" in existing:
+            log.info("字幕文件已存在，复用：%s", transcript_path)
+            return {
+                "identity": identity,
+                "title": title,
+                "published": published,
+                "url": make_public_url(transcript_path),
+                "path": str(transcript_path.relative_to(SITE_DIR)),
+            }
 
-    state = load_state()
-    pc_state = get_podcast_state(state)
-    processed = pc_state.get("processed", {})
+    suffix = Path(urlparse(audio_url).path).suffix.lower()
+    if suffix not in {".mp3", ".m4a", ".aac", ".wav", ".ogg", ".opus", ".flac", ".mp4"}:
+        suffix = ".audio"
 
-    print(f"📂 该播客已处理 {pc_state.get('total_processed', 0)} 集")
+    with tempfile.TemporaryDirectory(prefix="podcast-audio-") as temp_dir:
+        audio_path = Path(temp_dir) / f"episode{suffix}"
+        download_audio(audio_url, audio_path)
+        cues = whisper_transcribe(audio_path)
 
-    feed = feedparser.parse(FEED_URL)
-    entries = list(feed.entries)
+    # 只有转录成功后才发起翻译。
+    cues = translate_cues_with_gemini(cues)
 
-    if not entries:
-        print("⚠️ RSS 无条目")
-        sys.exit(0)
+    # 写入前确保每条字幕都有英中内容。
+    if any(not cue.get("en") or not cue.get("zh") for cue in cues):
+        raise RuntimeError("字幕校验失败：仍存在空的英文或中文条目。")
 
-    next_entry = find_next_entry(entries, processed)
+    write_bilingual_vtt(cues, transcript_path)
 
-    if not next_entry:
-        print("✅ 该播客全部处理完毕")
-        print("🔄 仅更新 Feed")
-        generate_podcast_feed(pc_state)
-        generate_master_index(state)
-        save_state(state)
-        sys.exit(0)
-
-    title = next_entry.get("title", "untitled")
-    guid = next_entry.get("guid") or next_entry.get("id") or title
-
-    print(f"\n🎯 本次处理：{title}")
-    print(f"🔑 GUID：{guid}")
-
-    enclosure_url = get_audio_url(next_entry)
-    if not enclosure_url:
-        print("❌ RSS 中未找到音频 enclosure")
-        sys.exit(1)
-
-    print(f"📎 RSS 原始 enclosure：{enclosure_url}")
-
-    audio_url = enclosure_url
-    audio_source = "rss_enclosure"
-    safe_title = safe_filename(title)
-    mp3_path = PODCAST_DIR / f"{safe_title}.mp3"
-
-    try:
-        proxy_info = download_audio(audio_url, mp3_path)
-    except Exception as exc:
-        print(f"\n❌ 音频下载失败：{type(exc).__name__}: {exc}")
-        sys.exit(1)
-
-    if not proxy_info:
-        print("❌ 未获得有效中国代理信息")
-        if mp3_path.exists():
-            mp3_path.unlink()
-        sys.exit(1)
-
-    print("\n📡 本次下载出口：")
-    print(f"   Proxy：{proxy_info.get('proxy')}")
-    print(f"   Public IP：{proxy_info.get('public_ip')}")
-    print(f"   Country：{proxy_info.get('country_code')}")
-
-    print(f"\n📝 使用实际音频进行转录（{MODEL_SIZE}, CPU int8, VAD）...")
-
-    try:
-        model = WhisperModel(MODEL_SIZE, device="cpu", compute_type="int8")
-
-        segments_iter, info = model.transcribe(
-            str(mp3_path),
-            beam_size=5,
-            language="en",
-            vad_filter=True,
-            vad_parameters=dict(min_silence_duration_ms=300),
-            condition_on_previous_text=False,
-            initial_prompt="Please punctuate accurately and break sentences naturally.",
-            log_prob_threshold=-1.0,
-            no_speech_threshold=0.6,
-        )
-
-        total_duration = getattr(info, "duration", None)
-        segments = []
-
-        for i, seg in enumerate(segments_iter, 1):
-            segments.append(seg)
-
-            if i % 10 == 0:
-                if total_duration and total_duration > 0:
-                    pct = seg.end / total_duration * 100
-                    print(
-                        f"   转录进度：{pct:.1f}% "
-                        f"({seg.end:.1f}s / {total_duration:.1f}s) | 第 {i} 段"
-                    )
-                else:
-                    print(f"   转录进度：{seg.end:.1f}s | 第 {i} 段")
-
-        print(f"   语言：{info.language} ({info.language_probability:.2f})")
-        print(f"   共 {len(segments)} 个片段")
-
-    except Exception as exc:
-        print(f"❌ 转录失败：{type(exc).__name__}: {exc}")
-        sys.exit(1)
-
-    finally:
-        if mp3_path.exists():
-            try:
-                mp3_path.unlink()
-                print(f"🗑️ 已删除临时音频：{mp3_path.name}")
-            except Exception as exc:
-                print(f"⚠️ 删除临时 MP3 失败：{type(exc).__name__}: {exc}")
-
-    print(f"✂️ 后处理：按句子重新切分 {len(segments)} 个原始片段...")
-    sentences = resegment(segments)
-    print(f"   合并为 {len(sentences)} 个句子级片段")
-
-    print("🌐 开始翻译（英→中，批量请求、有限重试）...")
-
-    try:
-        bilingual = translate_sentences(sentences)
-    except Exception as exc:
-        print(f"\n❌ 翻译失败：{type(exc).__name__}: {exc}")
-        print("   本次不会标记为已处理；稍后重新运行即可重试。")
-        sys.exit(1)
-
-    vtt_filename = f"{safe_title}.vtt"
-    vtt_path = TRANSCRIPTS_DIR / vtt_filename
-    write_bilingual_vtt(bilingual, vtt_path)
-
-    print(f"💾 双语 VTT：{vtt_path.name}")
-
-    # 只有 VTT 成功写出后才更新已处理状态
-    processed[guid] = {
+    return {
+        "identity": identity,
         "title": title,
-        "vtt_filename": vtt_filename,
-        "processed_at": datetime.now(timezone.utc).isoformat(),
-        "enclosure_url": enclosure_url,
-        "audio_url": audio_url,
-        "audio_source": audio_source,
-        "proxy": proxy_info.get("proxy"),
-        "public_ip": proxy_info.get("public_ip"),
+        "published": published,
+        "url": make_public_url(transcript_path),
+        "path": str(transcript_path.relative_to(SITE_DIR)),
     }
 
-    pc_state["total_processed"] = pc_state.get("total_processed", 0) + 1
-    pc_state["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+def make_public_url(path: Path) -> str:
+    relative = path.relative_to(SITE_DIR).as_posix()
+    # GitHub Pages 子路径 BASE_URL 已由 workflow 设置。
+    if BASE_URL:
+        from urllib.parse import quote
+
+        encoded_path = "/".join(quote(part) for part in relative.split("/"))
+        return f"{BASE_URL}/{encoded_path}"
+    return relative
+
+
+# ============================================================
+# 主流程
+# ============================================================
+
+
+def main() -> int:
+    if not FEED_URL:
+        log.error("缺少 FEED_URL 环境变量。")
+        return 2
+
+    if not GEMINI_API_KEY:
+        log.error("缺少 GEMINI_API_KEY 环境变量。")
+        return 2
+
+    ensure_directories()
+
+    state = load_state()
+    podcast_states = state.setdefault("podcasts", {})
+    podcast_state = podcast_states.setdefault(
+        PODCAST_SLUG,
+        {
+            "feed_url": FEED_URL,
+            "processed": {},
+            "transcripts": [],
+        },
+    )
+    podcast_state["feed_url"] = FEED_URL
+    processed = podcast_state.setdefault("processed", {})
+
+    parsed_feed, entries = get_feed_entries(FEED_URL)
+    feed_title = clean_text(getattr(parsed_feed.feed, "title", "") or PODCAST_SLUG)
+
+    # 默认先处理最新节目；MAX_EPISODES=0 表示不限制。
+    candidates = []
+    for entry in entries:
+        audio_url = get_entry_audio_url(entry)
+        if not audio_url:
+            continue
+
+        identity = entry_identity(entry, audio_url)
+        candidates.append((entry, identity, audio_url))
+
+    if MAX_EPISODES > 0:
+        candidates = candidates[:MAX_EPISODES]
+
+    log.info(
+        "播客：%s；RSS 条目：%d；可处理音频条目：%d",
+        feed_title,
+        len(entries),
+        len(candidates),
+    )
+
+    completed_this_run: list[dict[str, str]] = []
+    transcripts_by_identity: dict[str, dict[str, str]] = {}
+
+    # 先恢复 state 中已有的字幕记录，便于每次运行重建站点索引。
+    for record in podcast_state.get("transcripts", []):
+        if isinstance(record, dict) and record.get("identity"):
+            transcripts_by_identity[record["identity"]] = record
+
+    for number, (entry, identity, audio_url) in enumerate(candidates, start=1):
+        title = clean_text(getattr(entry, "title", "") or "Untitled episode")
+        log.info("处理节目 %d/%d：%s", number, len(candidates), title)
+
+        existing_record = transcripts_by_identity.get(identity)
+        existing_path = (
+            SITE_DIR / existing_record["path"]
+            if existing_record and existing_record.get("path")
+            else None
+        )
+
+        if processed.get(identity) and existing_path and existing_path.exists():
+            log.info("已处理且字幕文件存在，跳过：%s", title)
+            completed_this_run.append(existing_record)
+            continue
+
+        try:
+            record = process_episode(entry, identity, audio_url)
+
+            # 只有整个转录和翻译成功、VTT 已写入后，才标记为完成。
+            processed[identity] = {
+                "title": record["title"],
+                "url": record["url"],
+                "path": record["path"],
+                "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "audio_url": audio_url,
+                "model": WHISPER_MODEL,
+                "translation_model": GEMINI_MODEL,
+            }
+
+            transcripts_by_identity[identity] = record
+            completed_this_run.append(record)
+
+            podcast_state["transcripts"] = list(transcripts_by_identity.values())
+            podcast_states[PODCAST_SLUG] = podcast_state
+            state["podcasts"] = podcast_states
+            save_state(state)
+
+            log.info("节目处理成功：%s", title)
+
+        except Exception:
+            # 失败不写入 processed；下次 Actions 运行可以重新尝试。
+            log.exception("节目处理失败：%s。不会标记为已完成。", title)
+            continue
+
+    # 如果单集失败，仍可为成功生成的节目更新 RSS 和站点。
+    all_transcripts = list(transcripts_by_identity.values())
+    podcast_state["transcripts"] = all_transcripts
+    podcast_state["last_run"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    podcast_state["feed_url"] = FEED_URL
+    podcast_state["feed_title"] = feed_title
+    podcast_states[PODCAST_SLUG] = podcast_state
+    state["podcasts"] = podcast_states
     save_state(state)
 
-    generate_podcast_feed(pc_state)
-    generate_master_index(state)
+    # 根据全部已知字幕记录重建增强 RSS。
+    try:
+        make_enhanced_feed(FEED_URL, all_transcripts)
+    except Exception:
+        log.exception("增强 RSS 生成失败。字幕文件和 state.json 已保留。")
 
-    print("\n✅ 完成！")
-    print(f"   播客：{PODCAST_SLUG}")
-    print(f"   累计处理：{pc_state['total_processed']} 集")
-    print(f"   Feed：{BASE_URL}/{PODCAST_SLUG}/feed.xml")
-    print(f"   Transcript：{BASE_URL}/{PODCAST_SLUG}/transcripts/{vtt_filename}")
+    build_podcast_index(feed_title, FEED_URL, all_transcripts)
+    rebuild_root_index()
+
+    success_count = len(completed_this_run)
+    failure_count = max(0, len(candidates) - success_count)
+    log.info(
+        "运行结束：本次成功或跳过 %d 集；其余未成功处理 %d 集。",
+        success_count,
+        failure_count,
+    )
+
+    # 有节目失败时返回非零，让 GitHub Actions 显示失败状态。
+    if failure_count:
+        return 1
+
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        log.error("收到中断信号。")
+        sys.exit(130)
+    except Exception as exc:
+        log.exception("脚本执行失败：%s", exc)
+        sys.exit(1)
