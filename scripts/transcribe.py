@@ -884,15 +884,44 @@ def find_feed_item(
 
 
 def add_transcript_tag(item: etree._Element, url: str) -> None:
+    """添加 Podcasting 2.0 transcript 标签；重复运行不会重复添加相同 URL。"""
     tag = f"{{{PODCAST_NS}}}transcript"
     for old in item.findall(tag):
         if old.get("url") == url:
+            # 修正已有同 URL 标签的属性，避免旧配置残留。
+            old.set("type", "text/vtt")
+            old.set("language", "zh-CN")
+            old.set("rel", "captions")
             return
+
     node = etree.SubElement(item, tag)
     node.set("url", url)
     node.set("type", "text/vtt")
     node.set("language", "zh-CN")
     node.set("rel", "captions")
+
+
+def ensure_podcast_namespace_prefix(root: etree._Element) -> etree._Element:
+    """确保 RSS 根节点声明 podcast 前缀，使新写入的标签序列化为 podcast:transcript。
+
+    lxml 对已解析 XML 中的 namespace prefix 会保留原有声明；仅调用
+    register_namespace() 不足以可靠地重命名已有节点。因此在修改条目前，
+    用同一标签、属性和内容重建根节点，并将 podcast 命名空间放到根节点 nsmap。
+    子节点会被原样移动，RSS 内容与元数据不变。
+    """
+    nsmap = dict(root.nsmap or {})
+    if nsmap.get("podcast") == PODCAST_NS:
+        return root
+
+    nsmap["podcast"] = PODCAST_NS
+    replacement = etree.Element(root.tag, nsmap=nsmap)
+    for key, value in root.attrib.items():
+        replacement.set(key, value)
+    replacement.text = root.text
+    replacement.tail = root.tail
+    for child in list(root):
+        replacement.append(child)
+    return replacement
 
 
 def make_enhanced_feed(feed_url: str, records: list[dict[str, str]]) -> Path:
@@ -919,6 +948,9 @@ def make_enhanced_feed(feed_url: str, records: list[dict[str, str]]) -> Path:
     root = etree.fromstring(response.content, parser=parser)
     if root is None:
         raise RuntimeError("无法解析原始 RSS XML")
+
+    # 在添加 transcript 节点之前固定命名空间前缀，避免 lxml 自动生成 ns115 等前缀。
+    root = ensure_podcast_namespace_prefix(root)
 
     # 确保这是 RSS 2.0 文档且包含 channel。
     channels = root.xpath("/*[local-name()='rss']/*[local-name()='channel']")
