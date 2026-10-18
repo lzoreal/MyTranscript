@@ -896,28 +896,112 @@ def add_transcript_tag(item: etree._Element, url: str) -> None:
 
 
 def make_enhanced_feed(feed_url: str, records: list[dict[str, str]]) -> Path:
+    """复制原始 RSS、添加双语字幕链接，并修正增强版 Feed 的自我声明地址。
+
+    保留原始单集 GUID、音频 enclosure 和其他节目元数据；不把增强版重定向回官方 Feed。
+    """
+    if not feed_url:
+        raise ValueError("FEED_URL 未设置，无法生成增强版 RSS")
+
     response = requests.get(
-        feed_url, headers={"User-Agent": USER_AGENT}, timeout=(20, AUDIO_TIMEOUT)
+        feed_url,
+        headers={"User-Agent": USER_AGENT},
+        timeout=(20, AUDIO_TIMEOUT),
     )
     response.raise_for_status()
+
     parser = etree.XMLParser(
-        recover=True, remove_blank_text=False, resolve_entities=False, no_network=True
+        recover=True,
+        remove_blank_text=False,
+        resolve_entities=False,
+        no_network=True,
     )
     root = etree.fromstring(response.content, parser=parser)
     if root is None:
         raise RuntimeError("无法解析原始 RSS XML")
+
+    # 确保这是 RSS 2.0 文档且包含 channel。
+    channels = root.xpath("/*[local-name()='rss']/*[local-name()='channel']")
+    if not channels:
+        raise RuntimeError("原始 XML 中找不到 RSS 2.0 channel 节点")
+    channel = channels[0]
+
+    # 1. 为匹配到的每一集添加 Podcasting 2.0 双语字幕链接。
+    matched = 0
     for record in records:
-        item = find_feed_item(root, record.get("identity", ""), record.get("title", ""))
+        item = find_feed_item(
+            root,
+            record.get("identity", ""),
+            record.get("title", ""),
+        )
         if item is None:
             log.warning("增强 RSS 时未匹配到条目：%s", record.get("title", ""))
             continue
-        add_transcript_tag(item, record["url"])
+        transcript_url = record.get("url", "").strip()
+        if not transcript_url:
+            log.warning("字幕 URL 为空，跳过：%s", record.get("title", ""))
+            continue
+        add_transcript_tag(item, transcript_url)
+        matched += 1
+
+    # 2. 计算公开地址。要求 BASE_URL 指向 GitHub Pages 项目根目录，
+    # 例如 https://lzoreal.github.io/MyTranscript，而不是仓库主页之外的地址。
     path = PODCAST_DIR / "feed.xml"
     path.parent.mkdir(parents=True, exist_ok=True)
-    etree.ElementTree(root).write(
-        str(path), encoding="utf-8", xml_declaration=True, pretty_print=True
+    enhanced_url = make_public_url(path)
+
+    # 3. 将 Atom self 链接统一指向增强版 Feed。
+    atom_ns = "http://www.w3.org/2005/Atom"
+    self_links = root.xpath(
+        "//*[local-name()='link' and namespace-uri()=$ns and @rel='self']",
+        ns=atom_ns,
     )
+    if self_links:
+        self_link = self_links[0]
+        self_link.set("href", enhanced_url)
+        self_link.set("type", "application/rss+xml")
+        for duplicate in self_links[1:]:
+            parent = duplicate.getparent()
+            if parent is not None:
+                parent.remove(duplicate)
+    else:
+        etree.SubElement(
+            channel,
+            f"{{{atom_ns}}}link",
+            {
+                "type": "application/rss+xml",
+                "rel": "self",
+                "href": enhanced_url,
+            },
+        )
+
+    # 4. 如果官方 Feed 带有 iTunes new-feed-url，避免它将客户端引导回官方地址。
+    itunes_ns = "http://www.itunes.com/dtds/podcast-1.0.dtd"
+    new_feed_nodes = root.xpath(
+        "//*[local-name()='new-feed-url' and namespace-uri()=$ns]",
+        ns=itunes_ns,
+    )
+    for node in new_feed_nodes:
+        node.text = enhanced_url
+
+    # 5. 原子写入，避免中断时留下不完整的 feed.xml。
+    temp_path = path.with_name(path.name + ".tmp")
+    try:
+        etree.ElementTree(root).write(
+            str(temp_path),
+            encoding="utf-8",
+            xml_declaration=True,
+            pretty_print=True,
+        )
+        temp_path.replace(path)
+    finally:
+        temp_path.unlink(missing_ok=True)
+
     log.info("增强 RSS 已生成：%s", path)
+    log.info("增强版 RSS self 地址：%s", enhanced_url)
+    log.info("已匹配并写入字幕链接的条目：%d/%d", matched, len(records))
+    log.info("已修正 Atom self 链接数量：%d", len(self_links) or 1)
+    log.info("已修正 iTunes new-feed-url 数量：%d", len(new_feed_nodes))
     return path
 
 
