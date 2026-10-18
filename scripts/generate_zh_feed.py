@@ -13,7 +13,7 @@ import logging
 import os
 import tempfile
 from pathlib import Path
-from urllib.parse import unquote, urlsplit
+from urllib.parse import quote, unquote, urlsplit
 import xml.etree.ElementTree as ET
 
 PODCAST_NS = "https://podcastindex.org/namespace/1.0"
@@ -97,7 +97,10 @@ def build_public_feed_url(base_url: str, slug: str) -> str:
         raise ValueError("--base-url cannot be empty")
     if not clean_slug or ".." in Path(clean_slug).parts:
         raise ValueError(f"Invalid podcast slug: {slug!r}")
-    return f"{base}/{clean_slug}/feed-zh.xml"
+    # Encode the slug as a single URL path segment. In particular, a literal
+    # percent sign must become %25 (e.g. 99%-invisible -> 99%25-invisible).
+    encoded_slug = quote(clean_slug, safe="-._~")
+    return f"{base}/{encoded_slug}/feed-zh.xml"
 
 
 def episode_id_from_transcript_url(url: str) -> str:
