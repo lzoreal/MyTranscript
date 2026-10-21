@@ -56,37 +56,37 @@ def find_children(parent: ET.Element, name: str):
 def load_status():
     path = Path("translations.json")
     if not path.exists():
-        log("WARNING: translations.json missing")
-        return {}
+        log("ERROR: translations.json missing; refusing to rewrite feeds")
+        return None
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
-            log("WARNING: translations.json root is not an object")
-            return {}
+            log("ERROR: translations.json root is not an object; refusing to rewrite feeds")
+            return None
         episodes = {k: v for k, v in data.items() if not str(k).startswith("__")}
         total = sum(len(v) for v in episodes.values() if isinstance(v, dict))
         log(f"Loaded translation status: {total} episodes")
         return data
     except Exception as exc:
-        log(f"Failed loading status: {exc}")
-        return {}
+        log(f"ERROR: failed loading translations.json: {exc}; refusing to rewrite feeds")
+        return None
 
 
 def load_podcasts():
     path = Path("podcasts_translate.json")
     if not path.exists():
-        log("WARNING: podcasts_translate.json missing")
-        return []
+        log("ERROR: podcasts_translate.json missing; refusing to rewrite feeds")
+        return None
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(data, list):
-            log("WARNING: podcasts_translate.json root is not a list")
-            return []
+            log("ERROR: podcasts_translate.json root is not a list; refusing to rewrite feeds")
+            return None
         log(f"Loaded podcasts: {len(data)}")
         return data
     except Exception as exc:
-        log(f"Failed loading podcasts_translate.json: {exc}")
-        return []
+        log(f"ERROR: failed loading podcasts_translate.json: {exc}; refusing to rewrite feeds")
+        return None
 
 
 def build_public_feed_url(base_url: str, slug: str) -> str:
@@ -104,19 +104,32 @@ def build_public_feed_url(base_url: str, slug: str) -> str:
 
 
 def episode_id_from_transcript_url(url: str) -> str:
-    """Extract the transcript filename stem, supporting URL-encoded filenames."""
-    path = urlsplit(url).path
+    """Extract the transcript filename stem, supporting URL-encoded filenames.
+
+    Accepts both the English layout ``/transcripts/<name>.vtt`` and the
+    Chinese layout ``/transcripts/zh/<name>.vtt``.  Older releases rejected the
+    latter, which made regenerating ``feed-zh.xml`` from an already-Chinese
+    feed delete every episode.
+    """
+    path = urlsplit(url or "").path
     marker = "/transcripts/"
     if marker not in path:
         return ""
-    relative = path.split(marker, 1)[1]
-    # Only accept a VTT directly under transcripts/, not nested unrelated paths.
-    if "/" in relative.strip("/"):
+    parts = [part for part in path.split(marker, 1)[1].split("/") if part]
+    if len(parts) == 2 and parts[0].lower() == "zh":
+        parts = parts[1:]
+    # Only accept a VTT directly under transcripts/ (or transcripts/zh/).
+    if len(parts) != 1:
         return ""
-    filename = unquote(relative.rsplit("/", 1)[-1])
+    filename = unquote(parts[0])
     if not filename.lower().endswith(".vtt"):
         return ""
     return filename[:-4]
+
+
+def _parent_map(root: ET.Element) -> dict:
+    """Map every element to its parent without repeated O(n^2) scans."""
+    return {child: parent for parent in root.iter() for child in list(parent)}
 
 
 def set_single_atom_self_link(channel: ET.Element, feed_url: str) -> int:
@@ -133,8 +146,9 @@ def set_single_atom_self_link(channel: ET.Element, feed_url: str) -> int:
         self_link = links[0]
         self_link.set("href", feed_url)
         self_link.set("type", "application/rss+xml")
+        parents = _parent_map(channel)
         for duplicate in links[1:]:
-            parent = next((p for p in channel.iter() if duplicate in list(p)), None)
+            parent = parents.get(duplicate)
             if parent is not None:
                 parent.remove(duplicate)
     else:
@@ -186,6 +200,16 @@ def write_xml_atomically(tree: ET.ElementTree, output: Path) -> None:
 # ============================================================
 # Process one podcast
 # ============================================================
+
+
+def transcript_rank(node) -> int:
+    """Prefer an already-Chinese transcript, then an English project one."""
+    path = urlsplit(node.get("url", "")).path
+    if "/transcripts/zh/" in path:
+        return 2
+    if "/transcripts/" in path:
+        return 1
+    return 0
 
 
 def process_podcast(slug, base_url, status):
@@ -245,9 +269,13 @@ def process_podcast(slug, base_url, status):
     items = find_children(channel, "item")
     log(f"Original episodes: {len(items)}")
 
-    podcast_status = status.get(slug, {})
+    # A missing slug entry means translations.json is incomplete/stale.  Do not
+    # treat that as "every episode is untranslated", which used to overwrite a
+    # good feed-zh.xml with an empty feed.
+    podcast_status = status.get(slug)
     if not isinstance(podcast_status, dict):
-        podcast_status = {}
+        log(f"SKIP {slug}: no translation status; preserving existing feed")
+        return 0, 0
 
     kept = 0
     removed = 0
@@ -267,16 +295,9 @@ def process_podcast(slug, base_url, status):
             removed += 1
             continue
 
-        # Prefer a VTT transcript located under /transcripts/.
-        transcript = next(
-            (
-                node
-                for node in transcripts
-                if "/transcripts/" in urlsplit(node.get("url", "")).path
-            ),
-            None,
-        )
-        if transcript is None:
+        # Prefer an already-Chinese transcript, then an English one.
+        transcript = max(transcripts, key=transcript_rank)
+        if transcript_rank(transcript) == 0:
             log(f"REMOVE {title_text}: bad transcript url")
             channel.remove(item)
             removed += 1
@@ -303,6 +324,14 @@ def process_podcast(slug, base_url, status):
             removed += 1
             continue
 
+        # Keep only the selected project transcript; stale English tags would
+        # otherwise remain alongside the Chinese one in the Chinese feed.
+        for node in transcripts:
+            if node is not transcript and "/transcripts/" in urlsplit(
+                node.get("url", "")
+            ).path:
+                item.remove(node)
+
         # Keep URL unchanged if it already points to /transcripts/zh/.
         # Otherwise insert /zh/ exactly once.
         parsed = urlsplit(old_url)
@@ -317,6 +346,16 @@ def process_podcast(slug, base_url, status):
 
         log(f"KEEP {episode}: {new_url}")
         kept += 1
+
+    # Never publish an empty Chinese feed.  Kept=0 almost always means a
+    # naming/status mismatch (or a temporarily empty source feed), not that
+    # every translation was intentionally removed.
+    if kept == 0:
+        log(
+            f"WARNING {slug}: no translated episodes matched; "
+            f"preserving existing {output.name}"
+        )
+        return 0, removed
 
     # --------------------------------------------------------
     # Correct feed identity metadata
@@ -355,6 +394,9 @@ def main():
 
     status = load_status()
     podcasts = load_podcasts()
+    if status is None or podcasts is None:
+        log("Aborted: refusing to rewrite feeds with incomplete inputs")
+        return 1
 
     total_kept = 0
     total_removed = 0
@@ -374,7 +416,8 @@ def main():
     log(f"Total kept: {total_kept}")
     log(f"Total removed: {total_removed}")
     log("Done")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
