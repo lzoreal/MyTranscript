@@ -168,14 +168,14 @@ def cooldown_after_deadline():
 
 def load_podcasts():
     if not PODCASTS_JSON.exists():
-        log("⚠️ podcasts.json not found, using empty list")
+        log(f"⚠️ {PODCASTS_JSON.name} not found, using empty list")
         return []
     try:
         data = json.loads(PODCASTS_JSON.read_text(encoding="utf-8"))
-        log(f"📻 Loaded {len(data)} podcast(s) from podcasts.json")
+        log(f"📻 Loaded {len(data)} podcast(s) from {PODCASTS_JSON.name}")
         return data
     except Exception as e:
-        log(f"⚠️ Failed to load podcasts.json: {e}")
+        log(f"⚠️ Failed to load {PODCASTS_JSON.name}: {e}")
         return []
 
 
@@ -706,11 +706,21 @@ def parse_vtt_cues(content):
     return cues
 
 
+CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+
+
+def _cue_lines(text):
+    return [line.strip() for line in (text or "").splitlines() if line.strip()]
+
+
 def is_bilingual_cue(text):
-    lines = text.splitlines()
-    if len(lines) >= 2:
-        return bool(re.search(r"[\u4e00-\u9fff]", lines[1].strip()))
-    return False
+    """A bilingual cue keeps its Chinese translation on the last line.
+
+    Checking the last line (instead of always line 2) supports multiline
+    English originals produced by Whisper/older generators.
+    """
+    lines = _cue_lines(text)
+    return len(lines) >= 2 and bool(CJK_RE.search(lines[-1]))
 
 
 def extract_speaker(text):
@@ -721,55 +731,70 @@ def extract_speaker(text):
 
 
 def prepare_gemini_text(text):
-    lines = text.splitlines()
-    if len(lines) >= 2:
-        if is_bilingual_cue(text):
-            text = lines[0].strip()
-        else:
-            text = " ".join(lines)
-    else:
-        text = lines[0].strip() if lines else text
-
-    speaker, content = extract_speaker(text)
+    lines = _cue_lines(text)
+    if not lines:
+        return text or ""
+    if is_bilingual_cue(text):
+        lines = lines[:-1]
+    plain = " ".join(lines)
+    speaker, content = extract_speaker(plain)
     if speaker:
         return content
-    return text
+    return plain
 
 
 def get_original_text(text):
+    lines = _cue_lines(text)
     if is_bilingual_cue(text):
-        return text.splitlines()[0].strip()
-    return text.strip()
+        lines = lines[:-1]
+    return "\n".join(lines).strip()
+
+
+def get_existing_translation(text):
+    """Return an existing Chinese line so it can be reused without an API call."""
+    lines = _cue_lines(text)
+    if is_bilingual_cue(text):
+        return lines[-1]
+    return ""
 
 
 def restore_speaker_translation(original, translated):
+    if not translated:
+        return translated
+    if re.match(r"<v\s+", translated):
+        return translated
     speaker, _ = extract_speaker(original)
     if speaker:
         return f"<v {speaker}>{translated}"
     return translated
 
 
-def chunk_cues_by_chars(cues, max_chars=MAX_BATCH_CHARS, max_blocks=MAX_BATCH_BLOCKS):
+def _chunk_blocks_by_size(blocks, max_chars=MAX_BATCH_CHARS, max_blocks=MAX_BATCH_BLOCKS):
+    """Split ``(index, text)`` blocks by character budget and block count."""
     batches = []
     current = []
     current_len = 500
 
-    for i, cue in enumerate(cues):
-        text = prepare_gemini_text(cue["text"])
+    for index, text in blocks:
         item_len = len(text) + 15
         if current and (
             current_len + item_len > max_chars or len(current) >= max_blocks
         ):
             batches.append(current)
-            current = [(i, text)]
+            current = [(index, text)]
             current_len = 500 + item_len
         else:
-            current.append((i, text))
+            current.append((index, text))
             current_len += item_len
 
     if current:
         batches.append(current)
     return batches
+
+
+def chunk_cues_by_chars(cues, max_chars=MAX_BATCH_CHARS, max_blocks=MAX_BATCH_BLOCKS):
+    blocks = [(i, prepare_gemini_text(cue["text"])) for i, cue in enumerate(cues)]
+    return _chunk_blocks_by_size(blocks, max_chars, max_blocks)
 
 
 def chunk_blocks(blocks, max_blocks=MAX_BATCH_BLOCKS):
@@ -804,8 +829,20 @@ def translate_episode(source, target, cache_meta, current=None, total=None):
         return
 
     translated = {}
+    missing_blocks = []
+    for i, cue in enumerate(cues):
+        existing = get_existing_translation(cue["text"])
+        if existing:
+            translated[i] = existing
+        else:
+            missing_blocks.append((i, prepare_gemini_text(cue["text"])))
+    if translated:
+        log(
+            f"{progress_prefix}Reusing {len(translated)} existing bilingual cue(s); "
+            f"{len(missing_blocks)} need translation"
+        )
 
-    batches = chunk_cues_by_chars(cues)
+    batches = _chunk_blocks_by_size(missing_blocks)
     log(
         f"{progress_prefix}Batches: {len(batches)} (max {MAX_BATCH_CHARS} chars, {MAX_BATCH_BLOCKS} blocks)"
     )

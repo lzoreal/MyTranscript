@@ -19,6 +19,8 @@ import tempfile
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
+from datetime import timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlparse
@@ -140,6 +142,28 @@ def save_state(state: dict[str, Any]) -> None:
     tmp.replace(STATE_FILE)
 
 
+def atomic_write_text(path: Path, content: str) -> None:
+    """Write a text file atomically; used for generated HTML pages."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(content, encoding="utf-8")
+    tmp.replace(path)
+
+
+CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+
+
+def published_sort_key(value: str) -> float:
+    """Sort RFC-822 dates correctly; fall back to 0 for legacy/odd values."""
+    try:
+        parsed = parsedate_to_datetime(value)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.timestamp()
+    except Exception:
+        return 0.0
+
+
 def format_timestamp(seconds: float) -> str:
     ms = max(0, int(round(float(seconds) * 1000)))
     h, rem = divmod(ms, 3_600_000)
@@ -150,7 +174,7 @@ def format_timestamp(seconds: float) -> str:
 
 def make_public_url(path: Path) -> str:
     rel = path.relative_to(SITE_DIR).as_posix()
-    encoded = "/".join(quote(part) for part in rel.split("/"))
+    encoded = "/".join(quote(part, safe="-._~") for part in rel.split("/"))
     return f"{BASE_URL}/{encoded}" if BASE_URL else encoded
 
 
@@ -841,33 +865,44 @@ def write_bilingual_vtt(cues: list[dict[str, Any]], output_path: Path) -> None:
     log.info("已写出双语 VTT：%s", output_path)
 
 
+MIN_BILINGUAL_RATIO = 0.8
+
+
 def is_valid_bilingual_vtt(path: Path) -> bool:
+    """Accept an already-generated bilingual VTT without re-transcribing it.
+
+    A few historical files contain one or two untranslated cues, so requiring
+    every cue to be bilingual would trigger expensive re-downloads.  An
+    English-only file still has a ratio of zero and is rejected.
+    """
     try:
         content = path.read_text(encoding="utf-8-sig").strip()
     except (OSError, UnicodeError):
         return False
     if not content.startswith("WEBVTT"):
         return False
-    blocks = re.split(r"\n\s*\n", content)
-    count = 0
-    for block in blocks[1:]:
+    total = bilingual = 0
+    for block in re.split(r"\n\s*\n", content)[1:]:
         lines = [line.strip() for line in block.splitlines() if line.strip()]
         idx = next((i for i, line in enumerate(lines) if "-->" in line), None)
         if idx is None:
             continue
-        if len(lines[idx + 1 :]) < 2 or not lines[idx + 1] or not lines[idx + 2]:
-            return False
-        count += 1
-    return count > 0
+        total += 1
+        text_lines = lines[idx + 1 :]
+        if len(text_lines) >= 2 and any(
+            CJK_RE.search(line) for line in text_lines[1:]
+        ):
+            bilingual += 1
+    return total > 0 and bilingual / total >= MIN_BILINGUAL_RATIO
 
 
 # -------------------- 增强 RSS / HTML --------------------
 def find_item_guid(item: etree._Element) -> str:
-    guid = item.find("guid")
-    if guid is not None and guid.text:
-        return guid.text.strip()
-    link = item.find("link")
-    return link.text.strip() if link is not None and link.text else ""
+    guid = item.xpath("./*[local-name()='guid']")
+    if guid and guid[0].text:
+        return guid[0].text.strip()
+    link = item.xpath("./*[local-name()='link']")
+    return link[0].text.strip() if link and link[0].text else ""
 
 
 def find_feed_item(
@@ -875,7 +910,8 @@ def find_feed_item(
 ) -> etree._Element | None:
     for item in root.xpath("//*[local-name()='item']"):
         guid = find_item_guid(item)
-        item_title = item.findtext("title") or ""
+        titles = item.xpath("./*[local-name()='title']")
+        item_title = titles[0].text if titles and titles[0].text else ""
         if identity and guid == identity:
             return item
         if title and item_title.strip() == title.strip():
@@ -883,16 +919,48 @@ def find_feed_item(
     return None
 
 
+def remove_project_transcript_tags(root: etree._Element) -> int:
+    """Drop transcript links owned by this project before rebuilding the feed.
+
+    Keeps external transcript tags untouched while making repeated runs
+    idempotent when a transcript file or URL was renamed.
+    """
+    removed = 0
+    nodes = root.xpath(
+        "//*[local-name()='item']/*[local-name()='transcript' and namespace-uri()=$ns]",
+        ns=PODCAST_NS,
+    )
+    for node in nodes:
+        if "/transcripts/" in (node.get("url") or ""):
+            parent = node.getparent()
+            if parent is not None:
+                parent.remove(node)
+                removed += 1
+    return removed
+
+
 def add_transcript_tag(item: etree._Element, url: str) -> None:
     """添加 Podcasting 2.0 transcript 标签；重复运行不会重复添加相同 URL。"""
     tag = f"{{{PODCAST_NS}}}transcript"
-    for old in item.findall(tag):
-        if old.get("url") == url:
-            # 修正已有同 URL 标签的属性，避免旧配置残留。
-            old.set("type", "text/vtt")
-            old.set("language", "zh-CN")
-            old.set("rel", "captions")
-            return
+    found = None
+    for old in list(item.findall(tag)):
+        old_url = old.get("url") or ""
+        if old_url == url:
+            if found is None:
+                found = old
+            else:
+                item.remove(old)
+            continue
+        # Remove stale project links (e.g. an episode was renamed); keep
+        # third-party transcript links untouched.
+        if "/transcripts/" in old_url:
+            item.remove(old)
+
+    if found is not None:
+        found.set("type", "text/vtt")
+        found.set("language", "zh-CN")
+        found.set("rel", "captions")
+        return
 
     node = etree.SubElement(item, tag)
     node.set("url", url)
@@ -958,7 +1026,12 @@ def make_enhanced_feed(feed_url: str, records: list[dict[str, str]]) -> Path:
         raise RuntimeError("原始 XML 中找不到 RSS 2.0 channel 节点")
     channel = channels[0]
 
-    # 1. 为匹配到的每一集添加 Podcasting 2.0 双语字幕链接。
+    # 1. 为匹配到的每一集添加 Podcasting 2.0 双语字幕链接。先清掉本项目
+    # 旧链接，避免改标题/改文件名后同一集残留多个 transcript 标签。
+    stale_removed = remove_project_transcript_tags(channel)
+    if stale_removed:
+        log.info("已清理旧字幕链接：%d 个", stale_removed)
+
     matched = 0
     for record in records:
         item = find_feed_item(
@@ -1045,16 +1118,17 @@ def build_podcast_index(
     title: str, feed_url: str, records: list[dict[str, str]]
 ) -> Path:
     rows = []
-    for item in sorted(records, key=lambda x: x.get("published", ""), reverse=True):
+    for item in sorted(
+        records, key=lambda x: published_sort_key(x.get("published", "")), reverse=True
+    ):
         rows.append(
             f'<li><a href="{escape_html(item.get("url", ""))}">{escape_html(item.get("title", "Untitled"))}</a><small>{escape_html(item.get("published", ""))}</small></li>'
         )
     base = BASE_URL or ""
-    enhanced = f"{base}/{PODCAST_SLUG}/feed.xml"
+    enhanced = f"{base}/{quote(PODCAST_SLUG, safe='-._~')}/feed.xml"
     page = f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{escape_html(title)} · 双语字幕</title><style>:root{{color-scheme:light dark}}body{{max-width:900px;margin:2rem auto;padding:0 1rem;font:16px/1.7 system-ui,-apple-system,"Segoe UI",sans-serif}}h1{{line-height:1.25}}a{{overflow-wrap:anywhere}}li{{margin:.9rem 0}}small{{display:block;opacity:.7}}</style></head><body><h1>{escape_html(title)}</h1><p>英文原文与简体中文译文合并显示的 WebVTT 字幕。</p><nav><a href="{escape_html(enhanced)}">增强版 RSS Feed</a> · <a href="{escape_html(feed_url)}">原始 RSS Feed</a></nav><h2>已生成字幕</h2><ul>{''.join(rows) if rows else '<li>暂无字幕。</li>'}</ul></body></html>"""
     path = PODCAST_DIR / "index.html"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(page, encoding="utf-8")
+    atomic_write_text(path, page)
     return path
 
 
@@ -1064,11 +1138,12 @@ def rebuild_root_index() -> None:
         for index_file in sorted(SITE_DIR.glob("*/index.html")):
             slug = index_file.parent.name
             if slug != "assets":
+                href = quote(slug, safe="-._~")
                 links.append(
-                    f'<li><a href="{escape_html(slug)}/index.html">{escape_html(slug)}</a></li>'
+                    f'<li><a href="{escape_html(href)}/index.html">{escape_html(slug)}</a></li>'
                 )
     page = f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Podcast Transcript Library</title><style>body{{max-width:900px;margin:2rem auto;padding:0 1rem;font:16px/1.7 system-ui,sans-serif}}li{{margin:.7rem 0}}</style></head><body><h1>Podcast Transcript Library</h1><p>自动生成的播客字幕目录。</p><ul>{''.join(links)}</ul></body></html>"""
-    (SITE_DIR / "index.html").write_text(page, encoding="utf-8")
+    atomic_write_text(SITE_DIR / "index.html", page)
 
 
 # -------------------- 单集与旧 state 兼容 --------------------
@@ -1088,7 +1163,10 @@ def get_existing_path(
 
 
 def process_episode(
-    entry: Any, identity: str, audio_url: str
+    entry: Any,
+    identity: str,
+    audio_url: str,
+    path_owner: dict[str, str] | None = None,
 ) -> tuple[dict[str, str], dict[str, Any]]:
     title = clean_text(getattr(entry, "title", "") or "Untitled episode")
     published = clean_text(
@@ -1096,6 +1174,15 @@ def process_episode(
     )
     filename = safe_filename(title)
     transcript_path = TRANSCRIPT_DIR / f"{filename}.vtt"
+    relative_path = transcript_path.relative_to(SITE_DIR).as_posix()
+    owner = (path_owner or {}).get(relative_path)
+    if owner and owner != identity:
+        # Two episodes with the same title must not share one transcript.
+        # Existing files/state records keep working; only the collision gets a
+        # stable identity suffix.
+        suffix = hashlib.sha1(identity.encode("utf-8")).hexdigest()[:8]
+        filename = f"{safe_filename(title, 100)}_{suffix}"
+        transcript_path = TRANSCRIPT_DIR / f"{filename}.vtt"
     if transcript_path.exists() and is_valid_bilingual_vtt(transcript_path):
         log.info("完整双语字幕已存在，复用：%s", transcript_path)
         record = {
@@ -1203,6 +1290,11 @@ def main() -> int:
         len(candidates),
     )
     records = migrate_legacy_records(ps, processed)
+    path_owner = {
+        record["path"]: identity
+        for identity, record in records.items()
+        if record.get("path")
+    }
     completed_this_run = 0
     failed_count = 0
     for number, (entry, identity, audio_url) in enumerate(candidates, 1):
@@ -1234,7 +1326,9 @@ def main() -> int:
             completed_this_run += 1
             continue
         try:
-            record, proxy_info = process_episode(entry, identity, audio_url)
+            record, proxy_info = process_episode(
+                entry, identity, audio_url, path_owner
+            )
             processed[identity] = {
                 "title": record["title"],
                 "url": record["url"],
@@ -1249,6 +1343,7 @@ def main() -> int:
                 "sha256": proxy_info.get("sha256"),
             }
             records[identity] = record
+            path_owner[record["path"]] = identity
             completed_this_run += 1
             ps["transcripts"] = list(records.values())
             podcasts[PODCAST_SLUG] = ps

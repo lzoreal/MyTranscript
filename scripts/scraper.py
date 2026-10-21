@@ -522,19 +522,25 @@ def is_episode_processed(info, slug):
         return False
 
 
-def unique_vtt_filename(title, guid, slug):
+def unique_vtt_filename(title, guid, slug, processed=None):
+    """Pick a VTT filename without re-reading progress.json for every episode."""
     base = safe_filename(title)
     path = vtt_path_for(slug, base + ".vtt")
+    if processed is None:
+        progress = load_json(PROGRESS_FILE, {"podcasts": {}})
+        processed = progress.get("podcasts", {}).get(slug, {}).get("processed", {})
     # 同名标题若已被另一 GUID 占用，使用 GUID hash 生成稳定文件名。
-    progress = load_json(PROGRESS_FILE, {"podcasts": {}})
-    existing = progress.get("podcasts", {}).get(slug, {}).get("processed", {})
-    for old_guid, info in existing.items():
-        if old_guid != guid and info.get("vtt_filename") == path.name:
-            suffix = hashlib.sha1(guid.encode("utf-8")).hexdigest()[:8]
-            return f"{base[:100]}_{suffix}.vtt"
+    used_by_other = {
+        info.get("vtt_filename")
+        for old_guid, info in processed.items()
+        if old_guid != guid
+    }
+    if path.name in used_by_other:
+        suffix = hashlib.sha1(guid.encode("utf-8")).hexdigest()[:8]
+        return f"{base[:100]}_{suffix}.vtt"
     if path.exists():
         # 若该路径已经是本 GUID 的记录，可覆盖修复；否则避免覆盖未知文件。
-        old_info = existing.get(guid, {})
+        old_info = processed.get(guid, {})
         if old_info.get("vtt_filename") != path.name:
             suffix = hashlib.sha1(guid.encode("utf-8")).hexdigest()[:8]
             return f"{base[:100]}_{suffix}.vtt"
@@ -629,7 +635,7 @@ def process_podcast(podcast, progress):
                 changed = True
                 save_progress(progress)
                 continue
-            filename = unique_vtt_filename(title, guid, slug)
+            filename = unique_vtt_filename(title, guid, slug, processed)
             path = vtt_path_for(slug, filename)
             # 临时文件写完再原子替换，避免中断留下半个 VTT。
             atomic_write_text(path, cues_to_vtt(cues))
@@ -641,11 +647,8 @@ def process_podcast(podcast, progress):
                 "source_url": ep_url,
                 "skipped": False,
             }
-            pc_prog["total_processed"] = sum(
-                1
-                for value in processed.values()
-                if not value.get("skipped") and value.get("vtt_filename")
-            )
+            # total_processed is recomputed once after the batch below; doing
+            # it for every episode made large backlogs O(n^2).
             pc_prog["updated_at"] = now_iso()
             changed = True
             save_progress(progress)
