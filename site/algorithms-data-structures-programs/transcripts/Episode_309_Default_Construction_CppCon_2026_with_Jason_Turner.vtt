@@ -1,0 +1,245 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:35.000
+I'm not saying that all functions that can't fit on a single screen are too long. But we've definitely entered the realm of this is outside the ordinary and deserves attention to justify itself. Because like some of the best code that I've seen, it's just, it is like, it's not even CIPA, it's like closure. And all of them are just these beautiful little concise, composed, you know, everything. It's, you know, what when you hear of Stepanov or Sean Perrin or you, Ben, talk about like the composability of algorithm. You can see that everything was so beautifully crafted to fit together that you only, ever need to invoke, you know, five, six, seven things, and you just read it and it's like, it's like reading poetry.
+
+2
+00:00:35.000 --> 00:01:09.000
+It's so nice. And you never are asking yourself, is this too long? Because it's obvious that it's not. Welcome to ADSP, the podcast, episode 309 recorded on October 7, 20206. My name is Connor. And today with my co-host, Ben. We finish part three of this three-part conversation with Jason Turner. In this episode, we chat about C++ default construction CPPCon 2020.
+
+3
+00:01:09.000 --> 00:01:33.000
+how many lines makes a function too long and more. Yeah, well, we could talk a bit about default construction, if you like. Sure, yeah. Steer the boat, Ben. Steer the boat. Well, I was thinking about this this morning some more. It occurred to me, default construction is really a poor term, the term that we've sort of had all these years,
+
+4
+00:01:33.000 --> 00:02:14.000
+and it sort of confuses two ideas. It confuses the, and one of the things that we inherited from sea, and one of the things that kind of the idea of regular, types and Stepanoffian stuff tries to do is to say well let's the great thing about C++ is you can make types that behave like the built in types right and and so it got mya says you know when in doubt do what the ints do but actually actually we don't like what the ins do this this is kind of bad advice right because we don't like into promotions we don't we and we don't you know in recently as we've started to realize that we don't actually like uninitialized construction right
+
+5
+00:02:14.000 --> 00:02:37.000
+which is what the ins do. Yeah. That's not actually a good way to design your types, right? Yeah, we like very little things that the ins do. And so, you know, default construction conflates two ideas. One is uninitialized construction, doing what the ins do. And that, I think, is just a bad idea. The other applies for some types and is a reasonable idea,
+
+6
+00:02:37.000 --> 00:03:18.000
+which is the idea of nullary construction, which is basically saying, okay, the author of the type was able to provide reasonable defaults, right? Nullary construction for some types is perfectly fine. Uninitialized construction is almost always a bad idea. Now there are, and the reason why we've we've held onto it for so long, perhaps, has been the performance argument, right, which is that I don't want to initialize this whole array of zero things. And interestingly, in recent years, we've seen things like resize and override. We've seen effectively the expansion of the construction idea to cover these performance argument, right? But we still don't like un-initialized construction. That's still kind of a
+
+7
+00:03:18.000 --> 00:04:02.000
+bad thing. Yeah. So I had one student come back to, like, I don't disagree with you just for the record. I'll start with that. But I had one student once come back to me after class. And he's like, look, he said, one of our main performance bottlenecks right now, he's like, I need to be able to resize a vector of trivially constructible things. But vector insists on initials. all the objects and he said one of my main performance bottlenecks right now is the initialization of those objects. And these are like people who work on like really large physics simulation engines. Like you've got you know who knows whatever billions of particles or something and you really really truly don't want to initialize that memory with zeros because that's like a performance problem for you.
+
+8
+00:04:02.000 --> 00:04:47.000
+And I've never encountered code like this in my own time. But whenever I think about this argument I go back to this person and I'm like, what is a good answer? there. And I've never come up with like what I think is like actually a good answer for the situation. Yeah. And you know, it that event that the thinking here eventually leads us to things like, you know, how C++ defines lifetime and all that kind of stuff. And indeed things like resize and overwrite for string, which I don't think exists for vector, right? Which might be another piece. It does not. Yeah. But, you know, so the other thing is that Stepanovian regularity is defined as having a the special member functions basically being copyable having equality in fact also having comparison
+
+9
+00:04:47.000 --> 00:05:28.000
+and and also being default constructible which again i think is a poor term to use because actually it's not needed it's not needed i don't think to define regular and it's not really needed to even implement the standard library for the most part you know so so supplying default constructability because we think that's what's needed or the code and Actually, if we think about containers, it's only vector resize and square bracket operator on the map types that require default constructability. There are no other functions on containers that did. What were those two? The second one was the square brackets on map types.
+
+10
+00:05:28.000 --> 00:05:46.000
+The first one was. Yeah, the indexing operator. And that arguably is a poorly designed API, right? Indexing into a map in C++. Default constructs the object if it wasn't there. I just watched. It was on my list for a long time. a, is it two-hour video called the worst language ever?
+
+11
+00:05:46.000 --> 00:06:12.000
+Oh, I've seen the title. I haven't watched the video, yeah. Yeah, it's a click-baity title. It's about C++, but really it's like a masterclass in like, you know, becoming a language expert and finding all the different things. And that's, in the first 10 minutes, I think, it talks about that being one of the biggest kind of warts of the container types is that kind of behavior. And it puts it up against Python and Java and a bunch of other.
+
+12
+00:06:12.000 --> 00:06:53.000
+languages and it's like no other language does this because it's absurd. Like it's not at all what you expect. Default construction, I should say, I'd like to stop using the term default construction and indeed say non-initializing construction versus nullery construction, right? So non-initializing construction, which is what the language applies to built-in types, basically, that leads us down the route of, oh, you know, we have to deal with it historically. So now we have erroneous behavior, for example, for reading from non-initialized built-in types. It also kind of flies in the face of, you know, one of the original things at C++1, the original kind of selling points, if you like, of C++ over C, is that we don't have to
+
+13
+00:06:53.000 --> 00:07:23.000
+declare all our automatic variables up front only to assign them later. We can wait till we need the variable to declare it. And at that point, we know how to initialize it, presumably. And, you know, this is certainly a best practice. I know that Jason espouses, and then you can market cons and all those good things, right? And Connor, I know you've talked about the initialized, then modify anti-pattern. So the idea of non-initializing construction just is anathema to this kind of best practices world view. Yeah.
+
+14
+00:07:23.000 --> 00:08:00.000
+I'm not going to disagree with you for sure. And then there's fallback solutions if you really need them. Like you can make an optional of the thing and then fill it in later, which I don't love optional, but that is a good use case for optional, right? Yeah, it's the major use case I have, I think, deferred construction. I just, I feel like I just want to say aloud to anyone who just heard me say that. Still try to figure out if you don't need optional first, right? Don't just be like, oh, I'll just use optional here because I don't have a plan. You know, don't do that. What does, I don't use these algorithms. Or, sir, go ahead, Jason. I was going to say,
+
+15
+00:08:00.000 --> 00:08:20.000
+I don't use these algorithms, but I know that they were added the uninitialized underscore operations. What does what does your commentary here Ben say about those? It's like I'm this is a more of like because I like oh you're talking about the algorithms in memory I think it's copy un-initialized and move un-initialized is that right? Yeah but I think
+
+16
+00:08:20.000 --> 00:08:40.000
+they might even come up. I've never looked at I've seen them maybe even in thrust or some other libraries and they are like for I think performance reasons but like when I hear potentially like an argument for do we do we even obviously they're not going to do this to C++ but we're talking hypothetically here, you know, do we even need, quote-unquote, you know, default construction?
+
+17
+00:08:40.000 --> 00:09:11.000
+Like, does that, what does the existence of these uninitialized algorithms or operations, like, mean in this kind of context? Like, I don't have the answer. I haven't used them a whole lot. I tend to think something is telling me, if I'm remembering, right, they are often used in the implementation of types like vector. And they are for things like, I, I, I, I, yeah. I need to do things which involve micromanagement of lifetimes.
+
+18
+00:09:11.000 --> 00:09:22.000
+Yeah. Constexper in 26. Looking up the details here. I've never used them. This is like, and this is officially going on a list for an upcoming C++ weekly episode. Perfect. Yeah.
+
+19
+00:09:22.000 --> 00:09:59.000
+I've only ever used them in things like implementing, like my own containers, my own vector, for example. It's clearly not necessary for the Constexper implementation of vector. otherwise it would have been constexper in C++20. That's how these things tend to fall out in the standard. So I am curious. Yeah, I just, I googled uninitialized on CPP reference. And the set that comes up when you Google or Google that, search that is stood uninitialized copy, uninitialized fill, uninitialized value construct, initialized default construct, and uninitialized construct use.
+
+20
+00:09:59.000 --> 00:10:31.000
+And then there's ranges versions of those also, it seems. Yeah. And they're all defined in memory, not out. Although it says specialized memory algorithm. Page and confusingly puts it under the algorithm, or it doesn't put it under, but to the left of the specialized memory algorithms is the algorithm library. So I'm going to think of these things as specialist tools for managing lifetime in things like containers, like we said. I think if you find yourself using these in application code, quote application code,
+
+21
+00:10:31.000 --> 00:11:02.000
+then maybe take a step back and look at encapsulating it in. No-rah un-initialized algorithms. Not as catchy as Sean's no-rah loops, but hey. Yeah, the idea of uninitialized or non-initializing construction, like for ints, right? So if we think about this more, I think I was thinking about this. So, and I looked inside elements of programming, and it defines regular types in Chapter 1.5, and it doesn't actually say that your default construction is required. It says construction is required.
+
+22
+00:11:02.000 --> 00:11:45.000
+And then it goes on to say that default construction is when you have no arguments. But it's not necessarily true, I think, for a consistent view of regularity that we require default construction. The one axiom, if you like, of regularity is that if you copy a T, then the A and the B should compare equal after the copy. Right. That's the axiom that links copying and equality. And it presupposes that you have a T available. How that T was constructed, we don't really care at that point, right? And it may also be true that some of the containers in their internals from time to time require nullery construction, right?
+
+23
+00:11:45.000 --> 00:12:28.000
+I'm not using deliberately not saying default construction. Right. But if we just say int X with no initializer, right, so that the storage is there, the int is, is it, alive. I think it's alive, but it has, but, but it's partially formed. And these are also the words of elements of programming. It's partially formed, which is to say that you can either destroy it or assign to it. And you cannot read it. It says in EOP. You cannot read it. That's erroneous behavior from, from 26 onwards, right? Um, well, you know, part of me wants to ask what, what is the point of constructing an object that cannot be in any meaningful way used? It, it seems to
+
+24
+00:12:28.000 --> 00:13:19.000
+me like if the fact of the matter is like built-in types do not have class invariant right they're not class types we don't think of them as having class invariants but maybe we should and if we were to do that then we would naturally think well you know if I'm constructing an int and not initializing it then that's upholding none of its invariants it can't be used in any meaningful way and that is part of its interface and therefore that is you know I expect after I construct an in that I can use it yeah that's a fair argument anyway that's my soapbox Yeah, no. And I think adjacent to your soapbox is I've made a point of demonstrating this in a few talks and I bring it up with students whenever it makes sense to. And it was one of the points that I ended up making at the very end of this rule of end talk. Well, whatever. I make the point somewhere in the talk. It depends on the version.
+
+25
+00:13:19.000 --> 00:13:43.000
+If the thing does not have a default constructor, like if you must provide something to construct the thing, I have come to the conclusion personally that this object should not be movable under most cases. Because the now, so... Can I ask a clarifying question? Do you mean it should only be copyable? Yes. Okay. Potentially.
+
+26
+00:13:43.000 --> 00:14:09.000
+Yeah. Copyable or, yeah. So I made, what I did was I was trying to illustrate the point. So I made a simple ring buffer type and it's probably broken by the standards of many people's ring buffer notions, whatever. But it requires a size. because it needs to know how much storage to create, right? Now, me in an alternate universe would have made that size a template parameter, but I didn't want to for the sake of this example.
+
+27
+00:14:09.000 --> 00:14:32.000
+I made it a runtime parameter. So you must provide a size. If you provide a size of zero, it's going to allocate an array of zero internally, but it's still valid pointer, valid storage, right? Or actually, I might have even put a contract on it saying that the size is greater than zero because I was just trying to illustrate a bunch of different points. But regardless, I have something. that holds a pointer to a thing. Think like unique pointer, but think a unique pointer that
+
+28
+00:14:32.000 --> 00:15:08.000
+cannot be constructed with a null pointer. Like that is an invalid use case, a unique pointer that must be constructed with a valid pointer. If you move out from this unique pointer, the thing that is left behind, the moved from object, is now in effectively an unusable state like you're talking about. Like, I can, well, unique pointer is a tough one because you can still get back the null pointer that was in it. Anyhow, in the ring buffer thing that I illustrated, I now have function, I now have an object where the only meaningful thing I can do is assigned to it again, like you're talking about with an integer.
+
+29
+00:15:08.000 --> 00:15:33.000
+Right. And so I said, you know what? I am for the sake of the argument so that we can talk about it. I'm going to delete the move operations here and say, if moving always puts this thing in a state where it is not usable in any meaningful way, then it shouldn't be movable. And I just want people to think about that also, right? And I think that's, I know, I think it's related to what your argument is. For sure.
+
+30
+00:15:33.000 --> 00:16:14.000
+And this line of thinking leads us to, you know, destructive move, right? Which is, if we had destructive move, I think your argument might change and say, well, it is movable because moveable because move to destroy is. Yeah. But we don't. But many, you know, a workable mental model, certainly a workable mental model is that after you move something, you should only assign to it or destroy it or disjoint. destroy it, right? Yes. That is where many people start. That is how many people think of things. That is certainly a workable mental model. It happens that in the minutiae of C++, that is not quite correct because after it's moved from, it still is a member of the class. Its invariant still
+
+31
+00:16:14.000 --> 00:16:49.000
+hold. Functions that don't have preconditions may still be called. And there are details of implementing some containers and or algorithms perhaps which rely on some of those things. And there's no way to know if the object has ever been moved from. If you ever pass anyone in a mutable reference to this thing, it's possible they moved it. Right. Like you pass an L-value, you think you're passing an L-value reference to a function. Ha-ha, jokes on you internally inside the function. They still called Stood Move.
+
+32
+00:16:49.000 --> 00:17:25.000
+They cast it to an R-value reference. They moved out the thing. And when your function is returned to you, you have an object that has now been moved from. There's no way to enforce it. Right. So, yes. Like, the ideal, but we, but, but it's still C++. The ideals are great, but we're programming it's C++. Yeah, I know. Well, as, as I've been listening to this, you know, just hanging out for dear life, I've had this little voice in the back of my head while, you know, Jason and the second part of this conversation is talking about the multidimensional extension to that Howard Hennon table. And I feel like I'm my,
+
+33
+00:17:25.000 --> 00:17:58.000
+my brain is vibrating. By the way, I think that table, certainly one of the early talks Howard gave with that table in it was a criminally underviewed talk, which I think I can dig up the link. And it was a talk at Bloomberg. It was an invited that Howard gave it. All right. I will definitely. I mean, I have already, because I've been trying to, at least if not find the links, get the, you know, type the name down in the future. I have the article that made. And in the bottom of the image, there is a hyperlink to the talk. that Howard Hinnett gave. I'm not sure if it's the exact same one.
+
+34
+00:17:58.000 --> 00:18:20.000
+That's a problem with images, folks, though. You can't click on the hyperlink in a JPEG or a PNG, or at least not yet, you know, maybe some future photo format. Send it to Codd and ask it to extract that URL for you, and then you could click on it. Maybe. I'm not sure that's the best you've... You could just type it into the browser.
+
+35
+00:18:20.000 --> 00:18:45.000
+Or you could just search for Howard Hinnon and Todd. I was also going to say, We haven't actually reviewed, you know, maybe, so yeah, talk a little bit about the other talk. We could talk about the conference. Yeah, but like CPPCon, I know Benton, you were only there for Friday, but Jason, I imagine you were there for the whole week. I mean, you can tell us true or false. And maybe you saw some talks while you were there. Like, I always, when I was a listener before I was a podcaster, I always liked getting, like, highlights of,
+
+36
+00:18:45.000 --> 00:19:14.000
+oh, I should definitely go watch this talk instead of having to sift through all hundreds of them to find the best one. So if you have any recommendations, if you don't, that's fine. But yeah, over to you. I'm going to say, unfortunately, I don't really have anything intelligent to tell you about CBPCon because I was absolutely wiped out. I flew from Europe, as many people do. But, and then I taught the workshop on Saturday and Sunday. And then I actually had to fly to another client on Monday night and I got back on Tuesday. Oh, wow.
+
+37
+00:19:14.000 --> 00:19:40.000
+So I missed like, yeah, I missed basically all of Monday and Tuesday. And then I had my own talks on Wednesday and Friday and a book signing on Thursday. and it was just like I wasn't really present. Well, in that case, I'm going to plug a couple of talks. One by Dave Stephan, who is a regular at Denver meetup, and it's called refactoring in three acts, or something of that, a tale of three acts. I think that's a good talk.
+
+38
+00:19:40.000 --> 00:20:09.000
+That is actually on YouTube, unlisted at the moment. But actually, it seems like the early access talks are free for everyone. I have no idea. I'm not sure. And the other talk I'm going to plug is, course my colleague Michael Case's talk that was on the Friday so I did see it and he was showing and now I've forgotten the name of the talk but Conner no doubt you can dig it up he was talking about the thesis the abstract of his talk said you know doing basically doing doing firmware slash
+
+39
+00:20:09.000 --> 00:20:33.000
+bare metal firmware with with contemporary C++ bringing bringing firmware into the the contemporary practices rather than staying in escaping 1996 was I think one of the phrases in the abstract. All right, I will link to both of those, and yeah, sure to check those out. Jason, do you want to highlight any of your other talks you've given? And I should say, I promise my wife, I would change a diaper in it.
+
+40
+00:20:33.000 --> 00:20:50.000
+So we have to time box the... The question is, how did you time the child? As would the real question I have here. Oh, I mean, I imagine the diaper just needs to be changed. Oh, yeah. In the first month, it's like a dozen times a day, at least. Yeah. You know, without...
+
+41
+00:20:50.000 --> 00:21:23.000
+You know what I'm going to do? I'm going to instead plug Dave's talk, which I have not seen yet. Because I have realized with side conversations with Dave, plus seeing many of his talks, he usually previews them at our meetup, that he and I are coalescing, perhaps is the right term. Converging? Converging? On, like, how one actually goes about writing code that's maintainable, I think. And so I am sure Tave's talk is good.
+
+42
+00:21:23.000 --> 00:21:42.000
+And if Ben plugs it, then it's definitely good. And yeah, like you'll almost certainly, I'm guessing that the average person who watches it will be slightly annoyed and say, I can't do that in my code. But then it's going to bother you for the rest of your life because you're going to wonder if you can pull it off in your code. Yeah.
+
+43
+00:21:42.000 --> 00:21:56.000
+You're making me think certainly of the function length idea. Yes. Functional length? And so another talk, yeah, function length. The line length of functions, the number of lines in the function. Yeah. So Dave. Dave.
+
+44
+00:21:56.000 --> 00:22:13.000
+So they definitely asks in that talk. Sorry. And he, you know, he has very small numbers. What most people would think can be impossibly small. And so. We should ask Connor. What do you think is that outside of APL? Let's say you're ready to say one line.
+
+45
+00:22:13.000 --> 00:22:30.000
+Yeah. Yeah. Right. What do you think is a, how small is small? is, the slightly more focused question is, what length of function would you be wary about okaying in the code review? If you saw a thousand line function in the code review, would that be too long?
+
+46
+00:22:30.000 --> 00:22:47.000
+I mean, that's way past the threshold. That would be, okay. So if you saw a hundred line function? It depends. It depends. But like, in general, depending on the level that you're at, I really think my favorite functions are like, you know, five to ten, like the grokability and understandability,
+
+47
+00:22:47.000 --> 00:23:00.000
+of it is just like obvious. As soon as you, as soon as I'm scrolling on GitHub in your PR, and I do the side by side, I don't do the unified. So it's like, however many lines that is, then I'm asking.
+
+48
+00:23:00.000 --> 00:23:11.000
+I'm not saying it's bad. I'm just saying I'm now asking myself. Does this need to be this long? Sometimes it does. I'm not saying that all functions that can't fit on a single screen are too long. But we've entered,
+
+49
+00:23:11.000 --> 00:23:31.000
+we've definitely entered the realm of, this is outside the ordinary and deserves attention to justify itself. Yeah. Because like some of the best code that I've seen, it's just, it is like, it's not even see, but it's like closure and all of them are just these beautiful, little concise, composed, you know, everything. It's, you know, what, when you hear Stepanov or Sean Parent or you, Ben, talk about like the composability of
+
+50
+00:23:31.000 --> 00:24:14.000
+Albert, you can see that everything was so beautifully crafted to fit together that you only ever need to invoke, you know, five, six, seven things. And you just read it and it's like, it's like reading poetry. It's, it's so nice. And you never are asking yourself, is this too long? Because it's obvious that it's not. It's obvious that, you know, it's just really well written. C++, I don't find you stumble into that as often. No. The talk I gave it in D.C. Toronto. The expression expression based C++. That's what it was. Thank you. That was directly. It is as of a couple months ago. It should be online now. That one is I created that talk because of the mindworm from Dave from years ago, right?
+
+51
+00:24:14.000 --> 00:24:31.000
+So that talk, watch one of Dave's recent talks, then go watch that talk and maybe I'll see where I was coming from. And Dave has practiced this in a decent size code base, you know, like in his production code base, he is deliberately
+
+52
+00:24:31.000 --> 00:24:59.000
+ratcheted up in CI the requirements for function length or function shortness, you know, and he's gone down from, you know, turning it on first and setting it's something arbitrary like 100 and fixing those and then bringing it down over time to 50, below 50. I think he stopped, you know, like all of these things, he stopped before perhaps his complete ideal, but he stopped in a pragmatic sense at like 35 or something like that.
+
+53
+00:24:59.000 --> 00:25:39.000
+And I've had students from Dave's teams many times and that seems to be a process that's working. And I will say, my last chat with him, we seem to agree that the only time where you can assume that this rule would be broken is something where it's just naturally expressed in more lines of code. Like, for some reason, you're decoding a protocol and you naturally have a switch with like 50K statements. And there's just, there's no logical way to split this in half, right? Then yeah. And you don't, you know, if the compiler could optimize an array lookup into function pointer as well, then maybe you could bring it down, but sometimes before you can't.
+
+54
+00:25:39.000 --> 00:26:13.000
+And but also readability of the code. Like sometimes it's just, it just makes more sense, I think often, but not always. I had this talk I want, you need to go. Yeah, well, I got two minutes. I had this talk that I wanted to give years ago and have never given it. And it was called format driven development, which sounds kind of like something that a lot of people would disagree with. But it's really more of like a design talk and that like when I think about that long case statements, like I'm really, I'm praying that it's like case. colon, return, you know, single thing and semicolon.
+
+55
+00:26:13.000 --> 00:26:44.000
+And like, it, like, drives me not insane, but just like, there's something about, and I've, I've gone on little in other talks. Like, I've given other speakers a hard time when they don't, like, use monospace font and they don't use, like, formatting like that because there's, oh, it's just slideware. And I'm like, you're making it harder for people to, like, use the pattern recognition engine that is in all of our brains. And so, like, when you see a case statement, like, that and then only one of the case statements breaks into multiple lines and it's in the middle it's
+
+56
+00:26:44.000 --> 00:27:24.000
+just like oh like throw that thing in a function so that like even if all of it's raw code and then you have one function so that you can keep that kind of linear style and aligned style anyways that's that kind of stuff I think leads to it goes hand in hand with keeping your function short because when you when you try to reduce indentation when you try to you know keep things linear and symmetric, you just naturally end up with shorter, because the easier things to keep symmetric and readable and parallel with each other are short functions. When you have a big globs, you end up with things that aren't at the same abstraction level. And yeah, so anyways, I think if I had made the talk, people would have been like, this is stupid. You shouldn't,
+
+57
+00:27:24.000 --> 00:27:47.000
+you shouldn't be driving the writing of your code based on form. Like, literally, I've done PRs where like some line was too long and then I just refactored the whole function just to make it look more. It didn't do anything different. It was just like reformatting. But at the end of it, it looked so much. You would imagine I did something amazing there, but really it was just a functionality. And I think that is my wife pinging on what's asking me to go. All right.
+
+58
+00:27:47.000 --> 00:27:56.000
+You have more important things to do than talk to us. You do. Yes. Well, absolutely. Arguably, I guess, yeah. You do. Raising a baby is more important. Indeed.
+
+59
+00:27:56.000 --> 00:28:09.000
+Yes, it is. It's more important. But thank you so much, Jason, for taking the time across the pond at a different time zone and to Ben as well. I guess you're in a different time zone. Yeah, thanks, Jason. Yeah, absolutely. Hopefully we'll bump all the three of us
+
+60
+00:28:09.000 --> 00:28:24.000
+in a conference in the next 365 days. Yeah, at some point. Be sure to check these show notes, either in your podcast app or at ADSP thepodcast.com for links to anything we mentioned in today's episode, as well as a link to a get-up discussion where you can leave thoughts, comments, and questions.
+
+61
+00:28:24.000 --> 00:28:29.000
+Thanks for listening. We hope you enjoyed and have a great day. I am the anti-brace. There aren't comments yet for this episode. Click on any sentence in the transcript to leave a comment.
