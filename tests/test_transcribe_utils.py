@@ -1,5 +1,6 @@
 import hashlib
 import importlib.util
+import json
 import sys
 import tempfile
 import types
@@ -22,6 +23,8 @@ genai = types.ModuleType("google.genai")
 genai_types = types.ModuleType("google.genai.types")
 genai.Client = object
 genai.types = genai_types
+if not hasattr(genai_types, "GenerateContentConfig"):
+    genai_types.GenerateContentConfig = lambda **kwargs: kwargs
 google.genai = genai
 sys.modules.setdefault("google", google)
 sys.modules.setdefault("google.genai", genai)
@@ -239,6 +242,84 @@ class RootIndexTests(unittest.TestCase):
 
             page = (site_dir / "index.html").read_text(encoding="utf-8")
             self.assertIn('href="99%25-invisible/index.html"', page)
+
+
+def _decode_trailing_object(prompt):
+    """取出 prompt 末尾那段待翻译 JSON，用来模拟模型只看到编号和英文。"""
+    start = prompt.rfind("{")
+    while start >= 0:
+        try:
+            value, _ = json.JSONDecoder().raw_decode(prompt[start:])
+        except json.JSONDecodeError:
+            start = prompt.rfind("{", 0, start)
+            continue
+        if isinstance(value, dict) and value:
+            return value
+        start = prompt.rfind("{", 0, start)
+    raise AssertionError("prompt 末尾没有 JSON 对象：" + prompt[-200:])
+
+
+class FakeGemini:
+    """按编号作答的假客户端；drops 逐个复现「合并重复短句导致漏条目」的真实故障。"""
+
+    def __init__(self, drops=()):
+        self.drops = [set(d) for d in drops]
+        self.requests = []
+        self.models = SimpleNamespace(generate_content=self._generate)
+
+    def _generate(self, model=None, contents=None, config=None):
+        source = _decode_trailing_object(contents)
+        self.requests.append(sorted(source, key=int))
+        drop = self.drops.pop(0) if self.drops else set()
+        # 故意倒序返回，配对不能依赖返回顺序。
+        result = {
+            key: f"译{key}::{source[key]}"
+            for key in reversed(sorted(source, key=int))
+            if key not in drop
+        }
+        return SimpleNamespace(text=json.dumps(result, ensure_ascii=False))
+
+
+class TranslationPairingTests(unittest.TestCase):
+    def setUp(self):
+        # 真实 hwmym 字幕里 "Yeah." 这类短句会重复十几遍，最容易触发模型合并。
+        self.cues = [
+            {"start": 0.0, "end": 1.0, "en": "Yeah."},
+            {"start": 1.0, "end": 2.0, "en": "So for our second season we united forces."},
+            {"start": 2.0, "end": 3.0, "en": "Yeah."},
+            {"start": 3.0, "end": 4.0, "en": "Right."},
+            {"start": 4.0, "end": 5.0, "en": "Yeah."},
+            {"start": 5.0, "end": 6.0, "en": "And Angela over at OLN."},
+        ]
+
+    def run_translation(self, drops, cues=None):
+        fake = FakeGemini(drops)
+        cues = self.cues if cues is None else cues
+        with patch.object(transcriber, "create_gemini_client", return_value=fake), patch.object(
+            transcriber, "wait_for_gemini_rate_limit", lambda: None
+        ), patch.object(transcriber, "TRANSLATE_BASE_DELAY", 0.0), patch.object(
+            transcriber, "TRANSLATE_BATCH_DELAY", 0.0
+        ):
+            result = transcriber.translate_cues_with_gemini(cues)
+        return fake, result
+
+    def test_translates_every_duplicate_short_phrase(self):
+        _, result = self.run_translation([])
+        for index, cue in enumerate(self.cues):
+            self.assertEqual(cue["zh"], f"译{index}::{cue['en']}")
+        self.assertEqual(result, self.cues)
+
+    def test_missing_cues_are_retried_without_resending_the_batch(self):
+        fake, _ = self.run_translation([{"2", "4"}])
+        self.assertEqual(len(fake.requests), 2, "漏两条不该把整批 6 条重发")
+        self.assertEqual(fake.requests[1], ["2", "4"])
+        for index, cue in enumerate(self.cues):
+            self.assertEqual(cue["zh"], f"译{index}::{cue['en']}")
+
+    def test_persistent_single_cue_failure_names_the_cue(self):
+        with self.assertRaises(RuntimeError) as caught:
+            self.run_translation([{"0"}] * 8, cues=[self.cues[0]])
+        self.assertIn("Yeah.", str(caught.exception))
 
 
 if __name__ == "__main__":
