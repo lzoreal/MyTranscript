@@ -3,6 +3,8 @@ name: Translate to Chinese & Deploy Pages
 on:
   schedule:
     # 每天北京时间凌晨 3 点运行（UTC 19:00）
+    # 流水线最后一步：周一它可能排队等 crawl/transcribe 结束（共用 group "pages"），
+    # 这样译好的 zh/ 字幕一定晚于新的 feed.xml。
     - cron: "0 19 * * *"
   workflow_dispatch:
     inputs:
@@ -50,7 +52,7 @@ jobs:
 
       - name: 安装依赖
         run: |
-          pip install google-genai
+          pip install -r requirements.txt
 
       - name: 运行 Gemini 翻译
         id: translate
@@ -59,7 +61,7 @@ jobs:
         continue-on-error: true
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GEMINI_MODEL: ${{ github.event.inputs.model || 'gemini-3.1-flash-lite' }}
+          GEMINI_MODEL: ${{ github.event.inputs.model || 'gemini-3.5-flash-lite' }}
           MAX_FILES: ${{ github.event.inputs.max_files || '10' }}
           # Bound prompt size; the script validates every returned cue and
           # retries only missing cues when a long response is incomplete.

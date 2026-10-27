@@ -67,7 +67,13 @@ if IN_ACTIONS:
 else:
     fmt = "%(asctime)s [%(levelname)s] %(message)s"
 
-logging.basicConfig(level=logging.INFO, format=fmt, datefmt="%H:%M:%S")
+# 每个 API 请求和每个跳过的剧集都会产生日志，默认只保留里程碑；
+# 排障时在 workflow 里设 LOG_LEVEL=DEBUG 可取回逐步细节。
+logging.basicConfig(
+    level=getattr(logging, os.environ.get("LOG_LEVEL", "INFO").strip().upper(), logging.INFO),
+    format=fmt,
+    datefmt="%H:%M:%S",
+)
 logger = logging.getLogger("vtt_translator")
 
 
@@ -75,8 +81,8 @@ def log(msg=""):
     logger.info(msg)
 
 
-def separator():
-    log("=" * 70)
+def log_detail(msg=""):
+    logger.debug(msg)
 
 
 def group(title):
@@ -111,7 +117,7 @@ def _rate_limit_wait():
     elapsed = now - _last_request_time
     if elapsed < MIN_REQUEST_INTERVAL:
         sleep_time = MIN_REQUEST_INTERVAL - elapsed
-        log(f"⏳ Rate limit: sleeping {sleep_time:.2f}s")
+        log_detail(f"⏳ Rate limit: sleeping {sleep_time:.2f}s")
         time.sleep(sleep_time)
     _last_request_time = time.time()
 
@@ -181,7 +187,7 @@ def load_podcasts():
 
 def load_cache():
     if not CACHE_FILE.exists():
-        log("ℹ️ Cache not found")
+        log_detail("ℹ️ Cache not found")
         return {}
     try:
         data = json.loads(CACHE_FILE.read_text(encoding="utf-8"))
@@ -456,7 +462,7 @@ def gemini_batch_translate(blocks, cache_meta):
         _rate_limit_wait()
         start = time.time()
 
-        log(
+        log_detail(
             f"🤖 Request #{cache_meta['daily_requests']}/{DAILY_REQUEST_LIMIT} "
             f"(attempt {attempt}/{RETRY_COUNT}), blocks: {len(blocks)}, "
             f"json={use_json}"
@@ -512,7 +518,7 @@ def gemini_batch_translate(blocks, cache_meta):
                 log(f"⚠️ Parse/Index error: {err_msg}")
                 raise IndexMismatchError(err_msg, parsed)
 
-            log(f"✅ Success {time.time() - start:.2f}s, parsed: {len(parsed)}")
+            log(f"✅ {len(parsed)} cues translated in {time.time() - start:.1f}s")
             return parsed
 
         except Exception as e:
@@ -816,16 +822,11 @@ def translate_episode(source, target, cache_meta, current=None, total=None):
     # 构建进度前缀
     progress_prefix = f"[{current}/{total}] " if current and total else ""
 
-    separator()
-    log(f"{progress_prefix}📄 Translating {source.name}")
-    separator()
-
     content = source.read_text(encoding="utf-8")
     cues = parse_vtt_cues(content)
 
-    log(f"{progress_prefix}Cue blocks: {len(cues)}")
     if not cues:
-        log(f"{progress_prefix}⚠️ No cues found, skipping")
+        log(f"{progress_prefix}⚠️ {source.name} has no cues, skipping")
         return
 
     translated = {}
@@ -836,15 +837,12 @@ def translate_episode(source, target, cache_meta, current=None, total=None):
             translated[i] = existing
         else:
             missing_blocks.append((i, prepare_gemini_text(cue["text"])))
-    if translated:
-        log(
-            f"{progress_prefix}Reusing {len(translated)} existing bilingual cue(s); "
-            f"{len(missing_blocks)} need translation"
-        )
 
     batches = _chunk_blocks_by_size(missing_blocks)
     log(
-        f"{progress_prefix}Batches: {len(batches)} (max {MAX_BATCH_CHARS} chars, {MAX_BATCH_BLOCKS} blocks)"
+        f"{progress_prefix}📄 {source.name}: {len(cues)} cues, "
+        f"{len(missing_blocks)} to translate ({len(translated)} reused) "
+        f"in {len(batches)} batch(es)"
     )
 
     for batch_idx, batch in enumerate(batches, 1):
@@ -914,27 +912,19 @@ def translate_episode(source, target, cache_meta, current=None, total=None):
 
 def main():
     global client
-    group("Initializing Gemini")
-    try:
-        client = initialize_client()
-        log("Gemini initialized")
-    finally:
-        endgroup()
+    client = initialize_client()
 
-    separator()
     log("🚀 Translate VTT started")
-    separator()
-    log(f"Model: {MODEL}")
-    log(f"Temperature: {TEMPERATURE}")
-    log(f"JSON schema: {USE_JSON_SCHEMA}")
-    log(f"Sensitive-content fallback: {SENSITIVE_FALLBACK}")
-    log(f"Site dir: {SITE_DIR}")
-    log(f"Max files: {MAX_FILES}")
-    log(f"Max batch chars: {MAX_BATCH_CHARS}")
-    log(f"Max batch blocks: {MAX_BATCH_BLOCKS}")
-    log(f"Deadline cooldown: {DEADLINE_COOLDOWN_SECONDS}s")
-    log(f"RPM limit: {RPM_LIMIT} (interval: {MIN_REQUEST_INTERVAL:.2f}s)")
-    log(f"Daily request limit: {DAILY_REQUEST_LIMIT}")
+    log(
+        f"   model={MODEL} temp={TEMPERATURE} json_schema={USE_JSON_SCHEMA} "
+        f"sensitive_fallback={SENSITIVE_FALLBACK}"
+    )
+    log(
+        f"   site={SITE_DIR} max_files={MAX_FILES} "
+        f"batch≤{MAX_BATCH_CHARS} chars/{MAX_BATCH_BLOCKS} cues "
+        f"rpm={RPM_LIMIT} ({MIN_REQUEST_INTERVAL:.2f}s interval) "
+        f"daily_limit={DAILY_REQUEST_LIMIT} cooldown={DEADLINE_COOLDOWN_SECONDS}s"
+    )
 
     podcasts = load_podcasts()
     if not podcasts:
@@ -992,21 +982,14 @@ def main():
                 input_dir.glob("*.vtt"),
                 key=lambda x: int(x.stem) if x.stem.isdigit() else x.stem,
             )
-            log(f"\n📻 Podcast: {slug} ({podcast.get('name', slug)})")
-            log(f"Found VTT: {len(files)}")
+            log(f"📻 {slug} ({podcast.get('name', slug)}): {len(files)} VTT file(s)")
 
             podcast_cache = cache.setdefault(slug, {})
             processed_podcast = 0
+            already_done = 0
 
             for episode_position, source in enumerate(files, start=1):
                 episode = source.stem
-
-                separator()
-                log(
-                    f"Processing episode {episode} "
-                    f"(podcast {episode_position}/{len(files)}, "
-                    f"overall {episode_positions[source]}/{total_episodes})"
-                )
 
                 sha = file_hash(source)
                 old = podcast_cache.get(episode)
@@ -1018,11 +1001,11 @@ def main():
                     and old.get("translated")
                     and target.exists()
                 ):
-                    log("⏭ Already translated")
+                    already_done += 1
                     continue
 
                 if processed_total >= MAX_FILES:
-                    log("MAX_FILES reached")
+                    log("🏁 MAX_FILES reached")
                     break
 
                 if meta["daily_requests"] >= DAILY_REQUEST_LIMIT:
@@ -1030,6 +1013,11 @@ def main():
                     stopped_by_limit = True
                     break
 
+                log_detail(
+                    f"Processing episode {episode} "
+                    f"(podcast {episode_position}/{len(files)}, "
+                    f"overall {episode_positions[source]}/{total_episodes})"
+                )
                 try:
                     group(f"Episode {episode} ({slug})")
                     # 传入当前集数和总集数
@@ -1064,7 +1052,8 @@ def main():
                     continue
 
             log(
-                f"✅ Podcast {slug}: {processed_podcast} episode(s) translated this run"
+                f"   {slug}: {processed_podcast} translated this run, "
+                f"{already_done} already up to date"
             )
 
             if processed_total >= MAX_FILES or stopped_by_limit:
@@ -1073,22 +1062,19 @@ def main():
     finally:
         save_cache(cache)
 
-    separator()
-    log("Finished")
-    log(f"Total translated episodes: {processed_total}")
-    if errors:
-        log(f"Failed episodes: {len(errors)}")
-        for slug, ep, err in errors:
-            log(f"  - {slug}/{ep}: {err}")
-    log(f"Daily requests used: {meta['daily_requests']}/{DAILY_REQUEST_LIMIT}")
-    separator()
-
+    summary = (
+        f"🏁 Finished: {processed_total} episode(s) translated, "
+        f"{meta['daily_requests']}/{DAILY_REQUEST_LIMIT} requests used"
+    )
     if stopped_by_limit:
-        log("⛔ Stopped due to daily API limit. Run again tomorrow to continue.")
+        log(f"{summary} — daily API limit reached, run again tomorrow to continue")
         return 0
-    elif errors:
-        log("⚠️ Completed with errors.")
+    if errors:
+        log(f"{summary} — {len(errors)} episode(s) failed")
+        for slug, ep, err in errors:
+            log(f"   - {slug}/{ep}: {err}")
         return 1
+    log(summary)
     return 0
 
 

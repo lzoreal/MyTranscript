@@ -60,6 +60,14 @@ RSS_HEADERS = {
 SESSION = requests.Session()
 SESSION.headers.update(HEADERS)
 
+# CI 里每集一行足够定位问题；设 VERBOSE=true 可恢复搜索变体、候选打分等逐步日志。
+VERBOSE = os.environ.get("VERBOSE", "").strip().lower() in ("1", "true", "yes")
+
+
+def detail(msg):
+    if VERBOSE:
+        print(msg)
+
 
 # ============================================================
 # 通用工具
@@ -369,11 +377,11 @@ def search_podscripts_once(search_title, podscripts_id):
         "podSelectedId": str(podscripts_id),
     }
     url = "https://podscripts.co/podkeywordsearch/?" + urllib.parse.urlencode(params)
-    print(f"      搜索：{search_title[:100]}")
+    detail(f"      搜索：{search_title[:100]}")
     html_text = request_text(url)
     if not html_text:
         return []
-    print(f"      搜索页面 HTML 长度：{len(html_text)}")
+    detail(f"      搜索页面 HTML 长度：{len(html_text)}")
     return parse_podscripts_search_results(html_text)
 
 
@@ -381,27 +389,27 @@ def search_podscripts(title, podscripts_id):
     if not podscripts_id:
         return None
     variants = build_search_variants(title)
-    print(f"      搜索变体数量：{len(variants)}")
+    detail(f"      搜索变体数量：{len(variants)}")
     for index, variant in enumerate(variants, 1):
-        print(f"      开始搜索变体 [{index}/{len(variants)}]")
+        detail(f"      开始搜索变体 [{index}/{len(variants)}]")
         candidates = search_podscripts_once(variant, podscripts_id)
-        print(f"      本次搜索得到：{len(candidates)} 个候选")
+        detail(f"      本次搜索得到：{len(candidates)} 个候选")
         scored = sorted(
             ((title_similarity(title, c["title"]), c) for c in candidates),
             key=lambda x: x[0],
             reverse=True,
         )
         for score, candidate in scored[:5]:
-            print(f"         {score:.3f} | {candidate['title']}")
+            detail(f"         {score:.3f} | {candidate['title']}")
         if scored:
             score, candidate = scored[0]
             if score >= 0.55:
-                print(f"      匹配成功 ({score:.3f})：{candidate['title']}")
+                detail(f"      匹配成功 ({score:.3f})：{candidate['title']}")
                 return candidate["url"]
-            print(f"      最高匹配度 {score:.3f}，低于 0.55，继续尝试")
+            detail(f"      最高匹配度 {score:.3f}，低于 0.55，继续尝试")
         if index < len(variants):
             time.sleep(PODSEARCH_DELAY)
-    print("      所有标题变体均未找到可靠匹配")
+    detail("      所有标题变体均未找到可靠匹配")
     return None
 
 
@@ -469,7 +477,7 @@ def parse_transcript(html_text):
             seen.add(key)
             result.append(cue)
     result.sort(key=lambda x: x["start_seconds"])
-    print(f"         解析到 cues：{len(result)}")
+    detail(f"         解析到 cues：{len(result)}")
     return result
 
 
@@ -553,7 +561,7 @@ def process_podcast(podcast, progress):
     podscripts_id = podcast.get("podscripts_id")
     pc_prog = get_podcast_progress(progress, slug)
     processed = pc_prog["processed"]
-    print(f"\n{'=' * 65}\n播客：{display_name(podcast)} ({slug})")
+    print(f"\n播客：{display_name(podcast)} ({slug})")
     if not feed_url:
         print("   未配置 feed_url，跳过")
         return False
@@ -594,7 +602,8 @@ def process_podcast(podcast, progress):
     changed = False
     for idx, entry in enumerate(batch, 1):
         guid, title = entry["guid"], entry["title"]
-        print(f"\n   [{idx}/{len(batch)}] {title[:90]}")
+        label = title[:70]
+        position = f"[{idx}/{len(batch)}]"
         try:
             ep_url = search_podscripts(title, podscripts_id)
             if not ep_url:
@@ -607,8 +616,9 @@ def process_podcast(podcast, progress):
                 }
                 changed = True
                 save_progress(progress)
+                print(f"   {position} 未匹配到字幕页：{label}")
                 continue
-            print(f"      页面：{ep_url}")
+            detail(f"      页面：{ep_url}")
             html_text = request_text(ep_url)
             if not html_text:
                 processed[guid] = {
@@ -621,6 +631,7 @@ def process_podcast(podcast, progress):
                 }
                 changed = True
                 save_progress(progress)
+                print(f"   {position} 字幕页抓取失败：{label}")
                 continue
             cues = parse_transcript(html_text)
             if not cues:
@@ -634,6 +645,7 @@ def process_podcast(podcast, progress):
                 }
                 changed = True
                 save_progress(progress)
+                print(f"   {position} 页面无字幕内容：{label}")
                 continue
             filename = unique_vtt_filename(title, guid, slug, processed)
             path = vtt_path_for(slug, filename)
@@ -652,12 +664,12 @@ def process_podcast(podcast, progress):
             pc_prog["updated_at"] = now_iso()
             changed = True
             save_progress(progress)
-            print(f"      VTT：{filename}（{len(cues)} cues）")
+            print(f"   {position} {label} → {filename}（{len(cues)} cues）")
         except KeyboardInterrupt:
             save_progress(progress)
             raise
         except Exception as exc:
-            print(f"      单集处理异常：{exc}")
+            print(f"   {position} 处理异常：{label} → {exc}")
             processed[guid] = {
                 "title": title,
                 "vtt_filename": None,
@@ -733,7 +745,6 @@ def ensure_atom_self(channel, enhanced_feed_url):
 def generate_podcast_feed(pc_prog, podcast, base_url):
     slug = podcast["slug"]
     source_feed_url = podcast["feed_url"]
-    print(f"   生成 Feed：{slug}")
     root = fetch_rss(source_feed_url)
     if root is None:
         print("      下载原始 RSS 失败")
@@ -801,8 +812,10 @@ def generate_podcast_feed(pc_prog, podcast, base_url):
     tmp = feed_path.with_name(feed_path.name + ".tmp")
     tree.write(tmp, pretty_print=True, xml_declaration=True, encoding="utf-8")
     tmp.replace(feed_path)
-    print(f"      Feed URL：{enhanced_feed_url}")
-    print(f"      保留 {kept} 集；删除 {removed} 集；新增 transcript 标签 {added} 个")
+    print(
+        f"   Feed：{slug} → {enhanced_feed_url}"
+        f"（保留 {kept} 集；删除 {removed} 集；transcript 标签 {added} 个）"
+    )
 
 
 # ============================================================
@@ -890,7 +903,7 @@ def main():
             print(f"处理播客 {podcast.get('slug', '?')} 时发生异常：{exc}")
         save_progress(progress)
 
-    print(f"\n{'=' * 65}\n开始生成增强 RSS")
+    print("\n开始生成增强 RSS")
     for podcast in podcasts:
         slug = podcast["slug"]
         pc_prog = get_podcast_progress(progress, slug)
@@ -902,7 +915,7 @@ def main():
     generate_master_index(progress, podcasts, base_url)
     save_progress(progress)
 
-    print(f"\n{'=' * 65}\n站点：{base_url}")
+    print(f"\n站点：{base_url}")
     for podcast in podcasts:
         slug = podcast["slug"]
         processed = progress.get("podcasts", {}).get(slug, {}).get("processed", {})
