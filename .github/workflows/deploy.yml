@@ -1,0 +1,36 @@
+name: Deploy Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 三个数据 job 可以并行提交，但一个仓库同时只接受一次 Pages 部署，所以部署单独串成一组。
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # 站点内容全部提交在 main 里，因此这里用最新检出重新上传，
+      # 而不是各数据 job 自己 checkout 时的快照——否则并发的 job 会把别人刚推上去的字幕「部署回旧版」。
+      - uses: actions/checkout@v4
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/
+
+      - name: 部署到 GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
