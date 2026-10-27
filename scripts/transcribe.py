@@ -36,7 +36,7 @@ from google.genai import types
 PODCAST_SLUG = os.getenv("PODCAST_SLUG", "podcast").strip()
 FEED_URL = os.getenv("FEED_URL", "").strip()
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base.en").strip()
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 BASE_URL = os.getenv("BASE_URL", "").rstrip("/")
 MAX_EPISODES = max(0, int(os.getenv("MAX_EPISODES", "0")))
@@ -88,7 +88,9 @@ PROXY_STOP_EVENT = threading.Event()
 PROXY_WINNER_LOCK = threading.Lock()
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(
+        logging, os.environ.get("LOG_LEVEL", "INFO").strip().upper(), logging.INFO
+    ),
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
@@ -407,7 +409,7 @@ def proxy_download_worker(
         race_dir / f"{index:04d}_{hashlib.md5(proxy.encode()).hexdigest()[:12]}.part"
     )
     try:
-        log.info("[%d/%d] 代理竞速启动：%s", index, total, proxy)
+        log.debug("[%d/%d] 代理竞速启动：%s", index, total, proxy)
         geo = get_proxy_geoip(proxy)
         if PROXY_STOP_EVENT.is_set():
             return {"ok": False, "proxy": proxy, "stopped": True}
@@ -466,11 +468,11 @@ def proxy_download_worker(
             if PROXY_STOP_EVENT.is_set():
                 return {"ok": False, "proxy": proxy, "stopped": True}
             PROXY_STOP_EVENT.set()
-            log.info("代理竞速胜出：%s（%.1f MB）", proxy, total_bytes / 1024 / 1024)
+            log.debug("代理竞速胜出：%s（%.1f MB）", proxy, total_bytes / 1024 / 1024)
         return result
     except Exception as exc:
         mark_bad_proxy(proxy)
-        log.warning("代理下载失败 %s：%s: %s", proxy, type(exc).__name__, exc)
+        log.debug("代理下载失败 %s：%s: %s", proxy, type(exc).__name__, exc)
         try:
             temp_path.unlink(missing_ok=True)
         except Exception:
@@ -555,9 +557,13 @@ def download_audio(url: str, output_path: Path) -> dict[str, Any]:
     finally:
         PROXY_STOP_EVENT.set()
         executor.shutdown(wait=True, cancel_futures=True)
+    with BAD_PROXIES_LOCK:
+        bad_count = len(BAD_PROXIES)
     if not winner:
         shutil.rmtree(race_dir, ignore_errors=True)
-        raise RuntimeError("所有中国代理均无法下载音频")
+        raise RuntimeError(
+            f"所有中国代理均无法下载音频：已尝试 {next_index}/{total} 个，失败 {bad_count} 个"
+        )
     winner_path = Path(winner["temp_path"])
     if not winner_path.exists():
         shutil.rmtree(race_dir, ignore_errors=True)
@@ -568,7 +574,10 @@ def download_audio(url: str, output_path: Path) -> dict[str, Any]:
     final_hash = calculate_sha256(output_path)
     shutil.rmtree(race_dir, ignore_errors=True)
     log.info(
-        "代理下载成功：proxy=%s, ip=%s, country=%s, size=%.1f MB, SHA256=%s",
+        "代理下载成功：尝试 %d/%d 个（失败 %d），proxy=%s, ip=%s, country=%s, size=%.1f MB, SHA256=%s",
+        next_index,
+        total,
+        bad_count,
         winner.get("proxy"),
         winner.get("public_ip"),
         winner.get("country_code"),
@@ -743,7 +752,7 @@ def wait_for_gemini_rate_limit() -> None:
         now = time.monotonic()
         wait_seconds = GEMINI_REQUEST_INTERVAL - (now - GEMINI_LAST_REQUEST_AT)
         if wait_seconds > 0:
-            log.info(
+            log.debug(
                 "Gemini RPM 限速：等待 %.2f 秒（目标 %d RPM）", wait_seconds, GEMINI_RPM
             )
             time.sleep(wait_seconds)
@@ -1102,11 +1111,14 @@ def make_enhanced_feed(feed_url: str, records: list[dict[str, str]]) -> Path:
     finally:
         temp_path.unlink(missing_ok=True)
 
-    log.info("增强 RSS 已生成：%s", path)
-    log.info("增强版 RSS self 地址：%s", enhanced_url)
-    log.info("已匹配并写入字幕链接的条目：%d/%d", matched, len(records))
-    log.info("已修正 Atom self 链接数量：%d", len(self_links) or 1)
-    log.info("已修正 iTunes new-feed-url 数量：%d", len(new_feed_nodes))
+    log.info("增强 RSS 已生成：%s → %s", path, enhanced_url)
+    log.info(
+        "字幕链接条目：%d/%d；Atom self 修正 %d 处；new-feed-url 修正 %d 处",
+        matched,
+        len(records),
+        len(self_links) or 1,
+        len(new_feed_nodes),
+    )
     return path
 
 
@@ -1184,7 +1196,7 @@ def process_episode(
         filename = f"{safe_filename(title, 100)}_{suffix}"
         transcript_path = TRANSCRIPT_DIR / f"{filename}.vtt"
     if transcript_path.exists() and is_valid_bilingual_vtt(transcript_path):
-        log.info("完整双语字幕已存在，复用：%s", transcript_path)
+        log.debug("完整双语字幕已存在，复用：%s", transcript_path)
         record = {
             "identity": identity,
             "title": title,
@@ -1296,10 +1308,11 @@ def main() -> int:
         if record.get("path")
     }
     completed_this_run = 0
+    skipped_this_run = 0
     failed_count = 0
     for number, (entry, identity, audio_url) in enumerate(candidates, 1):
         title = clean_text(getattr(entry, "title", "") or "Untitled episode")
-        log.info("处理节目 %d/%d：%s", number, len(candidates), title)
+        log.debug("处理节目 %d/%d：%s", number, len(candidates), title)
         old_path = get_existing_path(identity, processed, records)
         old_record = records.get(identity)
         if (
@@ -1308,7 +1321,7 @@ def main() -> int:
             and old_path.exists()
             and is_valid_bilingual_vtt(old_path)
         ):
-            log.info("已处理且双语字幕文件有效，跳过：%s", title)
+            log.debug("已处理且双语字幕文件有效，跳过：%s", title)
             if old_record:
                 records[identity] = old_record
             else:
@@ -1323,7 +1336,7 @@ def main() -> int:
                     "url": make_public_url(old_path),
                     "path": old_path.relative_to(SITE_DIR).as_posix(),
                 }
-            completed_this_run += 1
+            skipped_this_run += 1
             continue
         try:
             record, proxy_info = process_episode(
@@ -1370,7 +1383,10 @@ def main() -> int:
     build_podcast_index(feed_title, FEED_URL, list(records.values()))
     rebuild_root_index()
     log.info(
-        "运行结束：本次成功或跳过 %d 集；失败 %d 集", completed_this_run, failed_count
+        "运行结束：转录 %d 集；跳过（双语字幕已存在）%d 集；失败 %d 集",
+        completed_this_run,
+        skipped_this_run,
+        failed_count,
     )
     return 1 if failed_count else 0
 
