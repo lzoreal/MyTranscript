@@ -1,19 +1,18 @@
-name: Crawl Transcripts & Deploy Pages
+name: Crawl Transcripts
 
 on:
   schedule:
-    # 流水线第一步：抓取英文字幕。三个 job 共用 concurrency group "pages"，
-    # 所以时间错开只是减少排队，真正防冲突靠串行。见 transcribe.yml / translate.yml。
+    # 流水线第一步：抓取英文字幕。三个 workflow 各自成组、可以并行；这里的时间只是
+    # 让数据依赖保持顺畅（translate 由 workflow_run 在本 workflow 成功后接着跑）。
     - cron: "0 5 * * 1"
   workflow_dispatch:
 
+# 部署拆到 deploy.yml（由 push 触发），本 workflow 只需要写仓库。
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 concurrency:
-  group: "pages"
+  group: "crawl"
   cancel-in-progress: false
 
 jobs:
@@ -49,25 +48,13 @@ jobs:
         env:
           MY_PAT: ${{ secrets.MY_CUSTOM_PAT }}  # 自定义秘钥名
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add progress.json site/
-          git diff --quiet && git diff --staged --quiet || git commit -m "auto: update transcripts"
-          git remote set-url origin https://${MY_PAT}@github.com/${GITHUB_REPOSITORY}.git
-          git push
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: site/
-
-  deploy:
-    needs: crawl
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          git remote set-url origin "https://${MY_PAT}@github.com/${GITHUB_REPOSITORY}.git"
+          # 只暂存本 job 拥有的路径：zh/ 字幕、feed-zh.xml 和根 index.html 分属其它 job，
+          # 顺手带上去会让并发提交撞上同一个文件。目录排除要写 /** ，裸目录名不排除内容。
+          bash scripts/git_push_retry.sh "auto: update transcripts" \
+            progress.json site \
+            ':(exclude)site/*/transcripts/zh/**' \
+            ':(exclude)site/*/feed-zh.xml' \
+            ':(exclude)site/index.html' \
+            ':(exclude)state.json' \
+            ':(exclude)translations.json'

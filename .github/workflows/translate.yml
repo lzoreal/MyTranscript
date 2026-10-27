@@ -1,11 +1,17 @@
-name: Translate to Chinese & Deploy Pages
+name: Translate to Chinese
 
 on:
   schedule:
-    # 每天北京时间凌晨 3 点运行（UTC 19:00）
-    # 流水线最后一步：周一它可能排队等 crawl/transcribe 结束（共用 group "pages"），
-    # 这样译好的 zh/ 字幕一定晚于新的 feed.xml。
+    # 每天北京时间凌晨 3 点（UTC 19:00）扫积压。
     - cron: "0 19 * * *"
+  workflow_run:
+    # crawl / transcribe 一成功就补一轮，当天新抓的新剧集不用等到第二天。
+    # 注意 workflow_run 拿不到 inputs，脚本会走各自默认值。
+    workflows:
+      - "Crawl Transcripts"
+      - "Auto Transcribe"
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       max_files:
@@ -17,17 +23,18 @@ on:
         required: false
         default: 'gemini-3.5-flash-lite'
 
+# 部署拆到 deploy.yml（由 push 触发），本 workflow 只需要写仓库。
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 concurrency:
-  group: "pages"
+  group: "translate"
   cancel-in-progress: false
 
 jobs:
   translate:
+    # 由 workflow_run 触发时，只在父运行成功之后才接着翻译。
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 360
     steps:
@@ -84,25 +91,13 @@ jobs:
         env:
           MY_PAT: ${{ secrets.MY_CUSTOM_PAT }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add translations.json site/
-          git diff --quiet && git diff --staged --quiet || git commit -m "auto: translate to zh-CN [skip ci]"
-          git remote set-url origin https://${MY_PAT}@github.com/${GITHUB_REPOSITORY}.git
-          git push
+          git remote set-url origin "https://${MY_PAT}@github.com/${GITHUB_REPOSITORY}.git"
+          # 本 job 拥有 translations.json、zh/ 字幕、feed-zh.xml；
+          # state.json / progress.json / 根 index.html 属于另外两个 job，排除掉防止互相回退。
+          # 提交信息不再带 [skip ci]：deploy.yml 靠 push 触发，中文站点要跟着上线。
+          bash scripts/git_push_retry.sh "auto: translate to zh-CN" \
+            translations.json site \
+            ':(exclude)state.json' \
+            ':(exclude)progress.json' \
+            ':(exclude)site/index.html'
 
-      - name: 上传 Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: site/
-
-  deploy:
-    needs: translate
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: 部署到 GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4

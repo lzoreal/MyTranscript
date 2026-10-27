@@ -1,9 +1,9 @@
-name: Auto Transcribe & Deploy Pages
+name: Auto Transcribe
 
 on:
   schedule:
-    # 流水线第二步，排在 crawl.yml (05:00 UTC) 之后：timeout 360 分钟，
-    # 最晚 18:00 UTC 结束，正好赶在每天 19:00 UTC 的 translate.yml 之前。
+    # 只转录 how-we-made-your-mother（自制字幕，不走抓取）。和 crawl 各自成组、可并行；
+    # timeout 360 分钟，最晚 18:00 UTC 结束，仍在每天 19:00 UTC 的 translate 之前。
     - cron: "0 12 * * 1"
 
   workflow_dispatch:
@@ -28,13 +28,12 @@ on:
         required: true
         default: "gemini-3.5-flash-lite"
 
+# 部署拆到 deploy.yml（由 push 触发），本 workflow 只需要写仓库。
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 concurrency:
-  group: "pages"
+  group: "transcribe"
   cancel-in-progress: false
 
 jobs:
@@ -115,34 +114,12 @@ jobs:
           MY_PAT: ${{ secrets.MY_CUSTOM_PAT }}
           PODCAST_SLUG: ${{ github.event.inputs.podcast_slug || 'how-we-made-your-mother' }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git add state.json site/
-
-          if ! git diff --cached --quiet; then
-            git commit -m "auto: update ${PODCAST_SLUG} transcripts"
-          else
-            echo "没有新的文件需要提交"
-          fi
-
           git remote set-url origin "https://${MY_PAT}@github.com/${GITHUB_REPOSITORY}.git"
-          git push
-
-      - name: 上传 Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: site/
-
-  deploy:
-    needs: transcribe
-    runs-on: ubuntu-latest
-
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-
-    steps:
-      - name: 部署到 GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          # 本 job 拥有 state.json、自己 slug 的 feed.xml/en 字幕和根 index.html；
+          # zh/ 与 feed-zh.xml 是 translate 的产物，排除掉以免并发提交撞同一个文件。
+          bash scripts/git_push_retry.sh "auto: update ${PODCAST_SLUG} transcripts" \
+            state.json site \
+            ':(exclude)site/*/transcripts/zh/**' \
+            ':(exclude)site/*/feed-zh.xml' \
+            ':(exclude)progress.json' \
+            ':(exclude)translations.json'
