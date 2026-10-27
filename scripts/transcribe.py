@@ -1295,33 +1295,47 @@ def main() -> int:
             candidates.append((entry, entry_identity(entry, audio_url), audio_url))
     if MAX_EPISODES:
         candidates = candidates[:MAX_EPISODES]
-    log.info(
-        "播客：%s；RSS 条目：%d；可处理音频条目：%d",
-        feed_title,
-        len(entries),
-        len(candidates),
-    )
     records = migrate_legacy_records(ps, processed)
     path_owner = {
         record["path"]: identity
         for identity, record in records.items()
         if record.get("path")
     }
+    # 先筛一遍缓存命中，日志才能报出真实待转录数；记账仍留在主循环，保持 records 原有顺序。
+    cached_paths: dict[str, Any] = {}
+    to_transcribe = 0
+    for entry, identity, _audio_url in candidates:
+        path = get_existing_path(identity, processed, records)
+        if (
+            processed.get(identity)
+            and path
+            and path.exists()
+            and is_valid_bilingual_vtt(path)
+        ):
+            cached_paths.setdefault(identity, path)
+            log.debug(
+                "已处理且双语字幕有效，跳过：%s",
+                clean_text(getattr(entry, "title", "") or "Untitled episode"),
+            )
+        else:
+            to_transcribe += 1
+    log.info(
+        "播客：%s；RSS 条目：%d；含音频候选：%d；待转录：%d；已处理跳过：%d",
+        feed_title,
+        len(entries),
+        len(candidates),
+        to_transcribe,
+        len(candidates) - to_transcribe,
+    )
     completed_this_run = 0
     skipped_this_run = 0
     failed_count = 0
-    for number, (entry, identity, audio_url) in enumerate(candidates, 1):
+    work_no = 0
+    for entry, identity, audio_url in candidates:
         title = clean_text(getattr(entry, "title", "") or "Untitled episode")
-        log.debug("处理节目 %d/%d：%s", number, len(candidates), title)
-        old_path = get_existing_path(identity, processed, records)
+        old_path = cached_paths.get(identity)
         old_record = records.get(identity)
-        if (
-            processed.get(identity)
-            and old_path
-            and old_path.exists()
-            and is_valid_bilingual_vtt(old_path)
-        ):
-            log.debug("已处理且双语字幕文件有效，跳过：%s", title)
+        if old_path:
             if old_record:
                 records[identity] = old_record
             else:
@@ -1338,6 +1352,8 @@ def main() -> int:
                 }
             skipped_this_run += 1
             continue
+        work_no += 1
+        log.info("转录 %d/%d：%s", work_no, to_transcribe, title)
         try:
             record, proxy_info = process_episode(
                 entry, identity, audio_url, path_owner
