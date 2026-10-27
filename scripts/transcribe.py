@@ -727,22 +727,90 @@ def build_translation_batches(cues: list[dict[str, Any]]) -> list[list[dict[str,
     return batches
 
 
-def parse_json_array(text: str) -> list[Any]:
-    text = (text or "").strip()
-    text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.I)
-    text = re.sub(r"\s*```$", "", text)
-    try:
-        value = json.loads(text)
-        if isinstance(value, list):
-            return value
-    except json.JSONDecodeError:
+TRANSLATE_SCHEMA_MAX_BLOCKS = 60
+
+
+class IncompleteTranslation(Exception):
+    """模型漏译或合并了条目：带着已经拿到的译文抛出，重试只补差的编号。"""
+
+    def __init__(self, message: str, partial: dict[int, str]):
+        super().__init__(message)
+        self.partial = partial
+
+
+def build_translation_prompt(blocks: list[tuple[int, dict[str, Any]]]) -> str:
+    payload = {str(index): cue["en"] for index, cue in blocks}
+    return (
+        "你是一名专业的英译简体中文字幕译者。下面的 JSON 对象把每条英文字幕绑定到一个编号，"
+        "请逐条翻译成自然、准确、易读的简体中文。\n"
+        "要求：只返回一个 JSON 对象，键必须与输入的编号完全一致，一个不多一个不少；"
+        "每个键的值只放对应那一条的中文译文；编号只是标识，不要写进译文；"
+        "即使多条英文完全相同或极短（例如连续的 Yeah.、Right.），也必须逐条独立返回，"
+        "不可合并、拆分、漏译或改变顺序；键的先后顺序随意，但不能漏键；"
+        "保留姓名、专有名词、数字、语气、幽默和上下文；不要解释或添加译者注。\n"
+        f"待翻译字幕：\n{json.dumps(payload, ensure_ascii=False)}"
+    )
+
+
+def build_translation_schema(keys: list[int]) -> dict[str, Any]:
+    properties = {str(key): {"type": "string"} for key in keys}
+    return {"type": "object", "properties": properties, "required": list(properties)}
+
+
+def parse_translation_object(text: str, source: dict[int, str]) -> dict[int, str]:
+    """按编号配对，绝不按返回顺序配对——顺序一乱，整批中英就全串位。"""
+    raw = (text or "").strip()
+    raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.I)
+    raw = re.sub(r"\s*```$", "", raw)
+    start, end = raw.find("{"), raw.rfind("}")
+    if start < 0 or end <= start:
+        raise IncompleteTranslation("Gemini 没有返回 JSON 对象", {})
+
+    class JSONObjectPairs(list):
         pass
-    start, end = text.find("["), text.rfind("]")
-    if start >= 0 and end > start:
-        value = json.loads(text[start : end + 1])
-        if isinstance(value, list):
-            return value
-    raise ValueError("Gemini 没有返回有效 JSON 数组")
+
+    try:
+        data = json.loads(raw[start : end + 1], object_pairs_hook=JSONObjectPairs)
+    except json.JSONDecodeError as exc:
+        raise IncompleteTranslation(f"Gemini 返回的 JSON 无法解析：{exc}", {}) from exc
+    if not isinstance(data, JSONObjectPairs):
+        raise IncompleteTranslation("Gemini 返回的根节点不是对象", {})
+
+    result: dict[int, str] = {}
+    problems: list[str] = []
+    for key, item in data:
+        try:
+            index = int(key)
+        except (TypeError, ValueError):
+            problems.append(f"非法编号 {key!r}")
+            continue
+        if index not in source:
+            problems.append(f"多出编号 {index}")
+            continue
+        if index in result:
+            problems.append(f"编号 {index} 重复")
+            continue
+        if not isinstance(item, str):
+            problems.append(f"编号 {index} 的译文不是字符串")
+            continue
+        zh = clean_text(item)
+        if not zh:
+            problems.append(f"编号 {index} 译文为空")
+            continue
+        if len(source[index]) >= 18 and zh == source[index]:
+            problems.append(f"编号 {index} 疑似未翻译")
+            continue
+        result[index] = zh
+
+    missing = [index for index in sorted(source) if index not in result]
+    if missing or problems:
+        detail = f"输入 {len(source)} 条，有效返回 {len(result)} 条"
+        if missing:
+            detail += f"；缺失编号 {missing[:8]}" + ("…" if len(missing) > 8 else "")
+        if problems:
+            detail += f"；异常 {'; '.join(problems[:5])}"
+        raise IncompleteTranslation("字幕未对齐：" + detail, result)
+    return result
 
 
 def wait_for_gemini_rate_limit() -> None:
@@ -759,69 +827,67 @@ def wait_for_gemini_rate_limit() -> None:
         GEMINI_LAST_REQUEST_AT = time.monotonic()
 
 
-def translate_batch_once(client: genai.Client, cues: list[dict[str, Any]]) -> list[str]:
-    source = [c["en"] for c in cues]
-    prompt = (
-        "你是一名专业的英译简体中文字幕译者。请将 JSON 数组里的英文字幕逐条翻译为自然、准确、易读的简体中文。\n"
-        "要求：严格按原顺序逐条翻译，一条英文对应一条中文；返回数量必须相同；不可合并、拆分、漏译或额外增加条目；保留姓名、专有名词、数字、语气、幽默和上下文；不要解释或添加译者注；只返回 JSON 字符串数组。\n待翻译字幕：\n"
-        + json.dumps(source, ensure_ascii=False)
-    )
+def translate_batch_once(
+    client: genai.Client, blocks: list[tuple[int, dict[str, Any]]]
+) -> dict[int, str]:
+    source = {index: cue["en"] for index, cue in blocks}
+    keys = sorted(source)
+    config_args: dict[str, Any] = {
+        "temperature": 0.2,
+        "response_mime_type": "application/json",
+    }
+    if len(keys) <= TRANSLATE_SCHEMA_MAX_BLOCKS:
+        config_args["response_schema"] = build_translation_schema(keys)
     wait_for_gemini_rate_limit()
     response = client.models.generate_content(
         model=GEMINI_MODEL,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            temperature=0.2, response_mime_type="application/json"
-        ),
+        contents=build_translation_prompt(blocks),
+        config=types.GenerateContentConfig(**config_args),
     )
-    translated = parse_json_array(response.text or "")
-    if len(translated) != len(source):
-        raise ValueError(
-            f"字幕数量不匹配：输入 {len(source)} 条，返回 {len(translated)} 条"
-        )
-    cleaned = []
-    for i, item in enumerate(translated):
-        if not isinstance(item, str):
-            raise ValueError(f"第 {i+1} 条翻译不是字符串")
-        item = clean_text(item)
-        if not item:
-            raise ValueError(f"第 {i+1} 条翻译为空")
-        if len(source[i]) >= 18 and item == source[i]:
-            raise ValueError(f"第 {i+1} 条疑似未翻译")
-        cleaned.append(item)
-    return cleaned
+    return parse_translation_object(response.text or "", source)
 
 
-def translate_batch_recursive(client: genai.Client, cues: list[dict[str, Any]]) -> None:
-    last_error = None
+def translate_blocks(
+    client: genai.Client,
+    blocks: list[tuple[int, dict[str, Any]]],
+    translated: dict[int, str],
+) -> None:
+    pending = [pair for pair in blocks if pair[0] not in translated]
+    if not pending:
+        return
+    last_error: Exception | None = None
     for attempt in range(TRANSLATE_MAX_RETRIES + 1):
         try:
-            translated = translate_batch_once(client, cues)
-            for cue, zh in zip(cues, translated):
-                cue["zh"] = zh
+            translated.update(translate_batch_once(client, pending))
             return
         except Exception as exc:
             last_error = exc
+            if isinstance(exc, IncompleteTranslation):
+                translated.update(exc.partial)
+                pending = [pair for pair in pending if pair[0] not in translated]
+                if not pending:
+                    return
             if attempt < TRANSLATE_MAX_RETRIES:
                 delay = min(60.0, TRANSLATE_BASE_DELAY * (2**attempt))
                 log.warning(
-                    "Gemini 批次失败（%d/%d）：%s；%.1f 秒后重试",
+                    "Gemini 批次失败（%d/%d）：%s；%.1f 秒后只补 %d 条",
                     attempt + 1,
                     TRANSLATE_MAX_RETRIES + 1,
                     exc,
                     delay,
+                    len(pending),
                 )
                 time.sleep(delay)
-    if len(cues) > 1:
-        mid = len(cues) // 2
-        log.warning("批次重试仍失败，拆分为 %d 与 %d 条", mid, len(cues) - mid)
-        translate_batch_recursive(client, cues[:mid])
+    if len(pending) > 1:
+        mid = len(pending) // 2
+        log.warning("批次重试仍失败，拆分为 %d 与 %d 条", mid, len(pending) - mid)
+        translate_blocks(client, pending[:mid], translated)
         if TRANSLATE_BATCH_DELAY:
             time.sleep(TRANSLATE_BATCH_DELAY)
-        translate_batch_recursive(client, cues[mid:])
+        translate_blocks(client, pending[mid:], translated)
         return
     raise RuntimeError(
-        f"单条字幕翻译最终失败：{cues[0].get('en', '')[:160]!r}；错误：{last_error}"
+        f"单条字幕翻译最终失败：{pending[0][1].get('en', '')[:160]!r}；错误：{last_error}"
     ) from last_error
 
 
@@ -840,7 +906,10 @@ def translate_cues_with_gemini(cues: list[dict[str, Any]]) -> list[dict[str, Any
     )
     for i, batch in enumerate(batches, 1):
         log.info("翻译批次 %d/%d：%d 条", i, len(batches), len(batch))
-        translate_batch_recursive(client, batch)
+        translated: dict[int, str] = {}
+        translate_blocks(client, list(enumerate(batch)), translated)
+        for index, cue in enumerate(batch):
+            cue["zh"] = translated[index]
         if TRANSLATE_BATCH_DELAY and i < len(batches):
             time.sleep(TRANSLATE_BATCH_DELAY)
     if any(not c.get("zh") for c in cues):
