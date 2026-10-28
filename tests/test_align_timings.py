@@ -1,4 +1,5 @@
 import importlib.util
+import os
 import sys
 import tempfile
 import types
@@ -384,6 +385,41 @@ class RunAlignTests(unittest.TestCase):
         )
         self.assertEqual(stats["mismatch"], 2)
         self.assertEqual(stats["failed"], 0)
+
+
+class EnvTests(unittest.TestCase):
+    def test_defaults(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(
+                aligner.align_env(),
+                {"mode": "recent", "shard": 0, "shards": 20, "max_minutes": 150.0, "latest": 20},
+            )
+
+    def test_reads_overrides(self):
+        with mock.patch.dict(
+            os.environ,
+            {
+                "ALIGN_MODE": "latest", "ALIGN_SHARD": "3", "ALIGN_SHARDS": "20",
+                "ALIGN_MAX_MINUTES": "90", "ALIGN_LATEST_PER_SHOW": "5",
+            },
+        ):
+            got = aligner.align_env()
+        self.assertEqual(got["mode"], "latest")
+        self.assertEqual(got["shard"], 3)
+        self.assertEqual(got["latest"], 5)
+
+    def test_rejects_bad_values(self):
+        with mock.patch.dict(os.environ, {"ALIGN_MODE": "bogus"}, clear=True):
+            with self.assertRaises(ValueError):
+                aligner.align_env()
+        with mock.patch.dict(
+            os.environ, {"ALIGN_SHARD": "5", "ALIGN_SHARDS": "4"}, clear=True
+        ):
+            with self.assertRaises(ValueError):
+                aligner.align_env()
+        with mock.patch.dict(os.environ, {"ALIGN_MAX_MINUTES": "0"}, clear=True):
+            with self.assertRaises(ValueError):
+                aligner.align_env()
 
 
 if __name__ == "__main__":
