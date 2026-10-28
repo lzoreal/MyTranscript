@@ -79,6 +79,79 @@ class WindowTests(unittest.TestCase):
         self.assertLessEqual(hi, 10.0)
 
 
+class FakeWord:
+    def __init__(self, word, start, end):
+        self.word, self.start, self.end = word, start, end
+
+
+class FakeSegment:
+    def __init__(self, seg_id, words):
+        self.id, self.words = seg_id, words
+
+
+class FakeAligned:
+    def __init__(self, segments):
+        self.segments = segments
+
+
+class PlausibilityTests(unittest.TestCase):
+    def cue(self, start, end, text):
+        return {"start": start, "end": end, "en": text}
+
+    def test_accepts_words_that_match_text_and_stay_in_range(self):
+        cue = self.cue(10.0, 14.0, "hello there friend")
+        words = [
+            {"w": "hello", "s": 10.2, "e": 10.6},
+            {"w": "there", "s": 10.6, "e": 11.0},
+            {"w": "friend", "s": 11.0, "e": 11.6},
+        ]
+        self.assertTrue(aligner.words_plausible(cue, next_start=20.0, words=words))
+
+    def test_rejects_when_token_count_differs(self):
+        cue = self.cue(10.0, 14.0, "hello there friend")
+        words = [{"w": "hello", "s": 10.2, "e": 10.6}]
+        self.assertFalse(aligner.words_plausible(cue, None, words))
+
+    def test_rejects_when_first_word_is_far_before_the_cue(self):
+        cue = self.cue(100.0, 104.0, "hello there friend")
+        words = [
+            {"w": "hello", "s": 80.0, "e": 80.4},
+            {"w": "there", "s": 80.4, "e": 81.0},
+            {"w": "friend", "s": 81.0, "e": 81.4},
+        ]
+        self.assertFalse(aligner.words_plausible(cue, None, words))
+
+    def test_rejects_when_last_word_overruns_the_next_cue(self):
+        cue = self.cue(10.0, 14.0, "hello there friend")
+        words = [
+            {"w": "hello", "s": 10.2, "e": 10.6},
+            {"w": "there", "s": 10.6, "e": 11.0},
+            {"w": "friend", "s": 40.0, "e": 41.0},
+        ]
+        self.assertFalse(aligner.words_plausible(cue, next_start=20.0, words=words))
+
+
+class CueWordsTests(unittest.TestCase):
+    def test_maps_segments_by_position_and_applies_offset(self):
+        group = [
+            {"start": 97.0, "end": 100.0, "en": "hello there"},
+            {"start": 100.0, "end": 104.0, "en": "second cue here"},
+        ]
+        aligned = FakeAligned([
+            FakeSegment(0, [FakeWord(" hello", 1.0, 1.4), FakeWord(" there", 1.4, 1.9)]),
+            FakeSegment(1, [FakeWord(" second", 4.0, 4.5)]),
+        ])
+        got = aligner.cue_words(aligned.segments, group, offset=97.0)
+        self.assertEqual([w["w"] for w in got[0]], ["hello", "there"])
+        self.assertAlmostEqual(got[0][0]["s"], 98.0)
+        self.assertAlmostEqual(got[1][0]["s"], 101.0)
+
+    def test_skips_segments_without_words(self):
+        group = [{"start": 0.0, "end": 2.0, "en": "hello"}]
+        aligned = FakeAligned([FakeSegment(0, [])])
+        self.assertEqual(aligner.cue_words(aligned.segments, group, offset=0.0), {})
+
+
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     unittest.main()
