@@ -44,77 +44,22 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 GEMINI_API_KEYS_RAW = os.getenv("GEMINI_API_KEYS", "").strip()
 
 
-def parse_gemini_keys(raw: str) -> list[str]:
-    keys: list[str] = []
-    for part in re.split(r"[,\s]+", raw or ""):
-        key = part.strip()
-        if key and key not in keys:
-            keys.append(key)
-    return keys
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from gemini_keys import (  # noqa: E402  （顺序轮换与错误分类的共享实现）
+    GeminiAuthFailed,
+    GeminiKeyRing,
+    QuotaExhausted,
+    is_auth_error,
+    is_quota_error,
+    parse_gemini_keys,
+)
 
 GEMINI_KEYS = parse_gemini_keys(GEMINI_API_KEYS_RAW) or (
     [GEMINI_API_KEY] if GEMINI_API_KEY else []
 )
 
 
-class QuotaExhausted(RuntimeError):
-    """所有 Gemini key 都用尽；调用方应停止本轮、下轮再续。"""
-
-
-class GeminiAuthFailed(RuntimeError):
-    """所有 key 都因为鉴权失败（401/403/400-invalid）被拒：这是配置故障，不是暂停。
-
-    ``QuotaExhausted`` 是「今天没额度、明天会好」，回填当干净暂停、退出 0。
-    key 无效/被吊销明天也不会自己好，必须让 job 变红，否则每个分片先下载
-    并转录 1~2 小时才发现 key 是死的，而整轮仍然是绿的。
-    """
-
-
-class GeminiKeyRing:
-    """顺序轮换 key：同一时刻只用一把，耗尽就切下一把，全部耗尽即不可用。
-
-    轮换状态只活在进程内——配额按天重置，跨轮沿用会把恢复的 key 永久排除。
-    """
-
-    def __init__(self, keys: list[str], factory=None):
-        if not keys:
-            raise QuotaExhausted("没有任何可用的 Gemini key")
-        self._keys = list(keys)
-        self._clients: dict[str, Any] = {}
-        self._index = 0
-        self._factory = factory or (lambda api_key: genai.Client(api_key=api_key))
-        self.requests = 0
-        # 每次切换 key 的原因（"quota" / "auth"）：全 auth 才算「所有 key 都被拒」。
-        self.switch_kinds: list[str] = []
-
-    @property
-    def available(self) -> bool:
-        return self._index < len(self._keys)
-
-    def label(self) -> str:
-        if not self.available:
-            return "#-（…****）"
-        key = self._keys[self._index]
-        tail = key[-4:] if len(key) > 4 else "****"
-        return f"#{self._index + 1}（…{tail}）"
-
-    def current(self) -> str:
-        if not self.available:
-            raise QuotaExhausted("所有 Gemini key 都已耗尽")
-        return self._keys[self._index]
-
-    def client(self):
-        if not self.available:
-            raise QuotaExhausted("所有 Gemini key 都已耗尽")
-        key = self._keys[self._index]
-        if key not in self._clients:
-            self._clients[key] = self._factory(api_key=key)
-        return self._clients[key]
-
-    def mark_exhausted(self) -> bool:
-        self._index += 1
-        return self.available
 
 
 BASE_URL = os.getenv("BASE_URL", "").rstrip("/")
@@ -948,17 +893,6 @@ def is_quota_error(exc: Exception) -> bool:
         or "QUOTA" in text
     )
 
-
-def is_auth_error(exc: Exception) -> bool:
-    text = f"{exc}".upper()
-    code = getattr(exc, "code", None) or getattr(exc, "status_code", None)
-    if "API_KEY_INVALID" in text or "API KEY NOT VALID" in text:
-        return True
-    # Google 对无效 key 返回 400 INVALID_ARGUMENT（而非 401/403），
-    # 消息里带 "API key not valid"；只靠状态码会让坏 key 走完退避重试。
-    if code in (400, "400") and ("API KEY" in text or "API_KEY" in text):
-        return True
-    return code in (401, 403, "401", "403", "PERMISSION_DENIED", "UNAUTHENTICATED")
 
 
 def build_translation_batches(cues: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:

@@ -3,6 +3,16 @@
 Podcast VTT Translator
 """
 
+import sys
+from pathlib import Path as _Path
+
+sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from gemini_keys import (  # noqa: E402
+    GeminiKeyRing,
+    is_auth_error,
+    parse_gemini_keys,
+)
+
 import os
 import re
 import json
@@ -98,14 +108,20 @@ def endgroup():
 
 
 client = None
+ring = None
 
 
-def initialize_client():
-    """Create the API client only when the command is actually run."""
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        raise RuntimeError("GEMINI_API_KEY is required to translate subtitles")
-    return genai.Client(api_key=api_key, http_options={"timeout": 120000})
+def build_ring():
+    """多 key 轮换：GEMINI_API_KEYS 优先，退回单 key 的 GEMINI_API_KEY。"""
+    keys = parse_gemini_keys(os.environ.get("GEMINI_API_KEYS", ""))
+    if not keys:
+        single = (os.environ.get("GEMINI_API_KEY") or "").strip()
+        keys = [single] if single else []
+    if not keys:
+        raise RuntimeError(
+            "GEMINI_API_KEYS or GEMINI_API_KEY is required to translate subtitles"
+        )
+    return GeminiKeyRing(keys)
 
 
 _last_request_time = 0.0
@@ -451,7 +467,7 @@ def gemini_batch_translate(blocks, cache_meta):
     expected_indices = {idx for idx, _ in blocks}
     use_json = USE_JSON_SCHEMA and len(blocks) <= 60
 
-    for attempt in range(1, RETRY_COUNT + 1):
+    for attempt in range(1, max(RETRY_COUNT, len(ring) + 1) + 1):
         daily_used = cache_meta.get("daily_requests", 0)
         if daily_used >= DAILY_REQUEST_LIMIT:
             raise DailyLimitReached(
@@ -472,7 +488,7 @@ def gemini_batch_translate(blocks, cache_meta):
             if use_json:
                 prompt = build_prompt_json(blocks)
                 schema = build_response_schema(blocks)
-                response = client.models.generate_content(
+                response = ring.client().models.generate_content(
                     model=MODEL,
                     contents=prompt,
                     config=types.GenerateContentConfig(
@@ -493,7 +509,7 @@ def gemini_batch_translate(blocks, cache_meta):
                 )
             else:
                 prompt = build_prompt_text(blocks)
-                response = client.models.generate_content(
+                response = ring.client().models.generate_content(
                     model=MODEL,
                     contents=prompt,
                     config=types.GenerateContentConfig(temperature=TEMPERATURE),
@@ -533,8 +549,16 @@ def gemini_batch_translate(blocks, cache_meta):
             ):
                 raise
             log(f"❌ Error: {e}")
-            # 配额耗尽 —— 直接停止整个程序，不再重试
-            if is_quota_error(e):
+            # 配额/鉴权失败：还有备用 key 就切过去重试同一块，全部用尽才停
+            if is_quota_error(e) or is_auth_error(e):
+                quota = is_quota_error(e)
+                ring.switch_kinds.append("quota" if quota else "auth")
+                if ring.mark_exhausted():
+                    log(
+                        f"🔑 key {'配额耗尽' if quota else '无效'}，"
+                        f"切到 {ring.label()} 重试"
+                    )
+                    continue
                 log("⛔ API quota exhausted. Stopping immediately.")
                 raise DailyLimitReached(f"API quota exhausted: {e}")
             if not is_retryable_error(e) or attempt >= RETRY_COUNT:
@@ -563,7 +587,7 @@ def translate_single_sensitive_block(block, cache_meta):
         _rate_limit_wait()
         log(f"   🔎 Sensitive single-cue retry #{idx} (attempt {attempt})")
         try:
-            response = client.models.generate_content(
+            response = ring.client().models.generate_content(
                 model=MODEL,
                 contents=build_single_block_prompt(block),
                 config=types.GenerateContentConfig(temperature=TEMPERATURE),
@@ -912,7 +936,7 @@ def translate_episode(source, target, cache_meta, current=None, total=None):
 
 def main():
     global client
-    client = initialize_client()
+    ring = build_ring()
 
     log("🚀 Translate VTT started")
     log(

@@ -3,7 +3,9 @@ import json
 import sys
 import tempfile
 from types import ModuleType
+import os
 import unittest
+from unittest import mock
 from unittest.mock import patch
 from pathlib import Path
 
@@ -184,6 +186,26 @@ class BilingualCueTests(unittest.TestCase):
             self.assertIn("甲", output)
             self.assertIn("乙", output)
             self.assertIn("丙", output)
+
+
+class KeyRingWiringTests(unittest.TestCase):
+    def test_build_ring_prefers_the_multi_key_secret(self):
+        with mock.patch.dict(
+            os.environ, {"GEMINI_API_KEYS": "k1,k2", "GEMINI_API_KEY": "single"}
+        ):
+            ring = translator.build_ring()
+        self.assertEqual(len(ring), 2)
+        self.assertEqual(ring.current(), "k1")
+
+    def test_build_ring_falls_back_to_single_key(self):
+        with mock.patch.dict(os.environ, {"GEMINI_API_KEYS": "", "GEMINI_API_KEY": "single"}):
+            ring = translator.build_ring()
+        self.assertEqual(len(ring), 1)
+
+    def test_build_ring_requires_a_key(self):
+        with mock.patch.dict(os.environ, {"GEMINI_API_KEYS": "", "GEMINI_API_KEY": ""}):
+            with self.assertRaises(RuntimeError):
+                translator.build_ring()
 
 
 if __name__ == "__main__":
