@@ -1,92 +1,151 @@
-# 抓取节目词级时间戳（移植 TMLT 对齐）设计
+# 抓取节目词级时间戳（v2：转写后按文本映射）设计
 
-日期：2026-10-29 状态：待评审 前序：`2026-10-28-hwmym-word-timestamps-backfill-design.md`（同构 sidecar）
+日期：2026-10-29（v2，取代同日 v1）状态：待评审 前序：`2026-10-28-hwmym-word-timestamps-backfill-design.md`（同构 sidecar）
 
 ## 目标
 
-12 个抓取节目也产出逐词时间轴，写进 `site/<slug>/timings/<vtt 同名>.json`，结构与 hwmym 完全一致。
-覆盖面：**每个节目最近 20 集回填（约 240 集）+ 之后新集滚动对齐**。
+12 个抓取节目产出与 hwmym 同构的逐词时间轴，并**修正现有字幕的时间轴、删除听众听不到的广告文本**。
+覆盖面：每个节目最近 20 集（约 240 集）+ 之后新集滚动。
 
-## 实测依据（2026-10-29 探针）
+## 一、为什么 v1 作废
 
-1 集（speaking-of-psychology，37 分钟）走 TMLT 的窗口逻辑对齐 10 个片段：
+v1 假定"PodScripts 的 cue 起点可作对齐锚点"。实测否证：
+
+1. PodScripts 在 202 s 处声称的内容是 "So I think we oftentimes complain about something…"，
+   而我们的音频在该时刻说的是 "right? Expressive complaining, which is just venting…"；
+   在音频前 400 秒的 ASR 全文里搜不到 PodScripts 那句原文。
+2. v1 探针报的"首词偏移中位 −2.18 s"是 3 秒 pad 造成的假象——文本不在窗口里时，
+   对齐器把首词丢在窗口起点附近。
+3. 端到端冒烟：44 条 cue 里 42 条"有词"，但 **2,521/4,674 个词时长为 0**——
+   stable-ts 把一整行剩余的词压在断点上。换 `original_split` 三种变体、放宽窗口 30 秒、
+   逐 cue 对齐，结果完全一致。
+
+**根因**：PodScripts 转写的是**带广告的版本**，我们下载的中国区版本没有那些插播。
+44 条 cue 的时间是均匀切出来的（约每 34 秒一条），不是语音对齐结果。
+
+## 二、实测依据（方案 A 验证，同 1 集）
+
+我们把这一集完整转写，再把 PodScripts 的 token 序列与我们的词 token 序列做全局对齐：
 
 | 指标 | 结果 |
 | --- | --- |
-| 对齐成功 | 10/10，0 失败 |
-| 首词偏移（对齐词 vs PodScripts cue 起点） | 中位 **−2.18 s**，范围 −2.56 ~ +2.04，0/10 超 ±3 s |
-| 末词偏移 | 中位 **+17.9 s** → **cue 结束时间不可信** |
-| 成本 | 10 个窗口（约 750 s 音频）耗时 420 s，**RTF ≈ 0.55**（24 线程） |
-| 噪音 | stable-ts 会报 "N/M segments failed to align"，组内个别句对不上是常态 |
+| 整篇文本相似度 | **0.959**（同一集、同版本） |
+| 可映射 cue（≥90% token 命中） | 38/44 = 86% |
+| 时间单调 | True |
+| 正文 cue 覆盖 | **97–100%** |
+| 未覆盖 cue | 全为广告（覆盖 0–63%） |
 
-推论：cue **起点**可作锚点（偏 2.2 s 且稳定，来自 PodScripts 时间轴而非对齐误差）；cue **结束**不能用作窗口上界。
+广告与正文的覆盖度分布间隔极宽（0–63% vs 97–100%），阈值可以放得很安全。
 
-## 一、机制
+## 三、管线
 
-纯文本 + 音频 → 词时间，不改 VTT。
+```
+下载音频（复用 transcribe.download_audio，中国代理竞速）
+  ↓
+我们自己的 ASR（turbo + word_timestamps，复用 transcribe.whisper_transcribe）
+  ↓
+序列映射：PodScripts 全篇 token ↔ 我们的词 token（difflib 全局对齐 + replace 块比例映射）
+  ↓
+按覆盖度分流每条 cue（阈值见第四节）
+  ↓
+写新 VTT（删广告、重定时间）+ 写 sidecar（同 hwmym 结构），原子替换
+```
 
-1. **输入**：`site/<slug>/transcripts/<stem>.vtt`（取英文行作文本、cue start 作锚点）；feed 里该集的 enclosure。
-2. **分组**：按 cue 顺序累加，超过 **900 字符**或 **100 秒**（最后一句起点 − 第一句起点）就切开。
-3. **窗口**：`lo = start − 3`；`hi = min(音频时长, max(cue.start + cue_span(cue)) + 8)`，
-   `cue_span = min(max(声明时长, 字数/15), 字数/4 + 5)`——用文本长度兜住"cue 结束时间虚报或偏短"。
-4. **对齐**：`stable_whisper.load_faster_whisper(turbo, device="cpu", compute_type="int8", cpu_threads=N).align(clip, text_block, language="en", original_split=True)`，词时间加回 `lo`。
-5. **每句合理性**（TMLT 的 `plausible_words`）：词非空、词序列与句子 token 一致、首词不早于 `cue.start − 8`、末词不晚于下一句起点 `+8`。不满足就丢弃该句的词（sidecar 里 `words: []`、`end: null`），**不失败整集**。
-6. **整集守卫**：算全集中位首词偏移；`|中位| > 3 s` ⇒ 判定"音频版本与转写来源不符"（地域插播等），写 `complete:false`、`attempts+1`、不写词，留给下一轮或人工排查。**不做全局平移校正**——常偏移可校正，地区插播的中途插入不可。
+**展示文本仍用 PodScripts 的**（人工校对过的版本），我们的 ASR 只提供时间——不替换用户看到的文字。
 
-## 二、sidecar 与断点
+## 四、阈值与删除规则（本文档的核心契约）
 
-完全复用 hwmym 的产物与语义：`{episode, audio_seconds, complete, attempts, segments:[{start,end,speaker,text,words:[[词,起始ms,时长ms]]}]}`；
-`complete:true` 即断点；`attempts >= 2` 不再重试；写失败也写 `complete:false` 记账。
-**不新增字段**——每集中位偏移只进日志，不污染与 hwmym 共用的结构。
+### 4.1 覆盖度定义
 
-## 三、音频获取
+`coverage(cue) = 该 cue 的 token 中能映射到我们词流的比例`。
+token 归一化：小写、去非字母数字、合并续接词（`-` `.` `'` `’` 开头并入前词）。
 
-直接复用 `scripts/transcribe.py` 的 `download_audio`（中国代理竞速，已验证）：align 脚本
-`from transcribe import download_audio, get_feed_entries, clean_text`。代价是 align job 必须安装
-transcribe 的依赖（faster-whisper 等），换来"只有一份下载实现"。
-**align job 不需要任何 Gemini key**（只做对齐，不翻译）；`transcribe` 模块顶层只读环境变量、不校验。
+### 4.2 三条分流（常量名即为实现里的名字）
 
-## 四、选片
+| 常量 | 值 | 判定 | 处理 |
+| --- | --- | --- | --- |
+| `BODY_MIN_COVERAGE` | **0.70** | `coverage ≥ 0.70` | 正文：cue 起止 = 映射首词起点 / 末词结束；写词时间 |
+| `PARTIAL_MIN_COVERAGE` | **0.30** | `0.30 ≤ coverage < 0.70` | 部分：保留文本；若有映射词则用其跨度定时，否则时间按前后 cue 线性插值；**不写词**（词不可信） |
+| — | — | `coverage < 0.30` | 判为广告：**整块（en + zh + 时间）从 VTT 删除** |
 
-两种模式，同一套候选逻辑：
+附加约束：
 
-| 模式 | 触发 | 选片 |
+- **不删短块**：token 数 < 5 的 cue 即使覆盖为 0 也保留（避免误删"嗯？""对。"这类碎片），
+  时间按前后插值、不写词。
+- **每集删除上限**：若某集被判为广告的 cue 超过总数的 **25%**（`MAX_DROP_RATIO`），
+  判定为"映射整体失败"而非"广告很多"→ **整集放弃**：不写 VTT、不写 sidecar，
+  写 `complete:false, attempts+1`，日志点名。
+
+### 4.3 整集守卫（任一触发即放弃本集）
+
+| 条件 | 阈值 | 含义 |
 | --- | --- | --- |
-| 滚动 | `workflow_run` 链在 crawl 成功之后 | 所有节目里 **published 在最近 30 天**、已有合格 VTT、sidecar 不完整的集（首次启用会一次性覆盖这 30 天的积压，属预期） |
-| 回填 | `workflow_dispatch` | 每个节目**最新 N 集**（默认 20），同上条件 |
+| 整篇文本相似度 | `< 0.85` | 不是同一集或版本差异过大 |
+| 正文 cue 占比 | `< 0.70` | 大面积对不上，映射不可信 |
+| 广告判决占比 | `> 0.25` | 见上，防"整篇被当广告" |
+| 无任何 cue 拿到映射词 | — | 对齐器没用 |
 
-分片、预算、断点、`attempts` 上限 2、提交边界（只提交 `site/*/timings`）全部复用 hwmym 回填的语义
-（`sha1(identity) % shards`、预算 150 分钟、`if: always()` 但排除 `.tmp`/`.part`）。
+放弃 = 不修改任何已发布文件；写 `complete:false`、`attempts+1`；`attempts >= 2` 后不再重试。
 
-## 五、CI
+### 4.4 VTT 重写规则
 
-新增 `.github/workflows/align.yml`：
+1. 删除被判广告的整块；保留块的 **en 与 zh 成对**（现有双语 VTT 是 en、zh 两行一块）。
+2. **重新编号** cue 序号（从 1 连续），保留 `WEBVTT` 头。
+3. 写前校验（任一失败则放弃本集）：
+   - 剩余块 ≥ 1；每块恰好两行文本；块数 = 原块数 − 删除数；
+   - 起点严格递增；每个 `start < end`；时长 > 0 且 < 300 秒。
+4. 原子写：`.tmp` → 校验 → `replace`。
 
-- 触发：`workflow_run`（crawl 完成且 success）+ `workflow_dispatch`（`shards`/`max_minutes`/`latest_per_show`）。
-- 依赖：`requirements-align.txt` = `requirements-transcribe.txt` + `stable-ts==2.19.1` + `av==17.1.0`（torch CPU 由 stable-ts 带入）。
-- 模型：复用 `ct2-turbo-v1` 缓存与 `model.bin`/`config.json` 双校验（同 transcribe.yml）。
-- 提交：`site/*/timings`，排除 `zh/`、`.tmp`、`.part`；`state.json`/feed/index 一律不碰。
-- 与 crawl 并发：独立 concurrency 组，写入路径与 crawl/translate 不相交。
+### 4.5 sidecar
 
-## 六、验收
+结构与 hwmym 完全一致，不新增字段：
 
-- 240 集 sidecar 全部 `complete: true`；带词 cue ≥ 90%（组内偶发失败可接受）；
-- 越界词 0（词时间落在所属 cue 的 `±8 秒` 合理性窗内）；
-- 每集中位偏移日志可查，且没有 |中位| > 3 s 的集（有则逐个人工排查音频版本）；
-- 抽 3 集人工听感：随机 10 个词，词起点偏差 ≤ 0.5 s。
+- `segments[i]` 对应**重写后 VTT 的第 i 条 cue**（下标即新编号）；
+- `start/end` 用毫秒整数；`words` 仅正文 cue 有，元素 `[词, 起始ms, 时长ms]`；
+- `audio_seconds` = 解码后音频时长；`complete/attempts` 语义同 hwmym。
 
-## 七、不做
+## 五、产物与提交边界
 
-- 不改 VTT、不加 `<c>` 卡拉OK 标签；词时间只走 sidecar。
-- 不对 hwmym 做对齐（它是自转录，词时间原生来自 Whisper）。
-- 不对 PodScripts 的时间轴做全局校正（2.2 s 偏差保留，词本身已贴在真实波形上）。
-- 不覆盖全部 4,907 集（约 390 GB 下载）。
+| 文件 | 归属 | 说明 |
+| --- | --- | --- |
+| `site/<slug>/transcripts/<stem>.vtt` | 本任务重写 | 删广告 + 重定时间；文本除删除外不变 |
+| `site/<slug>/timings/<stem>.json` | 本任务新增 | 逐词时间 |
+| `state.json` / `feed.xml` / `index.html` / `progress.json` | **一律不动** | 提交 pathspec 排除 |
 
-## 八、风险
+`align.yml` 的提交路径因此改为同时包含 `site/*/transcripts/*.vtt` 与 `site/*/timings`，
+排除 `zh/`、`feed*.xml`、`index.html`、`*.tmp`、`*.part`。
+
+## 六、成本与轮次
+
+- 单集：整集转写 RTF ≈ 0.5（本机 24 线程），2 核估 50–60 分钟；下载约 40–80 MB。
+- 240 集 ÷ 20 分片 × 150 分钟预算 ≈ 每轮 10 小时，**2–3 轮**。
+
+## 七、验收
+
+- 240 集：sidecar `complete` 全部为真；正文 cue 覆盖 ≥95%。
+- 每集日志给出：相似度、正文/部分/删除条数、被删 cue 的前 60 字符（可人工复核）。
+- 抽 3 集人工核对：删掉的确实是广告；正文 cue 时间与音频对齐（误差 ≤ 0.5 秒）；
+  正文文本与改前逐字相同（只删不改）。
+- 抽 1 集在 AntennaPod 侧确认字幕随音频同步，且不再出现广告文本。
+
+## 八、不做
+
+- 不改 `zh/` 目录与 `feed-zh.xml`（translate 流程的产物）。
+- 不用我们的 ASR 文本替换 PodScripts 的展示文本。
+- 不处理 4,907 集全量（约 390 GB 下载）。
+- 不做"仅平移"的全局校正（广告是分散插入的，平移修不了）。
+
+## 九、v1 已建资产的处理
+
+保留并复用：sidecar 读写与断点语义、`run_align` 分片/预算、`align.yml`、模型缓存、`download_audio`。
+删除：`group_cues` / `window_for` / `cue_words` / `words_plausible` 及其测试（锚点式对齐已否证）。
+新增：序列映射、覆盖度分流、VTT 重写与校验。
+
+## 十、风险
 
 | 风险 | 处理 |
 | --- | --- |
-| 5 个节目的地域插播未验证 | 整集守卫拦在中位偏移 > 3 s；日志点名，人工排查后按节目决定是否放弃 |
-| stable-ts + torch 体积（约 300 MB） | 只在 align job 安装；与 transcribe job 的依赖解耦 |
-| 2 核 RTF 未知（本机 0.55/24 线程） | 先跑 1 集的冒烟，按实测调整每轮分片数 |
-| PodScripts 组内个别句对不上 | 丢弃该句词、其余照写；带词率门槛 90% 兜底 |
+| PodScripts 文本被人工改写，正文 cue 掉到 70% 以下 | 30–70% 只降级不删除；<30% 才删，且整集删除上限 25% |
+| 广告阈值误伤片头片尾口播 | 实测分布 0–63% vs 97–100%，阈值取 30/70 留足余量；冒烟时人工复核删除清单 |
+| VTT 重写写坏 | 4.4 的全部校验 + 原子替换；失败即放弃本集 |
+| 双语配对错位 | 块内两行一起处理；写前校验每块恰好两行文本 |
