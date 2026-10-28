@@ -877,9 +877,13 @@ def is_quota_error(exc: Exception) -> bool:
 def is_auth_error(exc: Exception) -> bool:
     text = f"{exc}".upper()
     code = getattr(exc, "code", None) or getattr(exc, "status_code", None)
-    return code in (401, 403, "401", "403", "PERMISSION_DENIED", "UNAUTHENTICATED") or (
-        "API_KEY_INVALID" in text
-    )
+    if "API_KEY_INVALID" in text or "API KEY NOT VALID" in text:
+        return True
+    # Google 对无效 key 返回 400 INVALID_ARGUMENT（而非 401/403），
+    # 消息里带 "API key not valid"；只靠状态码会让坏 key 走完退避重试。
+    if code in (400, "400") and ("API KEY" in text or "API_KEY" in text):
+        return True
+    return code in (401, 403, "401", "403", "PERMISSION_DENIED", "UNAUTHENTICATED")
 
 
 def build_translation_batches(cues: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
