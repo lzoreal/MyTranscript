@@ -1,11 +1,13 @@
 import hashlib
 import importlib.util
 import json
+import logging
 import os
 import sys
 import tempfile
 import types
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -35,6 +37,23 @@ MODULE_PATH = Path(__file__).parents[1] / "scripts" / "transcribe.py"
 SPEC = importlib.util.spec_from_file_location("transcribe", MODULE_PATH)
 transcriber = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(transcriber)
+
+
+@contextmanager
+def captured_messages(logger):
+    """收集所有级别的日志消息文本；assertLogs 要求至少一条，安静路径用这个。"""
+    messages = []
+
+    class _Handler(logging.Handler):
+        def emit(self, record):
+            messages.append(record.getMessage())
+
+    handler = _Handler()
+    logger.addHandler(handler)
+    try:
+        yield messages
+    finally:
+        logger.removeHandler(handler)
 
 
 class BilingualVttTests(unittest.TestCase):
@@ -302,6 +321,36 @@ class ForceRetranscribeTests(unittest.TestCase):
         self.assertTrue(
             transcriber.needs_backfill(target, sidecar),
             "配额暂停之后这集必须还留在回填候选里",
+        )
+
+    def test_dead_keys_abort_without_recording_an_attempt(self):
+        # 鉴权全失效是配置故障，不是这一集的失败：记 attempts 会把这集
+        # 挤出回填候选，修好 key 之后也再也补不回来。
+        target = self.transcript_dir / "Ep.vtt"
+        transcriber.write_bilingual_vtt(
+            [{"start": 0.0, "end": 1.0, "en": "Old", "zh": "旧"}], target
+        )
+        with patch.object(transcriber, "download_audio", return_value={}), patch.object(
+            transcriber, "whisper_transcribe", return_value=(self.cues, 42.0)
+        ), patch.object(
+            transcriber,
+            "translate_cues_with_gemini",
+            side_effect=transcriber.GeminiAuthFailed("所有 key 都被拒绝"),
+        ):
+            with self.assertRaises(transcriber.GeminiAuthFailed):
+                transcriber.process_episode(
+                    self.entry,
+                    "g1",
+                    "https://cdn.test/a.mp3",
+                    {},
+                    force=True,
+                    output_path=target,
+                )
+        sidecar = self.site_dir / "pod" / "timings" / "Ep.json"
+        self.assertFalse(sidecar.exists(), "鉴权失败不能写失败 sidecar")
+        self.assertTrue(
+            transcriber.needs_backfill(target, sidecar),
+            "修好 key 之后这集必须还留在回填候选里",
         )
 
     def test_quota_pause_leaves_an_existing_sidecar_untouched(self):
@@ -695,6 +744,126 @@ class GeminiRotationTranslateTests(unittest.TestCase):
         output = "\n".join(captured.output)
         self.assertIn("…1111", output)
         self.assertNotIn("AIzaSySECRET", output)
+
+    def test_all_keys_rejected_by_auth_raises_gemini_auth_failed(self):
+        # 无效/吊销的 key 不能表现成「配额用完」：回填会当干净暂停、退出 0，
+        # 每个分片先下载+转录 1~2 小时才发现 key 是死的。
+        class Client:
+            @property
+            def models(self):
+                return self
+
+            def generate_content(self, **kwargs):
+                raise _AuthError("403 PERMISSION_DENIED")
+
+        ring = transcriber.GeminiKeyRing(["k1", "k2"], factory=lambda api_key: Client())
+        with patch.object(transcriber, "wait_for_gemini_rate_limit"):
+            with self.assertRaises(transcriber.GeminiAuthFailed):
+                transcriber.translate_blocks(
+                    ring, [(0, {"en": "Hello there friend"})], {}
+                )
+
+    def test_single_invalid_key_raises_gemini_auth_failed(self):
+        class Client:
+            @property
+            def models(self):
+                return self
+
+            def generate_content(self, **kwargs):
+                raise _AuthError("403 PERMISSION_DENIED")
+
+        ring = transcriber.GeminiKeyRing(["k1"], factory=lambda api_key: Client())
+        with patch.object(transcriber, "wait_for_gemini_rate_limit"):
+            with self.assertRaises(transcriber.GeminiAuthFailed):
+                transcriber.translate_blocks(
+                    ring, [(0, {"en": "Hello there friend"})], {}
+                )
+
+    def test_quota_then_auth_still_counts_as_quota_exhaustion(self):
+        # 先耗尽的 key 明天会恢复，不能因为后面一把 key 无效就把整个 job 判死。
+        class Client:
+            def __init__(self, api_key):
+                self.api_key = api_key
+
+            @property
+            def models(self):
+                return self
+
+            def generate_content(self, model=None, contents=None, config=None):
+                if self.api_key == "k1":
+                    raise _QuotaError("429 RESOURCE_EXHAUSTED")
+                raise _AuthError("403 PERMISSION_DENIED")
+
+        ring = transcriber.GeminiKeyRing(["k1", "k2"], factory=Client)
+        with patch.object(transcriber, "wait_for_gemini_rate_limit"):
+            with self.assertRaises(transcriber.QuotaExhausted):
+                transcriber.translate_blocks(
+                    ring, [(0, {"en": "Hello there friend"})], {}
+                )
+
+    def test_auth_failed_is_not_a_quota_error(self):
+        exc = transcriber.GeminiAuthFailed("所有 key 都被拒绝")
+        self.assertFalse(transcriber.is_quota_error(exc))
+        self.assertFalse(transcriber.is_auth_error(exc))
+        self.assertNotIsInstance(exc, transcriber.QuotaExhausted)
+
+
+class LogScrubbingTests(unittest.TestCase):
+    def test_log_line_with_a_configured_key_is_scrubbed(self):
+        logger = logging.getLogger("transcribe-scrub-test")
+        logger.propagate = False
+        logger.addFilter(transcriber.SecretScrubbingFilter(["AIzaSyLEAK-9999"]))
+        try:
+            with self.assertLogs(logger, level="ERROR") as captured:
+                logger.error(
+                    "下载失败：https://cdn.test/a.mp3?key=%s",
+                    "AIzaSyLEAK-9999",
+                )
+        finally:
+            logger.filters.clear()
+        output = "\n".join(captured.output)
+        self.assertNotIn("AIzaSyLEAK-9999", output)
+        self.assertIn("***", output)
+
+    def test_log_exception_with_a_key_in_the_traceback_is_scrubbed(self):
+        # log.exception 的行内消息只是一半：traceback 里的 str(exc) 同样带 key。
+        logger = logging.getLogger("transcribe-scrub-exc-test")
+        logger.propagate = False
+        logger.addFilter(transcriber.SecretScrubbingFilter(["AIzaSyLEAK-9999"]))
+        try:
+            with self.assertLogs(logger, level="ERROR") as captured:
+                try:
+                    raise RuntimeError(
+                        "GET https://cdn.test/a.mp3?key=AIzaSyLEAK-9999 failed"
+                    )
+                except RuntimeError as exc:
+                    logger.exception("下载失败：%s", exc)
+        finally:
+            logger.filters.clear()
+        output = "\n".join(captured.output)
+        self.assertNotIn("AIzaSyLEAK-9999", output)
+        self.assertIn("***", output)
+
+    def test_scrubber_is_idempotent_and_tolerates_non_string_messages(self):
+        scrubber = transcriber.SecretScrubbingFilter(["k-secret"])
+        record = logging.LogRecord(
+            "x", logging.INFO, __file__, 1, "a k-secret b", None, None
+        )
+        scrubber.filter(record)
+        scrubber.filter(record)
+        self.assertEqual(record.getMessage(), "a *** b")
+
+        numeric = logging.LogRecord("x", logging.INFO, __file__, 1, 42, None, None)
+        self.assertTrue(scrubber.filter(numeric))
+        self.assertEqual(numeric.getMessage(), "42")
+
+    def test_module_logger_has_a_scrubber_installed(self):
+        self.assertTrue(
+            any(
+                isinstance(item, transcriber.SecretScrubbingFilter)
+                for item in transcriber.log.filters
+            )
+        )
 
 
 def _decode_trailing_object(prompt):
@@ -1119,6 +1288,80 @@ class BackfillSelectionTests(unittest.TestCase):
             got = transcriber.build_backfill_candidates([entry], records)
         self.assertEqual(got, [])
 
+    def test_cap_exhausted_episode_is_named_in_a_warning(self):
+        # 达到重试上限的集会被安静地排除在候选之外；日志必须点名（标题 + 2/2），
+        # 否则「这集为什么一直没补上」永远查不到。
+        with tempfile.TemporaryDirectory() as temp_dir:
+            site_dir = Path(temp_dir) / "site"
+            vtt = site_dir / "pod" / "transcripts" / "Gone.vtt"
+            transcriber.write_bilingual_vtt(
+                [{"start": 0.0, "end": 1.0, "en": "Hello", "zh": "你好"}], vtt
+            )
+            sidecar = site_dir / "pod" / "timings" / "Gone.json"
+            transcriber.write_sidecar_failure(
+                sidecar, attempts=transcriber.BACKFILL_MAX_ATTEMPTS
+            )
+            entry = SimpleNamespace(
+                id="g1",
+                title="Gone Episode",
+                published="",
+                enclosures=[{"href": "https://cdn.test/a.mp3", "type": "audio/mpeg"}],
+                links=[],
+            )
+            records = {
+                "g1": {
+                    "identity": "g1",
+                    "path": "pod/transcripts/Gone.vtt",
+                    "title": "Gone Episode",
+                }
+            }
+            with patch.object(transcriber, "SITE_DIR", site_dir), patch.object(
+                transcriber, "TIMING_DIR", site_dir / "pod" / "timings"
+            ), self.assertLogs(transcriber.log, level="WARNING") as captured:
+                got = transcriber.build_backfill_candidates([entry], records)
+
+        self.assertEqual(got, [], "达上限的集不能再进候选")
+        output = "\n".join(captured.output)
+        self.assertIn("Gone Episode", output)
+        self.assertIn(
+            f"{transcriber.BACKFILL_MAX_ATTEMPTS}/{transcriber.BACKFILL_MAX_ATTEMPTS}",
+            output,
+        )
+
+    def test_candidates_stay_quiet_about_episodes_that_still_have_attempts(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            site_dir = Path(temp_dir) / "site"
+            vtt = site_dir / "pod" / "transcripts" / "Fresh.vtt"
+            transcriber.write_bilingual_vtt(
+                [{"start": 0.0, "end": 1.0, "en": "Hello", "zh": "你好"}], vtt
+            )
+            sidecar = site_dir / "pod" / "timings" / "Fresh.json"
+            transcriber.write_sidecar_failure(sidecar, attempts=1)
+            entry = SimpleNamespace(
+                id="g1",
+                title="Fresh Episode",
+                published="",
+                enclosures=[{"href": "https://cdn.test/a.mp3", "type": "audio/mpeg"}],
+                links=[],
+            )
+            records = {
+                "g1": {
+                    "identity": "g1",
+                    "path": "pod/transcripts/Fresh.vtt",
+                    "title": "Fresh Episode",
+                }
+            }
+            with patch.object(transcriber, "SITE_DIR", site_dir), patch.object(
+                transcriber, "TIMING_DIR", site_dir / "pod" / "timings"
+            ), captured_messages(transcriber.log) as messages:
+                got = transcriber.build_backfill_candidates([entry], records)
+
+        self.assertEqual(len(got), 1)
+        self.assertFalse(
+            [message for message in messages if "Fresh Episode" in message],
+            "还有重试机会的集不能出现在警告里",
+        )
+
     def test_candidates_dedupe_by_vtt_path_keeping_first_entry(self):
         # migrate_legacy_records 可能让两个 identity 共用同一条 path；两个候选会
         # 按 identity 落到不同分片，却并发写同一份 sidecar。因此每条 path 只留
@@ -1219,6 +1462,48 @@ class RunBackfillTests(unittest.TestCase):
         )
         self.assertEqual(stats["failed"], 1)
         self.assertEqual(stats["done"], 2)
+
+    def test_dead_keys_fail_the_shard_instead_of_pausing_it(self):
+        calls = []
+
+        def process(item):
+            calls.append(item["identity"])
+            raise transcriber.GeminiAuthFailed("所有 key 都被拒绝")
+
+        with self.assertRaises(transcriber.GeminiAuthFailed):
+            transcriber.run_backfill(
+                self.items(3), shard=0, shards=1, max_minutes=10,
+                process=process, clock=lambda: 0.0,
+            )
+        self.assertEqual(len(calls), 1, "鉴权失败必须立刻冒泡，不能继续下一集")
+
+    def test_failure_line_does_not_promise_retry_for_a_capped_episode(self):
+        # 这一集这次失败后 attempts 已经到 2/2：再写「下轮重试」就是骗人。
+        with tempfile.TemporaryDirectory() as temp_dir:
+            timings = Path(temp_dir)
+            transcriber.write_sidecar_failure(
+                timings / "x.json", attempts=transcriber.BACKFILL_MAX_ATTEMPTS
+            )
+
+            def process(item):
+                raise RuntimeError("boom")
+
+            with patch.object(transcriber, "TIMING_DIR", timings), self.assertLogs(
+                transcriber.log, level="WARNING"
+            ) as captured:
+                stats = transcriber.run_backfill(
+                    self.items(1), shard=0, shards=1, max_minutes=10,
+                    process=process, clock=lambda: 0.0,
+                )
+
+        self.assertEqual(stats["failed"], 1)
+        output = "\n".join(captured.output)
+        self.assertNotIn("下轮重试", output)
+        self.assertIn("Ep 0", output)
+        self.assertIn(
+            f"{transcriber.BACKFILL_MAX_ATTEMPTS}/{transcriber.BACKFILL_MAX_ATTEMPTS}",
+            output,
+        )
 
     def test_skipped_counts_other_shards_and_done_counts_own(self):
         seen = []
@@ -1398,7 +1683,7 @@ class BackfillEnvTests(unittest.TestCase):
 class MainBackfillReadOnlyTests(unittest.TestCase):
     """main() 回填分支只读 state：任何 writer 被调用都直接让测试失败。"""
 
-    def run_main_in_backfill_mode(self, entries, env):
+    def run_main_in_backfill_mode(self, entries, env, run_backfill_error=None):
         calls = []
         seen = {}
 
@@ -1424,6 +1709,8 @@ class MainBackfillReadOnlyTests(unittest.TestCase):
         def fake_run_backfill(candidates, **kwargs):
             seen["candidates"] = candidates
             seen["kwargs"] = kwargs
+            if run_backfill_error is not None:
+                raise run_backfill_error
             return {"done": 1, "failed": 0, "skipped": 0, "quota": False}
 
         with patch.dict(os.environ, env, clear=True), patch.object(
@@ -1500,6 +1787,25 @@ class MainBackfillReadOnlyTests(unittest.TestCase):
 
         self.assertEqual(len(seen["entries"]), 3)
         self.assertEqual(seen["entries"], entries)
+
+    def test_main_backfill_returns_nonzero_when_every_key_is_rejected(self):
+        # 死 key 不是配额暂停：分片必须红着退出，否则 20 个 job 全绿而一集没补。
+        entries = [
+            SimpleNamespace(
+                id="guid-0",
+                title="Ep 0",
+                enclosures=[{"href": "https://example.test/0.mp3", "type": "audio/mpeg"}],
+            )
+        ]
+
+        code, _seen, calls = self.run_main_in_backfill_mode(
+            entries,
+            {"BACKFILL_SHARD": "0", "BACKFILL_SHARDS": "1"},
+            run_backfill_error=transcriber.GeminiAuthFailed("所有 key 都被拒绝"),
+        )
+
+        self.assertEqual(code, 1)
+        self.assertEqual(calls, [], "鉴权失败也不能触发 state/feed/index writer")
 
 
 if __name__ == "__main__":
