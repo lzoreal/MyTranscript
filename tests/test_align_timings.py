@@ -61,7 +61,8 @@ class WindowTests(unittest.TestCase):
         self.assertAlmostEqual(aligner.cue_span(cue), 20.0)
 
     def test_span_is_capped_for_very_long_text(self):
-        cue = {"start": 0.0, "end": 999.0, "en": "x" * 4000}
+        # 声明 3000 秒远超上限，必须被 4000/4+5 = 1005 截断
+        cue = {"start": 0.0, "end": 3000.0, "en": "x" * 4000}
         self.assertAlmostEqual(aligner.cue_span(cue), 1005.0)
 
     def test_window_pads_the_start_and_tails_with_bound(self):
