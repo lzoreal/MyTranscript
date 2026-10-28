@@ -70,6 +70,7 @@ STATE_FILE = ROOT_DIR / "state.json"
 PROXY_CACHE_FILE = ROOT_DIR / ".china_proxy_cache.json"
 PODCAST_DIR = SITE_DIR / PODCAST_SLUG
 TRANSCRIPT_DIR = PODCAST_DIR / "transcripts"
+TIMING_DIR = PODCAST_DIR / "timings"
 PODCAST_NS = "https://podcastindex.org/namespace/1.0"
 USER_AGENT = "PodcastTranscriptBot/1.0 (+https://github.com/)"
 PROXY_API_URLS = [
@@ -648,15 +649,23 @@ def resegment_whisper_segments(
         duration = max(0.05, end - start)
         weights = [max(1, len(s)) for s in expanded]
         total = sum(weights)
+        measured = measured_cue_times(expanded, segment.get("words") or [])
         cursor = start
         for i, sentence in enumerate(expanded):
-            cue_end = (
-                end
-                if i == len(expanded) - 1
-                else cursor + duration * weights[i] / total
-            )
-            cue_end = max(cursor + 0.05, min(cue_end, end))
-            cues.append({"start": cursor, "end": cue_end, "en": sentence, "zh": ""})
+            if measured is not None:
+                cue_start, cue_end, words = measured[i]
+            else:
+                cue_end = (
+                    end
+                    if i == len(expanded) - 1
+                    else cursor + duration * weights[i] / total
+                )
+                cue_start, words = cursor, []
+            cue_end = max(cue_start + 0.05, min(cue_end, end))
+            cue = {"start": cue_start, "end": cue_end, "en": sentence, "zh": ""}
+            if words:
+                cue["words"] = words
+            cues.append(cue)
             cursor = cue_end
     previous_end = 0.0
     for cue in cues:
@@ -666,9 +675,91 @@ def resegment_whisper_segments(
     return cues
 
 
-def whisper_transcribe(audio_path: Path) -> list[dict[str, Any]]:
+def merge_continuation_words(words: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Whisper 会把 Whim-Yim、example.com 切成两个 token；续接段并回前一个词。"""
+    merged: list[dict[str, Any]] = []
+    for word in words:
+        text = str(word["w"])
+        if merged and text[:1] in ("-", "."):
+            previous = merged[-1]
+            merged[-1] = {
+                "w": previous["w"] + text,
+                "s": previous["s"],
+                "e": word["e"],
+            }
+            continue
+        merged.append({"w": text, "s": word["s"], "e": word["e"]})
+    return merged
+
+
+def split_words_proportionally(
+    cue_texts: list[str], words: list[dict[str, Any]]
+) -> list[list[dict[str, Any]]] | None:
+    """词数与文本 token 数对不上时，按各 cue 的字符占比分词，保证每个 cue 至少一个词。"""
+    total_chars = sum(len(text) for text in cue_texts)
+    if total_chars == 0 or len(words) < len(cue_texts):
+        return None
+    chunks: list[list[dict[str, Any]]] = []
+    cursor = 0
+    consumed = 0
+    for index, text in enumerate(cue_texts):
+        consumed += len(text)
+        remaining_cues = len(cue_texts) - index - 1
+        if remaining_cues == 0:
+            end = len(words)
+        else:
+            end = round(len(words) * consumed / total_chars)
+            end = min(max(end, cursor + 1), len(words) - remaining_cues)
+        chunks.append(words[cursor:end])
+        cursor = end
+    if cursor != len(words):
+        return None
+    return chunks
+
+
+def measured_cue_times(
+    cue_texts: list[str], words: list[dict[str, Any]]
+) -> list[tuple[float, float, list[dict[str, Any]]]] | None:
+    """按词的顺序把 Whisper 词时间分配到切好的 cue 上；词时间不可信就返回 None 让调用方估算。
+
+    Whisper 的词切分与文本 token 数并不总一致（连字符、域名后缀），先合并续接词；
+    仍然对不齐时按字符比例分词，宁可差一个词的边界，也不让整条 cue 丢掉词级时间。
+    """
+    words = merge_continuation_words(words or [])
+    if not words:
+        return None
+    counts = [len(text.split()) for text in cue_texts]
+    if sum(counts) == len(words):
+        chunks: list[list[dict[str, Any]]] = []
+        cursor = 0
+        for count in counts:
+            chunks.append(words[cursor : cursor + count])
+            cursor += count
+    else:
+        chunks = split_words_proportionally(cue_texts, words)
+        if chunks is None:
+            return None
+    result = []
+    for chunk in chunks:
+        if not chunk:
+            return None
+        first, last = float(chunk[0]["s"]), float(chunk[-1]["e"])
+        if last <= first:
+            return None
+        result.append((first, last, chunk))
+    for earlier, later in zip(result, result[1:]):
+        if later[0] < earlier[0]:
+            return None
+    return result
+
+
+
+def whisper_transcribe(audio_path: Path) -> tuple[list[dict[str, Any]], float]:
     log.info("加载 Whisper 模型：%s", WHISPER_MODEL)
-    model = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8")
+    threads = int(os.getenv("WHISPER_THREADS", "0")) or (os.cpu_count() or 1)
+    model = WhisperModel(
+        WHISPER_MODEL, device="cpu", compute_type="int8", cpu_threads=threads
+    )
     segments, info = model.transcribe(
         str(audio_path),
         language="en",
@@ -676,11 +767,13 @@ def whisper_transcribe(audio_path: Path) -> list[dict[str, Any]]:
         beam_size=5,
         vad_filter=True,
         condition_on_previous_text=True,
+        word_timestamps=True,
     )
     log.info(
-        "开始转录：language=%s，预计时长=%.1f 秒",
+        "开始转录：language=%s，预计时长=%.1f 秒，cpu_threads=%d",
         getattr(info, "language", "unknown"),
         getattr(info, "duration", 0.0) or 0.0,
+        threads,
     )
     raw = []
     for seg in segments:
@@ -691,13 +784,18 @@ def whisper_transcribe(audio_path: Path) -> list[dict[str, Any]]:
                     "start": max(0.0, float(seg.start)),
                     "end": max(float(seg.start) + 0.05, float(seg.end)),
                     "text": text,
+                    "words": [
+                        {"w": word.word.strip(), "s": float(word.start), "e": float(word.end)}
+                        for word in (seg.words or [])
+                        if word.word.strip()
+                    ],
                 }
             )
     if not raw:
         raise RuntimeError("Whisper 没有识别到任何语音内容")
     cues = resegment_whisper_segments(raw)
     log.info("转录完成：%d 条英文字幕", len(cues))
-    return cues
+    return cues, round(getattr(info, "duration", 0.0) or 0.0, 2)
 
 
 # -------------------- Gemini 翻译 --------------------
@@ -941,6 +1039,60 @@ def write_bilingual_vtt(cues: list[dict[str, Any]], output_path: Path) -> None:
     tmp.write_text("\n".join(blocks).rstrip() + "\n", encoding="utf-8")
     tmp.replace(output_path)
     log.info("已写出双语 VTT：%s", output_path)
+
+
+def write_word_timings(
+    cues: list[dict[str, Any]], output_path: Path, audio_seconds: float
+) -> None:
+    """按 TMLT 的 sidecar 结构写出逐词时间轴；没有词的 cue 把 end 置空，由消费方回退到 VTT。"""
+    if not cues:
+        raise ValueError("没有字幕，拒绝写出空的逐词时间轴")
+    segments = []
+    for cue in cues:
+        start_ms = int(round(float(cue["start"]) * 1000))
+        cue_end_ms = int(round(float(cue["end"]) * 1000))
+        words = []
+        for word in cue.get("words") or []:
+            word_start = int(round(float(word["s"]) * 1000))
+            word_end = int(round(float(word["e"]) * 1000))
+            words.append(
+                [clean_text(word["w"]), word_start, max(0, word_end - word_start)]
+            )
+        if not words:
+            end_ms = None
+        elif float(cue["words"][-1]["e"]) <= float(cue["words"][-1]["s"]):
+            end_ms = cue_end_ms
+        else:
+            end_ms = int(round(float(cue["words"][-1]["e"]) * 1000))
+        segments.append(
+            {
+                "start": start_ms,
+                "end": end_ms,
+                "speaker": None,
+                "text": clean_text(cue.get("en", "")),
+                "words": words,
+            }
+        )
+    document = {
+        "episode": output_path.stem,
+        "audio_seconds": round(float(audio_seconds), 2),
+        "complete": True,
+        "attempts": 1,
+        "segments": segments,
+    }
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = output_path.with_suffix(output_path.suffix + ".tmp")
+    tmp.write_text(
+        json.dumps(document, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    tmp.replace(output_path)
+    log.info(
+        "已写出逐词时间轴：%s（%d 段，%d 词）",
+        output_path,
+        len(segments),
+        sum(len(segment["words"]) for segment in segments),
+    )
 
 
 MIN_BILINGUAL_RATIO = 0.8
@@ -1286,11 +1438,18 @@ def process_episode(
     with tempfile.TemporaryDirectory(prefix="podcast-audio-") as temp_dir:
         audio_path = Path(temp_dir) / f"episode{suffix}"
         proxy_info = download_audio(audio_url, audio_path)
-        cues = whisper_transcribe(audio_path)
+        cues, audio_seconds = whisper_transcribe(audio_path)
     cues = translate_cues_with_gemini(cues)
     if any(not c.get("en") or not c.get("zh") for c in cues):
         raise RuntimeError("字幕校验失败：存在空的英文或中文条目")
     write_bilingual_vtt(cues, transcript_path)
+    try:
+        write_word_timings(
+            cues, TIMING_DIR / f"{transcript_path.stem}.json", audio_seconds
+        )
+    except Exception:
+        # 逐词时间轴是附加产物；写不出来不能连累已经生成好的双语字幕。
+        log.exception("逐词时间轴写出失败：%s", transcript_path.stem)
     record = {
         "identity": identity,
         "title": title,
