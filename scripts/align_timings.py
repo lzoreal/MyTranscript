@@ -68,3 +68,42 @@ def window_for(group: list[dict[str, Any]], total_seconds: float) -> tuple[float
     lo = max(0.0, group[0]["start"] - PAD)
     hi = min(total_seconds, max(cue["start"] + cue_span(cue) for cue in group) + TAIL_PAD)
     return lo, hi
+
+
+EARLY_TOLERANCE = 8.0
+LATE_TOLERANCE = 8.0
+
+
+def words_plausible(
+    cue: dict[str, Any], next_start: float | None, words: list[dict[str, Any]]
+) -> bool:
+    """词集与词位置是否可信；不可信就丢该句的词，而不是写错数据。"""
+    if not words:
+        return False
+    if [word["w"] for word in words] != cue["en"].split():
+        return False
+    first, last = words[0]["s"], words[-1]["e"]
+    if first < cue["start"] - EARLY_TOLERANCE:
+        return False
+    limit = next_start if next_start is not None else cue["start"] + LATE_TOLERANCE * 10
+    return last <= limit + LATE_TOLERANCE
+
+
+def cue_words(segments, group, offset: float) -> dict[int, list[dict[str, Any]]]:
+    by_id = {getattr(segment, "id", None): segment for segment in segments}
+    result: dict[int, list[dict[str, Any]]] = {}
+    for position, _cue in enumerate(group):
+        segment = by_id.get(position)
+        words = list(getattr(segment, "words", None) or []) if segment else []
+        mapped = [
+            {
+                "w": word.word.strip(),
+                "s": float(word.start) + offset,
+                "e": float(word.end) + offset,
+            }
+            for word in words
+            if word.word.strip()
+        ]
+        if mapped:
+            result[position] = mapped
+    return result
