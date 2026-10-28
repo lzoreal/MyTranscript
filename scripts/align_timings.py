@@ -649,3 +649,56 @@ def episode_rejection(decisions: list[str], similarity: float) -> str | None:
     if "body" not in decisions:
         return "没有任何 cue 拿到映射词"
     return None
+
+
+def _mapped_words(span, mapping, words) -> list[dict[str, Any]]:
+    indexes = [mapping[index] for index in range(*span) if index in mapping]
+    if not indexes:
+        return []
+    return [
+        {"w": words[index]["w"], "s": words[index]["s"], "e": words[index]["e"]}
+        for index in range(min(indexes), max(indexes) + 1)
+    ]
+
+
+def assign_times(cues, spans, decisions, mapping, words, total_seconds) -> list[dict[str, Any]]:
+    """删掉 drop、给保留的 cue 定时：有词用词区间，没词的按连续空档按字数分配。"""
+    kept: list[dict[str, Any]] = []
+    for cue, span, decision in zip(cues, spans, decisions):
+        if decision == "drop":
+            continue
+        mapped = _mapped_words(span, mapping, words) if decision == "body" else []
+        kept.append(
+            {
+                "start": mapped[0]["s"] if mapped else None,
+                "end": mapped[-1]["e"] if mapped else None,
+                "en": cue["en"],
+                "zh": cue["zh"],
+                "words": mapped,
+            }
+        )
+    index = 0
+    while index < len(kept):
+        if kept[index]["start"] is not None:
+            index += 1
+            continue
+        run_end = index
+        while run_end < len(kept) and kept[run_end]["start"] is None:
+            run_end += 1
+        left = kept[index - 1]["end"] if index else 0.0
+        right = kept[run_end]["start"] if run_end < len(kept) else total_seconds
+        run = kept[index:run_end]
+        total_chars = sum(len(item["en"]) for item in run) or 1
+        cursor = left
+        for item in run:
+            share = len(item["en"]) / total_chars
+            item["start"] = cursor
+            item["end"] = cursor + max(0.05, (right - left) * share)
+            cursor = item["end"]
+        index = run_end
+    previous_end = 0.0
+    for entry in kept:
+        entry["start"] = max(previous_end, float(entry["start"]))
+        entry["end"] = max(entry["start"] + 0.05, float(entry["end"]))
+        previous_end = entry["end"]
+    return kept
