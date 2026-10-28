@@ -590,6 +590,37 @@ class MappingTests(unittest.TestCase):
         self.assertGreater(similarity, 0.5)
 
 
+class ClassifyTests(unittest.TestCase):
+    def spans(self, *counts):
+        spans, cursor = [], 0
+        for count in counts:
+            spans.append((cursor, cursor + count))
+            cursor += count
+        return spans
+
+    def test_three_way_split_at_the_documented_thresholds(self):
+        spans = self.spans(10, 10, 10, 10)
+        mapping = {i: i for i in range(10)}
+        mapping.update({10 + i: 10 + i for i in range(5)})
+        mapping.update({20 + i: 20 + i for i in range(2)})
+        got = aligner.classify_cues(spans, mapping)
+        self.assertEqual(got, ["body", "partial", "drop", "drop"])
+
+    def test_short_blocks_are_never_dropped(self):
+        got = aligner.classify_cues(self.spans(3), {})
+        self.assertEqual(got, ["partial"])
+
+    def test_rejection_when_too_much_would_be_dropped(self):
+        decisions = ["drop"] * 4 + ["body"] * 6
+        self.assertEqual(aligner.episode_rejection(decisions, 0.99), "删除比例超过 25%")
+
+    def test_rejection_on_low_similarity(self):
+        self.assertEqual(aligner.episode_rejection(["body"] * 10, 0.5), "文本相似度过低")
+
+    def test_accepts_a_healthy_episode(self):
+        self.assertIsNone(aligner.episode_rejection(["body"] * 8 + ["drop"] * 2, 0.96))
+
+
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     unittest.main()
