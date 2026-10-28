@@ -130,6 +130,10 @@ def words_plausible(
     got = _normalize(_merge_continuations([word["w"] for word in words]))
     if not tokens_match(want, got):
         return False
+    # 对齐失败时 stable-ts 会把一整行的词压在同一个时间点（时长 0）：这不是可用数据。
+    positive = [word for word in words if word["e"] > word["s"]]
+    if len(positive) < max(1, int(len(words) * 0.8)):
+        return False
     # PodScripts 单条 cue 的起点实测可偏 ±25 秒，时间不能贴 cue 判；这里只拦
     # 明显跑到别处的对齐，真正的防线是上面的文本相似度与整集的偏移守卫。
     first, last = words[0]["s"], words[-1]["e"]
@@ -180,7 +184,7 @@ def align_cues(model, audio, cues, total_seconds: float):
         for cue in cues
     ]
     index_of = {id(cue): position for position, cue in enumerate(cues)}
-    for group in group_cues(cues):
+    for group in ([cue] for cue in cues):
         stats["groups"] += 1
         lo, hi = window_for(group, total_seconds)
         clip = audio[int(lo * SR) : int(hi * SR)]
