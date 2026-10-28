@@ -559,6 +559,37 @@ class VttRoundTripTests(unittest.TestCase):
             aligner.validate_vtt(text, blocks=2, bilingual=True)
 
 
+class MappingTests(unittest.TestCase):
+    def test_normalize_lowercases_and_merges_continuations(self):
+        tokens = aligner.normalize_tokens("Don't re-watch HowWeMadeYourMother.com!")
+        self.assertEqual(tokens, ["dont", "rewatch", "howwemadeyourmothercom"])
+
+    def test_cue_spans_cover_every_token_once(self):
+        cues = [
+            {"start": 0.0, "end": 1.0, "en": "one two", "zh": "甲"},
+            {"start": 2.0, "end": 3.0, "en": "three", "zh": "乙"},
+        ]
+        tokens, spans = aligner.cue_token_spans(cues)
+        self.assertEqual(tokens, ["one", "two", "three"])
+        self.assertEqual(spans, [(0, 2), (2, 3)])
+
+    def test_maps_identical_streams_one_to_one(self):
+        mapping, similarity = aligner.map_stream(["a", "b", "c"], ["a", "b", "c"])
+        self.assertEqual(mapping, {0: 0, 1: 1, 2: 2})
+        self.assertAlmostEqual(similarity, 1.0)
+
+    def test_maps_across_an_inserted_ad(self):
+        pods = ["intro", "ad", "ad", "body", "end"]
+        ours = ["intro", "body", "end"]
+        mapping, similarity = aligner.map_stream(pods, ours)
+        self.assertEqual(mapping[0], 0)
+        self.assertEqual(mapping[3], 1)
+        self.assertEqual(mapping[4], 2)
+        self.assertNotIn(1, mapping)
+        self.assertNotIn(2, mapping)
+        self.assertGreater(similarity, 0.5)
+
+
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     unittest.main()
