@@ -810,7 +810,9 @@ def generate_podcast_feed(pc_prog, podcast, base_url):
     feed_path.parent.mkdir(parents=True, exist_ok=True)
     tree = etree.ElementTree(root)
     tmp = feed_path.with_name(feed_path.name + ".tmp")
-    tree.write(tmp, pretty_print=True, xml_declaration=True, encoding="utf-8")
+    # lxml 会把文件名当 URI 解析，含 % 的相对路径在 Windows 上直接失败，所以走句柄。
+    with open(tmp, "wb") as handle:
+        tree.write(handle, pretty_print=True, xml_declaration=True, encoding="utf-8")
     tmp.replace(feed_path)
     print(
         f"   Feed：{slug} → {enhanced_feed_url}"
