@@ -172,16 +172,64 @@ jobs:
 
           model = os.environ["WHISPER_MODEL"].strip()
           if model.startswith("models/"):
-              model_bin = Path(model) / "model.bin"
+              model_dir = Path(model)
               # 缺模型必须当场失败：faster-whisper 会用同名仓库或 base.en 兜底，
               # 一旦兜底成功，词级时间戳整批都是错的却看不出来。
-              if not model_bin.is_file():
-                  raise SystemExit(f"模型缺失：{model_bin}（回填模式禁止回退 base.en）")
+              # config.json 一并检查：半截的缓存可能只在 model.bin 之外缺文件，
+              # 那样报错会推迟到 WhisperModel() 里，看不出是缓存没恢复全。
+              missing = [n for n in ("model.bin", "config.json") if not (model_dir / n).is_file()]
+              if missing:
+                  raise SystemExit(
+                      f"模型缺失：{model} 缺少 {', '.join(missing)}（回填模式禁止回退 base.en）"
+                  )
+              model_bin = model_dir / "model.bin"
               print(f"模型就绪：{model}（{model_bin.stat().st_size / 2**30:.2f} GiB）")
           elif os.environ.get("BACKFILL") == "true":
               raise SystemExit(f"回填模式必须使用 models/ 下的本地模型，收到：{model}")
           else:
               print(f"模型：{model}（按名称/缓存解析）")
+          PY
+
+      # 分片参数必须在 continue-on-error 之外校验：放在 run 步骤里会被吞掉，
+      # shards=30/0 时每个 job 都自己跳过，run 仍是绿的却漏掉整批集。
+      - name: 检查回填参数
+        env:
+          BACKFILL: ${{ github.event.inputs.backfill || 'false' }}
+          SHARDS: ${{ github.event.inputs.shards || '20' }}
+          MAX_MINUTES: ${{ github.event.inputs.max_minutes || '280' }}
+        run: |
+          python - <<'PY'
+          import os
+
+          if os.environ.get("BACKFILL") != "true":
+              print("非回填模式，无需校验分片参数")
+              raise SystemExit(0)
+
+          # 与 strategy.matrix.shard 的字面量数组长度保持一致。
+          matrix_shards = 20
+
+
+          def parse_int(name, raw):
+              value = raw.strip()
+              if not value.lstrip("+-").isdigit():
+                  raise SystemExit(f"{name} 必须是整数，收到：{raw!r}")
+              return int(value)
+
+
+          shards = parse_int("shards", os.environ.get("SHARDS", ""))
+          max_minutes = parse_int("max_minutes", os.environ.get("MAX_MINUTES", ""))
+
+          if shards < 1:
+              raise SystemExit(f"shards 必须 >= 1，收到：{shards}")
+          if shards > matrix_shards:
+              raise SystemExit(
+                  f"shards={shards} 超过分片矩阵上限 {matrix_shards}，"
+                  "请先扩展 .github/workflows/transcribe.yml 的 matrix.shard"
+              )
+          if max_minutes < 1:
+              raise SystemExit(f"max_minutes 必须 >= 1，收到：{max_minutes}")
+
+          print(f"回填参数就绪：shards={shards}，max_minutes={max_minutes}")
           PY
 
       - name: 运行转录与翻译
@@ -207,21 +255,17 @@ jobs:
           from pathlib import Path
 
           model = os.environ["WHISPER_MODEL"].strip()
-          if model.startswith("models/") and not (Path(model) / "model.bin").is_file():
-              raise SystemExit(f"模型缺失：{model}/model.bin（回填模式禁止回退 base.en）")
-
-          shard = os.environ.get("BACKFILL_SHARD", "").strip()
-          shards = os.environ.get("BACKFILL_SHARDS", "").strip()
-          matrix_shards = 20
-          # shards 大于矩阵长度时 20..shards-1 号分片没有 job，那部分集会静默漏掉。
-          if shard and int(shards) > matrix_shards:
-              raise SystemExit(
-                  f"shards={shards} 超过分片矩阵上限 {matrix_shards}，"
-                  "请先扩展 .github/workflows/transcribe.yml 的 matrix.shard"
-              )
+          if model.startswith("models/"):
+              model_dir = Path(model)
+              missing = [n for n in ("model.bin", "config.json") if not (model_dir / n).is_file()]
+              if missing:
+                  raise SystemExit(
+                      f"模型缺失：{model} 缺少 {', '.join(missing)}（回填模式禁止回退 base.en）"
+                  )
           PY
           # shard_of 只产出 0..shards-1，分片号超出本次 shards 的 job 无集可做：
           # 空跑退出，别让 transcribe.py 因 shard >= shards 报「分片配置非法」。
+          # shards 本身的合法性由上面的「检查回填参数」步骤保证（此处在 continue-on-error 内）。
           if [ -n "${BACKFILL_SHARD}" ] && [ "${BACKFILL_SHARD}" -ge "${BACKFILL_SHARDS}" ]; then
             echo "分片 ${BACKFILL_SHARD} 超出 shards=${BACKFILL_SHARDS}，本 job 无集可做，跳过"
             exit 0
@@ -240,6 +284,8 @@ jobs:
           git remote set-url origin "https://${MY_PAT}@github.com/${GITHUB_REPOSITORY}.git"
           # git add -A -- <pathspec> 只要有一条 pathspec 不匹配任何文件就整体失败，
           # 分片可能一集都没完成，所以先只留下存在且非空的目录。
+          # .part（代理竞态缓存）和 .tmp（原子写的中间文件）是 kill 后可能残留的半成品，
+          # 而本步骤 if: always()，所以两条分支的 pathspec 都必须显式排除它们。
           paths=()
           if [ "$BACKFILL" = "true" ]; then
             # 回填分片只产出 VTT 与 sidecar；不碰 state.json / feed.xml / index.html。
@@ -254,7 +300,9 @@ jobs:
             fi
             bash scripts/git_push_retry.sh "auto: backfill ${PODCAST_SLUG} word timings (shard ${SHARD})" \
               "${paths[@]}" \
-              ':(exclude)site/*/transcripts/zh/**'
+              ':(exclude)site/*/transcripts/zh/**' \
+              ':(exclude)**/*.part' \
+              ':(exclude)**/*.tmp'
           else
             # 本 job 拥有 state.json、自己 slug 的 feed.xml/en 字幕和根 index.html；
             # zh/ 与 feed-zh.xml 是 translate 的产物，排除掉以免并发提交撞同一个文件。
@@ -272,5 +320,7 @@ jobs:
               ':(exclude)site/*/transcripts/zh/**' \
               ':(exclude)site/*/feed-zh.xml' \
               ':(exclude)progress.json' \
-              ':(exclude)translations.json'
+              ':(exclude)translations.json' \
+              ':(exclude)**/*.part' \
+              ':(exclude)**/*.tmp'
           fi
