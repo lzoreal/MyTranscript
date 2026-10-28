@@ -482,6 +482,48 @@ class ParagraphCueTests(unittest.TestCase):
         self.assertFalse(aligner.words_plausible(cue, next_start=45.0, words=words))
 
 
+class DegenerateWordTests(unittest.TestCase):
+    def cue(self, start, end, text):
+        return {"start": start, "end": end, "en": text}
+
+    def test_rejects_words_collapsed_to_one_instant(self):
+        cue = self.cue(10.0, 40.0, "hello there friend")
+        words = [
+            {"w": "hello", "s": 12.0, "e": 12.0},
+            {"w": "there", "s": 12.0, "e": 12.0},
+            {"w": "friend", "s": 12.0, "e": 12.0},
+        ]
+        self.assertFalse(aligner.words_plausible(cue, None, words))
+
+    def test_accepts_normal_word_durations(self):
+        cue = self.cue(10.0, 40.0, "hello there friend")
+        words = [
+            {"w": "hello", "s": 12.0, "e": 12.4},
+            {"w": "there", "s": 12.4, "e": 12.9},
+            {"w": "friend", "s": 12.9, "e": 13.3},
+        ]
+        self.assertTrue(aligner.words_plausible(cue, None, words))
+
+
+class PerCueAlignTests(unittest.TestCase):
+    def test_each_cue_is_aligned_in_its_own_window(self):
+        calls = []
+
+        class Model:
+            def align(self, clip, text, language="en", original_split=True):
+                calls.append(text)
+                return FakeAligned([FakeSegment(0, [FakeWord(text.split()[0], 1.0, 1.4)])])
+
+        cues = [
+            {"start": 10.0, "end": 12.0, "en": "one"},
+            {"start": 100.0, "end": 102.0, "en": "two"},
+        ]
+        out, stats = aligner.align_cues(Model(), FakeAudio(200.0), cues, 200.0)
+        self.assertEqual(len(calls), 2, "逐 cue 对齐，不合并成组")
+        self.assertEqual(stats["groups"], 2)
+        self.assertTrue(out[0]["words"] and out[1]["words"])
+
+
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     unittest.main()
