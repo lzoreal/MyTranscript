@@ -22,7 +22,8 @@ from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from datetime import timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, Callable
 from urllib.parse import quote, urlparse
 
 import feedparser
@@ -1346,6 +1347,65 @@ def build_backfill_candidates(entries, records) -> list[dict[str, Any]]:
             }
         )
     return candidates
+
+
+def process_backfill_item(item: dict[str, Any]) -> None:
+    """按 state 里既有的 VTT 路径重转一集；失败记账由 run_backfill 统一处理。
+
+    ``output_path`` 必须显式传给 process_episode：多数既有文件名与标题推导名
+    不一致，按标题推导会另写一份新文件，旧文件永远拿不到 sidecar。
+    """
+    entry = SimpleNamespace(
+        title=item["title"], published="", id=item["identity"], guid=item["identity"]
+    )
+    record, _ = process_episode(
+        entry,
+        item["identity"],
+        item["audio_url"],
+        path_owner=None,
+        force=True,
+        output_path=item["vtt_path"],
+    )
+    if (SITE_DIR / record["path"]) != item["vtt_path"]:
+        # 有 output_path 时正常不会触发；留着是防 process_episode 再次改行为。
+        log.warning(
+            "回填产出路径与预期不一致：%s → %s", item["vtt_path"], record["path"]
+        )
+
+
+def run_backfill(
+    candidates: list[dict[str, Any]],
+    shard: int,
+    shards: int,
+    max_minutes: float,
+    process: Callable[[dict[str, Any]], None] | None = None,
+    clock: Callable[[], float] | None = None,
+) -> dict[str, Any]:
+    """回填一个分片：预算用完即停；配额耗尽干净退出；单集失败不影响其它集。"""
+    process = process or process_backfill_item
+    clock = clock or time.monotonic
+    deadline = clock() + max_minutes * 60
+    stats = {"done": 0, "failed": 0, "skipped": 0, "quota": False}
+    for item in candidates:
+        if shard_of(item["identity"], shards) != shard:
+            stats["skipped"] += 1
+            continue
+        if clock() >= deadline:
+            log.info("分片 %d 预算用完，已完成 %d 集", shard, stats["done"])
+            break
+        try:
+            process(item)
+        except QuotaExhausted:
+            log.info("Gemini 配额耗尽，分片 %d 停下：本轮完成 %d 集", shard, stats["done"])
+            stats["quota"] = True
+            break
+        except Exception:
+            stats["failed"] += 1
+            log.exception("回填失败（下轮重试）：%s", item.get("title", ""))
+            continue
+        stats["done"] += 1
+        log.info("回填完成 %d 集：%s", stats["done"], item.get("title", "")[:70])
+    return stats
 
 
 # -------------------- 增强 RSS / HTML --------------------

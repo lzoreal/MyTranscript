@@ -1086,5 +1086,98 @@ class BackfillSelectionTests(unittest.TestCase):
         self.assertEqual(got[0]["vtt_path"], Path("site") / "pod/transcripts/Ep.vtt")
 
 
+class RunBackfillTests(unittest.TestCase):
+    def items(self, n):
+        return [
+            {"identity": f"guid-{i}", "title": f"Ep {i}", "audio_url": "u", "vtt_path": Path("x")}
+            for i in range(n)
+        ]
+
+    def test_only_my_shard_runs_and_budget_stops_cleanly(self):
+        done = []
+        ticks = iter([0.0, 0.0, 0.0, 99999.0, 99999.0])
+
+        def fake_clock():
+            return next(ticks, 99999.0)
+
+        stats = transcriber.run_backfill(
+            self.items(6), shard=0, shards=1, max_minutes=1,
+            process=lambda item: done.append(item["identity"]), clock=fake_clock,
+        )
+        self.assertEqual(stats["done"], len(done))
+        self.assertLess(len(done), 6, "预算耗尽后必须停下")
+        self.assertFalse(stats["quota"])
+
+    def test_other_shards_are_skipped(self):
+        seen = []
+        transcriber.run_backfill(
+            self.items(6), shard=0, shards=2, max_minutes=10,
+            process=lambda item: seen.append(item["identity"]), clock=lambda: 0.0,
+        )
+        self.assertTrue(seen)
+        self.assertTrue(all(transcriber.shard_of(i, 2) == 0 for i in seen))
+
+    def test_quota_exhausted_pauses_the_shard(self):
+        def process(item):
+            raise transcriber.QuotaExhausted("done for today")
+
+        stats = transcriber.run_backfill(
+            self.items(3), shard=0, shards=1, max_minutes=10,
+            process=process, clock=lambda: 0.0,
+        )
+        self.assertEqual(stats["done"], 0)
+        self.assertTrue(stats["quota"])
+
+    def test_single_episode_failure_does_not_stop_the_shard(self):
+        calls = []
+
+        def process(item):
+            calls.append(item["identity"])
+            if len(calls) == 1:
+                raise RuntimeError("boom")
+
+        stats = transcriber.run_backfill(
+            self.items(3), shard=0, shards=1, max_minutes=10,
+            process=process, clock=lambda: 0.0,
+        )
+        self.assertEqual(stats["failed"], 1)
+        self.assertEqual(stats["done"], 2)
+
+    def test_skipped_counts_other_shards_and_done_counts_own(self):
+        seen = []
+        stats = transcriber.run_backfill(
+            self.items(6), shard=0, shards=2, max_minutes=10,
+            process=lambda item: seen.append(item["identity"]), clock=lambda: 0.0,
+        )
+        self.assertEqual(stats["done"], len(seen))
+        self.assertEqual(stats["skipped"], 6 - len(seen))
+        self.assertEqual(stats["failed"], 0)
+        self.assertFalse(stats["quota"])
+
+    def test_default_process_writes_to_the_candidate_path(self):
+        # 既有 VTT 文件名与标题推导名大多不一致：force 重转必须落在候选给的
+        # 路径上，否则会多写一份新文件、旧文件永远没有 sidecar。
+        item = self.items(1)[0]
+        item["vtt_path"] = Path("site") / "pod" / "transcripts" / "Old Name.vtt"
+        seen = {}
+
+        def fake_process_episode(entry, identity, audio_url, **kwargs):
+            seen.update(kwargs)
+            seen["identity"], seen["audio_url"], seen["title"] = (
+                identity, audio_url, entry.title,
+            )
+            return {"path": "pod/transcripts/Old Name.vtt"}, {}
+
+        with patch.object(transcriber, "process_episode", fake_process_episode):
+            transcriber.process_backfill_item(item)
+
+        self.assertTrue(seen["force"])
+        self.assertIsNone(seen["path_owner"])
+        self.assertEqual(seen["output_path"], item["vtt_path"])
+        self.assertEqual(seen["identity"], "guid-0")
+        self.assertEqual(seen["audio_url"], "u")
+        self.assertEqual(seen["title"], "Ep 0")
+
+
 if __name__ == "__main__":
     unittest.main()
