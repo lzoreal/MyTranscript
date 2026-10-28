@@ -55,6 +55,29 @@ class GroupTests(unittest.TestCase):
             self.assertLessEqual(group[-1]["start"] - group[0]["start"], aligner.GROUP_MAX_SPAN)
 
 
+class WindowTests(unittest.TestCase):
+    def test_span_floor_is_text_length_not_declared_end(self):
+        cue = {"start": 100.0, "end": 101.0, "en": "word " * 60}
+        self.assertAlmostEqual(aligner.cue_span(cue), 20.0)
+
+    def test_span_is_capped_for_very_long_text(self):
+        cue = {"start": 0.0, "end": 999.0, "en": "x" * 4000}
+        self.assertAlmostEqual(aligner.cue_span(cue), 1005.0)
+
+    def test_window_pads_the_start_and_tails_with_bound(self):
+        group = [{"start": 100.0, "end": 101.0, "en": "hello there"}]
+        lo, hi = aligner.window_for(group, total_seconds=500.0)
+        self.assertAlmostEqual(lo, 97.0)
+        self.assertGreater(hi, 101.0)
+        self.assertLessEqual(hi, 500.0)
+
+    def test_window_never_exceeds_audio(self):
+        group = [{"start": 2.0, "end": 3.0, "en": "hi"}]
+        lo, hi = aligner.window_for(group, total_seconds=10.0)
+        self.assertEqual(lo, 0.0)
+        self.assertLessEqual(hi, 10.0)
+
+
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     unittest.main()
