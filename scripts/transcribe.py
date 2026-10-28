@@ -136,6 +136,8 @@ PROXY_CACHE_FILE = ROOT_DIR / ".china_proxy_cache.json"
 PODCAST_DIR = SITE_DIR / PODCAST_SLUG
 TRANSCRIPT_DIR = PODCAST_DIR / "transcripts"
 TIMING_DIR = PODCAST_DIR / "timings"
+# 回填任务把 sidecar 当断点：同一集最多尝试这么多次就放弃
+BACKFILL_MAX_ATTEMPTS = 2
 PODCAST_NS = "https://podcastindex.org/namespace/1.0"
 USER_AGENT = "PodcastTranscriptBot/1.0 (+https://github.com/)"
 PROXY_API_URLS = [
@@ -1140,9 +1142,17 @@ def write_bilingual_vtt(cues: list[dict[str, Any]], output_path: Path) -> None:
 
 
 def write_word_timings(
-    cues: list[dict[str, Any]], output_path: Path, audio_seconds: float
+    cues: list[dict[str, Any]],
+    output_path: Path,
+    audio_seconds: float,
+    complete: bool = True,
+    attempts: int = 1,
 ) -> None:
-    """按 TMLT 的 sidecar 结构写出逐词时间轴；没有词的 cue 把 end 置空，由消费方回退到 VTT。"""
+    """按 TMLT 的 sidecar 结构写出逐词时间轴；没有词的 cue 把 end 置空，由消费方回退到 VTT。
+
+    ``complete`` / ``attempts`` 让 sidecar 兼作回填断点：失败时用
+    ``write_sidecar_failure`` 写下未完成记录，下次运行据此跳过或重试。
+    """
     if not cues:
         raise ValueError("没有字幕，拒绝写出空的逐词时间轴")
     segments = []
@@ -1174,8 +1184,8 @@ def write_word_timings(
     document = {
         "episode": output_path.stem,
         "audio_seconds": round(float(audio_seconds), 2),
-        "complete": True,
-        "attempts": 1,
+        "complete": complete,
+        "attempts": attempts,
         "segments": segments,
     }
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1191,6 +1201,43 @@ def write_word_timings(
         len(segments),
         sum(len(segment["words"]) for segment in segments),
     )
+
+
+def sidecar_path_for(vtt_path: Path) -> Path:
+    """双语 VTT 对应的逐词时间轴 sidecar 路径。"""
+    return TIMING_DIR / f"{vtt_path.stem}.json"
+
+
+def sidecar_status(path: Path) -> tuple[bool, int]:
+    """返回 (complete, attempts)；缺失或损坏一律按未完成、0 次处理。"""
+    if not path.exists():
+        return False, 0
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return False, 0
+    if not isinstance(document, dict):
+        return False, 0
+    return document.get("complete") is True, int(document.get("attempts") or 0)
+
+
+def write_sidecar_failure(path: Path, attempts: int) -> None:
+    """写下未完成的 sidecar 作为回填断点，保留 segments 空表以免消费方误读。"""
+    document = {
+        "episode": path.stem,
+        "audio_seconds": 0.0,
+        "complete": False,
+        "attempts": attempts,
+        "segments": [],
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(
+        json.dumps(document, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    tmp.replace(path)
+    log.warning("逐词时间轴未完成：%s（第 %d 次尝试）", path, attempts)
 
 
 MIN_BILINGUAL_RATIO = 0.8
