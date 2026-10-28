@@ -10,6 +10,7 @@ import hashlib
 import html
 import json
 import logging
+import math
 import os
 import random
 import re
@@ -1317,21 +1318,32 @@ def needs_backfill(vtt_path: Path, sidecar_path: Path) -> bool:
 
 
 def backfill_env() -> dict[str, Any] | None:
-    """回填模式由环境变量开启；没设 BACKFILL_SHARD 就是正常模式。
+    """回填模式由环境变量开启；三个变量都为空才是正常模式。
 
     分片数量和预算只在回填模式里解析：正常模式不该因为一个残留的
     BACKFILL_SHARDS 拼写错误而整轮启动失败。
+
+    但「设了分片数/预算、却缺分片号」必须报错而不是退回正常模式：
+    那种情况多半是 CI 矩阵漏传 BACKFILL_SHARD，悄悄跑正常路径会写
+    state/feed/index，正好是回填要避免的共享状态互相覆盖。
     """
     raw_shard = os.getenv("BACKFILL_SHARD", "").strip()
+    raw_shards = os.getenv("BACKFILL_SHARDS", "").strip()
+    raw_minutes = os.getenv("BACKFILL_MAX_MINUTES", "").strip()
     if not raw_shard:
+        if raw_shards or raw_minutes:
+            raise ValueError(
+                "缺少 BACKFILL_SHARD：已设置 BACKFILL_SHARDS/BACKFILL_MAX_MINUTES，"
+                "但分片回填必须同时提供有效的 BACKFILL_SHARD"
+            )
         return None
     shard = int(raw_shard)
-    shards = int(os.getenv("BACKFILL_SHARDS", "20").strip() or 20)
-    max_minutes = float(os.getenv("BACKFILL_MAX_MINUTES", "280").strip() or 280)
+    shards = int(raw_shards or 20)
+    max_minutes = float(raw_minutes or 280)
     if shards < 1 or not 0 <= shard < shards:
         raise ValueError(f"分片配置非法：shard={shard} shards={shards}")
-    if max_minutes <= 0:
-        raise ValueError(f"预算非法：{max_minutes} 分钟")
+    if not math.isfinite(max_minutes) or max_minutes <= 0:
+        raise ValueError(f"预算非法：{max_minutes} 分钟（必须是有限正数）")
     return {"shard": shard, "shards": shards, "max_minutes": max_minutes}
 
 

@@ -1355,6 +1355,152 @@ class BackfillEnvTests(unittest.TestCase):
         self.assertIn("7", str(caught.exception))
         self.assertIn("4", str(caught.exception))
 
+    def test_partial_config_without_shard_raises_naming_missing_variable(self):
+        # 只设分片数/预算却漏了分片号，等于「以为在回填、实际跑正常模式」，
+        # 多分片并行时会一起写 state/feed/index。必须直接报错。
+        for partial in ({"BACKFILL_SHARDS": "20"}, {"BACKFILL_MAX_MINUTES": "90"}):
+            with self.subTest(partial=partial), self.backfill_env(**partial):
+                with self.assertRaises(ValueError) as caught:
+                    transcriber.backfill_env()
+                self.assertIn("BACKFILL_SHARD", str(caught.exception))
+
+    def test_blank_shard_with_sibling_backfill_keys_raises(self):
+        for blank in ("", "   "):
+            for partial in (
+                {"BACKFILL_SHARDS": "4"},
+                {"BACKFILL_MAX_MINUTES": "60"},
+                {"BACKFILL_SHARDS": "4", "BACKFILL_MAX_MINUTES": "60"},
+            ):
+                with self.subTest(blank=blank, partial=partial), self.backfill_env(
+                    BACKFILL_SHARD=blank, **partial
+                ):
+                    with self.assertRaises(ValueError) as caught:
+                        transcriber.backfill_env()
+                    self.assertIn("BACKFILL_SHARD", str(caught.exception))
+
+    def test_blank_sibling_values_are_still_normal_mode(self):
+        # CI 把未启用的变量注入成空串时仍算「没设」，不能误判成回填模式。
+        with self.backfill_env(
+            BACKFILL_SHARD="", BACKFILL_SHARDS=" ", BACKFILL_MAX_MINUTES=""
+        ):
+            self.assertIsNone(transcriber.backfill_env())
+
+    def test_non_finite_budget_raises(self):
+        # nan/inf 会让 deadline 失效，等于静默取消预算。
+        for minutes in ("nan", "inf", "-inf", "Infinity"):
+            with self.subTest(minutes=minutes), self.backfill_env(
+                BACKFILL_SHARD="0", BACKFILL_MAX_MINUTES=minutes
+            ):
+                with self.assertRaises(ValueError):
+                    transcriber.backfill_env()
+
+
+class MainBackfillReadOnlyTests(unittest.TestCase):
+    """main() 回填分支只读 state：任何 writer 被调用都直接让测试失败。"""
+
+    def run_main_in_backfill_mode(self, entries, env):
+        calls = []
+        seen = {}
+
+        def writer(name):
+            def explode(*_args, **_kwargs):
+                calls.append(name)
+                raise AssertionError(
+                    f"回填模式调用了 {name}，会覆盖共享 state/feed/index"
+                )
+
+            return explode
+
+        parsed = SimpleNamespace(feed=SimpleNamespace(title="Test Pod"))
+        fake_candidates = [
+            {"identity": "a", "title": "A", "audio_url": "u", "vtt_path": Path("x")}
+        ]
+
+        def fake_build_candidates(feed_entries, records):
+            seen["entries"] = list(feed_entries)
+            seen["records"] = records
+            return list(fake_candidates)
+
+        def fake_run_backfill(candidates, **kwargs):
+            seen["candidates"] = candidates
+            seen["kwargs"] = kwargs
+            return {"done": 1, "failed": 0, "skipped": 0, "quota": False}
+
+        with patch.dict(os.environ, env, clear=True), patch.object(
+            transcriber, "FEED_URL", "https://example.test/feed.xml"
+        ), patch.object(
+            transcriber, "PODCAST_SLUG", "pod"
+        ), patch.object(
+            transcriber, "GEMINI_KEYS", ["test-key"]
+        ), patch.object(
+            transcriber, "MAX_EPISODES", 1
+        ), patch.object(
+            transcriber, "ensure_directories", lambda: None
+        ), patch.object(
+            transcriber, "load_state", lambda: {"podcasts": {}}
+        ), patch.object(
+            transcriber, "get_feed_entries", lambda url: (parsed, entries)
+        ), patch.object(
+            transcriber, "build_backfill_candidates", fake_build_candidates
+        ), patch.object(
+            transcriber, "run_backfill", fake_run_backfill
+        ), patch.object(
+            transcriber, "save_state", writer("save_state")
+        ), patch.object(
+            transcriber, "make_enhanced_feed", writer("make_enhanced_feed")
+        ), patch.object(
+            transcriber, "build_podcast_index", writer("build_podcast_index")
+        ), patch.object(
+            transcriber, "rebuild_root_index", writer("rebuild_root_index")
+        ):
+            code = transcriber.main()
+        return code, seen, calls
+
+    def test_main_backfill_exits_zero_without_touching_writers(self):
+        entries = [
+            SimpleNamespace(
+                id=f"guid-{i}",
+                title=f"Ep {i}",
+                enclosures=[{"href": f"https://example.test/{i}.mp3", "type": "audio/mpeg"}],
+            )
+            for i in range(3)
+        ]
+
+        code, seen, calls = self.run_main_in_backfill_mode(
+            entries,
+            {
+                "BACKFILL_SHARD": "0",
+                "BACKFILL_SHARDS": "2",
+                "BACKFILL_MAX_MINUTES": "90",
+            },
+        )
+
+        self.assertEqual(code, 0)
+        self.assertEqual(calls, [], "回填模式不能调用 state/feed/index writer")
+        self.assertEqual(
+            seen["kwargs"], {"shard": 0, "shards": 2, "max_minutes": 90.0}
+        )
+        self.assertEqual(len(seen["candidates"]), 1)
+        self.assertEqual(seen["candidates"][0]["identity"], "a")
+
+    def test_main_backfill_passes_full_entry_list_past_max_episodes(self):
+        # MAX_EPISODES=1 只该截断正常模式；回填必须看到全部条目，否则漏集。
+        entries = [
+            SimpleNamespace(
+                id=f"guid-{i}",
+                title=f"Ep {i}",
+                enclosures=[{"href": f"https://example.test/{i}.mp3", "type": "audio/mpeg"}],
+            )
+            for i in range(3)
+        ]
+
+        _code, seen, _calls = self.run_main_in_backfill_mode(
+            entries, {"BACKFILL_SHARD": "1", "BACKFILL_SHARDS": "4"}
+        )
+
+        self.assertEqual(len(seen["entries"]), 3)
+        self.assertEqual(seen["entries"], entries)
+
 
 if __name__ == "__main__":
     unittest.main()
