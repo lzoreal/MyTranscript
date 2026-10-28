@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import statistics
 from pathlib import Path
 from typing import Any
 
@@ -107,3 +108,57 @@ def cue_words(segments, group, offset: float) -> dict[int, list[dict[str, Any]]]
         if mapped:
             result[position] = mapped
     return result
+
+
+SR = 16000
+MISMATCH_MEDIAN = 3.0
+
+
+class AudioMismatch(RuntimeError):
+    """中位偏移过大：下载到的音频与转写来源不是同一个版本。"""
+
+
+def align_cues(model, audio, cues, total_seconds: float):
+    """整集对齐：返回 (带词的 cues, 统计)；中位偏移超限时抛 AudioMismatch。"""
+    stats: dict[str, Any] = {
+        "groups": 0,
+        "aligned_cues": 0,
+        "failed_groups": 0,
+        "median_offset": 0.0,
+    }
+    offsets: list[float] = []
+    result = [
+        {"start": cue["start"], "end": cue["end"], "en": cue["en"], "words": []}
+        for cue in cues
+    ]
+    index_of = {id(cue): position for position, cue in enumerate(cues)}
+    for group in group_cues(cues):
+        stats["groups"] += 1
+        lo, hi = window_for(group, total_seconds)
+        clip = audio[int(lo * SR) : int(hi * SR)]
+        text = "\n".join(cue["en"] for cue in group)
+        try:
+            aligned = model.align(clip, text, language="en", original_split=True)
+        except Exception:
+            stats["failed_groups"] += 1
+            continue
+        mapped = cue_words(aligned.segments, group, offset=lo)
+        for position, cue in enumerate(group):
+            words = mapped.get(position) or []
+            if not words:
+                continue
+            index = index_of[id(cue)]
+            next_start = cues[index + 1]["start"] if index + 1 < len(cues) else None
+            if not words_plausible(cue, next_start, words):
+                continue
+            result[index]["words"] = words
+            stats["aligned_cues"] += 1
+            offsets.append(words[0]["s"] - cue["start"])
+    if offsets:
+        median = statistics.median(offsets)
+        stats["median_offset"] = round(median, 3)
+        if abs(median) > MISMATCH_MEDIAN:
+            raise AudioMismatch(
+                f"中位首词偏移 {median:+.2f}s 超过 {MISMATCH_MEDIAN}s：音频版本可能不同"
+            )
+    return result, stats
