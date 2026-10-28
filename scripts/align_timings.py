@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import json
+import os
 import re
 import statistics
 import sys
+import tempfile
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -324,3 +327,98 @@ def run_align(
         f"failed {stats['failed']}，mismatch {stats['mismatch']}，skipped {stats['skipped']}"
     )
     return stats
+
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def process_candidate(item: dict[str, Any], model=None) -> str:
+    """对齐一集：下载音频 → 解码 → 对齐 → 写 sidecar。"""
+    model = model or load_model()
+    with tempfile.TemporaryDirectory(prefix="align-audio-") as temp_dir:
+        return align_episode_file(
+            item["vtt_path"], item["audio_url"], model, workdir=Path(temp_dir)
+        )
+
+
+def load_model():
+    import stable_whisper as sw
+
+    threads = int(os.getenv("ALIGN_THREADS", "0")) or (os.cpu_count() or 1)
+    return sw.load_faster_whisper(
+        transcribe.WHISPER_MODEL,
+        device="cpu",
+        compute_type="int8",
+        cpu_threads=threads,
+    )
+
+
+def align_env() -> dict[str, Any]:
+    mode = (os.getenv("ALIGN_MODE", "recent") or "recent").strip().lower()
+    if mode not in ("recent", "latest"):
+        raise ValueError(f"ALIGN_MODE 只能是 recent 或 latest：{mode}")
+    shards = int(os.getenv("ALIGN_SHARDS", "20") or 20)
+    shard = int(os.getenv("ALIGN_SHARD", "0") or 0)
+    max_minutes = float(os.getenv("ALIGN_MAX_MINUTES", "150") or 150)
+    latest = int(os.getenv("ALIGN_LATEST_PER_SHOW", "20") or 20)
+    if shards < 1 or not 0 <= shard < shards:
+        raise ValueError(f"分片配置非法：shard={shard} shards={shards}")
+    if max_minutes <= 0:
+        raise ValueError(f"预算非法：{max_minutes}")
+    if latest < 1:
+        raise ValueError(f"ALIGN_LATEST_PER_SHOW 非法：{latest}")
+    return {
+        "mode": mode,
+        "shard": shard,
+        "shards": shards,
+        "max_minutes": max_minutes,
+        "latest": latest,
+    }
+
+
+def collect_shows(podcasts: list[dict[str, Any]], progress: dict[str, Any]) -> list[dict[str, Any]]:
+    shows = []
+    for podcast in podcasts:
+        slug = podcast["slug"]
+        _, entries = transcribe.get_feed_entries(podcast["feed_url"])
+        processed = progress.get("podcasts", {}).get(slug, {}).get("processed", {})
+        shows.append(
+            {
+                "slug": slug,
+                "entries": [
+                    {
+                        "guid": str(getattr(entry, "id", "") or ""),
+                        "title": transcribe.clean_text(getattr(entry, "title", "") or ""),
+                        "published": str(getattr(entry, "published", "") or ""),
+                        "url": transcribe.get_entry_audio_url(entry),
+                    }
+                    for entry in entries
+                ],
+                "processed": processed,
+            }
+        )
+    return shows
+
+
+def main() -> int:
+    env = align_env()
+    podcasts = json.loads((ROOT / "podcasts.json").read_text(encoding="utf-8"))
+    progress = json.loads((ROOT / "progress.json").read_text(encoding="utf-8"))
+    shows = collect_shows(podcasts, progress)
+    candidates = build_candidates(shows, mode=env["mode"], latest_per_show=env["latest"])
+    print(
+        f"对齐模式 {env['mode']}：分片 {env['shard']}/{env['shards']}，"
+        f"预算 {env['max_minutes']:.0f} 分钟，候选 {len(candidates)} 集"
+    )
+    run_align(
+        candidates,
+        shard=env["shard"],
+        shards=env["shards"],
+        max_minutes=env["max_minutes"],
+        process=process_candidate,
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
