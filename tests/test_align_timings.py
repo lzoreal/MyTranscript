@@ -359,9 +359,9 @@ class RewriteEpisodeTests(unittest.TestCase):
         self.dir.mkdir(parents=True)
         (self.dir / "zh").mkdir()
         self.vtt = self.dir / "Ep.vtt"
-        self.vtt.write_text(build_vtt(VTT_BLOCKS), encoding="utf-8")
+        self.vtt.write_text(build_vtt(VTT_BLOCKS, bilingual=False), encoding="utf-8")
         self.zh = self.dir / "zh" / "Ep.vtt"
-        self.zh.write_text(build_vtt(VTT_BLOCKS, bilingual=False), encoding="utf-8")
+        self.zh.write_text(build_vtt(VTT_BLOCKS, bilingual=True), encoding="utf-8")
         self.timing = self.site / "pod" / "timings"
         for patch_ in (
             mock.patch.object(self.transcribe, "TIMING_DIR", self.timing),
@@ -406,10 +406,11 @@ class RewriteEpisodeTests(unittest.TestCase):
 
     def test_remaining_cues_use_real_times_and_keep_chinese(self):
         self.run_rewrite()
-        cues = aligner.parse_bilingual_vtt(self.vtt)
+        cues = aligner.parse_english_vtt(self.vtt)
         self.assertAlmostEqual(cues[0]["start"], 1.0, places=2)
         self.assertAlmostEqual(cues[1]["start"], 31.0, places=2)
-        self.assertEqual(cues[0]["zh"], "你好朋友我们又回来了")
+        zh_cues = aligner.parse_bilingual_vtt(self.zh)
+        self.assertEqual(zh_cues[0]["zh"], "你好朋友我们又回来了")
 
     def test_sidecar_matches_rewritten_cues(self):
         self.run_rewrite()
