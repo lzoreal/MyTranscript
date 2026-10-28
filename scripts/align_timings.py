@@ -81,13 +81,44 @@ EARLY_TOLERANCE = 8.0
 LATE_TOLERANCE = 8.0
 
 
+CONTINUATION_PREFIXES = ("-", ".", "'", "’")
+
+
+def _merge_continuations(tokens: list[str]) -> list[str]:
+    """合并被拆开的续接词：don + 't、re + -watching、com + .com。"""
+    merged: list[str] = []
+    for token in tokens:
+        if merged and token[:1] in CONTINUATION_PREFIXES:
+            merged[-1] = merged[-1] + token
+        else:
+            merged.append(token)
+    return merged
+
+
+def _normalize(tokens: list[str]) -> list[str]:
+    cleaned = (re.sub(r"[^a-z0-9]", "", token.lower()) for token in tokens)
+    return [token for token in cleaned if token]
+
+
+def tokens_match(want: list[str], got: list[str]) -> bool:
+    """归一化后比较：完全一致，或长度差 ≤1 且位置一致率 ≥98%。"""
+    if want == got:
+        return True
+    if abs(len(want) - len(got)) > 1:
+        return False
+    same = sum(1 for a, b in zip(want, got) if a == b)
+    return same / max(len(want), 1) >= 0.98
+
+
 def words_plausible(
     cue: dict[str, Any], next_start: float | None, words: list[dict[str, Any]]
 ) -> bool:
     """词集与词位置是否可信；不可信就丢该句的词，而不是写错数据。"""
     if not words:
         return False
-    if [word["w"] for word in words] != cue["en"].split():
+    want = _normalize(cue["en"].split())
+    got = _normalize(_merge_continuations([word["w"] for word in words]))
+    if not tokens_match(want, got):
         return False
     first, last = words[0]["s"], words[-1]["e"]
     if first < cue["start"] - EARLY_TOLERANCE:

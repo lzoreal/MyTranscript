@@ -422,6 +422,38 @@ class EnvTests(unittest.TestCase):
                 aligner.align_env()
 
 
+class ToleranceTests(unittest.TestCase):
+    def cue(self, text, start=10.0, end=14.0):
+        return {"start": start, "end": end, "en": text}
+
+    def test_merges_apostrophe_continuation_split(self):
+        cue = self.cue("I don't know")
+        words = [
+            {"w": "I", "s": 10.1, "e": 10.3},
+            {"w": "don", "s": 10.3, "e": 10.6},
+            {"w": "'t", "s": 10.6, "e": 10.8},
+            {"w": "know", "s": 10.8, "e": 11.1},
+        ]
+        self.assertTrue(aligner.words_plausible(cue, None, words))
+
+    def test_ignores_punctuation_and_case(self):
+        cue = self.cue("Hello, there!")
+        words = [
+            {"w": "hello", "s": 10.1, "e": 10.4},
+            {"w": "there", "s": 10.4, "e": 10.9},
+        ]
+        self.assertTrue(aligner.words_plausible(cue, None, words))
+
+    def test_rejects_when_content_really_differs(self):
+        cue = self.cue("I don't know")
+        words = [
+            {"w": "completely", "s": 10.1, "e": 10.4},
+            {"w": "different", "s": 10.4, "e": 10.9},
+            {"w": "text", "s": 10.9, "e": 11.2},
+        ]
+        self.assertFalse(aligner.words_plausible(cue, None, words))
+
+
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     unittest.main()
