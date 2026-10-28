@@ -19,6 +19,7 @@ import sys
 import tempfile
 import threading
 import time
+import traceback
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from datetime import timezone
 from email.utils import parsedate_to_datetime
@@ -61,6 +62,15 @@ class QuotaExhausted(RuntimeError):
     """所有 Gemini key 都用尽；调用方应停止本轮、下轮再续。"""
 
 
+class GeminiAuthFailed(RuntimeError):
+    """所有 key 都因为鉴权失败（401/403/400-invalid）被拒：这是配置故障，不是暂停。
+
+    ``QuotaExhausted`` 是「今天没额度、明天会好」，回填当干净暂停、退出 0。
+    key 无效/被吊销明天也不会自己好，必须让 job 变红，否则每个分片先下载
+    并转录 1~2 小时才发现 key 是死的，而整轮仍然是绿的。
+    """
+
+
 class GeminiKeyRing:
     """顺序轮换 key：同一时刻只用一把，耗尽就切下一把，全部耗尽即不可用。
 
@@ -75,6 +85,8 @@ class GeminiKeyRing:
         self._index = 0
         self._factory = factory or (lambda api_key: genai.Client(api_key=api_key))
         self.requests = 0
+        # 每次切换 key 的原因（"quota" / "auth"）：全 auth 才算「所有 key 都被拒」。
+        self.switch_kinds: list[str] = []
 
     @property
     def available(self) -> bool:
@@ -157,6 +169,48 @@ BAD_PROXIES_LOCK = threading.Lock()
 PROXY_STOP_EVENT = threading.Event()
 PROXY_WINNER_LOCK = threading.Lock()
 
+
+class SecretScrubbingFilter(logging.Filter):
+    """把日志消息里出现的已知 key 换成 ***。
+
+    完整 key 唯一能进日志的路径是异常文本（例如传输错误里带着 ``?key=...``）
+    和 ``log.exception``：既要洗 ``record.getMessage()``，也要洗 traceback
+    （``str(exc)`` 会原样出现在 traceback 最后一行）。幂等，非字符串消息
+    原样放过，绝不因为日志崩掉。
+    """
+
+    def __init__(self, secrets: list[str]):
+        super().__init__()
+        self.secrets = [secret for secret in secrets if secret]
+
+    def _scrub(self, text: str) -> str:
+        for secret in self.secrets:
+            text = text.replace(secret, "***")
+        return text
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            message = record.getMessage()
+            if isinstance(message, str):
+                scrubbed = self._scrub(message)
+                if scrubbed != message:
+                    record.msg = scrubbed
+                    record.args = None
+        except Exception:
+            pass
+        if record.exc_info and self.secrets:
+            try:
+                traceback_text = record.exc_text or "".join(
+                    traceback.format_exception(*record.exc_info)
+                )
+                scrubbed = self._scrub(traceback_text)
+                if scrubbed != traceback_text:
+                    record.exc_text = scrubbed
+            except Exception:
+                pass
+        return True
+
+
 logging.basicConfig(
     level=getattr(
         logging, os.environ.get("LOG_LEVEL", "INFO").strip().upper(), logging.INFO
@@ -165,6 +219,7 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 log = logging.getLogger("podcast-transcriber")
+log.addFilter(SecretScrubbingFilter(GEMINI_KEYS))
 
 
 # -------------------- 通用工具 / state --------------------
@@ -1061,18 +1116,25 @@ def translate_blocks(
             ring.requests += 1
             translated.update(translate_batch_once(ring.client(), pending))
             return
-        except QuotaExhausted:
+        except (QuotaExhausted, GeminiAuthFailed):
             raise
         except Exception as exc:
             last_error = exc
             if is_quota_error(exc) or is_auth_error(exc):
                 # 配额/鉴权错误不消耗退避重试次数：换 key 后立刻重试同一批。
-                kind = "配额耗尽" if is_quota_error(exc) else "key 无效"
+                quota = is_quota_error(exc)
+                kind = "配额耗尽" if quota else "key 无效"
                 before = ring.label()
+                # 先记下这次切换的原因，再判断是否还有 key：最后这把 key 的
+                # 失败原因才决定「配额用完」还是「key 全被拒」。
+                ring.switch_kinds.append("quota" if quota else "auth")
                 if not ring.mark_exhausted():
-                    raise QuotaExhausted(
+                    message = (
                         f"{kind}，所有 key 已用尽（本进程已发 {ring.requests} 次请求）"
-                    ) from exc
+                    )
+                    if all(item == "auth" for item in ring.switch_kinds):
+                        raise GeminiAuthFailed(message) from exc
+                    raise QuotaExhausted(message) from exc
                 log.warning("Gemini key %s %s，切到 %s", before, kind, ring.label())
                 continue
             if isinstance(exc, IncompleteTranslation):
@@ -1367,7 +1429,24 @@ def build_backfill_candidates(entries, records) -> list[dict[str, Any]]:
         if vtt_path in seen_paths:
             continue
         seen_paths.add(vtt_path)
-        if not needs_backfill(vtt_path, sidecar_path_for(vtt_path)):
+        sidecar = sidecar_path_for(vtt_path)
+        if not needs_backfill(vtt_path, sidecar):
+            # 达到重试上限的集会被安静地排除：日志必须点名（标题 + 次数），
+            # 否则「这集为什么一直没补上」永远查不到。只在 VTT 本身有效时
+            # 这样报，字幕无效的集不是被上限放弃的，原因不同。
+            complete, attempts = sidecar_status(sidecar)
+            if (
+                not complete
+                and attempts >= BACKFILL_MAX_ATTEMPTS
+                and vtt_path.exists()
+                and is_valid_bilingual_vtt(vtt_path)
+            ):
+                log.warning(
+                    "回填放弃（尝试 %d/%d 已达上限）：%s",
+                    attempts,
+                    BACKFILL_MAX_ATTEMPTS,
+                    record.get("title") or vtt_path.name,
+                )
             continue
         candidates.append(
             {
@@ -1432,9 +1511,31 @@ def run_backfill(
             log.info("Gemini 配额耗尽，分片 %d 停下：本轮完成 %d 集", shard, stats["done"])
             stats["quota"] = True
             break
+        except GeminiAuthFailed:
+            # key 全被拒不是暂停：继续跑只会让每一集重下载重转一遍，直接冒泡。
+            log.error(
+                "Gemini key 全部鉴权失败，分片 %d 立即中止：本轮完成 %d 集",
+                shard,
+                stats["done"],
+            )
+            raise
         except Exception:
             stats["failed"] += 1
-            log.exception("回填失败（下轮重试）：%s", item.get("title", ""))
+            vtt_path = item.get("vtt_path")
+            complete, attempts = (
+                sidecar_status(sidecar_path_for(vtt_path))
+                if vtt_path is not None
+                else (False, 0)
+            )
+            if not complete and attempts >= BACKFILL_MAX_ATTEMPTS:
+                log.exception(
+                    "回填失败（尝试 %d/%d 已达上限，不再重试）：%s",
+                    attempts,
+                    BACKFILL_MAX_ATTEMPTS,
+                    item.get("title", ""),
+                )
+            else:
+                log.exception("回填失败（下轮重试）：%s", item.get("title", ""))
             continue
         stats["done"] += 1
         log.info("回填完成 %d 集：%s", stats["done"], item.get("title", "")[:70])
@@ -1793,10 +1894,14 @@ def process_episode(
                 log.warning("本次尝试失败，已恢复旧字幕：%s", transcript_path)
         except Exception:
             log.exception("恢复旧字幕失败：%s", transcript_path)
-        if isinstance(exc, QuotaExhausted):
-            # 配额暂停不是这一集的失败：一次都不许记 attempts，否则两轮之后
-            # needs_backfill 就把这集永久踢出候选，暂停等于丢进度。
-            log.warning("Gemini 配额耗尽，暂停转录且不计失败：%s", transcript_path)
+        if isinstance(exc, (QuotaExhausted, GeminiAuthFailed)):
+            # 配额暂停/鉴权失败都不是这一集的失败：一次都不许记 attempts，否则
+            # 两轮之后 needs_backfill 就把这集永久踢出候选。区别在于配额是暂停
+            # （本轮退出 0），鉴权失败是配置故障（job 必须变红）。
+            if isinstance(exc, GeminiAuthFailed):
+                log.error("Gemini key 全部鉴权失败，中止且不计失败：%s", transcript_path)
+            else:
+                log.warning("Gemini 配额耗尽，暂停转录且不计失败：%s", transcript_path)
             raise
         try:
             complete, previous_attempts = sidecar_status(sidecar)
@@ -1896,12 +2001,16 @@ def main() -> int:
             WHISPER_MODEL,
             len(GEMINI_KEYS),
         )
-        stats = run_backfill(
-            backfill_candidates,
-            shard=backfill["shard"],
-            shards=backfill["shards"],
-            max_minutes=backfill["max_minutes"],
-        )
+        try:
+            stats = run_backfill(
+                backfill_candidates,
+                shard=backfill["shard"],
+                shards=backfill["shards"],
+                max_minutes=backfill["max_minutes"],
+            )
+        except GeminiAuthFailed:
+            log.exception("Gemini key 全部被拒（鉴权失败），回填中止")
+            return 1
         log.info(
             "回填结束：完成 %d，失败 %d，非本分片 %d，配额耗尽=%s",
             stats["done"],
