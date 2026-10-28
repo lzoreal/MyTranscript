@@ -79,6 +79,8 @@ class GeminiKeyRing:
         return self._index < len(self._keys)
 
     def label(self) -> str:
+        if not self.available:
+            return "#-（…****）"
         key = self._keys[self._index]
         tail = key[-4:] if len(key) > 4 else "****"
         return f"#{self._index + 1}（…{tail}）"

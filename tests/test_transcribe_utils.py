@@ -281,6 +281,20 @@ class GeminiKeyRingTests(unittest.TestCase):
         with self.assertRaises(transcriber.QuotaExhausted):
             ring.client()
 
+    def test_label_hides_short_key_entirely(self):
+        ring = transcriber.GeminiKeyRing(["abcd"], factory=lambda api_key: object())
+        self.assertEqual(ring.label(), "#1（…****）")
+
+    def test_label_is_safe_after_every_key_is_exhausted(self):
+        ring = transcriber.GeminiKeyRing(["only-key"], factory=lambda api_key: object())
+        self.assertFalse(ring.mark_exhausted())
+        self.assertFalse(ring.available)
+        self.assertEqual(ring.label(), "#-（…****）", "耗尽后 label() 不能抛异常")
+
+    def test_ring_rejects_empty_key_list(self):
+        with self.assertRaises(transcriber.QuotaExhausted):
+            transcriber.GeminiKeyRing([])
+
 
 def _decode_trailing_object(prompt):
     """取出 prompt 末尾那段待翻译 JSON，用来模拟模型只看到编号和英文。"""
