@@ -220,6 +220,22 @@ def atomic_write_text(path: Path, content: str) -> None:
     tmp.replace(path)
 
 
+def snapshot_file_bytes(path: Path) -> bytes | None:
+    """失败回滚用的快照；文件不存在或不可读时返回 None，调用方跳过恢复。"""
+    try:
+        return path.read_bytes()
+    except OSError:
+        return None
+
+
+def restore_file_bytes(path: Path, data: bytes) -> None:
+    """把快照原子写回（.tmp + replace），与写出路径保持同一套原子语义。"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_bytes(data)
+    tmp.replace(path)
+
+
 CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 
 
@@ -1611,9 +1627,9 @@ def process_episode(
 ) -> tuple[dict[str, str], dict[str, Any]]:
     """转录音集并写出双语 VTT 与逐词时间轴。
 
-    ``force=True`` 忽略已存在的字幕重新转录；失败的尝试不会留下半成品文件
-    （VTT 与 sidecar 都是原子替换），并写下 ``complete:false`` 的 sidecar 记账
-    （attempts 递增）后重新抛出。
+    ``force=True`` 忽略已存在的字幕重新转录；失败的尝试会把旧 VTT 原样恢复
+    （快照 + 原子替换），并且只在旧 sidecar 未完成时写下 ``complete:false``
+    的记账（attempts 递增），已完成的 sidecar 保持不动；随后重新抛出异常。
 
     ``output_path`` 由调用方拥有时（例如按 state 里既有文件名回填）直接使用，
     不再按标题推导文件名，也不加同标题后缀。
@@ -1660,6 +1676,8 @@ def process_episode(
     if suffix not in {".mp3", ".m4a", ".aac", ".wav", ".ogg", ".opus", ".flac", ".mp4"}:
         suffix = ".audio"
     sidecar = sidecar_path_for(transcript_path)
+    # force 失败必须让旧 VTT 原样留下：先拍字节快照，异常时按快照恢复。
+    previous_vtt = snapshot_file_bytes(transcript_path)
     try:
         with tempfile.TemporaryDirectory(prefix="podcast-audio-") as temp_dir:
             audio_path = Path(temp_dir) / f"episode{suffix}"
@@ -1672,8 +1690,23 @@ def process_episode(
         # sidecar 现在是回填断点，写失败必须显式失败，不能吞掉。
         write_word_timings(cues, sidecar, audio_seconds)
     except Exception:
-        _, previous_attempts = sidecar_status(sidecar)
-        write_sidecar_failure(sidecar, attempts=previous_attempts + 1)
+        try:
+            current_vtt = snapshot_file_bytes(transcript_path)
+            if previous_vtt is not None and current_vtt != previous_vtt:
+                restore_file_bytes(transcript_path, previous_vtt)
+                log.warning("本次尝试失败，已恢复旧字幕：%s", transcript_path)
+        except Exception:
+            log.exception("恢复旧字幕失败：%s", transcript_path)
+        try:
+            complete, previous_attempts = sidecar_status(sidecar)
+            if complete:
+                # 已完成的 sidecar 是既有成果，失败的 force 尝试不得把它降级。
+                log.warning("逐词时间轴已完成，保留原记录：%s", sidecar)
+            else:
+                write_sidecar_failure(sidecar, attempts=previous_attempts + 1)
+        except Exception:
+            # 记账只是附带动作，出错也不能掩盖真正要抛出的异常。
+            log.exception("记录失败尝试出错：%s", sidecar)
         raise
     record = {
         "identity": identity,
