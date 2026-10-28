@@ -275,6 +275,39 @@ def timestamp(value: float) -> str:
     return f"{ms // 3600000:02d}:{ms // 60000 % 60:02d}:{ms // 1000 % 60:02d}.{ms % 1000:03d}"
 
 
+def parse_vtt_blocks(path: Path) -> list[dict[str, Any]]:
+    """通用解析：每块保留全部文本行（行数取决于文件形态）。"""
+    blocks: list[dict[str, Any]] = []
+    text = path.read_text(encoding="utf-8-sig", errors="replace")
+    for block in split_blocks(text):
+        lines = [line.strip() for line in block.strip().split(chr(10)) if line.strip()]
+        stamp = next((line for line in lines if "-->" in line), None)
+        if not stamp:
+            continue
+        match = TIMESTAMP.search(stamp)
+        if not match:
+            continue
+        body = [line for line in lines if "-->" not in line and not line.isdigit()]
+        if not body:
+            continue
+        blocks.append(
+            {
+                "start": _seconds(match, 0),
+                "end": _seconds(match, 3),
+                "lines": body,
+            }
+        )
+    return blocks
+
+
+def parse_english_vtt(path: Path) -> list[dict[str, Any]]:
+    """transcripts/<stem>.vtt 只有英文一行。"""
+    return [
+        {"start": block["start"], "end": block["end"], "en": block["lines"][0]}
+        for block in parse_vtt_blocks(path)
+    ]
+
+
 def parse_bilingual_vtt(path: Path) -> list[dict[str, Any]]:
     """读双语 VTT：每块必须同时有英文与中文，缺译文或缺时间戳的块忽略。"""
     cues: list[dict[str, Any]] = []
@@ -299,6 +332,20 @@ def parse_bilingual_vtt(path: Path) -> list[dict[str, Any]]:
             }
         )
     return cues
+
+
+def render_english_vtt(cues: list[dict[str, Any]]) -> str:
+    blocks = ["WEBVTT", ""]
+    for index, cue in enumerate(cues, 1):
+        blocks.extend(
+            [
+                str(index),
+                f"{timestamp(cue['start'])} --> {timestamp(cue['end'])}",
+                cue["en"],
+                "",
+            ]
+        )
+    return chr(10).join(blocks).rstrip() + chr(10)
 
 
 def render_vtt(cues: list[dict[str, Any]]) -> str:
@@ -447,7 +494,7 @@ def assign_times(cues, spans, decisions, mapping, words, total_seconds) -> list[
                 "start": mapped[0]["s"] if mapped else None,
                 "end": mapped[-1]["e"] if mapped else None,
                 "en": cue["en"],
-                "zh": cue["zh"],
+                "zh": cue.get("zh", ""),
                 "words": mapped,
             }
         )
@@ -531,9 +578,9 @@ def rewrite_episode(
     sidecar = transcribe.sidecar_path_for(vtt_path)
     audio_path = Path(workdir) / "episode.audio"
     try:
-        cues = parse_bilingual_vtt(vtt_path)
+        cues = parse_english_vtt(vtt_path)
         if not cues:
-            raise RuntimeError("VTT 没有可用的双语块")
+            raise RuntimeError("英文 VTT 没有可用的块")
         download(audio_url, audio_path)
         our_cues, total = transcribe_audio(audio_path)
         raw_words = [word for cue in our_cues for word in cue.get("words") or []]
@@ -555,19 +602,30 @@ def rewrite_episode(
             )
             return "rejected"
         kept = assign_times(cues, spans, decisions, mapping, words, total)
-        en_text = render_vtt(kept)
-        validate_vtt(en_text, blocks=len(kept), bilingual=True)
+        en_text = render_english_vtt(kept)
+        validate_vtt(en_text, blocks=len(kept), bilingual=False)
         zh_source = zh_vtt_path(vtt_path)
         zh_text = None
         if zh_source.exists():
-            zh_rows = zh_blocks(zh_source)
+            zh_rows = parse_bilingual_vtt(zh_source)
             if len(zh_rows) != len(cues):
-                raise RuntimeError("zh 字幕块数与双语版不一致")
-            zh_text = render_zh_vtt(
-                [zh_rows[i] for i, decision in enumerate(decisions) if decision != "drop"],
-                kept,
-            )
-            validate_vtt(zh_text, blocks=len(kept), bilingual=False)
+                raise RuntimeError("zh 字幕块数与英文版不一致")
+            # 中文必须按**原始块下标**取，否则删掉一条广告后后面所有译文整体错位
+            kept_zh = []
+            for original_index, decision in enumerate(decisions):
+                if decision == "drop":
+                    continue
+                cue = kept[len(kept_zh)]
+                kept_zh.append(
+                    {
+                        "start": cue["start"],
+                        "end": cue["end"],
+                        "en": cue["en"],
+                        "zh": zh_rows[original_index]["zh"],
+                    }
+                )
+            zh_text = render_vtt(kept_zh)
+            validate_vtt(zh_text, blocks=len(kept), bilingual=True)
     except Exception as exc:
         print(f"{vtt_path.stem}: 放弃 {type(exc).__name__}: {exc}")
         transcribe.write_sidecar_failure(sidecar, transcribe.sidecar_status(sidecar)[1] + 1)
