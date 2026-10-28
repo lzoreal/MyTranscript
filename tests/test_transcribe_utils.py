@@ -696,5 +696,38 @@ class WordTimingsFileTests(unittest.TestCase):
             self.assertFalse(path.exists())
 
 
+class SidecarStatusTests(unittest.TestCase):
+    def test_status_of_missing_or_broken_file_is_incomplete(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "x.json"
+            self.assertEqual(transcriber.sidecar_status(path), (False, 0))
+            path.write_text("{not json", encoding="utf-8")
+            self.assertEqual(transcriber.sidecar_status(path), (False, 0))
+
+    def test_status_of_non_dict_payload_is_incomplete(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "x.json"
+            path.write_text(json.dumps([1, 2, 3]), encoding="utf-8")
+            self.assertEqual(transcriber.sidecar_status(path), (False, 0))
+
+    def test_status_reads_complete_and_attempts(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "x.json"
+            path.write_text(
+                json.dumps({"complete": True, "attempts": 2}), encoding="utf-8"
+            )
+            self.assertEqual(transcriber.sidecar_status(path), (True, 2))
+
+    def test_failure_sidecar_is_incomplete_with_attempt_count(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "x.json"
+            transcriber.write_sidecar_failure(path, attempts=1)
+            self.assertEqual(transcriber.sidecar_status(path), (False, 1))
+
+    def test_sidecar_path_matches_vtt_stem(self):
+        vtt = Path("site/pod/transcripts/Ep 1.vtt")
+        self.assertEqual(transcriber.sidecar_path_for(vtt).name, "Ep 1.json")
+
+
 if __name__ == "__main__":
     unittest.main()
