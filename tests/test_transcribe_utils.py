@@ -296,6 +296,83 @@ class GeminiKeyRingTests(unittest.TestCase):
             transcriber.GeminiKeyRing([])
 
 
+class _QuotaError(Exception):
+    code = "RESOURCE_EXHAUSTED"
+
+
+class _AuthError(Exception):
+    code = 403
+
+
+class GeminiRotationTranslateTests(unittest.TestCase):
+    def test_switches_key_after_quota_error(self):
+        calls = []
+
+        class Client:
+            def __init__(self, api_key):
+                self.api_key = api_key
+
+            @property
+            def models(self):
+                return self
+
+            def generate_content(self, model, contents, config):
+                calls.append(self.api_key)
+                if self.api_key == "k1":
+                    raise _QuotaError("429 RESOURCE_EXHAUSTED")
+                return SimpleNamespace(text=json.dumps({"0": "译0"}))
+
+        ring = transcriber.GeminiKeyRing(["k1", "k2"], factory=Client)
+        translated = {}
+        with patch.object(transcriber, "wait_for_gemini_rate_limit"):
+            transcriber.translate_blocks(ring, [(0, {"en": "Hello there friend"})], translated)
+        self.assertEqual(translated, {0: "译0"})
+        self.assertEqual(calls, ["k1", "k2"])
+
+    def test_all_keys_exhausted_raises(self):
+        class Client:
+            @property
+            def models(self):
+                return self
+
+            def generate_content(self, **kwargs):
+                raise _QuotaError("429 RESOURCE_EXHAUSTED")
+
+        ring = transcriber.GeminiKeyRing(["k1"], factory=lambda api_key: Client())
+        with patch.object(transcriber, "wait_for_gemini_rate_limit"):
+            with self.assertRaises(transcriber.QuotaExhausted):
+                transcriber.translate_blocks(ring, [(0, {"en": "Hello there friend"})], {})
+
+    def test_error_classification(self):
+        self.assertTrue(transcriber.is_quota_error(_QuotaError("x")))
+        self.assertFalse(transcriber.is_quota_error(TimeoutError("x")))
+        self.assertTrue(transcriber.is_auth_error(_AuthError("x")))
+
+    def test_rotation_log_never_prints_the_key(self):
+        class Client:
+            @property
+            def models(self):
+                return self
+
+            def generate_content(self, **kwargs):
+                raise _QuotaError("429 RESOURCE_EXHAUSTED")
+
+        ring = transcriber.GeminiKeyRing(
+            ["AIzaSySECRET-1111", "AIzaSySECRET-2222"],
+            factory=lambda api_key: Client(),
+        )
+        with patch.object(transcriber, "wait_for_gemini_rate_limit"), self.assertLogs(
+            transcriber.log, level="WARNING"
+        ) as captured:
+            with self.assertRaises(transcriber.QuotaExhausted):
+                transcriber.translate_blocks(
+                    ring, [(0, {"en": "Hello there friend"})], {}
+                )
+        output = "\n".join(captured.output)
+        self.assertIn("…1111", output)
+        self.assertNotIn("AIzaSySECRET", output)
+
+
 def _decode_trailing_object(prompt):
     """取出 prompt 末尾那段待翻译 JSON，用来模拟模型只看到编号和英文。"""
     start = prompt.rfind("{")
@@ -347,7 +424,13 @@ class TranslationPairingTests(unittest.TestCase):
     def run_translation(self, drops, cues=None):
         fake = FakeGemini(drops)
         cues = self.cues if cues is None else cues
-        with patch.object(transcriber, "create_gemini_client", return_value=fake), patch.object(
+        real_ring = transcriber.GeminiKeyRing
+
+        def make_ring(keys, factory=None):
+            # 只替换底层 client；轮换逻辑仍走真实的 GeminiKeyRing。
+            return real_ring(["test-key"], factory=lambda api_key: fake)
+
+        with patch.object(transcriber, "GeminiKeyRing", make_ring), patch.object(
             transcriber, "wait_for_gemini_rate_limit", lambda: None
         ), patch.object(transcriber, "TRANSLATE_BASE_DELAY", 0.0), patch.object(
             transcriber, "TRANSLATE_BATCH_DELAY", 0.0

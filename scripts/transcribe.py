@@ -864,10 +864,22 @@ def whisper_transcribe(audio_path: Path) -> tuple[list[dict[str, Any]], float]:
 
 
 # -------------------- Gemini 翻译 --------------------
-def create_gemini_client() -> genai.Client:
-    if not GEMINI_API_KEY:
-        raise RuntimeError("缺少 GEMINI_API_KEY")
-    return genai.Client(api_key=GEMINI_API_KEY)
+def is_quota_error(exc: Exception) -> bool:
+    text = f"{exc}".upper()
+    code = getattr(exc, "code", None) or getattr(exc, "status_code", None)
+    return (
+        code in (429, "429", "RESOURCE_EXHAUSTED")
+        or "RESOURCE_EXHAUSTED" in text
+        or "QUOTA" in text
+    )
+
+
+def is_auth_error(exc: Exception) -> bool:
+    text = f"{exc}".upper()
+    code = getattr(exc, "code", None) or getattr(exc, "status_code", None)
+    return code in (401, 403, "401", "403", "PERMISSION_DENIED", "UNAUTHENTICATED") or (
+        "API_KEY_INVALID" in text
+    )
 
 
 def build_translation_batches(cues: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
@@ -1011,20 +1023,34 @@ def translate_batch_once(
 
 
 def translate_blocks(
-    client: genai.Client,
+    ring: GeminiKeyRing,
     blocks: list[tuple[int, dict[str, Any]]],
     translated: dict[int, str],
 ) -> None:
     pending = [pair for pair in blocks if pair[0] not in translated]
     if not pending:
         return
+    attempt = 0
     last_error: Exception | None = None
-    for attempt in range(TRANSLATE_MAX_RETRIES + 1):
+    while pending:
         try:
-            translated.update(translate_batch_once(client, pending))
+            ring.requests += 1
+            translated.update(translate_batch_once(ring.client(), pending))
             return
+        except QuotaExhausted:
+            raise
         except Exception as exc:
             last_error = exc
+            if is_quota_error(exc) or is_auth_error(exc):
+                # 配额/鉴权错误不消耗退避重试次数：换 key 后立刻重试同一批。
+                kind = "配额耗尽" if is_quota_error(exc) else "key 无效"
+                before = ring.label()
+                if not ring.mark_exhausted():
+                    raise QuotaExhausted(
+                        f"{kind}，所有 key 已用尽（本进程已发 {ring.requests} 次请求）"
+                    ) from exc
+                log.warning("Gemini key %s %s，切到 %s", before, kind, ring.label())
+                continue
             if isinstance(exc, IncompleteTranslation):
                 translated.update(exc.partial)
                 pending = [pair for pair in pending if pair[0] not in translated]
@@ -1041,36 +1067,39 @@ def translate_blocks(
                     len(pending),
                 )
                 time.sleep(delay)
-    if len(pending) > 1:
-        mid = len(pending) // 2
-        log.warning("批次重试仍失败，拆分为 %d 与 %d 条", mid, len(pending) - mid)
-        translate_blocks(client, pending[:mid], translated)
-        if TRANSLATE_BATCH_DELAY:
-            time.sleep(TRANSLATE_BATCH_DELAY)
-        translate_blocks(client, pending[mid:], translated)
-        return
-    raise RuntimeError(
-        f"单条字幕翻译最终失败：{pending[0][1].get('en', '')[:160]!r}；错误：{last_error}"
-    ) from last_error
+                attempt += 1
+                continue
+            if len(pending) > 1:
+                half = len(pending) // 2
+                log.warning("批次重试仍失败，拆分为 %d 与 %d 条", half, len(pending) - half)
+                translate_blocks(ring, pending[:half], translated)
+                if TRANSLATE_BATCH_DELAY:
+                    time.sleep(TRANSLATE_BATCH_DELAY)
+                translate_blocks(ring, pending[half:], translated)
+                return
+            raise RuntimeError(
+                f"单条字幕翻译最终失败：{pending[0][1].get('en', '')[:160]!r}"
+            ) from last_error
 
 
 def translate_cues_with_gemini(cues: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if not cues:
         raise ValueError("没有可翻译字幕")
-    client = create_gemini_client()
+    ring = GeminiKeyRing(GEMINI_KEYS)
     batches = build_translation_batches(cues)
     log.info(
-        "Gemini 翻译开始：%d 条字幕，%d 个初始批次，模型=%s，限速=%d RPM（请求间隔至少 %.2f 秒）",
+        "Gemini 翻译开始：%d 条字幕，%d 个初始批次，模型=%s，key=%d 把，限速=%d RPM（请求间隔至少 %.2f 秒）",
         len(cues),
         len(batches),
         GEMINI_MODEL,
+        len(GEMINI_KEYS),
         GEMINI_RPM,
         GEMINI_REQUEST_INTERVAL,
     )
     for i, batch in enumerate(batches, 1):
         log.info("翻译批次 %d/%d：%d 条", i, len(batches), len(batch))
         translated: dict[int, str] = {}
-        translate_blocks(client, list(enumerate(batch)), translated)
+        translate_blocks(ring, list(enumerate(batch)), translated)
         for index, cue in enumerate(batch):
             cue["zh"] = translated[index]
         if TRANSLATE_BATCH_DELAY and i < len(batches):
