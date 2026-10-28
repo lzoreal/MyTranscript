@@ -480,3 +480,88 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+def split_blocks(text: str) -> list[str]:
+    """按空行切块；统一 CRLF，避免正则里的转义在脚本里被误写。"""
+    normalized = text.replace(chr(13) + chr(10), chr(10)).replace(chr(13), chr(10))
+    return [block for block in normalized.split(chr(10) + chr(10)) if block.strip()]
+
+
+def _seconds(match, offset: int) -> float:
+    return (
+        int(match.group(1 + offset)) * 3600
+        + int(match.group(2 + offset)) * 60
+        + float(match.group(3 + offset))
+    )
+
+
+def timestamp(value: float) -> str:
+    ms = int(round(value * 1000))
+    return f"{ms // 3600000:02d}:{ms // 60000 % 60:02d}:{ms // 1000 % 60:02d}.{ms % 1000:03d}"
+
+
+def parse_bilingual_vtt(path: Path) -> list[dict[str, Any]]:
+    """读双语 VTT：每块必须同时有英文与中文，缺译文或缺时间戳的块忽略。"""
+    cues: list[dict[str, Any]] = []
+    text = path.read_text(encoding="utf-8-sig", errors="replace")
+    for block in split_blocks(text):
+        lines = [line.strip() for line in block.strip().split(chr(10)) if line.strip()]
+        stamp = next((line for line in lines if "-->" in line), None)
+        if not stamp:
+            continue
+        match = TIMESTAMP.search(stamp)
+        if not match:
+            continue
+        body = [line for line in lines if "-->" not in line and not line.isdigit()]
+        if len(body) < 2:
+            continue
+        cues.append(
+            {
+                "start": _seconds(match, 0),
+                "end": _seconds(match, 3),
+                "en": body[0],
+                "zh": body[1],
+            }
+        )
+    return cues
+
+
+def render_vtt(cues: list[dict[str, Any]]) -> str:
+    blocks = ["WEBVTT", ""]
+    for index, cue in enumerate(cues, 1):
+        blocks.extend(
+            [
+                str(index),
+                f"{timestamp(cue['start'])} --> {timestamp(cue['end'])}",
+                cue["en"],
+                cue["zh"],
+                "",
+            ]
+        )
+    return chr(10).join(blocks).rstrip() + chr(10)
+
+
+def validate_vtt(text: str, blocks: int, bilingual: bool) -> None:
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "WEBVTT":
+        raise ValueError("缺少 WEBVTT 头")
+    body = [line for line in lines[1:] if line.strip()]
+    cue_blocks = split_blocks(chr(10).join(body))
+    if len(cue_blocks) != blocks or blocks < 1:
+        raise ValueError(f"块数不符：{len(cue_blocks)} != {blocks}")
+    previous_end = -1.0
+    for block in cue_blocks:
+        rows = block.strip().split(chr(10))
+        expected = 4 if bilingual else 3
+        if len(rows) != expected:
+            raise ValueError(f"块结构异常：{len(rows)} 行")
+        match = TIMESTAMP.search(rows[1])
+        if not match:
+            raise ValueError("时间行无法解析")
+        start, end = _seconds(match, 0), _seconds(match, 3)
+        if start < previous_end:
+            raise ValueError("时间未单调递增")
+        if not 0 < end - start < 300:
+            raise ValueError(f"时长异常：{end - start:.2f}s")
+        previous_end = end

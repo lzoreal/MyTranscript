@@ -524,6 +524,41 @@ class PerCueAlignTests(unittest.TestCase):
         self.assertTrue(out[0]["words"] and out[1]["words"])
 
 
+class VttRoundTripTests(unittest.TestCase):
+    def sample(self):
+        return [
+            {"start": 1.0, "end": 4.0, "en": "Hello there.", "zh": "你好。"},
+            {"start": 60.5, "end": 62.0, "en": "Second cue.", "zh": "第二句。"},
+        ]
+
+    def test_render_then_parse_round_trips(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "ep.vtt"
+            path.write_text(aligner.render_vtt(self.sample()), encoding="utf-8")
+            back = aligner.parse_bilingual_vtt(path)
+        self.assertEqual(back, self.sample())
+
+    def test_parse_rejects_blocks_without_both_languages(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "ep.vtt"
+            path.write_text(
+                chr(10).join(["WEBVTT", "", "1", "00:00:01.000 --> 00:00:02.000", "Only english", ""]),
+                encoding="utf-8",
+            )
+            cues = aligner.parse_bilingual_vtt(path)
+        self.assertEqual(cues, [], "缺译文的块不参与重写")
+
+    def test_validate_rejects_non_monotonic_times(self):
+        text = aligner.render_vtt(
+            [
+                {"start": 5.0, "end": 6.0, "en": "a", "zh": "甲"},
+                {"start": 2.0, "end": 3.0, "en": "b", "zh": "乙"},
+            ]
+        )
+        with self.assertRaises(ValueError):
+            aligner.validate_vtt(text, blocks=2, bilingual=True)
+
+
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     unittest.main()
