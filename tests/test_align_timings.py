@@ -621,6 +621,53 @@ class ClassifyTests(unittest.TestCase):
         self.assertIsNone(aligner.episode_rejection(["body"] * 8 + ["drop"] * 2, 0.96))
 
 
+class AssignTimesTests(unittest.TestCase):
+    def setUp(self):
+        self.words = [
+            {"w": "one", "s": 1.0, "e": 1.4},
+            {"w": "two", "s": 1.4, "e": 1.8},
+            {"w": "three", "s": 1.8, "e": 2.2},
+            {"w": "four", "s": 30.0, "e": 30.4},
+            {"w": "five", "s": 30.4, "e": 31.0},
+        ]
+
+    def test_body_cue_takes_mapped_word_span(self):
+        cues = [{"start": 0.0, "end": 10.0, "en": "one two three", "zh": "甲"}]
+        out = aligner.assign_times(cues, [(0, 3)], ["body"], {0: 0, 1: 1, 2: 2}, self.words, 60.0)
+        self.assertAlmostEqual(out[0]["start"], 1.0)
+        self.assertAlmostEqual(out[0]["end"], 2.2)
+        self.assertEqual([w["w"] for w in out[0]["words"]], ["one", "two", "three"])
+
+    def test_dropped_cues_disappear(self):
+        cues = [
+            {"start": 0.0, "end": 10.0, "en": "one two three", "zh": "甲"},
+            {"start": 10.0, "end": 20.0, "en": "four five", "zh": "乙"},
+        ]
+        out = aligner.assign_times(cues, [(0, 3), (3, 5)], ["body", "drop"], {0: 0, 1: 1, 2: 2}, self.words, 60.0)
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0]["en"], "one two three")
+
+    def test_unmapped_cue_is_interpolated_between_neighbours(self):
+        cues = [
+            {"start": 0.0, "end": 5.0, "en": "x" * 50, "zh": "甲"},
+            {"start": 5.0, "end": 10.0, "en": "y" * 200, "zh": "乙"},
+        ]
+        out = aligner.assign_times(cues, [(0, 0), (0, 0)], ["partial", "partial"], {}, [], 60.0)
+        self.assertAlmostEqual(out[0]["start"], 0.0)
+        self.assertLess(out[0]["end"], out[1]["end"])
+        self.assertEqual(out[0]["words"], [])
+
+    def test_times_stay_monotonic_and_positive(self):
+        cues = [
+            {"start": 0.0, "end": 10.0, "en": "one two three", "zh": "甲"},
+            {"start": 10.0, "end": 20.0, "en": "four five", "zh": "乙"},
+        ]
+        mapping = {0: 0, 1: 1, 2: 2, 3: 3, 4: 4}
+        out = aligner.assign_times(cues, [(0, 3), (3, 5)], ["body", "body"], mapping, self.words, 60.0)
+        self.assertTrue(all(cue["start"] < cue["end"] for cue in out))
+        self.assertTrue(all(a["end"] <= b["start"] for a, b in zip(out, out[1:])))
+
+
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     unittest.main()
