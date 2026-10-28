@@ -607,3 +607,45 @@ def map_stream(pods: list[str], ours: list[str]) -> tuple[dict[int, int], float]
                 mapped = j1 + int((offset + 0.5) * (j2 - j1) / (i2 - i1))
                 mapping[i1 + offset] = min(mapped, j2 - 1)
     return mapping, matcher.ratio()
+
+
+BODY_MIN_COVERAGE = 0.70
+PARTIAL_MIN_COVERAGE = 0.30
+MAX_DROP_RATIO = 0.25
+MIN_TOKENS_TO_DROP = 5
+MIN_TEXT_SIMILARITY = 0.85
+MIN_BODY_RATIO = 0.70
+
+
+def classify_cues(spans, mapping) -> list[str]:
+    decisions = []
+    for start, end in spans:
+        count = end - start
+        if count == 0:
+            decisions.append("partial")
+            continue
+        covered = sum(1 for index in range(start, end) if index in mapping)
+        coverage = covered / count
+        if coverage >= BODY_MIN_COVERAGE:
+            decisions.append("body")
+        elif coverage < PARTIAL_MIN_COVERAGE and count >= MIN_TOKENS_TO_DROP:
+            decisions.append("drop")
+        else:
+            decisions.append("partial")
+    return decisions
+
+
+def episode_rejection(decisions: list[str], similarity: float) -> str | None:
+    if similarity < MIN_TEXT_SIMILARITY:
+        return "文本相似度过低"
+    if not decisions:
+        return "没有 cue"
+    dropped = decisions.count("drop")
+    if dropped / len(decisions) > MAX_DROP_RATIO:
+        return "删除比例超过 25%"
+    kept = len(decisions) - dropped
+    if kept / len(decisions) < MIN_BODY_RATIO:
+        return "保留 cue 占比过低"
+    if "body" not in decisions:
+        return "没有任何 cue 拿到映射词"
+    return None
