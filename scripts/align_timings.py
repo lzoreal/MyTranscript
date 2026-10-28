@@ -546,8 +546,8 @@ def validate_vtt(text: str, blocks: int, bilingual: bool) -> None:
     lines = text.splitlines()
     if not lines or lines[0].strip() != "WEBVTT":
         raise ValueError("缺少 WEBVTT 头")
-    body = [line for line in lines[1:] if line.strip()]
-    cue_blocks = split_blocks(chr(10).join(body))
+    # 不能先过滤空行——空行正是块分隔符
+    cue_blocks = split_blocks(chr(10).join(lines[1:]))
     if len(cue_blocks) != blocks or blocks < 1:
         raise ValueError(f"块数不符：{len(cue_blocks)} != {blocks}")
     previous_end = -1.0
@@ -702,3 +702,108 @@ def assign_times(cues, spans, decisions, mapping, words, total_seconds) -> list[
         entry["end"] = max(entry["start"] + 0.05, float(entry["end"]))
         previous_end = entry["end"]
     return kept
+
+
+def zh_vtt_path(vtt_path: Path) -> Path:
+    return vtt_path.parent / "zh" / vtt_path.name
+
+
+def zh_blocks(path: Path) -> list[str]:
+    """中文单语 VTT 的文本行，按块顺序；没有时间戳的块（WEBVTT 头）跳过。"""
+    rows = []
+    for block in split_blocks(path.read_text(encoding="utf-8-sig", errors="replace")):
+        lines = [line.strip() for line in block.strip().split(chr(10)) if line.strip()]
+        if not any("-->" in line for line in lines):
+            continue
+        body = [line for line in lines if "-->" not in line and not line.isdigit()]
+        if body:
+            rows.append(body[0])
+    return rows
+
+
+def render_zh_vtt(zh_texts: list[str], kept: list[dict[str, Any]]) -> str:
+    blocks = ["WEBVTT", ""]
+    for index, (zh, cue) in enumerate(zip(zh_texts, kept), 1):
+        blocks.extend(
+            [
+                str(index),
+                f"{timestamp(cue['start'])} --> {timestamp(cue['end'])}",
+                zh,
+                "",
+            ]
+        )
+    return chr(10).join(blocks).rstrip() + chr(10)
+
+
+def write_atomic(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    tmp.replace(path)
+
+
+def rewrite_episode(
+    vtt_path: Path,
+    audio_url: str,
+    model,
+    *,
+    workdir: Path,
+    download=None,
+    transcribe_audio=None,
+) -> str:
+    """转写→映射→分流→重写双语与 zh 字幕→写 sidecar；返回 done/rejected/failed。"""
+    download = download or transcribe.download_audio
+    transcribe_audio = transcribe_audio or transcribe.whisper_transcribe
+    sidecar = transcribe.sidecar_path_for(vtt_path)
+    audio_path = Path(workdir) / "episode.audio"
+    try:
+        cues = parse_bilingual_vtt(vtt_path)
+        if not cues:
+            raise RuntimeError("VTT 没有可用的双语块")
+        download(audio_url, audio_path)
+        our_cues, total = transcribe_audio(audio_path)
+        raw_words = [word for cue in our_cues for word in cue.get("words") or []]
+        our_tokens: list[str] = []
+        words: list[dict[str, Any]] = []
+        for word in raw_words:
+            token = re.sub(r"[^a-z0-9]", "", word["w"].lower())
+            if token:
+                our_tokens.append(token)
+                words.append(word)
+        tokens, spans = cue_token_spans(cues)
+        mapping, similarity = map_stream(tokens, our_tokens)
+        decisions = classify_cues(spans, mapping)
+        reason = episode_rejection(decisions, similarity)
+        if reason:
+            print(f"{vtt_path.stem}: 整集放弃（{reason}）")
+            transcribe.write_sidecar_failure(
+                sidecar, transcribe.sidecar_status(sidecar)[1] + 1
+            )
+            return "rejected"
+        kept = assign_times(cues, spans, decisions, mapping, words, total)
+        en_text = render_vtt(kept)
+        validate_vtt(en_text, blocks=len(kept), bilingual=True)
+        zh_source = zh_vtt_path(vtt_path)
+        zh_text = None
+        if zh_source.exists():
+            zh_rows = zh_blocks(zh_source)
+            if len(zh_rows) != len(cues):
+                raise RuntimeError("zh 字幕块数与双语版不一致")
+            zh_text = render_zh_vtt(
+                [zh_rows[i] for i, decision in enumerate(decisions) if decision != "drop"],
+                kept,
+            )
+            validate_vtt(zh_text, blocks=len(kept), bilingual=False)
+    except Exception as exc:
+        print(f"{vtt_path.stem}: 放弃 {type(exc).__name__}: {exc}")
+        transcribe.write_sidecar_failure(sidecar, transcribe.sidecar_status(sidecar)[1] + 1)
+        return "failed"
+    write_atomic(vtt_path, en_text)
+    if zh_text is not None:
+        write_atomic(zh_source, zh_text)
+    transcribe.write_word_timings(kept, sidecar, total)
+    print(
+        f"{vtt_path.stem}: 相似度 {similarity:.3f}，正文 {decisions.count('body')}，"
+        f"部分 {decisions.count('partial')}，删除 {decisions.count('drop')}"
+    )
+    return "done"
