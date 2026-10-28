@@ -855,6 +855,33 @@ class BackfillSelectionTests(unittest.TestCase):
             got = transcriber.build_backfill_candidates([entry], records)
         self.assertEqual(got, [])
 
+    def test_candidates_dedupe_by_vtt_path_keeping_first_entry(self):
+        # migrate_legacy_records 可能让两个 identity 共用同一条 path；两个候选会
+        # 按 identity 落到不同分片，却并发写同一份 sidecar。因此每条 path 只留
+        # 第一个（feed 顺序）候选。
+        first = SimpleNamespace(
+            id="g1", title="Ep", published="",
+            enclosures=[{"href": "https://cdn.test/a.mp3", "type": "audio/mpeg"}],
+            links=[],
+        )
+        second = SimpleNamespace(
+            id="g2", title="Ep", published="",
+            enclosures=[{"href": "https://cdn.test/b.mp3", "type": "audio/mpeg"}],
+            links=[],
+        )
+        records = {
+            "g1": {"identity": "g1", "path": "pod/transcripts/Ep.vtt", "title": "Ep"},
+            "g2": {"identity": "g2", "path": "pod/transcripts/Ep.vtt", "title": "Ep"},
+        }
+        with patch.object(transcriber, "SITE_DIR", Path("site")), patch.object(
+            transcriber, "needs_backfill", return_value=True
+        ):
+            got = transcriber.build_backfill_candidates([first, second], records)
+        self.assertEqual(len(got), 1)
+        self.assertEqual(got[0]["identity"], "g1")
+        self.assertEqual(got[0]["audio_url"], "https://cdn.test/a.mp3")
+        self.assertEqual(got[0]["vtt_path"], Path("site") / "pod/transcripts/Ep.vtt")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1300,8 +1300,13 @@ def needs_backfill(vtt_path: Path, sidecar_path: Path) -> bool:
 
 
 def build_backfill_candidates(entries, records) -> list[dict[str, Any]]:
-    """把 feed 条目与现有记录 join 成待回填清单（identity/title/audio_url/vtt_path）。"""
+    """把 feed 条目与现有记录 join 成待回填清单（identity/title/audio_url/vtt_path）。
+
+    每条 vtt_path 只保留 feed 顺序里第一个候选：旧状态经 migrate_legacy_records
+    后可能让两个 identity 共用一条 path，二者会落到不同分片却写同一份 sidecar。
+    """
     candidates = []
+    seen_paths: set[Path] = set()
     for entry in entries:
         audio_url = get_entry_audio_url(entry)
         if not audio_url:
@@ -1311,6 +1316,9 @@ def build_backfill_candidates(entries, records) -> list[dict[str, Any]]:
         if not record or not record.get("path"):
             continue
         vtt_path = SITE_DIR / record["path"]
+        if vtt_path in seen_paths:
+            continue
+        seen_paths.add(vtt_path)
         if not needs_backfill(vtt_path, sidecar_path_for(vtt_path)):
             continue
         candidates.append(
