@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 import statistics
 import sys
+import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -227,3 +229,98 @@ def align_episode_file(
     transcribe.write_word_timings(aligned, sidecar, total)
     log_summary(vtt_path, stats, len(aligned))
     return "done" if stats["aligned_cues"] else "partial"
+
+
+RECENT_DAYS = 30
+
+
+def _published(entry: dict[str, Any]) -> datetime | None:
+    raw = entry.get("published") or ""
+    try:
+        from email.utils import parsedate_to_datetime
+
+        stamp = parsedate_to_datetime(raw)
+        return stamp if stamp.tzinfo else stamp.replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+
+def build_candidates(
+    shows: list[dict[str, Any]],
+    mode: str,
+    latest_per_show: int = 20,
+    now: datetime | None = None,
+) -> list[dict[str, Any]]:
+    """按模式挑选需要对齐的集；sidecar 已完成或尝试超限的集跳过。"""
+    now = now or datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=RECENT_DAYS)
+    candidates: list[dict[str, Any]] = []
+    seen_paths: set[Path] = set()
+    for show in shows:
+        slug = show["slug"]
+        entries = show["entries"]
+        processed = show["processed"]
+        picked: list[tuple[dict[str, Any], Path]] = []
+        for entry in entries:
+            info = processed.get(entry["guid"])
+            if not info or not info.get("vtt_filename"):
+                continue
+            vtt_path = transcribe.SITE_DIR / slug / "transcripts" / info["vtt_filename"]
+            if not vtt_path.exists() or not transcribe.is_valid_bilingual_vtt(vtt_path):
+                continue
+            complete, attempts = transcribe.sidecar_status(
+                transcribe.sidecar_path_for(vtt_path)
+            )
+            if complete or attempts >= transcribe.BACKFILL_MAX_ATTEMPTS:
+                continue
+            if mode == "recent":
+                stamp = _published(entry)
+                if stamp is None or stamp < cutoff:
+                    continue
+            picked.append((entry, vtt_path))
+        if mode == "latest":
+            picked = picked[:latest_per_show]
+        for entry, vtt_path in picked:
+            if vtt_path in seen_paths:
+                continue
+            seen_paths.add(vtt_path)
+            candidates.append(
+                {
+                    "slug": slug,
+                    "identity": entry["guid"],
+                    "title": entry["title"],
+                    "audio_url": entry["url"],
+                    "vtt_path": vtt_path,
+                }
+            )
+    return candidates
+
+
+def run_align(
+    candidates: list[dict[str, Any]],
+    shard: int,
+    shards: int,
+    max_minutes: float,
+    process=None,
+    clock=None,
+) -> dict[str, int]:
+    """跑一个分片：预算到点即停；单集结果分别计数。"""
+    if process is None:
+        raise ValueError("run_align 需要注入 process")
+    clock = clock or time.monotonic
+    deadline = clock() + max_minutes * 60
+    stats = {"done": 0, "partial": 0, "failed": 0, "mismatch": 0, "skipped": 0}
+    for item in candidates:
+        if transcribe.shard_of(item["identity"], shards) != shard:
+            stats["skipped"] += 1
+            continue
+        if clock() >= deadline:
+            print(f"分片 {shard} 预算用完，已完成 {stats['done'] + stats['partial']} 集")
+            break
+        outcome = process(item)
+        stats[outcome] = stats.get(outcome, 0) + 1
+    print(
+        f"分片 {shard} 结束：done {stats['done']}，partial {stats['partial']}，"
+        f"failed {stats['failed']}，mismatch {stats['mismatch']}，skipped {stats['skipped']}"
+    )
+    return stats

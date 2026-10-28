@@ -298,6 +298,94 @@ class AlignFileTests(unittest.TestCase):
         )
 
 
+class CandidateTests(unittest.TestCase):
+    def test_latest_mode_takes_n_newest_per_show(self):
+        entries = [
+            # feed 是新到旧，所以 g4 是最新的
+            {"guid": f"g{i}", "title": f"Ep {i}", "published": "", "url": f"https://cdn/{i}.mp3"}
+            for i in reversed(range(5))
+        ]
+        processed = {f"g{i}": {"vtt_filename": f"Ep_{i}.vtt"} for i in range(5)}
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        site = Path(temp.name) / "site"
+        (site / "pod" / "transcripts").mkdir(parents=True)
+        for i in range(5):
+            (site / "pod" / "transcripts" / f"Ep_{i}.vtt").write_text("WEBVTT", encoding="utf-8")
+        with mock.patch.object(
+            aligner.transcribe, "is_valid_bilingual_vtt", return_value=True
+        ), mock.patch.object(
+            aligner.transcribe, "sidecar_status", return_value=(False, 0)
+        ), mock.patch.object(aligner.transcribe, "SITE_DIR", site), mock.patch.object(
+            aligner.transcribe, "TIMING_DIR", site / "pod" / "timings"
+        ):
+            got = aligner.build_candidates(
+                [{"slug": "pod", "entries": entries, "processed": processed}],
+                mode="latest",
+                latest_per_show=2,
+            )
+        self.assertEqual([c["identity"] for c in got], ["g4", "g3"])
+
+    def test_recent_mode_skips_old_and_finished(self):
+        from datetime import datetime, timezone
+
+        now = datetime(2026, 10, 29, tzinfo=timezone.utc)
+        entries = [
+            {"guid": "new", "title": "New", "published": "Wed, 28 Oct 2026 00:00:00 +0000", "url": "https://cdn/n.mp3"},
+            {"guid": "old", "title": "Old", "published": "Wed, 01 Jan 2025 00:00:00 +0000", "url": "https://cdn/o.mp3"},
+            {"guid": "done", "title": "Done", "published": "Wed, 28 Oct 2026 00:00:00 +0000", "url": "https://cdn/d.mp3"},
+        ]
+        processed = {g: {"vtt_filename": f"{g}.vtt"} for g in ("new", "old", "done")}
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        site = Path(temp.name) / "site"
+        (site / "pod" / "transcripts").mkdir(parents=True)
+        for g in ("new", "old", "done"):
+            (site / "pod" / "transcripts" / f"{g}.vtt").write_text("WEBVTT", encoding="utf-8")
+        with mock.patch.object(
+            aligner.transcribe, "is_valid_bilingual_vtt", return_value=True
+        ), mock.patch.object(
+            aligner.transcribe, "sidecar_status",
+            side_effect=lambda p: (p.name == "done.json", 1),
+        ), mock.patch.object(aligner.transcribe, "SITE_DIR", site), mock.patch.object(
+            aligner.transcribe, "TIMING_DIR", site / "pod" / "timings"
+        ):
+            got = aligner.build_candidates(
+                [{"slug": "pod", "entries": entries, "processed": processed}],
+                mode="recent",
+                now=now,
+            )
+        self.assertEqual([c["identity"] for c in got], ["new"])
+
+
+class RunAlignTests(unittest.TestCase):
+    def items(self, n):
+        return [
+            {"slug": "pod", "identity": f"g{i}", "title": f"E{i}",
+             "audio_url": "u", "vtt_path": Path("x")}
+            for i in range(n)
+        ]
+
+    def test_budget_stops_the_shard(self):
+        seen = []
+        ticks = iter([0.0, 0.0, 0.0, 99999.0, 99999.0])
+        stats = aligner.run_align(
+            self.items(6), shard=0, shards=1, max_minutes=1,
+            process=lambda item: seen.append(item["identity"]) or "done",
+            clock=lambda: next(ticks, 99999.0),
+        )
+        self.assertLess(len(seen), 6, "预算耗尽后必须停")
+        self.assertEqual(stats["done"], len(seen))
+
+    def test_mismatch_is_counted_separately(self):
+        stats = aligner.run_align(
+            self.items(2), shard=0, shards=1, max_minutes=10,
+            process=lambda item: "mismatch", clock=lambda: 0.0,
+        )
+        self.assertEqual(stats["mismatch"], 2)
+        self.assertEqual(stats["failed"], 0)
+
+
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     unittest.main()
