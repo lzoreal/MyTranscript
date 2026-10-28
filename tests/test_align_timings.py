@@ -134,22 +134,24 @@ class PlausibilityTests(unittest.TestCase):
         self.assertFalse(aligner.words_plausible(cue, None, words))
 
     def test_rejects_when_first_word_is_far_before_the_cue(self):
-        cue = self.cue(100.0, 104.0, "hello there friend")
+        # ±25 秒的锚点误差要容忍；落后到两分钟就不是同一条 cue 了
+        cue = self.cue(300.0, 304.0, "hello there friend")
         words = [
-            {"w": "hello", "s": 80.0, "e": 80.4},
-            {"w": "there", "s": 80.4, "e": 81.0},
-            {"w": "friend", "s": 81.0, "e": 81.4},
+            {"w": "hello", "s": 100.0, "e": 100.4},
+            {"w": "there", "s": 100.4, "e": 101.0},
+            {"w": "friend", "s": 101.0, "e": 101.4},
         ]
         self.assertFalse(aligner.words_plausible(cue, None, words))
 
-    def test_rejects_when_last_word_overruns_the_next_cue(self):
+    def test_tolerates_anchor_error_inside_the_window(self):
+        # 实测单条 cue 可偏 +26 秒：这类必须接受，不能整句丢词
         cue = self.cue(10.0, 14.0, "hello there friend")
         words = [
-            {"w": "hello", "s": 10.2, "e": 10.6},
-            {"w": "there", "s": 10.6, "e": 11.0},
-            {"w": "friend", "s": 40.0, "e": 41.0},
+            {"w": "hello", "s": 35.0, "e": 35.4},
+            {"w": "there", "s": 35.4, "e": 36.0},
+            {"w": "friend", "s": 36.0, "e": 36.4},
         ]
-        self.assertFalse(aligner.words_plausible(cue, next_start=20.0, words=words))
+        self.assertTrue(aligner.words_plausible(cue, next_start=20.0, words=words))
 
 
 class CueWordsTests(unittest.TestCase):
@@ -452,6 +454,32 @@ class ToleranceTests(unittest.TestCase):
             {"w": "text", "s": 10.9, "e": 11.2},
         ]
         self.assertFalse(aligner.words_plausible(cue, None, words))
+
+
+class ParagraphCueTests(unittest.TestCase):
+    """PodScripts 的 cue 是段落块：文本可以合法地越过下一句起点。"""
+
+    def cue(self, start, text, declared=1.0):
+        return {"start": start, "end": start + declared, "en": text}
+
+    def words(self, start, count, step=0.4):
+        return [
+            {"w": f"w{i}", "s": start + i * step, "e": start + (i + 1) * step}
+            for i in range(count)
+        ]
+
+    def test_accepts_words_that_overrun_the_next_cue_start(self):
+        text = " ".join(f"w{i}" for i in range(100))
+        cue = self.cue(40.0, text)
+        words = self.words(41.0, 100, step=0.3)
+        # 下一句起点在 45 秒，但这段文本本来就比它长
+        self.assertTrue(aligner.words_plausible(cue, next_start=45.0, words=words))
+
+    def test_rejects_words_far_beyond_the_text_derived_span(self):
+        text = " ".join(f"w{i}" for i in range(100))
+        cue = self.cue(40.0, text)
+        words = self.words(41.0, 100, step=5.0)  # 最后一句远超合理时长
+        self.assertFalse(aligner.words_plausible(cue, next_start=45.0, words=words))
 
 
 if __name__ == "__main__":
