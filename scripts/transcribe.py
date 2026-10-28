@@ -1209,7 +1209,11 @@ def sidecar_path_for(vtt_path: Path) -> Path:
 
 
 def sidecar_status(path: Path) -> tuple[bool, int]:
-    """返回 (complete, attempts)；缺失或损坏一律按未完成、0 次处理。"""
+    """返回 (complete, attempts)；缺失或损坏一律按未完成、0 次处理。
+
+    attempts 只接受 JSON 整数（缺失算 0）；字符串、数组、对象、布尔等
+    不可表示的值一律按未开始处理，绝不让单个坏文件打断整批扫描。
+    """
     if not path.exists():
         return False, 0
     try:
@@ -1218,7 +1222,12 @@ def sidecar_status(path: Path) -> tuple[bool, int]:
         return False, 0
     if not isinstance(document, dict):
         return False, 0
-    return document.get("complete") is True, int(document.get("attempts") or 0)
+    attempts = document.get("attempts")
+    if attempts is None:
+        attempts = 0
+    if isinstance(attempts, bool) or not isinstance(attempts, int):
+        return False, 0
+    return document.get("complete") is True, attempts
 
 
 def write_sidecar_failure(path: Path, attempts: int) -> None:
