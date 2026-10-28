@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import statistics
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -162,3 +163,67 @@ def align_cues(model, audio, cues, total_seconds: float):
                 f"中位首词偏移 {median:+.2f}s 超过 {MISMATCH_MEDIAN}s：音频版本可能不同"
             )
     return result, stats
+
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import transcribe  # noqa: E402  （复用下载、sidecar 结构、断点语义）
+
+
+def decode_audio(path: Path):
+    """解成 16 kHz 单声道 float32。"""
+    import av
+    import numpy as np
+
+    chunks = []
+    with av.open(str(path)) as container:
+        stream = container.streams.audio[0]
+        resampler = av.AudioResampler(format="flt", layout="mono", rate=SR)
+        for frame in container.decode(stream):
+            for out in resampler.resample(frame):
+                chunks.append(out.to_ndarray().reshape(-1))
+        for out in resampler.resample(None):
+            chunks.append(out.to_ndarray().reshape(-1))
+    return np.concatenate(chunks).astype("float32")
+
+
+def log_summary(vtt_path: Path, stats: dict, total_cues: int) -> None:
+    print(
+        f"{vtt_path.stem}: 组 {stats['groups']}（失败 {stats['failed_groups']}），"
+        f"带词 {stats['aligned_cues']}/{total_cues}，中位偏移 {stats['median_offset']:+.2f}s"
+    )
+
+
+def align_episode_file(
+    vtt_path: Path,
+    audio_url: str,
+    model,
+    *,
+    workdir: Path,
+    download=None,
+    decode=None,
+    total_seconds: float | None = None,
+) -> str:
+    """对齐一集并写 sidecar；返回 done/partial/failed/mismatch。"""
+    download = download or transcribe.download_audio
+    decode = decode or decode_audio
+    sidecar = transcribe.sidecar_path_for(vtt_path)
+    audio_path = Path(workdir) / "episode.audio"
+    try:
+        download(audio_url, audio_path)
+        audio = decode(audio_path)
+        total = total_seconds or len(audio) / SR
+        cues = parse_vtt_cues(vtt_path)
+        if not cues:
+            raise RuntimeError("VTT 没有可用 cue")
+        aligned, stats = align_cues(model, audio, cues, total)
+    except AudioMismatch as exc:
+        print(f"{vtt_path.stem}: {exc}")
+        transcribe.write_sidecar_failure(sidecar, transcribe.sidecar_status(sidecar)[1] + 1)
+        return "mismatch"
+    except Exception as exc:
+        print(f"{vtt_path.stem}: 对齐失败 {type(exc).__name__}: {exc}")
+        transcribe.write_sidecar_failure(sidecar, transcribe.sidecar_status(sidecar)[1] + 1)
+        return "failed"
+    transcribe.write_word_timings(aligned, sidecar, total)
+    log_summary(vtt_path, stats, len(aligned))
+    return "done" if stats["aligned_cues"] else "partial"
