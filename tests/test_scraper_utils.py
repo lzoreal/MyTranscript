@@ -1,15 +1,56 @@
 import hashlib
 import importlib.util
+import os
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+
+from lxml import etree
 
 
 MODULE_PATH = Path(__file__).parents[1] / "scripts" / "scraper.py"
 SPEC = importlib.util.spec_from_file_location("scraper", MODULE_PATH)
 scraper = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(scraper)
+
+
+class FeedWriteTests(unittest.TestCase):
+    def test_generate_podcast_feed_writes_percent_slug_directory(self):
+        """lxml 把相对路径当 URI 解析，含 % 的 slug 在 Windows 上会写失败，必须走文件句柄。"""
+        original_cwd = os.getcwd()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            os.chdir(temp_dir)
+            try:
+                site_dir = Path("site")
+                transcripts = site_dir / "99%-invisible" / "transcripts"
+                transcripts.mkdir(parents=True)
+                (transcripts / "one.vtt").write_text(
+                    "WEBVTT\n\n1\n00:00:00.000 --> 00:00:01.000\nhi", encoding="utf-8"
+                )
+                root = etree.fromstring(
+                    (
+                        "<rss><channel><title>Show</title><item><guid>g0</guid>"
+                        '<enclosure url="https://cdn.test/a.mp3" type="audio/mpeg"/>'
+                        "</item></channel></rss>"
+                    ).encode("utf-8")
+                )
+                pc = {"processed": {"g0": {"title": "one", "vtt_filename": "one.vtt"}}}
+                with patch.object(scraper, "fetch_rss", lambda url: root), patch.object(
+                    scraper, "SITE_DIR", site_dir
+                ):
+                    scraper.generate_podcast_feed(
+                        pc,
+                        {
+                            "slug": "99%-invisible",
+                            "feed_url": "https://feed.test/x",
+                            "language": "en",
+                        },
+                        "https://pages.test",
+                    )
+                self.assertTrue((site_dir / "99%-invisible" / "feed.xml").exists())
+            finally:
+                os.chdir(original_cwd)
 
 
 class UrlTests(unittest.TestCase):
