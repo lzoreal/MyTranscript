@@ -565,3 +565,45 @@ def validate_vtt(text: str, blocks: int, bilingual: bool) -> None:
         if not 0 < end - start < 300:
             raise ValueError(f"时长异常：{end - start:.2f}s")
         previous_end = end
+
+
+CONTINUATION_PREFIXES = ("-", ".", "'", chr(8217))
+
+
+def normalize_tokens(text: str) -> list[str]:
+    """小写、去标点、把被拆开的续接词并回前一个词。"""
+    merged: list[str] = []
+    for raw in text.split():
+        if merged and raw[:1] in CONTINUATION_PREFIXES:
+            merged[-1] += raw
+        else:
+            merged.append(raw)
+    cleaned = (re.sub(r"[^a-z0-9]", "", token.lower()) for token in merged)
+    return [token for token in cleaned if token]
+
+
+def cue_token_spans(cues) -> tuple[list[str], list[tuple[int, int]]]:
+    tokens: list[str] = []
+    spans: list[tuple[int, int]] = []
+    for cue in cues:
+        start = len(tokens)
+        tokens.extend(normalize_tokens(cue["en"]))
+        spans.append((start, len(tokens)))
+    return tokens, spans
+
+
+def map_stream(pods: list[str], ours: list[str]) -> tuple[dict[int, int], float]:
+    """全局序列对齐：equal 块一一对应，replace 块按比例对应，insert/delete 不给映射。"""
+    from difflib import SequenceMatcher
+
+    matcher = SequenceMatcher(None, pods, ours, autojunk=False)
+    mapping: dict[int, int] = {}
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            for offset in range(i2 - i1):
+                mapping[i1 + offset] = j1 + offset
+        elif tag == "replace" and j2 > j1:
+            for offset in range(i2 - i1):
+                mapped = j1 + int((offset + 0.5) * (j2 - j1) / (i2 - i1))
+                mapping[i1 + offset] = min(mapped, j2 - 1)
+    return mapping, matcher.ratio()
