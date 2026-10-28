@@ -1280,6 +1280,50 @@ def is_valid_bilingual_vtt(path: Path) -> bool:
     return total > 0 and bilingual / total >= MIN_BILINGUAL_RATIO
 
 
+# -------------------- 回填分片与候选筛选 --------------------
+def shard_of(identity: str, shards: int) -> int:
+    """把一集稳定地分到某个分片。
+
+    用 sha1 而不是内置 hash()：后者每个进程加盐，跨进程会漂移导致同一集
+    被两个分片重复处理或被漏掉。
+    """
+    digest = hashlib.sha1(identity.encode("utf-8")).hexdigest()
+    return int(digest, 16) % max(1, shards)
+
+
+def needs_backfill(vtt_path: Path, sidecar_path: Path) -> bool:
+    """只有「有效双语 VTT 且 sidecar 未完成、且尝试次数未达上限」才要回填。"""
+    if not vtt_path.exists() or not is_valid_bilingual_vtt(vtt_path):
+        return False
+    complete, attempts = sidecar_status(sidecar_path)
+    return not complete and attempts < BACKFILL_MAX_ATTEMPTS
+
+
+def build_backfill_candidates(entries, records) -> list[dict[str, Any]]:
+    """把 feed 条目与现有记录 join 成待回填清单（identity/title/audio_url/vtt_path）。"""
+    candidates = []
+    for entry in entries:
+        audio_url = get_entry_audio_url(entry)
+        if not audio_url:
+            continue
+        identity = entry_identity(entry, audio_url)
+        record = records.get(identity)
+        if not record or not record.get("path"):
+            continue
+        vtt_path = SITE_DIR / record["path"]
+        if not needs_backfill(vtt_path, sidecar_path_for(vtt_path)):
+            continue
+        candidates.append(
+            {
+                "identity": identity,
+                "title": record.get("title") or "",
+                "audio_url": audio_url,
+                "vtt_path": vtt_path,
+            }
+        )
+    return candidates
+
+
 # -------------------- 增强 RSS / HTML --------------------
 def find_item_guid(item: etree._Element) -> str:
     guid = item.xpath("./*[local-name()='guid']")

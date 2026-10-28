@@ -768,5 +768,93 @@ class SidecarStatusTests(unittest.TestCase):
         self.assertEqual(transcriber.sidecar_path_for(vtt).name, "Ep 1.json")
 
 
+class BackfillSelectionTests(unittest.TestCase):
+    def test_shard_is_stable_and_in_range(self):
+        first = transcriber.shard_of("guid-1", 20)
+        self.assertEqual(first, transcriber.shard_of("guid-1", 20))
+        self.assertTrue(0 <= first < 20)
+        self.assertNotEqual(
+            [transcriber.shard_of(f"guid-{i}", 20) for i in range(20)],
+            [0] * 20,
+            "分片必须真的分散，不能全落一片",
+        )
+
+    def test_shard_does_not_depend_on_process_hash_seed(self):
+        # 分片必须跨进程稳定，因此不能用内置 hash()（每个进程加盐）。
+        expected = int(
+            hashlib.sha1("guid-1".encode("utf-8")).hexdigest(), 16
+        ) % 20
+        self.assertEqual(transcriber.shard_of("guid-1", 20), expected)
+
+    def test_needs_backfill_only_for_valid_vtt_without_complete_sidecar(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            vtt = Path(temp_dir) / "Ep.vtt"
+            sidecar = Path(temp_dir) / "Ep.json"
+            self.assertFalse(transcriber.needs_backfill(vtt, sidecar), "没有 VTT 不是回填对象")
+            vtt.write_text("WEBVTT\n\n1\n00:00:00.000 --> 00:00:01.000\nhi\n", encoding="utf-8")
+            with patch.object(transcriber, "is_valid_bilingual_vtt", return_value=True):
+                self.assertTrue(transcriber.needs_backfill(vtt, sidecar))
+                sidecar.write_text(json.dumps({"complete": True, "attempts": 1}), encoding="utf-8")
+                self.assertFalse(transcriber.needs_backfill(vtt, sidecar))
+                sidecar.write_text(json.dumps({"complete": False, "attempts": 2}), encoding="utf-8")
+                self.assertFalse(
+                    transcriber.needs_backfill(vtt, sidecar), "连续失败两次的集不再重试"
+                )
+
+    def test_needs_backfill_rejects_invalid_vtt_even_without_sidecar(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            vtt = Path(temp_dir) / "english.vtt"
+            sidecar = Path(temp_dir) / "english.json"
+            vtt.write_text(
+                "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHello\nThere\n",
+                encoding="utf-8",
+            )
+            self.assertFalse(transcriber.needs_backfill(vtt, sidecar))
+
+    def test_candidates_join_feed_entries_with_records(self):
+        entry = SimpleNamespace(
+            id="g1", title="Ep", published="",
+            enclosures=[{"href": "https://cdn.test/a.mp3", "type": "audio/mpeg"}],
+            links=[],
+        )
+        records = {"g1": {"identity": "g1", "path": "pod/transcripts/Ep.vtt", "title": "Ep"}}
+        with patch.object(transcriber, "SITE_DIR", Path("site")), patch.object(
+            transcriber, "needs_backfill", return_value=True
+        ):
+            got = transcriber.build_backfill_candidates([entry], records)
+        self.assertEqual(len(got), 1)
+        self.assertEqual(got[0]["identity"], "g1")
+        self.assertEqual(got[0]["title"], "Ep")
+        self.assertEqual(got[0]["audio_url"], "https://cdn.test/a.mp3")
+        self.assertEqual(got[0]["vtt_path"], Path("site") / "pod/transcripts/Ep.vtt")
+
+    def test_candidates_skip_entries_without_audio_or_record(self):
+        no_audio = SimpleNamespace(id="g2", title="No audio", published="", enclosures=[], links=[])
+        entry = SimpleNamespace(
+            id="g1", title="Ep", published="",
+            enclosures=[{"href": "https://cdn.test/a.mp3", "type": "audio/mpeg"}],
+            links=[],
+        )
+        records = {"g1": {"identity": "g1", "path": "pod/transcripts/Ep.vtt", "title": "Ep"}}
+        with patch.object(transcriber, "SITE_DIR", Path("site")), patch.object(
+            transcriber, "needs_backfill", return_value=True
+        ):
+            got = transcriber.build_backfill_candidates([no_audio, entry], records)
+        self.assertEqual([c["identity"] for c in got], ["g1"])
+
+    def test_candidates_skip_records_without_path(self):
+        entry = SimpleNamespace(
+            id="g1", title="Ep", published="",
+            enclosures=[{"href": "https://cdn.test/a.mp3", "type": "audio/mpeg"}],
+            links=[],
+        )
+        records = {"g1": {"identity": "g1", "path": "", "title": "Ep"}}
+        with patch.object(transcriber, "SITE_DIR", Path("site")), patch.object(
+            transcriber, "needs_backfill", return_value=True
+        ):
+            got = transcriber.build_backfill_candidates([entry], records)
+        self.assertEqual(got, [])
+
+
 if __name__ == "__main__":
     unittest.main()
