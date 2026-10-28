@@ -1606,23 +1606,41 @@ def process_episode(
     identity: str,
     audio_url: str,
     path_owner: dict[str, str] | None = None,
+    force: bool = False,
+    output_path: Path | None = None,
 ) -> tuple[dict[str, str], dict[str, Any]]:
+    """转录音集并写出双语 VTT 与逐词时间轴。
+
+    ``force=True`` 忽略已存在的字幕重新转录；失败的尝试不会留下半成品文件
+    （VTT 与 sidecar 都是原子替换），并写下 ``complete:false`` 的 sidecar 记账
+    （attempts 递增）后重新抛出。
+
+    ``output_path`` 由调用方拥有时（例如按 state 里既有文件名回填）直接使用，
+    不再按标题推导文件名，也不加同标题后缀。
+    """
     title = clean_text(getattr(entry, "title", "") or "Untitled episode")
     published = clean_text(
         getattr(entry, "published", "") or getattr(entry, "updated", "") or ""
     )
-    filename = safe_filename(title)
-    transcript_path = TRANSCRIPT_DIR / f"{filename}.vtt"
-    relative_path = transcript_path.relative_to(SITE_DIR).as_posix()
-    owner = (path_owner or {}).get(relative_path)
-    if owner and owner != identity:
-        # Two episodes with the same title must not share one transcript.
-        # Existing files/state records keep working; only the collision gets a
-        # stable identity suffix.
-        suffix = hashlib.sha1(identity.encode("utf-8")).hexdigest()[:8]
-        filename = f"{safe_filename(title, 100)}_{suffix}"
+    if output_path is not None:
+        transcript_path = output_path
+    else:
+        filename = safe_filename(title)
         transcript_path = TRANSCRIPT_DIR / f"{filename}.vtt"
-    if transcript_path.exists() and is_valid_bilingual_vtt(transcript_path):
+        relative_path = transcript_path.relative_to(SITE_DIR).as_posix()
+        owner = (path_owner or {}).get(relative_path)
+        if owner and owner != identity:
+            # Two episodes with the same title must not share one transcript.
+            # Existing files/state records keep working; only the collision gets a
+            # stable identity suffix.
+            suffix = hashlib.sha1(identity.encode("utf-8")).hexdigest()[:8]
+            filename = f"{safe_filename(title, 100)}_{suffix}"
+            transcript_path = TRANSCRIPT_DIR / f"{filename}.vtt"
+    if (
+        not force
+        and transcript_path.exists()
+        and is_valid_bilingual_vtt(transcript_path)
+    ):
         log.debug("完整双语字幕已存在，复用：%s", transcript_path)
         record = {
             "identity": identity,
@@ -1641,21 +1659,22 @@ def process_episode(
     suffix = Path(urlparse(audio_url).path).suffix.lower()
     if suffix not in {".mp3", ".m4a", ".aac", ".wav", ".ogg", ".opus", ".flac", ".mp4"}:
         suffix = ".audio"
-    with tempfile.TemporaryDirectory(prefix="podcast-audio-") as temp_dir:
-        audio_path = Path(temp_dir) / f"episode{suffix}"
-        proxy_info = download_audio(audio_url, audio_path)
-        cues, audio_seconds = whisper_transcribe(audio_path)
-    cues = translate_cues_with_gemini(cues)
-    if any(not c.get("en") or not c.get("zh") for c in cues):
-        raise RuntimeError("字幕校验失败：存在空的英文或中文条目")
-    write_bilingual_vtt(cues, transcript_path)
+    sidecar = sidecar_path_for(transcript_path)
     try:
-        write_word_timings(
-            cues, TIMING_DIR / f"{transcript_path.stem}.json", audio_seconds
-        )
+        with tempfile.TemporaryDirectory(prefix="podcast-audio-") as temp_dir:
+            audio_path = Path(temp_dir) / f"episode{suffix}"
+            proxy_info = download_audio(audio_url, audio_path)
+            cues, audio_seconds = whisper_transcribe(audio_path)
+        cues = translate_cues_with_gemini(cues)
+        if any(not c.get("en") or not c.get("zh") for c in cues):
+            raise RuntimeError("字幕校验失败：存在空的英文或中文条目")
+        write_bilingual_vtt(cues, transcript_path)
+        # sidecar 现在是回填断点，写失败必须显式失败，不能吞掉。
+        write_word_timings(cues, sidecar, audio_seconds)
     except Exception:
-        # 逐词时间轴是附加产物；写不出来不能连累已经生成好的双语字幕。
-        log.exception("逐词时间轴写出失败：%s", transcript_path.stem)
+        _, previous_attempts = sidecar_status(sidecar)
+        write_sidecar_failure(sidecar, attempts=previous_attempts + 1)
+        raise
     record = {
         "identity": identity,
         "title": title,

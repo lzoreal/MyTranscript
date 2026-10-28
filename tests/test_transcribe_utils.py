@@ -234,6 +234,125 @@ class EpisodeFilenameTests(unittest.TestCase):
         )
 
 
+class ForceRetranscribeTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.site_dir = Path(self.temp_dir.name) / "site"
+        self.transcript_dir = self.site_dir / "pod" / "transcripts"
+        self.transcript_dir.mkdir(parents=True)
+        self.patches = [
+            patch.object(transcriber, "SITE_DIR", self.site_dir),
+            patch.object(transcriber, "TRANSCRIPT_DIR", self.transcript_dir),
+            patch.object(transcriber, "TIMING_DIR", self.site_dir / "pod" / "timings"),
+        ]
+        for item in self.patches:
+            item.start()
+        self.entry = SimpleNamespace(title="Ep", published="")
+        self.cues = [{"start": 0.0, "end": 1.0, "en": "Hello", "zh": "你好",
+                      "words": [{"w": "Hello", "s": 0.0, "e": 1.0}]}]
+
+    def tearDown(self):
+        for item in reversed(self.patches):
+            item.stop()
+        self.temp_dir.cleanup()
+
+    def test_force_rewrites_existing_vtt_and_sidecar(self):
+        existing = self.transcript_dir / "Ep.vtt"
+        transcriber.write_bilingual_vtt(
+            [{"start": 0.0, "end": 1.0, "en": "Old", "zh": "旧"}], existing
+        )
+        with patch.object(transcriber, "download_audio", return_value={}), patch.object(
+            transcriber, "whisper_transcribe", return_value=(self.cues, 42.0)
+        ), patch.object(transcriber, "translate_cues_with_gemini", return_value=self.cues):
+            transcriber.process_episode(
+                self.entry, "g1", "https://cdn.test/a.mp3", {}, force=True
+            )
+        self.assertIn("Hello", existing.read_text(encoding="utf-8"))
+        sidecar = self.site_dir / "pod" / "timings" / "Ep.json"
+        self.assertEqual(transcriber.sidecar_status(sidecar), (True, 1))
+
+    def test_force_failure_records_attempt_and_keeps_old_vtt(self):
+        existing = self.transcript_dir / "Ep.vtt"
+        transcriber.write_bilingual_vtt(
+            [{"start": 0.0, "end": 1.0, "en": "Old", "zh": "旧"}], existing
+        )
+        with patch.object(transcriber, "download_audio", return_value={}), patch.object(
+            transcriber, "whisper_transcribe", side_effect=RuntimeError("boom")
+        ):
+            with self.assertRaises(RuntimeError):
+                transcriber.process_episode(
+                    self.entry, "g1", "https://cdn.test/a.mp3", {}, force=True
+                )
+        self.assertIn("Old", existing.read_text(encoding="utf-8"), "老 VTT 必须原样保留")
+        sidecar = self.site_dir / "pod" / "timings" / "Ep.json"
+        self.assertEqual(transcriber.sidecar_status(sidecar), (False, 1))
+
+    def test_force_failure_after_an_earlier_failure_increments_attempts(self):
+        sidecar = self.site_dir / "pod" / "timings" / "Ep.json"
+        transcriber.write_sidecar_failure(sidecar, attempts=1)
+        with patch.object(transcriber, "download_audio", return_value={}), patch.object(
+            transcriber, "whisper_transcribe", side_effect=RuntimeError("boom")
+        ):
+            with self.assertRaises(RuntimeError):
+                transcriber.process_episode(
+                    self.entry, "g1", "https://cdn.test/a.mp3", {}, force=True
+                )
+        self.assertEqual(transcriber.sidecar_status(sidecar), (False, 2))
+
+    def test_without_force_existing_vtt_is_reused(self):
+        existing = self.transcript_dir / "Ep.vtt"
+        transcriber.write_bilingual_vtt(
+            [{"start": 0.0, "end": 1.0, "en": "Old", "zh": "旧"}], existing
+        )
+        with patch.object(
+            transcriber, "download_audio", side_effect=AssertionError("不应下载")
+        ):
+            transcriber.process_episode(self.entry, "g1", "https://cdn.test/a.mp3", {})
+
+    def test_force_with_explicit_output_path_uses_that_stem(self):
+        # 109/119 的既有 hwmym 文件名与标题推导名不一致：force 重转必须写到
+        # 调用方给的路径，否则会多出一份文件、旧文件永远没有 sidecar。
+        target = self.transcript_dir / "Original Name.vtt"
+        transcriber.write_bilingual_vtt(
+            [{"start": 0.0, "end": 1.0, "en": "Old", "zh": "旧"}], target
+        )
+        with patch.object(transcriber, "download_audio", return_value={}), patch.object(
+            transcriber, "whisper_transcribe", return_value=(self.cues, 42.0)
+        ), patch.object(transcriber, "translate_cues_with_gemini", return_value=self.cues):
+            record, _ = transcriber.process_episode(
+                self.entry,
+                "g1",
+                "https://cdn.test/a.mp3",
+                {},
+                force=True,
+                output_path=target,
+            )
+        self.assertIn("Hello", target.read_text(encoding="utf-8"))
+        self.assertEqual(record["path"], "pod/transcripts/Original Name.vtt")
+        sidecar = self.site_dir / "pod" / "timings" / "Original Name.json"
+        self.assertEqual(transcriber.sidecar_status(sidecar), (True, 1))
+        self.assertFalse(
+            (self.transcript_dir / "Ep.vtt").exists(), "不能另外写出标题推导名的文件"
+        )
+
+    def test_explicit_output_path_skips_title_collision_suffix(self):
+        target = self.transcript_dir / "Original Name.vtt"
+        owner = {"pod/transcripts/Original Name.vtt": "guid-1"}
+        with patch.object(transcriber, "download_audio", return_value={}), patch.object(
+            transcriber, "whisper_transcribe", return_value=(self.cues, 42.0)
+        ), patch.object(transcriber, "translate_cues_with_gemini", return_value=self.cues):
+            record, _ = transcriber.process_episode(
+                self.entry,
+                "guid-2",
+                "https://cdn.test/a.mp3",
+                owner,
+                force=True,
+                output_path=target,
+            )
+        self.assertEqual(record["path"], "pod/transcripts/Original Name.vtt")
+        self.assertTrue(target.exists())
+
+
 class RootIndexTests(unittest.TestCase):
     def test_root_index_percent_encodes_slug(self):
         with tempfile.TemporaryDirectory() as temp_dir:
