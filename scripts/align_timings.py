@@ -48,3 +48,23 @@ def group_cues(cues: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
     if current:
         groups.append(current)
     return groups
+
+
+PAD = 3.0
+TAIL_PAD = 8.0
+NOMINAL_CPS = 15.0
+SLOWEST_CPS = 4.0
+
+
+def cue_span(cue: dict[str, Any]) -> float:
+    """本句语音时长的合理上界：取声明时长与按字数估算的交集，再用最慢语速兜底。"""
+    declared = max(0.0, cue["end"] - cue["start"])
+    natural = len(cue["en"]) / NOMINAL_CPS
+    ceiling = len(cue["en"]) / SLOWEST_CPS + 5.0
+    return min(max(declared, natural), ceiling)
+
+
+def window_for(group: list[dict[str, Any]], total_seconds: float) -> tuple[float, float]:
+    lo = max(0.0, group[0]["start"] - PAD)
+    hi = min(total_seconds, max(cue["start"] + cue_span(cue) for cue in group) + TAIL_PAD)
+    return lo, hi
