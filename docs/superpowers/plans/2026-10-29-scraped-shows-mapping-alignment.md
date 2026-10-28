@@ -14,7 +14,7 @@
 
 - 阈值（与 spec 逐字一致）：`BODY_MIN_COVERAGE = 0.70`、`PARTIAL_MIN_COVERAGE = 0.30`、`MAX_DROP_RATIO = 0.25`、`MIN_TOKENS_TO_DROP = 5`、`MIN_TEXT_SIMILARITY = 0.85`、`MIN_BODY_RATIO = 0.70`。
 - **展示文本不变**：只删除广告块与改时间，正文英文/中文文本逐字保留。
-- **两套字幕一起重写**：`transcripts/<stem>.vtt` 与 `transcripts/zh/<stem>.vtt` 按同样块下标删除、用同样新时间；写前校验两份块数一致；zh 文件缺失则只写双语版并记一行日志。
+- **两套字幕一起重写**（实测形态）：`transcripts/<stem>.vtt` 为英文单语（3 行/块），`transcripts/zh/<stem>.vtt` 为中英双语（4 行/块）；两者按**原始块下标**删除、用同样新时间；中文按原始下标取（不能按保留序号取）；写前校验两份块数一致；zh 文件缺失则只写英文版。
 - **不写** `state.json` / `feed.xml` / `feed-zh.xml` / `index.html` / `progress.json`。
 - sidecar 结构不变（与 hwmym 同构）：`{episode, audio_seconds, complete, attempts, segments:[{start,end,speaker,text,words:[[词,起始ms,时长ms]]}]}`；`segments[i]` 对应**重写后**第 i 条 cue。
 - 断点 = sidecar：`complete:true` 跳过；`attempts >= 2` 不再重试；放弃本集时只写 `complete:false` + `attempts+1`，不动任何已发布文件。
