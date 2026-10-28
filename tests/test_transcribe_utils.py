@@ -271,6 +271,66 @@ class ForceRetranscribeTests(unittest.TestCase):
         sidecar = self.site_dir / "pod" / "timings" / "Ep.json"
         self.assertEqual(transcriber.sidecar_status(sidecar), (True, 1))
 
+    def test_quota_pause_propagates_without_writing_a_sidecar(self):
+        # 配额暂停不是这一集的失败：写了 complete:false 就会把它算进
+        # BACKFILL_MAX_ATTEMPTS，两轮之后这集永久退出回填候选。
+        target = self.transcript_dir / "Ep.vtt"
+        transcriber.write_bilingual_vtt(
+            [{"start": 0.0, "end": 1.0, "en": "Old", "zh": "旧"}], target
+        )
+        old_bytes = target.read_bytes()
+        with patch.object(transcriber, "download_audio", return_value={}), patch.object(
+            transcriber, "whisper_transcribe", return_value=(self.cues, 42.0)
+        ), patch.object(
+            transcriber,
+            "translate_cues_with_gemini",
+            side_effect=transcriber.QuotaExhausted("done for today"),
+        ):
+            with self.assertRaises(transcriber.QuotaExhausted):
+                transcriber.process_episode(
+                    self.entry,
+                    "g1",
+                    "https://cdn.test/a.mp3",
+                    {},
+                    force=True,
+                    output_path=target,
+                )
+        sidecar = self.site_dir / "pod" / "timings" / "Ep.json"
+        self.assertFalse(sidecar.exists(), "配额暂停不能写失败 sidecar")
+        self.assertEqual(target.read_bytes(), old_bytes, "旧 VTT 必须原样保留")
+        self.assertTrue(
+            transcriber.needs_backfill(target, sidecar),
+            "配额暂停之后这集必须还留在回填候选里",
+        )
+
+    def test_quota_pause_leaves_an_existing_sidecar_untouched(self):
+        target = self.transcript_dir / "Ep.vtt"
+        transcriber.write_bilingual_vtt(
+            [{"start": 0.0, "end": 1.0, "en": "Old", "zh": "旧"}], target
+        )
+        sidecar = self.site_dir / "pod" / "timings" / "Ep.json"
+        transcriber.write_sidecar_failure(sidecar, attempts=1)
+        before = sidecar.read_bytes()
+        with patch.object(transcriber, "download_audio", return_value={}), patch.object(
+            transcriber, "whisper_transcribe", return_value=(self.cues, 42.0)
+        ), patch.object(
+            transcriber,
+            "translate_cues_with_gemini",
+            side_effect=transcriber.QuotaExhausted("done for today"),
+        ):
+            with self.assertRaises(transcriber.QuotaExhausted):
+                transcriber.process_episode(
+                    self.entry,
+                    "g1",
+                    "https://cdn.test/a.mp3",
+                    {},
+                    force=True,
+                    output_path=target,
+                )
+        self.assertEqual(sidecar.read_bytes(), before, "配额暂停不能改已有 sidecar")
+        self.assertEqual(transcriber.sidecar_status(sidecar), (False, 1))
+        self.assertTrue(transcriber.needs_backfill(target, sidecar))
+
     def test_force_failure_records_attempt_and_keeps_old_vtt(self):
         existing = self.transcript_dir / "Ep.vtt"
         transcriber.write_bilingual_vtt(
@@ -1128,6 +1188,22 @@ class RunBackfillTests(unittest.TestCase):
         self.assertEqual(stats["done"], 0)
         self.assertTrue(stats["quota"])
 
+    def test_quota_pause_stops_the_shard_without_counting_a_failure(self):
+        calls = []
+
+        def process(item):
+            calls.append(item["identity"])
+            raise transcriber.QuotaExhausted("done for today")
+
+        stats = transcriber.run_backfill(
+            self.items(3), shard=0, shards=1, max_minutes=10,
+            process=process, clock=lambda: 0.0,
+        )
+        self.assertEqual(len(calls), 1, "配额耗尽后不能再碰下一集")
+        self.assertTrue(stats["quota"])
+        self.assertEqual(stats["failed"], 0, "配额暂停不能算成失败")
+        self.assertEqual(stats["done"], 0)
+
     def test_single_episode_failure_does_not_stop_the_shard(self):
         calls = []
 
@@ -1168,7 +1244,9 @@ class RunBackfillTests(unittest.TestCase):
             )
             return {"path": "pod/transcripts/Old Name.vtt"}, {}
 
-        with patch.object(transcriber, "process_episode", fake_process_episode):
+        with patch.object(transcriber, "process_episode", fake_process_episode), patch.object(
+            transcriber, "SITE_DIR", Path("site")
+        ):
             transcriber.process_backfill_item(item)
 
         self.assertTrue(seen["force"])
@@ -1177,6 +1255,24 @@ class RunBackfillTests(unittest.TestCase):
         self.assertEqual(seen["identity"], "guid-0")
         self.assertEqual(seen["audio_url"], "u")
         self.assertEqual(seen["title"], "Ep 0")
+
+    def test_path_drift_raises_instead_of_reporting_success(self):
+        # 产出写到别处却报成功，比这一集失败更糟：必须抛错让 run_backfill 记 failed。
+        item = self.items(1)[0]
+        item["vtt_path"] = Path("site") / "pod" / "transcripts" / "Old Name.vtt"
+
+        def fake_process_episode(entry, identity, audio_url, **kwargs):
+            return {"path": "pod/transcripts/Other Name.vtt"}, {}
+
+        with patch.object(transcriber, "process_episode", fake_process_episode), patch.object(
+            transcriber, "SITE_DIR", Path("site")
+        ):
+            with self.assertRaises(RuntimeError) as caught:
+                transcriber.process_backfill_item(item)
+
+        message = str(caught.exception)
+        self.assertIn("Old Name.vtt", message)
+        self.assertIn("Other Name.vtt", message)
 
 
 if __name__ == "__main__":

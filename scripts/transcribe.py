@@ -1354,6 +1354,8 @@ def process_backfill_item(item: dict[str, Any]) -> None:
 
     ``output_path`` 必须显式传给 process_episode：多数既有文件名与标题推导名
     不一致，按标题推导会另写一份新文件，旧文件永远拿不到 sidecar。
+    ``process_episode`` 回报的路径一旦与候选不一致就抛错，不把「写到别处」
+    当成成功。
     """
     entry = SimpleNamespace(
         title=item["title"], published="", id=item["identity"], guid=item["identity"]
@@ -1367,9 +1369,9 @@ def process_backfill_item(item: dict[str, Any]) -> None:
         output_path=item["vtt_path"],
     )
     if (SITE_DIR / record["path"]) != item["vtt_path"]:
-        # 有 output_path 时正常不会触发；留着是防 process_episode 再次改行为。
-        log.warning(
-            "回填产出路径与预期不一致：%s → %s", item["vtt_path"], record["path"]
+        # 产出写到别处却报成功，比这一集失败更糟：抛错让 run_backfill 记 failed。
+        raise RuntimeError(
+            f"回填产出路径与预期不一致：{item['vtt_path']} → {record['path']}"
         )
 
 
@@ -1691,6 +1693,9 @@ def process_episode(
     （快照 + 原子替换），并且只在旧 sidecar 未完成时写下 ``complete:false``
     的记账（attempts 递增），已完成的 sidecar 保持不动；随后重新抛出异常。
 
+    ``QuotaExhausted`` 是暂停而不是失败：直接向上抛出，不动 sidecar 记账，
+    否则重试计数会把这一集永久挤出回填候选。
+
     ``output_path`` 由调用方拥有时（例如按 state 里既有文件名回填）直接使用，
     不再按标题推导文件名，也不加同标题后缀。
     """
@@ -1749,7 +1754,7 @@ def process_episode(
         write_bilingual_vtt(cues, transcript_path)
         # sidecar 现在是回填断点，写失败必须显式失败，不能吞掉。
         write_word_timings(cues, sidecar, audio_seconds)
-    except Exception:
+    except Exception as exc:
         try:
             current_vtt = snapshot_file_bytes(transcript_path)
             if previous_vtt is not None and current_vtt != previous_vtt:
@@ -1757,6 +1762,11 @@ def process_episode(
                 log.warning("本次尝试失败，已恢复旧字幕：%s", transcript_path)
         except Exception:
             log.exception("恢复旧字幕失败：%s", transcript_path)
+        if isinstance(exc, QuotaExhausted):
+            # 配额暂停不是这一集的失败：一次都不许记 attempts，否则两轮之后
+            # needs_backfill 就把这集永久踢出候选，暂停等于丢进度。
+            log.warning("Gemini 配额耗尽，暂停转录且不计失败：%s", transcript_path)
+            raise
         try:
             complete, previous_attempts = sidecar_status(sidecar)
             if complete:
