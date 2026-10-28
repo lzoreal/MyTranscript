@@ -1,6 +1,7 @@
 import hashlib
 import importlib.util
 import json
+import os
 import sys
 import tempfile
 import types
@@ -1273,6 +1274,86 @@ class RunBackfillTests(unittest.TestCase):
         message = str(caught.exception)
         self.assertIn("Old Name.vtt", message)
         self.assertIn("Other Name.vtt", message)
+
+
+class BackfillEnvTests(unittest.TestCase):
+    def backfill_env(self, **overrides):
+        """只留测试给的 BACKFILL_*，避免本机环境变量渗进断言。"""
+        env = {
+            key: value
+            for key, value in os.environ.items()
+            if not key.startswith("BACKFILL_")
+        }
+        env.update(overrides)
+        return patch.dict(os.environ, env, clear=True)
+
+    def test_env_is_none_without_shard(self):
+        with self.backfill_env():
+            self.assertIsNone(transcriber.backfill_env())
+
+    def test_blank_shard_is_not_backfill_mode(self):
+        with self.backfill_env(BACKFILL_SHARD="   "):
+            self.assertIsNone(transcriber.backfill_env())
+
+    def test_env_reads_and_validates(self):
+        with self.backfill_env(
+            BACKFILL_SHARD="3", BACKFILL_SHARDS="20", BACKFILL_MAX_MINUTES="90"
+        ):
+            self.assertEqual(
+                transcriber.backfill_env(),
+                {"shard": 3, "shards": 20, "max_minutes": 90.0},
+            )
+
+    def test_env_defaults_match_the_documented_shard_plan(self):
+        with self.backfill_env(BACKFILL_SHARD="0"):
+            self.assertEqual(
+                transcriber.backfill_env(),
+                {"shard": 0, "shards": 20, "max_minutes": 280.0},
+            )
+
+    def test_bad_env_raises(self):
+        with self.backfill_env(BACKFILL_SHARD="x"):
+            with self.assertRaises(ValueError):
+                transcriber.backfill_env()
+        with self.backfill_env(BACKFILL_SHARD="5", BACKFILL_SHARDS="4"):
+            with self.assertRaises(ValueError):
+                transcriber.backfill_env()
+
+    def test_non_numeric_shards_and_budget_raise(self):
+        with self.backfill_env(BACKFILL_SHARD="1", BACKFILL_SHARDS="many"):
+            with self.assertRaises(ValueError):
+                transcriber.backfill_env()
+        with self.backfill_env(BACKFILL_SHARD="1", BACKFILL_MAX_MINUTES="hour"):
+            with self.assertRaises(ValueError):
+                transcriber.backfill_env()
+
+    def test_negative_shard_raises(self):
+        with self.backfill_env(BACKFILL_SHARD="-1", BACKFILL_SHARDS="4"):
+            with self.assertRaises(ValueError):
+                transcriber.backfill_env()
+
+    def test_zero_or_negative_shards_raise(self):
+        for shards in ("0", "-3"):
+            with self.subTest(shards=shards), self.backfill_env(
+                BACKFILL_SHARD="0", BACKFILL_SHARDS=shards
+            ):
+                with self.assertRaises(ValueError):
+                    transcriber.backfill_env()
+
+    def test_non_positive_budget_raises(self):
+        for minutes in ("0", "-5"):
+            with self.subTest(minutes=minutes), self.backfill_env(
+                BACKFILL_SHARD="0", BACKFILL_MAX_MINUTES=minutes
+            ):
+                with self.assertRaises(ValueError):
+                    transcriber.backfill_env()
+
+    def test_error_message_names_the_bad_config(self):
+        with self.backfill_env(BACKFILL_SHARD="7", BACKFILL_SHARDS="4"):
+            with self.assertRaises(ValueError) as caught:
+                transcriber.backfill_env()
+        self.assertIn("7", str(caught.exception))
+        self.assertIn("4", str(caught.exception))
 
 
 if __name__ == "__main__":

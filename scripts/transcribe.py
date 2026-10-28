@@ -1316,6 +1316,25 @@ def needs_backfill(vtt_path: Path, sidecar_path: Path) -> bool:
     return not complete and attempts < BACKFILL_MAX_ATTEMPTS
 
 
+def backfill_env() -> dict[str, Any] | None:
+    """回填模式由环境变量开启；没设 BACKFILL_SHARD 就是正常模式。
+
+    分片数量和预算只在回填模式里解析：正常模式不该因为一个残留的
+    BACKFILL_SHARDS 拼写错误而整轮启动失败。
+    """
+    raw_shard = os.getenv("BACKFILL_SHARD", "").strip()
+    if not raw_shard:
+        return None
+    shard = int(raw_shard)
+    shards = int(os.getenv("BACKFILL_SHARDS", "20").strip() or 20)
+    max_minutes = float(os.getenv("BACKFILL_MAX_MINUTES", "280").strip() or 280)
+    if shards < 1 or not 0 <= shard < shards:
+        raise ValueError(f"分片配置非法：shard={shard} shards={shards}")
+    if max_minutes <= 0:
+        raise ValueError(f"预算非法：{max_minutes} 分钟")
+    return {"shard": shard, "shards": shards, "max_minutes": max_minutes}
+
+
 def build_backfill_candidates(entries, records) -> list[dict[str, Any]]:
     """把 feed 条目与现有记录 join 成待回填清单（identity/title/audio_url/vtt_path）。
 
@@ -1826,8 +1845,8 @@ def main() -> int:
     if not FEED_URL:
         log.error("缺少 FEED_URL 环境变量")
         return 2
-    if not GEMINI_API_KEY:
-        log.error("缺少 GEMINI_API_KEY 环境变量")
+    if not GEMINI_KEYS:
+        log.error("缺少 GEMINI_API_KEYS（或 GEMINI_API_KEY）环境变量")
         return 2
     if not PODCAST_SLUG:
         log.error("缺少 PODCAST_SLUG 环境变量")
@@ -1852,6 +1871,33 @@ def main() -> int:
     if MAX_EPISODES:
         candidates = candidates[:MAX_EPISODES]
     records = migrate_legacy_records(ps, processed)
+    backfill = backfill_env()
+    if backfill is not None:
+        # 回填只补 sidecar：不写 state、不重建 feed/index，多个分片才能并行跑。
+        backfill_candidates = build_backfill_candidates(entries, records)
+        log.info(
+            "回填模式：分片 %d/%d，预算 %.0f 分钟，候选 %d 集，模型 %s，key %d 把",
+            backfill["shard"],
+            backfill["shards"],
+            backfill["max_minutes"],
+            len(backfill_candidates),
+            WHISPER_MODEL,
+            len(GEMINI_KEYS),
+        )
+        stats = run_backfill(
+            backfill_candidates,
+            shard=backfill["shard"],
+            shards=backfill["shards"],
+            max_minutes=backfill["max_minutes"],
+        )
+        log.info(
+            "回填结束：完成 %d，失败 %d，非本分片 %d，配额耗尽=%s",
+            stats["done"],
+            stats["failed"],
+            stats["skipped"],
+            stats["quota"],
+        )
+        return 0
     path_owner = {
         record["path"]: identity
         for identity, record in records.items()
