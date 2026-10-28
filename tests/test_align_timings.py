@@ -4,11 +4,31 @@ import tempfile
 import types
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).parents[1]
+
+# align_timings 复用 transcribe 的下载/sidecar；这些重依赖在测试里只需名字。
+_fw = types.ModuleType("faster_whisper")
+_fw.WhisperModel = object
+sys.modules.setdefault("faster_whisper", _fw)
+for _name in ("google", "google.genai", "google.genai.types"):
+    sys.modules.setdefault(_name, types.ModuleType(_name))
+sys.modules["google"].genai = sys.modules["google.genai"]
+sys.modules["google.genai"].types = sys.modules["google.genai.types"]
+for _attr in ("Client", "GenerateContentConfig"):
+    if not hasattr(sys.modules["google.genai"], _attr):
+        setattr(sys.modules["google.genai"], _attr, object)
+sys.modules.setdefault("feedparser", types.ModuleType("feedparser"))
+sys.path.insert(0, str(ROOT / "scripts"))
 SPEC = importlib.util.spec_from_file_location("align_timings", ROOT / "scripts" / "align_timings.py")
 aligner = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(aligner)
+
+
+VTT_SAMPLE = chr(10).join([
+    "WEBVTT", "", "1", "00:00:01.000 --> 00:00:05.000", "Hello there.", "你好。", "",
+])
 
 
 class VttParseTests(unittest.TestCase):
@@ -161,6 +181,9 @@ class FakeAudio:
     def __getitem__(self, span):
         return ("clip", span)
 
+    def __len__(self):
+        return int(self.seconds * 16000)
+
 
 class AlignCuesTests(unittest.TestCase):
     def cue(self, start, end, text):
@@ -197,6 +220,82 @@ class AlignCuesTests(unittest.TestCase):
         out, stats = aligner.align_cues(Broken(), FakeAudio(60.0), cues, 60.0)
         self.assertEqual(out[0]["words"], [])
         self.assertEqual(stats["failed_groups"], 1)
+
+
+class AlignFileTests(unittest.TestCase):
+    def setUp(self):
+        import transcribe as _t
+
+        self.transcribe = _t
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        self.site = self.root / "site"
+        self.vtt_dir = self.site / "pod" / "transcripts"
+        self.vtt_dir.mkdir(parents=True)
+        self.timing_dir = self.site / "pod" / "timings"
+        self.vtt = self.vtt_dir / "Ep.vtt"
+        self.vtt.write_text(
+            VTT_SAMPLE,
+            encoding="utf-8",
+        )
+        self.patches = [
+            mock.patch.object(self.transcribe, "TIMING_DIR", self.timing_dir),
+            mock.patch.object(self.transcribe, "PODCAST_DIR", self.site / "pod"),
+            mock.patch.object(self.transcribe, "SITE_DIR", self.site),
+        ]
+        for item in self.patches:
+            item.start()
+
+    def tearDown(self):
+        for item in reversed(self.patches):
+            item.stop()
+        self.temp.cleanup()
+
+    def fake_model(self, words):
+        class Model:
+            def align(self, clip, text, language="en", original_split=True):
+                return FakeAligned([FakeSegment(0, [FakeWord(w, s, e) for w, s, e in words])])
+
+        return Model()
+
+    def test_writes_successful_sidecar(self):
+        status = aligner.align_episode_file(
+            self.vtt, "https://cdn.test/a.mp3",
+            self.fake_model([(" Hello", 1.0, 1.4), (" there.", 1.4, 2.0)]),
+            workdir=self.root,
+            download=lambda url, path: path.write_bytes(b"x"),
+            decode=lambda path: FakeAudio(60.0),
+        )
+        self.assertEqual(status, "done")
+        self.assertEqual(
+            self.transcribe.sidecar_status(self.timing_dir / "Ep.json"), (True, 1)
+        )
+
+    def test_mismatch_writes_failure_and_bumps_attempts(self):
+        status = aligner.align_episode_file(
+            self.vtt, "https://cdn.test/a.mp3",
+            self.fake_model([(" Hello", 40.0, 40.4), (" there.", 40.4, 41.0)]),
+            workdir=self.root,
+            download=lambda url, path: path.write_bytes(b"x"),
+            decode=lambda path: FakeAudio(120.0),
+        )
+        self.assertEqual(status, "mismatch")
+        self.assertEqual(
+            self.transcribe.sidecar_status(self.timing_dir / "Ep.json"), (False, 1)
+        )
+
+    def test_download_error_is_counted_as_failure(self):
+        def boom(url, path):
+            raise RuntimeError("network down")
+
+        status = aligner.align_episode_file(
+            self.vtt, "https://cdn.test/a.mp3", self.fake_model([]),
+            workdir=self.root, download=boom, decode=lambda path: FakeAudio(60.0),
+        )
+        self.assertEqual(status, "failed")
+        self.assertEqual(
+            self.transcribe.sidecar_status(self.timing_dir / "Ep.json"), (False, 1)
+        )
 
 
 if __name__ == "__main__":
