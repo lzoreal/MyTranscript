@@ -348,6 +348,66 @@ class GeminiRotationTranslateTests(unittest.TestCase):
         self.assertFalse(transcriber.is_quota_error(TimeoutError("x")))
         self.assertTrue(transcriber.is_auth_error(_AuthError("x")))
 
+    def test_invalid_key_400_is_an_auth_error(self):
+        # google-genai 的 ClientError 真实形状：HTTP 400 + INVALID_ARGUMENT。
+        class _InvalidKey(Exception):
+            code = 400
+
+        exc = _InvalidKey(
+            "400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': "
+            "'API key not valid. Please pass a valid API key.', "
+            "'status': 'INVALID_ARGUMENT'}}"
+        )
+        self.assertTrue(
+            transcriber.is_auth_error(exc),
+            "400 + 'API key not valid' 必须触发换 key，不能走退避重试",
+        )
+        self.assertFalse(transcriber.is_quota_error(exc))
+
+    def test_invalid_key_text_is_auth_error_without_status_code(self):
+        exc = Exception("API key not valid. Please pass a valid API key.")
+        self.assertTrue(transcriber.is_auth_error(exc))
+
+    def test_api_key_invalid_literal_is_an_auth_error(self):
+        self.assertTrue(transcriber.is_auth_error(Exception("API_KEY_INVALID")))
+
+    def test_generic_400_stays_a_normal_error(self):
+        class _BadRequest(Exception):
+            code = 400
+
+        self.assertFalse(
+            transcriber.is_auth_error(_BadRequest("400 INVALID_ARGUMENT: bad JSON"))
+        )
+
+    def test_quota_rotation_consumes_no_backoff(self):
+        calls = []
+
+        class Client:
+            def __init__(self, api_key):
+                self.api_key = api_key
+
+            @property
+            def models(self):
+                return self
+
+            def generate_content(self, model, contents, config):
+                calls.append(self.api_key)
+                if self.api_key == "k1":
+                    raise _QuotaError("429 RESOURCE_EXHAUSTED")
+                return SimpleNamespace(text=json.dumps({"0": "译0"}))
+
+        ring = transcriber.GeminiKeyRing(["k1", "k2"], factory=Client)
+        translated = {}
+        with patch.object(
+            transcriber, "wait_for_gemini_rate_limit"
+        ), patch.object(transcriber.time, "sleep") as sleep:
+            transcriber.translate_blocks(
+                ring, [(0, {"en": "Hello there friend"})], translated
+            )
+        sleep.assert_not_called()
+        self.assertEqual(translated, {0: "译0"})
+        self.assertEqual(calls, ["k1", "k2"])
+
     def test_rotation_log_never_prints_the_key(self):
         class Client:
             @property
