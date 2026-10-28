@@ -79,6 +79,8 @@ def window_for(group: list[dict[str, Any]], total_seconds: float) -> tuple[float
 
 EARLY_TOLERANCE = 8.0
 LATE_TOLERANCE = 8.0
+# 单条 cue 的锚点误差实测可达 ±25 秒，时间边界必须比它宽
+CUE_TIME_TOLERANCE = 60.0
 
 
 CONTINUATION_PREFIXES = ("-", ".", "'", "’")
@@ -101,13 +103,21 @@ def _normalize(tokens: list[str]) -> list[str]:
 
 
 def tokens_match(want: list[str], got: list[str]) -> bool:
-    """归一化后比较：完全一致，或长度差 ≤1 且位置一致率 ≥98%。"""
+    """归一化后比相似度。
+
+    两边的文本来自不同 ASR（PodScripts 一次、我们对音频再一次），长段落里个别词
+    本来就不同，所以不用严格相等：序列相似度 ≥90% 且词数差不超过 5% 即视为同一段话。
+    """
     if want == got:
         return True
-    if abs(len(want) - len(got)) > 1:
+    if not want or not got:
         return False
-    same = sum(1 for a, b in zip(want, got) if a == b)
-    return same / max(len(want), 1) >= 0.98
+    tolerance = max(3, int(len(want) * 0.05))
+    if abs(len(want) - len(got)) > tolerance:
+        return False
+    from difflib import SequenceMatcher
+
+    return SequenceMatcher(None, want, got).ratio() >= 0.9
 
 
 def words_plausible(
@@ -120,11 +130,12 @@ def words_plausible(
     got = _normalize(_merge_continuations([word["w"] for word in words]))
     if not tokens_match(want, got):
         return False
+    # PodScripts 单条 cue 的起点实测可偏 ±25 秒，时间不能贴 cue 判；这里只拦
+    # 明显跑到别处的对齐，真正的防线是上面的文本相似度与整集的偏移守卫。
     first, last = words[0]["s"], words[-1]["e"]
-    if first < cue["start"] - EARLY_TOLERANCE:
+    if first < cue["start"] - CUE_TIME_TOLERANCE:
         return False
-    limit = next_start if next_start is not None else cue["start"] + LATE_TOLERANCE * 10
-    return last <= limit + LATE_TOLERANCE
+    return last <= cue["start"] + cue_span(cue) + CUE_TIME_TOLERANCE
 
 
 def cue_words(segments, group, offset: float) -> dict[int, list[dict[str, Any]]]:
@@ -191,6 +202,14 @@ def align_cues(model, audio, cues, total_seconds: float):
             result[index]["words"] = words
             stats["aligned_cues"] += 1
             offsets.append(words[0]["s"] - cue["start"])
+    if (
+        stats["groups"]
+        and not stats["aligned_cues"]
+        and not stats["failed_groups"]
+    ):
+        raise AudioMismatch(
+            f"{stats['groups']} 个窗口没有一句对齐成功：音频与转写来源可能不是同一版本"
+        )
     if offsets:
         median = statistics.median(offsets)
         stats["median_offset"] = round(median, 3)
@@ -260,6 +279,10 @@ def align_episode_file(
         print(f"{vtt_path.stem}: 对齐失败 {type(exc).__name__}: {exc}")
         transcribe.write_sidecar_failure(sidecar, transcribe.sidecar_status(sidecar)[1] + 1)
         return "failed"
+    if not stats["aligned_cues"]:
+        raise RuntimeError(
+            f"{stats['groups']} 个窗口全部对齐失败（对齐器报错），本集留给下一轮"
+        )
     transcribe.write_word_timings(aligned, sidecar, total)
     log_summary(vtt_path, stats, len(aligned))
     return "done" if stats["aligned_cues"] else "partial"
