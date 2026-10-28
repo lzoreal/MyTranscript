@@ -299,6 +299,66 @@ class ForceRetranscribeTests(unittest.TestCase):
                 )
         self.assertEqual(transcriber.sidecar_status(sidecar), (False, 2))
 
+    def test_force_failure_after_vtt_write_restores_old_vtt(self):
+        # 新 VTT 已经 replace 成功、写 sidecar 才失败：老字节必须被恢复。
+        existing = self.transcript_dir / "Ep.vtt"
+        transcriber.write_bilingual_vtt(
+            [{"start": 0.0, "end": 1.0, "en": "Old", "zh": "旧"}], existing
+        )
+        old_bytes = existing.read_bytes()
+        with patch.object(transcriber, "download_audio", return_value={}), patch.object(
+            transcriber, "whisper_transcribe", return_value=(self.cues, 42.0)
+        ), patch.object(
+            transcriber, "translate_cues_with_gemini", return_value=self.cues
+        ), patch.object(
+            transcriber, "write_word_timings", side_effect=OSError("disk full")
+        ):
+            with self.assertRaises(OSError):
+                transcriber.process_episode(
+                    self.entry, "g1", "https://cdn.test/a.mp3", {}, force=True
+                )
+        self.assertEqual(existing.read_bytes(), old_bytes, "老 VTT 必须逐字节恢复")
+        self.assertNotIn("Hello", existing.read_text(encoding="utf-8"))
+        self.assertFalse(existing.with_name("Ep.vtt.tmp").exists(), "不能留下临时文件")
+        sidecar = self.site_dir / "pod" / "timings" / "Ep.json"
+        self.assertEqual(transcriber.sidecar_status(sidecar), (False, 1))
+
+    def test_failed_force_keeps_complete_sidecar(self):
+        # 已完成的 sidecar 是既有成果：失败的 force 尝试不得把它降级成
+        # complete:false、也不能把 attempts 顶到上限。
+        existing = self.transcript_dir / "Ep.vtt"
+        transcriber.write_bilingual_vtt(
+            [{"start": 0.0, "end": 1.0, "en": "Old", "zh": "旧"}], existing
+        )
+        sidecar = self.site_dir / "pod" / "timings" / "Ep.json"
+        transcriber.write_word_timings(self.cues, sidecar, 42.0)
+        before = sidecar.read_bytes()
+        with patch.object(transcriber, "download_audio", return_value={}), patch.object(
+            transcriber, "whisper_transcribe", side_effect=RuntimeError("boom")
+        ):
+            with self.assertRaises(RuntimeError):
+                transcriber.process_episode(
+                    self.entry, "g1", "https://cdn.test/a.mp3", {}, force=True
+                )
+        self.assertEqual(sidecar.read_bytes(), before, "已完成的 sidecar 必须原样保留")
+        self.assertEqual(transcriber.sidecar_status(sidecar), (True, 1))
+        self.assertFalse(
+            transcriber.needs_backfill(existing, sidecar),
+            "已完成的 sidecar 不能被标记成需要回填",
+        )
+
+    def test_bookkeeping_failure_does_not_mask_transcription_error(self):
+        with patch.object(transcriber, "download_audio", return_value={}), patch.object(
+            transcriber, "whisper_transcribe", side_effect=RuntimeError("boom")
+        ), patch.object(
+            transcriber, "write_sidecar_failure", side_effect=OSError("no sidecar")
+        ):
+            with self.assertRaises(RuntimeError) as caught:
+                transcriber.process_episode(
+                    self.entry, "g1", "https://cdn.test/a.mp3", {}, force=True
+                )
+        self.assertEqual(str(caught.exception), "boom", "记账失败不能掩盖真实异常")
+
     def test_without_force_existing_vtt_is_reused(self):
         existing = self.transcript_dir / "Ep.vtt"
         transcriber.write_bilingual_vtt(
@@ -336,8 +396,13 @@ class ForceRetranscribeTests(unittest.TestCase):
         )
 
     def test_explicit_output_path_skips_title_collision_suffix(self):
+        # 标题推导名正好是被 guid-1 占用的名字：不给 output_path 时必然加 sha1
+        # 后缀（本次先证明碰撞是活的），给了 output_path 才证明碰撞分支被跳过。
+        self.entry.title = "Original Name"
         target = self.transcript_dir / "Original Name.vtt"
         owner = {"pod/transcripts/Original Name.vtt": "guid-1"}
+        suffix = hashlib.sha1(b"guid-2").hexdigest()[:8]
+
         with patch.object(transcriber, "download_audio", return_value={}), patch.object(
             transcriber, "whisper_transcribe", return_value=(self.cues, 42.0)
         ), patch.object(transcriber, "translate_cues_with_gemini", return_value=self.cues):
@@ -349,8 +414,27 @@ class ForceRetranscribeTests(unittest.TestCase):
                 force=True,
                 output_path=target,
             )
+
         self.assertEqual(record["path"], "pod/transcripts/Original Name.vtt")
         self.assertTrue(target.exists())
+        self.assertFalse(
+            (self.transcript_dir / f"Original Name_{suffix}.vtt").exists(),
+            "output_path 已由调用方指定，不能再加同标题后缀",
+        )
+
+        # 同一份 owner 表、同一个调用者，不给 output_path 时必须走后缀分支，
+        # 否则上面的断言即使删掉 output_path 支持也照样通过。
+        with patch.object(transcriber, "download_audio", return_value={}), patch.object(
+            transcriber, "whisper_transcribe", return_value=(self.cues, 42.0)
+        ), patch.object(transcriber, "translate_cues_with_gemini", return_value=self.cues):
+            record, _ = transcriber.process_episode(
+                self.entry, "guid-2", "https://cdn.test/a.mp3", owner, force=True
+            )
+
+        self.assertEqual(
+            record["path"], f"pod/transcripts/Original Name_{suffix}.vtt"
+        )
+        self.assertTrue((self.transcript_dir / f"Original Name_{suffix}.vtt").exists())
 
 
 class RootIndexTests(unittest.TestCase):
