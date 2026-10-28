@@ -152,6 +152,53 @@ class CueWordsTests(unittest.TestCase):
         self.assertEqual(aligner.cue_words(aligned.segments, group, offset=0.0), {})
 
 
+class FakeAudio:
+    """只支持切片，避免测试里真分配几十 MB 的 numpy 数组。"""
+
+    def __init__(self, seconds):
+        self.seconds = seconds
+
+    def __getitem__(self, span):
+        return ("clip", span)
+
+
+class AlignCuesTests(unittest.TestCase):
+    def cue(self, start, end, text):
+        return {"start": start, "end": end, "en": text}
+
+    class Model:
+        def __init__(self, words):
+            self.words = words
+
+        def align(self, clip, text, language="en", original_split=True):
+            return FakeAligned([FakeSegment(0, [FakeWord(w, s, e) for w, s, e in self.words])])
+
+    def test_aligned_words_get_absolute_times(self):
+        cues = [self.cue(100.0, 104.0, "hello there")]
+        model = self.Model([(" hello", 4.0, 4.4), (" there", 4.4, 4.9)])
+        out, stats = aligner.align_cues(model, FakeAudio(200.0), cues, 200.0)
+        self.assertAlmostEqual(out[0]["words"][0]["s"], 101.0, places=1)
+        self.assertEqual(stats["aligned_cues"], 1)
+        self.assertLess(abs(stats["median_offset"]), aligner.MISMATCH_MEDIAN)
+
+    def test_guard_trips_when_the_audio_version_differs(self):
+        cues = [self.cue(100.0, 104.0, "hello there")]
+        model = self.Model([(" hello", 60.0, 60.4), (" there", 60.4, 60.9)])
+        with self.assertRaises(aligner.AudioMismatch):
+            aligner.align_cues(model, FakeAudio(200.0), cues, 200.0)
+
+    def test_failed_group_keeps_cues_without_words(self):
+        cues = [self.cue(10.0, 14.0, "hello there")]
+
+        class Broken:
+            def align(self, *args, **kwargs):
+                raise RuntimeError("boom")
+
+        out, stats = aligner.align_cues(Broken(), FakeAudio(60.0), cues, 60.0)
+        self.assertEqual(out[0]["words"], [])
+        self.assertEqual(stats["failed_groups"], 1)
+
+
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     unittest.main()
