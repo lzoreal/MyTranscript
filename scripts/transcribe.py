@@ -38,6 +38,69 @@ FEED_URL = os.getenv("FEED_URL", "").strip()
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base.en").strip()
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+GEMINI_API_KEYS_RAW = os.getenv("GEMINI_API_KEYS", "").strip()
+
+
+def parse_gemini_keys(raw: str) -> list[str]:
+    keys: list[str] = []
+    for part in re.split(r"[,\s]+", raw or ""):
+        key = part.strip()
+        if key and key not in keys:
+            keys.append(key)
+    return keys
+
+
+GEMINI_KEYS = parse_gemini_keys(GEMINI_API_KEYS_RAW) or (
+    [GEMINI_API_KEY] if GEMINI_API_KEY else []
+)
+
+
+class QuotaExhausted(RuntimeError):
+    """所有 Gemini key 都用尽；调用方应停止本轮、下轮再续。"""
+
+
+class GeminiKeyRing:
+    """顺序轮换 key：同一时刻只用一把，耗尽就切下一把，全部耗尽即不可用。
+
+    轮换状态只活在进程内——配额按天重置，跨轮沿用会把恢复的 key 永久排除。
+    """
+
+    def __init__(self, keys: list[str], factory=None):
+        if not keys:
+            raise QuotaExhausted("没有任何可用的 Gemini key")
+        self._keys = list(keys)
+        self._clients: dict[str, Any] = {}
+        self._index = 0
+        self._factory = factory or (lambda api_key: genai.Client(api_key=api_key))
+        self.requests = 0
+
+    @property
+    def available(self) -> bool:
+        return self._index < len(self._keys)
+
+    def label(self) -> str:
+        key = self._keys[self._index]
+        tail = key[-4:] if len(key) > 4 else "****"
+        return f"#{self._index + 1}（…{tail}）"
+
+    def current(self) -> str:
+        if not self.available:
+            raise QuotaExhausted("所有 Gemini key 都已耗尽")
+        return self._keys[self._index]
+
+    def client(self):
+        if not self.available:
+            raise QuotaExhausted("所有 Gemini key 都已耗尽")
+        key = self._keys[self._index]
+        if key not in self._clients:
+            self._clients[key] = self._factory(api_key=key)
+        return self._clients[key]
+
+    def mark_exhausted(self) -> bool:
+        self._index += 1
+        return self.available
+
+
 BASE_URL = os.getenv("BASE_URL", "").rstrip("/")
 MAX_EPISODES = max(0, int(os.getenv("MAX_EPISODES", "0")))
 TRANSLATE_BATCH_SIZE = max(1, int(os.getenv("TRANSLATE_BATCH_SIZE", "50")))

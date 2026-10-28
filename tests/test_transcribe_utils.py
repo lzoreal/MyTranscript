@@ -249,6 +249,39 @@ class RootIndexTests(unittest.TestCase):
             self.assertIn('href="99%25-invisible/index.html"', page)
 
 
+class GeminiKeyRingTests(unittest.TestCase):
+    def test_parse_splits_and_dedupes(self):
+        self.assertEqual(
+            transcriber.parse_gemini_keys("k1, k2\nk3 ,k1"),
+            ["k1", "k2", "k3"],
+        )
+        self.assertEqual(transcriber.parse_gemini_keys("   "), [])
+
+    def test_ring_starts_at_first_key_and_rotates(self):
+        made = []
+        ring = transcriber.GeminiKeyRing(
+            ["key-aaaa", "key-bbbb"], factory=lambda api_key: made.append(api_key) or object()
+        )
+        self.assertEqual(ring.current(), "key-aaaa")
+        self.assertIn("aaaa", ring.label())
+        self.assertNotIn("key-aaaa", ring.label(), "日志标签不能泄露完整 key")
+        ring.client()
+        ring.client()
+        self.assertEqual(made, ["key-aaaa"], "同一个 key 只建一次 client")
+        self.assertTrue(ring.mark_exhausted())
+        self.assertEqual(ring.current(), "key-bbbb")
+        self.assertEqual(made, ["key-aaaa"])
+
+    def test_ring_raises_when_every_key_is_exhausted(self):
+        ring = transcriber.GeminiKeyRing(["only-key"], factory=lambda api_key: object())
+        self.assertFalse(ring.mark_exhausted())
+        self.assertFalse(ring.available)
+        with self.assertRaises(transcriber.QuotaExhausted):
+            ring.current()
+        with self.assertRaises(transcriber.QuotaExhausted):
+            ring.client()
+
+
 def _decode_trailing_object(prompt):
     """取出 prompt 末尾那段待翻译 JSON，用来模拟模型只看到编号和英文。"""
     start = prompt.rfind("{")
