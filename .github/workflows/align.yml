@@ -1,0 +1,130 @@
+name: Align Word Timings
+
+# 把抓取来的 VTT 对齐到音频，产出 site/<slug>/timings/*.json（与 hwmym 同构）。
+# 链在 crawl 之后自动跑；回填用 workflow_dispatch 分片派发。
+on:
+  workflow_run:
+    workflows: ["Crawl Transcripts"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "recent（最近 30 天）或 latest（每节目最新 N 集）"
+        default: "recent"
+      shard:
+        description: "本分片号（0 起）"
+        default: "0"
+      shards:
+        description: "分片总数"
+        default: "20"
+      max_minutes:
+        description: "本分片时间预算（分钟）；需小于 job 超时减去单集最长耗时"
+        default: "150"
+      latest_per_show:
+        description: "latest 模式每节目取几集"
+        default: "20"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: align-timings
+  cancel-in-progress: false
+
+jobs:
+  align:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    # 预算 150 分钟 + 单集最长约 170 分钟 < 360
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.MY_CUSTOM_PAT }}
+
+      - name: 同步到远程最新
+        run: |
+          git fetch origin
+          git checkout "${GITHUB_REF_NAME}"
+          git reset --hard "origin/${GITHUB_REF_NAME}"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-align.txt
+
+      - name: Cache whisper model
+        id: cache-model
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/models/ct2-turbo
+          key: ct2-turbo-v1
+
+      - name: Download whisper model (if cache miss)
+        if: steps.cache-model.outputs.cache-hit != 'true'
+        run: |
+          pip install --quiet huggingface_hub
+          python - <<'PY'
+          from pathlib import Path
+          from huggingface_hub import snapshot_download
+
+          target = Path("models/ct2-turbo")
+          snapshot_download("deepdml/faster-whisper-large-v3-turbo-ct2", local_dir=str(target))
+          size = (target / "model.bin").stat().st_size
+          if size < 1_000_000_000:
+              raise SystemExit(f"model.bin 异常：{size} 字节")
+          print(f"model ready: {size / 2**30:.2f} GiB")
+          PY
+
+      - name: 检查模型
+        run: |
+          for f in model.bin config.json; do
+            [ -f "models/ct2-turbo/$f" ] || { echo "::error::缺少 models/ct2-turbo/$f"; exit 1; }
+          done
+
+      - name: 对齐
+        id: align
+        continue-on-error: true
+        env:
+          WHISPER_MODEL: models/ct2-turbo
+          ALIGN_MODE: ${{ github.event.inputs.mode || 'recent' }}
+          ALIGN_SHARD: ${{ github.event.inputs.shard || '0' }}
+          ALIGN_SHARDS: ${{ github.event.inputs.shards || '20' }}
+          ALIGN_MAX_MINUTES: ${{ github.event.inputs.max_minutes || '150' }}
+          ALIGN_LATEST_PER_SHOW: ${{ github.event.inputs.latest_per_show || '20' }}
+        run: python -u scripts/align_timings.py
+
+      - name: 提交 sidecar
+        if: always()
+        env:
+          MY_PAT: ${{ secrets.MY_CUSTOM_PAT }}
+        run: |
+          git remote set-url origin "https://${MY_PAT}@github.com/${GITHUB_REPOSITORY}.git"
+          paths=""
+          for d in site/*/timings; do
+            [ -d "$d" ] && [ -n "$(ls -A "$d" 2>/dev/null)" ] && paths="$paths $d"
+          done
+          if [ -z "$paths" ]; then
+            echo "本分片没有产出 sidecar，跳过提交"
+            exit 0
+          fi
+          # shellcheck disable=SC2086
+          bash scripts/git_push_retry.sh "auto: align word timings (${GITHUB_EVENT_NAME})" \
+            $paths \
+            ':(exclude)**/*.tmp' \
+            ':(exclude)**/*.part'
+
+      - name: 失败则红
+        if: always()
+        env:
+          OUTCOME: ${{ steps.align.outcome }}
+        run: |
+          if [ "$OUTCOME" = "failure" ]; then
+            echo "::error::对齐步骤失败"
+            exit 1
+          fi
+          echo "align outcome: $OUTCOME"
