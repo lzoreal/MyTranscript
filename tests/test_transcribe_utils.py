@@ -182,6 +182,7 @@ class EpisodeFilenameTests(unittest.TestCase):
         self.patches = [
             patch.object(transcriber, "SITE_DIR", self.site_dir),
             patch.object(transcriber, "TRANSCRIPT_DIR", self.transcript_dir),
+            patch.object(transcriber, "TIMING_DIR", self.site_dir / "pod" / "timings"),
         ]
         for item in self.patches:
             item.start()
@@ -218,7 +219,7 @@ class EpisodeFilenameTests(unittest.TestCase):
         cues = [{"start": 0.0, "end": 1.0, "en": "Hello", "zh": "你好"}]
 
         with patch.object(transcriber, "download_audio", return_value={}), patch.object(
-            transcriber, "whisper_transcribe", return_value=cues
+            transcriber, "whisper_transcribe", return_value=(cues, 1.0)
         ), patch.object(transcriber, "translate_cues_with_gemini", return_value=cues):
             record, _ = transcriber.process_episode(
                 entry, "guid-2", "https://example.test/a.mp3", owner
@@ -227,6 +228,10 @@ class EpisodeFilenameTests(unittest.TestCase):
         suffix = hashlib.sha1(b"guid-2").hexdigest()[:8]
         self.assertEqual(record["path"], f"pod/transcripts/Same_{suffix}.vtt")
         self.assertTrue((self.transcript_dir / f"Same_{suffix}.vtt").exists())
+        self.assertTrue(
+            (self.site_dir / "pod" / "timings" / f"Same_{suffix}.json").exists(),
+            "逐词时间轴应与字幕同名写到 timings/",
+        )
 
 
 class RootIndexTests(unittest.TestCase):
@@ -320,6 +325,185 @@ class TranslationPairingTests(unittest.TestCase):
         with self.assertRaises(RuntimeError) as caught:
             self.run_translation([{"0"}] * 8, cues=[self.cues[0]])
         self.assertIn("Yeah.", str(caught.exception))
+
+
+class WordTimingTests(unittest.TestCase):
+    def segment(self, start, end, text, words=None):
+        seg = {"start": start, "end": end, "text": text}
+        if words is not None:
+            seg["words"] = [{"w": w, "s": s, "e": e} for w, s, e in words]
+        return seg
+
+    def test_cue_bounds_come_from_real_word_times(self):
+        seg = self.segment(
+            0.0,
+            4.0,
+            "Hello there. Bye now.",
+            [
+                ("Hello", 0.2, 0.6),
+                ("there.", 0.6, 1.0),
+                ("Bye", 3.0, 3.4),
+                ("now.", 3.4, 3.9),
+            ],
+        )
+        cues = transcriber.resegment_whisper_segments([seg])
+        self.assertEqual(len(cues), 2)
+        self.assertAlmostEqual(cues[0]["start"], 0.2)
+        self.assertAlmostEqual(cues[0]["end"], 1.0)
+        self.assertAlmostEqual(cues[1]["start"], 3.0)
+        self.assertAlmostEqual(cues[1]["end"], 3.9)
+        self.assertEqual([w["w"] for w in cues[0]["words"]], ["Hello", "there."])
+
+    def test_long_segment_keeps_words_in_order(self):
+        text = "First part here, second part follows, third part ends."
+        tokens = text.split()
+        words = [(t.strip(".,"), 1.0 + i * 0.5, 1.4 + i * 0.5) for i, t in enumerate(tokens)]
+        seg = self.segment(1.0, 1.0 + len(words) * 0.5, text, words)
+        cues = transcriber.resegment_whisper_segments([seg], max_chars=20)
+        self.assertGreater(len(cues), 1)
+        joined = [w["w"] for cue in cues for w in cue["words"]]
+        self.assertEqual(joined, [t.strip(".,") for t in tokens], "词不能丢也不能乱序")
+        for cue in cues:
+            self.assertLess(cue["start"], cue["end"])
+            self.assertAlmostEqual(cue["start"], cue["words"][0]["s"])
+            self.assertAlmostEqual(cue["end"], cue["words"][-1]["e"])
+
+    def test_missing_words_fall_back_to_proportional(self):
+        cues = transcriber.resegment_whisper_segments(
+            [self.segment(0.0, 4.0, "One. Two.")]
+        )
+        self.assertEqual(len(cues), 2)
+        self.assertAlmostEqual(cues[0]["start"], 0.0)
+        self.assertAlmostEqual(cues[-1]["end"], 4.0)
+        self.assertFalse(any("words" in cue for cue in cues))
+
+    def test_token_count_mismatch_still_assigns_words(self):
+        # Whisper 的词切分和文本 token 数可能对不上；按比例分词，保住词级时间。
+        seg = self.segment(
+            0.0, 2.0, "We don't stop.", [("We", 0.0, 0.3), ("stop.", 1.0, 1.4)]
+        )
+        cues = transcriber.resegment_whisper_segments([seg])
+        self.assertEqual(len(cues), 1)
+        self.assertEqual([w["w"] for w in cues[0]["words"]], ["We", "stop."])
+        self.assertAlmostEqual(cues[0]["start"], 0.0)
+        self.assertAlmostEqual(cues[0]["end"], 1.4)
+
+    def test_hyphenated_compound_merges_into_one_word(self):
+        # Whisper 会把 Whim-Yim 切成 'Whim' + '-Yim.'；合并后词数才对得上文本。
+        seg = self.segment(
+            0.0,
+            2.0,
+            "Whim-Yim, I say let's commit.",
+            [
+                ("Whim", 0.0, 0.3),
+                ("-Yim,", 0.3, 0.6),
+                ("I", 0.6, 0.7),
+                ("say", 0.7, 0.9),
+                ("let's", 0.9, 1.2),
+                ("commit.", 1.2, 1.8),
+            ],
+        )
+        cues = transcriber.resegment_whisper_segments([seg])
+        self.assertEqual(len(cues), 1)
+        self.assertEqual([w["w"] for w in cues[0]["words"]],
+                         ["Whim-Yim,", "I", "say", "let's", "commit."])
+        self.assertAlmostEqual(cues[0]["start"], 0.0)
+        self.assertAlmostEqual(cues[0]["end"], 1.8)
+
+    def test_domain_continuation_merges(self):
+        seg = self.segment(
+            0.0,
+            2.0,
+            "Learn more at HowWeMadeYourMother.com.",
+            [
+                ("Learn", 0.0, 0.2),
+                ("more", 0.2, 0.4),
+                ("at", 0.4, 0.5),
+                ("HowWeMadeYourMother", 0.5, 1.4),
+                (".com.", 1.4, 1.8),
+            ],
+        )
+        cues = transcriber.resegment_whisper_segments([seg])
+        self.assertEqual(len(cues), 1)
+        self.assertEqual(
+            [w["w"] for w in cues[0]["words"]],
+            ["Learn", "more", "at", "HowWeMadeYourMother.com."],
+        )
+
+    def test_unmatched_counts_share_words_proportionally(self):
+        # 词数对不上且没有可合并的续接词时，按 cue 文本长度比例分词，保证不丢词。
+        words = [("Hello", 0.0, 0.3), ("big", 0.6, 0.9), ("world", 1.2, 1.6)]
+        seg = self.segment(0.0, 2.0, "Hello big world.", words)
+        cues = transcriber.resegment_whisper_segments([seg], max_chars=10)
+        self.assertEqual(len(cues), 1, "这段没有可切分的标点，应保持一段")
+        self.assertEqual([w["w"] for w in cues[0]["words"]], ["Hello", "big", "world"])
+
+    def test_degenerate_word_time_falls_back(self):
+        seg = self.segment(1.0, 2.0, "That", [("That", 1.5, 1.5)])
+        cues = transcriber.resegment_whisper_segments([seg])
+        self.assertEqual(len(cues), 1)
+        self.assertAlmostEqual(cues[0]["start"], 1.0)
+        self.assertAlmostEqual(cues[0]["end"], 2.0)
+        self.assertNotIn("words", cues[0])
+
+
+class WordTimingsFileTests(unittest.TestCase):
+    def cues(self):
+        return [
+            {
+                "start": 0.2,
+                "end": 1.0,
+                "en": "Hello there.",
+                "zh": "你好。",
+                "words": [
+                    {"w": "Hello", "s": 0.2, "e": 0.6},
+                    {"w": "there.", "s": 0.6, "e": 1.0},
+                ],
+            },
+            {"start": 1.0, "end": 2.0, "en": "No words here.", "zh": "没有词。"},
+        ]
+
+    def test_writes_tmlt_schema(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "timings" / "episode.json"
+            transcriber.write_word_timings(self.cues(), path, audio_seconds=12.5)
+            doc = json.loads(path.read_text(encoding="utf-8"))
+        self.assertTrue(doc["complete"])
+        self.assertEqual(doc["attempts"], 1)
+        self.assertEqual(doc["audio_seconds"], 12.5)
+        first, second = doc["segments"]
+        self.assertEqual(first["text"], "Hello there.")
+        self.assertEqual(first["start"], 200)
+        self.assertEqual(first["end"], 1000)
+        self.assertEqual(first["words"], [["Hello", 200, 400], ["there.", 600, 400]])
+        self.assertNotIn("zh", first, "sidecar 只带英文词，不带译文")
+        self.assertIsNone(second["end"], "没有词的 cue end 置空，消费方回退到 VTT")
+        self.assertEqual(second["words"], [])
+
+    def test_clamps_zero_length_word_duration(self):
+        cues = [
+            {
+                "start": 1.0,
+                "end": 1.5,
+                "en": "That",
+                "zh": "那",
+                "words": [{"w": "That", "s": 1.2, "e": 1.2}],
+            }
+        ]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "x.json"
+            transcriber.write_word_timings(cues, path, audio_seconds=3.0)
+            doc = json.loads(path.read_text(encoding="utf-8"))
+        seg = doc["segments"][0]
+        self.assertEqual(seg["words"], [["That", 1200, 0]])
+        self.assertEqual(seg["end"], 1500, "词时间退化时用 cue 自身的结束时间")
+
+    def test_writes_nothing_for_empty_cues(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "x.json"
+            with self.assertRaises(ValueError):
+                transcriber.write_word_timings([], path, audio_seconds=0.0)
+            self.assertFalse(path.exists())
 
 
 if __name__ == "__main__":
