@@ -668,6 +668,95 @@ class AssignTimesTests(unittest.TestCase):
         self.assertTrue(all(a["end"] <= b["start"] for a, b in zip(out, out[1:])))
 
 
+VTT_BLOCKS = [
+    ("00:00:01.000", "00:00:10.000", "Hello there friend we are back again", "你好朋友我们又回来了"),
+    ("00:00:10.000", "00:00:20.000", "Buy our sponsor right now please", "现在就买我们的赞助"),
+    ("00:00:20.000", "00:00:30.000", "Back to the show with more words here", "回到节目多说几句"),
+    ("00:00:30.000", "00:00:40.000", "Another body line here with extra padding", "另一句正文再垫一点"),
+    ("00:00:40.000", "00:00:50.000", "Final body line ends right about here", "最后一句正文到这里"),
+]
+
+
+def build_vtt(rows, bilingual=True):
+    out = ["WEBVTT", ""]
+    for index, (start, end, en, zh) in enumerate(rows, 1):
+        out.extend([str(index), f"{start} --> {end}", en])
+        if bilingual:
+            out.append(zh)
+        out.append("")
+    return chr(10).join(out)
+
+
+class RewriteEpisodeTests(unittest.TestCase):
+    def setUp(self):
+        import transcribe as _t
+
+        self.transcribe = _t
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        root = Path(self.temp.name)
+        self.site = root / "site"
+        self.dir = self.site / "pod" / "transcripts"
+        self.dir.mkdir(parents=True)
+        (self.dir / "zh").mkdir()
+        self.vtt = self.dir / "Ep.vtt"
+        self.vtt.write_text(build_vtt(VTT_BLOCKS), encoding="utf-8")
+        self.zh = self.dir / "zh" / "Ep.vtt"
+        self.zh.write_text(build_vtt(VTT_BLOCKS, bilingual=False), encoding="utf-8")
+        self.timing = self.site / "pod" / "timings"
+        for patch_ in (
+            mock.patch.object(self.transcribe, "TIMING_DIR", self.timing),
+            mock.patch.object(self.transcribe, "SITE_DIR", self.site),
+        ):
+            patch_.start()
+            self.addCleanup(patch_.stop)
+
+    def fake_transcribe(self, path):
+        lines = [
+            ("Hello there friend we are back again", 1.0),
+            ("Back to the show with more words here", 31.0),
+            ("Another body line here with extra padding", 41.0),
+            ("Final body line ends right about here", 51.0),
+        ]
+        cues, words = [], []
+        for text, start in lines:
+            line_words = []
+            for offset, token in enumerate(text.split()):
+                word = {"w": token, "s": start + offset * 0.4, "e": start + (offset + 1) * 0.4}
+                line_words.append(word)
+                words.append(word)
+            cues.append({"start": start, "end": start + len(line_words) * 0.4, "en": text, "zh": "", "words": line_words})
+        return cues, 60.0
+
+    def run_rewrite(self):
+        return aligner.rewrite_episode(
+            self.vtt, "https://cdn.test/a.mp3", object(),
+            workdir=Path(self.temp.name),
+            download=lambda url, path: path.write_bytes(b"x"),
+            transcribe_audio=self.fake_transcribe,
+        )
+
+    def test_ad_block_is_dropped_from_both_vtts(self):
+        self.assertEqual(self.run_rewrite(), "done")
+        en = self.vtt.read_text(encoding="utf-8")
+        zh = self.zh.read_text(encoding="utf-8")
+        self.assertNotIn("sponsor", en)
+        self.assertNotIn("赞助", zh)
+        self.assertEqual(en.count("-->"), 4)
+        self.assertEqual(zh.count("-->"), 4)
+
+    def test_remaining_cues_use_real_times_and_keep_chinese(self):
+        self.run_rewrite()
+        cues = aligner.parse_bilingual_vtt(self.vtt)
+        self.assertAlmostEqual(cues[0]["start"], 1.0, places=2)
+        self.assertAlmostEqual(cues[1]["start"], 31.0, places=2)
+        self.assertEqual(cues[0]["zh"], "你好朋友我们又回来了")
+
+    def test_sidecar_matches_rewritten_cues(self):
+        self.run_rewrite()
+        self.assertEqual(self.transcribe.sidecar_status(self.timing / "Ep.json"), (True, 1))
+
+
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     unittest.main()
