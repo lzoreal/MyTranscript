@@ -724,6 +724,45 @@ class SidecarStatusTests(unittest.TestCase):
             transcriber.write_sidecar_failure(path, attempts=1)
             self.assertEqual(transcriber.sidecar_status(path), (False, 1))
 
+    def test_partial_sidecar_round_trips_complete_and_attempts(self):
+        cues = [
+            {
+                "start": 0.0,
+                "end": 1.0,
+                "en": "Hello there.",
+                "zh": "你好。",
+                "words": [
+                    {"w": "Hello", "s": 0.0, "e": 0.5},
+                    {"w": "there.", "s": 0.5, "e": 1.0},
+                ],
+            }
+        ]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "x.json"
+            transcriber.write_word_timings(
+                cues, path, audio_seconds=1.0, complete=False, attempts=3
+            )
+            self.assertEqual(transcriber.sidecar_status(path), (False, 3))
+
+    def test_truthy_string_complete_still_reads_as_incomplete(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "x.json"
+            path.write_text(
+                json.dumps({"complete": "true", "attempts": 1}), encoding="utf-8"
+            )
+            self.assertEqual(transcriber.sidecar_status(path), (False, 1))
+
+    def test_non_integer_attempts_is_treated_as_unstarted(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "x.json"
+            for attempts in ("abc", [1], {"n": 1}, True):
+                with self.subTest(attempts=attempts):
+                    path.write_text(
+                        json.dumps({"complete": True, "attempts": attempts}),
+                        encoding="utf-8",
+                    )
+                    self.assertEqual(transcriber.sidecar_status(path), (False, 0))
+
     def test_sidecar_path_matches_vtt_stem(self):
         vtt = Path("site/pod/transcripts/Ep 1.vtt")
         self.assertEqual(transcriber.sidecar_path_for(vtt).name, "Ep 1.json")
