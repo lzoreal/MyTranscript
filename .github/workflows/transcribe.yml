@@ -40,9 +40,12 @@ on:
         default: "20"
 
       max_minutes:
-        description: "单分片时间预算（分钟）"
+        # 预算只在两集之间检查，所以「预算 + 最坏单集」必须小于下面的 timeout-minutes（360）：
+        # 84 分钟音频在 2 vCPU 上约需 168 分钟，150 + 168 ≈ 318 < 360，再留 ~40 分钟给
+        # checkout / 模型 / pip。job 超时不会执行任何 if: always() 步骤，超了就是整片白跑。
+        description: "单分片时间预算（分钟，默认 150；150 + 最坏单集 ≈ 318，须小于 timeout 360）"
         required: false
-        default: "280"
+        default: "150"
 
 # 部署拆到 deploy.yml（由 push 触发），本 workflow 只需要写仓库。
 permissions:
@@ -55,12 +58,16 @@ concurrency:
 jobs:
   transcribe:
     runs-on: ubuntu-latest
+    # 预算（默认 150）+ 最坏单集（84 分钟音频 ≈ 168 分钟）≈ 318，必须小于本值；
+    # job 超时会同时干掉所有 if: always() 步骤，分片跑完的集就永远提交不上去。
     timeout-minutes: 360
     strategy:
       fail-fast: false
       # backfill=false（含每周 cron）时矩阵只有 shard 0，且下面三个 BACKFILL_* 变量
       # 全部渲染成空串，环境与拆分片之前逐字节一致；backfill=true 时 20 个分片并行。
       # 分片数组是字面量：改长度时同步改 run 步骤里的 matrix_shards 上限。
+      # 外层引号只是 YAML 的字符串写法：这个标量整条就是一个表达式，GitHub 求值后
+      # 保留原生类型（数组），不会先转成字符串，所以 20 个分片照常展开。
       matrix:
         shard: "${{ fromJSON(github.event.inputs.backfill == 'true' && '[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]' || '[0]') }}"
 
@@ -196,7 +203,7 @@ jobs:
         env:
           BACKFILL: ${{ github.event.inputs.backfill || 'false' }}
           SHARDS: ${{ github.event.inputs.shards || '20' }}
-          MAX_MINUTES: ${{ github.event.inputs.max_minutes || '280' }}
+          MAX_MINUTES: ${{ github.event.inputs.max_minutes || '150' }}
         run: |
           python - <<'PY'
           import os
@@ -233,6 +240,7 @@ jobs:
           PY
 
       - name: 运行转录与翻译
+        id: transcribe
         continue-on-error: true
         env:
           PODCAST_SLUG: ${{ github.event.inputs.podcast_slug || 'how-we-made-your-mother' }}
@@ -247,7 +255,7 @@ jobs:
           # 会渲染成空串，0 号分片就会掉回正常模式去写 state/feed/index。
           BACKFILL_SHARD: "${{ github.event.inputs.backfill == 'true' && format('{0}', matrix.shard) || '' }}"
           BACKFILL_SHARDS: "${{ github.event.inputs.backfill == 'true' && (github.event.inputs.shards || '20') || '' }}"
-          BACKFILL_MAX_MINUTES: "${{ github.event.inputs.backfill == 'true' && (github.event.inputs.max_minutes || '280') || '' }}"
+          BACKFILL_MAX_MINUTES: "${{ github.event.inputs.backfill == 'true' && (github.event.inputs.max_minutes || '150') || '' }}"
           BASE_URL: ${{ env.BASE_URL }}
         run: |
           python - <<'PY'
@@ -272,7 +280,8 @@ jobs:
           fi
           python -u scripts/transcribe.py
 
-      # if: always() 让超时/失败也提交：分片预算 280 分钟，跑完的集不该丢在 runner 上。
+      # if: always() 让步骤失败时也提交，但 job 超时时不会执行——所以预算默认降到 150，
+      # 保证「预算 + 最坏单集」落在 timeout 之内，跑完的集不会丢在 runner 上。
       - name: 提交状态与站点文件到 Git
         if: always()
         env:
@@ -323,4 +332,19 @@ jobs:
               ':(exclude)translations.json' \
               ':(exclude)**/*.part' \
               ':(exclude)**/*.tmp'
+          fi
+
+      # continue-on-error 会把 run 步骤的任何失败吞成绿；这里按 outcome 重新定案。
+      # quota 暂停在 Python 侧是 exit 0（outcome=success），所以只看 failure：
+      # feed 抓取失败、没有可用 key、ValueError、鉴权失败等都走 failure → job 红。
+      # if: always()：提交步骤自己失败时也要把真正的死因报出来（job 本来就是红）。
+      - name: 转录失败则让 job 失败
+        if: always()
+        env:
+          OUTCOME: ${{ steps.transcribe.outcome }}
+        run: |
+          echo "transcribe outcome: ${OUTCOME}"
+          if [ "${OUTCOME}" = "failure" ]; then
+            echo "::error::转录步骤失败（配额暂停会以 exit 0 结束，不算失败），本次运行按失败处理"
+            exit 1
           fi
