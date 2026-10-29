@@ -1,6 +1,23 @@
 import importlib.util
+import sys
 import unittest
 from pathlib import Path
+
+ROOT = Path(__file__).parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+import types
+
+fw = types.ModuleType("faster_whisper")
+fw.WhisperModel = object
+sys.modules.setdefault("faster_whisper", fw)
+for _name in ("google", "google.genai", "google.genai.types"):
+    sys.modules.setdefault(_name, types.ModuleType(_name))
+sys.modules["google"].genai = sys.modules["google.genai"]
+sys.modules["google"].genai.types = sys.modules["google.genai.types"]
+for _attr in ("Client", "GenerateContentConfig"):
+    if not hasattr(sys.modules["google"].genai, _attr):
+        setattr(sys.modules["google"].genai, _attr, object)
+sys.modules.setdefault("feedparser", types.ModuleType("feedparser"))
 
 MODULE = Path(__file__).parents[1] / "scripts" / "run_pipeline.py"
 SPEC = importlib.util.spec_from_file_location("run_pipeline", MODULE)
