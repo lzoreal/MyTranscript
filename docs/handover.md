@@ -205,3 +205,36 @@ for f in tests/test_*.py; do python "$f"; done     # 6 个文件、174 个用例
 | 翻译整批缺几条 | `translate_blocks` 的"只补缺失编号"日志；Gemini 是否返回了不完整对象 |
 | job 绿但什么都没做 | 分片参数被 `continue-on-error` 吞掉？看"检查回填参数"步骤与 `候选 N 集` |
 | push 被拒 | `git_push_retry.sh` 会 rebase 重试；持续失败多半是 pathspec 越界改了别人的文件 |
+
+## 十一、统一链路（新，进行中）
+
+2026-10-30 起，仓库里多了一条统一链路：`feeds.json` → `scripts/run_pipeline.py` → 双语词级 JSON
+（写 `word-transcripts` 分支，不部署）。设计见 `docs/superpowers/specs/2026-10-30-unified-transcript-pipeline-design.md`。
+
+### 模块
+
+| 文件 | 职责 |
+| --- | --- |
+| `scripts/pipeline_config.py` | 读/校验 `feeds.json`，按 slug 分片，列 RSS 条目 |
+| `scripts/pipeline_text.py` | 文本源：`asr` 直接用 ASR 句子；`podscripts` 抓取后映射到词流 |
+| `scripts/clause_translation.py` | 小句翻译契约（en 拼接必须等于原句） |
+| `scripts/zh_align.py` | 中文分词驱动的时间分配 + DTW 兜底 |
+| `scripts/pipeline_store.py` | `data/<slug>/state.json` 与单集 JSON 的原子写 |
+| `scripts/pipeline_episode.py` | 单集编排（依赖注入，可单测） |
+| `scripts/pipeline_publish.py` | 双语 VTT 渲染 |
+| `scripts/pipeline_deps.py` | 把 ASR/翻译/抓取/嵌入装配成 deps |
+| `scripts/run_pipeline.py` | CLI：分片、预算、`ONLY_SLUG`、`DATA_DIR` |
+
+### 迁移一个节目（三步，缺一不可）
+
+1. `feeds.json` 增加该节目（`text_source` 选 `podscripts` 或 `asr`）；
+2. `podcasts.json` 移除该 slug（旧 crawl 不再碰它）；
+3. 新链路接管它的 VTT / feed / index，并核对 `guid / enclosure / transcript url` 三者与迁移前逐字相同。
+
+**同一节目只能有一个产出方**；切换后观察一周 `git log`，确认旧链路不再产生该节目的提交。
+回滚：把 slug 加回 `podcasts.json`、从 `feeds.json` 删除即可。
+
+### 与旧链路的关系
+
+迁移完成前，旧的四条 workflow（crawl / transcribe / translate / align）照常运行；
+`word-transcripts` 分支只累积产物，不影响 Pages。

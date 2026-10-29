@@ -1,0 +1,106 @@
+name: Transcript Pipeline
+
+# 统一链路：RSS → 双语词级 JSON（写入 word-transcripts 分支，不部署）。
+# 详见 docs/superpowers/specs/2026-10-30-unified-transcript-pipeline-design.md
+on:
+  workflow_dispatch:
+    inputs:
+      only_slug:
+        description: "只跑某个节目（留空=全部）"
+        default: ""
+      shard:
+        description: "分片号"
+        default: "0"
+      shards:
+        description: "分片数"
+        default: "1"
+      max_minutes:
+        description: "预算（分钟）"
+        default: "150"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: transcript-pipeline
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      DATA_DIR: data
+      SHARD: ${{ github.event.inputs.shard || '0' }}
+      SHARDS: ${{ github.event.inputs.shards || '1' }}
+      MAX_MINUTES: ${{ github.event.inputs.max_minutes || '150' }}
+      ONLY_SLUG: ${{ github.event.inputs.only_slug || '' }}
+      WHISPER_MODEL: models/ct2-turbo
+      GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      HF_ENDPOINT: https://hf-mirror.com
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.MY_CUSTOM_PAT }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-transcribe.txt
+          python -m spacy download zh_core_web_sm
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/huggingface
+            ${{ github.workspace }}/models/ct2-turbo
+          key: pipeline-models-v1
+
+      - name: 准备模型（缓存未命中时）
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          target = Path("models/ct2-turbo")
+          if not (target / "model.bin").exists():
+              from huggingface_hub import snapshot_download
+              snapshot_download("deepdml/faster-whisper-large-v3-turbo-ct2", local_dir=str(target))
+          from sentence_transformers import SentenceTransformer
+          SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+          print("models ready")
+          PY
+
+      - name: 挂载数据分支
+        run: |
+          set -e
+          if git fetch origin word-transcripts 2>/dev/null; then
+            git worktree add --detach ../data-branch origin/word-transcripts
+            cd ../data-branch
+            git checkout -B word-transcripts
+          else
+            echo "数据分支不存在，创建空分支"
+            git worktree add --detach ../data-branch HEAD
+            cd ../data-branch
+            git checkout --orphan word-transcripts
+            git rm -rf . >/dev/null 2>&1 || true
+            git commit --allow-empty -m "chore: init word-transcripts branch"
+            git push origin word-transcripts
+          fi
+          mkdir -p data
+
+      - name: 运行管线
+        run: python -u scripts/run_pipeline.py
+
+      - name: 提交产物到数据分支
+        if: always()
+        env:
+          MY_PAT: ${{ secrets.MY_CUSTOM_PAT }}
+        run: |
+          cd ../data-branch
+          git remote set-url origin "https://${MY_PAT}@github.com/${GITHUB_REPOSITORY}.git"
+          bash "${GITHUB_WORKSPACE}/scripts/git_push_retry.sh" \
+            "auto: word transcripts (${GITHUB_EVENT_NAME})" data
