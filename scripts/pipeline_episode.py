@@ -9,6 +9,7 @@ from pathlib import Path
 import pipeline_store as store
 import pipeline_text as ptext
 import zh_align
+from gemini_keys import GeminiAuthFailed, QuotaExhausted
 
 
 def _stamp(now) -> str:
@@ -58,6 +59,9 @@ def process_episode(show, episode, deps, data_dir: Path, now=None) -> str:
                     )
             else:
                 sentence["zh_words"] = []
+    except (QuotaExhausted, GeminiAuthFailed):
+        # 配额用完/配置失效不是这一集的锅：记 attempts 会让它在两轮之后永久出局。
+        raise
     except Exception as exc:
         print(f"{show['slug']}/{guid}: 失败 {type(exc).__name__}: {exc}")
         _record(state, guid, "failed", updated, attempts=attempts)

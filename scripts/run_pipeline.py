@@ -37,7 +37,11 @@ def run(shows, *, deps_factory, data_dir, max_minutes, clock=None, process=None)
             if clock() >= deadline:
                 print("预算用完，剩余留给下一轮")
                 return stats
-            outcome = process(show, episode, deps, data_dir)
+            try:
+                outcome = process(show, episode, deps, data_dir)
+            except pepisode.QuotaExhausted as exc:
+                print(f"Gemini 配额用尽，本轮停在这里：{exc}")
+                return stats
             stats[outcome] = stats.get(outcome, 0) + 1
     return stats
 

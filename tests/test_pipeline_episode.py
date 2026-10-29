@@ -76,6 +76,23 @@ class EpisodeTests(unittest.TestCase):
         self.assertEqual(state["episodes"]["g1"]["attempts"], 1)
         self.assertTrue(pstore.needs_work(state, "g1"))
 
+    def test_quota_pause_is_not_counted_as_an_attempt(self):
+        cues = [{"start": 0.0, "end": 1.0, "en": "hi", "words": [{"w": "hi", "s": 0.0, "e": 1.0}]}]
+        deps = self.deps(cues)
+        deps["translate"] = lambda sentences: (_ for _ in ()).throw(
+            pepisode.QuotaExhausted("all keys spent")
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data = Path(temp_dir)
+            with self.assertRaises(pepisode.QuotaExhausted):
+                pepisode.process_episode(
+                    {"slug": "pod", "text_source": "asr"},
+                    {"guid": "g1", "title": "Ep", "audio_url": "u"},
+                    deps, data,
+                )
+            state = pstore.load_state(data, "pod")
+        self.assertNotIn("g1", state["episodes"], "配额暂停不能记账")
+
     def test_done_episode_is_skipped(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             data = Path(temp_dir)

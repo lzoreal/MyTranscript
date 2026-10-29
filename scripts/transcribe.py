@@ -1015,6 +1015,19 @@ def wait_for_gemini_rate_limit() -> None:
         GEMINI_LAST_REQUEST_AT = time.monotonic()
 
 
+UNTRANSLATABLE = re.compile(
+    r"^(?:https?://\S+|www\.\S+|[\w.+-]+@[\w-]+(?:\.[\w-]+)+"
+    r"|[\w-]+(?:\.[\w-]+)*\.(?:com|org|net|io|co|fm|tv|us|uk|me|link|ly)(?:/\S*)?)$",
+    re.IGNORECASE,
+)
+
+
+def is_untranslatable(text: str) -> bool:
+    """链接/域名/邮箱不需要翻译：模型只会原样吐回来，被当成漏译反复重试。"""
+    tokens = [token.strip("\"'()[]{}.,!?;:") for token in (text or "").split()]
+    return bool(tokens) and all(UNTRANSLATABLE.match(token) for token in tokens)
+
+
 def translate_batch_once(
     client: genai.Client, blocks: list[tuple[int, dict[str, Any]]]
 ) -> dict[int, str]:
@@ -1106,7 +1119,14 @@ def translate_cues_with_gemini(cues: list[dict[str, Any]]) -> list[dict[str, Any
     if not cues:
         raise ValueError("没有可翻译字幕")
     ring = GeminiKeyRing(GEMINI_KEYS)
-    batches = build_translation_batches(cues)
+    verbatim = 0
+    for cue in cues:
+        if is_untranslatable(cue.get("en", "")):
+            cue["zh"] = cue["en"]
+            verbatim += 1
+    if verbatim:
+        log.info("无需翻译的链接/邮箱：%d 条（中文照抄原文）", verbatim)
+    batches = build_translation_batches([cue for cue in cues if not cue.get("zh")])
     log.info(
         "Gemini 翻译开始：%d 条字幕，%d 个初始批次，模型=%s，key=%d 把，限速=%d RPM（请求间隔至少 %.2f 秒）",
         len(cues),
