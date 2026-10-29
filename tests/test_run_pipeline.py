@@ -90,6 +90,7 @@ class EnvTests(unittest.TestCase):
         )
         self.assertEqual(seen, [1, 2], "配额用尽后不再继续下一集")
         self.assertEqual(stats["done"], 1)
+        self.assertTrue(stats["paused"], "配额暂停要让调用方知道，好停下来提交断点")
 
 
 if __name__ == "__main__":
