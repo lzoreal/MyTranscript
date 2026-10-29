@@ -46,6 +46,7 @@ GEMINI_API_KEYS_RAW = os.getenv("GEMINI_API_KEYS", "").strip()
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import key_health  # noqa: E402
 from gemini_keys import (  # noqa: E402  （顺序轮换与错误分类的共享实现）
     GeminiAuthFailed,
     GeminiKeyRing,
@@ -1079,6 +1080,11 @@ def translate_blocks(
                 # 先记下这次切换的原因，再判断是否还有 key：最后这把 key 的
                 # 失败原因才决定「配额用完」还是「key 全被拒」。
                 ring.switch_kinds.append("quota" if quota else "auth")
+                try:
+                    failed_key = ring.current()
+                except QuotaExhausted:
+                    failed_key = ""
+                _record_key_failure(failed_key, "quota" if quota else "auth")
                 if not ring.mark_exhausted():
                     message = (
                         f"{kind}，所有 key 已用尽（本进程已发 {ring.requests} 次请求）"
@@ -1133,10 +1139,39 @@ def translate_blocks(
             ) from last_error
 
 
+def _excluded_key_ids() -> set[str]:
+    raw = os.getenv("GEMINI_EXCLUDE_KEYS", "")
+    return {part.strip() for part in raw.split(",") if part.strip()}
+
+
+def _key_offset() -> int:
+    try:
+        return int(os.getenv("GEMINI_KEY_OFFSET", "0") or 0)
+    except ValueError:
+        return 0
+
+
+def _record_key_failure(key: str, kind: str) -> None:
+    """把"这把 key 现在不可用"写给其它分片；写失败不影响翻译。"""
+    directory = os.getenv("GEMINI_HEALTH_DIR", "").strip()
+    if not directory or not key:
+        return
+    try:
+        shard = os.getenv("SHARD", "0") or "0"
+        key_health.record(Path(directory) / f"shard-{shard}.json", key, kind)
+    except Exception as exc:  # 健康度只是优化，不能打断翻译
+        log.debug("写入 key 健康度失败：%s", exc)
+
+
 def translate_cues_with_gemini(cues: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if not cues:
         raise ValueError("没有可翻译字幕")
-    ring = GeminiKeyRing(GEMINI_KEYS)
+    keys = key_health.usable_keys(GEMINI_KEYS, _excluded_key_ids())
+    if GEMINI_KEYS and not keys:
+        raise QuotaExhausted("所有 key 都被其它分片标记为暂不可用（按 TTL 自动恢复）")
+    if len(keys) < len(GEMINI_KEYS):
+        log.info("跳过其它分片标记不可用的 key：%d 把", len(GEMINI_KEYS) - len(keys))
+    ring = GeminiKeyRing(keys, start=_key_offset())
     verbatim = 0
     for cue in cues:
         if is_untranslatable(cue.get("en", "")):
