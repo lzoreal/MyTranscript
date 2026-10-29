@@ -76,6 +76,28 @@ class EpisodeTests(unittest.TestCase):
         self.assertEqual(state["episodes"]["g1"]["attempts"], 1)
         self.assertTrue(pstore.needs_work(state, "g1"))
 
+    def test_sentences_without_clauses_still_get_zh_words(self):
+        # 线上事故：翻译器不返回 clauses，旧代码直接写空数组，1254 句全没有中文词时间。
+        cues = [{"start": 0.0, "end": 2.0, "en": "a b",
+                 "words": [{"w": "a", "s": 0.0, "e": 1.0}, {"w": "b", "s": 1.0, "e": 2.0}]}]
+        deps = self.deps(cues)
+
+        def translate(sentences):
+            for sentence in sentences:
+                sentence["zh"] = "甲乙。"
+
+        deps["translate"] = translate
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data = Path(temp_dir)
+            status = pepisode.process_episode(
+                {"slug": "pod", "text_source": "asr"},
+                {"guid": "g1", "title": "Ep", "audio_url": "u"},
+                deps, data,
+            )
+            doc = json.loads(pstore.episode_path(data, "pod", "g1").read_text(encoding="utf-8"))
+        self.assertEqual(status, "done")
+        self.assertTrue(doc["sentences"][0]["zh_words"], "没有 clauses 也要走 DTW 兜底")
+
     def test_quota_pause_is_not_counted_as_an_attempt(self):
         cues = [{"start": 0.0, "end": 1.0, "en": "hi", "words": [{"w": "hi", "s": 0.0, "e": 1.0}]}]
         deps = self.deps(cues)
