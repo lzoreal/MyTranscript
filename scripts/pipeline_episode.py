@@ -49,17 +49,20 @@ def process_episode(show, episode, deps, data_dir: Path, now=None) -> str:
             raise RuntimeError("没有任何句子")
         deps["translate"](sentences)
         for sentence in sentences:
-            if sentence.get("clauses") and not sentence.get("coarse"):
-                sentence["zh_words"] = zh_align.build_zh_words(
-                    sentence["clauses"], sentence["start"], sentence["end"], deps["segment"]
-                )
-                if not sentence["zh_words"]:
-                    sentence["zh_words"] = zh_align.fallback_zh_words(
+            # 没有小句（当前翻译器不产 clauses）时也必须走 DTW 兜底，
+            # 否则 zh_words 全是空数组——中文词级时间就白生成了。
+            words = []
+            if sentence.get("zh"):
+                if sentence.get("clauses") and not sentence.get("coarse"):
+                    words = zh_align.build_zh_words(
+                        sentence["clauses"], sentence["start"], sentence["end"], deps["segment"]
+                    )
+                if not words:
+                    words = zh_align.fallback_zh_words(
                         sentence["words"], sentence["zh"], deps["segment"], deps["encode"],
                         sentence["start"], sentence["end"],
                     )
-            else:
-                sentence["zh_words"] = []
+            sentence["zh_words"] = words
     except (QuotaExhausted, GeminiAuthFailed):
         # 配额用完/配置失效不是这一集的锅：记 attempts 会让它在两轮之后永久出局。
         raise
