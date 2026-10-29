@@ -8,6 +8,23 @@ zh = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(zh)
 
 
+class SegmentTests(unittest.TestCase):
+    def tearDown(self):
+        zh._NLP = None
+
+    def test_segment_zh_uses_the_loaded_model_and_drops_spaces(self):
+        # 线上事故：pipeline_deps 调用 zh_align.segment_zh，但函数根本不存在，
+        # 每集翻译完就 AttributeError，121 集全失败。
+        class Token:
+            def __init__(self, text, space=False):
+                self.text, self.is_space = text, space
+
+        zh._NLP = lambda text: [
+            Token("我们"), Token(" ", space=True), Token("抱怨"), Token("。")
+        ]
+        self.assertEqual(zh.segment_zh("我们抱怨。"), ["我们", "抱怨", "。"])
+
+
 class ClauseTests(unittest.TestCase):
     def test_counts_words_per_english_clause(self):
         tokens = ["habit,", "complaining", "can", "feel", "satisfying"]
