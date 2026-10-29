@@ -7,6 +7,18 @@ from typing import Callable
 EN_END = (".", ",", "!", "?", ";", ":")
 ZH_END = ("，", "。", "！", "？", "；", "：", "、", "…")
 
+_NLP = None
+
+
+def segment_zh(text: str) -> list[str]:
+    """spaCy 中文分词；模型按进程懒加载（首次约 1 秒，之后复用）。"""
+    global _NLP
+    if _NLP is None:
+        import spacy
+
+        _NLP = spacy.load("zh_core_web_sm")
+    return [token.text for token in _NLP(text) if not token.is_space]
+
 
 def en_clause_word_counts(tokens: list[str]) -> list[int]:
     counts, current = [], 0
