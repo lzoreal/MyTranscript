@@ -38,5 +38,28 @@ class ClauseTests(unittest.TestCase):
         self.assertAlmostEqual((words[-1][1] + words[-1][2]) / 1000, 8.0)
 
 
+class FallbackTests(unittest.TestCase):
+    def test_clause_delta_gate(self):
+        self.assertFalse(zh.clauses_confident([2, 2], [["甲"], ["乙"], ["丙"], ["丁"], ["戊"]]))
+        self.assertTrue(zh.clauses_confident([2, 2], [["甲"], ["乙"], ["丙"]]))
+
+    def test_allocation_plausibility(self):
+        self.assertFalse(zh.allocation_plausible([(0.0, 5.0), (5.0, 11.0)],
+                                                 [["一"], ["一二三四五六七八九十"]]))
+        self.assertTrue(zh.allocation_plausible([(0.0, 1.0), (1.0, 11.0)],
+                                                [["一"], ["一二三四五六七八九十"]]))
+
+    def test_dtw_prefers_the_diagonal(self):
+        self.assertEqual(zh.dtw_path([[1.0, 0.0], [0.0, 1.0]]), [(0, 0), (1, 1)])
+
+    def test_fallback_is_monotonic_and_bounded(self):
+        en_words = [{"w": "a", "s": 0.0, "e": 1.0}, {"w": "b", "s": 1.0, "e": 2.0}]
+        encode = lambda texts: [[1.0, 0.0] for _ in texts]
+        words = zh.fallback_zh_words(en_words, "甲乙。", lambda t: list(t), encode, 0.0, 2.0)
+        starts = [w[1] for w in words]
+        self.assertEqual(starts, sorted(starts))
+        self.assertLessEqual(words[-1][1] + words[-1][2], 2000)
+
+
 if __name__ == "__main__":
     unittest.main()
