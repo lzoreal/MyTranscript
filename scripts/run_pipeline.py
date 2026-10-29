@@ -7,6 +7,7 @@ import os
 import time
 from pathlib import Path
 
+import key_health as pkeyhealth
 import pipeline_config as pconfig
 import pipeline_episode as pepisode
 
@@ -50,6 +51,18 @@ def run(shows, *, deps_factory, data_dir, max_minutes, reserve_minutes=0,
     return stats
 
 
+def publish_key_health(env) -> None:
+    """把其它分片记下的不可用 key 转成本进程的排除表，并错开起始 key。"""
+    os.environ["GEMINI_KEY_OFFSET"] = str(env["shard"])
+    directory = os.getenv("GEMINI_HEALTH_DIR", "").strip()
+    if not directory:
+        return
+    dead = sorted(pkeyhealth.dead_ids(Path(directory)))
+    os.environ["GEMINI_EXCLUDE_KEYS"] = ",".join(dead)
+    if dead:
+        print(f"跳过其它分片标记不可用的 key：{len(dead)} 把")
+
+
 def prepare_shows(shows, shard: int, shards: int, list_episodes=None):
     list_episodes = list_episodes or pconfig.list_episodes
     prepared = []
@@ -73,6 +86,7 @@ def build_default_deps(show):
 
 def main() -> int:
     env = pipeline_env(os.environ)
+    publish_key_health(env)
     shows = pconfig.select_shows(
         pconfig.load_feeds(env["feeds_file"]), only_slug=env["only_slug"]
     )

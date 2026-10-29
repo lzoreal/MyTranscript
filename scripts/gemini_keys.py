@@ -45,12 +45,18 @@ def _default_factory(api_key: str):
 class GeminiKeyRing:
     """顺序轮换 key：同一时刻只用一把，耗尽就切下一把。"""
 
-    def __init__(self, keys: list[str], factory: Callable[[str], Any] | None = None):
+    def __init__(
+        self,
+        keys: list[str],
+        factory: Callable[[str], Any] | None = None,
+        start: int = 0,
+    ):
         if not keys:
             raise QuotaExhausted("没有任何可用的 Gemini key")
         self._keys = list(keys)
         self._clients: dict[str, Any] = {}
-        self._index = 0
+        # 各分片从不同的 key 起跑，否则所有 job 同时压在同一把 key 上。
+        self._index = int(start) % len(self._keys)
         self._factory = factory or _default_factory
         self.requests = 0
         # 已用掉的"全 key 429 冷却"次数（每进程上限，防止每日额度用完后一直等）

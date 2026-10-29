@@ -1,7 +1,11 @@
 import importlib.util
+import os
 import sys
+import tempfile
+import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -87,6 +91,27 @@ class EnvTests(unittest.TestCase):
         )
         self.assertEqual(len(seen), 1, "剩 35 分钟不够一集，不能再开")
         self.assertEqual(stats["done"], 1)
+
+    def test_publish_key_health_excludes_dead_keys_and_offsets_the_start(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            runmod.pkeyhealth.record(
+                Path(temp_dir) / "shard-1.json", "k-dead", "auth", now=time.time()
+            )
+            with patch.dict(
+                "os.environ",
+                {"GEMINI_HEALTH_DIR": temp_dir, "GEMINI_EXCLUDE_KEYS": ""},
+            ):
+                runmod.publish_key_health({"shard": 3, "shards": 10})
+                self.assertEqual(os.environ["GEMINI_KEY_OFFSET"], "3")
+                self.assertEqual(
+                    os.environ["GEMINI_EXCLUDE_KEYS"],
+                    runmod.pkeyhealth.key_id("k-dead"),
+                )
+
+    def test_publish_key_health_is_a_no_op_without_a_health_dir(self):
+        with patch.dict("os.environ", {"GEMINI_HEALTH_DIR": ""}, clear=False):
+            runmod.publish_key_health({"shard": 2, "shards": 10})
+            self.assertEqual(os.environ["GEMINI_KEY_OFFSET"], "2")
 
     def test_run_pauses_on_quota_instead_of_failing_episodes(self):
         seen = []

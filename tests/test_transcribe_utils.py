@@ -5,6 +5,7 @@ import logging
 import os
 import sys
 import tempfile
+import time
 import types
 import unittest
 from contextlib import contextmanager
@@ -961,7 +962,7 @@ class TranslationPairingTests(unittest.TestCase):
         cues = self.cues if cues is None else cues
         real_ring = transcriber.GeminiKeyRing
 
-        def make_ring(keys, factory=None):
+        def make_ring(keys, factory=None, start=0):
             # 只替换底层 client；轮换逻辑仍走真实的 GeminiKeyRing。
             return real_ring(["test-key"], factory=lambda api_key: fake)
 
@@ -1002,6 +1003,91 @@ class TranslationPairingTests(unittest.TestCase):
         with self.assertRaises(RuntimeError) as caught:
             self.run_translation([{"0"}] * 8, cues=[self.cues[0]])
         self.assertIn("Yeah.", str(caught.exception))
+
+
+class SharedKeyHealthTests(unittest.TestCase):
+    def test_other_shards_dead_keys_are_skipped_and_start_is_offset(self):
+        # 10 个分片同时轮换会把同一把 key 打爆；跳过别人判死的 key，并从不同位置起跑。
+        used = []
+
+        class Client:
+            def __init__(self, api_key):
+                self.api_key = api_key
+
+            @property
+            def models(self):
+                return self
+
+            def generate_content(self, model=None, contents=None, config=None):
+                used.append(self.api_key)
+                source = _decode_trailing_object(contents)
+                return SimpleNamespace(
+                    text=json.dumps({k: "译" + k for k in source}, ensure_ascii=False)
+                )
+
+        real_ring = transcriber.GeminiKeyRing
+
+        def make_ring(keys, factory=None, start=0):
+            return real_ring(keys, factory=lambda api_key: Client(api_key), start=start)
+
+        cues = [{"start": 0.0, "end": 1.0, "en": "Hello there friend"}]
+        with patch.object(transcriber, "GEMINI_KEYS", ["k1", "k2", "k3"]), patch.object(
+            transcriber, "GeminiKeyRing", make_ring
+        ), patch.object(
+            transcriber, "wait_for_gemini_rate_limit", lambda: None
+        ), patch.dict(
+            "os.environ",
+            {
+                "GEMINI_EXCLUDE_KEYS": transcriber.key_health.key_id("k1"),
+                "GEMINI_KEY_OFFSET": "1",
+            },
+        ):
+            transcriber.translate_cues_with_gemini(cues)
+        self.assertEqual(used, ["k3"], "k1 被排除，起点偏移 2，只剩 k3")
+
+    def test_every_key_excluded_pauses_instead_of_burning_requests(self):
+        cues = [{"start": 0.0, "end": 1.0, "en": "Hello there friend"}]
+        excluded = ",".join(transcriber.key_health.key_id(k) for k in ("k1", "k2"))
+        with patch.object(transcriber, "GEMINI_KEYS", ["k1", "k2"]), patch.dict(
+            "os.environ", {"GEMINI_EXCLUDE_KEYS": excluded}
+        ):
+            with self.assertRaises(transcriber.QuotaExhausted):
+                transcriber.translate_cues_with_gemini(cues)
+
+    def test_failed_key_is_recorded_for_the_other_shards(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            class Client:
+                def __init__(self, api_key):
+                    self.api_key = api_key
+
+                @property
+                def models(self):
+                    return self
+
+                def generate_content(self, model=None, contents=None, config=None):
+                    if self.api_key == "k1":
+                        raise _QuotaError("429 RESOURCE_EXHAUSTED")
+                    source = _decode_trailing_object(contents)
+                    return SimpleNamespace(
+                        text=json.dumps({k: "译" + k for k in source}, ensure_ascii=False)
+                    )
+
+            with patch.object(
+                transcriber, "wait_for_gemini_rate_limit", lambda: None
+            ), patch.object(transcriber.time, "sleep"), patch.dict(
+                "os.environ",
+                {"GEMINI_HEALTH_DIR": temp_dir, "SHARD": "7", "GEMINI_EXCLUDE_KEYS": ""},
+            ):
+                ring = transcriber.GeminiKeyRing(
+                    ["k1", "k2"], factory=lambda api_key: Client(api_key)
+                )
+                transcriber.translate_blocks(
+                    ring, [(0, {"en": "Hello there friend"})], {}
+                )
+            dead = transcriber.key_health.dead_ids(Path(temp_dir), now=time.time())
+            files = sorted(p.name for p in Path(temp_dir).glob("*.json"))
+        self.assertEqual(dead, {transcriber.key_health.key_id("k1")})
+        self.assertEqual(files, ["shard-7.json"], "每个分片只写自己的文件")
 
 
 class WordTimingTests(unittest.TestCase):
