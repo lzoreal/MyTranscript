@@ -30,7 +30,8 @@ def _record(state, guid, status, updated, *, attempts=None):
 
 def process_episode(show, episode, deps, data_dir: Path, now=None) -> str:
     guid = episode["guid"]
-    state = store.load_state(data_dir, show["slug"])
+    suffix = show.get("state_suffix", "")
+    state = store.load_state(data_dir, show["slug"], suffix)
     if not store.needs_work(state, guid):
         return "skipped"
     updated = _stamp(now)
@@ -65,7 +66,7 @@ def process_episode(show, episode, deps, data_dir: Path, now=None) -> str:
     except Exception as exc:
         print(f"{show['slug']}/{guid}: 失败 {type(exc).__name__}: {exc}")
         _record(state, guid, "failed", updated, attempts=attempts)
-        store.save_state(data_dir, show["slug"], state)
+        store.save_state(data_dir, show["slug"], state, suffix)
         return "failed"
 
     document = {
@@ -82,6 +83,6 @@ def process_episode(show, episode, deps, data_dir: Path, now=None) -> str:
     coarse = any(sentence.get("coarse") for sentence in sentences)
     _record(state, guid, "done", updated, attempts=attempts)
     state["episodes"][guid]["coarse"] = coarse
-    store.save_state(data_dir, show["slug"], state)
+    store.save_state(data_dir, show["slug"], state, suffix)
     print(f"{show['slug']}/{guid}: done，{len(sentences)} 句，coarse={coarse}")
     return "done"

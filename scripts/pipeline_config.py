@@ -33,10 +33,17 @@ def _shard_of(slug: str, shards: int) -> int:
     return int(hashlib.sha1(slug.encode("utf-8")).hexdigest(), 16) % max(1, shards)
 
 
-def select_shows(shows, only_slug=None, shard=0, shards=1):
+def select_shows(shows, only_slug=None):
     if only_slug:
         return [show for show in shows if show["slug"] == only_slug]
-    return [show for show in shows if _shard_of(show["slug"], shards) == shard]
+    return list(shows)
+
+
+def shard_episodes(episodes, shard: int = 0, shards: int = 1):
+    """按 guid 分片：同一集永远落在同一片，各片的 state 文件互不重叠。"""
+    if shards <= 1:
+        return list(episodes)
+    return [episode for episode in episodes if _shard_of(episode["guid"], shards) == shard]
 
 
 def list_episodes(feed_url: str, fetch: Callable[[str], bytes] | None = None):

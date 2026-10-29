@@ -46,6 +46,21 @@ def run(shows, *, deps_factory, data_dir, max_minutes, clock=None, process=None)
     return stats
 
 
+def prepare_shows(shows, shard: int, shards: int, list_episodes=None):
+    list_episodes = list_episodes or pconfig.list_episodes
+    prepared = []
+    for show in shows:
+        episodes = list_episodes(show["feed_url"])
+        prepared.append(
+            {
+                **show,
+                "episodes": pconfig.shard_episodes(episodes, shard=shard, shards=shards),
+                "state_suffix": "" if shards <= 1 else f"-{shard}",
+            }
+        )
+    return prepared
+
+
 def build_default_deps(show):
     import pipeline_deps
 
@@ -55,14 +70,11 @@ def build_default_deps(show):
 def main() -> int:
     env = pipeline_env(os.environ)
     shows = pconfig.select_shows(
-        pconfig.load_feeds(env["feeds_file"]),
-        only_slug=env["only_slug"],
-        shard=env["shard"],
-        shards=env["shards"],
+        pconfig.load_feeds(env["feeds_file"]), only_slug=env["only_slug"]
     )
-    prepared = [
-        {**show, "episodes": pconfig.list_episodes(show["feed_url"])} for show in shows
-    ]
+    prepared = prepare_shows(
+        shows, shard=env["shard"], shards=env["shards"]
+    )
     print(f"分片 {env['shard']}/{env['shards']}：节目 {len(prepared)}，"
           f"候选集 {sum(len(s['episodes']) for s in prepared)}")
     stats = run(prepared, deps_factory=build_default_deps, data_dir=env["data_dir"],

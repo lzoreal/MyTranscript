@@ -21,18 +21,23 @@ class ConfigTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 pcfg.load_feeds(path)
 
-    def test_sharding_is_stable_and_partitions_shows(self):
-        shows = [{"slug": f"s{i}", "feed_url": "u", "text_source": "asr"} for i in range(10)]
-        first = pcfg.select_shows(shows, shard=0, shards=2)
-        second = pcfg.select_shows(shows, shard=1, shards=2)
-        self.assertEqual(len(first) + len(second), 10)
-        self.assertFalse({s["slug"] for s in first} & {s["slug"] for s in second})
-        self.assertEqual(first, pcfg.select_shows(shows, shard=0, shards=2))
+    def test_sharding_is_stable_and_partitions_episodes(self):
+        # 一个节目 121 集也必须能切给多个 job：按 guid 切，同一集永远同一片。
+        episodes = [{"guid": f"g{i}"} for i in range(121)]
+        parts = [pcfg.shard_episodes(episodes, shard=i, shards=8) for i in range(8)]
+        self.assertEqual(sum(len(part) for part in parts), 121)
+        seen = [e["guid"] for part in parts for e in part]
+        self.assertEqual(len(seen), len(set(seen)))
+        self.assertEqual(parts[0], pcfg.shard_episodes(episodes, shard=0, shards=8))
+
+    def test_single_shard_keeps_every_episode(self):
+        episodes = [{"guid": f"g{i}"} for i in range(5)]
+        self.assertEqual(pcfg.shard_episodes(episodes, shard=3, shards=1), episodes)
 
     def test_only_slug_wins(self):
         shows = [{"slug": "a", "feed_url": "u", "text_source": "asr"}]
-        self.assertEqual(pcfg.select_shows(shows, only_slug="a", shard=0, shards=1), shows)
-        self.assertEqual(pcfg.select_shows(shows, only_slug="b", shard=0, shards=1), [])
+        self.assertEqual(pcfg.select_shows(shows, only_slug="a"), shows)
+        self.assertEqual(pcfg.select_shows(shows, only_slug="b"), [])
 
 
 if __name__ == "__main__":
