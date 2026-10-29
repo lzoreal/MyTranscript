@@ -1082,7 +1082,11 @@ def translate_blocks(
                     if all(item == "auth" for item in ring.switch_kinds):
                         raise GeminiAuthFailed(message) from exc
                     raise QuotaExhausted(message) from exc
-                log.warning("Gemini key %s %s，切到 %s", before, kind, ring.label())
+                # 带上服务端原话：429 是"每分钟"还是"每天"的配额，只有它说得清。
+                log.warning(
+                    "Gemini key %s %s（%s），切到 %s",
+                    before, kind, str(exc)[:200].replace("\n", " "), ring.label(),
+                )
                 continue
             if isinstance(exc, IncompleteTranslation):
                 translated.update(exc.partial)
