@@ -13,8 +13,13 @@ def show_dir(data_dir: Path, slug: str) -> Path:
     return Path(data_dir) / slug
 
 
-def load_state(data_dir: Path, slug: str) -> dict[str, Any]:
-    path = show_dir(data_dir, slug) / "state.json"
+def state_path(data_dir: Path, slug: str, suffix: str = "") -> Path:
+    """每片一份 state：分片按 guid 切分，各片只写自己的文件，push 不会互撞。"""
+    return show_dir(data_dir, slug) / f"state{suffix}.json"
+
+
+def load_state(data_dir: Path, slug: str, suffix: str = "") -> dict[str, Any]:
+    path = state_path(data_dir, slug, suffix)
     if not path.exists():
         return {"episodes": {}}
     try:
@@ -25,9 +30,11 @@ def load_state(data_dir: Path, slug: str) -> dict[str, Any]:
     return data
 
 
-def save_state(data_dir: Path, slug: str, state: dict[str, Any]) -> None:
-    path = show_dir(data_dir, slug) / "state.json"
-    _atomic_write(path, json.dumps(state, ensure_ascii=False, separators=(",", ":")))
+def save_state(data_dir: Path, slug: str, state: dict[str, Any], suffix: str = "") -> None:
+    _atomic_write(
+        state_path(data_dir, slug, suffix),
+        json.dumps(state, ensure_ascii=False, separators=(",", ":")),
+    )
 
 
 def needs_work(state: dict[str, Any], guid: str) -> bool:

@@ -17,6 +17,18 @@ class StoreTests(unittest.TestCase):
             state = pstore.load_state(data, "pod")
         self.assertEqual(state["episodes"]["g1"]["status"], "done")
 
+    def test_shard_suffixes_keep_states_apart(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data = Path(temp_dir)
+            pstore.save_state(data, "pod", {"episodes": {"a": {"status": "done"}}})
+            pstore.save_state(data, "pod", {"episodes": {"b": {"status": "done"}}}, "-3")
+            self.assertEqual(set(pstore.load_state(data, "pod")["episodes"]), {"a"})
+            self.assertEqual(set(pstore.load_state(data, "pod", "-3")["episodes"]), {"b"})
+            self.assertEqual(
+                sorted(p.name for p in (data / "pod").glob("state*.json")),
+                ["state-3.json", "state.json"],
+            )
+
     def test_needs_work_rules(self):
         self.assertTrue(pstore.needs_work({"episodes": {}}, "g1"))
         self.assertFalse(pstore.needs_work({"episodes": {"g1": {"status": "done"}}}, "g1"))

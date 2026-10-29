@@ -51,6 +51,26 @@ class EnvTests(unittest.TestCase):
         self.assertLess(len(seen), 3)
         self.assertEqual(stats["done"], len(seen))
 
+    def test_prepared_shows_partition_episodes_and_name_their_state(self):
+        episodes = [{"guid": f"g{i}"} for i in range(40)]
+        shows = [{"slug": "a", "feed_url": "u", "text_source": "asr"}]
+        a = runmod.prepare_shows(shows, shard=0, shards=4, list_episodes=lambda url: episodes)
+        b = runmod.prepare_shows(shows, shard=1, shards=4, list_episodes=lambda url: episodes)
+        self.assertEqual(a[0]["state_suffix"], "-0")
+        self.assertEqual(b[0]["state_suffix"], "-1")
+        self.assertFalse({e["guid"] for e in a[0]["episodes"]} & {e["guid"] for e in b[0]["episodes"]})
+        parts = [
+            runmod.prepare_shows(shows, shard=i, shards=4, list_episodes=lambda url: episodes)[0]["episodes"]
+            for i in range(4)
+        ]
+        self.assertEqual(sum(len(part) for part in parts), len(episodes))
+
+    def test_single_shard_keeps_the_plain_state_file(self):
+        shows = [{"slug": "a", "feed_url": "u", "text_source": "asr"}]
+        got = runmod.prepare_shows(shows, shard=0, shards=1, list_episodes=lambda url: [{"guid": "g1"}])
+        self.assertEqual(got[0]["state_suffix"], "")
+        self.assertEqual(len(got[0]["episodes"]), 1)
+
     def test_run_pauses_on_quota_instead_of_failing_episodes(self):
         seen = []
 
