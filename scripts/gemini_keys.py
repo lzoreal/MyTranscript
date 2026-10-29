@@ -53,6 +53,8 @@ class GeminiKeyRing:
         self._index = 0
         self._factory = factory or _default_factory
         self.requests = 0
+        # 已用掉的"全 key 429 冷却"次数（每进程上限，防止每日额度用完后一直等）
+        self.cooldowns = 0
         # 每次切换的原因（"quota" / "auth"）：最后一次的原因决定是"配额用完"还是"key 全被拒"
         self.switch_kinds: list[str] = []
 
@@ -86,6 +88,10 @@ class GeminiKeyRing:
     def mark_exhausted(self) -> bool:
         self._index += 1
         return self.available
+
+    def rewind(self) -> None:
+        """全部 429 之后隔一会儿重来：RPM 限流会自己恢复，换 key 换不掉它。"""
+        self._index = 0
 
 
 def is_quota_error(exc: Exception) -> bool:

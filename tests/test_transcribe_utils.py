@@ -619,6 +619,12 @@ class _AuthError(Exception):
 
 
 class GeminiRotationTranslateTests(unittest.TestCase):
+    def setUp(self):
+        # 冷却等待在真实环境是 90 秒；测试里归零，断言只看"等过"。
+        self._cooldown = patch.object(transcriber, "GEMINI_QUOTA_COOLDOWN", 0.0)
+        self._cooldown.start()
+        self.addCleanup(self._cooldown.stop)
+
     def test_switches_key_after_quota_error(self):
         calls = []
 
@@ -653,9 +659,44 @@ class GeminiRotationTranslateTests(unittest.TestCase):
                 raise _QuotaError("429 RESOURCE_EXHAUSTED")
 
         ring = transcriber.GeminiKeyRing(["k1"], factory=lambda api_key: Client())
-        with patch.object(transcriber, "wait_for_gemini_rate_limit"):
+        with patch.object(transcriber, "wait_for_gemini_rate_limit"), patch.object(
+            transcriber.time, "sleep"
+        ):
             with self.assertRaises(transcriber.QuotaExhausted):
                 transcriber.translate_blocks(ring, [(0, {"en": "Hello there friend"})], {})
+        self.assertEqual(ring.cooldowns, transcriber.GEMINI_QUOTA_COOLDOWNS)
+
+    def test_transient_429_on_every_key_cools_down_then_retries(self):
+        # 线上事故：10 个 job 同时跑，4 把 key 在一分钟内全被 429 判死，
+        # 整片直接暂停。限流会自己恢复，等一轮就该继续。
+        calls = []
+
+        class Client:
+            def __init__(self, api_key):
+                self.api_key = api_key
+
+            @property
+            def models(self):
+                return self
+
+            def generate_content(self, model, contents, config):
+                calls.append(self.api_key)
+                if len(calls) <= 2:
+                    raise _QuotaError("429 RESOURCE_EXHAUSTED")
+                return SimpleNamespace(text=json.dumps({"0": "译0"}))
+
+        ring = transcriber.GeminiKeyRing(["k1", "k2"], factory=Client)
+        translated = {}
+        with patch.object(
+            transcriber, "wait_for_gemini_rate_limit"
+        ), patch.object(transcriber.time, "sleep") as sleep:
+            transcriber.translate_blocks(
+                ring, [(0, {"en": "Hello there friend"})], translated
+            )
+        self.assertEqual(translated, {0: "译0"})
+        self.assertEqual(ring.cooldowns, 1)
+        sleep.assert_called_once()
+        self.assertEqual(calls, ["k1", "k2", "k1"])
 
     def test_error_classification(self):
         self.assertTrue(transcriber.is_quota_error(_QuotaError("x")))

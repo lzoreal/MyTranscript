@@ -76,6 +76,10 @@ GEMINI_RPM = max(1, int(os.getenv("GEMINI_RPM", "15")))
 GEMINI_REQUEST_INTERVAL = 60.0 / GEMINI_RPM
 GEMINI_RATE_LIMIT_LOCK = threading.Lock()
 GEMINI_LAST_REQUEST_AT = 0.0
+# 全部 key 都 429 时先等一会儿再重来：并发 job 之间撞的是每分钟配额，
+# 换 key 换不掉它，但等一分钟就恢复了。
+GEMINI_QUOTA_COOLDOWN = max(1.0, float(os.getenv("GEMINI_QUOTA_COOLDOWN", "90")))
+GEMINI_QUOTA_COOLDOWNS = max(0, int(os.getenv("GEMINI_QUOTA_COOLDOWNS", "2")))
 AUDIO_TIMEOUT = max(10, int(os.getenv("AUDIO_TIMEOUT", "60")))
 AUDIO_MAX_MB = max(1, int(os.getenv("AUDIO_MAX_MB", "1500")))
 
@@ -1081,6 +1085,16 @@ def translate_blocks(
                     )
                     if all(item == "auth" for item in ring.switch_kinds):
                         raise GeminiAuthFailed(message) from exc
+                    if ring.cooldowns < GEMINI_QUOTA_COOLDOWNS:
+                        ring.cooldowns += 1
+                        ring.rewind()
+                        log.warning(
+                            "所有 key 都撞上限流，等 %.0f 秒后重来（第 %d/%d 次）",
+                            GEMINI_QUOTA_COOLDOWN, ring.cooldowns,
+                            GEMINI_QUOTA_COOLDOWNS,
+                        )
+                        time.sleep(GEMINI_QUOTA_COOLDOWN)
+                        continue
                     raise QuotaExhausted(message) from exc
                 # 带上服务端原话：429 是"每分钟"还是"每天"的配额，只有它说得清。
                 log.warning(
