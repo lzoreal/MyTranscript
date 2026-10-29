@@ -57,9 +57,7 @@ def main() -> int:
         shards=env["shards"],
     )
     prepared = [
-        {"slug": show["slug"], "text_source": show["text_source"],
-         "config": show, "episodes": pconfig.list_episodes(show["feed_url"])}
-        for show in shows
+        {**show, "episodes": pconfig.list_episodes(show["feed_url"])} for show in shows
     ]
     print(f"分片 {env['shard']}/{env['shards']}：节目 {len(prepared)}，"
           f"候选集 {sum(len(s['episodes']) for s in prepared)}")
