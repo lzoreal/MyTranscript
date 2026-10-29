@@ -51,6 +51,26 @@ class EnvTests(unittest.TestCase):
         self.assertLess(len(seen), 3)
         self.assertEqual(stats["done"], len(seen))
 
+    def test_run_pauses_on_quota_instead_of_failing_episodes(self):
+        seen = []
+
+        def process(show, episode, deps, data_dir):
+            seen.append(episode)
+            if episode == 2:
+                raise runmod.pepisode.QuotaExhausted("all keys spent")
+            return "done"
+
+        stats = runmod.run(
+            [{"slug": "a", "text_source": "asr", "episodes": [1, 2, 3]}],
+            deps_factory=lambda show: {},
+            data_dir=Path("unused"),
+            max_minutes=60,
+            clock=lambda: 0.0,
+            process=process,
+        )
+        self.assertEqual(seen, [1, 2], "配额用尽后不再继续下一集")
+        self.assertEqual(stats["done"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

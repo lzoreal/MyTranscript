@@ -21,17 +21,18 @@ faster_whisper = types.ModuleType("faster_whisper")
 faster_whisper.WhisperModel = object
 sys.modules.setdefault("faster_whisper", faster_whisper)
 
-google = types.ModuleType("google")
-genai = types.ModuleType("google.genai")
-genai_types = types.ModuleType("google.genai.types")
+# 别的测试文件可能已经装了更简的 google 桩（setdefault 不覆盖），
+# 这里取回真正生效的模块再补属性，否则整包跑时翻译用例会缺 GenerateContentConfig。
+google = sys.modules.setdefault("google", types.ModuleType("google"))
+genai = sys.modules.setdefault("google.genai", types.ModuleType("google.genai"))
+genai_types = sys.modules.setdefault(
+    "google.genai.types", types.ModuleType("google.genai.types")
+)
 genai.Client = object
 genai.types = genai_types
+google.genai = genai
 if not hasattr(genai_types, "GenerateContentConfig"):
     genai_types.GenerateContentConfig = lambda **kwargs: kwargs
-google.genai = genai
-sys.modules.setdefault("google", google)
-sys.modules.setdefault("google.genai", genai)
-sys.modules.setdefault("google.genai.types", genai_types)
 
 MODULE_PATH = Path(__file__).parents[1] / "scripts" / "transcribe.py"
 SPEC = importlib.util.spec_from_file_location("transcribe", MODULE_PATH)
@@ -943,6 +944,18 @@ class TranslationPairingTests(unittest.TestCase):
         self.assertEqual(fake.requests[1], ["2", "4"])
         for index, cue in enumerate(self.cues):
             self.assertEqual(cue["zh"], f"译{index}::{cue['en']}")
+
+    def test_domain_only_cue_is_copied_verbatim(self):
+        # 真实事故：整集 2979 条字幕，卡在 "howwemadeyourmother.com" 这一条上，
+        # 模型原样返回，被当成"疑似未翻译"重试到整集失败。
+        cues = [
+            {"start": 0.0, "end": 1.0, "en": "howwemadeyourmother.com"},
+            {"start": 1.0, "end": 2.0, "en": "Yeah."},
+        ]
+        fake, _ = self.run_translation([], cues=cues)
+        self.assertEqual(cues[0]["zh"], "howwemadeyourmother.com")
+        self.assertEqual(fake.requests, [["0"]], "域名不该被送进模型")
+        self.assertEqual(cues[1]["zh"], "译0::Yeah.")
 
     def test_persistent_single_cue_failure_names_the_cue(self):
         with self.assertRaises(RuntimeError) as caught:
