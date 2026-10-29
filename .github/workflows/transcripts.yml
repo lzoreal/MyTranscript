@@ -75,8 +75,11 @@ jobs:
           PY
 
       - name: 挂载数据分支
+        id: mount
         run: |
           set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if git fetch origin word-transcripts 2>/dev/null; then
             git worktree add --detach ../data-branch origin/word-transcripts
             cd ../data-branch
@@ -91,12 +94,15 @@ jobs:
             git push origin word-transcripts
           fi
           mkdir -p data
+          [ -n "$(ls -A data)" ] || touch data/.gitkeep
 
       - name: 运行管线
         run: python -u scripts/run_pipeline.py
+        env:
+          DATA_DIR: ${{ github.workspace }}/../data-branch/data
 
       - name: 提交产物到数据分支
-        if: always()
+        if: always() && steps.mount.outcome == 'success'
         env:
           MY_PAT: ${{ secrets.MY_CUSTOM_PAT }}
         run: |
