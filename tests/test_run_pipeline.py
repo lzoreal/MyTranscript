@@ -71,6 +71,23 @@ class EnvTests(unittest.TestCase):
         self.assertEqual(got[0]["state_suffix"], "")
         self.assertEqual(len(got[0]["episodes"]), 1)
 
+    def test_run_leaves_room_for_one_more_episode(self):
+        # 单集动辄 40 分钟且不可中断：剩 45 分钟时开新一集，这一块就会越过截止线，
+        # 分块提交跟着变稀。留一集余量后，45 分钟的块只干一集就收尾。
+        seen = []
+        times = iter([0.0, 0.0, 10 * 60.0, 10 * 60.0, 20 * 60.0])
+        stats = runmod.run(
+            [{"slug": "a", "text_source": "asr", "episodes": [1, 2, 3]}],
+            deps_factory=lambda show: {},
+            data_dir=Path("unused"),
+            max_minutes=45,
+            reserve_minutes=40,
+            clock=lambda: next(times),
+            process=lambda show, episode, deps, data_dir: seen.append(episode) or "done",
+        )
+        self.assertEqual(len(seen), 1, "剩 35 分钟不够一集，不能再开")
+        self.assertEqual(stats["done"], 1)
+
     def test_run_pauses_on_quota_instead_of_failing_episodes(self):
         seen = []
 

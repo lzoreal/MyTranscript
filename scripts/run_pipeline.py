@@ -20,13 +20,15 @@ def pipeline_env(env) -> dict:
         "shard": shard,
         "shards": shards,
         "max_minutes": float(env.get("MAX_MINUTES", "150") or 150),
+        "reserve_minutes": float(env.get("RESERVE_MINUTES", "0") or 0),
         "only_slug": (env.get("ONLY_SLUG", "") or "").strip() or None,
         "data_dir": Path(env.get("DATA_DIR", "data") or "data"),
         "feeds_file": Path(env.get("FEEDS_FILE", "feeds.json") or "feeds.json"),
     }
 
 
-def run(shows, *, deps_factory, data_dir, max_minutes, clock=None, process=None):
+def run(shows, *, deps_factory, data_dir, max_minutes, reserve_minutes=0,
+        clock=None, process=None):
     process = process or pepisode.process_episode
     clock = clock or time.monotonic
     deadline = clock() + max_minutes * 60
@@ -34,8 +36,9 @@ def run(shows, *, deps_factory, data_dir, max_minutes, clock=None, process=None)
     for show in shows:
         deps = deps_factory(show)
         for episode in show["episodes"]:
-            if clock() >= deadline:
-                print("预算用完，剩余留给下一轮")
+            # 单集耗时不可中断，留不够一集就别开新的，否则这一块会越过截止线。
+            if clock() + reserve_minutes * 60 >= deadline:
+                print("剩余时间不足一集，先提交这一块")
                 return stats
             try:
                 outcome = process(show, episode, deps, data_dir)
@@ -79,7 +82,8 @@ def main() -> int:
     print(f"分片 {env['shard']}/{env['shards']}：节目 {len(prepared)}，"
           f"候选集 {sum(len(s['episodes']) for s in prepared)}")
     stats = run(prepared, deps_factory=build_default_deps, data_dir=env["data_dir"],
-                max_minutes=env["max_minutes"])
+                max_minutes=env["max_minutes"],
+                reserve_minutes=env["reserve_minutes"])
     paused = stats.pop("paused", False)
     print(f"结束：{json.dumps(stats, ensure_ascii=False)}")
     return 2 if paused else 0
