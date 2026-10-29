@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-MAX_ATTEMPTS = 2
+MAX_ATTEMPTS = 3
 
 
 def show_dir(data_dir: Path, slug: str) -> Path:
