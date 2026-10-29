@@ -215,15 +215,27 @@ for f in tests/test_*.py; do python "$f"; done     # 6 个文件、174 个用例
 
 | 文件 | 职责 |
 | --- | --- |
-| `scripts/pipeline_config.py` | 读/校验 `feeds.json`，按 slug 分片，列 RSS 条目 |
+| `scripts/pipeline_config.py` | 读/校验 `feeds.json`，按 guid 分片，列 RSS 条目 |
 | `scripts/pipeline_text.py` | 文本源：`asr` 直接用 ASR 句子；`podscripts` 抓取后映射到词流 |
 | `scripts/clause_translation.py` | 小句翻译契约（en 拼接必须等于原句） |
 | `scripts/zh_align.py` | 中文分词驱动的时间分配 + DTW 兜底 |
-| `scripts/pipeline_store.py` | `data/<slug>/state.json` 与单集 JSON 的原子写 |
+| `scripts/pipeline_store.py` | `data/<slug>/state<suffix>.json` 与单集 JSON 的原子写 |
 | `scripts/pipeline_episode.py` | 单集编排（依赖注入，可单测） |
 | `scripts/pipeline_publish.py` | 双语 VTT 渲染 |
 | `scripts/pipeline_deps.py` | 把 ASR/翻译/抓取/嵌入装配成 deps |
 | `scripts/run_pipeline.py` | CLI：分片、预算、`ONLY_SLUG`、`DATA_DIR` |
+
+### 分片与续跑
+
+- 分片的单位是**集**，不是节目：`sha1(guid) % shards == shard`。一个节目 121 集也能切给 16 个 job，
+  同一集永远落在同一片。
+- 每片写自己的 `data/<slug>/state-<shard>.json`（单片时仍叫 `state.json`）。分片之间不共享状态文件，
+  并发 push 时各改各的文件，`git_push_retry.sh` 的 rebase 不会撞车。**完成的集要看所有 state 的并集。**
+- `needs_work` 只认本片状态：某集在某片失败两次就永久出局，要捞回来得手动改该片 state。
+- 配额用尽不是失败：`process_episode` 直接上抛 `QuotaExhausted`，不记 attempts，`run_pipeline` 打印
+  "Gemini 配额用尽，本轮停在这里"后正常退出——补配额后重发同一片即可续跑。
+- 单个 job 的 `timeout-minutes` 是 360；`MAX_MINUTES` 要在开跑下一集前判断，所以整片时长
+  ≈ `MAX_MINUTES` + 一集耗时，两者之和必须小于 360。
 
 ### 迁移一个节目（三步，缺一不可）
 
