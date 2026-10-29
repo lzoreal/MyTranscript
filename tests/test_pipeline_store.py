@@ -32,8 +32,8 @@ class StoreTests(unittest.TestCase):
     def test_needs_work_rules(self):
         self.assertTrue(pstore.needs_work({"episodes": {}}, "g1"))
         self.assertFalse(pstore.needs_work({"episodes": {"g1": {"status": "done"}}}, "g1"))
-        self.assertFalse(pstore.needs_work({"episodes": {"g1": {"status": "failed", "attempts": 2}}}, "g1"))
-        self.assertTrue(pstore.needs_work({"episodes": {"g1": {"status": "failed", "attempts": 1}}}, "g1"))
+        self.assertFalse(pstore.needs_work({"episodes": {"g1": {"status": "failed", "attempts": 3}}}, "g1"))
+        self.assertTrue(pstore.needs_work({"episodes": {"g1": {"status": "failed", "attempts": 2}}}, "g1"))
 
     def test_episode_document_is_compact_and_complete(self):
         with tempfile.TemporaryDirectory() as temp_dir:
