@@ -8,33 +8,47 @@ on:
       only_slug:
         description: "只跑某个节目（留空=全部）"
         default: ""
-      shard:
-        description: "分片号"
-        default: "0"
       shards:
-        description: "分片数"
-        default: "1"
+        description: "分片数（每片一个 job，按 guid 切集）"
+        default: "10"
       max_minutes:
-        description: "预算（分钟）"
-        default: "150"
+        description: "每片预算（分钟，含已提交的分块）"
+        default: "270"
 
 permissions:
   contents: write
 
-# 分片各跑各的：一个 group 会把 16 个分片串行化成一次只跑一个。
+# 同一个 run 里的矩阵 job 各跑各的，这里只防止两次 dispatch 重叠。
 concurrency:
-  group: transcript-pipeline-${{ github.event.inputs.shard || '0' }}
+  group: transcript-pipeline
   cancel-in-progress: false
 
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      shards: ${{ steps.gen.outputs.shards }}
+    steps:
+      - id: gen
+        env:
+          SHARDS: ${{ github.event.inputs.shards || '10' }}
+        run: |
+          echo "shards=$(python3 -c 'import json, os; print(json.dumps(list(range(int(os.environ["SHARDS"])))))')" >> "$GITHUB_OUTPUT"
+
   run:
+    needs: plan
     runs-on: ubuntu-latest
     timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
     env:
-      DATA_DIR: data
-      SHARD: ${{ github.event.inputs.shard || '0' }}
-      SHARDS: ${{ github.event.inputs.shards || '1' }}
-      MAX_MINUTES: ${{ github.event.inputs.max_minutes || '150' }}
+      DATA_DIR: ${{ github.workspace }}/../data-branch/data
+      SHARD: ${{ matrix.shard }}
+      SHARDS: ${{ github.event.inputs.shards || '10' }}
+      MAX_MINUTES: ${{ github.event.inputs.max_minutes || '270' }}
       ONLY_SLUG: ${{ github.event.inputs.only_slug || '' }}
       WHISPER_MODEL: models/ct2-turbo
       GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
@@ -43,6 +57,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          # 排队的 run 会钉在创建时的 SHA；显式取 main 最新，否则上一轮
+          # 提交到数据分支的分片状态在 worktree 里看不到，会被重做。
+          ref: main
           token: ${{ secrets.MY_CUSTOM_PAT }}
 
       - uses: actions/setup-python@v5
@@ -97,10 +114,31 @@ jobs:
           mkdir -p data
           [ -n "$(ls -A data)" ] || touch data/.gitkeep
 
-      - name: 运行管线
-        run: python -u scripts/run_pipeline.py
-        env:
-          DATA_DIR: ${{ github.workspace }}/../data-branch/data
+      # 分块跑 + 分块提交：job 被掐断时只丢当前这一集，不像整片跑完再提交那样全丢。
+      - name: 运行管线（每块提交）
+        run: |
+          set -o pipefail
+          start=$(date +%s)
+          budget=$(( ${MAX_MINUTES%.*} * 60 ))
+          while :; do
+            remaining=$(( budget - ( $(date +%s) - start ) ))
+            if [ "$remaining" -lt 1800 ]; then
+              echo "剩余 ${remaining}s 不足一集，收尾"
+              break
+            fi
+            chunk=$(( remaining / 60 ))
+            [ "$chunk" -gt 45 ] && chunk=45
+            rc=0
+            MAX_MINUTES=$chunk python -u scripts/run_pipeline.py || rc=$?
+            ( cd ../data-branch \
+              && bash "${GITHUB_WORKSPACE}/scripts/git_push_retry.sh" \
+                   "auto: word transcripts (shard ${SHARD})" data ) \
+              || echo "提交失败，文件留在 worktree 等兜底步骤"
+            if [ "$rc" -ne 0 ]; then
+              echo "管线退出码 ${rc}（2=配额暂停），本片停止"
+              break
+            fi
+          done
 
       - name: 提交产物到数据分支
         if: always() && steps.mount.outcome == 'success'
@@ -110,4 +148,4 @@ jobs:
           cd ../data-branch
           git remote set-url origin "https://${MY_PAT}@github.com/${GITHUB_REPOSITORY}.git"
           bash "${GITHUB_WORKSPACE}/scripts/git_push_retry.sh" \
-            "auto: word transcripts (${GITHUB_EVENT_NAME})" data
+            "auto: word transcripts (shard ${SHARD}, tail)" data

@@ -41,6 +41,7 @@ def run(shows, *, deps_factory, data_dir, max_minutes, clock=None, process=None)
                 outcome = process(show, episode, deps, data_dir)
             except pepisode.QuotaExhausted as exc:
                 print(f"Gemini 配额用尽，本轮停在这里：{exc}")
+                stats["paused"] = True
                 return stats
             stats[outcome] = stats.get(outcome, 0) + 1
     return stats
@@ -79,8 +80,9 @@ def main() -> int:
           f"候选集 {sum(len(s['episodes']) for s in prepared)}")
     stats = run(prepared, deps_factory=build_default_deps, data_dir=env["data_dir"],
                 max_minutes=env["max_minutes"])
+    paused = stats.pop("paused", False)
     print(f"结束：{json.dumps(stats, ensure_ascii=False)}")
-    return 0
+    return 2 if paused else 0
 
 
 if __name__ == "__main__":
