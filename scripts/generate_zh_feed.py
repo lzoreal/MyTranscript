@@ -212,8 +212,8 @@ def transcript_rank(node) -> int:
     return 0
 
 
-def process_podcast(slug, base_url, status):
-    site_dir = Path("site")
+def process_podcast(slug, base_url, status, site_dir=None):
+    site_dir = Path(site_dir or "site")
     source = site_dir / slug / "feed.xml"
     output = site_dir / slug / "feed-zh.xml"
 
