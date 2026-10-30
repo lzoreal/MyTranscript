@@ -98,6 +98,24 @@ class EpisodeTests(unittest.TestCase):
         self.assertEqual(status, "done")
         self.assertTrue(doc["sentences"][0]["zh_words"], "没有 clauses 也要走 DTW 兜底")
 
+    def test_missing_external_text_falls_back_to_asr(self):
+        # 线上事故：PodScripts 没收录的集（"未匹配到字幕页"）整集失败，
+        # 这两集本该像 hwmym 一样用我们自己的 ASR 文本。
+        cues = [{"start": 0.0, "end": 1.0, "en": "hi there",
+                 "words": [{"w": "hi", "s": 0.0, "e": 0.5}, {"w": "there", "s": 0.5, "e": 1.0}]}]
+        deps = self.deps(cues)
+        deps["text"] = lambda show, episode: []
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data = Path(temp_dir)
+            status = pepisode.process_episode(
+                {"slug": "pod", "text_source": "podscripts", "podscripts_id": 1},
+                {"guid": "g1", "title": "Ep", "audio_url": "u"},
+                deps, data,
+            )
+            doc = json.loads(pstore.episode_path(data, "pod", "g1").read_text(encoding="utf-8"))
+        self.assertEqual(status, "done")
+        self.assertEqual(doc["sentences"][0]["en"], "hi there")
+
     def test_gated_sentence_falls_back_to_even_timing(self):
         # 英中分句数差太大时 DTW 门控会拒绝；这一句仍需词级时间，标 even 供消费方降级。
         # 英文每个词都自带逗号 → 8 个小句；中文只有 2 个 → 门控必然拒绝。

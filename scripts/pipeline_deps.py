@@ -27,15 +27,19 @@ def _encode(texts: list[str]):
 
 
 def _text(show, episode):
+    """PodScripts 没有这一集就返回空表：调用方回退到 ASR 文本，而不是整集失败。"""
     episode_url = scraper.search_podscripts(episode["title"], show["podscripts_id"])
     if not episode_url:
-        raise RuntimeError(f"未匹配到字幕页：{episode['title'][:60]}")
+        print(f"   PodScripts 未收录：{episode['title'][:60]}")
+        return []
     html = scraper.request_text(episode_url)
     if not html:
-        raise RuntimeError("字幕页抓取失败")
+        print("   PodScripts 页面抓取失败，回退到 ASR 文本")
+        return []
     cues = scraper.parse_transcript(html)
     if not cues:
-        raise RuntimeError("字幕页没有内容")
+        print("   PodScripts 页面没有内容，回退到 ASR 文本")
+        return []
     return [{"en": scraper.clean_text(cue["text"])} for cue in cues]
 
 

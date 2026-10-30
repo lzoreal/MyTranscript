@@ -44,7 +44,13 @@ def process_episode(show, episode, deps, data_dir: Path, now=None) -> str:
         if show["text_source"] == "asr":
             sentences = ptext.asr_sentences(asr_cues)
         else:
-            sentences = ptext.map_external_text(deps["text"](show, episode), asr_cues, seconds)
+            blocks = deps["text"](show, episode)
+            sentences = (
+                ptext.map_external_text(blocks, asr_cues, seconds) if blocks else []
+            )
+            if not sentences:
+                print(f"{show['slug']}/{guid}: 外部文本不可用，回退到 ASR 文本")
+                sentences = ptext.asr_sentences(asr_cues)
         if not sentences:
             raise RuntimeError("没有任何句子")
         deps["translate"](sentences)
