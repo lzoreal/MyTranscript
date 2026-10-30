@@ -100,7 +100,10 @@ def main() -> int:
                 reserve_minutes=env["reserve_minutes"])
     paused = stats.pop("paused", False)
     print(f"结束：{json.dumps(stats, ensure_ascii=False)}")
-    return 2 if paused else 0
+    if paused:
+        return 2
+    # 3 = 本片没有可处理的集数：分块循环据此收工，不再空转。
+    return 3 if not any(stats.values()) else 0
 
 
 if __name__ == "__main__":
