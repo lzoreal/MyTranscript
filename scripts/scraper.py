@@ -895,6 +895,9 @@ def main():
     SITE_DIR.mkdir(parents=True, exist_ok=True)
 
     for podcast in podcasts:
+        if podcast.get("migrated"):
+            print(f"播客：{display_name(podcast)} ({podcast['slug']}) 已迁移到新管线，跳过抓取")
+            continue
         try:
             process_podcast(podcast, progress)
         except KeyboardInterrupt:
@@ -907,6 +910,8 @@ def main():
 
     print("\n开始生成增强 RSS")
     for podcast in podcasts:
+        if podcast.get("migrated"):
+            continue
         slug = podcast["slug"]
         pc_prog = get_podcast_progress(progress, slug)
         try:

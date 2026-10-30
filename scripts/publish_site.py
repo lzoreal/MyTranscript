@@ -51,6 +51,32 @@ def merge_translations(data: dict, slug: str, entries: dict) -> int:
     return changed
 
 
+def merge_progress(progress: dict, slug: str, documents, stems, base_url: str) -> int:
+    """把新发布的集登记进 progress.json：总索引的集数、feed 合并都读它。"""
+    bucket = (
+        (progress.setdefault("podcasts", {})).setdefault(slug, {}).setdefault("processed", {})
+    )
+    changed = 0
+    for document in documents:
+        guid = document["guid"]
+        stem = stems.get(guid)
+        if not stem:
+            continue
+        entry = bucket.get(guid) or {}
+        merged = {
+            "title": document.get("title", ""),
+            "url": f"{base_url.rstrip('/')}/{slug}/transcripts/{stem}.vtt",
+            "path": f"{slug}/transcripts/{stem}.vtt",
+            "completed_at": document.get("generated_at", ""),
+            "vtt_filename": f"{stem}.vtt",
+        }
+        if any(entry.get(key) != value for key, value in merged.items()):
+            changed += 1
+            entry.update(merged)
+            bucket[guid] = entry
+    return changed
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("slug")
@@ -81,6 +107,15 @@ def main(argv=None) -> int:
         # zh feed 只保留 status 里的集：必须带上已发布的老集，否则会被整批删掉。
         status={args.slug: translations.get(args.slug) or {}},
     )
+    progress_changed = merge_progress(
+        progress, args.slug, pipeline_site.load_documents(args.data_dir, args.slug),
+        result["stems"], args.base_url,
+    )
+    if progress_changed:
+        Path("progress.json").write_text(
+            json.dumps(progress, ensure_ascii=False, indent=2) + chr(10), encoding="utf-8"
+        )
+
     merged = dict(translations)
     changed = merge_translations(merged, args.slug, result["status"])
     if changed:
