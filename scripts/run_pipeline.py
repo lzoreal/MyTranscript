@@ -57,7 +57,8 @@ def publish_key_health(env) -> None:
     directory = os.getenv("GEMINI_HEALTH_DIR", "").strip()
     if not directory:
         return
-    dead = sorted(pkeyhealth.dead_ids(Path(directory)))
+    model = (os.getenv("GEMINI_MODEL", "") or "").strip() or None
+    dead = sorted(pkeyhealth.dead_ids(Path(directory), model=model))
     os.environ["GEMINI_EXCLUDE_KEYS"] = ",".join(dead)
     if dead:
         print(f"跳过其它分片标记不可用的 key：{len(dead)} 把")
