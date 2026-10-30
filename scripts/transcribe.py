@@ -367,6 +367,11 @@ def load_proxy_cache() -> list[str]:
             return []
         log.info("使用代理缓存：%d 个", len(proxies))
         random.shuffle(proxies)
+        preferred = data.get("preferred")
+        if preferred in proxies:
+            # 上一次成功的代理排最前：同一 job 的下一集几乎立刻命中，不用再赌一遍。
+            proxies.remove(preferred)
+            proxies.insert(0, preferred)
         return proxies
     except Exception as exc:
         log.warning("读取代理缓存失败：%s", exc)
@@ -385,6 +390,31 @@ def save_proxy_cache(proxies: list[str]) -> None:
         )
     except Exception as exc:
         log.warning("保存代理缓存失败：%s", exc)
+
+
+def promote_proxy(proxy: str | None) -> None:
+    """把本次成功的代理记为 preferred，下次优先尝试。"""
+    if not proxy:
+        return
+    try:
+        data = {}
+        if PROXY_CACHE_FILE.exists():
+            try:
+                data = json.loads(PROXY_CACHE_FILE.read_text(encoding="utf-8"))
+            except Exception:
+                data = {}
+        proxies = list(data.get("proxies") or [])
+        if proxy not in proxies:
+            proxies.append(proxy)
+        PROXY_CACHE_FILE.write_text(
+            json.dumps(
+                {"created_at": time.time(), "proxies": proxies, "preferred": proxy},
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+    except Exception as exc:
+        log.debug("记录优先代理失败：%s", exc)
 
 
 def get_china_proxies() -> list[str]:
@@ -664,6 +694,7 @@ def download_audio(url: str, output_path: Path) -> dict[str, Any]:
     final_size = validate_audio_file(output_path)
     final_hash = calculate_sha256(output_path)
     shutil.rmtree(race_dir, ignore_errors=True)
+    promote_proxy(winner.get("proxy"))
     log.info(
         "代理下载成功：尝试 %d/%d 个（失败 %d），proxy=%s, ip=%s, country=%s, size=%.1f MB, SHA256=%s",
         next_index,

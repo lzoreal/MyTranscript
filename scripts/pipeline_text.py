@@ -50,6 +50,13 @@ def map_external_text(text_blocks, asr_cues, total_seconds: float) -> list[dict[
     mapping, _similarity = align_timings.map_stream(tokens, our_tokens)
     decisions = align_timings.classify_cues(spans, mapping)
     kept = align_timings.assign_times(blocks, spans, decisions, mapping, kept_words, total_seconds)
+    dropped = [cue for cue, decision in zip(blocks, decisions) if decision == "drop"]
+    if dropped:
+        chars = sum(len(cue["en"]) for cue in dropped)
+        print(
+            f"  丢弃 {len(dropped)} 段广告/无关块（{chars} 字），"
+            f"示例：{dropped[0]['en'][:60]}"
+        )
     return [
         _sentence(cue["start"], cue["end"], cue["en"], cue.get("words") or [])
         for cue in kept
