@@ -62,3 +62,25 @@ class SeedTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ResetTests(unittest.TestCase):
+    def test_reset_removes_only_seeded_entries(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            progress = root / "progress.json"
+            progress.write_text(json.dumps({"podcasts": {"pod": {"processed": {
+                "g1": {"vtt_filename": "A.vtt"},
+                "g2": {"vtt_filename": "B.vtt"},
+            }}}}), encoding="utf-8")
+            seed.seed(progress, "pod", root / "data", shards=2)
+            # 真跑出来的集不该被 reset 带走
+            shard = seed.shard_of("g2", 2)
+            path = root / "data" / "pod" / f"state-{shard}.json"
+            state = json.loads(path.read_text(encoding="utf-8"))
+            state["episodes"]["g2"] = {"status": "done", "attempts": 1}
+            path.write_text(json.dumps(state), encoding="utf-8")
+            removed = seed.reset_seeded("pod", root / "data")
+            left = json.loads(path.read_text(encoding="utf-8"))["episodes"]
+        self.assertEqual(removed, 1)
+        self.assertEqual(set(left), {"g2"})

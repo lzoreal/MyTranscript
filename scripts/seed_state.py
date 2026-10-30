@@ -22,6 +22,23 @@ def shard_of(guid: str, shards: int) -> int:
     return int(hashlib.sha1(guid.encode("utf-8")).hexdigest(), 16) % shards
 
 
+def reset_seeded(slug: str, data_dir: Path) -> int:
+    """撤掉种子：回填时要把旧集重新过一遍管线。"""
+    removed = 0
+    for path in sorted((Path(data_dir) / slug).glob("state*.json")):
+        suffix = path.stem[len("state"):]
+        state = store.load_state(Path(data_dir), slug, suffix)
+        kept = {
+            guid: entry
+            for guid, entry in state["episodes"].items()
+            if not entry.get("seeded")
+        }
+        removed += len(state["episodes"]) - len(kept)
+        state["episodes"] = kept
+        store.save_state(Path(data_dir), slug, state, suffix)
+    return removed
+
+
 def seed(progress_path: Path, slug: str, data_dir: Path, shards: int) -> dict:
     progress = json.loads(Path(progress_path).read_text(encoding="utf-8"))
     processed = (
@@ -50,7 +67,14 @@ def main(argv=None) -> int:
     parser.add_argument("--data-dir", type=Path, required=True)
     parser.add_argument("--progress", type=Path, default=Path("progress.json"))
     parser.add_argument("--shards", type=int, default=10)
+    parser.add_argument("--reset-seeded", action="store_true",
+                        help="撤掉种子，让这些集重新进管线（回填用）")
     args = parser.parse_args(argv)
+
+    if args.reset_seeded:
+        removed = reset_seeded(args.slug, args.data_dir)
+        print(f"{args.slug}: 撤掉 {removed} 个种子")
+        return 0
 
     counts = seed(args.progress, args.slug, args.data_dir, args.shards)
     total = sum(counts.values())
