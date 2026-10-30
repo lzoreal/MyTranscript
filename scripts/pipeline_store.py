@@ -22,12 +22,30 @@ def load_state(data_dir: Path, slug: str, suffix: str = "") -> dict[str, Any]:
     path = state_path(data_dir, slug, suffix)
     if not path.exists():
         return {"episodes": {}}
+    return _read_state(path)
+
+
+def _read_state(path: Path) -> dict[str, Any]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return {"episodes": {}}
     data.setdefault("episodes", {})
     return data
+
+
+def done_guids(data_dir: Path, slug: str) -> set[str]:
+    """汇总该节目所有分片 state 里记为 done 的 guid。
+
+    分片数变了（10 → 20）时，老分片的记录还在旧文件里；只查自己那片会把
+    做过的集当成新集重跑，这里合并读取来判重。写入仍各片各写。
+    """
+    done: set[str] = set()
+    for path in sorted(show_dir(data_dir, slug).glob("state*.json")):
+        for guid, entry in _read_state(path).get("episodes", {}).items():
+            if isinstance(entry, dict) and entry.get("status") == "done":
+                done.add(guid)
+    return done
 
 
 def save_state(data_dir: Path, slug: str, state: dict[str, Any], suffix: str = "") -> None:

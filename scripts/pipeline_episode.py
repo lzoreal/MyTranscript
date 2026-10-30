@@ -34,6 +34,8 @@ def process_episode(show, episode, deps, data_dir: Path, now=None) -> str:
     state = store.load_state(data_dir, show["slug"], suffix)
     if not store.needs_work(state, guid):
         return "skipped"
+    if guid in store.done_guids(data_dir, show["slug"]):
+        return "skipped"
     updated = _stamp(now)
     attempts = int(state["episodes"].get(guid, {}).get("attempts") or 0) + 1
     try:

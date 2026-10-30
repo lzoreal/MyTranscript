@@ -170,6 +170,44 @@ class EpisodeTests(unittest.TestCase):
             )
         self.assertEqual(status, "skipped")
 
+    def test_done_in_another_shard_is_skipped(self):
+        # 分片数一变（10 → 20），老的 done 记在 state-3.json，不能再整批重跑。
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data = Path(temp_dir)
+            pstore.save_state(data, "pod",
+                              {"episodes": {"g1": {"status": "done", "attempts": 1}}},
+                              suffix="-3")
+            calls = []
+            deps = self.deps([])
+            deps["download"] = lambda url, path: calls.append(url)
+            status = pepisode.process_episode(
+                {"slug": "pod", "text_source": "asr", "state_suffix": "-7"},
+                {"guid": "g1", "title": "Ep", "audio_url": "u"},
+                deps, data,
+            )
+            state7 = pstore.load_state(data, "pod", "-7")
+        self.assertEqual(status, "skipped")
+        self.assertEqual(calls, [], "别的分片做过就不该再下载音频")
+        self.assertNotIn("g1", state7["episodes"])
+
+    def test_failed_in_another_shard_is_retried(self):
+        cues = [{"start": 0.0, "end": 1.0, "en": "hi", "words": [{"w": "hi", "s": 0.0, "e": 1.0}]}]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data = Path(temp_dir)
+            pstore.save_state(data, "pod",
+                              {"episodes": {"g1": {"status": "failed", "attempts": 1}}},
+                              suffix="-3")
+            calls = []
+            deps = self.deps(cues)
+            deps["download"] = lambda url, path: calls.append(url)
+            status = pepisode.process_episode(
+                {"slug": "pod", "text_source": "asr", "state_suffix": "-7"},
+                {"guid": "g1", "title": "Ep", "audio_url": "u"},
+                deps, data,
+            )
+        self.assertEqual(status, "done")
+        self.assertEqual(len(calls), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
