@@ -69,6 +69,15 @@ def distribute_clause(tokens: list[str], start: float, end: float) -> list[dict]
     return result
 
 
+def evenly_timed_words(tokens: list[str], start: float, end: float) -> list[list]:
+    """按字数均分整句时间：门控放弃时的兜底，句子会被标记为近似对齐。"""
+    words = distribute_clause([token for token in tokens if token.strip()], start, end)
+    return [
+        [word["w"], int(round(word["s"] * 1000)), max(1, int(round(word["d"] * 1000)))]
+        for word in words
+    ]
+
+
 def build_zh_words(clauses, start: float, end: float, tokens_of: Callable[[str], list[str]]):
     counts = [len((clause.get("en") or "").split()) for clause in clauses]
     spans = allocate_spans(counts, start, end)

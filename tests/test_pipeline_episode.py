@@ -98,6 +98,32 @@ class EpisodeTests(unittest.TestCase):
         self.assertEqual(status, "done")
         self.assertTrue(doc["sentences"][0]["zh_words"], "没有 clauses 也要走 DTW 兜底")
 
+    def test_gated_sentence_falls_back_to_even_timing(self):
+        # 英中分句数差太大时 DTW 门控会拒绝；这一句仍需词级时间，标 even 供消费方降级。
+        # 英文每个词都自带逗号 → 8 个小句；中文只有 2 个 → 门控必然拒绝。
+        cues = [{"start": 0.0, "end": 4.0, "en": "a, b, c, d, e, f, g, h,",
+                 "words": [{"w": w + ",", "s": i * 0.5, "e": i * 0.5 + 0.5}
+                           for i, w in enumerate("abcdefgh")]}]
+        deps = self.deps(cues)
+
+        def translate(sentences):
+            for sentence in sentences:
+                sentence["zh"] = "甲，乙。"
+
+        deps["translate"] = translate
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data = Path(temp_dir)
+            status = pepisode.process_episode(
+                {"slug": "pod", "text_source": "asr"},
+                {"guid": "g1", "title": "Ep", "audio_url": "u"},
+                deps, data,
+            )
+            doc = json.loads(pstore.episode_path(data, "pod", "g1").read_text(encoding="utf-8"))
+        sentence = doc["sentences"][0]
+        self.assertEqual(status, "done")
+        self.assertTrue(sentence["zh_words"], "门控放弃后必须均分兜底")
+        self.assertEqual(sentence["zh_word_mode"], "even")
+
     def test_quota_pause_is_not_counted_as_an_attempt(self):
         cues = [{"start": 0.0, "end": 1.0, "en": "hi", "words": [{"w": "hi", "s": 0.0, "e": 1.0}]}]
         deps = self.deps(cues)

@@ -224,6 +224,7 @@ for f in tests/test_*.py; do python "$f"; done     # 6 个文件、174 个用例
 | `scripts/pipeline_publish.py` | 双语 VTT 渲染 |
 | `scripts/pipeline_deps.py` | 把 ASR/翻译/抓取/嵌入装配成 deps |
 | `scripts/run_pipeline.py` | CLI：分片、预算、`ONLY_SLUG`、`DATA_DIR` |
+| `scripts/fill_zh_words.py` | 离线补齐：门控放弃的句子按字数均分，写 `zh_word_mode="even"` |
 
 ### 分片与续跑
 
@@ -236,6 +237,15 @@ for f in tests/test_*.py; do python "$f"; done     # 6 个文件、174 个用例
   "Gemini 配额用尽，本轮停在这里"后正常退出——补配额后重发同一片即可续跑。
 - 单个 job 的 `timeout-minutes` 是 360；`MAX_MINUTES` 要在开跑下一集前判断，所以整片时长
   ≈ `MAX_MINUTES` + 一集耗时，两者之和必须小于 360。
+
+### 中文词时间的三层兜底
+
+1. 有小句（翻译契约）：按英文词数分配小句跨度，再按字数分到词；
+2. 无小句或门控不自信：`zh_align.fallback_zh_words` 做词级 DTW（要求英中小句数差 < 3 且分配比例不偏）；
+3. 门控放弃：按整句字数均分，句子上写 `zh_word_mode="even"`，消费方据此降级。
+
+第 3 层现在也会在管线里自动发生；历史语料用 `python scripts/fill_zh_words.py <data_dir>`
+离线补（不碰 ASR、不花 Gemini），补完 121 集覆盖率从 79.6% 到 99.9%（剩下 109 句中文只有标点）。
 
 ### 迁移一个节目（三步，缺一不可）
 
