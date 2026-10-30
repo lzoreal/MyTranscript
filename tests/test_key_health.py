@@ -29,6 +29,24 @@ class KeyHealthTests(unittest.TestCase):
             tomorrow = kh.dead_ids(directory, now=kh.AUTH_TTL + 1)
         self.assertEqual(tomorrow, set())
 
+    def test_quota_only_blocks_the_model_it_was_recorded_for(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            directory = Path(temp_dir)
+            kh.record(directory / "s0.json", "key-a", "quota",
+                      model="gemini-3.5-flash-lite", now=0.0)
+            same = kh.dead_ids(directory, model="gemini-3.5-flash-lite", now=1.0)
+            other = kh.dead_ids(directory, model="gemini-3.1-flash-lite", now=1.0)
+        self.assertEqual(same, {kh.key_id("key-a")})
+        self.assertEqual(other, set())
+
+    def test_auth_blocks_the_key_for_every_model(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            directory = Path(temp_dir)
+            kh.record(directory / "s0.json", "key-a", "auth",
+                      model="gemini-3.5-flash-lite", now=0.0)
+            dead = kh.dead_ids(directory, model="gemini-3.1-flash-lite", now=1.0)
+        self.assertEqual(dead, {kh.key_id("key-a")})
+
     def test_corrupt_file_is_ignored(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             directory = Path(temp_dir)

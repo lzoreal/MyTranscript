@@ -1189,7 +1189,8 @@ def _record_key_failure(key: str, kind: str) -> None:
         return
     try:
         shard = os.getenv("SHARD", "0") or "0"
-        key_health.record(Path(directory) / f"shard-{shard}.json", key, kind)
+        key_health.record(Path(directory) / f"shard-{shard}.json", key, kind,
+                          model=GEMINI_MODEL)
     except Exception as exc:  # 健康度只是优化，不能打断翻译
         log.debug("写入 key 健康度失败：%s", exc)
 
