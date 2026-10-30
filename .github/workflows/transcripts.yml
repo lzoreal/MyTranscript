@@ -14,6 +14,9 @@ on:
       max_minutes:
         description: "每片预算（分钟，含已提交的分块）"
         default: "270"
+      gemini_model:
+        description: "翻译模型（留空=仓库变量 GEMINI_MODEL，再退回 gemini-3.1-flash-lite）"
+        default: ""
 
 permissions:
   contents: write
@@ -57,6 +60,8 @@ jobs:
       # 各分片只写自己的健康度文件，读取时合并：一把 key 在某片被判死，其它片下一块就跳过。
       GEMINI_HEALTH_DIR: ${{ github.workspace }}/../data-branch/data/.key-health
       ONLY_SLUG: ${{ github.event.inputs.only_slug || '' }}
+      # 换模型：dispatch 时传 gemini_model，或直接在仓库变量里改 GEMINI_MODEL，都不用推代码。
+      GEMINI_MODEL: ${{ github.event.inputs.gemini_model || vars.GEMINI_MODEL || 'gemini-3.1-flash-lite' }}
       WHISPER_MODEL: models/ct2-turbo
       GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
