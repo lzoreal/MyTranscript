@@ -1,4 +1,6 @@
+import contextlib
 import importlib.util
+import io
 import sys
 import types
 import unittest
@@ -37,9 +39,13 @@ class TextSourceTests(unittest.TestCase):
         blocks = [{"en": "hi there"}, {"en": "buy our sponsor now please"}]
         asr = [{"start": 0.0, "end": 2.0, "en": "hi there",
                 "words": [{"w": "hi", "s": 0.0, "e": 1.0}, {"w": "there", "s": 1.0, "e": 2.0}]}]
-        sentences = ptext.map_external_text(blocks, asr, 2.0)
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            sentences = ptext.map_external_text(blocks, asr, 2.0)
+        printed = buffer.getvalue()
         self.assertEqual([s["en"] for s in sentences], ["hi there"], "广告块应被丢弃")
         self.assertEqual(sentences[0]["zh_words"], [])
+        self.assertIn("丢弃 1 段", printed, "丢弃必须留一行可查的日志")
 
     def test_external_text_keeps_real_times(self):
         blocks = [{"en": "hello there friend"}]

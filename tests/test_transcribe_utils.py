@@ -1950,3 +1950,26 @@ class MainBackfillReadOnlyTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ProxyPreferenceTests(unittest.TestCase):
+    def test_preferred_proxy_comes_first_and_survives_shuffle(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cache = Path(temp_dir) / "cache.json"
+            cache.write_text(json.dumps({
+                "created_at": time.time(),
+                "proxies": ["a", "b", "c", "d"],
+                "preferred": "c",
+            }), encoding="utf-8")
+            with patch.object(transcriber, "PROXY_CACHE_FILE", cache):
+                for _ in range(5):
+                    self.assertEqual(transcriber.load_proxy_cache()[0], "c")
+
+    def test_promote_records_the_winner(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cache = Path(temp_dir) / "cache.json"
+            with patch.object(transcriber, "PROXY_CACHE_FILE", cache):
+                transcriber.promote_proxy("http://win:1")
+                data = json.loads(cache.read_text(encoding="utf-8"))
+        self.assertEqual(data["preferred"], "http://win:1")
+        self.assertIn("http://win:1", data["proxies"])
