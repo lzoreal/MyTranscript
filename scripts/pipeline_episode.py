@@ -62,6 +62,13 @@ def process_episode(show, episode, deps, data_dir: Path, now=None) -> str:
                         sentence["words"], sentence["zh"], deps["segment"], deps["encode"],
                         sentence["start"], sentence["end"],
                     )
+                if not words:
+                    # 门控放弃时按字数均分，保证每句都有词级时间（消费方靠标记降级）。
+                    words = zh_align.evenly_timed_words(
+                        deps["segment"](sentence["zh"]), sentence["start"], sentence["end"]
+                    )
+                    if words:
+                        sentence["zh_word_mode"] = "even"
             sentence["zh_words"] = words
     except (QuotaExhausted, GeminiAuthFailed):
         # 配额用完/配置失效不是这一集的锅：记 attempts 会让它在两轮之后永久出局。
