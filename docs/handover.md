@@ -247,11 +247,19 @@ for f in tests/test_*.py; do python "$f"; done     # 6 个文件、174 个用例
 第 3 层现在也会在管线里自动发生；历史语料用 `python scripts/fill_zh_words.py <data_dir>`
 离线补（不碰 ASR、不花 Gemini），补完 121 集覆盖率从 79.6% 到 99.9%（剩下 109 句中文只有标点）。
 
-### 迁移一个节目（三步，缺一不可）
+### 迁移一个节目（2026-10-30 office-ladies 实跑过）
 
-1. `feeds.json` 增加该节目（`text_source` 选 `podscripts` 或 `asr`）；
-2. `podcasts.json` 移除该 slug（旧 crawl 不再碰它）；
-3. 新链路接管它的 VTT / feed / index，并核对 `guid / enclosure / transcript url` 三者与迁移前逐字相同。
+1. `feeds.json` 加该节目：`text_source`（`podscripts` 优先抓取，抓不到自动回退 ASR）、
+   `podscripts_id`、`publish: true`；
+2. `podcasts.json` 给该节目加 `"migrated": true` —— crawl 跳过抓取与 feed/index，但总索引仍列出；
+3. `podcasts_translate.json` 移除该节目（旧翻译 job 不再碰它）；
+4. 数据分支种状态：`python scripts/seed_state.py <slug> --data-dir <data> --shards 10`，
+   把 progress.json 里已发布的集标成 done，新链路只处理新集；
+5. 跑一次 `transcripts.yml`：分片处理新集 → `publish` job 渲染双语 VTT、重建 feed/feed-zh/index、
+   往 `progress.json` / `translations.json` 登记。
+
+**验收**：旧条目的 `guid / enclosure / transcript url` 不动（feed diff 只有新增行），
+VTT 命名沿用 progress.json 里的旧文件名。
 
 **同一节目只能有一个产出方**；切换后观察一周 `git log`，确认旧链路不再产生该节目的提交。
 回滚：把 slug 加回 `podcasts.json`、从 `feeds.json` 删除即可。
