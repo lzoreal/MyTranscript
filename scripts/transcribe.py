@@ -39,7 +39,7 @@ from google.genai import types
 PODCAST_SLUG = os.getenv("PODCAST_SLUG", "podcast").strip()
 FEED_URL = os.getenv("FEED_URL", "").strip()
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base.en").strip()
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite").strip()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 GEMINI_API_KEYS_RAW = os.getenv("GEMINI_API_KEYS", "").strip()
 
