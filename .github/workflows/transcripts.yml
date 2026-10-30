@@ -128,7 +128,7 @@ jobs:
           budget=$(( ${MAX_MINUTES%.*} * 60 ))
           while :; do
             remaining=$(( budget - ( $(date +%s) - start ) ))
-            if [ "$remaining" -lt 1800 ]; then
+            if [ "$remaining" -lt 2700 ]; then
               echo "剩余 ${remaining}s 不足一集，收尾"
               break
             fi
@@ -140,6 +140,10 @@ jobs:
               && bash "${GITHUB_WORKSPACE}/scripts/git_push_retry.sh" \
                    "auto: word transcripts (shard ${SHARD})" data ) \
               || echo "提交失败，文件留在 worktree 等兜底步骤"
+            if [ "$rc" -eq 3 ]; then
+              echo "本片已无待处理集数"
+              break
+            fi
             if [ "$rc" -ne 0 ]; then
               echo "管线退出码 ${rc}（2=配额暂停），本片停止"
               break
