@@ -159,3 +159,49 @@ jobs:
           git remote set-url origin "https://${MY_PAT}@github.com/${GITHUB_REPOSITORY}.git"
           bash "${GITHUB_WORKSPACE}/scripts/git_push_retry.sh" \
             "auto: word transcripts (shard ${SHARD}, tail)" data
+
+  # 分片全部跑完后统一发布：写 VTT、重建 feed/index，一个节目只由一个 job 写。
+  publish:
+    needs: run
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.MY_CUSTOM_PAT }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 安装发布依赖
+        run: pip install -r requirements.txt
+
+      - name: 挂载数据分支
+        id: mount
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin word-transcripts
+          git worktree add --detach ../data-branch origin/word-transcripts
+
+      - name: 发布已迁移节目
+        run: |
+          set -e
+          for slug in $(python -c "import json;print(' '.join(s['slug'] for s in json.load(open('feeds.json',encoding='utf-8')) if s.get('publish')))"); do
+            python scripts/publish_site.py "$slug" --data-dir ../data-branch/data
+          done
+
+      - name: 提交站点文件
+        env:
+          MY_PAT: ${{ secrets.MY_CUSTOM_PAT }}
+        run: |
+          paths="translations.json progress.json"
+          for s in $(python -c "import json;print(' '.join(s['slug'] for s in json.load(open('feeds.json',encoding='utf-8')) if s.get('publish')))"); do
+            [ -d "site/$s" ] && paths="$paths site/$s"
+          done
+          git remote set-url origin "https://${MY_PAT}@github.com/${GITHUB_REPOSITORY}.git"
+          bash scripts/git_push_retry.sh "auto: publish migrated shows" $paths
