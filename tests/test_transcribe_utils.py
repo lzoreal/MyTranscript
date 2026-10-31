@@ -1973,3 +1973,48 @@ class ProxyPreferenceTests(unittest.TestCase):
                 data = json.loads(cache.read_text(encoding="utf-8"))
         self.assertEqual(data["preferred"], "http://win:1")
         self.assertIn("http://win:1", data["proxies"])
+
+
+class DegenerateCueTests(unittest.TestCase):
+    def test_word_level_flood_is_degenerate(self):
+        cues = [{"words": [{"w": "and"}]} for _ in range(5000)]
+        self.assertTrue(transcriber.degenerate_cues(cues, 5954.0))
+
+    def test_normal_cues_are_not_flagged(self):
+        cues = [{"words": [{"w": str(i)}] * 9} for i in range(1365)]
+        self.assertFalse(transcriber.degenerate_cues(cues, 3561.0))
+
+    def test_short_episode_with_few_cues_is_not_flagged(self):
+        cues = [{"words": [{"w": "hi"}]} for _ in range(3)]
+        self.assertFalse(transcriber.degenerate_cues(cues, 2.0))
+
+    def test_retry_switches_context_off_when_output_is_fragmented(self):
+        calls = []
+
+        class Model:
+            def transcribe(self, path, **kwargs):
+                calls.append(kwargs["condition_on_previous_text"])
+
+                class Word:
+                    def __init__(self, w, s, e):
+                        self.word, self.start, self.end = w, s, e
+
+                class Seg:
+                    def __init__(self, s, e, text, words):
+                        self.start, self.end, self.text, self.words = s, e, text, words
+
+                # 第一次：一词一条（碎片化）；第二次：正常句子。
+                if kwargs["condition_on_previous_text"]:
+                    segs = [Seg(i, i + 0.2, "and", [Word("and", i, i + 0.2)]) for i in range(200)]
+                else:
+                    segs = [Seg(i * 3, i * 3 + 2.8, "and then we talked about it.",
+                                [Word(w, i * 3 + k * 0.5, i * 3 + k * 0.5 + 0.4)
+                                 for k, w in enumerate("and then we talked about it".split())])
+                            for i in range(10)]
+                return segs, SimpleNamespace(duration=20.0, language="en")
+
+        with patch.object(transcriber, "WhisperModel", lambda *a, **k: Model()), \
+             patch.object(transcriber, "resegment_whisper_segments", lambda raw: raw):
+            cues, _ = transcriber.whisper_transcribe(Path("x"))
+        self.assertEqual(calls, [True, False])
+        self.assertEqual(len(cues), 10)
