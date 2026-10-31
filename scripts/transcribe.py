@@ -881,21 +881,43 @@ def whisper_transcribe(audio_path: Path) -> tuple[list[dict[str, Any]], float]:
     model = WhisperModel(
         WHISPER_MODEL, device="cpu", compute_type="int8", cpu_threads=threads
     )
-    segments, info = model.transcribe(
-        str(audio_path),
-        language="en",
-        task="transcribe",
-        beam_size=5,
-        vad_filter=True,
-        condition_on_previous_text=True,
-        word_timestamps=True,
-    )
-    log.info(
-        "开始转录：language=%s，预计时长=%.1f 秒，cpu_threads=%d",
-        getattr(info, "language", "unknown"),
-        getattr(info, "duration", 0.0) or 0.0,
-        threads,
-    )
+    cues: list[dict[str, Any]] = []
+    info = None
+    for condition_on_previous in (True, False):
+        segments, info = model.transcribe(
+            str(audio_path),
+            language="en",
+            task="transcribe",
+            beam_size=5,
+            vad_filter=True,
+            condition_on_previous_text=condition_on_previous,
+            word_timestamps=True,
+        )
+        duration = round(getattr(info, "duration", 0.0) or 0.0, 2)
+        log.info(
+            "开始转录：language=%s，预计时长=%.1f 秒，cpu_threads=%d，上文上下文=%s",
+            getattr(info, "language", "unknown"),
+            getattr(info, "duration", 0.0) or 0.0,
+            threads,
+            "开" if condition_on_previous else "关",
+        )
+        raw = _segments_to_raw(segments)
+        if not raw:
+            raise RuntimeError("Whisper 没有识别到任何语音内容")
+        cues = resegment_whisper_segments(raw)
+        if not degenerate_cues(cues, duration):
+            break
+        # 长音频开着上文上下文会退化成逐词输出（实测有整集 71% 是一词一句），
+        # 换一组解码参数重来一次，比把这集交出去更划算。
+        log.warning(
+            "转录输出碎片化（%d 条，中位 %.1f 词/句），关闭上文上下文重试",
+            len(cues), median_words_per_cue(cues),
+        )
+    log.info("转录完成：%d 条英文字幕", len(cues))
+    return cues, round(getattr(info, "duration", 0.0) or 0.0, 2)
+
+
+def _segments_to_raw(segments) -> list[dict[str, Any]]:
     raw = []
     for seg in segments:
         text = clean_text(seg.text)
@@ -912,11 +934,21 @@ def whisper_transcribe(audio_path: Path) -> tuple[list[dict[str, Any]], float]:
                     ],
                 }
             )
-    if not raw:
-        raise RuntimeError("Whisper 没有识别到任何语音内容")
-    cues = resegment_whisper_segments(raw)
-    log.info("转录完成：%d 条英文字幕", len(cues))
-    return cues, round(getattr(info, "duration", 0.0) or 0.0, 2)
+    return raw
+
+
+def median_words_per_cue(cues) -> float:
+    if not cues:
+        return 0.0
+    counts = sorted(len(cue.get("words") or []) for cue in cues)
+    return float(counts[len(counts) // 2])
+
+
+def degenerate_cues(cues, audio_seconds: float) -> bool:
+    """逐词碎片化：中位词数 < 2，且条数远超"每秒一条"的合理上限。"""
+    if not cues or audio_seconds <= 0:
+        return False
+    return median_words_per_cue(cues) < 2 and len(cues) > max(50, audio_seconds / 2)
 
 
 # -------------------- Gemini 翻译 --------------------
