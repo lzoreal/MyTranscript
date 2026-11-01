@@ -85,6 +85,14 @@ def build_default_deps(show):
     return pipeline_deps.build(show)
 
 
+def final_code(stats: dict, paused: bool = False) -> int:
+    """分块循环的退出码：3 只表示"本片没有新活了"，skipped 不算活。"""
+    if paused:
+        return 2
+    # 只剩 skipped 说明候选集已全部做完：必须收工，否则分块循环会空转烧预算。
+    return 3 if not stats.get("done") and not stats.get("failed") else 0
+
+
 def main() -> int:
     env = pipeline_env(os.environ)
     publish_key_health(env)
@@ -101,10 +109,7 @@ def main() -> int:
                 reserve_minutes=env["reserve_minutes"])
     paused = stats.pop("paused", False)
     print(f"结束：{json.dumps(stats, ensure_ascii=False)}")
-    if paused:
-        return 2
-    # 3 = 本片没有可处理的集数：分块循环据此收工，不再空转。
-    return 3 if not any(stats.values()) else 0
+    return final_code(stats, paused)
 
 
 if __name__ == "__main__":
