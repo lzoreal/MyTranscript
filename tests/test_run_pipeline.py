@@ -92,6 +92,19 @@ class EnvTests(unittest.TestCase):
         self.assertEqual(len(seen), 1, "剩 35 分钟不够一集，不能再开")
         self.assertEqual(stats["done"], 1)
 
+    def test_exit_code_3_when_only_skips_remain(self):
+        # 整片候选集都已 done 时，每块只剩 skipped；此时必须收工，
+        # 否则分块循环会把 330 分钟预算耗在空转上，白占 runner。
+        self.assertEqual(runmod.final_code({"done": 0, "skipped": 30, "failed": 0}), 3)
+
+    def test_exit_code_0_while_work_or_failures_happened(self):
+        self.assertEqual(runmod.final_code({"done": 1, "skipped": 5, "failed": 0}), 0)
+        self.assertEqual(runmod.final_code({"done": 0, "skipped": 5, "failed": 1}), 0)
+        self.assertEqual(runmod.final_code({"done": 0, "skipped": 0, "failed": 0}), 3)
+
+    def test_exit_code_2_wins_over_stop(self):
+        self.assertEqual(runmod.final_code({"done": 0, "skipped": 5}, paused=True), 2)
+
     def test_publish_key_health_excludes_dead_keys_and_offsets_the_start(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             runmod.pkeyhealth.record(
