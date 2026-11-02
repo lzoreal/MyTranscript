@@ -209,7 +209,11 @@ for f in tests/test_*.py; do python "$f"; done     # 6 个文件、174 个用例
 ## 十一、统一链路（新，进行中）
 
 2026-10-30 起，仓库里多了一条统一链路：`feeds.json` → `scripts/run_pipeline.py` → 双语词级 JSON
-（写 `word-transcripts` 分支，不部署）。设计见 `docs/superpowers/specs/2026-10-30-unified-transcript-pipeline-design.md`。
+（写 main 的 `data/`，不部署）。设计见 `docs/superpowers/specs/2026-10-30-unified-transcript-pipeline-design.md`。
+
+> 2026-11-02：产物原来在独立的 `word-transcripts` 分支，现已并入 main。分片直接提交 `data/`
+> 到 main；`deploy.yml` 因此加了 `paths: ["site/**"]`，数据提交不再触发 Pages 部署。
+> 旧分支保留作历史备份，CI 不再读取。
 
 ### 模块
 
@@ -267,4 +271,5 @@ VTT 命名沿用 progress.json 里的旧文件名。
 ### 与旧链路的关系
 
 迁移完成前，旧的四条 workflow（crawl / transcribe / translate / align）照常运行；
-`word-transcripts` 分支只累积产物，不影响 Pages。
+统一链路的产物在 main 的 `data/`，`publish` job 才写 `site/` 和两份 Feed。
+`data/` 不进 Pages 上传（`deploy.yml` 只传 `site/`，且只由 `site/**` 的提交触发）。
