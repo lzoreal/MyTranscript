@@ -48,7 +48,8 @@ WHISPER_MODEL="D:/tmp/tmlt-align/ct2-turbo" \
 | `progress.json`、12 个节目的 `site/<slug>/transcripts/*.vtt`、`feed.xml`、`index.html` | Crawl | ✅ |
 | `state.json`、hwmym 的 `transcripts/*.vtt`、`timings/`、hwmym 的 feed/index | Transcribe | ✅ |
 | `site/*/transcripts/zh/`、`site/*/feed-zh.xml`、`translations.json` | Translate | ✅ |
-| 站点发布 | Deploy（push 触发，只读最新 main） | — |
+| `data/**`（双语词级 JSON + 分片 state）、已迁移节目的 `site/<slug>/transcripts`、`feed*.xml`、`index.html`、`progress.json`、`translations.json` | Transcript Pipeline（`transcripts.yml`） | ✅ |
+| 站点发布 | Deploy（main 上 `site/**` 变更触发，只读最新 main） | — |
 | 抓取节目的两份 VTT + `timings/` | Align（会**重写**字幕） | 见 `docs/handover.md` |
 
 ## 已知坑（都踩过）

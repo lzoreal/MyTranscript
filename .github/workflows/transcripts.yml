@@ -1,6 +1,6 @@
 name: Transcript Pipeline
 
-# 统一链路：RSS → 双语词级 JSON（写入 word-transcripts 分支，不部署）。
+# 统一链路：RSS → 双语词级 JSON（写入 main 的 data/，站点由 publish job 写 site/）。
 # 详见 docs/superpowers/specs/2026-10-30-unified-transcript-pipeline-design.md
 on:
   workflow_dispatch:
@@ -49,7 +49,7 @@ jobs:
       matrix:
         shard: ${{ fromJSON(needs.plan.outputs.shards) }}
     env:
-      DATA_DIR: ${{ github.workspace }}/../data-branch/data
+      DATA_DIR: ${{ github.workspace }}/data
       SHARD: ${{ matrix.shard }}
       SHARDS: ${{ github.event.inputs.shards || '10' }}
       MAX_MINUTES: ${{ github.event.inputs.max_minutes || '270' }}
@@ -58,7 +58,7 @@ jobs:
       # 4 把 key、每把约 15 RPM；10 个分片各按 15 RPM 打，几分钟就把 key 全打成 429。
       GEMINI_RPM: "4"
       # 各分片只写自己的健康度文件，读取时合并：一把 key 在某片被判死，其它片下一块就跳过。
-      GEMINI_HEALTH_DIR: ${{ github.workspace }}/../data-branch/data/.key-health
+      GEMINI_HEALTH_DIR: ${{ github.workspace }}/data/.key-health
       ONLY_SLUG: ${{ github.event.inputs.only_slug || '' }}
       # 换模型：dispatch 时传 gemini_model，或直接在仓库变量里改 GEMINI_MODEL，都不用推代码。
       GEMINI_MODEL: ${{ github.event.inputs.gemini_model || vars.GEMINI_MODEL || 'gemini-3.1-flash-lite' }}
@@ -70,7 +70,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           # 排队的 run 会钉在创建时的 SHA；显式取 main 最新，否则上一轮
-          # 提交到数据分支的分片状态在 worktree 里看不到，会被重做。
+          # 分片提交的 state 看不到，会被重做。
           ref: main
           token: ${{ secrets.MY_CUSTOM_PAT }}
 
@@ -104,25 +104,11 @@ jobs:
           print("models ready")
           PY
 
-      - name: 挂载数据分支
-        id: mount
+      - name: 准备数据目录
         run: |
           set -e
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git fetch origin word-transcripts 2>/dev/null; then
-            git worktree add --detach ../data-branch origin/word-transcripts
-            cd ../data-branch
-            git checkout -B word-transcripts
-          else
-            echo "数据分支不存在，创建空分支"
-            git worktree add --detach ../data-branch HEAD
-            cd ../data-branch
-            git checkout --orphan word-transcripts
-            git rm -rf . >/dev/null 2>&1 || true
-            git commit --allow-empty -m "chore: init word-transcripts branch"
-            git push origin word-transcripts
-          fi
           mkdir -p data
           [ -n "$(ls -A data)" ] || touch data/.gitkeep
 
@@ -142,10 +128,9 @@ jobs:
             [ "$chunk" -gt 45 ] && chunk=45
             rc=0
             MAX_MINUTES=$chunk python -u scripts/run_pipeline.py || rc=$?
-            ( cd ../data-branch \
-              && bash "${GITHUB_WORKSPACE}/scripts/git_push_retry.sh" \
-                   "auto: word transcripts (shard ${SHARD})" data ) \
-              || echo "提交失败，文件留在 worktree 等兜底步骤"
+            bash scripts/git_push_retry.sh \
+              "auto: word transcripts (shard ${SHARD})" data \
+              || echo "提交失败，文件留在工作区等兜底步骤"
             if [ "$rc" -eq 3 ]; then
               echo "本片已无待处理集数"
               break
@@ -156,14 +141,13 @@ jobs:
             fi
           done
 
-      - name: 提交产物到数据分支
-        if: always() && steps.mount.outcome == 'success'
+      - name: 提交产物到 main
+        if: always()
         env:
           MY_PAT: ${{ secrets.MY_CUSTOM_PAT }}
         run: |
-          cd ../data-branch
           git remote set-url origin "https://${MY_PAT}@github.com/${GITHUB_REPOSITORY}.git"
-          bash "${GITHUB_WORKSPACE}/scripts/git_push_retry.sh" \
+          bash scripts/git_push_retry.sh \
             "auto: word transcripts (shard ${SHARD}, tail)" data
 
   # 分片全部跑完后统一发布：写 VTT、重建 feed/index，一个节目只由一个 job 写。
@@ -185,20 +169,11 @@ jobs:
       - name: 安装发布依赖
         run: pip install -r requirements.txt
 
-      - name: 挂载数据分支
-        id: mount
-        run: |
-          set -e
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin word-transcripts
-          git worktree add --detach ../data-branch origin/word-transcripts
-
       - name: 发布已迁移节目
         run: |
           set -e
           for slug in $(python -c "import json;print(' '.join(s['slug'] for s in json.load(open('feeds.json',encoding='utf-8')) if s.get('publish')))"); do
-            python scripts/publish_site.py "$slug" --data-dir ../data-branch/data
+            python scripts/publish_site.py "$slug" --data-dir data
           done
 
       - name: 提交站点文件

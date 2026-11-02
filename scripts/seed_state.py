@@ -1,6 +1,6 @@
 """把旧 progress.json 里已发布的集标成 done，迁移后的管线只处理新集。
 
-用法：python scripts/seed_state.py <slug> --data-dir <word-transcripts worktree>/data
+用法：python scripts/seed_state.py <slug> --data-dir data
       [--shards 10]
 
 只写本分片该写的那一份 state，不动别的文件；重复执行是空操作。
