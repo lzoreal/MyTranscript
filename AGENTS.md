@@ -45,10 +45,10 @@ WHISPER_MODEL="D:/tmp/tmlt-align/ct2-turbo" \
 
 | 路径 | 归属 job | 其他 job 不得写 |
 | --- | --- | --- |
-| `progress.json`、12 个节目的 `site/<slug>/transcripts/*.vtt`、`feed.xml`、`index.html` | Crawl | ✅ |
-| `state.json`、hwmym 的 `transcripts/*.vtt`、`timings/`、hwmym 的 feed/index | Transcribe | ✅ |
-| `site/*/transcripts/zh/`、`site/*/feed-zh.xml`、`translations.json` | Translate | ✅ |
-| `data/**`（双语词级 JSON + 分片 state）、已迁移节目的 `site/<slug>/transcripts`、`feed*.xml`、`index.html`、`progress.json`、`translations.json` | Transcript Pipeline（`transcripts.yml`） | ✅ |
+| `progress.json`、未迁移抓取节目的 `site/<slug>/transcripts/*.vtt`、`feed.xml`、`index.html` | Crawl | ✅ |
+| `state.json`、hwmym 的 `transcripts/*.vtt`、`timings/`、hwmym 的 feed/index、`json/how-we-made-your-mother/**` | Transcribe | ✅ |
+| `site/*/transcripts/zh/`、`site/*/feed-zh.xml`、`translations.json`（仅未迁移节目） | Translate | ✅ |
+| `data/**`（双语词级 JSON + 分片 state）、已迁移节目的 `json/<slug>/**`、`feed.xml`、`index.html`、`progress.json` | Transcript Pipeline（`transcripts.yml`） | ✅ |
 | 站点发布 | Deploy（main 上 `site/**` 变更触发，只读最新 main） | — |
 | 抓取节目的两份 VTT + `timings/` | Align（会**重写**字幕） | 见 `docs/handover.md` |
 
