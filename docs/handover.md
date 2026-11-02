@@ -66,13 +66,14 @@ Translate（每天 19:00 UTC + crawl/transcribe 成功后 + 手动）
 ### 站点结构
 
 ```
+json/<slug>/<stem>.json        ← 已迁移节目的词级 JSON（raw.githubusercontent 提供，不进 Pages）
 site/
   index.html                 根索引（Transcribe 生成）
   podcasts.html              抓取节目索引（Crawl 生成）
   <slug>/
-    feed.xml / feed-zh.xml
+    feed.xml / feed-zh.xml   ← 已迁移节目只有 feed.xml
     index.html
-    transcripts/<stem>.vtt        ← 形态因来源而异，见下
+    transcripts/<stem>.vtt        ← 未迁移节目；形态因来源而异，见下
     transcripts/zh/<stem>.vtt
     timings/<stem>.json           ← 词级时间（sidecar）
 ```
@@ -229,6 +230,9 @@ for f in tests/test_*.py; do python "$f"; done     # 6 个文件、174 个用例
 | `scripts/pipeline_deps.py` | 把 ASR/翻译/抓取/嵌入装配成 deps |
 | `scripts/run_pipeline.py` | CLI：分片、预算、`ONLY_SLUG`、`DATA_DIR` |
 | `scripts/fill_zh_words.py` | 离线补齐：门控放弃的句子按字数均分，写 `zh_word_mode="even"` |
+| `scripts/word_transcript.py` | `data/` 内部 JSON → 公开词级 JSON（官方字段 + fork 扩展）与 raw URL |
+| `scripts/publish_site.py` | publish job 入口：导出 JSON、重建 feed/index、登记 progress |
+| `scripts/export_word_json.py` | 手动补导出：`--progress`（office-ladies）或 `--state`（hwmym） |
 
 ### 分片与续跑
 
@@ -259,11 +263,11 @@ for f in tests/test_*.py; do python "$f"; done     # 6 个文件、174 个用例
 3. `podcasts_translate.json` 移除该节目（旧翻译 job 不再碰它）；
 4. 数据分支种状态：`python scripts/seed_state.py <slug> --data-dir <data> --shards 10`，
    把 progress.json 里已发布的集标成 done，新链路只处理新集；
-5. 跑一次 `transcripts.yml`：分片处理新集 → `publish` job 渲染双语 VTT、重建 feed/feed-zh/index、
-   往 `progress.json` / `translations.json` 登记。
+5. 跑一次 `transcripts.yml`：分片处理新集 → `publish` job 导出词级 JSON、重建 feed/index、
+   往 `progress.json` 登记。
 
 **验收**：旧条目的 `guid / enclosure / transcript url` 不动（feed diff 只有新增行），
-VTT 命名沿用 progress.json 里的旧文件名。
+VTT 命名沿用 progress.json 里的旧文件名（JSON 文件名也沿用它）。
 
 **同一节目只能有一个产出方**；切换后观察一周 `git log`，确认旧链路不再产生该节目的提交。
 回滚：把 slug 加回 `podcasts.json`、从 `feeds.json` 删除即可。
@@ -271,5 +275,22 @@ VTT 命名沿用 progress.json 里的旧文件名。
 ### 与旧链路的关系
 
 迁移完成前，旧的四条 workflow（crawl / transcribe / translate / align）照常运行；
-统一链路的产物在 main 的 `data/`，`publish` job 才写 `site/` 和两份 Feed。
+统一链路的产物在 main 的 `data/`，`publish` job 才写 `site/` 和 Feed。
 `data/` 不进 Pages 上传（`deploy.yml` 只传 `site/`，且只由 `site/**` 的提交触发）。
+
+### 词级 JSON 字幕（2026-11-02）
+
+- 已迁移节目（office-ladies、hwmym）的 transcript 是仓库里的
+  `json/<slug>/<stem>.json`，由 `https://raw.githubusercontent.com/lzoreal/MyTranscript/main/...`
+  直接提供；**不进 Pages**（618 集实测 386.3 MB，放进站点会超过 1 GB）；
+- JSON = Podcasting 2.0 官方字段（`version`、`segments[].startTime/endTime/body`，秒）
+  + AntennaPod fork 扩展（`segments[].start/end/text/words`，毫秒）；
+- 每集一个双语文件，`body/text` 是「英文句 + 换行 + 中文句」；`words` 只含英文词
+  （fork 解析器要求单调递增，混入中文词会被整段丢弃）；
+- 已迁移节目只保留 `feed.xml`，不再生成 `feed-zh.xml`；hwmym 已从
+  `podcasts_translate.json` 移除；
+- 旧 VTT 原样归档在 `data/<slug>/legacy-vtt/`（含 `zh/`），不再发布；
+- 导出只读 `data/`：office-ladies 由 `transcripts.yml` 的 publish job，
+  hwmym 由 `transcribe.yml` 在每次运行尾部完成；`scripts/export_word_json.py` 供手动补导出；
+- `scraper.is_episode_processed` 认得 `json/` 下的产物，VTT 归档后 feed 不会被清空；
+  `transcribe.is_cached_episode` 同理，hwmym 不会因 VTT 移动而重转。
