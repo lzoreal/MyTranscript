@@ -137,5 +137,91 @@ class VttTests(unittest.TestCase):
         self.assertTrue(vtt.startswith("WEBVTT\n"))
 
 
+class TranscriptFormatTests(unittest.TestCase):
+    def _feed(self):
+        return etree.fromstring(
+            (
+                "<rss><channel><title>Show</title><item><guid>g0</guid>"
+                '<enclosure url="https://cdn.test/a.mp3" type="audio/mpeg"/>'
+                "</item></channel></rss>"
+            ).encode("utf-8")
+        )
+
+    def test_tag_points_to_json_when_record_says_so(self):
+        original_cwd = os.getcwd()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            os.chdir(temp_dir)
+            try:
+                site_dir = Path("site")
+                json_dir = Path("json")
+                (json_dir / "pod").mkdir(parents=True)
+                (json_dir / "pod" / "one.json").write_text(
+                    '{"version":"1.0.0","segments":[{"startTime":0,'
+                    '"endTime":1,"body":"hi"}]}',
+                    encoding="utf-8",
+                )
+                pc = {
+                    "processed": {
+                        "g0": {
+                            "title": "one",
+                            "transcript_filename": "one.json",
+                            "transcript_type": "application/json",
+                        }
+                    }
+                }
+                with patch.object(
+                    scraper, "fetch_rss", lambda url: self._feed()
+                ), patch.object(scraper, "SITE_DIR", site_dir), patch.object(
+                    scraper, "JSON_DIR", json_dir
+                ):
+                    scraper.generate_podcast_feed(
+                        pc,
+                        {
+                            "slug": "pod",
+                            "feed_url": "https://feed.test/x",
+                            "language": "en",
+                        },
+                        "https://pages.test",
+                    )
+                feed = etree.parse("site/pod/feed.xml")
+                node = feed.xpath("//*[local-name()='transcript']")[0]
+                self.assertEqual(
+                    node.get("url"),
+                    "https://raw.githubusercontent.com/lzoreal/MyTranscript/main"
+                    "/json/pod/one.json",
+                )
+                self.assertEqual(node.get("type"), "application/json")
+                self.assertEqual(node.get("language"), "en")
+            finally:
+                os.chdir(original_cwd)
+
+    def test_is_episode_processed_accepts_valid_json(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            json_dir = Path(temp_dir)
+            (json_dir / "pod").mkdir(parents=True)
+            (json_dir / "pod" / "one.json").write_text(
+                '{"segments":[{"startTime":0,"endTime":1,"body":"hi"}]}',
+                encoding="utf-8",
+            )
+            with patch.object(scraper, "JSON_DIR", json_dir):
+                info = {
+                    "transcript_filename": "one.json",
+                    "transcript_type": "application/json",
+                }
+                self.assertTrue(scraper.is_episode_processed(info, "pod"))
+
+    def test_is_episode_processed_rejects_broken_json(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            json_dir = Path(temp_dir)
+            (json_dir / "pod").mkdir(parents=True)
+            (json_dir / "pod" / "one.json").write_text("{not json", encoding="utf-8")
+            with patch.object(scraper, "JSON_DIR", json_dir):
+                info = {
+                    "transcript_filename": "one.json",
+                    "transcript_type": "application/json",
+                }
+                self.assertFalse(scraper.is_episode_processed(info, "pod"))
+
+
 if __name__ == "__main__":
     unittest.main()
