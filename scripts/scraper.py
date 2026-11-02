@@ -32,12 +32,16 @@ import requests
 from lxml import etree
 from lxml import html as lxml_html
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import word_transcript  # noqa: E402
+
 # ============================================================
 # 文件与运行配置
 # ============================================================
 PROGRESS_FILE = Path("progress.json")
 PODCASTS_FILE = Path("podcasts.json")
 SITE_DIR = Path("site")
+JSON_DIR = Path(os.getenv("JSON_DIR", "json"))
 BATCH_SIZE = 500
 PODSEARCH_DELAY = 2
 EPISODE_DELAY = 5
@@ -519,11 +523,21 @@ def vtt_path_for(slug, filename):
 
 
 def is_episode_processed(info, slug):
-    if not info or info.get("skipped") or not info.get("vtt_filename"):
+    if not info or info.get("skipped"):
         return False
-    path = vtt_path_for(slug, info["vtt_filename"])
+    filename = info.get("transcript_filename") or info.get("vtt_filename")
+    if not filename:
+        return False
+    is_json = info.get("transcript_type") == "application/json" or filename.endswith(".json")
+    path = JSON_DIR / slug / filename if is_json else vtt_path_for(slug, filename)
     if not path.exists() or path.stat().st_size < 10:
         return False
+    if is_json:
+        try:
+            document = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return False
+        return isinstance(document.get("segments"), list) and bool(document["segments"])
     try:
         return path.read_text(encoding="utf-8-sig").lstrip().startswith("WEBVTT")
     except Exception:
@@ -785,13 +799,18 @@ def generate_podcast_feed(pc_prog, podcast, base_url):
             channel.remove(item)
             removed += 1
             continue
-        vtt_url = public_url(base_url, slug, "transcripts", info["vtt_filename"])
+        filename = info.get("transcript_filename") or info.get("vtt_filename")
+        transcript_type = info.get("transcript_type") or "text/vtt"
+        if transcript_type == "application/json":
+            transcript_url = word_transcript.public_url(slug, filename)
+        else:
+            transcript_url = public_url(base_url, slug, "transcripts", filename)
         transcript_nodes = item.xpath(
             "./*[local-name()='transcript' and namespace-uri()=$ns]", ns=PODCAST_NS
         )
         matching = None
         for node in transcript_nodes:
-            if node.get("url") == vtt_url:
+            if node.get("url") == transcript_url:
                 matching = node
             else:
                 # 删除指向旧地址的本项目 transcript，避免同一集出现错误重复字幕标签。
@@ -800,8 +819,8 @@ def generate_podcast_feed(pc_prog, podcast, base_url):
         if matching is None:
             matching = etree.SubElement(item, f"{{{PODCAST_NS}}}transcript")
             added += 1
-        matching.set("url", vtt_url)
-        matching.set("type", "text/vtt")
+        matching.set("url", transcript_url)
+        matching.set("type", transcript_type)
         matching.set("rel", "captions")
         matching.set("language", podcast.get("language", "en"))
         kept += 1

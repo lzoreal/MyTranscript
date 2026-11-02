@@ -1,9 +1,9 @@
-"""发布一个已迁移节目：双语 VTT → feed.xml → feed-zh.xml → index.html。
+"""发布一个已迁移节目：词级 JSON → feed.xml → index.html（单 feed）。
 
-用法：python scripts/publish_site.py <slug> [--data-dir data] [--site-dir site]
+用法：python scripts/publish_site.py <slug> [--data-dir data] [--json-dir json] [--site-dir site]
 
 feed 的条目集合 = progress.json 里旧的、已发布的集 ∪ 本管线产出的集；
-文件名沿用旧的那一个，所以订阅端看到的 transcript URL 不会变。
+文件名沿用旧的那一个（扩展名由 .vtt 变 .json），订阅端会重新取字幕。
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import pipeline_site  # noqa: E402
+import word_transcript  # noqa: E402
 
 BASE_URL = "https://lzoreal.github.io/MyTranscript"
 
@@ -38,20 +39,7 @@ def podcast_config(show: dict, podcasts: list[dict]) -> dict:
     }
 
 
-def merge_translations(data: dict, slug: str, entries: dict) -> int:
-    bucket = data.get(slug)
-    if not isinstance(bucket, dict):
-        bucket = {}
-    changed = 0
-    for stem, entry in entries.items():
-        if bucket.get(stem) != entry:
-            bucket[stem] = entry
-            changed += 1
-    data[slug] = bucket
-    return changed
-
-
-def merge_progress(progress: dict, slug: str, documents, stems, base_url: str) -> int:
+def merge_progress(progress: dict, slug: str, documents, stems) -> int:
     """把新发布的集登记进 progress.json：总索引的集数、feed 合并都读它。"""
     bucket = (
         (progress.setdefault("podcasts", {})).setdefault(slug, {}).setdefault("processed", {})
@@ -65,10 +53,11 @@ def merge_progress(progress: dict, slug: str, documents, stems, base_url: str) -
         entry = bucket.get(guid) or {}
         merged = {
             "title": document.get("title", ""),
-            "url": f"{base_url.rstrip('/')}/{slug}/transcripts/{stem}.vtt",
-            "path": f"{slug}/transcripts/{stem}.vtt",
+            "url": word_transcript.public_url(slug, f"{stem}.json"),
+            "path": f"json/{slug}/{stem}.json",
             "completed_at": document.get("generated_at", ""),
-            "vtt_filename": f"{stem}.vtt",
+            "transcript_filename": f"{stem}.json",
+            "transcript_type": "application/json",
         }
         if any(entry.get(key) != value for key, value in merged.items()):
             changed += 1
@@ -81,6 +70,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("slug")
     parser.add_argument("--data-dir", type=Path, default=Path("data"))
+    parser.add_argument("--json-dir", type=Path, default=Path("json"))
     parser.add_argument("--site-dir", type=Path, default=Path("site"))
     parser.add_argument("--base-url", default=BASE_URL)
     args = parser.parse_args(argv)
@@ -92,40 +82,27 @@ def main(argv=None) -> int:
         return 2
     podcasts = load_json(Path("podcasts.json"), [])
     progress = load_json(Path("progress.json"), {"podcasts": {}})
-    status_path = Path("translations.json")
-    translations = load_json(status_path, {})
-    if not isinstance(translations, dict):
-        translations = {}
 
     result = pipeline_site.publish_show(
         show,
         data_dir=args.data_dir,
+        json_dir=args.json_dir,
         site_dir=args.site_dir,
         progress=progress,
         site_base_url=args.base_url,
         podcast=podcast_config(show, podcasts),
-        # zh feed 只保留 status 里的集：必须带上已发布的老集，否则会被整批删掉。
-        status={args.slug: translations.get(args.slug) or {}},
     )
     progress_changed = merge_progress(
         progress, args.slug, pipeline_site.load_documents(args.data_dir, args.slug),
-        result["stems"], args.base_url,
+        result["stems"],
     )
     if progress_changed:
         Path("progress.json").write_text(
             json.dumps(progress, ensure_ascii=False, indent=2) + chr(10), encoding="utf-8"
         )
-
-    merged = dict(translations)
-    changed = merge_translations(merged, args.slug, result["status"])
-    if changed:
-        status_path.write_text(
-            json.dumps(merged, ensure_ascii=False, indent=2) + chr(10),
-            encoding="utf-8",
-        )
     print(
-        f"{args.slug}: 发布 {result['episodes']} 集，"
-        f"新增/更新翻译状态 {changed} 条"
+        f"{args.slug}: 发布 {result['episodes']} 集（词级 JSON），"
+        f"progress 更新 {progress_changed} 条"
     )
     return 0
 

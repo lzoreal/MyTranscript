@@ -47,6 +47,8 @@ GEMINI_API_KEYS_RAW = os.getenv("GEMINI_API_KEYS", "").strip()
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import key_health  # noqa: E402
+import pipeline_store as store  # noqa: E402
+import word_transcript  # noqa: E402
 from gemini_keys import (  # noqa: E402  （顺序轮换与错误分类的共享实现）
     GeminiAuthFailed,
     GeminiKeyRing,
@@ -95,6 +97,8 @@ PROXY_CACHE_TTL = max(60, int(os.getenv("PROXY_CACHE_TTL", "1800")))
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 SITE_DIR = ROOT_DIR / "site"
+DATA_DIR = Path(os.getenv("DATA_DIR", "data"))
+JSON_DIR = Path(os.getenv("JSON_DIR", "json"))
 STATE_FILE = ROOT_DIR / "state.json"
 PROXY_CACHE_FILE = ROOT_DIR / ".china_proxy_cache.json"
 PODCAST_DIR = SITE_DIR / PODCAST_SLUG
@@ -265,10 +269,47 @@ def format_timestamp(seconds: float) -> str:
     return f"{h:02d}:{m:02d}:{s:02d}.{milli:03d}"
 
 
-def make_public_url(path: Path) -> str:
-    rel = path.relative_to(SITE_DIR).as_posix()
+def public_url_for(path: Path, site_dir: Path) -> str:
+    rel = Path(path).relative_to(Path(site_dir)).as_posix()
     encoded = "/".join(quote(part, safe="-._~") for part in rel.split("/"))
     return f"{BASE_URL}/{encoded}" if BASE_URL else encoded
+
+
+def make_public_url(path: Path) -> str:
+    return public_url_for(path, SITE_DIR)
+
+
+def has_word_json(data_dir, slug: str, identity: str) -> bool:
+    return store.episode_path(Path(data_dir), slug, identity).exists()
+
+
+def is_cached_episode(identity, path, processed, data_dir, slug) -> bool:
+    """VTT 有效，或 data 里已有该集的词级 JSON，都算已处理。"""
+    if not processed.get(identity):
+        return False
+    if path and path.exists() and is_valid_bilingual_vtt(path):
+        return True
+    return has_word_json(data_dir, slug, identity)
+
+
+def sync_data_transcripts(records, *, data_dir, json_dir, slug) -> tuple[int, int]:
+    """给有 data JSON 的集导出站点 JSON，并把记录 URL 切过去。"""
+    stems = {}
+    for identity, record in records.items():
+        path = (record.get("path") or "").strip()
+        if path:
+            stems[identity] = Path(path).stem
+    written = word_transcript.export_show(data_dir, json_dir, slug, stems)
+    switched = 0
+    for identity, record in records.items():
+        stem = stems.get(identity)
+        if not stem or not has_word_json(data_dir, slug, identity):
+            continue
+        url = word_transcript.public_url(slug, f"{stem}.json")
+        if record.get("url") != url:
+            record["url"] = url
+            switched += 1
+    return written, switched
 
 
 # -------------------- RSS --------------------
@@ -1636,6 +1677,10 @@ def find_feed_item(
     return None
 
 
+def is_project_transcript_url(url: str) -> bool:
+    return "/transcripts/" in url or url.startswith(f"{word_transcript.RAW_BASE}/json/")
+
+
 def remove_project_transcript_tags(root: etree._Element) -> int:
     """Drop transcript links owned by this project before rebuilding the feed.
 
@@ -1648,7 +1693,7 @@ def remove_project_transcript_tags(root: etree._Element) -> int:
         ns=PODCAST_NS,
     )
     for node in nodes:
-        if "/transcripts/" in (node.get("url") or ""):
+        if is_project_transcript_url(node.get("url") or ""):
             parent = node.getparent()
             if parent is not None:
                 parent.remove(node)
@@ -1659,6 +1704,7 @@ def remove_project_transcript_tags(root: etree._Element) -> int:
 def add_transcript_tag(item: etree._Element, url: str) -> None:
     """添加 Podcasting 2.0 transcript 标签；重复运行不会重复添加相同 URL。"""
     tag = f"{{{PODCAST_NS}}}transcript"
+    transcript_type = "application/json" if url.lower().endswith(".json") else "text/vtt"
     found = None
     for old in list(item.findall(tag)):
         old_url = old.get("url") or ""
@@ -1670,18 +1716,18 @@ def add_transcript_tag(item: etree._Element, url: str) -> None:
             continue
         # Remove stale project links (e.g. an episode was renamed); keep
         # third-party transcript links untouched.
-        if "/transcripts/" in old_url:
+        if is_project_transcript_url(old_url):
             item.remove(old)
 
     if found is not None:
-        found.set("type", "text/vtt")
+        found.set("type", transcript_type)
         found.set("language", "zh-CN")
         found.set("rel", "captions")
         return
 
     node = etree.SubElement(item, tag)
     node.set("url", url)
-    node.set("type", "text/vtt")
+    node.set("type", transcript_type)
     node.set("language", "zh-CN")
     node.set("rel", "captions")
 
@@ -1846,7 +1892,7 @@ def build_podcast_index(
         )
     base = BASE_URL or ""
     enhanced = f"{base}/{quote(PODCAST_SLUG, safe='-._~')}/feed.xml"
-    page = f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{escape_html(title)} · 双语字幕</title><style>:root{{color-scheme:light dark}}body{{max-width:900px;margin:2rem auto;padding:0 1rem;font:16px/1.7 system-ui,-apple-system,"Segoe UI",sans-serif}}h1{{line-height:1.25}}a{{overflow-wrap:anywhere}}li{{margin:.9rem 0}}small{{display:block;opacity:.7}}</style></head><body><h1>{escape_html(title)}</h1><p>英文原文与简体中文译文合并显示的 WebVTT 字幕。</p><nav><a href="{escape_html(enhanced)}">增强版 RSS Feed</a> · <a href="{escape_html(feed_url)}">原始 RSS Feed</a></nav><h2>已生成字幕</h2><ul>{''.join(rows) if rows else '<li>暂无字幕。</li>'}</ul></body></html>"""
+    page = f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{escape_html(title)} · 双语字幕</title><style>:root{{color-scheme:light dark}}body{{max-width:900px;margin:2rem auto;padding:0 1rem;font:16px/1.7 system-ui,-apple-system,"Segoe UI",sans-serif}}h1{{line-height:1.25}}a{{overflow-wrap:anywhere}}li{{margin:.9rem 0}}small{{display:block;opacity:.7}}</style></head><body><h1>{escape_html(title)}</h1><p>英文原文与简体中文译文合并显示的词级字幕（JSON）。</p><nav><a href="{escape_html(enhanced)}">增强版 RSS Feed</a> · <a href="{escape_html(feed_url)}">原始 RSS Feed</a></nav><h2>已生成字幕</h2><ul>{''.join(rows) if rows else '<li>暂无字幕。</li>'}</ul></body></html>"""
     path = PODCAST_DIR / "index.html"
     atomic_write_text(path, page)
     return path
@@ -2100,12 +2146,7 @@ def main() -> int:
     to_transcribe = 0
     for entry, identity, _audio_url in candidates:
         path = get_existing_path(identity, processed, records)
-        if (
-            processed.get(identity)
-            and path
-            and path.exists()
-            and is_valid_bilingual_vtt(path)
-        ):
+        if is_cached_episode(identity, path, processed, DATA_DIR, PODCAST_SLUG):
             cached_paths.setdefault(identity, path)
             log.debug(
                 "已处理且双语字幕有效，跳过：%s",
@@ -2186,6 +2227,14 @@ def main() -> int:
     podcasts[PODCAST_SLUG] = ps
     state["podcasts"] = podcasts
     save_state(state)
+    try:
+        written, switched = sync_data_transcripts(
+            records, data_dir=DATA_DIR, json_dir=JSON_DIR, slug=PODCAST_SLUG
+        )
+        if written:
+            log.info("已导出词级 JSON：%d 集；transcript 链接切换 %d 条", written, switched)
+    except Exception:
+        log.exception("词级 JSON 导出失败；继续使用旧 VTT 链接")
     try:
         make_enhanced_feed(FEED_URL, list(records.values()))
     except Exception:

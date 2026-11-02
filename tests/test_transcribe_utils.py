@@ -164,6 +164,60 @@ class TranscriptTagTests(unittest.TestCase):
         self.assertIn("https://external.test/transcript.vtt", urls)
         self.assertNotIn("https://example.test/transcripts/old.vtt", urls)
 
+    def test_json_url_sets_json_type(self):
+        item = etree.fromstring(
+            '<item xmlns:podcast="https://podcastindex.org/namespace/1.0"></item>'
+        )
+        transcriber.add_transcript_tag(
+            item, "https://example.test/transcripts/new.json"
+        )
+        node = item.find("{https://podcastindex.org/namespace/1.0}transcript")
+        self.assertEqual(node.get("type"), "application/json")
+
+    def test_vtt_url_keeps_vtt_type(self):
+        item = etree.fromstring(
+            '<item xmlns:podcast="https://podcastindex.org/namespace/1.0"></item>'
+        )
+        transcriber.add_transcript_tag(
+            item, "https://example.test/transcripts/new.vtt"
+        )
+        node = item.find("{https://podcastindex.org/namespace/1.0}transcript")
+        self.assertEqual(node.get("type"), "text/vtt")
+
+    def test_add_transcript_tag_removes_stale_raw_json_link(self):
+        old = f"{transcriber.word_transcript.RAW_BASE}/json/pod/Old.json"
+        new = f"{transcriber.word_transcript.RAW_BASE}/json/pod/New.json"
+        item = etree.fromstring(
+            f"""
+            <item xmlns:podcast="https://podcastindex.org/namespace/1.0">
+              <podcast:transcript url="{old}" type="application/json"/>
+              <podcast:transcript url="https://external.test/transcript.vtt"/>
+            </item>
+            """
+        )
+        transcriber.add_transcript_tag(item, new)
+
+        urls = item.xpath("*[local-name()='transcript']/@url")
+        self.assertEqual(urls, ["https://external.test/transcript.vtt", new])
+
+    def test_remove_project_transcript_tags_removes_raw_json(self):
+        raw = f"{transcriber.word_transcript.RAW_BASE}/json/pod/Ep.json"
+        channel = etree.fromstring(
+            f"""
+            <channel xmlns:podcast="https://podcastindex.org/namespace/1.0">
+              <item>
+                <podcast:transcript url="{raw}" type="application/json"/>
+                <podcast:transcript url="https://external.test/transcript.vtt"/>
+              </item>
+            </channel>
+            """
+        )
+        removed = transcriber.remove_project_transcript_tags(channel)
+
+        self.assertEqual(removed, 1)
+        urls = channel.xpath("//*[local-name()='transcript']/@url")
+        self.assertEqual(urls, ["https://external.test/transcript.vtt"])
+
     def test_remove_project_transcript_tags_keeps_external(self):
         channel = etree.fromstring(
             """
@@ -1948,10 +2002,6 @@ class MainBackfillReadOnlyTests(unittest.TestCase):
         self.assertEqual(calls, [], "鉴权失败也不能触发 state/feed/index writer")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class ProxyPreferenceTests(unittest.TestCase):
     def test_preferred_proxy_comes_first_and_survives_shuffle(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2018,3 +2068,44 @@ class DegenerateCueTests(unittest.TestCase):
             cues, _ = transcriber.whisper_transcribe(Path("x"))
         self.assertEqual(calls, [True, False])
         self.assertEqual(len(cues), 10)
+
+
+class WordJsonSyncTests(unittest.TestCase):
+    def test_export_and_switch_urls_only_for_episodes_with_data(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_dir = root / "data"
+            show = data_dir / "pod"
+            show.mkdir(parents=True)
+            document = {
+                "guid": "g1",
+                "audio_seconds": 2.0,
+                "sentences": [{
+                    "start": 0.0,
+                    "end": 1.0,
+                    "en": "Hi.",
+                    "words": [{"w": "Hi.", "s": 0.0, "e": 1.0}],
+                }],
+            }
+            (show / "g1.json").write_text(json.dumps(document), encoding="utf-8")
+            records = {
+                "g1": {"path": "pod/transcripts/Old.vtt", "url": "https://x/Old.vtt"},
+                "g2": {"path": "pod/transcripts/Other.vtt", "url": "https://x/Other.vtt"},
+            }
+            json_dir = root / "json"
+            written, switched = transcriber.sync_data_transcripts(
+                records, data_dir=data_dir, json_dir=json_dir, slug="pod"
+            )
+            self.assertEqual((written, switched), (1, 1))
+            out = json_dir / "pod" / "Old.json"
+            self.assertTrue(out.exists())
+            self.assertEqual(
+                records["g1"]["url"],
+                "https://raw.githubusercontent.com/lzoreal/MyTranscript/main"
+                "/json/pod/Old.json",
+            )
+            self.assertEqual(records["g2"]["url"], "https://x/Other.vtt")
+
+
+if __name__ == "__main__":
+    unittest.main()
