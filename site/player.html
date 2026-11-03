@@ -233,6 +233,15 @@ button{cursor:pointer;background:none;border:0;padding:0}
 }
 body.immersive .dock{transform:translateY(calc(100% + 32px));opacity:0;pointer-events:none}
 body.immersive{--bottom:16px}
+.toast{
+  position:fixed;left:50%;bottom:calc(var(--bottom) + 14px);z-index:55;
+  translate:-50% 8px;max-width:min(560px,calc(100vw - 32px));
+  padding:10px 15px;border:1px solid var(--line);border-radius:4px;
+  background:var(--dock2);color:var(--ink);font:12.5px/1.45 var(--sans);text-align:center;
+  box-shadow:var(--shadow-dock);opacity:0;pointer-events:none;cursor:pointer;
+  transition:opacity .2s var(--ease),translate .2s var(--ease);
+}
+.toast.on{opacity:1;translate:-50% 0;pointer-events:auto}
 .coverframe{
   position:fixed;left:24px;bottom:22px;z-index:46;width:clamp(64px,6.2vw,96px);height:clamp(64px,6.2vw,96px);padding:6px;
   border:1px solid color-mix(in srgb, var(--accent) 42%, transparent);border-radius:3px;cursor:grab;touch-action:none;user-select:none;
@@ -691,6 +700,8 @@ body.playing .eq i{animation:eq .9s ease-in-out infinite alternate}
   </div>
 </footer>
 
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
 <div class="typesheet" id="typeSheet" role="dialog" aria-label="阅读排版" aria-hidden="true">
   <div class="tshead">
     <h4>阅读排版</h4><span class="spacer"></span>
@@ -798,7 +809,8 @@ const state = { shows: [], show: null, feeds: new Map(), episodes: [], current: 
   cues: [], nodes: [], activeCue: -1, wordIdx: -1,
   vtt: null, sidecar: null, zhVtt: null, base: null, experiment: null,
   mode: 'word', scroll: 'center', offset: 0, userScrollUntil: 0, immersive: false,
-  timeScale: 1, audioSeconds: 0, seekRaw: 0, loadSeq: 0, transcriptSeq: 0 };
+  timeScale: 1, audioSeconds: 0, seekRaw: 0, loadSeq: 0, transcriptSeq: 0,
+  audioToken: 0, audioRetried: 0, audioUsed: new Set() };
 
 const themeBtns = [...document.querySelectorAll('.swatch')];
 const LIGHT_THEMES = new Set(['paper', 'mist']);
@@ -1038,6 +1050,83 @@ const isBracket = t => /^\s*\[.*\]\s*[.!?]?\s*$/.test(t);
 const esc = t => String(t).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const loaderHTML = text => '<div class="loader"><span class="bars"><i></i><i></i><i></i></span><span>' + esc(text) + '</span></div>';
 function status(t, cls='') { $('status').textContent = t; $('status').className = 'status ' + cls; }
+let toastTimer = 0;
+function showToast(text, ms = 6000) {
+  const el = $('toast');
+  el.textContent = text;
+  el.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('on'), ms);
+}
+function hideToast() { clearTimeout(toastTimer); $('toast').classList.remove('on'); }
+function resolveFinalAudioUrl(url) {
+  return new Promise(resolve => {
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = setTimeout(() => ctrl && ctrl.abort(), 8000);
+    fetch(url, { cache: 'no-store', signal: ctrl ? ctrl.signal : undefined }).then(r => {
+      const finalUrl = r.url;
+      if (r.body) r.body.cancel().catch(() => {});
+      resolve(finalUrl && finalUrl !== url ? finalUrl : null);
+    }).catch(() => resolve(null)).finally(() => clearTimeout(timer));
+  });
+}
+function tryAudioSource(url) {
+  if (!url || state.audioUsed.has(url)) return false;
+  state.audioUsed.add(url);
+  audio.dataset.ep = state.current?.id || '';
+  audio.src = url;
+  audio.load();
+  audio.play().catch(() => {});
+  return true;
+}
+function retryCurrentAudio() {
+  const item = state.current;
+  if (!item || !item.url) return;
+  state.audioRetried = 0;
+  state.audioUsed = new Set([item.url]);
+  state.audioToken += 1;
+  audio.dataset.ep = item.id;
+  audio.src = item.url;
+  audio.load();
+  audio.play().catch(() => {});
+}
+function audioFail(code) {
+  const msg = '音频加载失败' + (code ? '（错误码 ' + code + '）' : '') + '，点击提示可重试。';
+  status(msg, 'warn');
+  showToast(msg, 12000);
+}
+async function onAudioError() {
+  const item = state.current;
+  if (!item || !item.url || audio.dataset.ep !== item.id) return;
+  const token = state.audioToken;
+  if (state.audioRetried === 0) {
+    state.audioRetried = 1;
+    showToast('音频请求失败，正在重试…', 5000);
+    setTimeout(() => {
+      if (token !== state.audioToken) return;
+      audio.load();
+      audio.play().catch(() => {});
+    }, 800);
+    return;
+  }
+  if (state.audioRetried === 1) {
+    state.audioRetried = 2;
+    showToast('正在尝试直连音频…', 10000);
+    const finalUrl = await resolveFinalAudioUrl(item.url);
+    if (token !== state.audioToken) return;
+    if (tryAudioSource(finalUrl) || tryAudioSource(item.directUrl)) return;
+    audioFail(audio.error && audio.error.code);
+    return;
+  }
+  if (state.audioRetried === 2) {
+    state.audioRetried = 3;
+    if (tryAudioSource(item.directUrl)) return;
+    audioFail(audio.error && audio.error.code);
+    return;
+  }
+  audioFail(audio.error && audio.error.code);
+}
+$('toast').onclick = () => { hideToast(); retryCurrentAudio(); };
 function openDrawer(){ closeDetails(); closeTypeSheet(); $('drawer').classList.add('on'); $('scrim').classList.add('on'); $('drawer').setAttribute('aria-hidden','false'); $('search').focus(); }
 function closeDrawer(){ $('drawer').classList.remove('on'); $('scrim').classList.remove('on'); $('drawer').setAttribute('aria-hidden','true'); }
 function openDetails(){ closeDrawer(); closeTypeSheet(); $('details').classList.add('on'); $('details').setAttribute('aria-hidden','false'); }
@@ -1097,10 +1186,12 @@ function parseFeed(xml) {
     const imgEl = it.getElementsByTagName('itunes:image')[0];
     const guid = (it.getElementsByTagName('guid')[0]?.textContent || '').trim();
     const transcript = pickTranscript(it);
+    const url = enc ? enc.getAttribute('url') : '';
+    const media = it.getElementsByTagName('media:content')[0]?.getAttribute('url') || '';
     return {
       id: guid || transcript?.url || 'ep-' + index,
-      title, date,
-      url: enc ? enc.getAttribute('url') : '',
+      title, date, url,
+      directUrl: media && media !== url ? media : '',
       img: (imgEl ? imgEl.getAttribute('href') : '') || channelImg,
       transcript,
     };
@@ -1700,7 +1791,14 @@ function selectEpisode(item, keepDrawer = false) {
   const frameCover = $('frameCover');
   frameCover.onerror = () => { frameCover.onerror = null; frameCover.src = coverFallback; };
   frameCover.src = item.img || coverFallback;
-  if (item.url) { audio.src = item.url; audio.load(); } else { audio.removeAttribute('src'); audio.load(); }
+  state.audioRetried = 0;
+  state.audioUsed = new Set(item.url ? [item.url] : []);
+  state.audioToken += 1;
+  audio.dataset.ep = item.id;
+  audio.pause();
+  audio.removeAttribute('src');
+  audio.load();
+  if (item.url) { audio.src = item.url; audio.load(); }
   state.audioSeconds = 0; state.timeScale = 1; state.seekRaw = 0;
   $('total').textContent = '00:00'; $('now').textContent = '00:00';
   $('seek').value = '0'; $('pfill').style.width = '0%';
@@ -1851,8 +1949,10 @@ async function initPlayer() {
 /* transport */
 $('play').onclick = () => {
   if (!state.current) { openDrawer(); return; }
-  if (!audio.getAttribute('src')) { status('该集没有音频地址。', 'warn'); return; }
-  audio.paused ? audio.play().catch(e => status('播放失败：' + e.message, 'warn')) : audio.pause();
+  if (!audio.getAttribute('src')) { status('该集没有音频地址。', 'warn'); showToast('该集没有音频地址。'); return; }
+  audio.paused
+    ? audio.play().catch(e => { status('播放失败：' + e.message, 'warn'); showToast('播放失败：' + e.message); })
+    : audio.pause();
 };
 audio.addEventListener('play', () => { $('play').classList.add('playing'); $('play').setAttribute('aria-label','暂停'); document.body.classList.add('playing'); });
 audio.addEventListener('pause', () => { $('play').classList.remove('playing'); $('play').setAttribute('aria-label','播放'); document.body.classList.remove('playing'); });
@@ -1873,6 +1973,7 @@ audio.addEventListener('pause', () => setBuffering(false));
 audio.addEventListener('emptied', () => setBuffering(false));
 audio.addEventListener('loadedmetadata', () => { updateTimeScale(); paint(false); });
 audio.addEventListener('timeupdate', () => paint());
+audio.addEventListener('error', () => { onAudioError(); });
 function seekBy(seconds) {
   const t = (audio.currentTime || 0) + (state.timeScale - 1) * state.seekRaw + seconds;
   rawSeek(t / (state.timeScale || 1));
