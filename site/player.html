@@ -1,0 +1,2004 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MyTranscript Player</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#0a0e15">
+<style>
+/* Design tokens — design skill palette "Dark Academia":
+   #0D0D0D ink · #594636 brown · #4B3E15 olive · #2C3850 navy · #DEB887 parchment */
+:root{
+  color-scheme:dark;
+  --bg:#0a0e15;
+  --ink:#efe6d6;--muted:#a3947e;--dim:#6e6152;
+  --soft:#c0b19b;--meta:#a8997f;--bright:#fbf3e6;
+  --line:#2b3140;--line2:#1e2430;
+  --accent:#d8b489;--accent2:#ead2ac;--accentText:#141008;
+  --good:#a9c9a5;--warn:#d8b489;
+  --glow1:rgba(44,56,80,.30);--glow2:rgba(89,70,54,.18);
+  --panel:#0c1119;--panel2:#0f1520;
+  --dock1:rgba(23,29,41,.95);--dock2:rgba(10,14,21,.975);
+  --glass:rgba(9,13,20,.78);
+  --track:#242c3a;--scroll:#2b3444;--coverbg:#111927;
+  --menu:#101623;--menu1:#151d2b;--menu2:#0d131d;--chev:#7d7364;
+  --edge:rgba(216,180,137,.14);--edge2:rgba(216,180,137,.16);
+  --hover:rgba(216,180,137,.055);--tick:rgba(255,255,255,.1);
+  --inset:rgba(255,255,255,.06);--wordactive:#fffaf0;--swborder:rgba(255,255,255,.18);
+  --shadow-dock:0 36px 80px -36px rgba(0,0,0,.98),inset 0 1px 0 var(--inset);
+  --serif:"Iowan Old Style","Palatino Linotype",Georgia,"Songti SC","Noto Serif SC",serif;
+  --sans:system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  --mono:"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+  --ease:cubic-bezier(.25,.6,.2,1);
+  --bottom:136px;
+  --reader-w:780px;--cue-scale:1;--cue-lh:1.78;--cue-gap:4px;--cue-ls:.06px;--pending-op:.42;
+}
+[data-theme="midnight"]{
+  --bg:#080b12;--ink:#e6e9f1;--muted:#98a3b8;--dim:#66718a;
+  --soft:#b4bdd0;--meta:#a3adc0;--bright:#f1f4fa;
+  --line:#232a38;--line2:#1a202c;
+  --accent:#9db8e8;--accent2:#b3c9ee;--accentText:#0b1220;
+  --good:#9fd6c4;--warn:#e6c489;
+  --glow1:rgba(120,150,220,.06);--glow2:rgba(80,110,180,.05);
+  --panel:#090d15;--panel2:#0b1018;
+  --dock1:rgba(20,26,38,.95);--dock2:rgba(10,14,22,.975);
+  --glass:rgba(9,13,20,.76);
+  --track:#242c3a;--scroll:#283142;--coverbg:#111826;
+  --menu:#0f1520;--menu1:#131a26;--menu2:#0c111a;--chev:#5f7396;
+}
+[data-theme="forest"]{
+  --bg:#080d0a;--ink:#e9e7d8;--muted:#9aa793;--dim:#64745f;
+  --soft:#b8b7a5;--meta:#a7a596;--bright:#f2f0e3;
+  --line:#232c25;--line2:#1a221c;
+  --accent:#c3b177;--accent2:#d3c48f;--accentText:#12130b;
+  --good:#a9c9a0;--warn:#d5c089;
+  --glow1:rgba(170,150,100,.055);--glow2:rgba(90,130,100,.05);
+  --panel:#0a100c;--panel2:#0c120e;
+  --dock1:rgba(22,28,23,.95);--dock2:rgba(11,15,12,.975);
+  --glass:rgba(10,14,11,.75);
+  --track:#252d26;--scroll:#2a332c;--coverbg:#161b15;
+  --menu:#111710;--menu1:#151b14;--menu2:#0d120e;--chev:#77714e;
+}
+[data-theme="oxblood"]{
+  --bg:#0d0708;--ink:#efe4df;--muted:#b09a96;--dim:#786460;
+  --soft:#c5b3ae;--meta:#b5a09b;--bright:#f6ede8;
+  --line:#2c1f21;--line2:#221719;
+  --accent:#dda08e;--accent2:#e7b3a4;--accentText:#1a0d0b;
+  --good:#b8c79f;--warn:#e0b58c;
+  --glow1:rgba(200,120,100,.06);--glow2:rgba(150,80,110,.05);
+  --panel:#0f0809;--panel2:#110a0b;
+  --dock1:rgba(32,20,21,.95);--dock2:rgba(15,9,10,.975);
+  --glass:rgba(14,8,9,.75);
+  --track:#332325;--scroll:#3a292b;--coverbg:#1d1214;
+  --menu:#170d0f;--menu1:#1b1113;--menu2:#12090b;--chev:#8a6a60;
+}
+[data-theme="celadon"]{
+  --bg:#070c0c;--ink:#e3ebe7;--muted:#93a7a2;--dim:#5f7470;
+  --soft:#b2c3be;--meta:#a1b2ad;--bright:#f0f5f2;
+  --line:#1f2b29;--line2:#172120;
+  --accent:#a7c8bd;--accent2:#bcd8ce;--accentText:#0a1210;
+  --good:#a3cfb4;--warn:#d3c392;
+  --glow1:rgba(130,180,165,.06);--glow2:rgba(100,140,180,.045);
+  --panel:#080e0d;--panel2:#0a100f;
+  --dock1:rgba(18,26,24,.95);--dock2:rgba(9,14,13,.975);
+  --glass:rgba(8,13,12,.75);
+  --track:#222d2a;--scroll:#273330;--coverbg:#101816;
+  --menu:#0e1413;--menu1:#121918;--menu2:#0b100f;--chev:#65847c;
+}
+[data-theme="paper"]{
+  color-scheme:light;
+  --bg:#f3eee3;--ink:#2b251c;--muted:#6f6657;--dim:#8d8272;
+  --soft:#5f5648;--meta:#6b6253;--bright:#171309;
+  --line:#ddd3c1;--line2:#e7dfd0;
+  --accent:#8a6733;--accent2:#a37c40;--accentText:#fbf6ea;
+  --good:#3f7a4f;--warn:#8a5f1a;
+  --glow1:rgba(180,140,80,.10);--glow2:rgba(120,140,170,.08);
+  --panel:#efe9dc;--panel2:#f6f1e6;
+  --dock1:rgba(250,246,238,.94);--dock2:rgba(244,238,227,.97);
+  --glass:rgba(252,249,242,.82);
+  --track:#d9cfbd;--scroll:#c4b8a3;--coverbg:#e4dccb;
+  --menu:#f7f2e7;--menu1:#fbf7ef;--menu2:#f1eadd;--chev:#9a8b74;
+  --edge:rgba(60,45,20,.16);--edge2:rgba(60,45,20,.16);
+  --hover:rgba(60,45,20,.05);--tick:rgba(60,45,20,.12);
+  --inset:rgba(255,255,255,.7);--wordactive:#141008;--swborder:rgba(60,45,20,.2);
+  --shadow-dock:0 26px 60px -30px rgba(60,45,25,.4),inset 0 1px 0 var(--inset);
+}
+[data-theme="mist"]{
+  color-scheme:light;
+  --bg:#edf1ef;--ink:#1f2827;--muted:#5f6f6b;--dim:#7d8b87;
+  --soft:#4f5d59;--meta:#5b6965;--bright:#0e1513;
+  --line:#cfd9d5;--line2:#dde5e2;
+  --accent:#3f7269;--accent2:#4f857b;--accentText:#f4faf8;
+  --good:#2f6f4a;--warn:#8a5f1a;
+  --glow1:rgba(90,140,130,.10);--glow2:rgba(90,120,160,.08);
+  --panel:#e8edeb;--panel2:#f1f5f3;
+  --dock1:rgba(247,250,248,.94);--dock2:rgba(238,243,241,.97);
+  --glass:rgba(250,253,251,.84);
+  --track:#ced9d5;--scroll:#b9c6c2;--coverbg:#dde6e2;
+  --menu:#f1f5f3;--menu1:#f7faf8;--menu2:#e9efec;--chev:#7d918c;
+  --edge:rgba(20,40,35,.16);--edge2:rgba(20,40,35,.16);
+  --hover:rgba(20,40,35,.05);--tick:rgba(20,40,35,.12);
+  --inset:rgba(255,255,255,.75);--wordactive:#0b1311;--swborder:rgba(20,40,35,.2);
+  --shadow-dock:0 26px 60px -30px rgba(20,40,35,.35),inset 0 1px 0 var(--inset);
+}
+@media(max-width:820px){:root{--bottom:140px}}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;color:var(--ink);font:15px/1.55 var(--sans);overflow:hidden;
+  background:
+    radial-gradient(900px 420px at 50% -10%, var(--glow1), transparent 70%),
+    radial-gradient(700px 500px at 88% 100%, var(--glow2), transparent 70%),
+    var(--bg);
+}
+body::before{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.035;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+button,select,input{font:inherit;color:var(--ink)}
+button{cursor:pointer;background:none;border:0;padding:0}
+::selection{background:color-mix(in srgb, var(--accent) 24%, transparent)}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:var(--scroll);border-radius:9px}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ---------- dock mode switch ---------- */
+.seg{display:flex;gap:16px;border-left:1px solid var(--line2);padding-left:20px;flex:0 0 auto}
+.seg button{
+  background:none;color:var(--muted);padding:6px 0;font-size:13.5px;letter-spacing:.08em;
+  position:relative;transition:color .16s var(--ease);
+}
+.seg button:hover{color:var(--muted)}
+.seg button.on{color:var(--ink)}
+.seg button.on::after{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;background:var(--accent)}
+
+/* ---------- reader ---------- */
+.reader{position:fixed;left:0;right:0;top:0;bottom:var(--bottom);z-index:1;overflow:hidden;transition:bottom .32s var(--ease)}
+.transcript{
+  position:absolute;inset:0;overflow:auto;overscroll-behavior:contain;
+  padding:48px max(22px,calc((100vw - var(--reader-w))/2)) 70px;
+  -webkit-mask-image:linear-gradient(180deg,transparent 0,#000 30px,#000 calc(100% - 38px),transparent 100%);
+  mask-image:linear-gradient(180deg,transparent 0,#000 30px,#000 calc(100% - 38px),transparent 100%);
+}
+.cue{
+  position:relative;padding:11px 0 11px 26px;margin:var(--cue-gap) 0;
+  color:color-mix(in srgb, var(--ink) 46%, transparent);
+  font-family:var(--serif);font-size:calc(clamp(18.5px,1.5vw,25px) * var(--cue-scale));
+  line-height:var(--cue-lh);letter-spacing:var(--cue-ls);
+  cursor:pointer;border-radius:6px;transition:color .2s var(--ease),background .2s var(--ease);
+}
+.cue::before{
+  content:"";position:absolute;left:0;top:16px;bottom:16px;width:2px;border-radius:2px;
+  background:linear-gradient(180deg,var(--accent2),color-mix(in srgb,var(--accent) 22%,transparent));opacity:0;transform:scaleY(.3);transform-origin:top;
+  transition:opacity .24s var(--ease),transform .24s var(--ease);
+}
+.cue:hover{color:color-mix(in srgb, var(--ink) 76%, transparent);background:color-mix(in srgb, var(--accent) 4%, transparent)}
+.cue.active{color:var(--bright);background:linear-gradient(100deg,color-mix(in srgb,var(--accent) 9%,transparent),color-mix(in srgb,var(--accent) 2%,transparent) 56%,transparent 92%)}
+.cue.active::before{opacity:.85;transform:scaleY(1)}
+.stamp{
+  display:inline-block;min-width:54px;margin-right:12px;vertical-align:2px;
+  font:9.5px/1.4 var(--mono);letter-spacing:.1em;color:var(--dim);
+  font-variant-numeric:tabular-nums;
+}
+.cue.active .stamp{color:var(--accent2)}
+.spk{
+  display:inline-block;margin-right:10px;vertical-align:2px;
+  font:600 9.5px/1.6 var(--sans);letter-spacing:.18em;text-transform:uppercase;color:var(--accent2);
+}
+.word{white-space:pre-wrap;transition:color .14s linear,opacity .14s linear}
+.word.pending{opacity:.4}
+.cue.active .word.pending{opacity:var(--pending-op)}
+.word.past{opacity:1}
+.word.active{
+  color:var(--wordactive);
+  -webkit-text-stroke-width:.4px;-webkit-text-stroke-color:currentColor;
+  background-image:linear-gradient(180deg,transparent 56%,color-mix(in srgb,color-mix(in srgb,var(--accent) 70%,#fff4dc) 52%,transparent) 56%,color-mix(in srgb,color-mix(in srgb,var(--accent) 70%,#fff4dc) 44%,transparent) 95%,transparent 95%);
+  text-shadow:0 0 24px color-mix(in srgb,var(--accent) 34%,transparent);
+}
+.label{color:var(--dim);font-size:.76em;font-style:italic;letter-spacing:.01em}
+.cue .zh{
+  display:block;margin-top:6px;font-size:.82em;line-height:1.72;letter-spacing:.01em;
+  color:color-mix(in srgb, var(--ink) 60%, transparent);transition:color .2s var(--ease);
+}
+.cue.active .zh{color:color-mix(in srgb, var(--ink) 84%, transparent)}
+.badge{
+  margin-left:10px;vertical-align:4px;font:9px/1 var(--mono);letter-spacing:.12em;
+  color:var(--dim);border-bottom:1px solid var(--line);padding-bottom:2px;text-transform:uppercase;
+}
+.empty{min-height:300px;display:grid;place-items:center;text-align:center;color:var(--dim);padding:24px;font-size:13px;line-height:1.9}
+.empty b{display:block;font-family:var(--serif);font-size:17px;font-weight:400;color:var(--muted);margin-bottom:6px}
+.loader{display:flex;flex-direction:column;align-items:center;gap:13px;color:var(--dim);font-size:12px;letter-spacing:.1em}
+.loader .bars{display:flex;align-items:flex-end;gap:4px;height:18px}
+.loader .bars i{
+  display:block;width:2px;height:100%;border-radius:1px;background:var(--accent);opacity:.85;
+  transform-origin:bottom;animation:loadbars .9s ease-in-out infinite alternate;
+}
+.loader .bars i:nth-child(2){animation-delay:.15s;background:var(--accent2)}
+.loader .bars i:nth-child(3){animation-delay:.3s}
+@keyframes loadbars{from{transform:scaleY(.28);opacity:.4}to{transform:scaleY(1);opacity:.95}}
+.epList .loader{gap:10px}
+.epList .loader .bars{height:14px}
+
+/* ---------- floating dock ---------- */
+.dock{
+  position:fixed;left:50%;bottom:16px;translate:-50% 0;z-index:45;
+  width:min(1040px,calc(100% - 40px));
+  border:1px solid var(--edge);border-radius:18px;
+  background:linear-gradient(180deg,var(--dock1),var(--dock2));
+  box-shadow:var(--shadow-dock);
+  backdrop-filter:blur(22px) saturate(1.15);-webkit-backdrop-filter:blur(22px) saturate(1.15);
+  padding:15px 26px 17px;
+  transition:transform .32s var(--ease),opacity .24s var(--ease);
+}
+body.immersive .dock{transform:translateY(calc(100% + 32px));opacity:0;pointer-events:none}
+body.immersive{--bottom:16px}
+.coverframe{
+  position:fixed;left:24px;bottom:22px;z-index:46;width:clamp(64px,6.2vw,96px);height:clamp(64px,6.2vw,96px);padding:6px;
+  border:1px solid color-mix(in srgb, var(--accent) 42%, transparent);border-radius:3px;cursor:grab;touch-action:none;user-select:none;
+  background:var(--glass);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  box-shadow:0 20px 46px -20px rgba(0,0,0,.95),inset 0 1px 0 rgba(255,255,255,.07);
+  opacity:0;pointer-events:none;transform:translateY(12px);
+  transition:opacity .24s var(--ease),transform .32s var(--ease),border-color .16s var(--ease),box-shadow .16s var(--ease);
+}
+.coverframe.dragging{cursor:grabbing;transition:border-color .16s var(--ease),box-shadow .16s var(--ease)}
+body.immersive .coverframe{opacity:1;pointer-events:auto;transform:none}
+body.immersive .transcript{
+  -webkit-mask-image:linear-gradient(180deg,transparent 0,#000 30px,#000 calc(100% - 124px),transparent 100%);
+  mask-image:linear-gradient(180deg,transparent 0,#000 30px,#000 calc(100% - 124px),transparent 100%);
+}
+.coverframe:hover{border-color:color-mix(in srgb, var(--accent) 85%, transparent);box-shadow:0 22px 50px -18px rgba(0,0,0,.95),0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent)}
+.coverframe img{display:block;width:100%;height:100%;object-fit:cover;border-radius:1px;background:var(--coverbg);filter:grayscale(.55) contrast(1.02);transition:filter .3s var(--ease);-webkit-user-drag:none}
+body.playing .coverframe img{filter:none}
+.coverframe::after{
+  content:"⤢";position:absolute;right:-1px;top:-14px;font:12px/1 var(--mono);color:var(--accent2);
+  opacity:0;transition:opacity .16s var(--ease);
+}
+body.immersive .coverframe:hover::after{opacity:.9}
+.jumppill{
+  position:fixed;left:50%;bottom:calc(var(--bottom) + 16px);translate:-50% 0;z-index:46;
+  display:flex;align-items:center;gap:8px;padding:9px 15px 9px 12px;border-radius:999px;
+  border:1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  background:var(--glass);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  color:var(--ink);font-size:12.5px;letter-spacing:.06em;white-space:nowrap;
+  box-shadow:0 16px 36px -18px rgba(0,0,0,.6),inset 0 1px 0 var(--inset);
+  opacity:0;pointer-events:none;transform:translateY(10px);
+  transition:opacity .2s var(--ease),transform .24s var(--ease),color .16s var(--ease),border-color .16s var(--ease);
+}
+.jumppill.on{opacity:1;pointer-events:auto;transform:none}
+.jumppill:hover{color:var(--accent);border-color:color-mix(in srgb, var(--accent) 70%, transparent)}
+.jumppill svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round}
+.pbar{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:14px;margin:0 1px 12px}
+.ptime{font:12px/1 var(--mono);color:var(--muted);font-variant-numeric:tabular-nums;letter-spacing:.04em;white-space:nowrap}
+.ptime b{color:var(--muted);font-weight:400}
+.track{position:relative;height:14px;display:flex;align-items:center;cursor:pointer}
+.track::before{content:"";position:absolute;left:0;right:0;height:4px;border-radius:2px;background:var(--track)}
+.track::after{
+  content:"";position:absolute;left:0;right:0;height:4px;pointer-events:none;
+  background-image:repeating-linear-gradient(90deg,var(--tick) 0 1px,transparent 1px 25%);
+}
+.track input{position:absolute;inset:-5px 0;width:100%;height:24px;margin:0;opacity:0;cursor:pointer;z-index:2}
+.pfill{
+  position:relative;height:4px;width:0;border-radius:2px;z-index:1;
+  background:linear-gradient(90deg,color-mix(in srgb, var(--accent) 62%, var(--bg)),var(--accent));
+  box-shadow:0 0 10px color-mix(in srgb, var(--accent) 28%, transparent);transition:width .12s linear;
+}
+.pfill::after{
+  content:"";position:absolute;right:-3px;top:50%;width:8px;height:8px;background:var(--accent);
+  transform:translateY(-50%) rotate(45deg);opacity:0;transition:opacity .18s var(--ease);
+}
+.track:hover .pfill::after,.track:focus-within .pfill::after{opacity:1}
+.track:hover::before{background:color-mix(in srgb, var(--ink) 18%, transparent)}
+.dockrow{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;align-items:center;gap:22px}
+.nowplay{display:flex;align-items:center;gap:14px;min-width:0}
+.cover{
+  width:54px;height:54px;border-radius:2px;object-fit:cover;flex:0 0 54px;cursor:pointer;
+  background:var(--coverbg);border:1px solid color-mix(in srgb, var(--accent) 24%, transparent);
+  box-shadow:0 0 0 1px rgba(0,0,0,.45),0 10px 22px -12px rgba(0,0,0,.95);
+  filter:grayscale(.55) contrast(1.02);transition:filter .3s var(--ease),opacity .2s var(--ease);
+}
+body.playing .cover{filter:none}
+.cover:hover{filter:none}
+.cover[hidden]{display:none}
+.ptext{min-width:0;cursor:pointer}
+.ptitle{font-family:var(--serif);font-size:18px;font-weight:400;line-height:1.3;margin:0 0 4px;letter-spacing:.005em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--bright)}
+.pmeta{display:flex;align-items:center;gap:10px;color:var(--meta);font-size:12.5px;letter-spacing:.03em;white-space:nowrap;overflow:hidden}
+.pmeta .sep{color:var(--line)}
+.axis{
+  font:10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--accent2);
+  border:0;border-bottom:1px solid color-mix(in srgb, var(--accent) 32%, transparent);padding:0 0 2px;background:none;
+}
+.pcontrols{display:flex;align-items:center;gap:12px}
+.skipbtn{
+  width:40px;height:40px;border-radius:50%;display:grid;place-items:center;
+  font:11px/1 var(--mono);letter-spacing:.02em;color:var(--soft);padding:0;
+  border:1px solid var(--line);
+  transition:color .16s var(--ease),border-color .16s var(--ease),background .16s var(--ease);
+}
+.skipbtn:hover{color:var(--ink);border-color:color-mix(in srgb, var(--accent) 50%, transparent);background:color-mix(in srgb, var(--accent) 6%, transparent)}
+.playbtn{
+  width:50px;height:50px;border-radius:50%;display:grid;place-items:center;
+  border:1px solid color-mix(in srgb,var(--accent) 78%, #fff);color:var(--accentText);
+  background:linear-gradient(160deg,color-mix(in srgb,var(--accent) 70%, #fff),var(--accent) 62%,color-mix(in srgb,var(--accent) 84%, #000));
+  box-shadow:0 14px 30px -14px color-mix(in srgb, var(--accent) 72%, transparent),inset 0 1px 0 rgba(255,255,255,.45);
+  transition:background .18s var(--ease),color .18s var(--ease),border-color .18s var(--ease),transform .18s var(--ease);
+}
+.playbtn:hover{filter:brightness(1.06)}
+.playbtn:active{transform:scale(.96)}
+.playbtn .ico{width:17px;height:17px;fill:currentColor}
+.playbtn .ico-pause{display:none}
+.playbtn.playing .ico-play{display:none}
+.playbtn.playing .ico-pause{display:block}
+.playbtn.buffering .ico{display:none}
+.playbtn .spin{
+  display:none;width:17px;height:17px;border-radius:50%;
+  border:2px solid color-mix(in srgb, var(--accentText) 22%, transparent);
+  border-top-color:var(--accentText);animation:spin .8s linear infinite;
+}
+.playbtn.buffering .spin{display:block}
+.coverframe .spinbadge{
+  position:absolute;right:-7px;bottom:-7px;width:22px;height:22px;border-radius:50%;display:none;place-items:center;
+  background:var(--glass);border:1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow:0 6px 14px -8px rgba(0,0,0,.6);
+}
+.coverframe .spinbadge i{
+  display:block;width:11px;height:11px;border-radius:50%;
+  border:1.5px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  border-top-color:var(--accent);animation:spin .8s linear infinite;
+}
+body.buffering .coverframe .spinbadge{display:grid}
+@keyframes spin{to{transform:rotate(360deg)}}
+.pright{display:flex;align-items:center;gap:3px;justify-self:end}
+.vsep{width:1px;height:17px;background:var(--line2);margin:0 10px;flex:0 0 auto}
+select{
+  appearance:none;border:0;border-bottom:1px solid transparent;background:none;
+  padding:7px 16px 7px 2px;font:12.5px/1 var(--mono);color:var(--soft);cursor:pointer;
+  background-image:linear-gradient(45deg,transparent 50%,var(--chev) 50%),linear-gradient(135deg,var(--chev) 50%,transparent 50%);
+  background-position:calc(100% - 7px) 50%,calc(100% - 3px) 50%;
+  background-size:4px 4px;background-repeat:no-repeat;
+  transition:color .16s var(--ease),border-color .16s var(--ease);
+}
+select:hover{color:var(--ink);border-bottom-color:var(--line)}
+option{background:var(--menu);color:var(--ink)}
+.speed{position:relative;display:flex;align-items:center}
+.speedbtn{
+  appearance:none;border:0;border-bottom:1px solid transparent;background:none;
+  padding:7px 17px 7px 3px;font:12.5px/1 var(--mono);color:var(--soft);cursor:pointer;position:relative;
+  transition:color .16s var(--ease),border-color .16s var(--ease);
+}
+.speedbtn::after{
+  content:"";position:absolute;right:4px;top:50%;width:5px;height:5px;
+  border-right:1px solid var(--chev);border-bottom:1px solid var(--chev);
+  transform:translateY(-70%) rotate(45deg);transition:transform .18s var(--ease);
+}
+.speedbtn[aria-expanded="true"]::after{transform:translateY(-20%) rotate(225deg)}
+.speedbtn:hover{color:var(--ink);border-bottom-color:var(--line)}
+.speedmenu{
+  position:absolute;right:0;bottom:calc(100% + 12px);min-width:106px;z-index:5;
+  background:linear-gradient(180deg,var(--menu1),var(--menu2));
+  border:1px solid var(--edge2);border-radius:4px;padding:5px;
+  box-shadow:0 24px 50px -24px rgba(0,0,0,.96),inset 0 1px 0 var(--inset);
+  opacity:0;transform:translateY(6px);pointer-events:none;
+  transition:opacity .16s var(--ease),transform .16s var(--ease);
+}
+.speedmenu.on{opacity:1;transform:none;pointer-events:auto}
+.speedmenu button{
+  display:flex;align-items:center;justify-content:space-between;width:100%;gap:10px;
+  padding:8px 10px;border-radius:2px;font:12px/1 var(--mono);color:var(--muted);
+  letter-spacing:.04em;text-align:left;transition:background .12s var(--ease),color .12s var(--ease);
+}
+.speedmenu button:hover{background:color-mix(in srgb, var(--accent) 10%, transparent);color:var(--ink)}
+.speedmenu button[aria-selected="true"]{color:var(--accent)}
+.speedmenu button[aria-selected="true"]::after{content:"✓";font-size:10px;color:var(--accent)}
+.textbtn{
+  font-size:12.5px;letter-spacing:.12em;color:var(--soft);padding:9px 8px;
+  border:1px solid transparent;border-radius:2px;transition:color .16s var(--ease),border-color .16s var(--ease),background .16s var(--ease);
+}
+.textbtn:hover{color:var(--ink);border-color:var(--line);background:var(--hover)}
+.themebtn{
+  width:28px;height:28px;display:grid;place-items:center;color:var(--soft);padding:0;
+  border:1px solid transparent;border-radius:50%;
+  transition:color .16s var(--ease),border-color .16s var(--ease),background .16s var(--ease);
+}
+.themebtn:hover{color:var(--ink);border-color:var(--line);background:var(--hover)}
+.themebtn svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round}
+.themebtn .ico-moon{display:none}
+html[data-scheme="light"] .themebtn .ico-sun{display:none}
+html[data-scheme="light"] .themebtn .ico-moon{display:block}
+.typebtn{font-family:var(--serif);font-size:14px;letter-spacing:0;line-height:1;padding:6px 7px}
+.dockicon{
+  width:30px;height:30px;border-radius:50%;display:grid;place-items:center;padding:0;
+  border:1px solid transparent;background:none;color:var(--soft);
+  transition:color .16s var(--ease),border-color .16s var(--ease),background .16s var(--ease);
+}
+.dockicon:hover{color:var(--ink);border-color:var(--line);background:var(--hover)}
+.dockicon svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.typesheet{
+  position:fixed;right:max(20px,calc((100vw - 1040px)/2 + 26px));bottom:calc(var(--bottom) + 8px);z-index:47;
+  width:min(320px,calc(100vw - 40px));max-height:calc(100vh - var(--bottom) - 32px);overflow:auto;
+  padding:14px 16px 6px;border-radius:8px;border:1px solid var(--edge2);
+  background:linear-gradient(180deg,var(--menu1),var(--menu2));
+  box-shadow:0 28px 60px -28px rgba(0,0,0,.95),inset 0 1px 0 var(--inset);
+  backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+  opacity:0;transform:translateY(8px);pointer-events:none;
+  transition:opacity .18s var(--ease),transform .22s var(--ease);
+}
+.typesheet.on{opacity:1;transform:none;pointer-events:auto}
+.tshead{display:flex;align-items:center;gap:8px;margin-bottom:12px;padding-bottom:9px;border-bottom:1px solid var(--line2)}
+.tshead h4{margin:0;flex:1;font:600 10px/1 var(--sans);letter-spacing:.2em;color:var(--muted);text-transform:uppercase}
+.tshead .textbtn{padding:4px 6px;font-size:11px}
+.rrow{display:grid;grid-template-columns:1fr auto;gap:6px 10px;margin-bottom:12px}
+.rrow span{font-size:11.5px;color:var(--dim);letter-spacing:.05em}
+.rrow output{font:10.5px/1 var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.rrow.toggle{align-items:center;margin-bottom:14px}
+.langrow{align-items:center;margin-bottom:14px}
+.langseg{display:flex;border:1px solid var(--line);border-radius:4px;overflow:hidden;justify-self:end}
+.langseg button{padding:5px 9px;font-size:11px;letter-spacing:.04em;color:var(--muted);transition:background .14s var(--ease),color .14s var(--ease)}
+.langseg button + button{border-left:1px solid var(--line)}
+.langseg button.on{background:color-mix(in srgb, var(--accent) 16%, transparent);color:var(--ink)}
+.switch{
+  width:36px;height:20px;border-radius:10px;border:1px solid var(--line);background:var(--track);
+  position:relative;padding:0;justify-self:end;
+  transition:background .18s var(--ease),border-color .18s var(--ease);
+}
+.switch::after{
+  content:"";position:absolute;left:2px;top:50%;width:14px;height:14px;margin-top:-7px;border-radius:50%;
+  background:var(--muted);transition:transform .18s var(--ease),background .18s var(--ease);
+}
+.switch[aria-checked="true"]{background:color-mix(in srgb, var(--accent) 22%, transparent);border-color:color-mix(in srgb, var(--accent) 55%, transparent)}
+.switch[aria-checked="true"]::after{transform:translateX(16px);background:var(--accent)}
+.importrow{align-items:center;gap:8px;margin-bottom:12px}
+.import-actions{display:flex;gap:6px;justify-self:end}
+.import-actions .textbtn{padding:5px 7px;font-size:11px}
+.import-note{grid-column:1/-1;font-size:10.5px;color:var(--dim);line-height:1.55;margin-top:2px;word-break:break-all;letter-spacing:.02em}
+.import-note.on{color:var(--accent)}
+.import-note.err{color:var(--warn)}
+#restoreBtn[disabled]{opacity:.35;pointer-events:none}
+.transcript.drop{outline:2px dashed color-mix(in srgb, var(--accent) 60%, transparent);outline-offset:-10px}
+.rrow input[type=range]{
+  grid-column:1/-1;width:100%;height:2px;margin:1px 0 0;border-radius:2px;background:var(--track);
+  appearance:none;-webkit-appearance:none;outline:none;cursor:pointer;
+}
+.rrow input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--accent);border:0;
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);cursor:pointer;
+}
+.rrow input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--accent);border:0;cursor:pointer}
+.rrow input[type=range]::-moz-range-track{height:2px;border-radius:2px;background:var(--track)}
+.rrow input[type=range]:focus-visible{outline:1px solid var(--accent);outline-offset:4px}
+:focus-visible{outline:1px solid var(--accent);outline-offset:3px}
+
+/* ---------- drawer ---------- */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.52);z-index:60;opacity:0;pointer-events:none;transition:opacity .2s var(--ease)}
+.scrim.on{opacity:1;pointer-events:auto}
+.drawer{
+  position:fixed;right:0;top:0;bottom:0;width:min(368px,90vw);z-index:70;display:flex;flex-direction:column;
+  background:linear-gradient(175deg,var(--panel2),var(--panel) 60%,var(--bg));border-left:1px solid var(--line);
+  transform:translateX(102%);transition:transform .32s var(--ease);
+  padding:20px 20px 16px;
+}
+.drawer.on{transform:none}
+.dhead{display:flex;align-items:baseline;gap:10px;margin:0 0 16px;padding-bottom:12px;border-bottom:1px solid var(--line2)}
+.dhead h2{margin:0;font:600 9.5px/1 var(--sans);letter-spacing:.24em;text-transform:uppercase;color:var(--accent2)}
+.dhead span{font:9.5px/1 var(--mono);color:var(--dim);letter-spacing:.06em}
+.dhead .spacer{flex:1}
+.showrow{display:flex;align-items:center;gap:10px;margin:0 0 12px}
+.showrow span{font:9.5px/1 var(--mono);letter-spacing:.12em;color:var(--dim);text-transform:uppercase}
+.showrow select{
+  flex:1;min-width:0;padding:8px 18px 8px 6px;border:0;border-bottom:1px solid var(--line);
+  background:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%23a8997f' stroke-width='1.4'/%3E%3C/svg%3E") no-repeat right 4px center/10px;
+  color:var(--ink);outline:none;font:12.5px/1.4 var(--sans);
+  appearance:none;cursor:pointer;
+}
+.showrow select:focus{border-bottom-color:color-mix(in srgb,var(--accent) 50%,transparent)}
+.showrow option{background:var(--menu);color:var(--ink)}
+.iconbtn{
+  width:28px;height:28px;display:grid;place-items:center;color:var(--dim);border:1px solid transparent;border-radius:2px;
+  font-size:12px;transition:color .16s var(--ease),border-color .16s var(--ease);
+}
+.iconbtn:hover{color:var(--ink);border-color:var(--line)}
+.search{position:relative;display:block;margin-bottom:8px}
+.search svg{position:absolute;left:2px;top:50%;transform:translateY(-50%);width:13px;height:13px;color:var(--dim)}
+.search input{
+  width:100%;padding:9px 10px 9px 26px;border:0;border-bottom:1px solid var(--line);
+  background:transparent;color:var(--ink);outline:none;font:12.5px/1.4 var(--sans);letter-spacing:.02em;
+}
+.search input::placeholder{color:var(--dim)}
+.search input:focus{border-bottom-color:color-mix(in srgb, var(--accent) 50%, transparent)}
+.epList{overflow:auto;flex:1;min-height:0;margin:0 -6px;padding:4px 6px 0;scroll-behavior:smooth}
+.ep{
+  position:relative;display:grid;grid-template-columns:36px minmax(0,1fr);gap:12px;
+  padding:11px 8px;cursor:pointer;border-bottom:1px solid var(--line2);
+  transition:background .16s var(--ease);
+}
+.ep:last-child{border-bottom:0}
+.ep:hover{background:var(--hover)}
+.ep.active{background:color-mix(in srgb, var(--accent) 5%, transparent)}
+.ep.active::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:1px;background:var(--accent)}
+.epArt{
+  width:36px;height:36px;object-fit:cover;grid-row:1/3;align-self:start;border-radius:1px;
+  background:var(--coverbg);filter:grayscale(.6);transition:filter .25s var(--ease);
+}
+.ep:hover .epArt,.ep.active .epArt{filter:none}
+.epArt[hidden]{display:none}
+.epArt.noart{background:linear-gradient(135deg,color-mix(in srgb, var(--accent) 26%, transparent),var(--panel2));filter:none}
+.epText{min-width:0;grid-column:2}
+.ep .num{font:9px/1.5 var(--mono);color:var(--muted);letter-spacing:.1em}
+.ep .t{font-family:var(--serif);font-size:13.5px;line-height:1.45;color:color-mix(in srgb, var(--ink) 78%, transparent);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ep.active .t{color:var(--ink)}
+.ep .d{font:9.5px/1.4 var(--mono);color:var(--muted);margin-top:4px;letter-spacing:.06em}
+.eq{position:absolute;right:8px;top:12px;display:none;gap:2px;align-items:flex-end;height:9px}
+.ep.active .eq{display:flex}
+body.playing .eq i{animation:eq .9s ease-in-out infinite alternate}
+.eq i{width:1px;height:3px;background:var(--accent);opacity:.9}
+.eq i:nth-child(2){animation-delay:.18s;height:6px}
+.eq i:nth-child(3){animation-delay:.36s;height:4px}
+@keyframes eq{from{transform:scaleY(.4)}to{transform:scaleY(1.8)}}
+
+/* ---------- details ---------- */
+.details{
+  position:fixed;right:24px;bottom:calc(var(--bottom) + 14px);z-index:50;width:min(360px,calc(100vw - 40px));
+  max-height:calc(100vh - var(--bottom) - 16px);overflow:auto;
+  background:linear-gradient(175deg,var(--panel2),var(--panel) 72%,var(--bg));border:1px solid var(--line);border-radius:4px;padding:18px 20px 18px;
+  box-shadow:0 30px 70px -30px rgba(0,0,0,.9);
+  transform:translateY(8px);opacity:0;pointer-events:none;
+  transition:opacity .2s var(--ease),transform .2s var(--ease);
+}
+.details.on{opacity:1;transform:none;pointer-events:auto}
+.dhead2{display:flex;align-items:baseline;gap:8px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--line2)}
+.dhead2 h3{margin:0;font:600 9.5px/1 var(--sans);letter-spacing:.24em;text-transform:uppercase;color:var(--accent2)}
+.dhead2 .spacer{flex:1}
+.dtitle{font-family:var(--serif);font-size:20px;line-height:1.35;margin:0 0 6px;font-weight:400;color:var(--bright)}
+.dmeta{color:var(--dim);font:10px/1.4 var(--mono);margin-bottom:16px;letter-spacing:.06em}
+.dstats{display:grid;grid-template-columns:repeat(2,1fr);border-top:1px solid var(--line2);border-left:1px solid var(--line2);margin-bottom:14px}
+.stat{padding:10px 12px;border-right:1px solid var(--line2);border-bottom:1px solid var(--line2)}
+.stat b{display:block;font-family:var(--serif);font-size:20px;line-height:1.15;font-weight:400;font-variant-numeric:tabular-nums;color:var(--ink)}
+.stat span{font:8.5px/1.4 var(--sans);color:var(--dim);letter-spacing:.14em;text-transform:uppercase}
+.status{
+  border-left:2px solid var(--line);padding:2px 0 2px 10px;font-size:11.5px;color:var(--muted);
+  line-height:1.7;margin-bottom:16px;
+}
+.status.good{border-left-color:color-mix(in srgb, var(--good) 55%, transparent);color:var(--good)}
+.status.warn{border-left-color:color-mix(in srgb, var(--warn) 60%, transparent);color:var(--warn)}
+.drow{display:grid;grid-template-columns:1fr auto;align-items:center;gap:12px;margin-bottom:14px}
+.drow label{display:flex;align-items:center;gap:6px;color:var(--dim);font-size:11px;grid-column:1}
+.drow select{grid-column:2}
+.drow .textbtn{grid-column:1/-1;justify-self:start;padding-left:0}
+.drow.themes{margin-bottom:12px}
+.swatches{display:flex;gap:8px;justify-content:flex-end;grid-column:2}
+.swatch{
+  width:22px;height:22px;border-radius:50%;border:1px solid var(--swborder);padding:0;
+  background:linear-gradient(135deg,var(--sw-accent) 50%,var(--sw-bg) 50%);
+  transition:transform .15s var(--ease),box-shadow .15s var(--ease);
+}
+.swatch:hover{transform:scale(1.1)}
+.swatch[aria-checked="true"]{box-shadow:0 0 0 2px var(--panel2),0 0 0 3px var(--accent)}
+.swatch[data-theme="brass"]{--sw-bg:#0a0e15;--sw-accent:#d8b489}
+.swatch[data-theme="midnight"]{--sw-bg:#080b12;--sw-accent:#9db8e8}
+.swatch[data-theme="forest"]{--sw-bg:#080d0a;--sw-accent:#c3b177}
+.swatch[data-theme="oxblood"]{--sw-bg:#0d0708;--sw-accent:#dda08e}
+.swatch[data-theme="celadon"]{--sw-bg:#070c0c;--sw-accent:#a7c8bd}
+.swatch[data-theme="paper"]{--sw-bg:#f3eee3;--sw-accent:#8a6733}
+.swatch[data-theme="mist"]{--sw-bg:#edf1ef;--sw-accent:#3f7269}
+.drow input{
+  width:62px;border:0;border-bottom:1px solid var(--line);background:transparent;
+  padding:5px 2px;font:11.5px/1 var(--mono);text-align:right;outline:none;color:var(--ink);
+}
+.drow input:focus{border-bottom-color:var(--accent)}
+.legend{font-size:10.5px;color:var(--dim);line-height:1.8;border-top:1px solid var(--line2);padding-top:12px}
+
+/* ---------- mobile ---------- */
+@media(max-width:820px){
+  .transcript{padding:26px 18px 60px}
+  .cue{font-size:calc(18.5px * var(--cue-scale));padding:9px 0 9px 18px;line-height:var(--cue-lh);letter-spacing:var(--cue-ls);margin:var(--cue-gap) 0}
+  .dock{width:calc(100% - 16px);bottom:8px;border-radius:16px;padding:10px 12px 12px}
+  body.immersive{--bottom:12px}
+  body.immersive .transcript{
+    -webkit-mask-image:linear-gradient(180deg,transparent 0,#000 26px,#000 calc(100% - 76px),transparent 100%);
+    mask-image:linear-gradient(180deg,transparent 0,#000 26px,#000 calc(100% - 76px),transparent 100%);
+  }
+  .coverframe{width:48px;height:48px;left:10px;bottom:10px}
+  .jumppill{bottom:calc(var(--bottom) + 12px);padding:8px 13px 8px 10px;font-size:12px}
+  .pbar{gap:8px;margin-bottom:9px}
+  .ptime{font-size:9.5px}
+  .dockrow{grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"now now play" "seg seg right";gap:8px 10px}
+  .nowplay{grid-area:now}
+  .pcontrols{grid-area:play;justify-self:end;gap:8px}
+  .skipbtn{width:30px;height:30px;font-size:8.5px}
+  .playbtn{width:42px;height:42px}
+  .cover{width:42px;height:42px;flex-basis:42px}
+  .seg{grid-area:seg;border-left:0;padding-left:0;gap:14px;justify-self:start}
+  .seg button{padding:4px 0;font-size:11.5px}
+  .pright{grid-area:right;justify-self:end;gap:0}
+  .vsep{margin:0 2px}
+  .mob-hide{display:none}
+  .themebtn{width:24px;height:24px}
+  .themebtn svg{width:13px;height:13px}
+  .dockicon{width:26px;height:26px}
+  .dockicon svg{width:14px;height:14px}
+  .typebtn{font-size:12px;padding:5px 2px}
+  .typesheet{left:10px;right:10px;width:auto;bottom:calc(var(--bottom) + 8px);max-height:58vh}
+  .ptitle{font-size:14px}
+  .pmeta{font-size:10.5px}
+  .textbtn{font-size:10px;letter-spacing:.08em;padding:6px 4px}
+  .details{right:10px;left:10px;width:auto;bottom:calc(var(--bottom) + 8px)}
+}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+</style></head>
+<body>
+<main class="reader">
+  <div id="transcript" class="transcript"><div class="empty"><div class="loader"><span class="bars"><i></i><i></i><i></i></span><span>正在读取 feed…</span></div></div></div>
+</main>
+
+<footer class="dock">
+  <div class="pbar">
+    <span class="ptime" id="now">00:00</span>
+    <div class="track">
+      <div class="pfill" id="pfill"></div>
+      <input id="seek" type="range" min="0" max="1000" value="0" aria-label="播放进度">
+    </div>
+    <span class="ptime"><b id="total">00:00</b></span>
+  </div>
+  <div class="dockrow">
+    <div class="nowplay">
+      <img id="cover" class="cover" alt="" hidden referrerpolicy="no-referrer" title="剧集信息">
+      <div class="ptext" id="openDetailsText" title="剧集信息">
+        <div class="ptitle" id="epTitle">从剧集列表选一集</div>
+        <div class="pmeta"><span id="epNum">EPISODE —</span><span class="sep">·</span><span id="epMeta"></span><span class="axis mob-hide" id="axisChip">—</span></div>
+      </div>
+    </div>
+    <div class="pcontrols">
+      <button id="back" class="skipbtn" aria-label="后退 5 秒">−5″</button>
+      <button id="play" class="playbtn" aria-label="播放">
+        <svg class="ico ico-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.4 5.2c0-.9 1-1.4 1.7-.9l9.1 6.1c.7.5.7 1.5 0 2l-9.1 6.1c-.7.5-1.7 0-1.7-.9V5.2z"/></svg>
+        <svg class="ico ico-pause" viewBox="0 0 24 24" aria-hidden="true"><rect x="6.6" y="4.6" width="3.9" height="14.8" rx="1.4"/><rect x="13.5" y="4.6" width="3.9" height="14.8" rx="1.4"/></svg>
+        <span class="spin" aria-hidden="true"></span>
+      </button>
+      <button id="forward" class="skipbtn" aria-label="前进 5 秒">+5″</button>
+    </div>
+    <div class="seg" id="modeSeg" role="tablist" aria-label="高亮模式">
+      <button data-mode="word" class="on" role="tab" aria-selected="true">逐词</button>
+      <button data-mode="sentence" role="tab" aria-selected="false">逐句</button>
+    </div>
+    <div class="pright">
+      <div class="speed" id="speed">
+        <button id="speedBtn" class="speedbtn" aria-haspopup="listbox" aria-expanded="false" aria-label="播放速度">1×</button>
+        <div class="speedmenu" id="speedMenu" role="listbox" aria-label="播放速度">
+          <button role="option" data-rate="0.75" aria-selected="false">0.75×</button>
+          <button role="option" data-rate="1" aria-selected="true">1×</button>
+          <button role="option" data-rate="1.25" aria-selected="false">1.25×</button>
+          <button role="option" data-rate="1.5" aria-selected="false">1.5×</button>
+          <button role="option" data-rate="1.75" aria-selected="false">1.75×</button>
+          <button role="option" data-rate="2" aria-selected="false">2×</button>
+        </div>
+      </div>
+      <span class="vsep"></span>
+      <button id="detailsBtn" class="dockicon" aria-label="剧集信息" title="剧集信息">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.2M12 7.8h.01"/></svg>
+      </button>
+      <button id="drawerBtn" class="dockicon" aria-label="剧集列表" title="剧集列表">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+      </button>
+      <button id="immersiveBtn" class="dockicon" aria-label="沉浸模式" title="沉浸模式">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5"/></svg>
+      </button>
+      <button id="themeBtn" class="themebtn" aria-label="切换到浅色主题" title="切换到浅色主题">
+        <svg class="ico-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M5.2 5.2l1.7 1.7M17.1 17.1l1.7 1.7M18.8 5.2l-1.7 1.7M6.9 17.1l-1.7 1.7"/></svg>
+        <svg class="ico-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.6 6.6 0 0 0 10.5 10.5z"/></svg>
+      </button>
+      <button id="typeBtn" class="textbtn typebtn" aria-label="阅读排版" aria-haspopup="dialog" aria-expanded="false">Aa</button>
+    </div>
+  </div>
+</footer>
+
+<div class="typesheet" id="typeSheet" role="dialog" aria-label="阅读排版" aria-hidden="true">
+  <div class="tshead">
+    <h4>阅读排版</h4><span class="spacer"></span>
+    <button id="typeReset" class="textbtn">重置</button>
+    <button id="typeClose" class="iconbtn" aria-label="关闭">✕</button>
+  </div>
+  <div class="rrow langrow">
+    <span>字幕语言</span>
+    <div class="langseg" id="langSeg" role="radiogroup" aria-label="字幕语言">
+      <button data-lang="en" class="on" role="radio" aria-checked="true">EN</button>
+      <button data-lang="zh" role="radio" aria-checked="false">中文</button>
+      <button data-lang="both" role="radio" aria-checked="false">双语</button>
+    </div>
+  </div>
+  <div class="rrow toggle">
+    <span>按句拆分 · AntennaPod</span>
+    <button id="rdSegment" class="switch" role="switch" aria-checked="true" aria-label="按 AntennaPod 规则分句"></button>
+  </div>
+  <label class="rrow"><span>阅读宽度</span><output id="outWidth">780 px</output><input id="rdWidth" type="range" min="560" max="1100" step="10" value="780" aria-label="阅读宽度"></label>
+  <label class="rrow"><span>字号</span><output id="outScale">100%</output><input id="rdScale" type="range" min="85" max="140" step="1" value="100" aria-label="字号缩放"></label>
+  <label class="rrow"><span>行距</span><output id="outLh">1.78</output><input id="rdLh" type="range" min="1.4" max="2.2" step="0.02" value="1.78" aria-label="行距"></label>
+  <label class="rrow"><span>段间距</span><output id="outGap">4 px</output><input id="rdGap" type="range" min="0" max="32" step="1" value="4" aria-label="段间距"></label>
+  <label class="rrow"><span>字间距</span><output id="outLs">0.06 px</output><input id="rdLs" type="range" min="0" max="2" step="0.02" value="0.06" aria-label="字间距"></label>
+  <label class="rrow"><span>未读文字</span><output id="outPending">42%</output><input id="rdPending" type="range" min="15" max="80" step="1" value="42" aria-label="未读文字强度"></label>
+  <div class="rrow importrow">
+    <span>实验数据</span>
+    <div class="import-actions">
+      <button id="importBtn" class="textbtn">导入 JSON / VTT…</button>
+      <button id="restoreBtn" class="textbtn" disabled>还原</button>
+    </div>
+    <div class="import-note" id="importNote">timings sidecar、实验包 JSON，或本地 .vtt；也可直接拖进正文。</div>
+  </div>
+  <input id="importFile" type="file" accept=".json,.vtt,application/json,text/vtt" hidden>
+</div>
+
+<button class="coverframe" id="frameBtn" aria-label="退出沉浸模式" title="回到播放器" inert>
+  <img id="frameCover" alt="" referrerpolicy="no-referrer" draggable="false">
+  <span class="spinbadge" aria-hidden="true"><i></i></span>
+</button>
+<button class="jumppill" id="jumpPill" aria-label="回到当前句" inert>
+  <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/></svg>
+  <span>回到当前句</span>
+</button>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div class="dhead">
+    <h2>Episodes</h2><span id="epCount"></span><span class="spacer"></span>
+    <button class="iconbtn" id="drawerClose" aria-label="关闭">✕</button>
+  </div>
+  <label class="showrow"><span>节目</span><select id="showSel" aria-label="选择播客"></select></label>
+  <label class="search">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+    <input id="search" type="search" placeholder="搜索集号或标题…" autocomplete="off">
+  </label>
+  <div class="epList" id="epList"><div class="empty"><div class="loader"><span class="bars"><i></i><i></i><i></i></span><span>正在读取 feed…</span></div></div></div>
+</aside>
+
+<section class="details" id="details" aria-hidden="true">
+  <div class="dhead2"><h3>Episode notes</h3><span class="spacer"></span><button class="iconbtn" id="detailsClose" aria-label="关闭">✕</button></div>
+  <h4 class="dtitle" id="dTitle">—</h4>
+  <div class="dmeta" id="dMeta"></div>
+  <div class="dstats">
+    <div class="stat"><b id="statCues">0</b><span>段落</span></div>
+    <div class="stat"><b id="statWords">0</b><span>词级时间点</span></div>
+    <div class="stat"><b id="statFallback">0</b><span>句级回退</span></div>
+    <div class="stat"><b id="statAxis">—</b><span>时间轴</span></div>
+  </div>
+  <div id="status" class="status">正在读取 feed…</div>
+  <div class="drow">
+    <label>偏移 <input id="offset" type="number" value="0" step="0.05"> 秒</label>
+    <select id="scroll" title="滚动策略" aria-label="滚动策略">
+      <option value="edge">边缘跟随</option>
+      <option value="center" selected>当前句居中</option>
+      <option value="off">关闭滚动</option>
+    </select>
+    <button id="follow" class="textbtn">重新跟随</button>
+  </div>
+  <div class="drow themes">
+    <label>深色</label>
+    <div class="swatches" role="radiogroup" aria-label="深色配色">
+      <button class="swatch" data-theme="brass" role="radio" aria-checked="true" title="档案" aria-label="档案"></button>
+      <button class="swatch" data-theme="midnight" role="radio" aria-checked="false" title="午夜蓝" aria-label="午夜蓝"></button>
+      <button class="swatch" data-theme="forest" role="radio" aria-checked="false" title="墨绿" aria-label="墨绿"></button>
+      <button class="swatch" data-theme="oxblood" role="radio" aria-checked="false" title="酒红" aria-label="酒红"></button>
+      <button class="swatch" data-theme="celadon" role="radio" aria-checked="false" title="青瓷" aria-label="青瓷"></button>
+    </div>
+  </div>
+  <div class="drow themes">
+    <label>浅色</label>
+    <div class="swatches" role="radiogroup" aria-label="浅色配色">
+      <button class="swatch" data-theme="paper" role="radio" aria-checked="false" title="纸张" aria-label="纸张"></button>
+      <button class="swatch" data-theme="mist" role="radio" aria-checked="false" title="雾白" aria-label="雾白"></button>
+    </div>
+  </div>
+  <div class="legend" id="legend">逐词模式：当前词加粗、已读正常、未读弱化；无词时间戳的句子显示“句级”并回退 VTT 时间。</div>
+</section>
+
+<script>
+(() => {
+const $ = id => document.getElementById(id);
+const audio = (() => { const a = document.createElement('audio'); a.preload = 'metadata'; document.body.append(a); return a; })();
+const listBox = $('epList'), box = $('transcript');
+const state = { shows: [], show: null, feeds: new Map(), episodes: [], current: null,
+  cues: [], nodes: [], activeCue: -1, wordIdx: -1,
+  vtt: null, sidecar: null, zhVtt: null, base: null, experiment: null,
+  mode: 'word', scroll: 'center', offset: 0, userScrollUntil: 0, immersive: false,
+  timeScale: 1, audioSeconds: 0, seekRaw: 0, loadSeq: 0, transcriptSeq: 0 };
+
+const themeBtns = [...document.querySelectorAll('.swatch')];
+const LIGHT_THEMES = new Set(['paper', 'mist']);
+let lastDark = 'brass', lastLight = 'paper';
+function setTheme(id, persist = true) {
+  const light = LIGHT_THEMES.has(id);
+  document.documentElement.dataset.theme = id;
+  document.documentElement.dataset.scheme = light ? 'light' : 'dark';
+  if (light) lastLight = id; else lastDark = id;
+  themeBtns.forEach(b => b.setAttribute('aria-checked', String(b.dataset.theme === id)));
+  const btn = $('themeBtn');
+  if (btn) {
+    const label = light ? '切换到深色主题' : '切换到浅色主题';
+    btn.setAttribute('aria-label', label);
+    btn.title = label;
+  }
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) {
+    const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+    if (bg) meta.setAttribute('content', bg);
+  }
+  if (persist) {
+    try {
+      localStorage.setItem('myt-theme', id);
+      localStorage.setItem('myt-theme-dark', lastDark);
+      localStorage.setItem('myt-theme-light', lastLight);
+    } catch (e) {}
+  }
+}
+themeBtns.forEach(b => { b.onclick = () => setTheme(b.dataset.theme); });
+$('themeBtn').onclick = () => {
+  const light = LIGHT_THEMES.has(document.documentElement.dataset.theme);
+  setTheme(light ? lastDark : lastLight);
+};
+try {
+  lastDark = localStorage.getItem('myt-theme-dark') || lastDark;
+  lastLight = localStorage.getItem('myt-theme-light') || lastLight;
+  const savedTheme = localStorage.getItem('myt-theme');
+  setTheme(savedTheme && themeBtns.some(b => b.dataset.theme === savedTheme) ? savedTheme : 'brass', false);
+} catch (e) { setTheme('brass', false); }
+
+const READER_DEFAULTS = { width: 780, scale: 100, lh: 1.78, gap: 4, ls: 0.06, pending: 42, segment: true, lang: 'en' };
+const readerFields = [
+  ['width', 'rdWidth', 'outWidth', v => v + ' px'],
+  ['scale', 'rdScale', 'outScale', v => v + '%'],
+  ['lh', 'rdLh', 'outLh', v => Number(v).toFixed(2)],
+  ['gap', 'rdGap', 'outGap', v => v + ' px'],
+  ['ls', 'rdLs', 'outLs', v => Number(v).toFixed(2) + ' px'],
+  ['pending', 'rdPending', 'outPending', v => v + '%'],
+];
+let reader = { ...READER_DEFAULTS };
+function applyReader(persist = true) {
+  const rs = document.documentElement.style;
+  rs.setProperty('--reader-w', reader.width + 'px');
+  rs.setProperty('--cue-scale', String(reader.scale / 100));
+  rs.setProperty('--cue-lh', String(reader.lh));
+  rs.setProperty('--cue-gap', reader.gap + 'px');
+  rs.setProperty('--cue-ls', Number(reader.ls).toFixed(2) + 'px');
+  rs.setProperty('--pending-op', String(reader.pending / 100));
+  readerFields.forEach(([k, inp, out, fmt]) => { $(inp).value = reader[k]; $(out).textContent = fmt(reader[k]); });
+  $('rdSegment').setAttribute('aria-checked', String(!!reader.segment));
+  [...$('langSeg').children].forEach(b => {
+    const on = b.dataset.lang === reader.lang;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-checked', String(on));
+  });
+  if (persist) { try { localStorage.setItem('myt-reader', JSON.stringify(reader)); } catch (e) {} }
+  syncJumpPill();
+}
+function rebuildCues() {
+  if (!state.vtt) return;
+  state.cues = mergeCues(state.vtt, state.sidecar, state.zhVtt);
+  renderCues();
+}
+readerFields.forEach(([k, inp]) => $(inp).addEventListener('input', e => { reader[k] = Number(e.target.value); applyReader(); }));
+$('rdSegment').onclick = () => {
+  reader.segment = !reader.segment;
+  applyReader();
+  rebuildCues();
+};
+$('langSeg').addEventListener('click', e => {
+  const b = e.target.closest('button[data-lang]');
+  if (!b) return;
+  reader.lang = b.dataset.lang;
+  applyReader();
+  rebuildCues();
+});
+try {
+  const saved = JSON.parse(localStorage.getItem('myt-reader') || 'null');
+  if (saved && typeof saved === 'object') {
+    readerFields.forEach(([k, inp]) => {
+      const v = Number(saved[k]);
+      if (Number.isFinite(v)) reader[k] = Math.min(Number($(inp).max), Math.max(Number($(inp).min), v));
+    });
+    if (typeof saved.segment === 'boolean') reader.segment = saved.segment;
+    if (['en', 'zh', 'both'].includes(saved.lang)) reader.lang = saved.lang;
+  }
+} catch (e) {}
+applyReader(false);
+
+function openTypeSheet() {
+  closeDetails(); closeSpeedMenu();
+  $('typeSheet').classList.add('on');
+  $('typeSheet').setAttribute('aria-hidden', 'false');
+  $('typeBtn').setAttribute('aria-expanded', 'true');
+}
+function closeTypeSheet() {
+  $('typeSheet').classList.remove('on');
+  $('typeSheet').setAttribute('aria-hidden', 'true');
+  $('typeBtn').setAttribute('aria-expanded', 'false');
+}
+$('typeBtn').onclick = e => {
+  e.stopPropagation();
+  $('typeSheet').classList.contains('on') ? closeTypeSheet() : openTypeSheet();
+};
+$('typeClose').onclick = closeTypeSheet;
+$('typeReset').onclick = () => {
+  reader = { ...READER_DEFAULTS };
+  applyReader();
+  rebuildCues();
+};
+function setImportNote(text, cls = '') {
+  const n = $('importNote');
+  n.textContent = text;
+  n.className = 'import-note' + (cls ? ' ' + cls : '');
+}
+function resetImportUI() {
+  setImportNote('timings sidecar、实验包 JSON，或本地 .vtt；也可直接拖进正文。');
+  $('restoreBtn').disabled = true;
+  $('importFile').value = '';
+}
+function applyExperiment(obj, name) {
+  const looksVtt = s => typeof s === 'string' && (/^\s*WEBVTT/.test(s) || s.includes('-->'));
+  const sc = (Array.isArray(obj?.segments)) ? obj
+    : (Array.isArray(obj?.sidecar?.segments)) ? obj.sidecar
+    : (Array.isArray(obj?.timings?.segments)) ? obj.timings : null;
+  const vttText = looksVtt(obj?.vtt) ? obj.vtt
+    : looksVtt(obj?.vttText) ? obj.vttText : null;
+  const zhText = looksVtt(obj?.zh) ? obj.zh
+    : looksVtt(obj?.zhText) ? obj.zhText : null;
+  const base = state.base;
+  if (!sc && !vttText) throw new Error('找不到 segments 或 vtt 字段');
+  const parsed = vttText ? parseVttSmart(vttText) : null;
+  let vtt;
+  if (vttText) {
+    if (parsed.hasLatin) vtt = parsed.primary;
+    else if (parsed.hasCjk) vtt = base?.vtt || state.vtt;
+    else vtt = [];
+    if (!vtt || !vtt.length) {
+      throw new Error(parsed.hasCjk && !base?.vtt ? '这是中文字幕，请先加载一集再导入' : 'VTT 解析为空');
+    }
+  } else {
+    vtt = base?.vtt || state.vtt;
+    if (!vtt || !vtt.length) throw new Error('当前没有可套用的 VTT');
+  }
+  const sameAsBase = !!(base?.vtt && base.vtt.length === vtt.length &&
+    Math.abs((base.vtt[0]?.start || 0) - (vtt[0]?.start || 0)) < 1);
+  const sidecar = sc || (sameAsBase ? base.sidecar : null);
+  const zhFromVtt = parsed?.hasCjk ? parsed.zh : null;
+  const zh = zhText ? parseZhVTT(zhText)
+    : (zhFromVtt || (sameAsBase ? base.zhVtt : (vttText ? null : state.zhVtt)));
+  state.vtt = vtt; state.sidecar = sidecar; state.zhVtt = zh; state.experiment = name;
+  state.cues = mergeCues(vtt, sidecar, zh);
+  renderCues();
+  status('实验数据：' + name + ' · ' + vtt.length + ' 段' + (sidecar ? ' · ' + sidecar.segments.length + ' 组词级' : ' · 无词级') + (zh ? ' · 含中文' : ''), 'good');
+  setImportNote('已导入 ' + name + (zh && reader.lang === 'en' ? '（切到中文/双语查看译文）' : ''), 'on');
+  $('restoreBtn').disabled = !base;
+}
+function applyVttExperiment(text, name) {
+  const parsed = parseVttSmart(text);
+  if (!parsed.hasLatin && !parsed.hasCjk) throw new Error('VTT 解析为空');
+  const base = state.base;
+  let vtt, sidecar = null, zhVtt = null;
+  if (!parsed.hasLatin) {
+    if (!base?.vtt) throw new Error('这是中文字幕，请先加载一集再导入');
+    vtt = base.vtt; sidecar = base.sidecar; zhVtt = parsed.zh;
+  } else {
+    vtt = parsed.primary;
+    const same = !!(base?.vtt && base.vtt.length === vtt.length &&
+      Math.abs((base.vtt[0]?.start || 0) - (vtt[0]?.start || 0)) < 1);
+    sidecar = same ? base.sidecar : null;
+    zhVtt = parsed.hasCjk ? parsed.zh : (same ? base.zhVtt : null);
+  }
+  state.vtt = vtt; state.sidecar = sidecar; state.zhVtt = zhVtt; state.experiment = name;
+  state.cues = mergeCues(vtt, sidecar, zhVtt);
+  renderCues();
+  const tag = !parsed.hasLatin ? '中文字幕' : parsed.hasCjk ? '双语字幕' : '英文字幕';
+  status('实验数据：' + name + ' · ' + vtt.length + ' 段 · ' + tag + (sidecar ? ' · 词级保留' : ' · 无词级'), 'good');
+  setImportNote('已导入 ' + name + '（' + tag + '）' + (zhVtt && reader.lang === 'en' ? '，切到中文/双语查看译文' : ''), 'on');
+  $('restoreBtn').disabled = !base;
+}
+function restoreExperiment() {
+  if (!state.base) return;
+  state.vtt = state.base.vtt; state.sidecar = state.base.sidecar; state.zhVtt = state.base.zhVtt;
+  state.experiment = null;
+  state.cues = mergeCues(state.vtt, state.sidecar, state.zhVtt);
+  renderCues();
+  status('已还原剧集数据', 'good');
+  resetImportUI();
+}
+function importExperimentFile(file) {
+  if (!file) return;
+  const isJson = /\.json$/i.test(file.name) || file.type === 'application/json';
+  const isVtt = /\.vtt$/i.test(file.name) || file.type === 'text/vtt';
+  if (!isJson && !isVtt) { setImportNote('请选择 .json 或 .vtt 文件', 'err'); return; }
+  file.text().then(txt => {
+    if (isVtt) { applyVttExperiment(txt, file.name); return; }
+    let obj;
+    try { obj = JSON.parse(txt); } catch (e) { throw new Error('JSON 解析失败：' + e.message); }
+    applyExperiment(obj, file.name);
+  }).catch(err => {
+    setImportNote(err.message, 'err');
+    status('实验数据导入失败：' + err.message, 'warn');
+  });
+}
+$('importBtn').onclick = () => $('importFile').click();
+$('importFile').addEventListener('change', e => { importExperimentFile(e.target.files[0]); e.target.value = ''; });
+$('restoreBtn').onclick = restoreExperiment;
+['dragenter', 'dragover'].forEach(t => box.addEventListener(t, e => { e.preventDefault(); box.classList.add('drop'); }));
+box.addEventListener('dragleave', e => { if (!box.contains(e.relatedTarget)) box.classList.remove('drop'); });
+box.addEventListener('drop', e => {
+  e.preventDefault();
+  box.classList.remove('drop');
+  const f = e.dataTransfer?.files?.[0];
+  if (f) importExperimentFile(f);
+});
+document.addEventListener('dragover', e => { if (e.dataTransfer?.types?.includes('Files')) e.preventDefault(); });
+document.addEventListener('drop', e => { if (e.dataTransfer?.types?.includes('Files')) e.preventDefault(); });
+document.addEventListener('click', e => {
+  if (!$('typeSheet').contains(e.target) && e.target !== $('typeBtn')) closeTypeSheet();
+});
+
+const fmt = s => { s = Math.max(0, Number(s) || 0); const h = Math.floor(s/3600), m = Math.floor(s%3600/60), x = Math.floor(s%60);
+  return h ? `${h}:${String(m).padStart(2,'0')}:${String(x).padStart(2,'0')}` : `${String(m).padStart(2,'0')}:${String(x).padStart(2,'0')}`; };
+const tsec = t => { const m = /^(\d+):(\d{2}):(\d{2})\.(\d{3})$/.exec(t); return m ? (+m[1])*3600 + (+m[2])*60 + (+m[3]) + (+m[4])/1000 : NaN; };
+const isBracket = t => /^\s*\[.*\]\s*[.!?]?\s*$/.test(t);
+const esc = t => String(t).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const loaderHTML = text => '<div class="loader"><span class="bars"><i></i><i></i><i></i></span><span>' + esc(text) + '</span></div>';
+function status(t, cls='') { $('status').textContent = t; $('status').className = 'status ' + cls; }
+function openDrawer(){ closeDetails(); closeTypeSheet(); $('drawer').classList.add('on'); $('scrim').classList.add('on'); $('drawer').setAttribute('aria-hidden','false'); $('search').focus(); }
+function closeDrawer(){ $('drawer').classList.remove('on'); $('scrim').classList.remove('on'); $('drawer').setAttribute('aria-hidden','true'); }
+function openDetails(){ closeDrawer(); closeTypeSheet(); $('details').classList.add('on'); $('details').setAttribute('aria-hidden','false'); }
+function closeDetails(){ $('details').classList.remove('on'); $('details').setAttribute('aria-hidden','true'); }
+function closeOverlays(){ closeDrawer(); closeDetails(); }
+function setImmersive(on) {
+  state.immersive = on;
+  document.body.classList.toggle('immersive', on);
+  document.querySelector('.dock').toggleAttribute('inert', on);
+  $('frameBtn').toggleAttribute('inert', !on);
+  if (on) { closeOverlays(); closeSpeedMenu(); closeTypeSheet(); }
+  if (on && framePos) placeFrame(framePos.x, framePos.y);
+  setTimeout(() => {
+    if (state.activeCue >= 0) { stopScroll(); scrollCue(state.nodes[state.activeCue].el, true); }
+    syncJumpPill();
+  }, 340);
+}
+
+function isOwnTranscript(url) {
+  return /^https?:\/\/(?:lzoreal\.github\.io\/MyTranscript|raw\.githubusercontent\.com\/lzoreal\/MyTranscript)\//.test(url);
+}
+function sitePath(url) {
+  try {
+    const u = new URL(url, location.href);
+    if (u.hostname === 'lzoreal.github.io' && u.pathname.startsWith('/MyTranscript/')) {
+      return u.pathname.slice('/MyTranscript/'.length) + u.search;
+    }
+  } catch (e) {}
+  return url;
+}
+function transcriptEls(item) {
+  const tagged = [...item.getElementsByTagName('podcast:transcript')];
+  return tagged.length ? tagged : [...item.getElementsByTagNameNS('https://podcastindex.org/namespace/1.0', 'transcript')];
+}
+function pickTranscript(item) {
+  const own = transcriptEls(item).filter(el => isOwnTranscript(el.getAttribute('url') || ''));
+  const el = own.find(x => x.getAttribute('type') === 'application/json') || own[0];
+  return el ? { url: el.getAttribute('url'), type: el.getAttribute('type') || '' } : null;
+}
+function episodeNumber(title) {
+  const text = String(title || '');
+  const m = text.match(/^(?:Episode\s*)?(\d{1,4})[.:\s-]/i) || text.match(/#(\d{1,4})\b/);
+  return m ? Number(m[1]) : 0;
+}
+function parseFeed(xml) {
+  const doc = new DOMParser().parseFromString(xml, 'text/xml');
+  const channel = doc.querySelector('channel');
+  const channelTitle = (channel?.querySelector('title')?.textContent || '').trim();
+  const channelImg = channel?.getElementsByTagName('itunes:image')[0]?.getAttribute('href')
+    || channel?.getElementsByTagName('image')[0]?.getElementsByTagName('url')[0]?.textContent
+    || '';
+  const items = [...doc.getElementsByTagName('item')];
+  const episodes = items.map((it, index) => {
+    const title = (it.getElementsByTagName('title')[0]?.textContent || '').trim();
+    const date = (it.getElementsByTagName('pubDate')[0]?.textContent || '').trim();
+    const enc = it.getElementsByTagName('enclosure')[0];
+    const imgEl = it.getElementsByTagName('itunes:image')[0];
+    const guid = (it.getElementsByTagName('guid')[0]?.textContent || '').trim();
+    const transcript = pickTranscript(it);
+    return {
+      id: guid || transcript?.url || 'ep-' + index,
+      title, date,
+      url: enc ? enc.getAttribute('url') : '',
+      img: (imgEl ? imgEl.getAttribute('href') : '') || channelImg,
+      transcript,
+    };
+  }).filter(e => e.title || e.url);
+  episodes.sort((a, b) => (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0));
+  episodes.forEach((e, i) => { e.num = episodeNumber(e.title) || (episodes.length - i); });
+  return { title: channelTitle, episodes };
+}
+function splitBilingual(text) {
+  const raw = String(text || '');
+  if (!raw.includes('\n')) return { en: raw.trim(), zh: '' };
+  const cut = languageSplitIndex(raw);
+  if (cut < 0) {
+    const lines = raw.split('\n');
+    return { en: lines.filter(l => scriptOf(l) !== 'cjk').join(' ').trim(),
+             zh: lines.filter(l => scriptOf(l) === 'cjk').join(' ').trim() };
+  }
+  return { en: raw.slice(0, cut).trim(), zh: raw.slice(cut + 1).trim() };
+}
+function jsonWords(words) {
+  if (!Array.isArray(words)) return [];
+  return words.map(w => Array.isArray(w) ? w : [w.w, Math.round((w.s || 0) * 1000), Math.round(((w.e || 0) - (w.s || 0)) * 1000)]);
+}
+function cuesFromJson(doc) {
+  const sentences = Array.isArray(doc.sentences) ? doc.sentences.map(s => ({
+    startTime: s.start, endTime: s.end,
+    body: [s.en, s.zh].filter(Boolean).join('\n'),
+    words: jsonWords(s.words),
+  })) : [];
+  const segs = Array.isArray(doc.segments) ? doc.segments : sentences;
+  const vtt = [], side = [], zh = [];
+  for (const s of segs) {
+    const start = Number.isFinite(s.start) ? s.start / 1000 : Number(s.startTime) || 0;
+    const endMs = Number.isFinite(s.end) ? s.end : Math.round((Number(s.endTime) || start + 2) * 1000);
+    const end = endMs / 1000;
+    const split = splitBilingual(s.body ?? s.text ?? '');
+    const en = split.en || (scriptOf(s.text || '') === 'cjk' ? '' : (s.text || ''));
+    if (!en && !split.zh) continue;
+    vtt.push({ start, end, speaker: s.speaker || '', text: en });
+    side.push({ start: Math.round(start * 1000), end: endMs, speaker: s.speaker || '', text: en || split.zh, words: jsonWords(s.words) });
+    if (split.zh) zh.push({ start, end, text: split.zh });
+  }
+  return {
+    vtt,
+    sidecar: { audio_seconds: Number(doc.audio_seconds) || 0, complete: true, segments: side },
+    zhVtt: zh.length ? zh : null,
+  };
+}
+function deriveZhUrl(url) {
+  const u = new URL(url, location.href);
+  u.pathname = u.pathname.replace('/transcripts/', '/transcripts/zh/');
+  return u.href;
+}
+function deriveTimingsUrl(url) {
+  const u = new URL(url, location.href);
+  const stem = decodeURIComponent((u.pathname.split('/').pop() || '').replace(/\.vtt$/i, ''));
+  const base = state.show?.feed ? state.show.feed.replace(/feed\.xml$/, '') : encodeURIComponent(state.show?.slug || '') + '/';
+  return base + 'timings/' + encodeURIComponent(stem) + '.json';
+}
+const getText = url => fetch(url).then(r => r.ok ? r.text() : null).catch(() => null);
+const getJson = url => fetch(url).then(r => r.ok ? r.json() : null).catch(() => null);
+
+// 英文 VTT 已不发布时，用词级 sidecar 的段文本当作 cue 源。
+function vttFromSidecar(sidecar) {
+  const segs = Array.isArray(sidecar?.segments) ? sidecar.segments : [];
+  return segs.map(s => {
+    const words = Array.isArray(s.words) ? s.words : [];
+    const last = words.length ? words[words.length - 1] : null;
+    const start = Number.isFinite(s.start) ? s.start : 0;
+    const fallbackEnd = last ? last[1] + Math.max(0, last[2]) : start + 1000;
+    const end = Number.isFinite(s.end) ? s.end : fallbackEnd;
+    return { start: start / 1000, end: end / 1000, speaker: s.speaker || '', text: s.text || '' };
+  });
+}
+
+function parseZhVTT(text) {
+  const out = [];
+  for (const block of text.replace(/\r/g,'').split(/\n{2,}/)) {
+    const lines = block.split('\n').filter(l => l.trim() !== '');
+    if (!lines.length || /^WEBVTT/.test(lines[0])) continue;
+    let i = 0;
+    if (!lines[i].includes('-->') && /^\d+$/.test(lines[i].trim())) i++;
+    const line = lines[i];
+    if (!line || !line.includes('-->')) continue;
+    const m = line.match(/(\d+:\d{2}:\d{2}\.\d{3})\s*-->\s*(\d+:\d{2}:\d{2}\.\d{3})/);
+    if (!m) continue;
+    const parsed = lines.slice(i + 1).map(l => {
+      const v = l.match(/^<v\s+([^>]+)>\s*([\s\S]*)$/);
+      return { speaker: v ? v[1].trim() : '', text: (v ? v[2] : l).replace(/<[^>]+>/g, '').trim() };
+    }).filter(l => l.text);
+    const zh = parsed.find(l => scriptOf(l.text) === 'cjk') || null;
+    out.push({ start: tsec(m[1]), end: tsec(m[2]), speaker: zh ? zh.speaker : '', text: zh ? zh.text : '' });
+  }
+  return out;
+}
+
+function parseVttSmart(text) {
+  const primary = [], zh = [];
+  for (const block of text.replace(/\r/g,'').split(/\n{2,}/)) {
+    const lines = block.split('\n').filter(l => l.trim() !== '');
+    if (!lines.length || /^WEBVTT/.test(lines[0])) continue;
+    let i = 0;
+    if (!lines[i].includes('-->') && /^\d+$/.test(lines[i].trim())) i++;
+    const line = lines[i];
+    if (!line || !line.includes('-->')) continue;
+    const m = line.match(/(\d+:\d{2}:\d{2}\.\d{3})\s*-->\s*(\d+:\d{2}:\d{2}\.\d{3})/);
+    if (!m) continue;
+    const parsed = lines.slice(i + 1).map(l => {
+      const v = l.match(/^<v\s+([^>]+)>\s*([\s\S]*)$/);
+      return { speaker: v ? v[1].trim() : '', text: (v ? v[2] : l).replace(/<[^>]+>/g, '').trim() };
+    }).filter(l => l.text);
+    const lat = parsed.filter(l => scriptOf(l.text) !== 'cjk');
+    const cjk = parsed.filter(l => scriptOf(l.text) === 'cjk');
+    const start = tsec(m[1]), end = tsec(m[2]);
+    if (lat.length) primary.push({ start, end, speaker: lat[0].speaker, text: lat.map(x => x.text).join(' ') });
+    if (cjk.length) zh.push({ start, end, speaker: cjk[0].speaker, text: cjk.map(x => x.text).join(' ') });
+  }
+  return { primary, zh, hasLatin: primary.length > 0, hasCjk: zh.length > 0 };
+}
+
+function scriptOf(text) {
+  let latin = 0, cjk = 0, other = 0;
+  for (const ch of text) {
+    if (!/\p{L}/u.test(ch)) continue;
+    const cp = ch.codePointAt(0);
+    if (/\p{Script=Latin}/u.test(ch)) latin++;
+    else if ((cp >= 0x3040 && cp <= 0x9fff) || (cp >= 0xac00 && cp <= 0xd7af)) cjk++;
+    else other++;
+  }
+  if (!latin && !cjk) return other ? 'other' : 'unknown';
+  if (cjk >= latin && cjk >= other) return 'cjk';
+  if (latin >= cjk && latin >= other) return 'latin';
+  return 'other';
+}
+function languageSplitIndex(text) {
+  const first = text.indexOf('\n');
+  if (first < 0) return -1;
+  let firstScript = 'unknown', lineStart = 0;
+  while (lineStart <= text.length) {
+    let lineEnd = text.indexOf('\n', lineStart);
+    if (lineEnd < 0) lineEnd = text.length;
+    firstScript = scriptOf(text.slice(lineStart, lineEnd));
+    if (firstScript !== 'unknown') break;
+    if (lineEnd === text.length) break;
+    lineStart = lineEnd + 1;
+  }
+  if (firstScript === 'unknown') return first;
+  let logicalEnd = text.length;
+  while (logicalEnd > 0 && text[logicalEnd - 1] === '\n') logicalEnd--;
+  let lastLineEnd = logicalEnd;
+  while (lastLineEnd > 0) {
+    const lastLineStart = text.lastIndexOf('\n', lastLineEnd - 1) + 1;
+    if (scriptOf(text.slice(lastLineStart, lastLineEnd)) === firstScript) {
+      return lastLineEnd === logicalEnd ? -1 : lastLineEnd;
+    }
+    if (lastLineStart === 0) break;
+    lastLineEnd = lastLineStart - 1;
+  }
+  return first;
+}
+function isTrailingChar(c) {
+  return '"\'”“’!?)]】」』》。！？…'.includes(c);
+}
+function isSentenceEnd(text, index, length) {
+  const c = text[index];
+  if ('。！？…!?'.includes(c)) return true;
+  if (c !== '.') return false;
+  if (index + 1 >= length) return true;
+  const prev = text[index - 1], next = text[index + 1];
+  if (index > 0 && /\d/.test(prev) && /\d/.test(next)) return false;
+  return /\s/.test(next) || next === '\u00a0' || '"”“\''.includes(next);
+}
+function chunkStarts(text, length) {
+  const starts = [0];
+  let last = 0;
+  for (let i = 0; i < length; i++) {
+    if (!isSentenceEnd(text, i, length)) continue;
+    let boundary = i + 1;
+    while (boundary < length && isTrailingChar(text[boundary])) boundary++;
+    if (boundary > last) { starts.push(boundary); last = boundary; }
+  }
+  if (length > last) starts.push(length);
+  return starts;
+}
+function sentenceRanges(text) {
+  const out = [];
+  const split = languageSplitIndex(text);
+  const blocks = split >= 0 ? [[0, split], [split + 1, text.length]] : [[0, text.length]];
+  for (const [bs, be] of blocks) {
+    if (be <= bs) continue;
+    const block = text.slice(bs, be);
+    const starts = chunkStarts(block, block.length);
+    for (let i = 0; i + 1 < starts.length; i++) {
+      let s = bs + starts[i], e = bs + starts[i + 1];
+      while (s < e && /\s/.test(text[s])) s++;
+      while (e > s && /\s/.test(text[e - 1])) e--;
+      if (e > s) out.push({ s, e, text: text.slice(s, e) });
+    }
+  }
+  return out;
+}
+function wordOffsets(text, words) {
+  if (!words.length) return null;
+  const toks = [];
+  const re = /\S+/g;
+  let m;
+  while ((m = re.exec(text))) toks.push({ t: m[0], s: m.index, e: m.index + m[0].length });
+  const wt = words.map(w => w.t);
+  let base = -1;
+  for (let k = 0; k + wt.length <= toks.length && base < 0; k++) {
+    let ok = true;
+    for (let j = 0; j < wt.length; j++) if (toks[k + j].t !== wt[j]) { ok = false; break; }
+    if (ok) base = k;
+  }
+  if (base < 0) return null;
+  return words.map((w, j) => ({ w, s: toks[base + j].s, e: toks[base + j].e }));
+}
+function splitCueIntoSentences(cue) {
+  const ranges = sentenceRanges(cue.text);
+  if (ranges.length < 2) return [cue];
+  const total = Math.max(1, cue.text.length);
+  const start = cue.start;
+  const end = cue.end != null ? cue.end : start + Math.max(2, total / 15);
+  const bounds = ranges.map(r => start + (end - start) * (r.s / total));
+  const parts = ranges.map((r, i) => ({
+    i: 0, start: bounds[i], end: i + 1 < ranges.length ? bounds[i + 1] : end,
+    speaker: cue.speaker, text: r.text, words: [], fromJson: cue.fromJson, hasWords: false
+  }));
+  const mapped = wordOffsets(cue.text, cue.words);
+  if (mapped) {
+    for (const { w, s } of mapped) {
+      let k = ranges.findIndex(r => s >= r.s && s < r.e);
+      if (k < 0) k = ranges.length - 1;
+      parts[k].words.push(w);
+    }
+  } else {
+    for (const w of cue.words) {
+      let k = -1;
+      for (let j = 0; j < parts.length; j++) {
+        if (w.s >= parts[j].start && w.s < parts[j].end) { k = j; break; }
+      }
+      if (k < 0) k = w.s < parts[0].start ? 0 : parts.length - 1;
+      parts[k].words.push(w);
+    }
+  }
+  parts.forEach(p => {
+    if (p.words.length) {
+      p.start = Math.min(...p.words.map(w => w.s));
+      p.end = Math.max(...p.words.map(w => w.e));
+    } else p.quiet = true;
+  });
+  return parts;
+}
+function splitCueZh(cue) {
+  const ranges = sentenceRanges(cue.zh);
+  if (ranges.length < 2) return [{ ...cue, text: cue.zh, words: [], quiet: true }];
+  const total = Math.max(1, cue.zh.length);
+  const start = cue.start;
+  const end = cue.end != null ? cue.end : start + Math.max(2, total / 8);
+  const bounds = ranges.map(r => start + (end - start) * (r.s / total));
+  return ranges.map((r, i) => ({
+    i: 0, start: bounds[i], end: i + 1 < ranges.length ? bounds[i + 1] : end,
+    speaker: cue.speaker, text: r.text, words: [], fromJson: cue.fromJson, hasWords: false, quiet: true
+  }));
+}
+function attachZh(parts, cue) {
+  if (!cue.zh) return;
+  const zs = sentenceRanges(cue.zh).map(r => r.text);
+  if (!zs.length) return;
+  parts.forEach((p, i) => { p.zh = zs[i] || ''; });
+  if (zs.length > parts.length) parts[parts.length - 1].zh = zs.slice(parts.length - 1).join('');
+}
+function finalizeCues(cues) {
+  cues.forEach((c, i) => {
+    const fallbackEnd = c.end != null ? c.end : c.start + Math.max(2, (c.text || '').length/15);
+    let speechStart = c.words.length ? c.words[0].s : c.start;
+    // 不因首词与第二词之间有较长停顿就直接跳过首词：这可能是真实停顿，
+    // 跳过会让整句直到第二个词才激活。真正异常的长首词由下面的重叠检测单独处理。
+    const speechEnd = c.words.length ? Math.max(...c.words.map(w => w.e)) : fallbackEnd;
+    c.i = i; c.speechStart = speechStart; c.speechEnd = speechEnd; c.hasWords = c.words.length > 0;
+  });
+  // 首词被拉成 >1.5 秒、且压住上一句的句尾：它是对齐粘过来的上一句尾巴，
+  // 实际语音从第二个词开始（899 的 "And" 2.7 秒）。激活起点跳过它。
+  for (let i = 1; i < cues.length; i++) {
+    const c = cues[i], lead = c.words[0];
+    if (c.words.length > 1 && lead && lead.e - lead.s > 1.5 && lead.s < cues[i-1].speechEnd - 0.2) {
+      c.speechStart = c.words[1].s;
+    }
+  }
+  return cues;
+}
+function smoothCompressedWords(words) {
+  let i = 0;
+  while (i < words.length) {
+    let j = i;
+    while (j < words.length && (words[j].e - words[j].s) < 0.12) j++;
+    const n = j - i;
+    if (n >= 3 && j < words.length) {
+      const start = words[i].s, runEnd = words[j - 1].e, next = words[j].s;
+      const gap = next - runEnd;
+      if (gap > 0.8 && (runEnd - start) < 0.4) {
+        const step = Math.min(0.6, Math.max(0.18, gap / n));
+        for (let k = i; k < j; k++) {
+          words[k].s = start + step * (k - i);
+          words[k].e = Math.min(next, start + step * (k - i + 1));
+        }
+      }
+    }
+    i = j > i ? j : i + 1;
+  }
+}
+function mergeCues(vtt, sidecar, zhVtt) {
+  const segs = Array.isArray(sidecar?.segments) ? sidecar.segments : [];
+  const aligned = segs.length === vtt.length;
+  const zh = Array.isArray(zhVtt) ? zhVtt : [];
+  const zhAligned = zh.length === vtt.length ? zh : vtt.map(c => zh.find(z => Math.abs(z.start - c.start) < 1) || null);
+  let cues = vtt.map((c, i) => {
+    const s = aligned ? segs[i] : (segs[i] && Math.abs((segs[i].start||0)/1000 - c.start) < 1 ? segs[i] : null);
+    const words = (s?.words || []).map(([t, st, dur]) => ({ t, s: st/1000, e: (st + Math.max(0, dur))/1000 }));
+    smoothCompressedWords(words);
+    for (let k = 0; k < words.length; k++) {
+      if (words[k].e <= words[k].s) {
+        const nx = words.slice(k+1).find(w => w.s > words[k].s);
+        words[k].e = nx ? nx.s : Math.max(words[k].s + 0.12, (s?.end ? s.end/1000 : c.end));
+      }
+    }
+    const start = s && Number.isFinite(s.start) ? s.start/1000 : c.start;
+    const end = s && s.end != null ? s.end/1000 : null;
+    return { i, start, end, speaker: s?.speaker || c.speaker || '',
+             text: c.text || s?.text || '', zh: zhAligned[i]?.text || '',
+             words, fromJson: !!s, hasWords: words.length > 0 };
+  });
+  let lang = reader.lang;
+  if (lang === 'zh' && !cues.some(c => c.zh)) lang = 'en';
+  if (lang === 'zh') {
+    const out = [];
+    for (const cue of cues) {
+      if (!cue.zh) { out.push({ ...cue, words: [], quiet: true }); continue; }
+      out.push(...(reader.segment ? splitCueZh(cue) : [{ ...cue, text: cue.zh, words: [], quiet: true }]));
+    }
+    cues = out;
+  } else if (reader.segment) {
+    const out = [];
+    for (const cue of cues) {
+      const parts = splitCueIntoSentences(cue);
+      if (lang === 'both' && cue.zh) attachZh(parts, cue);
+      out.push(...parts);
+    }
+    cues = out;
+  }
+  return finalizeCues(cues);
+}
+
+function splitLabel(text, words) {
+  const toks = text.trim().split(/\s+/), wt = words.map(w => w.t);
+  if (!wt.length) return { label: '', words };
+  for (let k = 0; k + wt.length <= toks.length; k++) {
+    let ok = true;
+    for (let j = 0; j < wt.length; j++) if (toks[k+j] !== wt[j]) { ok = false; break; }
+    if (ok) return { label: toks.slice(0, k).join(' '), words };
+  }
+  return { label: '', words, mismatch: true };
+}
+
+// 双语行对齐到英文列：时间戳和说话人的宽度逐条不同，只能按实际布局补左边距。
+function alignZhLines() {
+  const items = [];
+  for (const el of box.querySelectorAll('.cue')) {
+    const z = el.querySelector('.zh');
+    if (!z) continue;
+    const wrap = z.previousElementSibling;
+    if (!wrap) continue;
+    const pad = parseFloat(getComputedStyle(el).paddingLeft) || 0;
+    items.push([z, Math.max(0, wrap.offsetLeft - pad)]);
+  }
+  for (const [z, d] of items) z.style.marginLeft = d ? d + 'px' : '';
+}
+function renderCues() {
+  box.innerHTML = ''; state.nodes = []; state.activeCue = -1; state.wordIdx = -1;
+  if (!state.cues.length) { box.innerHTML = '<div class="empty">没有可显示的逐字稿。</div>'; syncJumpPill(); return; }
+  const wordMode = state.mode === 'word';
+  let wordCount = 0, fallback = 0;
+  state.cues.forEach((cue, ci) => {
+    const el = document.createElement('div');
+    el.className = 'cue'; el.dataset.ci = ci;
+    const stamp = document.createElement('span'); stamp.className = 'stamp'; stamp.textContent = fmt(cue.start + state.offset);
+    el.append(stamp);
+    if (cue.speaker) { const sp = document.createElement('span'); sp.className = 'spk'; sp.textContent = cue.speaker; el.append(sp); }
+    const wrap = document.createElement('span');
+    let wordEls = [];
+    if (wordMode && cue.hasWords) {
+      const { label, words, mismatch } = splitLabel(cue.text, cue.words);
+      if (!mismatch) {
+        if (label) { const lb = document.createElement('span'); lb.className = 'label'; lb.textContent = label + ' '; wrap.append(lb); }
+        words.forEach((w, wi) => {
+          const sp = document.createElement('span');
+          sp.className = 'word pending'; sp.textContent = w.t; sp.dataset.wi = wi;
+          sp.addEventListener('click', e => { e.stopPropagation(); seekTo(w.s + state.offset); });
+          wrap.append(sp); wrap.append(document.createTextNode(' ')); wordEls.push(sp); wordCount++;
+        });
+      } else { wrap.textContent = cue.text; wordEls = []; }
+    } else {
+      wrap.textContent = cue.text;
+      if (wordMode && !isBracket(cue.text) && !cue.quiet) {
+        const b = document.createElement('span'); b.className = 'badge'; b.textContent = cue.fromJson ? '句级' : '官网';
+        wrap.append(b); fallback++;
+      }
+    }
+    el.append(wrap);
+    if (reader.lang === 'both' && cue.zh) {
+      const z = document.createElement('span'); z.className = 'zh'; z.textContent = cue.zh;
+      el.append(z);
+    }
+    el.addEventListener('click', () => seekTo(cue.start + state.offset));
+    box.append(el);
+    state.nodes.push({ el, wrap, words: wordEls, lastIdx: -1 });
+  });
+  alignZhLines();
+  $('statCues').textContent = state.cues.length.toLocaleString();
+  $('statWords').textContent = wordCount.toLocaleString();
+  $('statFallback').textContent = fallback.toLocaleString();
+  const axis = wordCount ? (fallback ? '混合' : '词级') : '句级';
+  $('statAxis').textContent = axis; $('axisChip').textContent = axis;
+  $('legend').textContent = wordMode
+    ? '逐词模式：当前词加粗、已读正常、未读弱化；无词时间戳的句子显示“句级”并回退 VTT 时间。'
+    : '逐句模式：按句子的起止时间高亮；点击任意句跳转。';
+  paint(false);
+}
+
+function updateTimeScale() {
+  const duration = audio.duration;
+  const real = state.audioSeconds;
+  const ratio = duration > 0 ? real / duration : 1;
+  // 只修正 MP3 头部时长估算误差（约 0.2%）。相差超过 1% 通常说明
+  // 当前 enclosure 与转写时的音频内容不同（动态插播广告），整体缩放只会更糟。
+  state.timeScale = (Number.isFinite(duration) && duration > 0
+      && Number.isFinite(real) && real > 0
+      && Math.abs(real - duration) > 0.5
+      && ratio > 0.99 && ratio < 1.01) ? ratio : 1;
+  $('total').textContent = fmt(state.timeScale !== 1 ? real : (duration || real || 0));
+}
+
+function rawSeek(r) {
+  const max = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : Infinity;
+  const x = Math.max(0, Math.min(max, r));
+  state.seekRaw = x;
+  audio.currentTime = x;
+}
+function seekTo(t) { if (!state.current) return; rawSeek(t / (state.timeScale || 1)); audio.play().catch(() => {}); paint(true); }
+
+function locateCue(t) {
+  // 选择已经开始的句子中 speechStart 最晚的一句。
+  // 不再无条件锁定上一句：词级时间戳重叠时，这会把下一句的显示推迟到上一句结束。
+  // 这里线性扫描而非二分查找，因为不同说话人的重叠语音可能令 cues 的时间顺序不完全单调。
+  let ans = -1;
+  let latestStart = -Infinity;
+  for (let i = 0; i < state.cues.length; i++) {
+    const c = state.cues[i];
+    const start = c.speechStart + state.offset;
+    if (start <= t && start >= latestStart) {
+      latestStart = start;
+      ans = i;
+    }
+  }
+  if (ans < 0) return -1;
+  const c = state.cues[ans];
+  return t <= c.speechEnd + state.offset + 0.35 ? ans : -1;
+}
+
+function paint(force = false) {
+  if (!state.cues.length) { syncJumpPill(); return; }
+  const raw = audio.currentTime || 0;
+  // 浏览器按标称码率估算时长，seek 落点会超前，但播放时钟仍与音频 1:1；
+  // 所以补偿量由最后一次 seek 的 raw 目标决定，而不是持续缩放时钟。
+  const t = raw + (state.timeScale - 1) * state.seekRaw;
+  let ci = locateCue(t);
+  // 未开始播放时定位不到任何句，默认高亮第一句
+  if (ci < 0 && t < 0.001) ci = 0;
+  if (ci !== state.activeCue) {
+    if (state.activeCue >= 0) {
+      const old = state.nodes[state.activeCue];
+      old.el.classList.remove('active');
+      old.words.forEach(w => { w.classList.remove('active','past'); w.classList.add('pending'); });
+    }
+    state.activeCue = ci; state.wordIdx = -1;
+    if (ci >= 0) { const n = state.nodes[ci]; n.el.classList.add('active'); scrollCue(n.el, force); }
+  }
+  if (ci >= 0 && state.mode === 'word') paintWords(ci, t);
+  $('now').textContent = fmt(t);
+  if (Number.isFinite(audio.duration) && audio.duration > 0) {
+    const pct = Math.min(100, Math.max(0, raw / audio.duration * 100));
+    $('seek').value = String(Math.round(pct * 10));
+    $('pfill').style.width = pct + '%';
+  }
+  syncJumpPill();
+}
+
+function syncJumpPill() {
+  const pill = $('jumpPill');
+  const node = state.nodes[state.activeCue];
+  let show = false;
+  if (state.activeCue >= 0 && node) {
+    const r = node.el.getBoundingClientRect(), br = box.getBoundingClientRect();
+    show = r.bottom < br.top + 6 || r.top > br.bottom - 6;
+  }
+  pill.classList.toggle('on', show);
+  pill.toggleAttribute('inert', !show);
+}
+
+function paintWords(ci, t) {
+  const cue = state.cues[ci], n = state.nodes[ci];
+  if (!cue.hasWords || !n.words.length) return;
+  let idx = -1;
+  for (let i = 0; i < cue.words.length; i++) { if (t >= cue.words[i].s + state.offset) idx = i; else break; }
+  if (idx === n.lastIdx) return;
+  if (n.lastIdx >= 0 && n.words[n.lastIdx]) { n.words[n.lastIdx].classList.remove('active'); n.words[n.lastIdx].classList.add('past'); }
+  for (let i = 0; i < n.words.length; i++) {
+    const w = n.words[i];
+    if (i === idx) { w.classList.remove('pending','past'); w.classList.add('active'); }
+    else if (i < idx) { w.classList.remove('pending','active'); w.classList.add('past'); }
+    else { w.classList.remove('active','past'); w.classList.add('pending'); }
+  }
+  n.lastIdx = idx; state.wordIdx = idx;
+  if (idx >= 0 && n.words[idx]) scrollWord(n.words[idx]);
+}
+
+let scrollTarget = -1;
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+function stopScroll() { scrollTarget = -1; }
+function scrollIntoBox(el, mode) {
+  const br = box.getBoundingClientRect(), er = el.getBoundingClientRect();
+  let top = null;
+  if (mode === 'center') top = box.scrollTop + (er.top - br.top) - (box.clientHeight - er.height)/2;
+  else if (er.top < br.top + 80) top = box.scrollTop + (er.top - br.top) - 80;
+  else if (er.bottom > br.bottom - 80) top = box.scrollTop + (er.bottom - br.bottom) + 80;
+  if (top === null) return;
+  const target = Math.max(0, Math.min(top, box.scrollHeight - box.clientHeight));
+  if (target === scrollTarget) return;
+  scrollTarget = target;
+  const far = Math.abs(target - box.scrollTop) > box.clientHeight * 1.2;
+  box.scrollTo({ top: target, behavior: reduceMotion || document.hidden || far ? 'auto' : 'smooth' });
+}
+function canFollow(force) { return state.scroll !== 'off' && (force || Date.now() >= state.userScrollUntil) && (force || !audio.paused); }
+function scrollCue(el, force) {
+  if (!canFollow(force)) return;
+  const r = el.getBoundingClientRect(), br = box.getBoundingClientRect();
+  const edge = r.top < br.top + 90 || r.bottom > br.bottom - 90;
+  if (force || state.scroll === 'center' || edge) scrollIntoBox(el, state.scroll === 'center' ? 'center' : 'edge');
+}
+function scrollWord(el) {
+  if (state.scroll === 'center' || !canFollow(false)) return;
+  const r = el.getBoundingClientRect(), br = box.getBoundingClientRect();
+  if (r.top < br.top + 60 || r.bottom > br.bottom - 60) scrollIntoBox(el, 'edge');
+}
+
+function applyEpisodeData(vtt, sidecar, zhVtt) {
+  state.vtt = vtt; state.sidecar = sidecar; state.zhVtt = zhVtt;
+  state.base = { vtt, sidecar, zhVtt };
+  state.audioSeconds = Number(sidecar?.audio_seconds) || 0;
+  updateTimeScale();
+  state.cues = mergeCues(vtt, sidecar, zhVtt);
+  renderCues();
+}
+function transcriptFailure(err) {
+  box.innerHTML = '<div class="empty"><div><b>字幕加载失败</b>' + esc(err.message) +
+    '<br><span style="font-size:12px">音频仍可播放。</span></div></div>';
+  status('字幕加载失败：' + err.message + '（音频仍可播放）', 'warn');
+}
+function selectEpisode(item, keepDrawer = false) {
+  if (!item) return;
+  state.current = item;
+  const params = new URLSearchParams(location.search);
+  params.set('show', state.show.slug);
+  params.set('ep', item.id);
+  history.replaceState(null, '', '?' + params.toString());
+  try { localStorage.setItem('myt-ep-' + state.show.slug, item.id); } catch (e) {}
+  [...listBox.children].forEach(el => el.classList.toggle('active', el.dataset.ep === item.id));
+  const activeEl = [...listBox.children].find(el => el.dataset.ep === item.id);
+  if (activeEl) {
+    const lr = listBox.getBoundingClientRect(), ar = activeEl.getBoundingClientRect();
+    if (ar.top < lr.top || ar.bottom > lr.bottom) listBox.scrollTop += ar.top - lr.top - 6;
+  }
+  $('epNum').textContent = (state.show.name || '') + (item.num ? ' · #' + item.num : '');
+  $('epTitle').textContent = item.title || (state.show.name || '');
+  $('dTitle').textContent = item.title || (state.show.name || '');
+  $('epMeta').textContent = item.date ? new Date(item.date).toLocaleDateString('zh-CN') : '';
+  $('dMeta').textContent = [item.date ? new Date(item.date).toLocaleDateString('zh-CN') : '',
+    item.transcript ? '字幕' : '无字幕', state.show.name].filter(Boolean).join(' · ');
+  const cover = $('cover');
+  const themeCss = getComputedStyle(document.documentElement);
+  const tAccent = themeCss.getPropertyValue('--accent').trim() || '#d8b277';
+  const tPanel = themeCss.getPropertyValue('--panel2').trim() || '#111111';
+  const tBg = themeCss.getPropertyValue('--bg').trim() || '#111111';
+  const coverFallback = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="88" height="88"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="' + tPanel + '"/><stop offset="1" stop-color="' + tBg + '"/></linearGradient></defs><rect width="88" height="88" fill="url(#g)"/><circle cx="44" cy="44" r="13" fill="none" stroke="' + tAccent + '" stroke-opacity=".3"/><circle cx="44" cy="44" r="3" fill="' + tAccent + '" fill-opacity=".35"/></svg>');
+  cover.onerror = () => { cover.onerror = null; cover.src = coverFallback; };
+  if (item.img) { cover.src = item.img; cover.hidden = false; } else { cover.src = coverFallback; cover.hidden = false; }
+  const frameCover = $('frameCover');
+  frameCover.onerror = () => { frameCover.onerror = null; frameCover.src = coverFallback; };
+  frameCover.src = item.img || coverFallback;
+  if (item.url) { audio.src = item.url; audio.load(); } else { audio.removeAttribute('src'); audio.load(); }
+  state.audioSeconds = 0; state.timeScale = 1; state.seekRaw = 0;
+  $('total').textContent = '00:00'; $('now').textContent = '00:00';
+  $('seek').value = '0'; $('pfill').style.width = '0%';
+  box.innerHTML = '<div class="empty">' + loaderHTML('正在加载字幕…') + '</div>';
+  state.cues = []; state.nodes = []; state.activeCue = -1; state.vtt = null; state.sidecar = null; state.zhVtt = null;
+  state.base = null; state.experiment = null; resetImportUI();
+  syncJumpPill();
+  if (!keepDrawer) closeDrawer();
+  const seq = ++state.transcriptSeq;
+  if (!item.transcript) {
+    box.innerHTML = '<div class="empty">该集没有字幕，可直接播放音频。</div>';
+    status('该集没有字幕，可直接播放音频。', 'warn');
+    return;
+  }
+  status('正在加载字幕…');
+  const transcript = item.transcript;
+  if (transcript.type === 'application/json' || /\.json(?:$|\?)/i.test(transcript.url)) {
+    getJson(transcript.url).then(doc => {
+      if (seq !== state.transcriptSeq) return;
+      if (!doc) throw new Error('JSON 加载失败');
+      const built = cuesFromJson(doc);
+      if (!built.vtt.length) throw new Error('JSON 中没有可显示的段落');
+      applyEpisodeData(built.vtt, built.sidecar, built.zhVtt);
+      const words = state.cues.reduce((n, c) => n + c.words.length, 0);
+      status('已加载 ' + built.vtt.length + ' 段，' + words.toLocaleString() + ' 个词级时间点。' +
+        (reader.lang !== 'en' && !state.zhVtt ? ' 该集暂无中文，已显示英文。' : ''), 'good');
+    }).catch(err => { if (seq === state.transcriptSeq) transcriptFailure(err); });
+    return;
+  }
+  const vttUrl = sitePath(transcript.url);
+  const timingsUrl = state.show.timings ? deriveTimingsUrl(vttUrl) : null;
+  Promise.all([
+    getText(vttUrl),
+    timingsUrl ? getJson(timingsUrl) : Promise.resolve(null),
+  ]).then(async ([vttText, sidecar]) => {
+    if (seq !== state.transcriptSeq) return;
+    if (!vttText) throw new Error('VTT 加载失败');
+    const parsed = parseVttSmart(vttText);
+    const zhText = parsed.hasCjk ? null : await getText(deriveZhUrl(vttUrl));
+    if (seq !== state.transcriptSeq) return;
+    let vtt = parsed.primary;
+    if (!vtt.length) vtt = vttFromSidecar(sidecar);
+    if (!vtt.length) throw new Error('VTT 解析为空');
+    const zhVtt = parsed.hasCjk ? parsed.zh : (zhText ? parseZhVTT(zhText) : null);
+    applyEpisodeData(vtt, sidecar, zhVtt);
+    const aligned = sidecar && Array.isArray(sidecar.segments) && sidecar.segments.length === vtt.length;
+    const complete = sidecar?.complete === true;
+    if (!sidecar) status('未找到词级时间轴，按句级时间显示。', 'warn');
+    else if (!complete) status('该集的修正时间轴尚未完成（' + (sidecar.rejected || '未完成') + '），按句级时间显示。', 'warn');
+    else if (!aligned) status('词级时间轴与 VTT 段落数不一致（' + (sidecar.segments?.length || 0) + ' vs ' + vtt.length + '），已按可匹配部分合并。', 'warn');
+    else status('已加载 ' + vtt.length + ' 段，' + state.cues.reduce((n, c) => n + c.words.length, 0).toLocaleString() + ' 个词级时间点。' +
+      (reader.lang !== 'en' && !zhVtt ? ' 该集暂无中文，已显示英文。' : ''), 'good');
+  }).catch(err => { if (seq === state.transcriptSeq) transcriptFailure(err); });
+}
+
+function renderList(filter = '') {
+  const q = filter.trim().toLowerCase();
+  const items = state.episodes.filter(e => !q || String(e.num).includes(q) || (e.title || '').toLowerCase().includes(q));
+  listBox.innerHTML = '';
+  $('epCount').textContent = items.length + ' / ' + state.episodes.length;
+  if (!items.length) { listBox.innerHTML = '<div class="empty">没有匹配的剧集。</div>'; return; }
+  for (const e of items) {
+    const el = document.createElement('div');
+    el.className = 'ep'; el.dataset.ep = e.id; el.tabIndex = 0;
+    el.innerHTML = '<img class="epArt" alt="" hidden referrerpolicy="no-referrer"><div class="epText"><div class="num"></div><div class="t"></div><div class="d"></div></div><span class="eq"><i></i><i></i><i></i></span>';
+    const art = el.querySelector('.epArt');
+    const artFallback = () => { const ph = document.createElement('div'); ph.className = 'epArt noart'; art.replaceWith(ph); };
+    if (e.img) { art.hidden = false; art.onerror = artFallback; art.src = e.img; } else artFallback();
+    el.querySelector('.num').textContent = e.num ? '#' + e.num : '';
+    el.querySelector('.t').textContent = e.title || '(无标题)';
+    el.querySelector('.d').textContent = e.date ? new Date(e.date).toLocaleDateString('zh-CN') : '';
+    if (state.current?.id === e.id) el.classList.add('active');
+    el.addEventListener('click', () => selectEpisode(e));
+    el.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); selectEpisode(e); } });
+    listBox.append(el);
+  }
+}
+
+async function loadShow(slug, episodeId) {
+  const show = state.shows.find(s => s.slug === slug) || state.shows[0];
+  if (!show) return;
+  const seq = ++state.loadSeq;
+  state.show = show;
+  try { localStorage.setItem('myt-show', show.slug); } catch (e) {}
+  $('showSel').value = show.slug;
+  $('epCount').textContent = '';
+  $('epTitle').textContent = show.name;
+  $('epNum').textContent = show.name;
+  $('epMeta').textContent = '';
+  listBox.innerHTML = '<div class="empty">' + loaderHTML('正在读取 feed…') + '</div>';
+  state.episodes = []; state.current = null;
+  if (!show.feed) {
+    renderList();
+    box.innerHTML = '<div class="empty">该节目暂时没有已发布的增强 Feed。</div>';
+    status('该节目暂时没有已发布 Feed。', 'warn');
+    return;
+  }
+  try {
+    let feed = state.feeds.get(show.slug);
+    if (!feed) {
+      const xml = await getText(show.feed);
+      if (seq !== state.loadSeq) return;
+      if (!xml) throw new Error('feed 加载失败');
+      feed = parseFeed(xml);
+      state.feeds.set(show.slug, feed);
+    }
+    state.episodes = feed.episodes;
+    renderList();
+    let saved = null;
+    try { saved = localStorage.getItem('myt-ep-' + show.slug); } catch (e) {}
+    const first = (episodeId && state.episodes.find(e => e.id === episodeId))
+      || (saved && state.episodes.find(e => e.id === saved))
+      || state.episodes[0];
+    if (first) selectEpisode(first, true);
+    else {
+      box.innerHTML = '<div class="empty">该节目还没有剧集。</div>';
+      status('该节目还没有剧集。', 'warn');
+    }
+  } catch (err) {
+    if (seq !== state.loadSeq) return;
+    state.episodes = [];
+    renderList();
+    box.innerHTML = '<div class="empty"><b>读取 feed 失败</b>' + esc(err.message) + '</div>';
+    status('读取 feed 失败：' + err.message + '。请用 HTTP 服务打开页面。', 'warn');
+  }
+}
+
+async function initPlayer() {
+  const params = new URLSearchParams(location.search);
+  try {
+    const data = await getJson('shows.json');
+    if (!Array.isArray(data) || !data.length) throw new Error('shows.json 格式错误');
+    state.shows = data;
+  } catch (err) {
+    listBox.innerHTML = '<div class="empty"><b>读取节目清单失败</b>' + esc(err.message) + '</div>';
+    status('读取节目清单失败：' + err.message, 'warn');
+    return;
+  }
+  $('showSel').innerHTML = state.shows.map(s =>
+    '<option value="' + esc(s.slug) + '">' + esc(s.name) + '</option>').join('');
+  $('showSel').onchange = e => loadShow(e.target.value);
+  let slug = params.get('show');
+  if (!slug) { try { slug = localStorage.getItem('myt-show'); } catch (e) {} }
+  if (!state.shows.some(s => s.slug === slug)) slug = state.shows[0]?.slug;
+  if (slug) loadShow(slug, params.get('ep'));
+}
+
+/* transport */
+$('play').onclick = () => {
+  if (!state.current) { openDrawer(); return; }
+  if (!audio.getAttribute('src')) { status('该集没有音频地址。', 'warn'); return; }
+  audio.paused ? audio.play().catch(e => status('播放失败：' + e.message, 'warn')) : audio.pause();
+};
+audio.addEventListener('play', () => { $('play').classList.add('playing'); $('play').setAttribute('aria-label','暂停'); document.body.classList.add('playing'); });
+audio.addEventListener('pause', () => { $('play').classList.remove('playing'); $('play').setAttribute('aria-label','播放'); document.body.classList.remove('playing'); });
+let buffering = false;
+function setBuffering(on) {
+  if (buffering === on) return;
+  buffering = on;
+  document.body.classList.toggle('buffering', on);
+  $('play').classList.toggle('buffering', on);
+  $('play').setAttribute('aria-label', on ? '正在缓冲' : (audio.paused ? '播放' : '暂停'));
+}
+audio.addEventListener('waiting', () => { if (!audio.paused) setBuffering(true); });
+audio.addEventListener('stalled', () => { if (!audio.paused) setBuffering(true); });
+audio.addEventListener('seeking', () => { if (!audio.paused) setBuffering(true); });
+audio.addEventListener('playing', () => setBuffering(false));
+audio.addEventListener('canplay', () => setBuffering(false));
+audio.addEventListener('pause', () => setBuffering(false));
+audio.addEventListener('emptied', () => setBuffering(false));
+audio.addEventListener('loadedmetadata', () => { updateTimeScale(); paint(false); });
+audio.addEventListener('timeupdate', () => paint());
+function seekBy(seconds) {
+  const t = (audio.currentTime || 0) + (state.timeScale - 1) * state.seekRaw + seconds;
+  rawSeek(t / (state.timeScale || 1));
+  paint(true);
+}
+$('back').onclick = () => seekBy(-5);
+$('forward').onclick = () => seekBy(5);
+const speedBtn = $('speedBtn'), speedMenu = $('speedMenu');
+function closeSpeedMenu() { speedMenu.classList.remove('on'); speedBtn.setAttribute('aria-expanded', 'false'); }
+speedBtn.onclick = e => {
+  e.stopPropagation();
+  const on = !speedMenu.classList.contains('on');
+  if (on) closeTypeSheet();
+  speedMenu.classList.toggle('on', on);
+  speedBtn.setAttribute('aria-expanded', String(on));
+};
+speedMenu.addEventListener('click', e => {
+  const b = e.target.closest('button[data-rate]');
+  if (!b) return;
+  const rate = Number(b.dataset.rate);
+  audio.playbackRate = rate;
+  speedBtn.textContent = rate + '×';
+  [...speedMenu.children].forEach(x => x.setAttribute('aria-selected', String(Number(x.dataset.rate) === rate)));
+  closeSpeedMenu();
+});
+document.addEventListener('click', e => { if (!e.target.closest('.speed')) closeSpeedMenu(); });
+$('seek').addEventListener('input', () => { if (audio.duration > 0) { rawSeek(Number($('seek').value)/1000 * audio.duration); paint(true); } });
+$('scroll').onchange = e => {
+  state.scroll = e.target.value;
+  if (state.scroll === 'off') return;
+  state.userScrollUntil = 0;
+  if (state.activeCue >= 0) scrollCue(state.nodes[state.activeCue].el, true);
+};
+$('offset').addEventListener('change', e => { state.offset = Number(e.target.value) || 0; renderCues(); });
+function returnToCue() {
+  state.userScrollUntil = 0;
+  stopScroll();
+  if (state.activeCue >= 0) scrollCue(state.nodes[state.activeCue].el, true);
+}
+$('follow').onclick = () => { returnToCue(); closeDetails(); };
+$('search').addEventListener('input', e => renderList(e.target.value));
+$('modeSeg').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-mode]');
+  if (!btn) return;
+  state.mode = btn.dataset.mode;
+  [...$('modeSeg').children].forEach(b => { const on = b === btn; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); });
+  renderCues();
+});
+$('drawerBtn').onclick = openDrawer;
+$('drawerClose').onclick = closeDrawer;
+$('scrim').onclick = closeOverlays;
+$('detailsBtn').onclick = (e) => { e.stopPropagation(); $('details').classList.contains('on') ? closeDetails() : openDetails(); };
+$('openDetailsText').onclick = openDetails;
+$('cover').onclick = openDetails;
+$('detailsClose').onclick = closeDetails;
+$('immersiveBtn').onclick = () => setImmersive(true);
+
+let framePos = null, frameMoved = false, frameDrag = null;
+const frameEl = $('frameBtn');
+function clampFrame(x, y) {
+  const w = frameEl.offsetWidth || 72, h = frameEl.offsetHeight || 72;
+  return { x: Math.max(8, Math.min(x, innerWidth - w - 8)), y: Math.max(8, Math.min(y, innerHeight - h - 8)) };
+}
+function placeFrame(x, y) {
+  framePos = clampFrame(x, y);
+  frameEl.style.left = framePos.x + 'px';
+  frameEl.style.top = framePos.y + 'px';
+  frameEl.style.bottom = 'auto';
+  frameEl.style.right = 'auto';
+}
+function onFrameMove(e) {
+  if (!frameDrag) return;
+  if (!frameMoved) {
+    if (Math.abs(e.clientX - frameDrag.sx) + Math.abs(e.clientY - frameDrag.sy) <= 4) return;
+    frameMoved = true;
+  }
+  placeFrame(e.clientX - frameDrag.dx, e.clientY - frameDrag.dy);
+}
+function endFrameDrag() {
+  if (!frameDrag) return;
+  frameDrag = null;
+  frameEl.classList.remove('dragging');
+  removeEventListener('pointermove', onFrameMove);
+  removeEventListener('pointerup', endFrameDrag);
+  removeEventListener('pointercancel', endFrameDrag);
+  if (frameMoved) setTimeout(() => { frameMoved = false; }, 300);
+}
+frameEl.addEventListener('pointerdown', e => {
+  if (!state.immersive || (e.pointerType === 'mouse' && e.button !== 0)) return;
+  const r = frameEl.getBoundingClientRect();
+  frameDrag = { dx: e.clientX - r.left, dy: e.clientY - r.top, sx: e.clientX, sy: e.clientY };
+  frameMoved = false;
+  frameEl.classList.add('dragging');
+  addEventListener('pointermove', onFrameMove);
+  addEventListener('pointerup', endFrameDrag);
+  addEventListener('pointercancel', endFrameDrag);
+});
+frameEl.addEventListener('dragstart', e => e.preventDefault());
+frameEl.onclick = () => { if (frameMoved) { frameMoved = false; return; } setImmersive(false); };
+$('jumpPill').onclick = () => returnToCue();
+addEventListener('resize', () => {
+  if (framePos && state.immersive) placeFrame(framePos.x, framePos.y);
+  alignZhLines();
+  syncJumpPill();
+});
+document.addEventListener('click', e => {
+  const d = $('details');
+  if (d.classList.contains('on') && !d.contains(e.target) && e.target !== $('detailsBtn') && e.target !== $('cover') && e.target !== $('openDetailsText')) closeDetails();
+});
+box.addEventListener('scroll', syncJumpPill, { passive: true });
+box.addEventListener('wheel', () => { stopScroll(); state.userScrollUntil = Date.now() + 3000; }, { passive: true });
+box.addEventListener('touchmove', () => { stopScroll(); state.userScrollUntil = Date.now() + 3000; }, { passive: true });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if ($('typeSheet').classList.contains('on')) closeTypeSheet();
+    else if (speedMenu.classList.contains('on')) closeSpeedMenu();
+    else if ($('drawer').classList.contains('on') || $('details').classList.contains('on')) closeOverlays();
+    else if (state.immersive) setImmersive(false);
+    return;
+  }
+  if (e.target.closest('input, select, textarea')) return;
+  if (e.code === 'Space') { e.preventDefault(); $('play').click(); }
+  else if (e.code === 'ArrowLeft') { e.preventDefault(); seekBy(-5); }
+  else if (e.code === 'ArrowRight') { e.preventDefault(); seekBy(5); }
+});
+(function loop() { if (!audio.paused) paint(); requestAnimationFrame(loop); })();
+initPlayer();
+})();
+</script></body></html>

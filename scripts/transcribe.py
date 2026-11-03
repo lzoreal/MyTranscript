@@ -1908,7 +1908,7 @@ def rebuild_root_index() -> None:
                 links.append(
                     f'<li><a href="{escape_html(href)}/index.html">{escape_html(slug)}</a></li>'
                 )
-    page = f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Podcast Transcript Library</title><style>body{{max-width:900px;margin:2rem auto;padding:0 1rem;font:16px/1.7 system-ui,sans-serif}}li{{margin:.7rem 0}}</style></head><body><h1>Podcast Transcript Library</h1><p>自动生成的播客字幕目录。</p><ul>{''.join(links)}</ul></body></html>"""
+    page = f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Podcast Transcript Library</title><style>body{{max-width:900px;margin:2rem auto;padding:0 1rem;font:16px/1.7 system-ui,sans-serif}}li{{margin:.7rem 0}}</style></head><body><h1>Podcast Transcript Library</h1><p>自动生成的播客字幕目录。</p><p><a href="player.html">▶ 打开播放器：收听全部节目</a></p><ul>{''.join(links)}</ul></body></html>"""
     atomic_write_text(SITE_DIR / "index.html", page)
 
 
