@@ -44,6 +44,34 @@ class RingTests(unittest.TestCase):
             keys_mod.GeminiKeyRing([])
 
 
+class ClientFactoryTests(unittest.TestCase):
+    def test_default_client_sets_request_timeout(self):
+        import sys
+        import types as pytypes
+        from unittest import mock
+
+        captured = {}
+        fake_genai = pytypes.ModuleType("google.genai")
+
+        class HttpOptions:
+            def __init__(self, **kwargs):
+                self.kwargs = kwargs
+
+        fake_genai.types = pytypes.SimpleNamespace(HttpOptions=HttpOptions)
+        fake_genai.Client = lambda **kwargs: captured.update(kwargs) or object()
+        fake_pkg = pytypes.ModuleType("google")
+        fake_pkg.genai = fake_genai
+
+        with mock.patch.dict(
+            sys.modules, {"google": fake_pkg, "google.genai": fake_genai}
+        ):
+            keys_mod._default_factory("key-aaaa")
+
+        self.assertEqual(captured.get("api_key"), "key-aaaa")
+        timeout = captured.get("http_options").kwargs.get("timeout")
+        self.assertGreater(timeout, 0)
+
+
 class PredicateTests(unittest.TestCase):
     class _Error(Exception):
         def __init__(self, message, code=None):
