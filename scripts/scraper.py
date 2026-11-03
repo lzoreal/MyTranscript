@@ -855,6 +855,7 @@ def generate_podcast_index(pc_prog, podcast, base_url):
     feed_url = public_url(base_url, slug, "feed.xml")
     html = f"""<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="../favicon.svg">
 <title>{html_module.escape(name)} - Transcripts</title><style>body{{font-family:system-ui,sans-serif;max-width:760px;margin:40px auto;padding:0 20px;line-height:1.7;color:#333}}a{{color:#0366d6}}code{{background:#f4f4f4;padding:2px 6px;border-radius:4px;overflow-wrap:anywhere}}.stat{{color:#666;font-size:.9rem}}</style></head><body>
 <h1>🎙️ {html_module.escape(name)}</h1>
 <p><strong>官方 Feed：</strong><a href="{html_module.escape(podcast['feed_url'], quote=True)}">{html_module.escape(podcast['feed_url'])}</a></p>
@@ -880,7 +881,7 @@ def generate_master_index(progress, podcasts, base_url):
         rows.append(
             f'<li><a href="{html_module.escape(page_url, quote=True)}">{html_module.escape(display_name(podcast))}</a> — 已处理 {total} 集 · <a href="{html_module.escape(feed_url, quote=True)}">Feed</a></li>'
         )
-    html = f"""<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Podcast Transcripts Hub</title><style>body{{font-family:system-ui,sans-serif;max-width:760px;margin:40px auto;padding:0 20px;line-height:1.7;color:#333}}li{{margin:10px 0}}a{{color:#0366d6}}</style></head><body><h1>🎙️ Podcast Transcripts Hub</h1><p>以下播客提供非官方 transcript 增强 RSS：</p><p><a href="{public_url(base_url, 'player.html')}">▶ 打开播放器：收听全部节目</a></p><ul>{''.join(rows)}</ul></body></html>"""
+    html = f"""<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" type="image/svg+xml" href="favicon.svg"><title>Podcast Transcripts Hub</title><style>body{{font-family:system-ui,sans-serif;max-width:760px;margin:40px auto;padding:0 20px;line-height:1.7;color:#333}}li{{margin:10px 0}}a{{color:#0366d6}}</style></head><body><h1>🎙️ Podcast Transcripts Hub</h1><p>以下播客提供非官方 transcript 增强 RSS：</p><p><a href="{public_url(base_url, 'player.html')}">▶ 打开播放器：收听全部节目</a></p><ul>{''.join(rows)}</ul></body></html>"""
     atomic_write_text(SITE_DIR / "podcasts.html", html)
 
 

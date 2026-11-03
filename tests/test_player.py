@@ -66,6 +66,39 @@ class PlayerTranscriptTests(unittest.TestCase):
                     self.assertTrue(path.endswith(".vtt"))
 
 
+class PlayerProgressTests(unittest.TestCase):
+    def test_player_persists_and_restores_playback_position(self):
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        self.assertIn("myt-progress", page)
+        self.assertIn("saveProgress(true)", page)
+        self.assertIn("state.resumeAt", page)
+        self.assertIn("audio.currentTime = t", page)
+
+
+class PlayerOffsetTests(unittest.TestCase):
+    def test_align_button_enters_pick_cue_mode(self):
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        self.assertIn('id="alignCue"', page)
+        self.assertIn("function toggleAlignMode", page)
+        self.assertIn("function alignToCue", page)
+        self.assertIn("state.alignMode", page)
+        self.assertIn("body.classList.toggle('aligning'", page)
+
+
+class SiteIconTests(unittest.TestCase):
+    def test_icon_assets_exist_and_every_page_links_them(self):
+        self.assertTrue((SITE / "favicon.svg").is_file())
+        self.assertTrue((SITE / "apple-touch-icon.png").is_file())
+        player = (SITE / "player.html").read_text(encoding="utf-8")
+        self.assertIn('href="favicon.svg"', player)
+        self.assertIn('href="apple-touch-icon.png"', player)
+        for page in [SITE / "index.html", SITE / "podcasts.html"]:
+            self.assertIn('href="favicon.svg"', page.read_text(encoding="utf-8"))
+        for show in load_shows():
+            page = (SITE / show["slug"] / "index.html").read_text(encoding="utf-8")
+            self.assertIn('href="../favicon.svg"', page)
+
+
 class PlayerEntryTests(unittest.TestCase):
     def test_player_page_is_wired_to_manifest(self):
         page = (SITE / "player.html").read_text(encoding="utf-8")

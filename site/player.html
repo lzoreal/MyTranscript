@@ -573,6 +573,9 @@ body.playing .eq i{animation:eq .9s ease-in-out infinite alternate}
 .drow label{display:flex;align-items:center;gap:6px;color:var(--dim);font-size:11px;grid-column:1}
 .drow select{grid-column:2}
 .drow .textbtn{grid-column:1/-1;justify-self:start;padding-left:0}
+.drowActions{grid-column:1/-1;display:flex;gap:16px}
+body.aligning .cue{cursor:crosshair}
+body.aligning .cue:hover{background:var(--hover);outline:1px solid var(--edge);outline-offset:2px}
 .drow.themes{margin-bottom:12px}
 .swatches{display:flex;gap:8px;justify-content:flex-end;grid-column:2}
 .swatch{
@@ -778,7 +781,10 @@ body.playing .eq i{animation:eq .9s ease-in-out infinite alternate}
       <option value="center" selected>当前句居中</option>
       <option value="off">关闭滚动</option>
     </select>
-    <button id="follow" class="textbtn">重新跟随</button>
+    <div class="drowActions">
+      <button id="alignCue" class="textbtn" title="点击后选择一句作为当前应高亮的句子，并据此设置偏移" aria-pressed="false">对齐到当前句</button>
+      <button id="follow" class="textbtn">重新跟随</button>
+    </div>
   </div>
   <div class="drow themes">
     <label>深色</label>
@@ -810,7 +816,9 @@ const state = { shows: [], show: null, feeds: new Map(), episodes: [], current: 
   vtt: null, sidecar: null, zhVtt: null, base: null, experiment: null,
   mode: 'word', scroll: 'center', offset: 0, userScrollUntil: 0, immersive: false,
   timeScale: 1, audioSeconds: 0, seekRaw: 0, loadSeq: 0, transcriptSeq: 0,
-  audioToken: 0, audioRetried: 0, audioUsed: new Set() };
+  audioToken: 0, audioRetried: 0, audioUsed: new Set(),
+  resumeEp: '', resumeAt: 0, audioKey: '', progressSavedAt: 0,
+  alignMode: false, alignAt: 0 };
 
 const themeBtns = [...document.querySelectorAll('.swatch')];
 const LIGHT_THEMES = new Set(['paper', 'mist']);
@@ -1059,6 +1067,47 @@ function showToast(text, ms = 6000) {
   toastTimer = setTimeout(() => el.classList.remove('on'), ms);
 }
 function hideToast() { clearTimeout(toastTimer); $('toast').classList.remove('on'); }
+const PROGRESS_KEY = 'myt-progress';
+function progressKey(item) { return state.show ? state.show.slug + ':' + item.id : ''; }
+function readProgress(item) {
+  if (!item) return 0;
+  try {
+    const all = JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}');
+    const t = Number(all[progressKey(item)]?.t);
+    return Number.isFinite(t) && t > 5 ? t : 0;
+  } catch (e) { return 0; }
+}
+function saveProgress(force) {
+  const item = state.current;
+  if (!item || !state.audioKey || audio.dataset.ep !== item.id) return;
+  const dur = audio.duration;
+  const t = audio.currentTime || 0;
+  if (!(dur > 0) || t < 3) return;
+  const now = Date.now();
+  if (!force && now - state.progressSavedAt < 5000) return;
+  state.progressSavedAt = now;
+  try {
+    const all = JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}');
+    all[state.audioKey] = { t: Math.round(t), d: Math.round(dur), at: now };
+    localStorage.setItem(PROGRESS_KEY, JSON.stringify(all));
+  } catch (e) {}
+}
+function clearProgress() {
+  if (!state.audioKey) return;
+  try {
+    const all = JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}');
+    if (!(state.audioKey in all)) return;
+    delete all[state.audioKey];
+    localStorage.setItem(PROGRESS_KEY, JSON.stringify(all));
+  } catch (e) {}
+}
+function rememberPosition() {
+  const ep = state.current?.id || '';
+  if (audio.dataset.ep === ep && Number.isFinite(audio.currentTime) && audio.currentTime > 0) {
+    state.resumeEp = ep;
+    state.resumeAt = audio.currentTime;
+  }
+}
 function resolveFinalAudioUrl(url) {
   return new Promise(resolve => {
     const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -1072,6 +1121,7 @@ function resolveFinalAudioUrl(url) {
 }
 function tryAudioSource(url) {
   if (!url || state.audioUsed.has(url)) return false;
+  rememberPosition();
   state.audioUsed.add(url);
   audio.dataset.ep = state.current?.id || '';
   audio.src = url;
@@ -1082,6 +1132,7 @@ function tryAudioSource(url) {
 function retryCurrentAudio() {
   const item = state.current;
   if (!item || !item.url) return;
+  rememberPosition();
   state.audioRetried = 0;
   state.audioUsed = new Set([item.url]);
   state.audioToken += 1;
@@ -1589,7 +1640,11 @@ function renderCues() {
         words.forEach((w, wi) => {
           const sp = document.createElement('span');
           sp.className = 'word pending'; sp.textContent = w.t; sp.dataset.wi = wi;
-          sp.addEventListener('click', e => { e.stopPropagation(); seekTo(w.s + state.offset); });
+          sp.addEventListener('click', e => {
+            e.stopPropagation();
+            if (state.alignMode) { alignToCue(cue); return; }
+            seekTo(w.s + state.offset);
+          });
           wrap.append(sp); wrap.append(document.createTextNode(' ')); wordEls.push(sp); wordCount++;
         });
       } else { wrap.textContent = cue.text; wordEls = []; }
@@ -1605,7 +1660,10 @@ function renderCues() {
       const z = document.createElement('span'); z.className = 'zh'; z.textContent = cue.zh;
       el.append(z);
     }
-    el.addEventListener('click', () => seekTo(cue.start + state.offset));
+    el.addEventListener('click', () => {
+      if (state.alignMode) { alignToCue(cue); return; }
+      seekTo(cue.start + state.offset);
+    });
     box.append(el);
     state.nodes.push({ el, wrap, words: wordEls, lastIdx: -1 });
   });
@@ -1762,6 +1820,8 @@ function transcriptFailure(err) {
 }
 function selectEpisode(item, keepDrawer = false) {
   if (!item) return;
+  saveProgress(true);
+  setAlignMode(false);
   state.current = item;
   const params = new URLSearchParams(location.search);
   params.set('show', state.show.slug);
@@ -1794,6 +1854,10 @@ function selectEpisode(item, keepDrawer = false) {
   state.audioRetried = 0;
   state.audioUsed = new Set(item.url ? [item.url] : []);
   state.audioToken += 1;
+  state.resumeEp = item.id;
+  state.resumeAt = readProgress(item);
+  state.audioKey = progressKey(item);
+  state.progressSavedAt = 0;
   audio.dataset.ep = item.id;
   audio.pause();
   audio.removeAttribute('src');
@@ -1878,6 +1942,7 @@ function renderList(filter = '') {
 }
 
 async function loadShow(slug, episodeId) {
+  saveProgress(true);
   const show = state.shows.find(s => s.slug === slug) || state.shows[0];
   if (!show) return;
   const seq = ++state.loadSeq;
@@ -1955,7 +2020,7 @@ $('play').onclick = () => {
     : audio.pause();
 };
 audio.addEventListener('play', () => { $('play').classList.add('playing'); $('play').setAttribute('aria-label','暂停'); document.body.classList.add('playing'); });
-audio.addEventListener('pause', () => { $('play').classList.remove('playing'); $('play').setAttribute('aria-label','播放'); document.body.classList.remove('playing'); });
+audio.addEventListener('pause', () => { $('play').classList.remove('playing'); $('play').setAttribute('aria-label','播放'); document.body.classList.remove('playing'); saveProgress(true); });
 let buffering = false;
 function setBuffering(on) {
   if (buffering === on) return;
@@ -1971,9 +2036,24 @@ audio.addEventListener('playing', () => setBuffering(false));
 audio.addEventListener('canplay', () => setBuffering(false));
 audio.addEventListener('pause', () => setBuffering(false));
 audio.addEventListener('emptied', () => setBuffering(false));
-audio.addEventListener('loadedmetadata', () => { updateTimeScale(); paint(false); });
-audio.addEventListener('timeupdate', () => paint());
+audio.addEventListener('loadedmetadata', () => {
+  if (state.current && state.resumeEp === state.current.id && audio.dataset.ep === state.current.id) {
+    const t = state.resumeAt;
+    state.resumeEp = ''; state.resumeAt = 0;
+    const dur = audio.duration;
+    if (t > 5 && Number.isFinite(dur) && dur > 0 && t < dur - 10) {
+      audio.currentTime = t;
+      state.seekRaw = t;
+    }
+  }
+  updateTimeScale(); paint(false);
+});
+audio.addEventListener('timeupdate', () => { paint(); saveProgress(false); });
+audio.addEventListener('seeked', () => saveProgress(true));
+audio.addEventListener('ended', () => { clearProgress(); paint(true); });
 audio.addEventListener('error', () => { onAudioError(); });
+window.addEventListener('pagehide', () => saveProgress(true));
+document.addEventListener('visibilitychange', () => { if (document.hidden) saveProgress(true); });
 function seekBy(seconds) {
   const t = (audio.currentTime || 0) + (state.timeScale - 1) * state.seekRaw + seconds;
   rawSeek(t / (state.timeScale || 1));
@@ -2007,6 +2087,29 @@ $('scroll').onchange = e => {
   state.userScrollUntil = 0;
   if (state.activeCue >= 0) scrollCue(state.nodes[state.activeCue].el, true);
 };
+function setAlignMode(on, at = 0) {
+  state.alignMode = on;
+  state.alignAt = on ? at : 0;
+  document.body.classList.toggle('aligning', on);
+  $('alignCue').textContent = on ? '取消对齐' : '对齐到当前句';
+  $('alignCue').setAttribute('aria-pressed', String(on));
+}
+function toggleAlignMode() {
+  if (state.alignMode) { setAlignMode(false); showToast('已取消对齐。', 2500); return; }
+  if (!state.current || !audio.getAttribute('src')) { showToast('该集没有音频地址。'); return; }
+  if (!state.cues.length) { showToast('该集没有字幕。'); return; }
+  setAlignMode(true, (audio.currentTime || 0) + (state.timeScale - 1) * state.seekRaw);
+  showToast('点击一句应高亮的句子（已锁定当前播放位置，Esc 取消）', 8000);
+}
+function alignToCue(cue) {
+  const offset = Math.round((state.alignAt - cue.speechStart) * 100) / 100;
+  state.offset = offset;
+  $('offset').value = String(offset);
+  setAlignMode(false);
+  renderCues();
+  showToast('偏移已设为 ' + offset.toFixed(2) + ' 秒', 4000);
+}
+$('alignCue').onclick = toggleAlignMode;
 $('offset').addEventListener('change', e => { state.offset = Number(e.target.value) || 0; renderCues(); });
 function returnToCue() {
   state.userScrollUntil = 0;
@@ -2088,7 +2191,8 @@ box.addEventListener('wheel', () => { stopScroll(); state.userScrollUntil = Date
 box.addEventListener('touchmove', () => { stopScroll(); state.userScrollUntil = Date.now() + 3000; }, { passive: true });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
-    if ($('typeSheet').classList.contains('on')) closeTypeSheet();
+    if (state.alignMode) { setAlignMode(false); showToast('已取消对齐。', 2500); }
+    else if ($('typeSheet').classList.contains('on')) closeTypeSheet();
     else if (speedMenu.classList.contains('on')) closeSpeedMenu();
     else if ($('drawer').classList.contains('on') || $('details').classList.contains('on')) closeOverlays();
     else if (state.immersive) setImmersive(false);
