@@ -194,7 +194,8 @@ for f in tests/test_*.py; do python "$f"; done     # 6 个文件、174 个用例
 - hwmym 121/121、office-ladies 497/497 的词级数据已完成；feed 的 transcript 标签指向
   `raw.githubusercontent.com/.../json/`，旧 VTT 归档在 `data/<slug>/legacy-vtt/`；
 - 两个已迁移节目只保留 `feed.xml`，`feed-zh.xml` 已下线；
-- smartless 迁移进行中：配置已推送，382 集旧字幕仍以 VTT 标签提供服务，回填完成的集逐批切到 JSON；
+- smartless 迁移进行中：382 集旧字幕仍以 VTT 标签提供服务，回填完成的集逐批切到 JSON；
+  该节目 PodScripts 页面无内容，`text_source` 已改为 `asr`，直接用自己的转写文本；
 - Pages 站点约 646 MB，词级 JSON 约 369 MB（仓库内，不进 Pages）。
 
 **未完成 / 注意**：
@@ -272,8 +273,8 @@ for f in tests/test_*.py; do python "$f"; done     # 6 个文件、174 个用例
 
 ### 迁移一个节目（office-ladies 2026-11-02、smartless 2026-11-03 实跑过）
 
-1. `feeds.json` 加该节目：`text_source`（`podscripts` 优先抓取，抓不到自动回退 ASR）、
-   `podscripts_id`、`publish: true`；
+1. `feeds.json` 加该节目：`text_source`（`podscripts` 优先抓取，抓不到自动回退 ASR；
+   PodScripts 无内容的节目如 smartless 直接写 `asr`）、`publish: true`，用 `podscripts` 时再加 `podscripts_id`；
 2. `podcasts.json` 给该节目加 `"migrated": true` —— crawl 跳过抓取与 feed/index，但总索引仍列出；
 3. `podcasts_translate.json` 移除该节目（旧翻译 job 不再碰它）；
 4. **决定是否回填历史集**：
