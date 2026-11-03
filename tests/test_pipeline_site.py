@@ -101,13 +101,17 @@ class MergeTests(unittest.TestCase):
                 }
             }
         }
-        merged = site.merged_processed(progress, "pod", {"new": "New_Ep"})
+        with tempfile.TemporaryDirectory() as temp_dir:
+            json_dir = Path(temp_dir) / "json"
+            (json_dir / "pod").mkdir(parents=True)
+            (json_dir / "pod" / "Old.json").write_text("{}", encoding="utf-8")
+            merged = site.merged_processed(progress, "pod", {"new": "New_Ep"}, json_dir)
         self.assertEqual(merged["old"]["vtt_filename"], "Old.vtt")
         self.assertEqual(merged["new"]["transcript_filename"], "New_Ep.json")
         self.assertEqual(merged["new"]["transcript_type"], "application/json")
         self.assertIn("skipped", merged, "旧记录原样保留，删不删由 feed 构建器决定")
 
-    def test_records_point_to_json_transcripts(self):
+    def test_old_episode_points_to_json_only_after_export(self):
         progress = {
             "podcasts": {
                 "pod": {
@@ -117,10 +121,28 @@ class MergeTests(unittest.TestCase):
                 }
             }
         }
-        merged = site.merged_processed(progress, "pod", {"new": "New_Ep"})
+        with tempfile.TemporaryDirectory() as temp_dir:
+            json_dir = Path(temp_dir) / "json"
+            (json_dir / "pod").mkdir(parents=True)
+            (json_dir / "pod" / "Old.json").write_text("{}", encoding="utf-8")
+            merged = site.merged_processed(progress, "pod", {}, json_dir)
         self.assertEqual(merged["old"]["transcript_filename"], "Old.json")
         self.assertEqual(merged["old"]["transcript_type"], "application/json")
-        self.assertEqual(merged["new"]["transcript_filename"], "New_Ep.json")
+
+    def test_old_episode_without_json_stays_vtt(self):
+        progress = {
+            "podcasts": {
+                "pod": {
+                    "processed": {
+                        "old": {"vtt_filename": "Old.vtt", "skipped": False},
+                    }
+                }
+            }
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            merged = site.merged_processed(progress, "pod", {}, Path(temp_dir) / "json")
+        self.assertNotIn("transcript_filename", merged["old"])
+        self.assertEqual(merged["old"]["vtt_filename"], "Old.vtt")
 
 
 if __name__ == "__main__":
