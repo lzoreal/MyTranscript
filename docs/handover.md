@@ -100,6 +100,8 @@ site/
 - `text/vtt` 解析后，英文单语再取 `transcripts/zh/<stem>.vtt`；`shows.json` 里该节目 `timings: true`
   时才请求 `timings/<stem>.json`（目前只有 hwmym），否则按句级显示；
 - 没有字幕的集仍然可以播放音频；
+- 音频优先用 feed enclosure（多跳跟踪 URL）；播放出错时自动重试、解析最终 CDN 地址、退回
+  `media:content` 直链，并在播放器上方显示可点击重试的提示；
 - `audio_seconds` 与浏览器 `duration` 相差超过 1% 时不做整体缩放（通常是动态插播广告导致音频内容不同）。
 
 ### VTT 有两种形态（必须区分）
