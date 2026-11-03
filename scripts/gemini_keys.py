@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from typing import Any, Callable
 
@@ -36,10 +37,18 @@ def parse_gemini_keys(raw: str) -> list[str]:
     return keys
 
 
+GEMINI_TIMEOUT_MS = max(1000, int(os.getenv("GEMINI_TIMEOUT_MS", "120000")))
+
+
 def _default_factory(api_key: str):
     from google import genai
+    from google.genai import types
 
-    return genai.Client(api_key=api_key)
+    # SDK 默认不设请求超时：Gemini 卡住不回包时，一集能把整个 6 小时 job 耗光。
+    return genai.Client(
+        api_key=api_key,
+        http_options=types.HttpOptions(timeout=GEMINI_TIMEOUT_MS),
+    )
 
 
 class GeminiKeyRing:
