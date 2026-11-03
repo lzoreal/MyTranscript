@@ -2,7 +2,11 @@
 
 **日期**：2026-11-02
 **状态**：已实施（2026-11-02）；JSON 改为仓库 `json/` + raw.githubusercontent 提供
-**范围**：已迁移的 618 集（office-ladies 497 + how-we-made-your-mother 121）；其余 11 个节目不动。
+**范围**：已迁移的 618 集（office-ladies 497 + how-we-made-your-mother 121）；其余节目不动。
+
+> 2026-11-03：smartless（382 集）复用本方案迁移。publish job 自动遍历 `feeds.json` 里
+> `publish: true` 的节目，无需改代码；分批回填期间未产出 JSON 的集必须继续用 VTT
+> （`merged_processed` 按文件存在与否回退），否则 feed 会整批删条目。
 
 ## 1. 目标
 
