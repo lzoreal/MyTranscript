@@ -82,6 +82,8 @@ json/<slug>/<stem>.json        ← 已迁移节目的词级 JSON（raw.githubuse
 site/
   index.html                 根索引（Transcribe 生成）
   podcasts.html              抓取节目索引（Crawl 生成）
+  player.html                多节目播放器（静态；读 shows.json + 各节目 feed）
+  shows.json                 播放器节目清单（新增节目时同步更新；无 feed 的节目 feed 为 null）
   <slug>/
     feed.xml / feed-zh.xml   ← 已迁移节目只有 feed.xml
     index.html
@@ -89,6 +91,16 @@ site/
     transcripts/zh/<stem>.vtt
     timings/<stem>.json           ← 词级时间（sidecar）
 ```
+
+### 播放器（`site/player.html`）取字幕规则
+
+- 只认 feed 里属于本项目的 `podcast:transcript`（host 为 `lzoreal.github.io/MyTranscript` 或
+  `raw.githubusercontent.com/lzoreal/MyTranscript`），忽略 Buzzsprout 等外部字幕链接；
+- `application/json` 直接按 `segments` 画词级并取 `body` 第二行中文；
+- `text/vtt` 解析后，英文单语再取 `transcripts/zh/<stem>.vtt`；`shows.json` 里该节目 `timings: true`
+  时才请求 `timings/<stem>.json`（目前只有 hwmym），否则按句级显示；
+- 没有字幕的集仍然可以播放音频；
+- `audio_seconds` 与浏览器 `duration` 相差超过 1% 时不做整体缩放（通常是动态插播广告导致音频内容不同）。
 
 ### VTT 有两种形态（必须区分）
 
