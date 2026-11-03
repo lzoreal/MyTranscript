@@ -4,13 +4,16 @@
 
 ## 这个仓库做什么
 
-把 13 个英文播客做成"带字幕的增强版 RSS"，发布到 GitHub Pages：
+把 14 个英文播客做成"带字幕的增强版 RSS"，发布到 GitHub Pages：
 
-- 12 个节目：字幕来自 PodScripts 抓取（`scraper.py`）；
+- 10 个节目：字幕来自 PodScripts 抓取（`scraper.py`），站点发 VTT；
+- 2 个节目（office-ladies、smartless）：统一管线产出双语词级 JSON，
+  存 `json/<slug>/`，feed 指向 raw.githubusercontent（不进 Pages）；
 - 1 个节目（how-we-made-your-mother，简称 hwmym）：字幕来自我们自己的 Whisper 转写（`transcribe.py`）；
-- 两者都由 `translate_vtt.py` 生成中文，`generate_zh_feed.py` 生成中文 Feed。
+- 未迁移节目由 `translate_vtt.py` 生成中文、`generate_zh_feed.py` 生成中文 Feed；
+  已迁移节目的中文在同一个 JSON 文件里，没有 `feed-zh.xml`。
 
-**永远不要把两条来源合并成一套清单/一套流程**——它们的数据、状态文件、提交路径都不同。
+**永远不要把这几条来源合并成一套清单/一套流程**——它们的数据、状态文件、提交路径都不同。
 
 ## 金科玉律
 
@@ -63,6 +66,7 @@ WHISPER_MODEL="D:/tmp/tmlt-align/ct2-turbo" \
 | `if: always()` 不覆盖 job **超时**（会被直接取消） | 预算必须 < `timeout-minutes`，shard 内结果要尽早落到 sidecar |
 | 本地 `origin` URL 可能被脚本改坏（变成 `https://…@github.com/.git`） | 临时用完整 URL `git fetch https://github.com/lzoreal/MyTranscript.git main` |
 | `git_push_retry.sh` 对不存在的 pathspec 会 `git add` 失败 | 动态只加"存在且非空"的目录 |
+| 分批迁移时 feed 整批消失 | `pipeline_site.merged_processed` 只在 JSON 已导出时才切标签，否则保留 VTT（有测试锁定） |
 
 ## 改动完成后
 
