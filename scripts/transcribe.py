@@ -1892,7 +1892,7 @@ def build_podcast_index(
         )
     base = BASE_URL or ""
     enhanced = f"{base}/{quote(PODCAST_SLUG, safe='-._~')}/feed.xml"
-    page = f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{escape_html(title)} · 双语字幕</title><style>:root{{color-scheme:light dark}}body{{max-width:900px;margin:2rem auto;padding:0 1rem;font:16px/1.7 system-ui,-apple-system,"Segoe UI",sans-serif}}h1{{line-height:1.25}}a{{overflow-wrap:anywhere}}li{{margin:.9rem 0}}small{{display:block;opacity:.7}}</style></head><body><h1>{escape_html(title)}</h1><p>英文原文与简体中文译文合并显示的词级字幕（JSON）。</p><nav><a href="{escape_html(enhanced)}">增强版 RSS Feed</a> · <a href="{escape_html(feed_url)}">原始 RSS Feed</a></nav><h2>已生成字幕</h2><ul>{''.join(rows) if rows else '<li>暂无字幕。</li>'}</ul></body></html>"""
+    page = f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" type="image/svg+xml" href="../favicon.svg"><title>{escape_html(title)} · 双语字幕</title><style>:root{{color-scheme:light dark}}body{{max-width:900px;margin:2rem auto;padding:0 1rem;font:16px/1.7 system-ui,-apple-system,"Segoe UI",sans-serif}}h1{{line-height:1.25}}a{{overflow-wrap:anywhere}}li{{margin:.9rem 0}}small{{display:block;opacity:.7}}</style></head><body><h1>{escape_html(title)}</h1><p>英文原文与简体中文译文合并显示的词级字幕（JSON）。</p><nav><a href="{escape_html(enhanced)}">增强版 RSS Feed</a> · <a href="{escape_html(feed_url)}">原始 RSS Feed</a></nav><h2>已生成字幕</h2><ul>{''.join(rows) if rows else '<li>暂无字幕。</li>'}</ul></body></html>"""
     path = PODCAST_DIR / "index.html"
     atomic_write_text(path, page)
     return path
@@ -1908,7 +1908,7 @@ def rebuild_root_index() -> None:
                 links.append(
                     f'<li><a href="{escape_html(href)}/index.html">{escape_html(slug)}</a></li>'
                 )
-    page = f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Podcast Transcript Library</title><style>body{{max-width:900px;margin:2rem auto;padding:0 1rem;font:16px/1.7 system-ui,sans-serif}}li{{margin:.7rem 0}}</style></head><body><h1>Podcast Transcript Library</h1><p>自动生成的播客字幕目录。</p><p><a href="player.html">▶ 打开播放器：收听全部节目</a></p><ul>{''.join(links)}</ul></body></html>"""
+    page = f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" type="image/svg+xml" href="favicon.svg"><title>Podcast Transcript Library</title><style>body{{max-width:900px;margin:2rem auto;padding:0 1rem;font:16px/1.7 system-ui,sans-serif}}li{{margin:.7rem 0}}</style></head><body><h1>Podcast Transcript Library</h1><p>自动生成的播客字幕目录。</p><p><a href="player.html">▶ 打开播放器：收听全部节目</a></p><ul>{''.join(links)}</ul></body></html>"""
     atomic_write_text(SITE_DIR / "index.html", page)
 
 
