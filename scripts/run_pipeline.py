@@ -26,6 +26,8 @@ def pipeline_env(env) -> dict:
         "only_slug": (env.get("ONLY_SLUG", "") or "").strip() or None,
         "data_dir": Path(env.get("DATA_DIR", "data") or "data"),
         "feeds_file": Path(env.get("FEEDS_FILE", "feeds.json") or "feeds.json"),
+        # 分片计划只在同一次 run 内复用；本地手跑没有这个变量，行为不变。
+        "run_id": (env.get("GITHUB_RUN_ID", "") or "").strip(),
     }
 
 
@@ -66,18 +68,36 @@ def publish_key_health(env) -> None:
 
 
 def prepare_shows(shows, shard: int, shards: int, list_episodes=None,
-                  blocked_lookup=None):
+                  blocked_lookup=None, plan_lookup=None, claimed_lookup=None,
+                  plan_save=None):
+    """一个 run 内每片只切一次分片。
+
+    每集 35~40 分钟且不可中断，本片的 state 要等这一集跑完才落盘；如果每个
+    分块都按"当前待办集"重切，别的片手上正在跑的集会被当成新集抢过来，两片
+    写同一个 data/<slug>/<guid>.json，提交时必然撞车。所以首切结果写进
+    plan-<shard>.json，后续分块复用；首切时还要排除其它片已认领的集。
+    """
     list_episodes = list_episodes or pconfig.list_episodes
     prepared = []
     for show in shows:
         episodes = list_episodes(show["feed_url"])
-        blocked = blocked_lookup(show["slug"]) if blocked_lookup else None
+        blocked = blocked_lookup(show["slug"]) if blocked_lookup else set()
+        planned = plan_lookup(show["slug"]) if plan_lookup else None
+        if planned is not None:
+            wanted = set(planned)
+            picked = [episode for episode in episodes
+                      if episode["guid"] in wanted and episode["guid"] not in blocked]
+        else:
+            claimed = claimed_lookup(show["slug"]) if claimed_lookup else set()
+            picked = pconfig.shard_episodes(
+                episodes, shard=shard, shards=shards, done=set(blocked) | set(claimed)
+            )
+            if plan_save:
+                plan_save(show["slug"], [episode["guid"] for episode in picked])
         prepared.append(
             {
                 **show,
-                "episodes": pconfig.shard_episodes(
-                    episodes, shard=shard, shards=shards, done=blocked
-                ),
+                "episodes": picked,
                 "state_suffix": "" if shards <= 1 else f"-{shard}",
             }
         )
@@ -104,9 +124,25 @@ def main() -> int:
     shows = pconfig.select_shows(
         pconfig.load_feeds(env["feeds_file"]), only_slug=env["only_slug"]
     )
+    # 单片没有争用，也不需要落 plan 文件。
+    use_plan = env["shards"] > 1 and bool(env["run_id"])
+    lookups = {}
+    if use_plan:
+        lookups = {
+            "plan_lookup": lambda slug: pstore.read_plan(
+                pstore.plan_path(env["data_dir"], slug, env["shard"]), env["run_id"]
+            ),
+            "claimed_lookup": lambda slug: pstore.claimed_guids(
+                env["data_dir"], slug, env["run_id"], env["shard"]
+            ),
+            "plan_save": lambda slug, guids: pstore.save_plan(
+                env["data_dir"], slug, env["shard"], env["run_id"], guids
+            ),
+        }
     prepared = prepare_shows(
         shows, shard=env["shard"], shards=env["shards"],
         blocked_lookup=lambda slug: pstore.blocked_guids(env["data_dir"], slug),
+        **lookups,
     )
     print(f"分片 {env['shard']}/{env['shards']}：节目 {len(prepared)}，"
           f"候选集 {sum(len(s['episodes']) for s in prepared)}")

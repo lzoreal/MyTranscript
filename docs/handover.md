@@ -240,7 +240,7 @@ for f in tests/test_*.py; do python "$f"; done     # 6 个文件、174 个用例
 | 某集反复被回填选中 | sidecar 的 `attempts`；`complete` 是否为 false |
 | 翻译整批缺几条 | `translate_blocks` 的"只补缺失编号"日志；Gemini 是否返回了不完整对象 |
 | job 绿但什么都没做 | 分片参数被 `continue-on-error` 吞掉？看"检查回填参数"步骤与 `候选 N 集` |
-| push 被拒 | `git_push_retry.sh` 会 rebase 重试；持续失败多半是 pathspec 越界改了别人的文件 |
+| push 被拒 | `git_push_retry.sh` 会 rebase 重试；同名集产物的 add/add 冲突自动保留远程版本，仍失败多半是 pathspec 越界改了别人的文件 |
 
 ## 十一、统一链路（新，进行中）
 
@@ -263,7 +263,7 @@ for f in tests/test_*.py; do python "$f"; done     # 6 个文件、174 个用例
 | `scripts/pipeline_text.py` | 文本源：`asr` 直接用 ASR 句子；`podscripts` 抓取后映射到词流 |
 | `scripts/clause_translation.py` | 小句翻译契约（en 拼接必须等于原句） |
 | `scripts/zh_align.py` | 中文分词驱动的时间分配 + DTW 兜底 |
-| `scripts/pipeline_store.py` | `data/<slug>/state<suffix>.json` 与单集 JSON 的原子写 |
+| `scripts/pipeline_store.py` | `data/<slug>/state<suffix>.json`、`plan-<shard>.json` 与单集 JSON 的原子写 |
 | `scripts/pipeline_episode.py` | 单集编排（依赖注入，可单测） |
 | `scripts/pipeline_publish.py` | 双语 VTT 渲染 |
 | `scripts/pipeline_deps.py` | 把 ASR/翻译/抓取/嵌入装配成 deps |
@@ -275,11 +275,19 @@ for f in tests/test_*.py; do python "$f"; done     # 6 个文件、174 个用例
 
 ### 分片与续跑
 
-- 分片的单位是**集**，不是节目：先剔除已完成（以及重试到上限）的集，剩下的按 guid 排序后
-  轮流分给各片，各片待办数差不超过 1。同一份待办集切出的结果可复现；待办集变化时同一集
-  可能换片，所以判重要看所有 state 的并集。
-- 每片写自己的 `data/<slug>/state-<shard>.json`（单片时仍叫 `state.json`）。分片之间不共享状态文件，
-  并发 push 时各改各的文件，`git_push_retry.sh` 的 rebase 不会撞车。**完成的集要看所有 state 的并集。**
+- 分片的单位是**集**，不是节目：首切时先剔除已完成（以及重试到上限、其它片已认领）的集，
+  剩下的按 guid 排序后轮流分给各片，各片待办数差不超过 1。
+- **一个 run 内每片只切一次分片**，结果落在 `data/<slug>/plan-<shard>.json`（`run_id` 用
+  `GITHUB_RUN_ID`）。后续分块复用这份计划，只去掉已完成的集。
+  > 2026-11-04 踩过：改成"每个分块按当前待办集重切"后，别的片手上正在跑的那一集（单集
+  > 35~40 分钟不可中断，state 要等跑完才落盘）会被重新分配过来，两片写同一个
+  > `data/<slug>/<guid>.json`，提交时 rebase 撞车，整片的产出推不上去。实测同一集同时记在
+  > shard 11（done）和 shard 12（failed）的 state 里。
+- 每片写自己的 `data/<slug>/state-<shard>.json`（单片时仍叫 `state.json`）和
+  `plan-<shard>.json`。分片之间不共享文件，并发 push 时各改各的。
+  **完成的集要看所有 state 的并集。**
+- `git_push_retry.sh` 普通 rebase 冲突时改用 `git rebase -X ours` 重试：同名集的产物是等价
+  重复劳动，保留远程那一份，本片其它文件照常提交，不再整片卡住。
 - 重试上限跨片生效：任一 state 里记满 3 次失败即不再分给任何片，要捞回来得手动改对应 state。
 - 配额用尽不是失败：`process_episode` 直接上抛 `QuotaExhausted`，不记 attempts，`run_pipeline` 打印
   "Gemini 配额用尽，本轮停在这里"后正常退出——补配额后重发同一片即可续跑。

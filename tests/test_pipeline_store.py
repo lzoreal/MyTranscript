@@ -49,6 +49,24 @@ class StoreTests(unittest.TestCase):
             blocked = pstore.blocked_guids(data, "pod")
         self.assertEqual(blocked, {"done", "dead"}, "分片换了也别忘了已到上限的集")
 
+    def test_plan_is_reused_only_within_the_same_run(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data = Path(temp_dir)
+            pstore.save_plan(data, "pod", 3, "run-1", ["b", "a"])
+            path = pstore.plan_path(data, "pod", 3)
+            self.assertEqual(pstore.read_plan(path, "run-1"), ["b", "a"])
+            self.assertIsNone(pstore.read_plan(path, "run-2"))
+            self.assertIsNone(pstore.read_plan(path, ""))
+
+    def test_claimed_guids_cover_other_shards_not_own(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data = Path(temp_dir)
+            pstore.save_plan(data, "pod", 0, "run-1", ["a", "b"])
+            pstore.save_plan(data, "pod", 1, "run-1", ["c"])
+            pstore.save_plan(data, "pod", 2, "run-0", ["stale"])
+            self.assertEqual(pstore.claimed_guids(data, "pod", "run-1", 0), {"c"})
+            self.assertEqual(pstore.claimed_guids(data, "pod", "run-1", 1), {"a", "b"})
+
     def test_episode_document_is_compact_and_complete(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "g1.json"

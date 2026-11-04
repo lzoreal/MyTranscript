@@ -74,6 +74,44 @@ def save_state(data_dir: Path, slug: str, state: dict[str, Any], suffix: str = "
     )
 
 
+def plan_path(data_dir: Path, slug: str, shard: int) -> Path:
+    """每片一份分片计划，和 state 一样各写各的。"""
+    return show_dir(data_dir, slug) / f"plan-{shard}.json"
+
+
+def read_plan(path: Path, run_id: str) -> list[str] | None:
+    """只有同一个 run 的计划才算数：换 run 后待办集变了，必须重切。"""
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(data, dict) or data.get("run_id") != run_id:
+        return None
+    return list(data.get("guids") or [])
+
+
+def save_plan(data_dir: Path, slug: str, shard: int, run_id: str,
+              guids: list[str]) -> None:
+    _atomic_write(
+        plan_path(data_dir, slug, shard),
+        json.dumps({"run_id": run_id, "guids": list(guids)},
+                   ensure_ascii=False, separators=(",", ":")),
+    )
+
+
+def claimed_guids(data_dir: Path, slug: str, run_id: str, shard: int) -> set[str]:
+    """其它分片本轮已认领的集——它们可能正在跑，state 里还看不见。"""
+    own = plan_path(data_dir, slug, shard)
+    claimed: set[str] = set()
+    for path in sorted(show_dir(data_dir, slug).glob("plan-*.json")):
+        if path == own:
+            continue
+        guids = read_plan(path, run_id)
+        if guids:
+            claimed.update(guids)
+    return claimed
+
+
 def needs_work(state: dict[str, Any], guid: str) -> bool:
     record = state.get("episodes", {}).get(guid) or {}
     if record.get("status") == "done":

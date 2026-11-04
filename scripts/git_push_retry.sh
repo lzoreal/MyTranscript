@@ -41,8 +41,14 @@ for attempt in 1 2 3 4 5; do
   fi
   if ! git rebase "origin/${branch}"; then
     git rebase --abort
-    echo "rebase 冲突：本 job 与其它 job 改了同一个文件，需要人工处理" >&2
-    exit 1
+    # 两片重跑同一集时，data/<slug>/<guid>.json 会 add/add 冲突。同一集的产物是
+    # 等价的，保留远程那一份，本片的重复劳动丢掉即可——否则整片的提交都推不上去。
+    echo "rebase 冲突，改用保留远程版本重试"
+    if ! git rebase -X ours "origin/${branch}"; then
+      git rebase --abort
+      echo "rebase 冲突：非内容冲突无法自动取远程，需要人工处理" >&2
+      exit 1
+    fi
   fi
   sleep "$((attempt + RANDOM % 4))"
 done
