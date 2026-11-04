@@ -61,11 +61,15 @@ def build(document: dict) -> dict:
         segment = _segment(sentence)
         if segment is not None:
             segments.append(segment)
-    return {
+    out = {
         "version": "1.0.0",
         "audio_seconds": float(document.get("audio_seconds") or 0),
         "segments": segments,
     }
+    # 导出侧靠它确认同名文件的归属；消费方会忽略这个扩展字段。
+    if document.get("guid"):
+        out["guid"] = document["guid"]
+    return out
 
 
 def dumps(document: dict) -> str:
