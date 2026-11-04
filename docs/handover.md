@@ -62,8 +62,8 @@ Translate（每天 19:00 UTC + crawl/transcribe 成功后 + 手动）
 | `scripts/publish_site.py` | 111 | publish job 入口：读 progress、写 `json/`、登记 progress | `main`、`merge_progress` |
 | `scripts/word_transcript.py` | 97 | 内部 JSON → 公开词级 JSON（官方字段 + fork 扩展）与 raw URL | `build`、`export_show`、`public_url` |
 | `scripts/export_word_json.py` | 69 | 手动补导出：`--progress` 或 `--state` | `stems_from_progress`、`stems_from_state` |
-| `scripts/gemini_keys.py` | 106 | Gemini 多 key 顺序轮换与错误分类（两条链路共用） | `GeminiKeyRing`、`is_quota_error`、`is_auth_error` |
-| `scripts/git_push_retry.sh` | 51 | 并发安全的提交与推送 | — |
+| `scripts/gemini_keys.py` | 149 | Gemini 配额桶（模型 × key）顺序轮换与错误分类（两条链路共用） | `GeminiKeyRing`、`gemini_models`、`is_quota_error`、`is_auth_error` |
+| `scripts/git_push_retry.sh` | 57 | 并发安全的提交与推送 | — |
 
 ## 四、持久化与站点结构
 
@@ -291,6 +291,12 @@ for f in tests/test_*.py; do python "$f"; done     # 6 个文件、174 个用例
 - 重试上限跨片生效：任一 state 里记满 3 次失败即不再分给任何片，要捞回来得手动改对应 state。
 - 配额用尽不是失败：`process_episode` 直接上抛 `QuotaExhausted`，不记 attempts，`run_pipeline` 打印
   "Gemini 配额用尽，本轮停在这里"后正常退出——补配额后重发同一片即可续跑。
+- 日额度按 **(key, model)** 计，所以轮换单位是桶而不是 key：`GEMINI_MODELS`（逗号分隔）里
+  每个模型都是一份额度，先走完一个模型的所有 key 再换下一个，**表上所有模型都耗尽**才抛
+  `QuotaExhausted`。实测 2026-11-04 那一轮：单模型时 20 片 15 分钟就把额度打空，只产出 1 集。
+  `GEMINI_MODELS` 没配时退回单个 `GEMINI_MODEL`，行为与轮换前一致。
+- 健康度（`data/.key-health/shard-<N>.json`）也按 (key, model) 判死：`run_pipeline` 启动时取
+  **轮换表上每个模型都判死**的交集作为排除表——只在某个模型上耗尽的 key，换个模型还能用。
 - 单个 job 的 `timeout-minutes` 是 360；`MAX_MINUTES` 要在开跑下一集前判断，所以整片时长
   ≈ `MAX_MINUTES` + 一集耗时，两者之和必须小于 360。
 

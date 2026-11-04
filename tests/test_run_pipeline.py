@@ -173,6 +173,41 @@ class EnvTests(unittest.TestCase):
             runmod.publish_key_health({"shard": 2, "shards": 10})
             self.assertEqual(os.environ["GEMINI_KEY_OFFSET"], "2")
 
+    def test_publish_key_health_keeps_keys_dead_only_on_one_model(self):
+        # 额度按 (key, model) 计：某把 key 只在轮换表的一个模型上耗尽时，
+        # 别的模型还能用它，所以只有"每个模型都判死"的 key 才整体排除。
+        with tempfile.TemporaryDirectory() as temp_dir:
+            now = time.time()
+            models = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
+            runmod.pkeyhealth.record(
+                Path(temp_dir) / "shard-1.json", "k-half-dead", "quota",
+                model=models[0], now=now)
+            for index, model in enumerate(models):
+                runmod.pkeyhealth.record(
+                    Path(temp_dir) / f"shard-{2 + index}.json", "k-all-dead",
+                    "quota", model=model, now=now)
+            # 鉴权失败与模型无关：任何模型上都算死。
+            runmod.pkeyhealth.record(
+                Path(temp_dir) / "shard-9.json", "k-auth-dead", "auth",
+                model=models[0], now=now)
+            with patch.dict(
+                "os.environ",
+                {
+                    "GEMINI_HEALTH_DIR": temp_dir,
+                    "GEMINI_MODELS": ", ".join(models),
+                    "GEMINI_EXCLUDE_KEYS": "",
+                },
+            ):
+                runmod.publish_key_health({"shard": 0, "shards": 10})
+                self.assertEqual(
+                    set(os.environ["GEMINI_EXCLUDE_KEYS"].split(",")),
+                    {
+                        runmod.pkeyhealth.key_id("k-all-dead"),
+                        runmod.pkeyhealth.key_id("k-auth-dead"),
+                    },
+                    "只在单个模型上耗尽的 key 不能被排除",
+                )
+
     def test_run_pauses_on_quota_instead_of_failing_episodes(self):
         seen = []
 
