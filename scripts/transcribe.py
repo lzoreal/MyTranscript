@@ -39,7 +39,7 @@ from google.genai import types
 PODCAST_SLUG = os.getenv("PODCAST_SLUG", "podcast").strip()
 FEED_URL = os.getenv("FEED_URL", "").strip()
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base.en").strip()
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite").strip()
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "").strip()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 GEMINI_API_KEYS_RAW = os.getenv("GEMINI_API_KEYS", "").strip()
 
@@ -53,10 +53,15 @@ from gemini_keys import (  # noqa: E402  （顺序轮换与错误分类的共享
     GeminiAuthFailed,
     GeminiKeyRing,
     QuotaExhausted,
+    gemini_models,
     is_auth_error,
     is_quota_error,
     parse_gemini_keys,
 )
+
+# 日额度按 (key, model) 计：轮换表上每个模型都是一份额度，全部耗尽才算本轮没额度。
+GEMINI_MODELS = gemini_models()
+GEMINI_MODEL = GEMINI_MODEL or GEMINI_MODELS[0]
 
 GEMINI_KEYS = parse_gemini_keys(GEMINI_API_KEYS_RAW) or (
     [GEMINI_API_KEY] if GEMINI_API_KEY else []
@@ -1138,7 +1143,7 @@ def is_untranslatable(text: str) -> bool:
 
 
 def translate_batch_once(
-    client: genai.Client, blocks: list[tuple[int, dict[str, Any]]]
+    client: genai.Client, model: str, blocks: list[tuple[int, dict[str, Any]]]
 ) -> dict[int, str]:
     source = {index: cue["en"] for index, cue in blocks}
     keys = sorted(source)
@@ -1150,11 +1155,16 @@ def translate_batch_once(
         config_args["response_schema"] = build_translation_schema(keys)
     wait_for_gemini_rate_limit()
     response = client.models.generate_content(
-        model=GEMINI_MODEL,
+        model=model,
         contents=build_translation_prompt(blocks),
         config=types.GenerateContentConfig(**config_args),
     )
     return parse_translation_object(response.text or "", source)
+
+
+def _ring_model(ring: GeminiKeyRing) -> str:
+    """当前桶的模型：调用方自带模型名的环（models=None）退回配置里的默认模型。"""
+    return ring.current_model() or GEMINI_MODEL
 
 
 def translate_blocks(
@@ -1170,7 +1180,9 @@ def translate_blocks(
     while pending:
         try:
             ring.requests += 1
-            translated.update(translate_batch_once(ring.client(), pending))
+            translated.update(
+                translate_batch_once(ring.client(), _ring_model(ring), pending)
+            )
             return
         except (QuotaExhausted, GeminiAuthFailed):
             raise
@@ -1188,10 +1200,13 @@ def translate_blocks(
                     failed_key = ring.current()
                 except QuotaExhausted:
                     failed_key = ""
-                _record_key_failure(failed_key, "quota" if quota else "auth")
+                _record_key_failure(
+                    failed_key, "quota" if quota else "auth", _ring_model(ring)
+                )
                 if not ring.mark_exhausted():
                     message = (
-                        f"{kind}，所有 key 已用尽（本进程已发 {ring.requests} 次请求）"
+                        f"{kind}，所有模型的所有 key 已用尽"
+                        f"（本进程已发 {ring.requests} 次请求）"
                     )
                     if all(item == "auth" for item in ring.switch_kinds):
                         raise GeminiAuthFailed(message) from exc
@@ -1255,15 +1270,15 @@ def _key_offset() -> int:
         return 0
 
 
-def _record_key_failure(key: str, kind: str) -> None:
-    """把"这把 key 现在不可用"写给其它分片；写失败不影响翻译。"""
+def _record_key_failure(key: str, kind: str, model: str) -> None:
+    """把"这把 key 在这个模型上不可用"写给其它分片；写失败不影响翻译。"""
     directory = os.getenv("GEMINI_HEALTH_DIR", "").strip()
     if not directory or not key:
         return
     try:
         shard = os.getenv("SHARD", "0") or "0"
         key_health.record(Path(directory) / f"shard-{shard}.json", key, kind,
-                          model=GEMINI_MODEL)
+                          model=model)
     except Exception as exc:  # 健康度只是优化，不能打断翻译
         log.debug("写入 key 健康度失败：%s", exc)
 
@@ -1276,7 +1291,7 @@ def translate_cues_with_gemini(cues: list[dict[str, Any]]) -> list[dict[str, Any
         raise QuotaExhausted("所有 key 都被其它分片标记为暂不可用（按 TTL 自动恢复）")
     if len(keys) < len(GEMINI_KEYS):
         log.info("跳过其它分片标记不可用的 key：%d 把", len(GEMINI_KEYS) - len(keys))
-    ring = GeminiKeyRing(keys, start=_key_offset())
+    ring = GeminiKeyRing(keys, start=_key_offset(), models=GEMINI_MODELS)
     verbatim = 0
     for cue in cues:
         if is_untranslatable(cue.get("en", "")):
@@ -1286,10 +1301,11 @@ def translate_cues_with_gemini(cues: list[dict[str, Any]]) -> list[dict[str, Any
         log.info("无需翻译的链接/邮箱：%d 条（中文照抄原文）", verbatim)
     batches = build_translation_batches([cue for cue in cues if not cue.get("zh")])
     log.info(
-        "Gemini 翻译开始：%d 条字幕，%d 个初始批次，模型=%s，key=%d 把，限速=%d RPM（请求间隔至少 %.2f 秒）",
+        "Gemini 翻译开始：%d 条字幕，%d 个初始批次，模型轮换=%s，key=%d 把，"
+        "限速=%d RPM（请求间隔至少 %.2f 秒）",
         len(cues),
         len(batches),
-        GEMINI_MODEL,
+        "+".join(GEMINI_MODELS),
         len(GEMINI_KEYS),
         GEMINI_RPM,
         GEMINI_REQUEST_INTERVAL,

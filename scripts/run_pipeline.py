@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 
 import key_health as pkeyhealth
+import gemini_keys as pkeys
 import pipeline_config as pconfig
 import pipeline_episode as pepisode
 import pipeline_store as pstore
@@ -55,13 +56,18 @@ def run(shows, *, deps_factory, data_dir, max_minutes, reserve_minutes=0,
 
 
 def publish_key_health(env) -> None:
-    """把其它分片记下的不可用 key 转成本进程的排除表，并错开起始 key。"""
+    """把其它分片记下的不可用 key 转成本进程的排除表，并错开起始桶。"""
     os.environ["GEMINI_KEY_OFFSET"] = str(env["shard"])
     directory = os.getenv("GEMINI_HEALTH_DIR", "").strip()
     if not directory:
         return
-    model = (os.getenv("GEMINI_MODEL", "") or "").strip() or None
-    dead = sorted(pkeyhealth.dead_ids(Path(directory), model=model))
+    # 额度按 (key, model) 计：只在某个模型上耗尽的 key，换个模型还能用，
+    # 所以只排除"轮换表上每个模型都判死"的那些。
+    per_model = [
+        pkeyhealth.dead_ids(Path(directory), model=model)
+        for model in pkeys.gemini_models()
+    ]
+    dead = sorted(set.intersection(*per_model))
     os.environ["GEMINI_EXCLUDE_KEYS"] = ",".join(dead)
     if dead:
         print(f"跳过其它分片标记不可用的 key：{len(dead)} 把")

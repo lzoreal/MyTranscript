@@ -898,6 +898,110 @@ class GeminiRotationTranslateTests(unittest.TestCase):
                     ring, [(0, {"en": "Hello there friend"})], {}
                 )
 
+    def test_quota_switches_model_before_giving_up(self):
+        # 一个模型的日额度用完不等于本轮结束：请求要按轮换表打到下一个模型上，
+        # 只有所有模型都耗尽才抛 QuotaExhausted 让分片暂停。
+        calls = []
+
+        class Client:
+            def __init__(self, api_key):
+                self.api_key = api_key
+
+            @property
+            def models(self):
+                return self
+
+            def generate_content(self, model=None, contents=None, config=None):
+                calls.append((model, self.api_key))
+                if model == "gemini-3.5-flash-lite":
+                    raise _QuotaError("429 RESOURCE_EXHAUSTED")
+                return SimpleNamespace(text=json.dumps({"0": "译0"}))
+
+        ring = transcriber.GeminiKeyRing(
+            ["k1"],
+            factory=Client,
+            models=["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"],
+        )
+        translated = {}
+        with patch.object(transcriber, "wait_for_gemini_rate_limit"):
+            transcriber.translate_blocks(
+                ring, [(0, {"en": "Hello there friend"})], translated
+            )
+        self.assertEqual(translated, {0: "译0"})
+        self.assertEqual(
+            calls,
+            [
+                ("gemini-3.5-flash-lite", "k1"),
+                ("gemini-3.1-flash-lite", "k1"),
+            ],
+        )
+
+    def test_quota_error_asks_for_more_models_than_the_ring_would_reach(self):
+        # 两个模型都耗尽才停：单模型时 2 把 key 只要 2 次请求，双模型要 4 次。
+        seen = []
+
+        class Client:
+            @property
+            def models(self):
+                return self
+
+            def generate_content(self, model=None, contents=None, config=None):
+                seen.append(model)
+                raise _QuotaError("429 RESOURCE_EXHAUSTED")
+
+        ring = transcriber.GeminiKeyRing(
+            ["k1", "k2"], factory=lambda api_key: Client(), models=["m-a", "m-b"]
+        )
+        with patch.object(transcriber, "wait_for_gemini_rate_limit"), patch.object(
+            transcriber.time, "sleep"
+        ):
+            with self.assertRaises(transcriber.QuotaExhausted):
+                transcriber.translate_blocks(
+                    ring, [(0, {"en": "Hello there friend"})], {}
+                )
+        self.assertEqual(
+            seen[:4], ["m-a", "m-a", "m-b", "m-b"], "耗尽顺序要先走完一个模型的所有 key"
+        )
+        self.assertEqual(set(seen), {"m-a", "m-b"})
+
+    def test_health_records_the_model_that_just_failed(self):
+        # 健康度按 (key, model) 判死：3.5 耗尽不该让 3.1 也跳过这把 key。
+        with tempfile.TemporaryDirectory() as temp_dir:
+            health = Path(temp_dir) / "shard-7.json"
+
+            class Client:
+                @property
+                def models(self):
+                    return self
+
+                def generate_content(self, model=None, contents=None, config=None):
+                    if model == "gemini-3.5-flash-lite":
+                        raise _QuotaError("429 RESOURCE_EXHAUSTED")
+                    return SimpleNamespace(text=json.dumps({"0": "译0"}))
+
+            ring = transcriber.GeminiKeyRing(
+                ["k1"],
+                factory=lambda api_key: Client(),
+                models=["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"],
+            )
+            with patch.object(
+                transcriber, "wait_for_gemini_rate_limit"
+            ), patch.dict(
+                os.environ,
+                {"GEMINI_HEALTH_DIR": temp_dir, "SHARD": "7"},
+                clear=False,
+            ):
+                translated = {}
+                transcriber.translate_blocks(
+                    ring, [(0, {"en": "Hello there friend"})], translated
+                )
+            self.assertEqual(translated, {0: "译0"})
+            entry = json.loads(health.read_text(encoding="utf-8"))
+            self.assertEqual(len(entry), 1, "只记刚失败的那一把 key")
+            recorded = next(iter(entry.values()))
+            self.assertEqual(recorded["kind"], "quota")
+            self.assertEqual(recorded["model"], "gemini-3.5-flash-lite")
+
     def test_auth_failed_is_not_a_quota_error(self):
         exc = transcriber.GeminiAuthFailed("所有 key 都被拒绝")
         self.assertFalse(transcriber.is_quota_error(exc))
@@ -1016,9 +1120,9 @@ class TranslationPairingTests(unittest.TestCase):
         cues = self.cues if cues is None else cues
         real_ring = transcriber.GeminiKeyRing
 
-        def make_ring(keys, factory=None, start=0):
+        def make_ring(keys, factory=None, start=0, models=None):
             # 只替换底层 client；轮换逻辑仍走真实的 GeminiKeyRing。
-            return real_ring(["test-key"], factory=lambda api_key: fake)
+            return real_ring(["test-key"], factory=lambda api_key: fake, models=models)
 
         with patch.object(transcriber, "GeminiKeyRing", make_ring), patch.object(
             transcriber, "wait_for_gemini_rate_limit", lambda: None
@@ -1081,8 +1185,10 @@ class SharedKeyHealthTests(unittest.TestCase):
 
         real_ring = transcriber.GeminiKeyRing
 
-        def make_ring(keys, factory=None, start=0):
-            return real_ring(keys, factory=lambda api_key: Client(api_key), start=start)
+        def make_ring(keys, factory=None, start=0, models=None):
+            return real_ring(
+                keys, factory=lambda api_key: Client(api_key), start=start, models=models
+            )
 
         cues = [{"start": 0.0, "end": 1.0, "en": "Hello there friend"}]
         with patch.object(transcriber, "GEMINI_KEYS", ["k1", "k2", "k3"]), patch.object(

@@ -1,6 +1,8 @@
 import importlib.util
+import os
 import unittest
 from pathlib import Path
+from unittest import mock
 
 MODULE = Path(__file__).parents[1] / "scripts" / "gemini_keys.py"
 SPEC = importlib.util.spec_from_file_location("gemini_keys", MODULE)
@@ -42,6 +44,66 @@ class RingTests(unittest.TestCase):
     def test_empty_list_is_rejected(self):
         with self.assertRaises(keys_mod.QuotaExhausted):
             keys_mod.GeminiKeyRing([])
+
+    def test_rotates_through_every_model_before_giving_up(self):
+        # 日额度按 (key, model) 计：一个模型的 key 全耗尽只是少了一份额度，
+        # 必须继续换下一个模型；轮换表上所有模型的所有 key 都用完才算耗尽。
+        ring = keys_mod.GeminiKeyRing(
+            ["key-aaaa", "key-bbbb"],
+            factory=lambda k: object(),
+            models=["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"],
+        )
+        seen = []
+        while ring.available:
+            seen.append((ring.current_model(), ring.current()))
+            ring.mark_exhausted()
+        self.assertEqual(
+            seen,
+            [
+                ("gemini-3.5-flash-lite", "key-aaaa"),
+                ("gemini-3.5-flash-lite", "key-bbbb"),
+                ("gemini-3.1-flash-lite", "key-aaaa"),
+                ("gemini-3.1-flash-lite", "key-bbbb"),
+            ],
+        )
+
+    def test_label_shows_the_current_model(self):
+        ring = keys_mod.GeminiKeyRing(
+            ["key-aaaa"], factory=lambda k: object(), models=["m-one", "m-two"]
+        )
+        ring.mark_exhausted()
+        self.assertEqual(ring.current_model(), "m-two")
+        self.assertIn("m-two", ring.label(), "换模型的日志要能看出现在用哪个模型")
+        self.assertNotIn("key-aaaa", ring.label(), "标签不能泄露完整 key")
+
+    def test_start_offset_spreads_shards_over_models(self):
+        # 各分片从不同槽位起跑：2 模型 × 2 key 时，第 4 片落在第二个模型上。
+        ring = keys_mod.GeminiKeyRing(
+            ["k1", "k2"], factory=lambda k: object(), models=["m1", "m2"], start=3
+        )
+        self.assertEqual((ring.current_model(), ring.current()), ("m2", "k2"))
+
+    def test_single_model_keeps_the_old_shape(self):
+        ring = keys_mod.GeminiKeyRing(["k1", "k2"], factory=lambda k: object())
+        self.assertEqual(len(ring), 2)
+        self.assertIsNone(ring.current_model())
+        self.assertEqual(ring.label(), "#1（…****）")
+
+
+class ModelListTests(unittest.TestCase):
+    def test_rotation_list_from_env_dedupes_and_keeps_order(self):
+        with mock.patch.dict(
+            os.environ, {"GEMINI_MODELS": "m2, m1\nm2", "GEMINI_MODEL": "m0"}
+        ):
+            self.assertEqual(keys_mod.gemini_models(), ["m2", "m1"])
+
+    def test_falls_back_to_the_single_model_variable(self):
+        with mock.patch.dict(os.environ, {"GEMINI_MODELS": "", "GEMINI_MODEL": "m0"}):
+            self.assertEqual(keys_mod.gemini_models(), ["m0"])
+
+    def test_unconfigured_falls_back_to_the_default_model(self):
+        with mock.patch.dict(os.environ, {"GEMINI_MODELS": "", "GEMINI_MODEL": ""}):
+            self.assertEqual(keys_mod.gemini_models(), [keys_mod.DEFAULT_MODEL])
 
 
 class ClientFactoryTests(unittest.TestCase):

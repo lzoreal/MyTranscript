@@ -1,5 +1,7 @@
-"""Gemini 多 key 的顺序轮换：配额/鉴权失败就切下一把，全部耗尽即停。
+"""Gemini 配额桶（模型 × key）的顺序轮换：耗尽就切下一桶，全部用尽即停。
 
+日额度按 (key, model) 分开计，轮换表上每个模型都是一份额度：一个模型的 key
+全用完只是少了一份，要等所有模型都用完才算本轮真的没额度。
 轮换状态只在进程内有效——配额按天重置，跨轮沿用会把恢复的 key 永久排除。
 """
 
@@ -8,6 +10,8 @@ from __future__ import annotations
 import os
 import re
 from typing import Any, Callable
+
+DEFAULT_MODEL = "gemini-3.1-flash-lite"
 
 QUOTA_MARKERS = (
     "resource_exhausted",
@@ -21,7 +25,7 @@ AUTH_MARKERS = ("api_key_invalid", "api key not valid")
 
 
 class QuotaExhausted(RuntimeError):
-    """所有 Gemini key 都用尽；调用方应停止本轮、下轮再续。"""
+    """轮换表上所有模型的所有 key 都用尽；调用方应停止本轮、下轮再续。"""
 
 
 class GeminiAuthFailed(RuntimeError):
@@ -35,6 +39,14 @@ def parse_gemini_keys(raw: str) -> list[str]:
         if key and key not in keys:
             keys.append(key)
     return keys
+
+
+def gemini_models() -> list[str]:
+    """轮换的模型表：GEMINI_MODELS 优先，没配就退回单个 GEMINI_MODEL。"""
+    models = parse_gemini_keys(os.getenv("GEMINI_MODELS", ""))
+    if models:
+        return models
+    return [(os.getenv("GEMINI_MODEL", "") or "").strip() or DEFAULT_MODEL]
 
 
 GEMINI_TIMEOUT_MS = max(1000, int(os.getenv("GEMINI_TIMEOUT_MS", "120000")))
@@ -52,20 +64,26 @@ def _default_factory(api_key: str):
 
 
 class GeminiKeyRing:
-    """顺序轮换 key：同一时刻只用一把，耗尽就切下一把。"""
+    """顺序轮换配额桶：同一时刻只用一个 (model, key)，耗尽就切下一个。"""
 
     def __init__(
         self,
         keys: list[str],
         factory: Callable[[str], Any] | None = None,
         start: int = 0,
+        models: list[str] | None = None,
     ):
         if not keys:
             raise QuotaExhausted("没有任何可用的 Gemini key")
         self._keys = list(keys)
+        # 先走完一个模型的所有 key 再换模型：日额度是整块没的，同模型内换 key 救不回来。
+        # models=None 表示调用方自己带模型名（如 translate_vtt），桶只按 key 分。
+        self._slots = [
+            (model, key) for model in (models or [None]) for key in self._keys
+        ]
         self._clients: dict[str, Any] = {}
-        # 各分片从不同的 key 起跑，否则所有 job 同时压在同一把 key 上。
-        self._index = int(start) % len(self._keys)
+        # 各分片从不同的桶起跑，否则所有 job 同时压在同一把 key 上。
+        self._index = int(start) % len(self._slots)
         self._factory = factory or _default_factory
         self.requests = 0
         # 已用掉的"全 key 429 冷却"次数（每进程上限，防止每日额度用完后一直等）
@@ -74,28 +92,32 @@ class GeminiKeyRing:
         self.switch_kinds: list[str] = []
 
     def __len__(self) -> int:
-        return len(self._keys)
+        return len(self._slots)
 
     @property
     def available(self) -> bool:
-        return self._index < len(self._keys)
+        return self._index < len(self._slots)
 
     def label(self) -> str:
         if not self.available:
             return "#-（…****）"
-        key = self._keys[self._index]
+        model, key = self._slots[self._index]
         tail = key[-4:] if len(key) > 4 else "****"
-        return f"#{self._index + 1}（…{tail}）"
+        return f"#{self._index + 1}（{f'{model} ' if model else ''}…{tail}）"
+
+    def _current(self) -> tuple[str | None, str]:
+        if not self.available:
+            raise QuotaExhausted("所有 Gemini 模型的所有 key 都已耗尽")
+        return self._slots[self._index]
 
     def current(self) -> str:
-        if not self.available:
-            raise QuotaExhausted("所有 Gemini key 都已耗尽")
-        return self._keys[self._index]
+        return self._current()[1]
+
+    def current_model(self) -> str | None:
+        return self._current()[0]
 
     def client(self):
-        if not self.available:
-            raise QuotaExhausted("所有 Gemini key 都已耗尽")
-        key = self._keys[self._index]
+        key = self.current()
         if key not in self._clients:
             self._clients[key] = self._factory(key)
         return self._clients[key]
