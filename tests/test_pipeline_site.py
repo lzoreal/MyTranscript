@@ -89,6 +89,63 @@ class NamingTests(unittest.TestCase):
         self.assertEqual(len(stem.split("_")[-1]), 8)
 
 
+class DuplicateTitleTests(unittest.TestCase):
+    def _stems(self, documents, processed=None, exported=None):
+        import scraper
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            old = scraper.SITE_DIR
+            scraper.SITE_DIR = Path(temp_dir)
+            try:
+                return site.assign_stems(
+                    documents, "pod", processed or {}, exported
+                )
+            finally:
+                scraper.SITE_DIR = old
+
+    def test_colliding_titles_get_distinct_stems(self):
+        stems = self._stems(
+            [{"guid": "g1", "title": "Same"}, {"guid": "g2", "title": "Same"}]
+        )
+        self.assertEqual(len(set(stems.values())), 2)
+        self.assertEqual(stems["g1"], "Same")
+        self.assertTrue(stems["g2"].startswith("Same_"))
+
+    def test_existing_export_owner_keeps_the_base_name(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            exported = Path(temp_dir) / "json" / "pod"
+            exported.mkdir(parents=True)
+            (exported / "Same.json").write_text(
+                json.dumps({"guid": "g2"}), encoding="utf-8"
+            )
+            stems = self._stems(
+                [{"guid": "g1", "title": "Same"}, {"guid": "g2", "title": "Same"}],
+                exported=exported,
+            )
+        self.assertEqual(stems["g2"], "Same")
+        self.assertNotEqual(stems["g1"], "Same")
+
+    def test_foreign_export_does_not_switch_old_episode_to_json(self):
+        progress = {
+            "podcasts": {
+                "pod": {
+                    "processed": {"old": {"vtt_filename": "Same.vtt"}},
+                }
+            }
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            exported = Path(temp_dir) / "json" / "pod"
+            exported.mkdir(parents=True)
+            (exported / "Same.json").write_text(
+                json.dumps({"guid": "other"}), encoding="utf-8"
+            )
+            merged = site.merged_processed(
+                progress, "pod", {}, Path(temp_dir) / "json"
+            )
+        self.assertNotIn("transcript_filename", merged["old"])
+        self.assertEqual(merged["old"]["vtt_filename"], "Same.vtt")
+
+
 class MergeTests(unittest.TestCase):
     def test_old_and_new_episodes_are_merged(self):
         progress = {
