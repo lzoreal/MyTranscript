@@ -250,12 +250,16 @@ for f in tests/test_*.py; do python "$f"; done     # 6 个文件、174 个用例
 > 2026-11-02：产物原来在独立的 `word-transcripts` 分支，现已并入 main。分片直接提交 `data/`
 > 到 main；`deploy.yml` 因此加了 `paths: ["site/**"]`，数据提交不再触发 Pages 部署。
 > 旧分支保留作历史备份，CI 不再读取。
+>
+> 2026-11-04：公开词级 JSON 增加 `guid` 扩展字段，导出侧用它确认同名文件归属。同名集
+> （如 smartless 的 Sandra Bullock / Stephen Colbert）不再互相覆盖，后迁移的集文件名带
+> guid 指纹后缀；老 progress 条目只有在该 JSON 确实属于本集时才切到 JSON。
 
 ### 模块
 
 | 文件 | 职责 |
 | --- | --- |
-| `scripts/pipeline_config.py` | 读/校验 `feeds.json`，按 guid 分片，列 RSS 条目 |
+| `scripts/pipeline_config.py` | 读/校验 `feeds.json`，待办集平均分片，列 RSS 条目 |
 | `scripts/pipeline_text.py` | 文本源：`asr` 直接用 ASR 句子；`podscripts` 抓取后映射到词流 |
 | `scripts/clause_translation.py` | 小句翻译契约（en 拼接必须等于原句） |
 | `scripts/zh_align.py` | 中文分词驱动的时间分配 + DTW 兜底 |
