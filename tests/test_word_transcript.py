@@ -51,6 +51,10 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(seg["body"], "Hello there.\n你好。")
         self.assertEqual(seg["text"], seg["body"])
 
+    def test_exports_guid_so_naming_can_verify_ownership(self):
+        self.assertEqual(wt.build(DOC)["guid"], "g1")
+        self.assertNotIn("guid", wt.build({**DOC, "guid": None}))
+
     def test_extension_fields_are_ms_and_monotonic(self):
         seg = wt.build(DOC)["segments"][0]
         self.assertEqual(seg["start"], 0)
