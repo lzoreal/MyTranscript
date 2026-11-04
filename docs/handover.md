@@ -271,11 +271,12 @@ for f in tests/test_*.py; do python "$f"; done     # 6 个文件、174 个用例
 
 ### 分片与续跑
 
-- 分片的单位是**集**，不是节目：`sha1(guid) % shards == shard`。一个节目 121 集也能切给 16 个 job，
-  同一集永远落在同一片。
+- 分片的单位是**集**，不是节目：先剔除已完成（以及重试到上限）的集，剩下的按 guid 排序后
+  轮流分给各片，各片待办数差不超过 1。同一份待办集切出的结果可复现；待办集变化时同一集
+  可能换片，所以判重要看所有 state 的并集。
 - 每片写自己的 `data/<slug>/state-<shard>.json`（单片时仍叫 `state.json`）。分片之间不共享状态文件，
   并发 push 时各改各的文件，`git_push_retry.sh` 的 rebase 不会撞车。**完成的集要看所有 state 的并集。**
-- `needs_work` 只认本片状态：某集在某片失败两次就永久出局，要捞回来得手动改该片 state。
+- 重试上限跨片生效：任一 state 里记满 3 次失败即不再分给任何片，要捞回来得手动改对应 state。
 - 配额用尽不是失败：`process_episode` 直接上抛 `QuotaExhausted`，不记 attempts，`run_pipeline` 打印
   "Gemini 配额用尽，本轮停在这里"后正常退出——补配额后重发同一片即可续跑。
 - 单个 job 的 `timeout-minutes` 是 360；`MAX_MINUTES` 要在开跑下一集前判断，所以整片时长

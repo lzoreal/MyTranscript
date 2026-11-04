@@ -48,6 +48,25 @@ def done_guids(data_dir: Path, slug: str) -> set[str]:
     return done
 
 
+def blocked_guids(data_dir: Path, slug: str) -> set[str]:
+    """已完成 + 重试次数到上限的 guid，分片时直接排除。
+
+    待办集是跨分片重新轮流分配的，某集在 A 片记满 3 次失败后，下一轮可能
+    落到 B 片；只看 B 片自己的 state 会把它当新集再试一遍。
+    """
+    blocked: set[str] = set()
+    for path in sorted(show_dir(data_dir, slug).glob("state*.json")):
+        for guid, entry in _read_state(path).get("episodes", {}).items():
+            if not isinstance(entry, dict):
+                continue
+            if entry.get("status") == "done" or (
+                entry.get("status") == "failed"
+                and int(entry.get("attempts") or 0) >= MAX_ATTEMPTS
+            ):
+                blocked.add(guid)
+    return blocked
+
+
 def save_state(data_dir: Path, slug: str, state: dict[str, Any], suffix: str = "") -> None:
     _atomic_write(
         state_path(data_dir, slug, suffix),

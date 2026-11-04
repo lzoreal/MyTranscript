@@ -69,6 +69,23 @@ class EnvTests(unittest.TestCase):
         ]
         self.assertEqual(sum(len(part) for part in parts), len(episodes))
 
+    def test_prepared_shows_spread_pending_evenly(self):
+        episodes = [{"guid": f"g{i}"} for i in range(41)]
+        done = {f"g{i}" for i in range(0, 41, 2)}
+        shows = [{"slug": "a", "feed_url": "u", "text_source": "asr"}]
+        parts = [
+            runmod.prepare_shows(
+                shows, shard=i, shards=4,
+                list_episodes=lambda url: episodes,
+                blocked_lookup=lambda slug: done,
+            )[0]["episodes"]
+            for i in range(4)
+        ]
+        counts = [len(part) for part in parts]
+        self.assertLessEqual(max(counts) - min(counts), 1, counts)
+        picked = {e["guid"] for part in parts for e in part}
+        self.assertEqual(picked, {e["guid"] for e in episodes} - done)
+
     def test_single_shard_keeps_the_plain_state_file(self):
         shows = [{"slug": "a", "feed_url": "u", "text_source": "asr"}]
         got = runmod.prepare_shows(shows, shard=0, shards=1, list_episodes=lambda url: [{"guid": "g1"}])

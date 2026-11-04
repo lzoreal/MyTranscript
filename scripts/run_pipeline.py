@@ -10,6 +10,7 @@ from pathlib import Path
 import key_health as pkeyhealth
 import pipeline_config as pconfig
 import pipeline_episode as pepisode
+import pipeline_store as pstore
 
 
 def pipeline_env(env) -> dict:
@@ -64,15 +65,19 @@ def publish_key_health(env) -> None:
         print(f"跳过其它分片标记不可用的 key：{len(dead)} 把")
 
 
-def prepare_shows(shows, shard: int, shards: int, list_episodes=None):
+def prepare_shows(shows, shard: int, shards: int, list_episodes=None,
+                  blocked_lookup=None):
     list_episodes = list_episodes or pconfig.list_episodes
     prepared = []
     for show in shows:
         episodes = list_episodes(show["feed_url"])
+        blocked = blocked_lookup(show["slug"]) if blocked_lookup else None
         prepared.append(
             {
                 **show,
-                "episodes": pconfig.shard_episodes(episodes, shard=shard, shards=shards),
+                "episodes": pconfig.shard_episodes(
+                    episodes, shard=shard, shards=shards, done=blocked
+                ),
                 "state_suffix": "" if shards <= 1 else f"-{shard}",
             }
         )
@@ -100,7 +105,8 @@ def main() -> int:
         pconfig.load_feeds(env["feeds_file"]), only_slug=env["only_slug"]
     )
     prepared = prepare_shows(
-        shows, shard=env["shard"], shards=env["shards"]
+        shows, shard=env["shard"], shards=env["shards"],
+        blocked_lookup=lambda slug: pstore.blocked_guids(env["data_dir"], slug),
     )
     print(f"分片 {env['shard']}/{env['shards']}：节目 {len(prepared)}，"
           f"候选集 {sum(len(s['episodes']) for s in prepared)}")
