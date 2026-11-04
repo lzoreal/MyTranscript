@@ -22,13 +22,25 @@ class ConfigTests(unittest.TestCase):
                 pcfg.load_feeds(path)
 
     def test_sharding_is_stable_and_partitions_episodes(self):
-        # 一个节目 121 集也必须能切给多个 job：按 guid 切，同一集永远同一片。
+        # 一个节目 121 集也必须能切给多个 job：同一份候选集的分片结果可复现。
         episodes = [{"guid": f"g{i}"} for i in range(121)]
         parts = [pcfg.shard_episodes(episodes, shard=i, shards=8) for i in range(8)]
         self.assertEqual(sum(len(part) for part in parts), 121)
         seen = [e["guid"] for part in parts for e in part]
         self.assertEqual(len(seen), len(set(seen)))
         self.assertEqual(parts[0], pcfg.shard_episodes(episodes, shard=0, shards=8))
+
+    def test_sharding_balances_pending_work(self):
+        episodes = [{"guid": f"g{i}"} for i in range(121)]
+        done = {f"g{i}" for i in range(0, 121, 3)}
+        parts = [
+            pcfg.shard_episodes(episodes, shard=i, shards=8, done=done)
+            for i in range(8)
+        ]
+        counts = [len(part) for part in parts]
+        self.assertLessEqual(max(counts) - min(counts), 1, counts)
+        picked = {e["guid"] for part in parts for e in part}
+        self.assertEqual(picked, {e["guid"] for e in episodes} - done)
 
     def test_single_shard_keeps_every_episode(self):
         episodes = [{"guid": f"g{i}"} for i in range(5)]

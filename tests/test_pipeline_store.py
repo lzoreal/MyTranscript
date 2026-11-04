@@ -35,6 +35,20 @@ class StoreTests(unittest.TestCase):
         self.assertFalse(pstore.needs_work({"episodes": {"g1": {"status": "failed", "attempts": 3}}}, "g1"))
         self.assertTrue(pstore.needs_work({"episodes": {"g1": {"status": "failed", "attempts": 2}}}, "g1"))
 
+    def test_blocked_guids_merge_done_and_exhausted_across_shards(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data = Path(temp_dir)
+            pstore.save_state(data, "pod", {"episodes": {
+                "done": {"status": "done"},
+                "dead": {"status": "failed", "attempts": 3},
+            }})
+            pstore.save_state(data, "pod", {"episodes": {
+                "retry": {"status": "failed", "attempts": 2},
+                "dead": {"status": "failed", "attempts": 1},
+            }}, "-4")
+            blocked = pstore.blocked_guids(data, "pod")
+        self.assertEqual(blocked, {"done", "dead"}, "分片换了也别忘了已到上限的集")
+
     def test_episode_document_is_compact_and_complete(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "g1.json"

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 from typing import Any, Callable
@@ -29,21 +28,24 @@ def load_feeds(path: Path) -> list[dict[str, Any]]:
     return data
 
 
-def _shard_of(slug: str, shards: int) -> int:
-    return int(hashlib.sha1(slug.encode("utf-8")).hexdigest(), 16) % max(1, shards)
-
-
 def select_shows(shows, only_slug=None):
     if only_slug:
         return [show for show in shows if show["slug"] == only_slug]
     return list(shows)
 
 
-def shard_episodes(episodes, shard: int = 0, shards: int = 1):
-    """按 guid 分片：同一集永远落在同一片，各片的 state 文件互不重叠。"""
+def shard_episodes(episodes, shard: int = 0, shards: int = 1, done=None):
+    """按待办集平均分片：已完成的集先剔除，剩下的按 guid 排序后轮流分配。
+
+    轮流分配让各片待办数差不超过 1；按 guid 排序保证同一份候选集每次切出
+    相同结果，不受 RSS 条目顺序变化影响。
+    """
     if shards <= 1:
         return list(episodes)
-    return [episode for episode in episodes if _shard_of(episode["guid"], shards) == shard]
+    pending = [episode for episode in episodes
+               if not done or episode["guid"] not in done]
+    pending.sort(key=lambda episode: episode["guid"])
+    return [episode for index, episode in enumerate(pending) if index % shards == shard]
 
 
 def list_episodes(feed_url: str, fetch: Callable[[str], bytes] | None = None):
