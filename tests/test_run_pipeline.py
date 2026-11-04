@@ -86,6 +86,36 @@ class EnvTests(unittest.TestCase):
         picked = {e["guid"] for part in parts for e in part}
         self.assertEqual(picked, {e["guid"] for e in episodes} - done)
 
+    def test_plan_is_cut_once_per_run(self):
+        # 每片一个 run 只切一次：后续分块不能把别的片正在跑的集抢过来，
+        # 否则两片写同一个 data/<slug>/<guid>.json，提交就撞车。
+        episodes = [{"guid": f"g{i}"} for i in range(11)]
+        shows = [{"slug": "a", "feed_url": "u", "text_source": "asr"}]
+        plans, done = {}, set()
+
+        def prep(shard):
+            return [e["guid"] for e in runmod.prepare_shows(
+                shows, shard=shard, shards=3, list_episodes=lambda url: episodes,
+                blocked_lookup=lambda slug: set(done),
+                plan_lookup=lambda slug: plans.get((slug, shard)),
+                claimed_lookup=lambda slug: {
+                    guid for (slug_, other), got in plans.items()
+                    if slug_ == slug and other != shard for guid in got
+                },
+                plan_save=lambda slug, guids: plans.__setitem__((slug, shard), list(guids)),
+            )[0]["episodes"]]
+
+        first, second, third = prep(0), prep(1), prep(2)
+        self.assertEqual(len(first) + len(second) + len(third),
+                         len(set(first) | set(second) | set(third)))
+        done.add(first[0])
+        self.assertEqual(prep(0), first[1:], "复用计划，只去掉已经做完的")
+
+        del plans[("a", 2)]
+        late = prep(2)
+        self.assertFalse(set(late) & (set(first) | set(second)),
+                         "晚启动的片要按别人的 plan 让开，而不是按 state")
+
     def test_single_shard_keeps_the_plain_state_file(self):
         shows = [{"slug": "a", "feed_url": "u", "text_source": "asr"}]
         got = runmod.prepare_shows(shows, shard=0, shards=1, list_episodes=lambda url: [{"guid": "g1"}])
