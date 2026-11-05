@@ -17,6 +17,9 @@ on:
       gemini_model:
         description: "翻译模型轮换表（逗号分隔；留空=仓库变量 GEMINI_MODELS，再退回 3.5/3.1 flash-lite）"
         default: ""
+      translate_batch:
+        description: "每次请求翻译的条数（配额按每天请求数计，调大最省额度）"
+        default: "150"
 
 permissions:
   contents: write
@@ -65,6 +68,8 @@ jobs:
       # 日额度按 (key, model) 计：轮换表就是额度份数，全部用完这一片才暂停。
       # 换表：dispatch 时传 gemini_model（可逗号分隔），或在仓库变量 GEMINI_MODELS 里改，都不用推代码。
       GEMINI_MODELS: ${{ github.event.inputs.gemini_model || vars.GEMINI_MODELS || 'gemini-3.5-flash-lite, gemini-3.1-flash-lite' }}
+      # 配额按"每天请求数"计：一次请求翻 3 倍，同一份额度就能多出 3 倍的集。
+      TRANSLATE_BATCH_SIZE: ${{ github.event.inputs.translate_batch || '150' }}
       WHISPER_MODEL: models/ct2-turbo
       GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

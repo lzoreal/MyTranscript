@@ -72,9 +72,14 @@ GEMINI_KEYS = parse_gemini_keys(GEMINI_API_KEYS_RAW) or (
 
 BASE_URL = os.getenv("BASE_URL", "").rstrip("/")
 MAX_EPISODES = max(0, int(os.getenv("MAX_EPISODES", "0")))
-TRANSLATE_BATCH_SIZE = max(1, int(os.getenv("TRANSLATE_BATCH_SIZE", "50")))
+TRANSLATE_BATCH_SIZE = max(1, int(os.getenv("TRANSLATE_BATCH_SIZE", "150")))
 TRANSLATE_BATCH_MAX_CHARS = max(
     500, int(os.getenv("TRANSLATE_BATCH_MAX_CHARS", "16000"))
+)
+# 配额按"每天请求数"计：单次多装几条就少发几次请求。结构化输出只在批次不超过
+# 这个条数时附带 schema，键太多时 schema 本身占的输出也大，留一个上限兜底。
+TRANSLATE_SCHEMA_MAX_BLOCKS = max(
+    0, int(os.getenv("TRANSLATE_SCHEMA_MAX_BLOCKS", "200"))
 )
 TRANSLATE_MAX_RETRIES = max(0, int(os.getenv("TRANSLATE_MAX_RETRIES", "3")))
 TRANSLATE_BASE_DELAY = max(0.1, float(os.getenv("TRANSLATE_BASE_DELAY", "2")))
@@ -1029,9 +1034,6 @@ def build_translation_batches(cues: list[dict[str, Any]]) -> list[list[dict[str,
     return batches
 
 
-TRANSLATE_SCHEMA_MAX_BLOCKS = 60
-
-
 class IncompleteTranslation(Exception):
     """模型漏译或合并了条目：带着已经拿到的译文抛出，重试只补差的编号。"""
 
@@ -1221,10 +1223,10 @@ def translate_blocks(
                         time.sleep(GEMINI_QUOTA_COOLDOWN)
                         continue
                     raise QuotaExhausted(message) from exc
-                # 带上服务端原话：429 是"每分钟"还是"每天"的配额，只有它说得清。
+                # 带上服务端原话：429 是"每分钟"还是"每天"的配额，只有 quotaId 说得清。
                 log.warning(
                     "Gemini key %s %s（%s），切到 %s",
-                    before, kind, str(exc)[:200].replace("\n", " "), ring.label(),
+                    before, kind, str(exc)[:600].replace("\n", " "), ring.label(),
                 )
                 continue
             if isinstance(exc, IncompleteTranslation):

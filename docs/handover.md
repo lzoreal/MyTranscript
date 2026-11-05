@@ -53,7 +53,7 @@ Translate（每天 19:00 UTC + crawl/transcribe 成功后 + 手动）
 | 文件 | 行数 | 职责 | 关键函数 |
 | --- | --- | --- | --- |
 | `scripts/scraper.py` | 959 | 抓取字幕、生成增强版英文 Feed 与索引 | `process_podcast`、`generate_podcast_feed`、`parse_transcript` |
-| `scripts/transcribe.py` | 2261 | hwmym 全流程：下载、转写、翻译、写 VTT/sidecar、回填、导出 JSON | `whisper_transcribe`、`translate_cues_with_gemini`、`sync_data_transcripts`、`process_episode`、`run_backfill` |
+| `scripts/transcribe.py` | 2279 | hwmym 全流程：下载、转写、翻译、写 VTT/sidecar、回填、导出 JSON | `whisper_transcribe`、`translate_cues_with_gemini`、`sync_data_transcripts`、`process_episode`、`run_backfill` |
 | `scripts/translate_vtt.py` | 1106 | 未迁移节目的中译（不改英文） | `gemini_batch_translate`、`build_ring` |
 | `scripts/generate_zh_feed.py` | 423 | 未迁移节目的中文 Feed 与中文索引 | `process_podcast` |
 | `scripts/align_timings.py` | 641 | 抓取节目的时间轴修正 + 词级时间 + 删广告 | `parse_english_vtt`、`map_stream`、`classify_cues`、`assign_times`、`rewrite_episode` |
@@ -299,6 +299,11 @@ for f in tests/test_*.py; do python "$f"; done     # 6 个文件、174 个用例
   **轮换表上每个模型都判死**的交集作为排除表——只在某个模型上耗尽的 key，换个模型还能用。
 - 单个 job 的 `timeout-minutes` 是 360；`MAX_MINUTES` 要在开跑下一集前判断，所以整片时长
   ≈ `MAX_MINUTES` + 一集耗时，两者之和必须小于 360。
+- 免费层的硬上限是**每天请求数**（RPD），不是 token：实测 2026-11-04 那一轮 31 集共发
+  1133 次请求（平均 36.5 次/集）就把一份 (key, model) 额度打到见底。所以 `TRANSLATE_BATCH_SIZE`
+  默认 150（原 50），一次请求装 3 倍字幕，同一份额度能多出约 3 倍集数；workflow 的
+  `translate_batch` 输入可临时改。`TRANSLATE_SCHEMA_MAX_BLOCKS` 跟着放到 200，
+  保证大块批次仍带逐键 `response_schema`；16000 字符上限保留，长段落先按字符切。
 
 ### 中文词时间的三层兜底
 
