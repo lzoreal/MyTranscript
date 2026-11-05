@@ -1163,6 +1163,43 @@ class TranslationPairingTests(unittest.TestCase):
         self.assertIn("Yeah.", str(caught.exception))
 
 
+class BatchSizingTests(unittest.TestCase):
+    """配额是每天请求数：单次装多少条，直接决定一天能出几集。"""
+
+    def test_default_batch_fits_150_cues(self):
+        cues = [{"start": i, "end": i + 1, "en": "Hi."} for i in range(400)]
+        batches = transcriber.build_translation_batches(cues)
+        self.assertEqual([len(batch) for batch in batches], [150, 150, 100])
+
+    def test_character_cap_still_splits_long_blocks(self):
+        cues = [{"start": i, "end": i + 1, "en": "x" * 700} for i in range(60)]
+        batches = transcriber.build_translation_batches(cues)
+        self.assertGreater(len(batches), 1, "16k 字符上限必须继续生效")
+        for batch in batches:
+            self.assertLessEqual(sum(len(cue["en"]) for cue in batch), 16000)
+
+    def test_schema_covers_a_full_batch(self):
+        # 结构化输出原来只覆盖 60 条以内，放大批次后大块批次会退化成只靠提示词。
+        seen = {}
+
+        class Client:
+            def __init__(self):
+                self.models = SimpleNamespace(generate_content=self._generate)
+
+            def _generate(self, model=None, contents=None, config=None):
+                seen["config"] = config
+                source = _decode_trailing_object(contents)
+                return SimpleNamespace(
+                    text=json.dumps({key: "译" for key in source}, ensure_ascii=False)
+                )
+
+        blocks = [(index, {"en": f"line {index}"}) for index in range(120)]
+        with patch.object(transcriber, "wait_for_gemini_rate_limit", lambda: None):
+            transcriber.translate_batch_once(Client(), "m", blocks)
+        schema = seen["config"].get("response_schema") or {}
+        self.assertEqual(len(schema.get("properties") or {}), 120)
+
+
 class SharedKeyHealthTests(unittest.TestCase):
     def test_other_shards_dead_keys_are_skipped_and_start_is_offset(self):
         # 10 个分片同时轮换会把同一把 key 打爆；跳过别人判死的 key，并从不同位置起跑。
