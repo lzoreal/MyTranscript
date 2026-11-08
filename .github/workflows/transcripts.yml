@@ -92,8 +92,15 @@ jobs:
           # sentence-transformers 默认拉 CUDA 版 torch（3 GB+ 的 nvidia 依赖），runner 没有 GPU，
           # 磁盘会被撑爆。先装 CPU wheel，后续解析直接复用。
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install --no-cache-dir -r requirements-transcribe.txt
-          python -m spacy download zh_core_web_sm
+          pip install --retries 5 --timeout 60 --no-cache-dir -r requirements-transcribe.txt
+          # spaCy 模型的 wheel 托管在 GitHub Releases，偶发 504：同一轮里 13/20 片曾卡死在这里。
+          ok=0
+          for attempt in 1 2 3 4; do
+            if python -m spacy download zh_core_web_sm; then ok=1; break; fi
+            echo "spaCy 中文模型下载失败（第 ${attempt} 次），15 秒后重试"
+            sleep 15
+          done
+          [ "$ok" = "1" ] || exit 1
 
       - uses: actions/cache@v4
         with:
