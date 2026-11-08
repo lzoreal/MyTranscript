@@ -198,3 +198,16 @@ jobs:
           done
           git remote set-url origin "https://${MY_PAT}@github.com/${GITHUB_REPOSITORY}.git"
           bash scripts/git_push_retry.sh "auto: publish migrated shows" $paths
+
+      # 一轮做完还有待办就自己派下一轮；配额打空（本轮 0 产出）时停下，避免空转。
+      - name: 链式派发下一轮
+        env:
+          MY_PAT: ${{ secrets.MY_CUSTOM_PAT }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          ONLY_SLUG: ${{ github.event.inputs.only_slug || '' }}
+          SHARDS: ${{ github.event.inputs.shards || '10' }}
+          MAX_MINUTES: ${{ github.event.inputs.max_minutes || '270' }}
+          GEMINI_MODEL_INPUT: ${{ github.event.inputs.gemini_model || '' }}
+          TRANSLATE_BATCH_INPUT: ${{ github.event.inputs.translate_batch || '150' }}
+        run: python scripts/chain_next.py

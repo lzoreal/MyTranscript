@@ -304,6 +304,9 @@ for f in tests/test_*.py; do python "$f"; done     # 6 个文件、174 个用例
   默认 150（原 50），一次请求装 3 倍字幕，同一份额度能多出约 3 倍集数；workflow 的
   `translate_batch` 输入可临时改。`TRANSLATE_SCHEMA_MAX_BLOCKS` 跟着放到 200，
   保证大块批次仍带逐键 `response_schema`；16000 字符上限保留，长段落先按字符切。
+- 一轮结束后会自动链式派发：publish job 最后一步跑 `chain_next.py`，**还有待办且本轮有新产出**
+  就再 dispatch 一次同样的输入；本轮 0 产出（配额打空、或剩余集全被 3 次失败挡住）就停。
+  workflow 的 concurrency 组只留一个 pending，所以链式派发是"上一轮跑完才开始下一轮"。
 
 ### 中文词时间的三层兜底
 
