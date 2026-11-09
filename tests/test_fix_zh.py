@@ -172,6 +172,32 @@ class BatchedFlowTests(unittest.TestCase):
             path = data / "pod" / "a.json"
             self.assertEqual(fix.write_back([(path, 0, {"en": "Bad.", "zh": "Bad."})]), 0)
 
+    def test_one_failing_batch_does_not_abort_the_show(self):
+        entries = [(Path("a.json"), i, {"en": f"Line {i}.", "zh": f"Line {i}."}) for i in range(300)]
+        calls = []
+
+        def translate(cues):
+            calls.append(len(cues))
+            if len(calls) == 1:
+                raise RuntimeError("单条字幕翻译最终失败")
+            for cue in cues:
+                cue["zh"] = "中文。"
+
+        fixed = fix.translate_entries(entries, translate, chunk=150)
+        self.assertEqual(calls, [150, 150], "应该分两批，而不是一次性整档失败")
+        self.assertEqual(fixed, 150, "失败批之外的句子要保留")
+
+    def test_quota_exhaustion_stops_cleanly(self):
+        entries = [(Path("a.json"), i, {"en": f"Line {i}.", "zh": f"Line {i}."}) for i in range(300)]
+        calls = []
+
+        def translate(cues):
+            calls.append(len(cues))
+            raise fix.transcribe.QuotaExhausted("所有模型的所有 key 已用尽")
+
+        self.assertEqual(fix.translate_entries(entries, translate, chunk=150), 0)
+        self.assertEqual(len(calls), 1, "配额用尽后不该继续撞下一批")
+
 
 if __name__ == "__main__":
     unittest.main()

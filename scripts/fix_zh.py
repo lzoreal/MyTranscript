@@ -92,12 +92,23 @@ def collect_entries(data_dir: Path, slug: str = ""):
     return entries
 
 
-def translate_entries(entries, translate) -> int:
-    """把全部缺中文的句子合成一次翻译（内部按 150 条切批），返回补好的条数。"""
+def translate_entries(entries, translate, chunk: int = 150) -> int:
+    """把全部缺中文的句子分批翻译，单批失败不影响其它批。
+
+    一次调用整档时，任何一条"模型只会原样返回"的字幕都会抛 RuntimeError，
+    连带已翻好的几千句一起丢掉；按批隔离后最多损失一批。
+    """
     cues = [cue for _, _, cue in entries]
-    if not cues:
-        return 0
-    translate(cues)
+    for start in range(0, len(cues), chunk):
+        batch = cues[start:start + chunk]
+        try:
+            translate(batch)
+        except transcribe.QuotaExhausted as exc:
+            # 额度用尽是全局状态，继续下一批只会白撞 429。
+            print(f"配额用尽，停止补译：{exc}", flush=True)
+            break
+        except Exception as exc:
+            print(f"第 {start // chunk + 1} 批翻译失败（{type(exc).__name__}）：{exc}", flush=True)
     return sum(1 for _, _, cue in entries if not transcribe.needs_translation(cue))
 
 

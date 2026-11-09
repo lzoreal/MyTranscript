@@ -1252,10 +1252,18 @@ UNTRANSLATABLE = re.compile(
 )
 
 
+# 逐字母拼读出来的名字/代码（E-S-L-C-A-V-A-…）：模型只能原样返回，翻译会死循环。
+SPELLED_OUT = re.compile(r"^[A-Za-z0-9]{1,2}(?:-[A-Za-z0-9]{1,2}){2,}\.?$")
+
+
 def is_untranslatable(text: str) -> bool:
-    """链接/域名/邮箱不需要翻译：模型只会原样吐回来，被当成漏译反复重试。"""
+    """链接/域名/邮箱/拼读串不需要翻译：模型只会原样吐回来，被当成漏译反复重试。"""
     tokens = [token.strip("\"'()[]{}.,!?;:") for token in (text or "").split()]
-    return bool(tokens) and all(UNTRANSLATABLE.match(token) for token in tokens)
+    if not tokens:
+        return False
+    if all(SPELLED_OUT.match(token) for token in tokens):
+        return True
+    return all(UNTRANSLATABLE.match(token) for token in tokens)
 
 
 CJK_TEXT = re.compile(r"[\u3400-\u9fff\uf900-\ufaff]")

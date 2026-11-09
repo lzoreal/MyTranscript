@@ -1165,6 +1165,12 @@ class TranslationPairingTests(unittest.TestCase):
         self.assertFalse(transcriber.is_untranslatable("U.S."))
         self.assertFalse(transcriber.is_untranslatable("Hello there."))
 
+    def test_spelled_out_letters_are_treated_as_untranslatable(self):
+        # 真实事故（99% Invisible 补译）：模型对拼读串只能原样返回，单条重试到整档失败。
+        spelled = "E-S-L-C-A-V-A-D-A-O-6-E-G-N-U-5-F-Z-B-D-4-O-F-L-C-T-A-P-E-O-2-5-E-V-O-T-Z-2."
+        self.assertTrue(transcriber.is_untranslatable(spelled))
+        self.assertFalse(transcriber.is_untranslatable("state-of-the-art"))
+
     def test_persistent_single_cue_failure_names_the_cue(self):
         with self.assertRaises(RuntimeError) as caught:
             self.run_translation([{"0"}] * 8, cues=[self.cues[0]])
