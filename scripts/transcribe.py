@@ -1430,6 +1430,21 @@ def _record_key_failure(key: str, kind: str, model: str) -> None:
         log.debug("写入 key 健康度失败：%s", exc)
 
 
+def _dead_key_buckets(directory: str, models: list[str], keys: list[str]) -> dict[str, set[str]]:
+    """按模型把健康度文件里的 key 指纹映射回 key 本身。
+
+    补译这类长驻进程会反复新建环；不按文件过滤的话，每批都从 #1 重新撞一遍 429。
+    """
+    path = Path(directory)
+    return {
+        model: {
+            key for key in keys
+            if key_health.key_id(key) in key_health.dead_ids(path, model=model)
+        }
+        for model in models
+    }
+
+
 def translate_cues_with_gemini(cues: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if not cues:
         raise ValueError("没有可翻译字幕")
@@ -1438,7 +1453,9 @@ def translate_cues_with_gemini(cues: list[dict[str, Any]]) -> list[dict[str, Any
         raise QuotaExhausted("所有 key 都被其它分片标记为暂不可用（按 TTL 自动恢复）")
     if len(keys) < len(GEMINI_KEYS):
         log.info("跳过其它分片标记不可用的 key：%d 把", len(GEMINI_KEYS) - len(keys))
-    ring = GeminiKeyRing(keys, start=_key_offset(), models=GEMINI_MODELS)
+    directory = os.getenv("GEMINI_HEALTH_DIR", "").strip()
+    dead = _dead_key_buckets(directory, GEMINI_MODELS, keys) if directory else None
+    ring = GeminiKeyRing(keys, start=_key_offset(), models=GEMINI_MODELS, dead=dead)
     verbatim = 0
     for cue in cues:
         if is_untranslatable(cue.get("en", "")):

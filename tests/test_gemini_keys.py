@@ -159,5 +159,24 @@ class PredicateTests(unittest.TestCase):
         self.assertFalse(keys_mod.is_auth_error(TimeoutError("network")))
 
 
+class DeadBucketTests(unittest.TestCase):
+    """同一个 job 里反复新建环时，已判死的 (模型, key) 桶必须直接跳过。"""
+
+    def test_ring_skips_buckets_marked_dead(self):
+        ring = keys_mod.GeminiKeyRing(
+            ["k1", "k2"], models=["m1", "m2"], dead={"m1": {"k1"}, "m2": {"k2"}}
+        )
+        self.assertEqual(len(ring), 2)
+        self.assertEqual((ring.current_model(), ring.current()), ("m1", "k2"))
+        ring.mark_exhausted()
+        self.assertEqual((ring.current_model(), ring.current()), ("m2", "k1"))
+
+    def test_every_bucket_dead_is_unavailable(self):
+        ring = keys_mod.GeminiKeyRing(["k1"], models=["m1"], dead={"m1": {"k1"}})
+        self.assertFalse(ring.available)
+        with self.assertRaises(keys_mod.QuotaExhausted):
+            ring.current()
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -72,18 +72,25 @@ class GeminiKeyRing:
         factory: Callable[[str], Any] | None = None,
         start: int = 0,
         models: list[str] | None = None,
+        dead: dict[str | None, set[str]] | None = None,
     ):
         if not keys:
             raise QuotaExhausted("没有任何可用的 Gemini key")
         self._keys = list(keys)
         # 先走完一个模型的所有 key 再换模型：日额度是整块没的，同模型内换 key 救不回来。
         # models=None 表示调用方自己带模型名（如 translate_vtt），桶只按 key 分。
+        # dead 按模型给出"已判死"的 key：同一个 job 里反复新建环时直接跳过，
+        # 否则每批都会从 #1 重新撞一遍 429。
+        dead = dead or {}
         self._slots = [
-            (model, key) for model in (models or [None]) for key in self._keys
+            (model, key)
+            for model in (models or [None])
+            for key in self._keys
+            if key not in dead.get(model, ())
         ]
         self._clients: dict[str, Any] = {}
         # 各分片从不同的桶起跑，否则所有 job 同时压在同一把 key 上。
-        self._index = int(start) % len(self._slots)
+        self._index = int(start) % len(self._slots) if self._slots else 0
         self._factory = factory or _default_factory
         self.requests = 0
         # 已用掉的"全 key 429 冷却"次数（每进程上限，防止每日额度用完后一直等）

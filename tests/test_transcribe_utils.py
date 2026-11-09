@@ -1120,9 +1120,9 @@ class TranslationPairingTests(unittest.TestCase):
         cues = self.cues if cues is None else cues
         real_ring = transcriber.GeminiKeyRing
 
-        def make_ring(keys, factory=None, start=0, models=None):
+        def make_ring(keys, factory=None, start=0, models=None, dead=None):
             # 只替换底层 client；轮换逻辑仍走真实的 GeminiKeyRing。
-            return real_ring(["test-key"], factory=lambda api_key: fake, models=models)
+            return real_ring(["test-key"], factory=lambda api_key: fake, models=models, dead=dead)
 
         with patch.object(transcriber, "GeminiKeyRing", make_ring), patch.object(
             transcriber, "wait_for_gemini_rate_limit", lambda: None
@@ -1203,8 +1203,8 @@ class RetranslateEnglishZhTests(unittest.TestCase):
     def run_with(self, client, cues):
         real_ring = transcriber.GeminiKeyRing
 
-        def make_ring(keys, factory=None, start=0, models=None):
-            return real_ring(["test-key"], factory=lambda api_key: client, models=models)
+        def make_ring(keys, factory=None, start=0, models=None, dead=None):
+            return real_ring(["test-key"], factory=lambda api_key: client, models=models, dead=dead)
 
         with patch.object(transcriber, "GeminiKeyRing", make_ring), patch.object(
             transcriber, "wait_for_gemini_rate_limit", lambda: None
@@ -1354,6 +1354,25 @@ class LongCueSplitTests(unittest.TestCase):
         self.assertEqual(len(transcriber.split_long_cues([cue])), 1)
 
 
+class DeadBucketTests(unittest.TestCase):
+    def test_health_records_map_back_to_keys_per_model(self):
+        import key_health
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            key_health.record(Path(temp_dir) / "shard-90.json", "key-aaaa",
+                              "quota", model="m1")
+            dead = transcriber._dead_key_buckets(
+                temp_dir, ["m1", "m2"], ["key-aaaa", "key-bbbb"])
+        self.assertEqual(dead["m1"], {"key-aaaa"})
+        self.assertEqual(dead["m2"], set())
+
+    def test_ring_starts_on_a_live_bucket(self):
+        ring = transcriber.GeminiKeyRing(
+            ["key-aaaa", "key-bbbb"], models=["m1", "m2"],
+            dead={"m1": {"key-aaaa"}, "m2": set()})
+        self.assertEqual((ring.current_model(), ring.current()), ("m1", "key-bbbb"))
+
+
 class BatchSizingTests(unittest.TestCase):
     """配额是每天请求数：单次装多少条，直接决定一天能出几集。"""
 
@@ -1413,9 +1432,10 @@ class SharedKeyHealthTests(unittest.TestCase):
 
         real_ring = transcriber.GeminiKeyRing
 
-        def make_ring(keys, factory=None, start=0, models=None):
+        def make_ring(keys, factory=None, start=0, models=None, dead=None):
             return real_ring(
-                keys, factory=lambda api_key: Client(api_key), start=start, models=models
+                keys, factory=lambda api_key: Client(api_key), start=start, models=models,
+                dead=dead,
             )
 
         cues = [{"start": 0.0, "end": 1.0, "en": "Hello there friend"}]
