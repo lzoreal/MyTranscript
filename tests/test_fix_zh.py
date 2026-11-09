@@ -130,8 +130,9 @@ class BatchedFlowTests(unittest.TestCase):
     def test_collect_pulls_missing_sentences_across_episodes(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             data = self.make_show(temp_dir, {
-                "a.json": [{"en": "Good.", "zh": "好。"}, {"en": "Bad.", "zh": "Bad."}],
-                "b.json": [{"en": "Also bad.", "zh": "Also bad."}],
+                "a.json": [{"en": "Good line.", "zh": "好。"},
+                            {"en": "Bad line.", "zh": "Bad line."}],
+                "b.json": [{"en": "Also bad line.", "zh": "Also bad line."}],
             })
             entries = fix.collect_entries(data, "pod")
         self.assertEqual(len(entries), 2)

@@ -1290,6 +1290,10 @@ def needs_translation(cue: dict[str, Any]) -> bool:
         return True
     if is_untranslatable(en):
         return False
+    if len(en.split()) == 1 and len(en) <= 24:
+        # 单词条（品牌、缩写、拼读、网址、编号）本来就没有中文可给；
+        # 继续要求"含中文"只会每轮白白重试——实测残留 900 多句全是这类。
+        return False
     return bool(LATIN_TEXT.search(en)) and not has_chinese(zh)
 
 

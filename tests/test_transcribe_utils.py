@@ -1229,6 +1229,16 @@ class RetranslateEnglishZhTests(unittest.TestCase):
         cue = {"en": "example.com", "zh": "example.com"}
         self.assertFalse(transcriber.needs_translation(cue))
 
+    def test_single_token_entities_are_accepted_without_chinese(self):
+        # 实测残留：拼读缩写、品牌、域名、编号，模型给不出中文，也没有中文可给。
+        for en in ("Skype.", "O-A.", "Instagram.", "Creedthoughts.gov.", "B9.", "80%?"):
+            self.assertFalse(transcriber.needs_translation({"en": en, "zh": en}),
+                             en)
+
+    def test_multi_word_english_reply_is_still_flagged(self):
+        self.assertTrue(transcriber.needs_translation(
+            {"en": "Let's go now.", "zh": "Let's go now."}))
+
     def test_english_reply_is_retranslated_alone(self):
         cues = [
             {"start": 0.0, "end": 1.0, "en": "First line."},
