@@ -2396,6 +2396,81 @@ class ProxyPreferenceTests(unittest.TestCase):
         self.assertIn("http://win:1", data["proxies"])
 
 
+class ProxySourceTests(unittest.TestCase):
+    def _collect(self, payloads, scrape_text=""):
+        """假 requests：JustFreeProxies 走分页 JSON，其余来源返回文本。"""
+        calls = []
+
+        class Response:
+            def __init__(self, payload=None, text=""):
+                self._payload = payload
+                self.text = text
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return self._payload
+
+        def fake_get(url, **kwargs):
+            calls.append(url)
+            if "justfreeproxies" not in url:
+                return Response(text=scrape_text)
+            page = int(url.rsplit("page=", 1)[1])
+            return Response(payload=payloads.get(page, {"total_pages": 1, "proxies": []}))
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.object(
+                transcriber, "PROXY_CACHE_FILE", Path(temp_dir) / "cache.json"
+            ), patch.object(transcriber.requests, "get", fake_get):
+                proxies = transcriber.get_china_proxies()
+        return proxies, calls
+
+    def test_justfreeproxies_pages_are_all_collected_and_schemes_mapped(self):
+        # 站点 JSON 一页 100 条、共 3 页；只取第一页会丢掉三分之二的池子。
+        payloads = {
+            1: {
+                "total_pages": 2,
+                "proxies": [
+                    {"ip": "1.1.1.1", "port": 8080, "protocol": "HTTP"},
+                    {"ip": "2.2.2.2", "port": 1080, "protocol": "SOCKS5"},
+                ],
+            },
+            2: {
+                "total_pages": 2,
+                "proxies": [
+                    {"ip": "3.3.3.3", "port": 8443, "protocol": "HTTPS"},
+                    {"ip": "4.4.4.4", "port": 4145, "protocol": "SOCKS4"},
+                    {"ip": "1.1.1.1", "port": 8080, "protocol": "HTTP"},
+                    {"ip": "", "port": 8080, "protocol": "HTTP"},
+                    {"ip": "5.5.5.5", "port": "8080", "protocol": "HTTP"},
+                ],
+            },
+        }
+
+        proxies, calls = self._collect(payloads)
+
+        self.assertEqual(
+            sorted(proxies),
+            sorted([
+                "http://1.1.1.1:8080",
+                "socks5://2.2.2.2:1080",
+                "http://3.3.3.3:8443",
+                "socks4://4.4.4.4:4145",
+            ]),
+        )
+        self.assertEqual(len(calls), 3, "文本来源一次 + JSON 两页")
+
+    def test_text_source_keeps_parsing_bare_ip_port(self):
+        proxies, _ = self._collect(
+            {}, scrape_text="5.5.5.5:3128\nsocks5://6.6.6.6:1080\nnot-a-proxy\n"
+        )
+
+        self.assertEqual(
+            sorted(proxies), sorted(["http://5.5.5.5:3128", "socks5://6.6.6.6:1080"])
+        )
+
+
 class DegenerateCueTests(unittest.TestCase):
     def test_word_level_flood_is_degenerate(self):
         cues = [{"words": [{"w": "and"}]} for _ in range(5000)]

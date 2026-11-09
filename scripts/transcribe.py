@@ -124,8 +124,22 @@ PROXY_API_URLS = [
     (
         "ProxyScrape",
         "https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&proxy_format=protocolipport&format=text&country=cn",
-    )
+        "text",
+    ),
+    (
+        "JustFreeProxies",
+        "https://justfreeproxies.com/free-proxy-list/cn.json",
+        "json",
+    ),
 ]
+PROXY_JSON_MAX_PAGES = max(1, int(os.getenv("PROXY_JSON_MAX_PAGES", "5")))
+# 站点的 HTTPS 指"能 CONNECT"，代理端点本身通常是明文 HTTP，按 http 拨才连得上。
+PROXY_JSON_SCHEMES = {
+    "HTTP": "http",
+    "HTTPS": "http",
+    "SOCKS4": "socks4",
+    "SOCKS5": "socks5",
+}
 GEOIP_URL = "https://ipwho.is/"
 PROXY_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0 Safari/537.36"
@@ -470,35 +484,87 @@ def promote_proxy(proxy: str | None) -> None:
         log.debug("记录优先代理失败：%s", exc)
 
 
+def normalize_proxy(line: str) -> str | None:
+    line = line.strip().replace(" ", "")
+    if not line:
+        return None
+    if "://" not in line:
+        line = "http://" + line
+    if not re.match(
+        r"^(http|https|socks4|socks4a|socks5|socks5h)://[^:]+:\d+$",
+        line,
+        re.I,
+    ):
+        return None
+    return line
+
+
+def proxy_from_json_entry(entry: dict[str, Any]) -> str | None:
+    ip = str(entry.get("ip") or "").strip()
+    port = entry.get("port")
+    if not ip or not isinstance(port, int) or not 0 < port < 65536:
+        return None
+    protocol = str(entry.get("protocol") or "").strip().upper()
+    scheme = PROXY_JSON_SCHEMES.get(protocol, "http")
+    return normalize_proxy(f"{scheme}://{ip}:{port}")
+
+
+def fetch_proxy_source(source_name: str, api_url: str, kind: str) -> list[str]:
+    """抓一个来源的全部代理；JSON 来源按 total_pages 翻页，任一页失败保留已有结果。"""
+    proxies: list[str] = []
+    page = 1
+    pages = 1
+    while page <= pages and page <= PROXY_JSON_MAX_PAGES:
+        url = f"{api_url}?page={page}" if kind == "json" else api_url
+        try:
+            response = requests.get(url, timeout=30, headers=PROXY_HEADERS)
+            response.raise_for_status()
+        except Exception as exc:
+            log.warning("代理来源 %s 第 %d 页获取失败：%s", source_name, page, exc)
+            break
+        if kind == "json":
+            try:
+                payload = response.json()
+            except Exception as exc:
+                log.warning("代理来源 %s 第 %d 页不是 JSON：%s", source_name, page, exc)
+                break
+            if not isinstance(payload, dict):
+                log.warning("代理来源 %s 第 %d 页结构异常，停止翻页", source_name, page)
+                break
+            pages = max(1, int(payload.get("total_pages") or 1))
+            entries = payload.get("proxies") or []
+            candidates = (
+                proxy_from_json_entry(entry)
+                for entry in entries
+                if isinstance(entry, dict)
+            )
+        else:
+            candidates = (
+                normalize_proxy(raw) for raw in response.text.splitlines()
+            )
+        for proxy in candidates:
+            if proxy and proxy not in proxies:
+                proxies.append(proxy)
+        page += 1
+    return proxies
+
+
 def get_china_proxies() -> list[str]:
     cached = load_proxy_cache()
     if cached:
         return cached
     log.info("获取中国免费代理列表")
     all_proxies: list[str] = []
-    for source_name, api_url in PROXY_API_URLS:
+    for source_name, api_url, kind in PROXY_API_URLS:
         try:
-            response = requests.get(api_url, timeout=30, headers=PROXY_HEADERS)
-            response.raise_for_status()
-            count = 0
-            for raw in response.text.splitlines():
-                line = raw.strip().replace(" ", "")
-                if not line:
-                    continue
-                if "://" not in line:
-                    line = "http://" + line
-                if not re.match(
-                    r"^(http|https|socks4|socks4a|socks5|socks5h)://[^:]+:\d+$",
-                    line,
-                    re.I,
-                ):
-                    continue
-                if line not in all_proxies:
-                    all_proxies.append(line)
-                    count += 1
-            log.info("代理来源 %s：获取 %d 个", source_name, count)
+            proxies = fetch_proxy_source(source_name, api_url, kind)
         except Exception as exc:
             log.warning("代理来源 %s 获取失败：%s", source_name, exc)
+            continue
+        log.info("代理来源 %s：获取 %d 个", source_name, len(proxies))
+        for proxy in proxies:
+            if proxy not in all_proxies:
+                all_proxies.append(proxy)
     random.shuffle(all_proxies)
     log.info("代理列表合计：%d 个", len(all_proxies))
     if all_proxies:

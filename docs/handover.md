@@ -196,6 +196,21 @@ site/
 - 单 job 超时上限 **6 小时**：`timeout-minutes: 360` 已顶格，预算 + 最坏单集必须 < 360；
 - 公共仓库的定时 workflow **60 天无仓库活动会被禁用**。
 
+### 音频下载代理池（2026-11-09 加了第二个来源）
+
+| 来源 | 地址 | 规模（实测） |
+| --- | --- | --- |
+| ProxyScrape | `api.proxyscrape.com/v4/...&country=cn` | CI 里 33–47 个 |
+| JustFreeProxies | `justfreeproxies.com/free-proxy-list/cn.json` | 约 280 个，按 `total_pages` 翻页（每页 100） |
+
+- 两个来源合并去重后随机打乱，再 `GeoIP`（`ipwho.is`）确认**出口 IP 是中国大陆**才允许下载；
+  不是 CN、连不上、下到 HTML 的代理都进 `BAD_PROXIES`。`MAX_PROXY_ATTEMPTS=200` 截断。
+- JustFreeProxies 的 `protocol` 字段不可信：标的 `HTTP` 也能是只做 HTTP 转发、不能对 https
+  建 CONNECT 的代理。2026-11-09 全池实测 281 个里只有 4 个过 GeoIP，其中 1 个真能下音频。
+  仍然接入，因为竞速只等第一个成功，ProxyScrape 池子只有几十个，多 280 个候选收益远大于成本。
+- `PROXY_JSON_MAX_PAGES`（默认 5）限制翻页数；列表缓存 `.china_proxy_cache.json` 保留 30 分钟
+  （含 `preferred`，下一个 job 优先命中）。
+
 ## 七、测试与本地验证
 
 ```bash
