@@ -1157,6 +1157,14 @@ class TranslationPairingTests(unittest.TestCase):
         self.assertEqual(fake.requests, [["0"]], "域名不该被送进模型")
         self.assertEqual(cues[1]["zh"], "译0::Yeah.")
 
+    def test_multi_label_hostname_is_treated_as_untranslatable(self):
+        # 真实事故（Hidden Brain "Unleashing Your Creativity"）：apple.co.hiddenbrain.
+        # 末尾不是常见 TLD，靠老规则认不出来，模型原样返回后单条重试到整集失败。
+        self.assertTrue(transcriber.is_untranslatable("apple.co.hiddenbrain."))
+        self.assertTrue(transcriber.is_untranslatable("apple.co.hiddenbrain"))
+        self.assertFalse(transcriber.is_untranslatable("U.S."))
+        self.assertFalse(transcriber.is_untranslatable("Hello there."))
+
     def test_persistent_single_cue_failure_names_the_cue(self):
         with self.assertRaises(RuntimeError) as caught:
             self.run_translation([{"0"}] * 8, cues=[self.cues[0]])

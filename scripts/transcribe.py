@@ -1179,7 +1179,9 @@ def wait_for_gemini_rate_limit() -> None:
 
 UNTRANSLATABLE = re.compile(
     r"^(?:https?://\S+|www\.\S+|[\w.+-]+@[\w-]+(?:\.[\w-]+)+"
-    r"|[\w-]+(?:\.[\w-]+)*\.(?:com|org|net|io|co|fm|tv|us|uk|me|link|ly)(?:/\S*)?)$",
+    r"|[\w-]+(?:\.[\w-]+)*\.(?:com|org|net|io|co|fm|tv|us|uk|me|link|ly)(?:/\S*)?"
+    # 多段主机名（apple.co.hiddenbrain）末段不是常见 TLD，也要原样照抄。
+    r"|[\w-]+(?:\.[\w-]+){2,}\.?)$",
     re.IGNORECASE,
 )
 
