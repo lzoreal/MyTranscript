@@ -117,5 +117,61 @@ class ScanTests(unittest.TestCase):
         self.assertEqual(names, ["g1.json"])
 
 
+class BatchedFlowTests(unittest.TestCase):
+    """按集发请求会很慢（全局限速下 1520 集 ≈ 12 小时），必须跨集凑批。"""
+
+    def make_show(self, temp_dir, docs):
+        root = Path(temp_dir) / "pod"
+        root.mkdir()
+        for name, sentences in docs.items():
+            (root / name).write_text(json.dumps(document(sentences)), encoding="utf-8")
+        return Path(temp_dir)
+
+    def test_collect_pulls_missing_sentences_across_episodes(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data = self.make_show(temp_dir, {
+                "a.json": [{"en": "Good.", "zh": "好。"}, {"en": "Bad.", "zh": "Bad."}],
+                "b.json": [{"en": "Also bad.", "zh": "Also bad."}],
+            })
+            entries = fix.collect_entries(data, "pod")
+        self.assertEqual(len(entries), 2)
+        self.assertEqual(sorted(path.name for path, _, _ in entries), ["a.json", "b.json"])
+
+    def test_all_episodes_go_through_one_translate_call(self):
+        entries = [
+            (Path("a.json"), 1, {"en": "Bad.", "zh": "Bad."}),
+            (Path("b.json"), 0, {"en": "Also bad.", "zh": "Also bad."}),
+        ]
+        calls = []
+
+        def translate(cues):
+            calls.append(len(cues))
+            for cue in cues:
+                cue["zh"] = "中文。"
+
+        fixed = fix.translate_entries(entries, translate)
+        self.assertEqual(calls, [2], "两集应该合成一次调用")
+        self.assertEqual(fixed, 2)
+
+    def test_write_back_updates_only_changed_sentences(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data = self.make_show(temp_dir, {
+                "a.json": [{"en": "Good.", "zh": "好。"}, {"en": "Bad.", "zh": "Bad."}],
+            })
+            path = data / "pod" / "a.json"
+            entries = [(path, 1, {"en": "Bad.", "zh": "修好了。"})]
+            changed = fix.write_back(entries)
+            saved = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(changed, 1)
+        self.assertEqual(saved["sentences"][0]["zh"], "好。")
+        self.assertEqual(saved["sentences"][1]["zh"], "修好了。")
+
+    def test_write_back_skips_still_english_entries(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data = self.make_show(temp_dir, {"a.json": [{"en": "Bad.", "zh": "Bad."}]})
+            path = data / "pod" / "a.json"
+            self.assertEqual(fix.write_back([(path, 0, {"en": "Bad.", "zh": "Bad."})]), 0)
+
+
 if __name__ == "__main__":
     unittest.main()

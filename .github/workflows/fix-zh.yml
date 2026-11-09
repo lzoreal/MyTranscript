@@ -2,11 +2,14 @@ name: Fix Missing Chinese
 
 # 离线补译：只重译“译文不含中文”的句子（模型偶尔把英文原文当译文返回），
 # 补完重新发布受影响的节目。不动 ASR、时轴和其它字段。
+#
+# 逐节目“补译 → 发布 → 提交”：一个节目跑完就落盘提交，job 即使超时也不会丢掉
+# 已完成的节目。翻译按 150 条跨集凑批（按集发请求会撞全局限速，1500+ 集要十几小时）。
 on:
   workflow_dispatch:
     inputs:
       slug:
-        description: "只处理某个节目（留空=data/ 下全部）"
+        description: "只处理某个节目（留空=所有已迁移节目）"
         default: ""
       dry_run:
         description: "只统计、不翻译不发请求（填 1）"
@@ -15,7 +18,6 @@ on:
 permissions:
   contents: write
 
-# 和管线分开排队：补译会占用同一份额度，建议在没跑分片时手动派。
 concurrency:
   group: fix-zh
   cancel-in-progress: false
@@ -24,7 +26,8 @@ env:
   GEMINI_MODELS: ${{ vars.GEMINI_MODELS || 'gemini-3.5-flash-lite, gemini-3.1-flash-lite' }}
   GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
   GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-  GEMINI_RPM: "2"
+  # 只补少量句子，额度按天算；6 RPM 比管线快，但仍在每把 key 的安全范围内。
+  GEMINI_RPM: "6"
   # 健康度文件名用 SHARD：给补译一个不存在的编号，避免和分片 0 抢同一个文件。
   SHARD: "90"
   SHARDS: "1"
@@ -35,7 +38,7 @@ env:
 jobs:
   fix:
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
         with:
@@ -61,34 +64,35 @@ jobs:
           done
           [ "$ok" = "1" ] || exit 1
 
-      - name: 补译
-        env:
-          DRY: ${{ github.event.inputs.dry_run }}
-          SLUG: ${{ github.event.inputs.slug }}
-        run: |
-          args=""
-          if [ "$DRY" = "1" ]; then args="--dry-run"; fi
-          python -u scripts/fix_zh.py --slug "$SLUG" $args
-
-      - name: 发布已迁移节目
-        if: ${{ github.event.inputs.dry_run != '1' }}
-        run: |
-          set -e
-          for slug in $(python -c "import json;print(' '.join(s['slug'] for s in json.load(open('feeds.json',encoding='utf-8')) if s.get('publish')))"); do
-            python scripts/publish_site.py "$slug" --data-dir data --json-dir json
-          done
-
-      - name: 提交补译结果
-        if: ${{ github.event.inputs.dry_run != '1' }}
+      - name: 配置 git
         env:
           MY_PAT: ${{ secrets.MY_CUSTOM_PAT }}
         run: |
-          paths="data progress.json"
-          for s in $(python -c "import json;print(' '.join(s['slug'] for s in json.load(open('feeds.json',encoding='utf-8')) if s.get('publish')))"); do
-            [ -d "site/$s" ] && paths="$paths site/$s"
-            [ -d "json/$s" ] && paths="$paths json/$s"
-          done
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git remote set-url origin "https://${MY_PAT}@github.com/${GITHUB_REPOSITORY}.git"
-          bash scripts/git_push_retry.sh "auto: fill in missing Chinese translations" $paths
+
+      - name: 逐节目补译、发布并提交
+        if: ${{ github.event.inputs.dry_run != '1' }}
+        env:
+          ONLY: ${{ github.event.inputs.slug }}
+        run: |
+          set -e
+          slugs=$(python -c "import json;print(' '.join(s['slug'] for s in json.load(open('feeds.json',encoding='utf-8')) if s.get('publish')))")
+          for slug in $slugs; do
+            if [ -n "$ONLY" ] && [ "$ONLY" != "$slug" ]; then continue; fi
+            [ -d "data/$slug" ] || continue
+            echo "== $slug"
+            python -u scripts/fix_zh.py --slug "$slug"
+            python scripts/publish_site.py "$slug" --data-dir data --json-dir json
+            paths="data progress.json"
+            [ -d "site/$slug" ] && paths="$paths site/$slug"
+            [ -d "json/$slug" ] && paths="$paths json/$slug"
+            bash scripts/git_push_retry.sh "auto: fill missing Chinese ($slug)" $paths
+          done
+
+      - name: 统计（dry-run）
+        if: ${{ github.event.inputs.dry_run == '1' }}
+        env:
+          SLUG: ${{ github.event.inputs.slug }}
+        run: python -u scripts/fix_zh.py --slug "$SLUG" --dry-run

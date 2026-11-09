@@ -26,6 +26,26 @@ def missing_indices(document) -> list[int]:
     ]
 
 
+def _rebuild_zh_words(sentence, segment=None, encode=None) -> None:
+    zh = (sentence.get("zh") or "").strip()
+    if not zh or not segment or not encode:
+        return
+    words = zh_align.fallback_zh_words(
+        sentence.get("words") or [], zh, segment, encode,
+        sentence.get("start", 0.0), sentence.get("end", 0.0),
+    )
+    if words:
+        sentence["zh_words"] = words
+        sentence.pop("zh_word_mode", None)
+        return
+    even = zh_align.evenly_timed_words(
+        segment(zh), sentence.get("start", 0.0), sentence.get("end", 0.0)
+    )
+    if even:
+        sentence["zh_words"] = even
+        sentence["zh_word_mode"] = "even"
+
+
 def apply_translations(document, translate, segment=None, encode=None) -> int:
     """只重译缺中文的句子，返回真正补好的条数。"""
     indices = missing_indices(document)
@@ -51,23 +71,58 @@ def apply_translations(document, translate, segment=None, encode=None) -> int:
             # 模型又回了英文（或空）：保留原样，下次再试。
             continue
         sentence["zh"] = zh
-        if segment and encode:
-            words = zh_align.fallback_zh_words(
-                sentence.get("words") or [], zh, segment, encode,
-                sentence.get("start", 0.0), sentence.get("end", 0.0),
-            )
-            if words:
-                sentence["zh_words"] = words
-                sentence.pop("zh_word_mode", None)
-            else:
-                even = zh_align.evenly_timed_words(
-                    segment(zh), sentence.get("start", 0.0), sentence.get("end", 0.0)
-                )
-                if even:
-                    sentence["zh_words"] = even
-                    sentence["zh_word_mode"] = "even"
+        _rebuild_zh_words(sentence, segment, encode)
         fixed += 1
     return fixed
+
+
+def collect_entries(data_dir: Path, slug: str = ""):
+    """收集所有缺中文的句子，返回 [(path, index, cue)]；文档本身不常驻内存。"""
+    entries = []
+    for _name, path, document in iter_documents(data_dir, slug):
+        for index, sentence in enumerate(document.get("sentences") or []):
+            if not transcribe.needs_translation(sentence):
+                continue
+            entries.append((path, index, {
+                "en": sentence.get("en", ""),
+                "zh": sentence.get("zh", ""),
+                "start": sentence.get("start", 0.0),
+                "end": sentence.get("end", 0.0),
+            }))
+    return entries
+
+
+def translate_entries(entries, translate) -> int:
+    """把全部缺中文的句子合成一次翻译（内部按 150 条切批），返回补好的条数。"""
+    cues = [cue for _, _, cue in entries]
+    if not cues:
+        return 0
+    translate(cues)
+    return sum(1 for _, _, cue in entries if not transcribe.needs_translation(cue))
+
+
+def write_back(entries, segment=None, encode=None) -> int:
+    """按文档分组写回，返回有改动的文档数。"""
+    groups: dict[Path, list[tuple[int, dict]]] = {}
+    for path, index, cue in entries:
+        groups.setdefault(path, []).append((index, cue))
+    changed_docs = 0
+    for path, items in groups.items():
+        document = json.loads(path.read_text(encoding="utf-8"))
+        changed = 0
+        for index, cue in items:
+            if transcribe.needs_translation(cue):
+                continue
+            sentence = document["sentences"][index]
+            if (sentence.get("zh") or "") == cue.get("zh"):
+                continue
+            sentence["zh"] = cue["zh"]
+            _rebuild_zh_words(sentence, segment, encode)
+            changed += 1
+        if changed:
+            pstore.write_episode(path, document)
+            changed_docs += 1
+    return changed_docs
 
 
 def build_deps():
@@ -105,27 +160,19 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", help="只统计，不发请求")
     args = parser.parse_args()
 
-    scanned = affected = sentences = 0
-    deps = None
-    for name, path, document in iter_documents(args.data_dir, args.slug.strip()):
-        scanned += 1
-        missing = missing_indices(document)
-        if not missing:
-            continue
-        affected += 1
-        print(f"{name}/{path.name}: 缺中文 {len(missing)} 句", flush=True)
-        if args.dry_run:
-            sentences += len(missing)
-            continue
-        if deps is None:
-            deps = build_deps()
-        fixed = apply_translations(document, deps["translate"], deps["segment"], deps["encode"])
-        if fixed:
-            pstore.write_episode(path, document)
-            sentences += fixed
-            print(f"{name}/{path.name}: 补译 {fixed} 句", flush=True)
-    mode = "（dry-run）" if args.dry_run else ""
-    print(f"扫描 {scanned} 集，涉及 {affected} 集，补译 {sentences} 句{mode}")
+    entries = collect_entries(args.data_dir, args.slug.strip())
+    episodes = len({path for path, _, _ in entries})
+    print(f"缺中文 {len(entries)} 句，涉及 {episodes} 集", flush=True)
+    if args.dry_run or not entries:
+        print("（dry-run）" if args.dry_run else "没有需要补译的句子")
+        return 0
+
+    deps = build_deps()
+    # 关键：所有集合成一次翻译，内部按批切分。按集发请求会撞全局限速，
+    # 1520 集 × 30 秒 ≈ 12 小时，远超过 job 的 6 小时上限。
+    fixed = translate_entries(entries, deps["translate"])
+    changed = write_back(entries, deps["segment"], deps["encode"])
+    print(f"补译 {fixed} 句，写回 {changed} 集", flush=True)
     return 0
 
 
