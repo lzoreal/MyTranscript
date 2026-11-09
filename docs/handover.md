@@ -331,8 +331,9 @@ for f in tests/test_*.py; do python "$f"; done     # 6 个文件、174 个用例
 
 ### 迁移一个节目（office-ladies 2026-11-02、smartless 2026-11-03 实跑过）
 
-1. `feeds.json` 加该节目：`text_source`（`podscripts` 优先抓取，抓不到自动回退 ASR；
-   PodScripts 无内容的节目如 smartless 直接写 `asr`）、`publish: true`，用 `podscripts` 时再加 `podscripts_id`；
+1. `feeds.json` 加该节目：`text_source`（**2026-11-09 起统一用 `asr`**：PodScripts 页面已经解析不出内容，
+   实测 hidden-brain 18/18 集都回退 ASR，`podscripts` 分支只留作历史兼容，不再配 `podscripts_id`）、
+   `publish: true`；
 2. `podcasts.json` 给该节目加 `"migrated": true` —— crawl 跳过抓取与 feed/index，但总索引仍列出；
 3. `podcasts_translate.json` 移除该节目（旧翻译 job 不再碰它）；
 4. **决定是否回填历史集**：
