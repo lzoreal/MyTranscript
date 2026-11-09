@@ -82,6 +82,8 @@ TRANSLATE_SCHEMA_MAX_BLOCKS = max(
     0, int(os.getenv("TRANSLATE_SCHEMA_MAX_BLOCKS", "200"))
 )
 TRANSLATE_MAX_RETRIES = max(0, int(os.getenv("TRANSLATE_MAX_RETRIES", "3")))
+# 模型偶尔把英文原文当译文返回；这些句子要单独补译，轮数别设太大避免烧配额。
+TRANSLATE_RETRANSLATE_PASSES = max(0, int(os.getenv("TRANSLATE_RETRANSLATE_PASSES", "2")))
 TRANSLATE_BASE_DELAY = max(0.1, float(os.getenv("TRANSLATE_BASE_DELAY", "2")))
 TRANSLATE_BATCH_DELAY = max(0.0, float(os.getenv("TRANSLATE_BATCH_DELAY", "0.3")))
 # Gemini RPM 限速：15 RPM = 每次请求至少间隔 4 秒；所有请求（含重试）共享此限速器。
@@ -1144,6 +1146,29 @@ def is_untranslatable(text: str) -> bool:
     return bool(tokens) and all(UNTRANSLATABLE.match(token) for token in tokens)
 
 
+CJK_TEXT = re.compile(r"[\u3400-\u9fff\uf900-\ufaff]")
+LATIN_TEXT = re.compile(r"[A-Za-z]")
+
+
+def has_chinese(text: str) -> bool:
+    return bool(CJK_TEXT.search(text or ""))
+
+
+def needs_translation(cue: dict[str, Any]) -> bool:
+    """没有译文、或英文句子的"译文"里一个中文字都没有，都算还没翻。
+
+    真实故障：模型偶尔把同批里另一条的英文原文当译文返回，长度校验和
+    "与原文相同"都拦不住（返回的不是本条原文），播放器随后整集错位。
+    """
+    en = cue.get("en") or ""
+    zh = (cue.get("zh") or "").strip()
+    if not zh:
+        return True
+    if is_untranslatable(en):
+        return False
+    return bool(LATIN_TEXT.search(en)) and not has_chinese(zh)
+
+
 def translate_batch_once(
     client: genai.Client, model: str, blocks: list[tuple[int, dict[str, Any]]]
 ) -> dict[int, str]:
@@ -1301,7 +1326,7 @@ def translate_cues_with_gemini(cues: list[dict[str, Any]]) -> list[dict[str, Any
             verbatim += 1
     if verbatim:
         log.info("无需翻译的链接/邮箱：%d 条（中文照抄原文）", verbatim)
-    batches = build_translation_batches([cue for cue in cues if not cue.get("zh")])
+    batches = build_translation_batches([cue for cue in cues if needs_translation(cue)])
     log.info(
         "Gemini 翻译开始：%d 条字幕，%d 个初始批次，模型轮换=%s，key=%d 把，"
         "限速=%d RPM（请求间隔至少 %.2f 秒）",
@@ -1320,8 +1345,23 @@ def translate_cues_with_gemini(cues: list[dict[str, Any]]) -> list[dict[str, Any
             cue["zh"] = translated[index]
         if TRANSLATE_BATCH_DELAY and i < len(batches):
             time.sleep(TRANSLATE_BATCH_DELAY)
+    for attempt in range(1, TRANSLATE_RETRANSLATE_PASSES + 1):
+        missing = [cue for cue in cues if needs_translation(cue)]
+        if not missing:
+            break
+        log.warning("译文不含中文的句子 %d 条，补译第 %d 轮", len(missing), attempt)
+        for batch in build_translation_batches(missing):
+            translated = {}
+            translate_blocks(ring, list(enumerate(batch)), translated)
+            for index, cue in enumerate(batch):
+                cue["zh"] = translated[index]
+            if TRANSLATE_BATCH_DELAY:
+                time.sleep(TRANSLATE_BATCH_DELAY)
     if any(not c.get("zh") for c in cues):
         raise RuntimeError("翻译不完整，存在缺失中文的字幕")
+    leftover = sum(1 for cue in cues if needs_translation(cue))
+    if leftover:
+        log.warning("仍有 %d 条译文不含中文（保留原文）", leftover)
     return cues
 
 

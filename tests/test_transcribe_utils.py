@@ -1163,6 +1163,71 @@ class TranslationPairingTests(unittest.TestCase):
         self.assertIn("Yeah.", str(caught.exception))
 
 
+class RetranslateEnglishZhTests(unittest.TestCase):
+    """模型偶尔把英文原文当译文返回：要单独补译，且不能因此让整集失败。"""
+
+    class Client:
+        def __init__(self, echo, always=False):
+            self.echo = echo
+            self.always = always
+            self.echoed = False
+            self.requests = []
+            self.models = SimpleNamespace(generate_content=self._generate)
+
+        def _generate(self, model=None, contents=None, config=None):
+            source = _decode_trailing_object(contents)
+            self.requests.append(dict(source))
+            result = {}
+            for key, value in source.items():
+                if value == self.echo and (self.always or not self.echoed):
+                    result[key] = value          # 把英文原文当成译文
+                    self.echoed = True
+                else:
+                    result[key] = f"译文{key}"
+            return SimpleNamespace(text=json.dumps(result, ensure_ascii=False))
+
+    def run_with(self, client, cues):
+        real_ring = transcriber.GeminiKeyRing
+
+        def make_ring(keys, factory=None, start=0, models=None):
+            return real_ring(["test-key"], factory=lambda api_key: client, models=models)
+
+        with patch.object(transcriber, "GeminiKeyRing", make_ring), patch.object(
+            transcriber, "wait_for_gemini_rate_limit", lambda: None
+        ), patch.object(transcriber, "TRANSLATE_BASE_DELAY", 0.0), patch.object(
+            transcriber, "TRANSLATE_BATCH_DELAY", 0.0
+        ):
+            return transcriber.translate_cues_with_gemini(cues)
+
+    def test_needs_translation_flags_english_reply(self):
+        self.assertTrue(transcriber.needs_translation({"en": "Hello there.", "zh": "Hello there."}))
+        self.assertFalse(transcriber.needs_translation({"en": "Hello there.", "zh": "你好。"}))
+        self.assertTrue(transcriber.needs_translation({"en": "Hello there."}))
+
+    def test_link_copied_verbatim_is_not_retranslated(self):
+        cue = {"en": "example.com", "zh": "example.com"}
+        self.assertFalse(transcriber.needs_translation(cue))
+
+    def test_english_reply_is_retranslated_alone(self):
+        cues = [
+            {"start": 0.0, "end": 1.0, "en": "First line."},
+            {"start": 1.0, "end": 2.0, "en": "Second line."},
+        ]
+        client = self.Client(echo="Second line.")
+        self.run_with(client, cues)
+        self.assertIn("译文", cues[1]["zh"])
+        self.assertEqual(len(client.requests), 2, "应只补发缺中文的那一条")
+        self.assertEqual(list(client.requests[1].values()), ["Second line."])
+
+    def test_persistent_english_reply_is_kept_not_fatal(self):
+        cues = [{"start": 0.0, "end": 1.0, "en": "Stubborn line."}]
+        client = self.Client(echo="Stubborn line.", always=True)
+        with captured_messages(transcriber.log) as messages:
+            self.run_with(client, cues)
+        self.assertEqual(cues[0]["zh"], "Stubborn line.")
+        self.assertTrue(any("不含中文" in m for m in messages), messages)
+
+
 class BatchSizingTests(unittest.TestCase):
     """配额是每天请求数：单次装多少条，直接决定一天能出几集。"""
 
