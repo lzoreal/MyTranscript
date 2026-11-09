@@ -849,6 +849,49 @@ def resegment_whisper_segments(
     return cues
 
 
+_SENTENCE_END = re.compile(r"[.!?…:;][\"')\]]?$")
+CONTINUATION_START = ",;:、，"
+
+
+def merge_fragment_cues(
+    cues: list[dict[str, Any]],
+    max_chars: int = 180,
+    max_span: float = 20.0,
+    max_words: int = 60,
+) -> list[dict[str, Any]]:
+    """把被 30 秒窗口切开的半句拼回整句。
+
+    关闭上文上下文后，Whisper 的窗口边界常落在词组中间（"Can we hit the gym a few"
+    + "times?"）。前一条没有句末标点、后一条小写续接时合并；大写开头视为新句子，
+    长度/时长/词数超过上限也停，避免把两句或隔着长停顿的内容粘在一起。
+    """
+    merged: list[dict[str, Any]] = []
+    for cue in cues:
+        item = dict(cue)
+        item["words"] = list(cue.get("words") or [])
+        if merged:
+            previous = merged[-1]
+            prev_text = str(previous.get("en") or "").rstrip()
+            next_text = str(item.get("en") or "").lstrip()
+            separator = "" if next_text[:1] in (",", ";", ":") else " "
+            joinable = (
+                bool(prev_text)
+                and bool(next_text)
+                and not _SENTENCE_END.search(prev_text)
+                and (next_text[0].islower() or next_text[0] in CONTINUATION_START)
+                and len(prev_text) + len(separator) + len(next_text) <= max_chars
+                and len(previous["words"]) + len(item["words"]) <= max_words
+                and float(item["end"]) - float(previous["start"]) <= max_span
+            )
+            if joinable:
+                previous["en"] = prev_text + separator + next_text
+                previous["end"] = item["end"]
+                previous["words"] = previous["words"] + item["words"]
+                continue
+        merged.append(item)
+    return merged
+
+
 def merge_continuation_words(words: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Whisper 会把 Whim-Yim、example.com 切成两个 token；续接段并回前一个词。"""
     merged: list[dict[str, Any]] = []
@@ -966,6 +1009,7 @@ def whisper_transcribe(audio_path: Path) -> tuple[list[dict[str, Any]], float]:
             "转录输出碎片化（%d 条，中位 %.1f 词/句），关闭上文上下文重试",
             len(cues), median_words_per_cue(cues),
         )
+    cues = merge_fragment_cues(cues)
     log.info("转录完成：%d 条英文字幕", len(cues))
     return cues, round(getattr(info, "duration", 0.0) or 0.0, 2)
 

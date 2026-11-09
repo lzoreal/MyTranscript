@@ -1228,6 +1228,55 @@ class RetranslateEnglishZhTests(unittest.TestCase):
         self.assertTrue(any("不含中文" in m for m in messages), messages)
 
 
+class FragmentMergeTests(unittest.TestCase):
+    """Whisper 关闭上文后按 30 秒窗口切，边界常落在词组中间。"""
+
+    def cue(self, en, start, end, words=()):
+        return {"en": en, "start": start, "end": end,
+                "words": [{"w": w, "s": s, "e": e} for w, s, e in words]}
+
+    def test_unpunctuated_fragment_absorbs_lowercase_continuation(self):
+        cues = [
+            self.cue("Can we hit the gym a few", 0.0, 1.7, [("Can", 0.0, 0.3)]),
+            self.cue("times?", 1.7, 2.1, [("times?", 1.7, 2.1)]),
+        ]
+        merged = transcriber.merge_fragment_cues(cues)
+        self.assertEqual(len(merged), 1)
+        self.assertEqual(merged[0]["en"], "Can we hit the gym a few times?")
+        self.assertEqual(merged[0]["end"], 2.1)
+        self.assertEqual([w["w"] for w in merged[0]["words"]], ["Can", "times?"])
+
+    def test_finished_sentence_is_left_alone(self):
+        cues = [self.cue("He stopped.", 0.0, 1.0), self.cue("we kept going.", 1.0, 2.0)]
+        self.assertEqual(len(transcriber.merge_fragment_cues(cues)), 2)
+
+    def test_uppercase_continuation_starts_a_new_sentence(self):
+        # 前一句漏了句号，但下一句大写开头：大概率是新句子，不能粘。
+        cues = [self.cue("And that's", 0.0, 1.0), self.cue("Sort of his plan.", 1.0, 2.0)]
+        self.assertEqual(len(transcriber.merge_fragment_cues(cues)), 2)
+
+    def test_merge_stops_at_the_length_limit(self):
+        cues = [
+            self.cue("x" * 100, 0.0, 1.0),
+            self.cue("y" * 100, 1.0, 2.0),
+        ]
+        self.assertEqual(len(transcriber.merge_fragment_cues(cues, max_chars=150)), 2)
+
+    def test_merge_stops_across_a_long_gap(self):
+        cues = [self.cue("and then", 0.0, 1.0), self.cue("we left.", 40.0, 41.0)]
+        self.assertEqual(len(transcriber.merge_fragment_cues(cues, max_span=20.0)), 2)
+
+    def test_three_fragments_collapse_into_one_sentence(self):
+        cues = [
+            self.cue("he was", 0.0, 0.5),
+            self.cue("trying to help, but they", 0.5, 1.5),
+            self.cue("all focus on attributes.", 1.5, 2.5),
+        ]
+        merged = transcriber.merge_fragment_cues(cues)
+        self.assertEqual(len(merged), 1)
+        self.assertEqual(merged[0]["en"], "he was trying to help, but they all focus on attributes.")
+
+
 class BatchSizingTests(unittest.TestCase):
     """配额是每天请求数：单次装多少条，直接决定一天能出几集。"""
 
