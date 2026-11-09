@@ -1165,16 +1165,23 @@ class TranslationPairingTests(unittest.TestCase):
         self.assertFalse(transcriber.is_untranslatable("U.S."))
         self.assertFalse(transcriber.is_untranslatable("Hello there."))
 
+    def test_domain_with_a_few_words_is_copied_verbatim(self):
+        # 真实事故（smartless 补译）：'Cost Plus Drugs.com,' 与 'hiddenbrain at npr.org'
+        # 整条都是品牌/联系方式，模型只会原样返回，单条重试会拖垮整批。
+        self.assertTrue(transcriber.is_untranslatable("Cost Plus Drugs.com,"))
+        self.assertTrue(transcriber.is_untranslatable("hiddenbrain at npr.org"))
+        self.assertFalse(transcriber.is_untranslatable("I bought it at the store."))
+
     def test_spelled_out_letters_are_treated_as_untranslatable(self):
         # 真实事故（99% Invisible 补译）：模型对拼读串只能原样返回，单条重试到整档失败。
         spelled = "E-S-L-C-A-V-A-D-A-O-6-E-G-N-U-5-F-Z-B-D-4-O-F-L-C-T-A-P-E-O-2-5-E-V-O-T-Z-2."
         self.assertTrue(transcriber.is_untranslatable(spelled))
         self.assertFalse(transcriber.is_untranslatable("state-of-the-art"))
 
-    def test_persistent_single_cue_failure_names_the_cue(self):
-        with self.assertRaises(RuntimeError) as caught:
-            self.run_translation([{"0"}] * 8, cues=[self.cues[0]])
-        self.assertIn("Yeah.", str(caught.exception))
+    def test_persistent_single_cue_failure_keeps_the_source(self):
+        # 翻不出来的单条保留英文，不影响整批——补译阶段会再试。
+        _, result = self.run_translation([{"0"}] * 100, cues=[self.cues[0]])
+        self.assertEqual(result[0]["zh"], "Yeah.")
 
 
 class RetranslateEnglishZhTests(unittest.TestCase):

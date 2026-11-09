@@ -1263,7 +1263,11 @@ def is_untranslatable(text: str) -> bool:
         return False
     if all(SPELLED_OUT.match(token) for token in tokens):
         return True
-    return all(UNTRANSLATABLE.match(token) for token in tokens)
+    if all(UNTRANSLATABLE.match(token) for token in tokens):
+        return True
+    # 域名 + 少量普通词（品牌、联系方式）：模型只会原样返回，重试只会拖垮整批。
+    links = [token for token in tokens if UNTRANSLATABLE.match(token)]
+    return bool(links) and len(tokens) - len(links) <= 3
 
 
 CJK_TEXT = re.compile(r"[\u3400-\u9fff\uf900-\ufaff]")
@@ -1400,9 +1404,12 @@ def translate_blocks(
                     time.sleep(TRANSLATE_BATCH_DELAY)
                 translate_blocks(ring, pending[half:], translated)
                 return
-            raise RuntimeError(
-                f"单条字幕翻译最终失败：{pending[0][1].get('en', '')[:160]!r}"
-            ) from last_error
+            # 单条始终翻不出来（拼读串、品牌名等）时保留原文，别让整批/整集失败；
+            # 这条会被 needs_translation 记为未翻译，后续补译再试。
+            source_text = (pending[0][1].get("en") or "").strip()
+            log.warning("单条字幕始终翻译失败，保留原文：%r", source_text[:120])
+            translated[pending[0][0]] = source_text
+            return
 
 
 def _excluded_key_ids() -> set[str]:
