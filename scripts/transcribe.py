@@ -851,6 +851,28 @@ def resegment_whisper_segments(
 
 _SENTENCE_END = re.compile(r"[.!?…:;][\"')\]]?$")
 CONTINUATION_START = ",;:、，"
+# 大写开头 + 虚词起头 + 几乎没有停顿：仍是同一句（whisper 常在窗口边界大写）。
+CONTINUATION_WORDS = frozenset({
+    "and", "but", "so", "then", "because", "which", "that", "or", "to", "of",
+    "in", "on", "at", "for", "with", "as", "if", "when", "while", "it", "he",
+    "she", "they", "we", "you", "i", "not", "is", "was", "were", "are",
+})
+MERGE_TIGHT_PAUSE = 0.35
+MERGE_MAX_PAUSE = 0.8
+LONG_CUE_MAX_WORDS = 35
+LONG_CUE_MIN_PAUSE = 0.5
+
+
+def _edge_times(cue: dict[str, Any]) -> tuple[float, float]:
+    words = cue.get("words") or []
+    if words:
+        return float(words[0]["s"]), float(words[-1]["e"])
+    return float(cue.get("start", 0.0)), float(cue.get("end", 0.0))
+
+
+def _first_word(text: str, words) -> str:
+    token = str(words[0].get("w", "")) if words else (text.split() or [""])[0]
+    return re.sub(r"[^\w']", "", token).lower()
 
 
 def merge_fragment_cues(
@@ -858,12 +880,14 @@ def merge_fragment_cues(
     max_chars: int = 180,
     max_span: float = 20.0,
     max_words: int = 60,
+    tight_pause: float = MERGE_TIGHT_PAUSE,
+    max_pause: float = MERGE_MAX_PAUSE,
 ) -> list[dict[str, Any]]:
     """把被 30 秒窗口切开的半句拼回整句。
 
     关闭上文上下文后，Whisper 的窗口边界常落在词组中间（"Can we hit the gym a few"
-    + "times?"）。前一条没有句末标点、后一条小写续接时合并；大写开头视为新句子，
-    长度/时长/词数超过上限也停，避免把两句或隔着长停顿的内容粘在一起。
+    + "times?"）。除了"没有句末标点 + 小写续接"，再用词级停顿判断：间隔很小且
+    下一句以虚词开头时，即使大写也合并；间隔超过 max_pause 视为真停顿，不合并。
     """
     merged: list[dict[str, Any]] = []
     for cue in cues:
@@ -873,23 +897,65 @@ def merge_fragment_cues(
             previous = merged[-1]
             prev_text = str(previous.get("en") or "").rstrip()
             next_text = str(item.get("en") or "").lstrip()
-            separator = "" if next_text[:1] in (",", ";", ":") else " "
-            joinable = (
-                bool(prev_text)
-                and bool(next_text)
-                and not _SENTENCE_END.search(prev_text)
-                and (next_text[0].islower() or next_text[0] in CONTINUATION_START)
-                and len(prev_text) + len(separator) + len(next_text) <= max_chars
-                and len(previous["words"]) + len(item["words"]) <= max_words
-                and float(item["end"]) - float(previous["start"]) <= max_span
-            )
-            if joinable:
-                previous["en"] = prev_text + separator + next_text
-                previous["end"] = item["end"]
-                previous["words"] = previous["words"] + item["words"]
-                continue
+            if prev_text and next_text and not _SENTENCE_END.search(prev_text):
+                _, prev_end = _edge_times(previous)
+                next_start, _ = _edge_times(item)
+                gap = max(0.0, next_start - prev_end)
+                soft_start = next_text[0].islower() or next_text[0] in CONTINUATION_START
+                continues = soft_start or (
+                    gap <= tight_pause and _first_word(next_text, item["words"]) in CONTINUATION_WORDS
+                )
+                separator = "" if next_text[:1] in (",", ";", ":") else " "
+                joinable = (
+                    continues
+                    and gap <= max_pause
+                    and len(prev_text) + len(separator) + len(next_text) <= max_chars
+                    and len(previous["words"]) + len(item["words"]) <= max_words
+                    and float(item["end"]) - float(previous["start"]) <= max_span
+                )
+                if joinable:
+                    previous["en"] = prev_text + separator + next_text
+                    previous["end"] = item["end"]
+                    previous["words"] = previous["words"] + item["words"]
+                    continue
         merged.append(item)
     return merged
+
+
+def split_long_cues(
+    cues: list[dict[str, Any]],
+    max_words: int = LONG_CUE_MAX_WORDS,
+    min_pause: float = LONG_CUE_MIN_PAUSE,
+) -> list[dict[str, Any]]:
+    """合并后可能出现很长的句子：在停顿处再切开，别让一段占满屏幕。"""
+    out: list[dict[str, Any]] = []
+    for cue in cues:
+        out.extend(_split_cue(cue, max_words, min_pause))
+    return out
+
+
+def _split_cue(cue, max_words: int, min_pause: float) -> list[dict[str, Any]]:
+    text = str(cue.get("en") or "").strip()
+    words = list(cue.get("words") or [])
+    # 词与文本对不上时无法安全切分，保持原样。
+    if len(words) <= max_words or len(words) != len(text.split()):
+        return [cue]
+    pauses = [
+        (abs(index - len(words) / 2), index)
+        for index in range(1, len(words))
+        if float(words[index]["s"]) - float(words[index - 1]["e"]) >= min_pause
+    ]
+    if not pauses:
+        return [cue]
+    balanced = [(score, index) for score, index in pauses
+                if index <= max_words and len(words) - index <= max_words]
+    cut = min(balanced or pauses)[1]
+    left_words, right_words = words[:cut], words[cut:]
+    left = dict(cue, en=" ".join(word["w"] for word in left_words),
+                end=float(left_words[-1]["e"]), words=left_words)
+    right = dict(cue, en=" ".join(word["w"] for word in right_words),
+                 start=float(right_words[0]["s"]), words=right_words)
+    return _split_cue(left, max_words, min_pause) + _split_cue(right, max_words, min_pause)
 
 
 def merge_continuation_words(words: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1009,7 +1075,7 @@ def whisper_transcribe(audio_path: Path) -> tuple[list[dict[str, Any]], float]:
             "转录输出碎片化（%d 条，中位 %.1f 词/句），关闭上文上下文重试",
             len(cues), median_words_per_cue(cues),
         )
-    cues = merge_fragment_cues(cues)
+    cues = split_long_cues(merge_fragment_cues(cues))
     log.info("转录完成：%d 条英文字幕", len(cues))
     return cues, round(getattr(info, "duration", 0.0) or 0.0, 2)
 

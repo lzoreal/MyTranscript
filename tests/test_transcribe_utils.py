@@ -1245,14 +1245,15 @@ class FragmentMergeTests(unittest.TestCase):
 
     def test_unpunctuated_fragment_absorbs_lowercase_continuation(self):
         cues = [
-            self.cue("Can we hit the gym a few", 0.0, 1.7, [("Can", 0.0, 0.3)]),
+            self.cue("Can we hit the gym a few", 0.0, 1.7,
+                     [("Can", 0.0, 0.3), ("few", 1.4, 1.68)]),
             self.cue("times?", 1.7, 2.1, [("times?", 1.7, 2.1)]),
         ]
         merged = transcriber.merge_fragment_cues(cues)
         self.assertEqual(len(merged), 1)
         self.assertEqual(merged[0]["en"], "Can we hit the gym a few times?")
         self.assertEqual(merged[0]["end"], 2.1)
-        self.assertEqual([w["w"] for w in merged[0]["words"]], ["Can", "times?"])
+        self.assertEqual([w["w"] for w in merged[0]["words"]], ["Can", "few", "times?"])
 
     def test_finished_sentence_is_left_alone(self):
         cues = [self.cue("He stopped.", 0.0, 1.0), self.cue("we kept going.", 1.0, 2.0)]
@@ -1283,6 +1284,68 @@ class FragmentMergeTests(unittest.TestCase):
         merged = transcriber.merge_fragment_cues(cues)
         self.assertEqual(len(merged), 1)
         self.assertEqual(merged[0]["en"], "he was trying to help, but they all focus on attributes.")
+
+    def test_capitalised_function_word_joins_when_there_is_no_pause(self):
+        # whisper 经常把后半句首词大写；间隔很小 + 虚词开头，仍然是同一句。
+        cues = [
+            self.cue("he kept walking", 0.0, 1.0, [("he", 0.0, 0.2), ("walking", 0.8, 1.0)]),
+            self.cue("And then he stopped.", 1.2, 2.4, [("And", 1.2, 1.3), ("stopped.", 2.0, 2.4)]),
+        ]
+        merged = transcriber.merge_fragment_cues(cues)
+        self.assertEqual(len(merged), 1)
+        self.assertEqual(merged[0]["en"], "he kept walking And then he stopped.")
+
+    def test_capitalised_content_word_does_not_join(self):
+        cues = [
+            self.cue("he kept walking", 0.0, 1.0, [("walking", 0.8, 1.0)]),
+            self.cue("Sort of his plan.", 1.2, 2.0, [("Sort", 1.2, 1.3)]),
+        ]
+        self.assertEqual(len(transcriber.merge_fragment_cues(cues)), 2)
+
+    def test_long_pause_stops_merging_even_for_lowercase(self):
+        cues = [self.cue("and then", 0.0, 1.0, [("then", 0.8, 1.0)]),
+                self.cue("we left.", 2.2, 3.0, [("we", 2.2, 2.4)])]
+        self.assertEqual(len(transcriber.merge_fragment_cues(cues)), 2)
+
+    def test_tight_pause_still_merges_lowercase(self):
+        cues = [self.cue("and then", 0.0, 1.0, [("then", 0.8, 1.0)]),
+                self.cue("we left.", 1.2, 2.0, [("we", 1.2, 1.4)])]
+        self.assertEqual(len(transcriber.merge_fragment_cues(cues)), 1)
+
+
+class LongCueSplitTests(unittest.TestCase):
+    """合并后偶尔会粘出 35 词以上的长句，在最大停顿处再切一刀。"""
+
+    def cue(self, n_words, gap_at=None, gap=0.6):
+        words, start = [], 0.0
+        for i in range(n_words):
+            s = start
+            if gap_at is not None and i == gap_at:
+                s += gap
+            e = s + 0.3
+            words.append({"w": f"w{i}", "s": round(s, 2), "e": round(e, 2)})
+            start = e
+        return {"en": " ".join(w["w"] for w in words), "start": 0.0,
+                "end": words[-1]["e"], "words": words}
+
+    def test_long_cue_is_split_at_the_pause(self):
+        cues = [self.cue(40, gap_at=20)]
+        parts = transcriber.split_long_cues(cues)
+        self.assertEqual([len(p["words"]) for p in parts], [20, 20])
+        self.assertEqual(parts[0]["end"], cues[0]["words"][19]["e"])
+        self.assertEqual(parts[1]["start"], cues[0]["words"][20]["s"])
+
+    def test_short_cue_is_left_alone(self):
+        self.assertEqual(len(transcriber.split_long_cues([self.cue(20)])), 1)
+
+    def test_no_pause_means_no_split(self):
+        cues = [self.cue(40)]
+        self.assertEqual(len(transcriber.split_long_cues(cues)), 1)
+
+    def test_words_not_aligned_with_text_are_left_alone(self):
+        cue = self.cue(40, gap_at=20)
+        cue["en"] = "totally different text"
+        self.assertEqual(len(transcriber.split_long_cues([cue])), 1)
 
 
 class BatchSizingTests(unittest.TestCase):
