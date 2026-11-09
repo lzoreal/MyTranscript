@@ -1,0 +1,94 @@
+name: Fix Missing Chinese
+
+# 离线补译：只重译“译文不含中文”的句子（模型偶尔把英文原文当译文返回），
+# 补完重新发布受影响的节目。不动 ASR、时轴和其它字段。
+on:
+  workflow_dispatch:
+    inputs:
+      slug:
+        description: "只处理某个节目（留空=data/ 下全部）"
+        default: ""
+      dry_run:
+        description: "只统计、不翻译不发请求（填 1）"
+        default: ""
+
+permissions:
+  contents: write
+
+# 和管线分开排队：补译会占用同一份额度，建议在没跑分片时手动派。
+concurrency:
+  group: fix-zh
+  cancel-in-progress: false
+
+env:
+  GEMINI_MODELS: ${{ vars.GEMINI_MODELS || 'gemini-3.5-flash-lite, gemini-3.1-flash-lite' }}
+  GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
+  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+  GEMINI_RPM: "2"
+  # 健康度文件名用 SHARD：给补译一个不存在的编号，避免和分片 0 抢同一个文件。
+  SHARD: "90"
+  SHARDS: "1"
+  GEMINI_HEALTH_DIR: ${{ github.workspace }}/data/.key-health
+  HF_ENDPOINT: https://hf-mirror.com
+  TRANSLATE_BATCH_SIZE: "150"
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.MY_CUSTOM_PAT }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install --retries 5 --timeout 60 --no-cache-dir -r requirements-transcribe.txt
+          pip install --retries 5 --timeout 60 --no-cache-dir -r requirements.txt
+          # spaCy 模型 wheel 偶发 504：重试四次再认输。
+          ok=0
+          for attempt in 1 2 3 4; do
+            if python -m spacy download zh_core_web_sm; then ok=1; break; fi
+            echo "spaCy 中文模型下载失败（第 ${attempt} 次），15 秒后重试"
+            sleep 15
+          done
+          [ "$ok" = "1" ] || exit 1
+
+      - name: 补译
+        env:
+          DRY: ${{ github.event.inputs.dry_run }}
+          SLUG: ${{ github.event.inputs.slug }}
+        run: |
+          args=""
+          if [ "$DRY" = "1" ]; then args="--dry-run"; fi
+          python -u scripts/fix_zh.py --slug "$SLUG" $args
+
+      - name: 发布已迁移节目
+        if: ${{ github.event.inputs.dry_run != '1' }}
+        run: |
+          set -e
+          for slug in $(python -c "import json;print(' '.join(s['slug'] for s in json.load(open('feeds.json',encoding='utf-8')) if s.get('publish')))"); do
+            python scripts/publish_site.py "$slug" --data-dir data --json-dir json
+          done
+
+      - name: 提交补译结果
+        if: ${{ github.event.inputs.dry_run != '1' }}
+        env:
+          MY_PAT: ${{ secrets.MY_CUSTOM_PAT }}
+        run: |
+          paths="data progress.json"
+          for s in $(python -c "import json;print(' '.join(s['slug'] for s in json.load(open('feeds.json',encoding='utf-8')) if s.get('publish')))"); do
+            [ -d "site/$s" ] && paths="$paths site/$s"
+            [ -d "json/$s" ] && paths="$paths json/$s"
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://${MY_PAT}@github.com/${GITHUB_REPOSITORY}.git"
+          bash scripts/git_push_retry.sh "auto: fill in missing Chinese translations" $paths

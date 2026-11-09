@@ -312,6 +312,9 @@ for f in tests/test_*.py; do python "$f"; done     # 6 个文件、174 个用例
   一集第 8 批尾部 20 条）。这些句子单独补译 `TRANSLATE_RETRANSLATE_PASSES`（默认 2）轮，
   仍不行就保留原文并告警，**不整集失败**。播放器读 JSON 时中文数组也按索引对齐，
   长度不齐才按时间兜底且取**最近**一条，避免个别缺失把整集中英错位。
+- 历史数据补译：`scripts/fix_zh.py`（workflow `fix-zh.yml`，输入 `slug`/`dry_run`）只重译
+  缺中文的句子并重建 `zh_words`，随后重新发布受影响的节目。它和分片抢同一份额度，
+  建议在没跑分片的时段手动派发；`dry_run=1` 只统计不发请求。
 
 ### 中文词时间的三层兜底
 
