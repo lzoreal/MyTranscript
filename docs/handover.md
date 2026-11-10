@@ -196,20 +196,41 @@ site/
 - 单 job 超时上限 **6 小时**：`timeout-minutes: 360` 已顶格，预算 + 最坏单集必须 < 360；
 - 公共仓库的定时 workflow **60 天无仓库活动会被禁用**。
 
-### 音频下载代理池（2026-11-09 加了第二个来源）
+### 音频下载代理池（2026-11-10 支持按地区切换）
 
-| 来源 | 地址 | 规模（实测） |
+| 来源 | 地址 | 规模（2026-11-10 本机实测） |
 | --- | --- | --- |
-| ProxyScrape | `api.proxyscrape.com/v4/...&country=cn` | CI 里 33–47 个 |
-| JustFreeProxies | `justfreeproxies.com/free-proxy-list/cn.json` | 约 280 个，按 `total_pages` 翻页（每页 100） |
+| ProxyScrape | `api.proxyscrape.com/v4/...&country=<region>` | CI 里 33–47 个（CN） |
+| JustFreeProxies | `justfreeproxies.com/free-proxy-list/<region>.json` | CN 约 380，AU 只有 3 |
+| HProxy | `hproxy.com/api/proxy-list?format=json&country=<REGION>&limit=240` | CN 234，AU 12（带 `protocols`/`tls_intercepted`/`uptime_24h`） |
+| Databay | `databay.com/free-proxy-list/<country-slug>` | 每个国家约 10 个（AU 10，出口是真 AU） |
+| FreeProxyWorld | `www.freeproxy.world/?country=<REGION>&page=N` | CN 262，AU 245（HTML 表格，最多 6 页） |
 
-- 两个来源合并去重后随机打乱，再 `GeoIP`（`ipwho.is`）确认**出口 IP 是中国大陆**才允许下载；
-  不是 CN、连不上、下到 HTML 的代理都进 `BAD_PROXIES`。`MAX_PROXY_ATTEMPTS=200` 截断。
-- JustFreeProxies 的 `protocol` 字段不可信：标的 `HTTP` 也能是只做 HTTP 转发、不能对 https
-  建 CONNECT 的代理。2026-11-09 全池实测 281 个里只有 4 个过 GeoIP，其中 1 个真能下音频。
-  仍然接入，因为竞速只等第一个成功，ProxyScrape 池子只有几十个，多 280 个候选收益远大于成本。
-- `PROXY_JSON_MAX_PAGES`（默认 5）限制翻页数；列表缓存 `.china_proxy_cache.json` 保留 30 分钟
-  （含 `preferred`，下一个 job 优先命中）。
+- `PROXY_REGION`（dispatch 输入 `proxy_region`）是逗号分隔的两字母国家代码，默认 `cn`，
+  例如 `au` 或 `cn,au`；GeoIP 出口必须落在所选地区集合里，否则该代理判死。
+  换地区会改变拿到的音频版本（cn 是无插播的中国区音频）。
+- 主来源（ProxyScrape/JustFreeProxies/HProxy/Databay）各自打乱后**轮流出队**，每个来源在 200 个名额里
+  各占一份；FreeProxyWorld 是兜底来源，只在主来源不足 200 个时才补位。
+- 下载前用 `GeoIP`（`ipwho.is`）确认出口地区；不是所选地区、连不上、下到 HTML 的代理都进 `BAD_PROXIES`。
+  `MAX_PROXY_ATTEMPTS=200` 截断。
+- Databay 的 `https://` 代理用**自签证书**：`is_tls_proxy()` 会对这类代理关掉证书校验
+  （`verify=False`，GeoIP 探测和音频下载都一样），代价是这些代理下的目标 TLS 也不校验。
+  这是接 AU 的唯一可用来源（AU 出口是真的），接受这点风险才用。
+- 实测可用率（2026-11-10，真实音频、无 Range）：HProxy CN 在 megaphone 音频上 2/12，
+  在 Simplecast 上 0/12（`fallback-audio-cdn.simplecast.com` 对这些机房 IP 直接 401
+  `oauth_error`）；FreeProxyWorld CN 0/50、AU 0/120（只会 HTTP 转发的透明代理）；
+  JustFreeProxies CN 约 1%；Databay AU 6/8（megaphone）。
+- **AU 出口能下 CN 下不到的节目**：2026-11-10 实测 Databay AU 对 speaking-of-psychology、
+  the-psychology-of-your-20s、casefile-true-crime、algorithms-data-structures-programs、
+  the-taproot-podcast、the-aspiring-psychologist-podcast、programming-throwdown
+  都是 5–6/6 成功（megaphone/omny/acast/buzzsprout/podbean/captivate/feedburner）。
+- `scripts/probe_proxies.py` + `proxy-probe.yml`：只读探测某地区的池子大小、GeoIP 出口分布、
+  音频成功率；换地区前先跑它。
+- 站点 `protocol` 字段不可信：标的 `HTTP` 也可能是不能对 https 建 CONNECT 的代理。
+  2026-11-09 全池实测 281 个里只有 4 个过 GeoIP，其中 1 个真能下音频；仍值得接入，
+  因为竞速只等第一个成功。
+- 缓存 `.proxy_cache.json` 里记 `regions`，地区不符直接重抓（不能拿 CN 的列表去跑 AU）；
+  `PROXY_JSON_MAX_PAGES`（默认 5）/`PROXY_HTML_MAX_PAGES`（默认 6）限制翻页数。
 
 ## 七、测试与本地验证
 

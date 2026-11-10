@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import html
+import itertools
 import json
 import logging
 import math
@@ -30,10 +31,14 @@ from urllib.parse import quote, urlparse
 
 import feedparser
 import requests
+import urllib3
 from lxml import etree
 from faster_whisper import WhisperModel
 from google import genai
 from google.genai import types
+
+# https:// 代理（自签证书）要关校验；关掉的这条警告会按代理数量刷屏。
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # -------------------- 配置 --------------------
 PODCAST_SLUG = os.getenv("PODCAST_SLUG", "podcast").strip()
@@ -112,7 +117,7 @@ SITE_DIR = ROOT_DIR / "site"
 DATA_DIR = Path(os.getenv("DATA_DIR", "data"))
 JSON_DIR = Path(os.getenv("JSON_DIR", "json"))
 STATE_FILE = ROOT_DIR / "state.json"
-PROXY_CACHE_FILE = ROOT_DIR / ".china_proxy_cache.json"
+PROXY_CACHE_FILE = ROOT_DIR / ".proxy_cache.json"
 PODCAST_DIR = SITE_DIR / PODCAST_SLUG
 TRANSCRIPT_DIR = PODCAST_DIR / "transcripts"
 TIMING_DIR = PODCAST_DIR / "timings"
@@ -120,19 +125,21 @@ TIMING_DIR = PODCAST_DIR / "timings"
 BACKFILL_MAX_ATTEMPTS = 2
 PODCAST_NS = "https://podcastindex.org/namespace/1.0"
 USER_AGENT = "PodcastTranscriptBot/1.0 (+https://github.com/)"
-PROXY_API_URLS = [
-    (
-        "ProxyScrape",
-        "https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&proxy_format=protocolipport&format=text&country=cn",
-        "text",
-    ),
-    (
-        "JustFreeProxies",
-        "https://justfreeproxies.com/free-proxy-list/cn.json",
-        "json",
-    ),
-]
+PROXY_REGION_ENV = "PROXY_REGION"
 PROXY_JSON_MAX_PAGES = max(1, int(os.getenv("PROXY_JSON_MAX_PAGES", "5")))
+PROXY_HTML_MAX_PAGES = max(1, int(os.getenv("PROXY_HTML_MAX_PAGES", "6")))
+PROXY_HPROXY_LIMIT = max(1, int(os.getenv("PROXY_HPROXY_LIMIT", "240")))
+# databay 的国家页用全称 slug；表里没有的地区就不接这个来源。
+PROXY_REGION_SLUGS = {
+    "au": "australia", "at": "austria", "cn": "china", "us": "united-states",
+    "gb": "united-kingdom", "ca": "canada", "de": "germany", "fr": "france",
+    "jp": "japan", "kr": "south-korea", "sg": "singapore", "hk": "hong-kong",
+    "tw": "taiwan", "nl": "netherlands", "se": "sweden", "ch": "switzerland",
+    "es": "spain", "it": "italy", "pl": "poland", "ru": "russia",
+    "in": "india", "id": "indonesia", "my": "malaysia", "th": "thailand",
+    "vn": "vietnam", "ph": "philippines", "br": "brazil", "mx": "mexico",
+    "ar": "argentina", "za": "south-africa", "tr": "turkey", "ae": "united-arab-emirates",
+}
 # 站点的 HTTPS 指"能 CONNECT"，代理端点本身通常是明文 HTTP，按 http 拨才连得上。
 PROXY_JSON_SCHEMES = {
     "HTTP": "http",
@@ -411,6 +418,11 @@ def is_socks_proxy(proxy: str) -> bool:
     )
 
 
+def is_tls_proxy(proxy: str) -> bool:
+    """https:// 代理要用 TLS 连代理本身；免费池里这类多半是自签证书。"""
+    return proxy.lower().startswith("https://")
+
+
 def mark_bad_proxy(proxy: str) -> None:
     with BAD_PROXIES_LOCK:
         BAD_PROXIES.add(proxy)
@@ -421,19 +433,23 @@ def is_bad_proxy(proxy: str) -> bool:
         return proxy in BAD_PROXIES
 
 
-def load_proxy_cache() -> list[str]:
+def load_proxy_cache(regions: list[str] | None = None) -> list[str]:
+    regions = regions or proxy_regions()
     if not PROXY_CACHE_FILE.exists():
         return []
     try:
         data = json.loads(PROXY_CACHE_FILE.read_text(encoding="utf-8"))
+        cached_regions = data.get("regions") or ["cn"]
+        if cached_regions != regions:
+            log.info("代理缓存地区不符（%s != %s），重新抓取", cached_regions, regions)
+            return []
         if time.time() - float(data.get("created_at", 0)) > PROXY_CACHE_TTL:
-            log.info("中国代理缓存已过期")
+            log.info("代理缓存已过期")
             return []
         proxies = data.get("proxies", [])
         if not isinstance(proxies, list):
             return []
         log.info("使用代理缓存：%d 个", len(proxies))
-        random.shuffle(proxies)
         preferred = data.get("preferred")
         if preferred in proxies:
             # 上一次成功的代理排最前：同一 job 的下一集几乎立刻命中，不用再赌一遍。
@@ -445,11 +461,11 @@ def load_proxy_cache() -> list[str]:
         return []
 
 
-def save_proxy_cache(proxies: list[str]) -> None:
+def save_proxy_cache(proxies: list[str], regions: list[str]) -> None:
     try:
         PROXY_CACHE_FILE.write_text(
             json.dumps(
-                {"created_at": time.time(), "proxies": proxies},
+                {"created_at": time.time(), "regions": regions, "proxies": proxies},
                 ensure_ascii=False,
                 indent=2,
             ),
@@ -475,7 +491,12 @@ def promote_proxy(proxy: str | None) -> None:
             proxies.append(proxy)
         PROXY_CACHE_FILE.write_text(
             json.dumps(
-                {"created_at": time.time(), "proxies": proxies, "preferred": proxy},
+                {
+                    "created_at": time.time(),
+                    "regions": data.get("regions") or ["cn"],
+                    "proxies": proxies,
+                    "preferred": proxy,
+                },
                 ensure_ascii=False,
             ),
             encoding="utf-8",
@@ -509,13 +530,79 @@ def proxy_from_json_entry(entry: dict[str, Any]) -> str | None:
     return normalize_proxy(f"{scheme}://{ip}:{port}")
 
 
+def proxy_from_html(html: str) -> list[str]:
+    """freeproxy.world 的表格行：IP / port / type 各占一个单元格。"""
+    proxies: list[str] = []
+    for row in re.findall(r"<tr[^>]*>.*?</tr>", html, re.S):
+        ip = re.search(r">\s*((?:\d{1,3}\.){3}\d{1,3})\s*<", row)
+        port = re.search(r'href="/\?port=(\d+)"', row)
+        if not ip or not port:
+            continue
+        kind = re.search(r'href="/\?type=([a-z0-9]+)"', row, re.I)
+        scheme = PROXY_JSON_SCHEMES.get(kind.group(1).upper(), "http") if kind else "http"
+        proxy = normalize_proxy(f"{scheme}://{ip.group(1)}:{port.group(1)}")
+        if proxy and proxy not in proxies:
+            proxies.append(proxy)
+    return proxies
+
+
+def proxy_from_databay_html(html: str) -> list[str]:
+    """databay 每行是 https://ip:port（代理本身走 TLS）或裸 ip:port。"""
+    proxies: list[str] = []
+    for row in re.findall(r"<tr[^>]*>.*?</tr>", html, re.S):
+        found = re.search(r"((?:https?)://(?:\d{1,3}\.){3}\d{1,3}:\d{1,5})", row)
+        if found:
+            text = found.group(1)
+        else:
+            bare = re.search(r"((?:\d{1,3}\.){3}\d{1,3}):(\d{1,5})", row)
+            text = f"{bare.group(1)}:{bare.group(2)}" if bare else None
+        proxy = normalize_proxy(text) if text else None
+        if proxy and proxy not in proxies:
+            proxies.append(proxy)
+    return proxies
+
+
+def proxy_from_hproxy_entry(entry: dict[str, Any]) -> str | None:
+    """hproxy 的 protocols 是列表；tls_intercepted=True 说明它会 MITM，直接丢掉。"""
+    if entry.get("tls_intercepted") is True:
+        return None
+    ip = str(entry.get("ip") or "").strip()
+    port = entry.get("port")
+    if not ip or not isinstance(port, int) or not 0 < port < 65536:
+        return None
+    protocols = [str(item).lower() for item in (entry.get("protocols") or [])]
+    for candidate in ("https", "http", "socks5", "socks4"):
+        if candidate in protocols:
+            scheme = "http" if candidate in ("http", "https") else candidate
+            return normalize_proxy(f"{scheme}://{ip}:{port}")
+    return None
+
+
+def interleave_sources(groups: list[list[str]]) -> list[str]:
+    """各来源轮流取一个，避免大池子把小池子的候选挤出 200 个名额。"""
+    merged: list[str] = []
+    seen: set[str] = set()
+    for row in itertools.zip_longest(*groups):
+        for proxy in row:
+            if proxy and proxy not in seen:
+                seen.add(proxy)
+                merged.append(proxy)
+    return merged
+
+
 def fetch_proxy_source(source_name: str, api_url: str, kind: str) -> list[str]:
-    """抓一个来源的全部代理；JSON 来源按 total_pages 翻页，任一页失败保留已有结果。"""
+    """抓一个来源的全部代理；JSON/HTML 来源翻页，任一页失败保留已有结果。"""
     proxies: list[str] = []
     page = 1
-    pages = 1
-    while page <= pages and page <= PROXY_JSON_MAX_PAGES:
-        url = f"{api_url}?page={page}" if kind == "json" else api_url
+    max_pages = PROXY_HTML_MAX_PAGES if kind == "html" else PROXY_JSON_MAX_PAGES
+    pages = max_pages if kind == "html" else 1
+    while page <= pages and page <= max_pages:
+        if kind == "json":
+            url = f"{api_url}?page={page}"
+        elif kind == "html":
+            url = f"{api_url}&page={page}"
+        else:
+            url = api_url
         try:
             response = requests.get(url, timeout=30, headers=PROXY_HEADERS)
             response.raise_for_status()
@@ -538,6 +625,28 @@ def fetch_proxy_source(source_name: str, api_url: str, kind: str) -> list[str]:
                 for entry in entries
                 if isinstance(entry, dict)
             )
+        elif kind == "hproxy":
+            try:
+                payload = response.json()
+            except Exception as exc:
+                log.warning("代理来源 %s 不是 JSON：%s", source_name, exc)
+                break
+            if not isinstance(payload, list):
+                log.warning("代理来源 %s 结构异常，跳过", source_name)
+                break
+            candidates = (
+                proxy_from_hproxy_entry(entry)
+                for entry in payload
+                if isinstance(entry, dict)
+            )
+        elif kind == "html":
+            candidates = proxy_from_html(response.text)
+            if not candidates:
+                break
+        elif kind == "databay":
+            candidates = proxy_from_databay_html(response.text)
+            if not candidates:
+                break
         else:
             candidates = (
                 normalize_proxy(raw) for raw in response.text.splitlines()
@@ -549,26 +658,99 @@ def fetch_proxy_source(source_name: str, api_url: str, kind: str) -> list[str]:
     return proxies
 
 
-def get_china_proxies() -> list[str]:
-    cached = load_proxy_cache()
+def proxy_regions() -> list[str]:
+    """PROXY_REGION 逗号分隔的两字母国家代码，默认 cn（拿无插播的中国区音频）。"""
+    raw = os.getenv(PROXY_REGION_ENV, "cn")
+    regions = [part.strip().lower() for part in raw.split(",") if part.strip()]
+    if not regions:
+        return ["cn"]
+    for region in regions:
+        if not re.fullmatch(r"[a-z]{2}", region):
+            raise RuntimeError(
+                f"{PROXY_REGION_ENV} 只接受两字母国家代码（如 cn、au），收到：{region!r}"
+            )
+    return regions
+
+
+def proxy_sources(regions: list[str]) -> list[tuple[str, str, str, str]]:
+    """返回 (名字, URL, 类型, tier)；tier=fallback 的只在前面的来源不够时才补位。"""
+    sources: list[tuple[str, str, str, str]] = []
+    for region in regions:
+        sources.append(
+            (
+                f"ProxyScrape-{region.upper()}",
+                "https://api.proxyscrape.com/v4/free-proxy-list/get"
+                "?request=display_proxies&proxy_format=protocolipport&format=text"
+                f"&country={region}",
+                "text",
+                "primary",
+            )
+        )
+        sources.append(
+            (
+                f"JustFreeProxies-{region.upper()}",
+                f"https://justfreeproxies.com/free-proxy-list/{region}.json",
+                "json",
+                "primary",
+            )
+        )
+        sources.append(
+            (
+                f"HProxy-{region.upper()}",
+                "https://hproxy.com/api/proxy-list?format=json"
+                f"&country={region.upper()}&limit={PROXY_HPROXY_LIMIT}",
+                "hproxy",
+                "primary",
+            )
+        )
+        slug = PROXY_REGION_SLUGS.get(region)
+        if slug:
+            sources.append(
+                (
+                    f"Databay-{region.upper()}",
+                    f"https://databay.com/free-proxy-list/{slug}",
+                    "databay",
+                    "primary",
+                )
+            )
+        sources.append(
+            (
+                f"FreeProxyWorld-{region.upper()}",
+                f"https://www.freeproxy.world/?country={region.upper()}",
+                "html",
+                "fallback",
+            )
+        )
+    return sources
+
+
+def get_china_proxies(regions: list[str] | None = None) -> list[str]:
+    regions = regions or proxy_regions()
+    cached = load_proxy_cache(regions)
     if cached:
         return cached
-    log.info("获取中国免费代理列表")
-    all_proxies: list[str] = []
-    for source_name, api_url, kind in PROXY_API_URLS:
+    log.info("获取代理列表：地区=%s", "+".join(r.upper() for r in regions))
+    primary: list[list[str]] = []
+    fallback: list[list[str]] = []
+    for source_name, api_url, kind, tier in proxy_sources(regions):
         try:
             proxies = fetch_proxy_source(source_name, api_url, kind)
         except Exception as exc:
             log.warning("代理来源 %s 获取失败：%s", source_name, exc)
             continue
         log.info("代理来源 %s：获取 %d 个", source_name, len(proxies))
-        for proxy in proxies:
-            if proxy not in all_proxies:
-                all_proxies.append(proxy)
-    random.shuffle(all_proxies)
+        random.shuffle(proxies)
+        (fallback if tier == "fallback" else primary).append(proxies)
+    # 主来源轮流取（每个 200 名额里各占一份），兜底来源只在前面不够时才补位。
+    all_proxies = interleave_sources(primary)
+    seen = set(all_proxies)
+    for proxy in interleave_sources(fallback):
+        if proxy not in seen:
+            all_proxies.append(proxy)
+            seen.add(proxy)
     log.info("代理列表合计：%d 个", len(all_proxies))
     if all_proxies:
-        save_proxy_cache(all_proxies)
+        save_proxy_cache(all_proxies, regions)
     return all_proxies
 
 
@@ -581,6 +763,7 @@ def get_proxy_geoip(proxy: str) -> dict[str, Any] | None:
             timeout=PROXY_TEST_TIMEOUT,
             proxies={"http": proxy, "https": proxy},
             headers=PROXY_HEADERS,
+            verify=not is_tls_proxy(proxy),
         )
         response.raise_for_status()
         data = response.json()
@@ -636,6 +819,7 @@ def proxy_download_worker(
     audio_url: str,
     race_dir: Path,
     headers: dict[str, str],
+    allowed: set[str],
 ) -> dict[str, Any]:
     if PROXY_STOP_EVENT.is_set() or is_bad_proxy(proxy):
         return {"ok": False, "proxy": proxy, "stopped": True}
@@ -657,12 +841,12 @@ def proxy_download_worker(
             mark_bad_proxy(proxy)
             return {"ok": False, "proxy": proxy, "reason": "GeoIP 请求失败"}
         country_code = (geo.get("country_code") or "").upper()
-        if country_code != "CN":
+        if country_code not in allowed:
             mark_bad_proxy(proxy)
             return {
                 "ok": False,
                 "proxy": proxy,
-                "reason": f"不是中国大陆 IP：{country_code}",
+                "reason": f"出口 IP 不在所选地区 {'/'.join(sorted(allowed))}：{country_code}",
             }
         total_bytes = 0
         with requests.get(
@@ -672,6 +856,7 @@ def proxy_download_worker(
             proxies={"http": proxy, "https": proxy},
             allow_redirects=True,
             stream=True,
+            verify=not is_tls_proxy(proxy),
         ) as response:
             response.raise_for_status()
             content_type = (response.headers.get("Content-Type") or "").lower()
@@ -721,17 +906,21 @@ def proxy_download_worker(
 
 
 def download_audio(url: str, output_path: Path) -> dict[str, Any]:
-    """严格沿用旧逻辑：只用经 GeoIP 确认的中国代理竞速，不自动直连回退。"""
+    """只用经 GeoIP 确认出口在所选地区的代理竞速，不自动直连回退。"""
     if not url:
         raise ValueError("节目没有音频 enclosure URL")
     if not USE_CHINA_PROXY:
         raise RuntimeError(
             "USE_CHINA_PROXY=false：按旧版策略，不允许使用 Runner IP 直连下载"
         )
+    regions = proxy_regions()
+    allowed = {region.upper() for region in regions}
     check_socks_support()
-    proxies = get_china_proxies()[:MAX_PROXY_ATTEMPTS]
+    proxies = get_china_proxies(regions)[:MAX_PROXY_ATTEMPTS]
     if not proxies:
-        raise RuntimeError("无法获取中国代理，任务终止")
+        raise RuntimeError(
+            f"无法获取 {'/'.join(sorted(allowed))} 代理，任务终止"
+        )
     PROXY_STOP_EVENT.clear()
     with BAD_PROXIES_LOCK:
         BAD_PROXIES.clear()
@@ -749,7 +938,11 @@ def download_audio(url: str, output_path: Path) -> dict[str, Any]:
     total = len(proxies)
     workers = max(1, min(PROXY_WORKERS, total))
     log.info(
-        "代理竞速开始：代理数=%d，并发=%d，最大音频=%d MB", total, workers, AUDIO_MAX_MB
+        "代理竞速开始：地区=%s，代理数=%d，并发=%d，最大音频=%d MB",
+        "/".join(sorted(allowed)),
+        total,
+        workers,
+        AUDIO_MAX_MB,
     )
     executor = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="proxy-race")
     pending = set()
@@ -765,7 +958,7 @@ def download_audio(url: str, output_path: Path) -> dict[str, Any]:
             if is_bad_proxy(proxy):
                 continue
             return executor.submit(
-                proxy_download_worker, idx, total, proxy, url, race_dir, headers
+                proxy_download_worker, idx, total, proxy, url, race_dir, headers, allowed
             )
         return None
 

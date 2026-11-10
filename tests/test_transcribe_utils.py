@@ -2374,7 +2374,7 @@ class MainBackfillReadOnlyTests(unittest.TestCase):
 
 
 class ProxyPreferenceTests(unittest.TestCase):
-    def test_preferred_proxy_comes_first_and_survives_shuffle(self):
+    def test_preferred_proxy_comes_first(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             cache = Path(temp_dir) / "cache.json"
             cache.write_text(json.dumps({
@@ -2459,7 +2459,7 @@ class ProxySourceTests(unittest.TestCase):
                 "socks4://4.4.4.4:4145",
             ]),
         )
-        self.assertEqual(len(calls), 3, "文本来源一次 + JSON 两页")
+        self.assertEqual(len(calls), 6, "文本一次 + JSON 两页 + HProxy/Databay 各一次 + HTML 首页")
 
     def test_text_source_keeps_parsing_bare_ip_port(self):
         proxies, _ = self._collect(
@@ -2469,6 +2469,203 @@ class ProxySourceTests(unittest.TestCase):
         self.assertEqual(
             sorted(proxies), sorted(["http://5.5.5.5:3128", "socks5://6.6.6.6:1080"])
         )
+
+    def test_region_switches_country_in_both_sources(self):
+        payload = {
+            "total_pages": 1,
+            "proxies": [{"ip": "9.9.9.9", "port": 1080, "protocol": "HTTP"}],
+        }
+
+        class Response:
+            def __init__(self, payload=None, text=""):
+                self._payload = payload
+                self.text = text
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return self._payload
+
+        calls = []
+
+        def fake_get(url, **kwargs):
+            calls.append(url)
+            if "justfreeproxies" in url:
+                return Response(payload=payload)
+            return Response(text="")
+
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
+            os.environ, {"PROXY_REGION": "au"}
+        ), patch.object(
+            transcriber, "PROXY_CACHE_FILE", Path(temp_dir) / "cache.json"
+        ), patch.object(transcriber.requests, "get", fake_get):
+            proxies = transcriber.get_china_proxies()
+
+        self.assertEqual(proxies, ["http://9.9.9.9:1080"])
+        self.assertTrue(any("country=au" in url for url in calls))
+        self.assertTrue(any("/free-proxy-list/au.json" in url for url in calls))
+        self.assertTrue(any("country=AU" in url for url in calls))
+
+    def test_cache_written_for_another_region_is_ignored(self):
+        class Response:
+            def __init__(self, payload=None, text=""):
+                self._payload = payload
+                self.text = text
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return self._payload
+
+        def fake_get(url, **kwargs):
+            if "justfreeproxies" in url:
+                return Response(payload={
+                    "total_pages": 1,
+                    "proxies": [{"ip": "8.8.8.8", "port": 3128, "protocol": "HTTP"}],
+                })
+            return Response(text="")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cache = Path(temp_dir) / "cache.json"
+            cache.write_text(json.dumps({
+                "created_at": time.time(),
+                "regions": ["cn"],
+                "proxies": ["http://old-cn:1"],
+            }), encoding="utf-8")
+            with patch.dict(os.environ, {"PROXY_REGION": "au"}), patch.object(
+                transcriber, "PROXY_CACHE_FILE", cache
+            ), patch.object(transcriber.requests, "get", fake_get):
+                proxies = transcriber.get_china_proxies()
+
+        self.assertEqual(proxies, ["http://8.8.8.8:3128"], "不能拿 CN 的缓存去跑 AU")
+
+    def test_freeproxy_world_table_rows_are_parsed(self):
+        html = """
+        <table><tr><th>IP</th></tr>
+        <tr>
+          <td style="font-weight: 500;">103.169.142.26</td>
+          <td><a href="/?port=80">80</a></td>
+          <td><a href="/?country=AU">Australia</a></td>
+          <td>101 ms</td>
+          <td><a href="/?type=http">http</a></td>
+          <td><a href="/?anonymity=1">No</a></td>
+        </tr>
+        <tr>
+          <td style="font-weight: 500;">203.0.113.7</td>
+          <td><a href="/?port=1080">1080</a></td>
+          <td><a href="/?country=AU">Australia</a></td>
+          <td>220 ms</td>
+          <td><a href="/?type=socks5">socks5</a></td>
+          <td><a href="/?anonymity=2">Yes</a></td>
+        </tr></table>
+        """
+        self.assertEqual(
+            transcriber.proxy_from_html(html),
+            ["http://103.169.142.26:80", "socks5://203.0.113.7:1080"],
+        )
+
+    def test_sources_keep_measured_quality_order(self):
+        # PS → JFP → FPW 按实测可用率排；前 200 个名额不能先被 FreeProxyWorld 占掉。
+        class Response:
+            def __init__(self, payload=None, text=""):
+                self._payload = payload
+                self.text = text
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return self._payload
+
+        def fake_get(url, **kwargs):
+            if "proxyscrape" in url:
+                return Response(text="1.1.1.1:1\n")
+            if "justfreeproxies" in url:
+                return Response(payload={
+                    "total_pages": 1,
+                    "proxies": [{"ip": "2.2.2.2", "port": 2, "protocol": "HTTP"}],
+                })
+            return Response(text=(
+                '<tr><td>3.3.3.3</td><td><a href="/?port=3">3</a></td>'
+                '<td><a href="/?type=http">http</a></td></tr>'
+            ))
+
+        with tempfile.TemporaryDirectory() as temp_dir, patch.object(
+            transcriber, "PROXY_CACHE_FILE", Path(temp_dir) / "cache.json"
+        ), patch.object(transcriber.requests, "get", fake_get):
+            proxies = transcriber.get_china_proxies()
+
+        self.assertEqual(
+            proxies,
+            ["http://1.1.1.1:1", "http://2.2.2.2:2", "http://3.3.3.3:3"],
+        )
+
+    def test_hproxy_entries_map_protocols_and_skip_mitm(self):
+        self.assertEqual(
+            transcriber.proxy_from_hproxy_entry({
+                "ip": "1.2.3.4", "port": 8080, "protocols": ["http", "https"],
+                "tls_intercepted": False,
+            }),
+            "http://1.2.3.4:8080",
+        )
+        self.assertEqual(
+            transcriber.proxy_from_hproxy_entry({
+                "ip": "9.9.9.9", "port": 1080, "protocols": ["socks5"],
+            }),
+            "socks5://9.9.9.9:1080",
+        )
+        self.assertIsNone(transcriber.proxy_from_hproxy_entry({
+            "ip": "5.6.7.8", "port": 3128, "protocols": ["https"],
+            "tls_intercepted": True,
+        }), "会 MITM 的代理直接丢掉")
+
+    def test_hproxy_source_is_region_aware(self):
+        names = [s[0] for s in transcriber.proxy_sources(["au"])]
+        urls = [s[1] for s in transcriber.proxy_sources(["au"])]
+        self.assertIn("HProxy-AU", names)
+        self.assertTrue(any("hproxy.com/api/proxy-list" in url and "country=AU" in url
+                            for url in urls))
+
+    def test_databay_rows_keep_their_scheme(self):
+        html = """
+        <table><tr><th>IP:Port</th></tr>
+        <tr><td>https://150.230.14.159:443</td><td>HTTPS proxy</td></tr>
+        <tr><td>114.111.151.41:80</td><td>HTTP</td></tr>
+        <tr><td>99.7</td><td>1452 ms</td></tr></table>
+        """
+        self.assertEqual(
+            transcriber.proxy_from_databay_html(html),
+            ["https://150.230.14.159:443", "http://114.111.151.41:80"],
+        )
+
+    def test_tls_proxies_skip_certificate_verification_only(self):
+        # databay 的代理 TLS 是自签的；只对 https:// 代理关校验，普通 http 代理照常校验。
+        seen = []
+
+        class Response:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {"success": True, "ip": "1.2.3.4", "country_code": "AU"}
+
+        def fake_get(url, **kwargs):
+            seen.append(kwargs.get("verify"))
+            return Response()
+
+        with patch.object(transcriber.requests, "get", fake_get):
+            transcriber.get_proxy_geoip("https://150.230.14.159:443")
+            transcriber.get_proxy_geoip("http://114.111.151.41:80")
+
+        self.assertEqual(seen, [False, True])
+
+    def test_invalid_region_is_rejected(self):
+        with patch.dict(os.environ, {"PROXY_REGION": "china"}):
+            with self.assertRaises(RuntimeError) as caught:
+                transcriber.get_china_proxies()
+        self.assertIn("china", str(caught.exception))
 
 
 class DegenerateCueTests(unittest.TestCase):

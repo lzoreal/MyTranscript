@@ -20,6 +20,9 @@ on:
       translate_batch:
         description: "每次请求翻译的条数（配额按每天请求数计，调大最省额度）"
         default: "150"
+      proxy_region:
+        description: "下载代理的出口地区（两字母代码，逗号分隔；留空=cn，例如 au 或 cn,au）"
+        default: ""
 
 permissions:
   contents: write
@@ -70,6 +73,8 @@ jobs:
       GEMINI_MODELS: ${{ github.event.inputs.gemini_model || vars.GEMINI_MODELS || 'gemini-3.5-flash-lite, gemini-3.1-flash-lite' }}
       # 配额按"每天请求数"计：一次请求翻 3 倍，同一份额度就能多出 3 倍的集。
       TRANSLATE_BATCH_SIZE: ${{ github.event.inputs.translate_batch || '150' }}
+      # 代理出口地区：默认 cn（无插播的中国区音频）；某些节目只能从别的地区取时改这里。
+      PROXY_REGION: ${{ github.event.inputs.proxy_region || 'cn' }}
       WHISPER_MODEL: models/ct2-turbo
       GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -217,4 +222,5 @@ jobs:
           MAX_MINUTES: ${{ github.event.inputs.max_minutes || '270' }}
           GEMINI_MODEL_INPUT: ${{ github.event.inputs.gemini_model || '' }}
           TRANSLATE_BATCH_INPUT: ${{ github.event.inputs.translate_batch || '150' }}
+          PROXY_REGION_INPUT: ${{ github.event.inputs.proxy_region || '' }}
         run: python scripts/chain_next.py

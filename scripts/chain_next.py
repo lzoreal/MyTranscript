@@ -55,7 +55,8 @@ def should_chain(pending: int, progressed: int) -> bool:
     return pending > 0 and progressed > 0
 
 
-def dispatch_payload(slug, shards, max_minutes, gemini_model, translate_batch):
+def dispatch_payload(slug, shards, max_minutes, gemini_model, translate_batch,
+                     proxy_region=""):
     return {
         "ref": "main",
         "inputs": {
@@ -64,6 +65,7 @@ def dispatch_payload(slug, shards, max_minutes, gemini_model, translate_batch):
             "max_minutes": max_minutes,
             "gemini_model": gemini_model,
             "translate_batch": translate_batch,
+            "proxy_region": proxy_region,
         },
     }
 
@@ -126,6 +128,7 @@ def main() -> int:
         os.environ.get("MAX_MINUTES", "230"),
         os.environ.get("GEMINI_MODEL_INPUT", ""),
         os.environ.get("TRANSLATE_BATCH_INPUT", "150"),
+        os.environ.get("PROXY_REGION_INPUT", ""),
     )
     got = _api(token, "POST", "/actions/workflows/transcripts.yml/dispatches", payload)
     print("已派发下一轮:", json.dumps(got, ensure_ascii=False)[:200] or "204 accepted")
