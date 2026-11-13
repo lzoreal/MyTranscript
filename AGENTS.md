@@ -26,6 +26,14 @@
 
 ## 命令
 
+本地克隆建议只取 main（默认 clone 会连 `data` 分支一起拉）：
+
+```bash
+git clone --single-branch --filter=blob:none --sparse https://github.com/lzoreal/MyTranscript.git
+cd MyTranscript
+git sparse-checkout set --no-cone '/*' '!/data/**' '!/json/**'
+```
+
 ```bash
 # 全部测试
 for f in tests/test_*.py; do python "$f"; done
