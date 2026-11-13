@@ -1,4 +1,7 @@
 import json
+import shutil
+import subprocess
+import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -73,6 +76,60 @@ class PlayerProgressTests(unittest.TestCase):
         self.assertIn("saveProgress(true)", page)
         self.assertIn("state.resumeAt", page)
         self.assertIn("audio.currentTime = t", page)
+
+
+class PlayerWordTimingTests(unittest.TestCase):
+    """词级 JSON 用 ASR 原生时间，不能再被 VTT 压缩时间轴的修补改写。"""
+
+    HARNESS = """
+const assert = require('assert');
+const reader = { lang: 'en', segment: false };
+%s
+
+const vtt = [
+  { start: 0, end: 3, text: 'One two', speaker: '' },
+  { start: 2, end: 5, text: 'And then', speaker: '' },
+];
+const segments = [
+  { start: 0, end: 3000, text: 'One two',
+    words: [['One', 0, 1000], ['two', 1000, 2000]] },
+  { start: 2000, end: 5000, text: 'And then',
+    words: [['And', 2000, 2000], ['then', 4000, 1000]] },
+];
+const nativeCues = mergeCues(vtt, { native: true, segments }, null);
+const repairedCues = mergeCues(vtt, { segments }, null);
+assert.strictEqual(nativeCues[1].speechStart, 2,
+  'native 首词 2.0s 起说话，不能被当成上一句粘过来的尾巴');
+assert.strictEqual(repairedCues[1].speechStart, 4,
+  '修正过的 sidecar 仍要跳过被拉长的首词');
+
+const fastVtt = [{ start: 0, end: 3, text: 'A B C D', speaker: '' }];
+const fastSegments = [{ start: 0, end: 3000, text: 'A B C D',
+  words: [['A', 0, 50], ['B', 50, 50], ['C', 100, 50], ['D', 2000, 500]] }];
+const fastNative = mergeCues(fastVtt, { native: true, segments: fastSegments }, null);
+const fastRepaired = mergeCues(fastVtt, { segments: fastSegments }, null);
+const starts = cues => cues[0].words.map(w => Number(w.s.toFixed(2)));
+assert.deepStrictEqual(starts(fastNative), [0, 0.05, 0.1, 2],
+  '原生词时间必须原样保留');
+assert.deepStrictEqual(starts(fastRepaired), [0, 0.6, 1.2, 2],
+  '压缩词串在修正过的 sidecar 上仍按停顿铺开');
+"""
+
+    def test_native_word_timing_is_not_repaired(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node 不在 PATH，跳过播放器逻辑测试")
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        start = page.index("function splitBilingual(text)")
+        end = page.index("function splitLabel(text, words)")
+        source = self.HARNESS % page[start:end]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            script = Path(temp_dir) / "player_word_timing.js"
+            script.write_text(source, encoding="utf-8")
+            proc = subprocess.run(
+                [node, str(script)], capture_output=True, text=True, encoding="utf-8"
+            )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
 
 
 class PlayerOffsetTests(unittest.TestCase):

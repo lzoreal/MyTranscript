@@ -977,6 +977,7 @@ function applyExperiment(obj, name) {
   const sameAsBase = !!(base?.vtt && base.vtt.length === vtt.length &&
     Math.abs((base.vtt[0]?.start || 0) - (vtt[0]?.start || 0)) < 1);
   const sidecar = sc || (sameAsBase ? base.sidecar : null);
+  if (sc) sc.native = nativeWordDoc(sc);
   const zhFromVtt = parsed?.hasCjk ? parsed.zh : null;
   const zh = zhText ? parseZhVTT(zhText)
     : (zhFromVtt || (sameAsBase ? base.zhVtt : (vttText ? null : state.zhVtt)));
@@ -1266,6 +1267,12 @@ function jsonWords(words) {
   if (!Array.isArray(words)) return [];
   return words.map(w => Array.isArray(w) ? w : [w.w, Math.round((w.s || 0) * 1000), Math.round(((w.e || 0) - (w.s || 0)) * 1000)]);
 }
+// 词级 JSON 导出（segments[].startTime/body）里是 ASR 原生词时间；timings sidecar
+// 是压缩时间轴修正后的产物，才需要播放器的修补启发式。
+function nativeWordDoc(sc) {
+  return !!sc && Array.isArray(sc.segments) &&
+    sc.segments.some(s => s && ('startTime' in s || 'body' in s));
+}
 function splitJsonBody(text) {
   // 导出格式固定是「英文\n译文」。第二行没有汉字就当作缺译文：模型偶尔把英文
   // 原文写进译文位，交给 splitBilingual 按脚本猜会把两行英文拼成一句。
@@ -1297,7 +1304,7 @@ function cuesFromJson(doc) {
   }
   return {
     vtt,
-    sidecar: { audio_seconds: Number(doc.audio_seconds) || 0, complete: true, segments: side },
+    sidecar: { audio_seconds: Number(doc.audio_seconds) || 0, complete: true, native: true, segments: side },
     zhVtt: zh.length ? zh : null,
   };
 }
@@ -1479,7 +1486,7 @@ function splitCueIntoSentences(cue) {
   const bounds = ranges.map(r => start + (end - start) * (r.s / total));
   const parts = ranges.map((r, i) => ({
     i: 0, start: bounds[i], end: i + 1 < ranges.length ? bounds[i + 1] : end,
-    speaker: cue.speaker, text: r.text, words: [], fromJson: cue.fromJson, hasWords: false
+    speaker: cue.speaker, text: r.text, words: [], native: cue.native, fromJson: cue.fromJson, hasWords: false
   }));
   const mapped = wordOffsets(cue.text, cue.words);
   if (mapped) {
@@ -1515,7 +1522,7 @@ function splitCueZh(cue) {
   const bounds = ranges.map(r => start + (end - start) * (r.s / total));
   return ranges.map((r, i) => ({
     i: 0, start: bounds[i], end: i + 1 < ranges.length ? bounds[i + 1] : end,
-    speaker: cue.speaker, text: r.text, words: [], fromJson: cue.fromJson, hasWords: false, quiet: true
+    speaker: cue.speaker, text: r.text, words: [], native: cue.native, fromJson: cue.fromJson, hasWords: false, quiet: true
   }));
 }
 function attachZh(parts, cue) {
@@ -1536,9 +1543,10 @@ function finalizeCues(cues) {
   });
   // 首词被拉成 >1.5 秒、且压住上一句的句尾：它是对齐粘过来的上一句尾巴，
   // 实际语音从第二个词开始（899 的 "And" 2.7 秒）。激活起点跳过它。
+  // 只对修正过的 sidecar 生效；词级 JSON 的首词就是 ASR 判定的词，跳过会漏字。
   for (let i = 1; i < cues.length; i++) {
     const c = cues[i], lead = c.words[0];
-    if (c.words.length > 1 && lead && lead.e - lead.s > 1.5 && lead.s < cues[i-1].speechEnd - 0.2) {
+    if (!c.native && c.words.length > 1 && lead && lead.e - lead.s > 1.5 && lead.s < cues[i-1].speechEnd - 0.2) {
       c.speechStart = c.words[1].s;
     }
   }
@@ -1566,6 +1574,7 @@ function smoothCompressedWords(words) {
 }
 function mergeCues(vtt, sidecar, zhVtt) {
   const segs = Array.isArray(sidecar?.segments) ? sidecar.segments : [];
+  const native = sidecar?.native === true;
   const aligned = segs.length === vtt.length;
   const zh = Array.isArray(zhVtt) ? zhVtt : [];
   const nearestZh = start => {
@@ -1579,7 +1588,7 @@ function mergeCues(vtt, sidecar, zhVtt) {
   let cues = vtt.map((c, i) => {
     const s = aligned ? segs[i] : (segs[i] && Math.abs((segs[i].start||0)/1000 - c.start) < 1 ? segs[i] : null);
     const words = (s?.words || []).map(([t, st, dur]) => ({ t, s: st/1000, e: (st + Math.max(0, dur))/1000 }));
-    smoothCompressedWords(words);
+    if (!native) smoothCompressedWords(words);
     for (let k = 0; k < words.length; k++) {
       if (words[k].e <= words[k].s) {
         const nx = words.slice(k+1).find(w => w.s > words[k].s);
@@ -1590,7 +1599,7 @@ function mergeCues(vtt, sidecar, zhVtt) {
     const end = s && s.end != null ? s.end/1000 : null;
     return { i, start, end, speaker: s?.speaker || c.speaker || '',
              text: c.text || s?.text || '', zh: zhAligned[i]?.text || '',
-             words, fromJson: !!s, hasWords: words.length > 0 };
+             words, native, fromJson: !!s, hasWords: words.length > 0 };
   });
   let lang = reader.lang;
   if (lang === 'zh' && !cues.some(c => c.zh)) lang = 'en';
