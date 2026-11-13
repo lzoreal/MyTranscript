@@ -5,7 +5,7 @@ import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import quote, unquote, urlparse
 
 ROOT = Path(__file__).parents[1]
 SITE = ROOT / "site"
@@ -62,7 +62,8 @@ class PlayerTranscriptTests(unittest.TestCase):
                 parsed = urlparse(url)
                 if kind == "json":
                     self.assertTrue(url.endswith(".json"))
-                    self.assertIn(f"/json/{show['slug']}/", url)
+                    slug = quote(show["slug"], safe="-._~")
+                    self.assertIn(f"/json/{slug}/", url)
                 else:
                     path = unquote(parsed.path)
                     self.assertIn(f"/{show['slug']}/transcripts/", path)
