@@ -9,8 +9,8 @@ on:
         description: "只跑某个节目（留空=全部）"
         default: ""
       shards:
-        description: "分片数（每片一个 job，待办集平均分配）"
-        default: "10"
+        description: "分片上限（实际取 min(待办集数, 20, 本值)，待办平均分配）"
+        default: "20"
       max_minutes:
         description: "每片预算（分钟，含已提交的分块）"
         default: "270"
@@ -37,15 +37,36 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       shards: ${{ steps.gen.outputs.shards }}
+      count: ${{ steps.gen.outputs.count }}
+      pending: ${{ steps.gen.outputs.pending }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          # 仓库约 2 GB；判定分片只需要 feeds.json 和分片 state，别全量 checkout。
+          filter: blob:none
+          sparse-checkout: |
+            feeds.json
+            scripts
+            data/*/state*.json
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 安装判定依赖
+        run: pip install --quiet feedparser requests
+
       - id: gen
         env:
-          SHARDS: ${{ github.event.inputs.shards || '10' }}
-        run: |
-          echo "shards=$(python3 -c 'import json, os; print(json.dumps(list(range(int(os.environ["SHARDS"])))))')" >> "$GITHUB_OUTPUT"
+          CAP: ${{ github.event.inputs.shards || '20' }}
+          ONLY_SLUG: ${{ github.event.inputs.only_slug || '' }}
+        run: python scripts/plan_shards.py --cap "$CAP" --only-slug "$ONLY_SLUG" >> "$GITHUB_OUTPUT"
 
   run:
     needs: plan
+    if: needs.plan.outputs.pending != '0'
     runs-on: ubuntu-latest
     timeout-minutes: 360
     strategy:
@@ -58,7 +79,7 @@ jobs:
     env:
       DATA_DIR: ${{ github.workspace }}/data
       SHARD: ${{ matrix.shard }}
-      SHARDS: ${{ github.event.inputs.shards || '10' }}
+      SHARDS: ${{ needs.plan.outputs.count }}
       MAX_MINUTES: ${{ github.event.inputs.max_minutes || '270' }}
       # 单集实测 35~40 分钟且不可中断；留够一集，每块提交才真的按集发生。
       RESERVE_MINUTES: "40"
@@ -203,10 +224,10 @@ jobs:
         env:
           MY_PAT: ${{ secrets.MY_CUSTOM_PAT }}
         run: |
+          # 只暂存本次真正改过的节目；没改动的 feed 不重写、不提交。
           paths="progress.json"
-          for s in $(python -c "import json;print(' '.join(s['slug'] for s in json.load(open('feeds.json',encoding='utf-8')) if s.get('publish')))"); do
-            [ -d "site/$s" ] && paths="$paths site/$s"
-            [ -d "json/$s" ] && paths="$paths json/$s"
+          for dir in $(python scripts/changed_shows.py); do
+            paths="$paths $dir"
           done
           git remote set-url origin "https://${MY_PAT}@github.com/${GITHUB_REPOSITORY}.git"
           bash scripts/git_push_retry.sh "auto: publish migrated shows" $paths
@@ -218,7 +239,7 @@ jobs:
           REPO: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
           ONLY_SLUG: ${{ github.event.inputs.only_slug || '' }}
-          SHARDS: ${{ github.event.inputs.shards || '10' }}
+          SHARDS: ${{ github.event.inputs.shards || '20' }}
           MAX_MINUTES: ${{ github.event.inputs.max_minutes || '270' }}
           GEMINI_MODEL_INPUT: ${{ github.event.inputs.gemini_model || '' }}
           TRANSLATE_BATCH_INPUT: ${{ github.event.inputs.translate_batch || '150' }}

@@ -97,6 +97,19 @@ class ExportTests(unittest.TestCase):
             self.assertEqual(doc["segments"][0]["body"], "Hello there.\n你好。")
 
 
+    def test_export_skips_files_whose_content_is_unchanged(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            show_dir = root / "data" / "pod"
+            show_dir.mkdir(parents=True)
+            (show_dir / "g1.json").write_text(json.dumps(DOC), encoding="utf-8")
+
+            first = wt.export_show(root / "data", root / "json", "pod", {"g1": "Ep_One"})
+            second = wt.export_show(root / "data", root / "json", "pod", {"g1": "Ep_One"})
+
+            self.assertEqual((first, second), (1, 0))
+
+
 class PublicUrlTests(unittest.TestCase):
     def test_raw_url_encodes_slug_and_filename(self):
         self.assertEqual(

@@ -59,6 +59,52 @@ class JsonWriteTests(unittest.TestCase):
             self.assertFalse((root / "site" / "pod" / "feed-zh.xml").exists())
 
 
+class IncrementalPublishTests(unittest.TestCase):
+    def test_second_publish_skips_when_data_did_not_change(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data = root / "data" / "pod"
+            data.mkdir(parents=True)
+            (data / "g1.json").write_text(json.dumps(DOCUMENT), encoding="utf-8")
+            calls = []
+
+            def feed(*args, **kwargs):
+                calls.append("feed")
+                target = root / "site" / "pod" / "feed.xml"
+                target.parent.mkdir(parents=True, exist_ok=True)
+                url = site.word_transcript.public_url("pod", "Ep_One.json")
+                target.write_text(f"<rss><u>{url}</u></rss>", encoding="utf-8")
+
+            def index(*args, **kwargs):
+                calls.append("index")
+                target = root / "site" / "pod" / "index.html"
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("<html/>", encoding="utf-8")
+
+            show = {"slug": "pod"}
+            kwargs = dict(
+                data_dir=root / "data",
+                json_dir=root / "json",
+                site_dir=root / "site",
+                progress={"podcasts": {}},
+                site_base_url="https://pages.test",
+                podcast={"slug": "pod", "feed_url": "u", "language": "en"},
+            )
+            with patch.object(site.scraper, "generate_podcast_feed", feed), patch.object(
+                site.scraper, "generate_podcast_index", index
+            ):
+                first = site.publish_show(show, **kwargs)
+                second = site.publish_show(show, **kwargs)
+                # feed 里缺少 JSON 链接（上次导出后中断）时必须重建。
+                (root / "site" / "pod" / "feed.xml").write_text("<rss/>", encoding="utf-8")
+                third = site.publish_show(show, **kwargs)
+
+            self.assertTrue(first["published"])
+            self.assertFalse(second["published"])
+            self.assertTrue(third["published"])
+            self.assertEqual(calls, ["feed", "index", "feed", "index"])
+
+
 class NamingTests(unittest.TestCase):
     def test_existing_filename_wins(self):
         processed = {"g1": {"vtt_filename": "Old Title.vtt"}}

@@ -122,16 +122,35 @@ def merged_processed(progress: dict, slug: str, stems: dict[str, str], json_dir)
     return old
 
 
+def feed_is_current(feed, slug: str, stems: dict[str, str]) -> bool:
+    """feed 里已经引用了每一集的 JSON，才算是最新的（中断恢复时用）。"""
+    try:
+        text = Path(feed).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return all(
+        word_transcript.public_url(slug, f"{stem}.json") in text
+        for stem in stems.values()
+    )
+
+
 def publish_show(show, *, data_dir, json_dir, site_dir, progress, site_base_url, podcast) -> dict:
     """发布一个节目：导出词级 JSON → 建 feed → 建 index（单 feed）。"""
     slug = show["slug"]
     processed = ((progress.get("podcasts") or {}).get(slug) or {}).get("processed") or {}
     documents = load_documents(data_dir, slug)
     stems = assign_stems(documents, slug, processed, Path(json_dir) / slug)
-    word_transcript.export_show(data_dir, json_dir, slug, stems)
+    exported = word_transcript.export_show(data_dir, json_dir, slug, stems)
+
+    feed = Path(site_dir) / slug / "feed.xml"
+    index = Path(site_dir) / slug / "index.html"
+    if exported == 0 and index.is_file() and feed_is_current(feed, slug, stems):
+        return {"episodes": len(documents), "stems": stems,
+                "exported": 0, "published": False}
 
     merged = merged_processed(progress, slug, stems, json_dir)
     scraper.SITE_DIR = Path(site_dir)
     scraper.generate_podcast_feed({"processed": merged}, podcast, site_base_url)
     scraper.generate_podcast_index({"processed": merged}, podcast, site_base_url)
-    return {"episodes": len(documents), "stems": stems}
+    return {"episodes": len(documents), "stems": stems,
+            "exported": exported, "published": True}

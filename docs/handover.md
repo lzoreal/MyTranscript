@@ -1,6 +1,6 @@
 # MyTranscript 交接文档
 
-最后更新：2026-11-03。面向接手者：先读本文件，再看 [AGENTS.md](../AGENTS.md) 的作业规则。
+最后更新：2026-11-14。面向接手者：先读本文件，再看 [AGENTS.md](../AGENTS.md) 的作业规则。
 
 ## 一、这个项目是什么
 
@@ -11,39 +11,37 @@
 | hwmym（自转录） | https://lzoreal.github.io/MyTranscript |
 | 其余节目 | https://lzoreal.github.io/MyTranscript/podcasts.html |
 
-Pages 站点约 **646 MB**（`site/`）；词级 JSON 另存仓库 `json/`，约 **369 MB**，由
+Pages 站点清理旧字幕后约 **40 MB**（`site/`）；词级 JSON 另存仓库 `json/`，由
 raw.githubusercontent 提供，不进 Pages。
 
-**字幕来源现在是三条**（数据与状态文件仍然彼此独立，不要合并成一套流程）：
+**字幕来源现在只有一条**（状态文件仍彼此独立）：
 
-| | hwmym | office-ladies / smartless | 其余 11 个节目 |
-| --- | --- | --- | --- |
-| 英文字幕来源 | 自己的 Whisper 转写 | 统一管线：PodScripts 文本映射到我们的 ASR 词流 | PodScripts 抓取 |
-| 主状态文件 | `state.json` | `data/<slug>/state-*.json` + `progress.json` | `progress.json` |
-| 翻译 | `transcribe.py` 内部调 Gemini | `run_pipeline.py` 内部调 Gemini | `translate_vtt.py` |
-| 发布 | `transcribe.py` 写 feed/index | `transcripts.yml` 的 publish job 写 JSON/feed/index | crawl / align 写 VTT |
+| | 13 个已发布节目 | hwmym |
+| --- | --- | --- |
+| 英文字幕来源 | 统一管线：RSS → 我们的 ASR 词流（`text_source: asr`） | `transcribe.py`（Whisper 词时间） |
+| 主状态文件 | `data/<slug>/state-*.json` + `progress.json` | `state.json` + `data/<slug>/state-*.json` |
+| 翻译 | `run_pipeline.py` 内部调 Gemini | `transcribe.py` 内部调 Gemini |
+| 发布 | `transcripts.yml` 的 publish job 写 JSON/feed/index | `transcribe.py` 写 feed/index，尾部导出 JSON |
+
+旧 VTT 翻译 / 对齐链路（`translate_vtt.py`、`generate_zh_feed.py`、`translate.yml`、`align.yml`）
+已于 2026-11-14 随全量迁移一起删除。只剩一处历史遗留：7 集尚未回填的 VTT 仍按 `text/vtt` 发布。
 
 ## 二、数据流
 
 ```
 Crawl（周一 05:00 UTC / 手动）
-  RSS → PodScripts 搜索 → 英文 VTT → progress.json → feed.xml + index.html
-        │ push
-        ├─→ Deploy Pages（任何 push 到 main）
-        └─→ Align Word Timings（workflow_run；另有手动分片回填）
-              每集：下载音频 → 我们自己的 ASR → 文本映射 → 删广告 → 重写两份 VTT + sidecar
+  只处理 podcasts.json 里 migrated=false 的节目（目前已迁移的全部跳过）
+  → progress.json → 根索引 index.html / podcasts.html
+        └─→ Deploy Pages（任何 push 到 main）
 
-Transcript Pipeline（手动 dispatch，10 分片）
-  RSS → ASR 词流 → PodScripts 文本映射 → Gemini 翻译 → data/<slug>/<guid>.json
-        → publish job：导出 json/<slug>/<stem>.json → feed.xml + index.html → progress.json
-  （已迁移节目：office-ladies、smartless；hwmym 的 data 也由这条链路产出）
+Transcript Pipeline（手动 dispatch；分片数 = min(待办集数, 20)）
+  RSS → ASR 词流 → Gemini 翻译 → data/<slug>/<guid>.json
+        → publish job：只对内容有改动的节目导出 json/、重建 feed.xml + index.html → progress.json
+  （13 个节目都走这条；hwmym 的 data 同格式，但 feed 仍由 transcribe.yml 收尾）
 
 Transcribe（周一 12:00 UTC / 手动，含回填分片）
   仅 hwmym：下载(中国代理) → turbo 转写(词时间) → Gemini 翻译 → 双语 VTT + timings sidecar
-        → 若 data 里已有该集，导出 json/ 并把 feed 标签切到 JSON
-
-Translate（每天 19:00 UTC + crawl/transcribe 成功后 + 手动）
-  未迁移节目：transcripts/zh/*.vtt + feed-zh.xml + translations.json
+        → 导出 json/ 并把 feed 标签切到 JSON
 ```
 
 各 workflow 有独立 concurrency group，可并行；提交一律走 `scripts/git_push_retry.sh`（只 `git add` 自己的 pathspec，push 被拒就 rebase 重试）。
@@ -52,14 +50,14 @@ Translate（每天 19:00 UTC + crawl/transcribe 成功后 + 手动）
 
 | 文件 | 行数 | 职责 | 关键函数 |
 | --- | --- | --- | --- |
-| `scripts/scraper.py` | 959 | 抓取字幕、生成增强版英文 Feed 与索引 | `process_podcast`、`generate_podcast_feed`、`parse_transcript` |
+| `scripts/scraper.py` | 959 | 生成增强版 Feed 与索引（publish 侧仍在用）；PodScripts 抓取只服务未迁移节目 | `process_podcast`、`generate_podcast_feed`、`parse_transcript` |
 | `scripts/transcribe.py` | 2279 | hwmym 全流程：下载、转写、翻译、写 VTT/sidecar、回填、导出 JSON | `whisper_transcribe`、`translate_cues_with_gemini`、`sync_data_transcripts`、`process_episode`、`run_backfill` |
-| `scripts/translate_vtt.py` | 1106 | 未迁移节目的中译（不改英文） | `gemini_batch_translate`、`build_ring` |
-| `scripts/generate_zh_feed.py` | 423 | 未迁移节目的中文 Feed 与中文索引 | `process_podcast` |
-| `scripts/align_timings.py` | 641 | 抓取节目的时间轴修正 + 词级时间 + 删广告 | `parse_english_vtt`、`map_stream`、`classify_cues`、`assign_times`、`rewrite_episode` |
+| `scripts/align_timings.py` | 641 | 词流映射与测时工具；`map_stream`/`classify_cues`/`assign_times` 仍被 `pipeline_text.py` 使用（CLI 随 `align.yml` 下线，文件保留） | `map_stream`、`classify_cues`、`assign_times` |
 | `scripts/run_pipeline.py` | 116 | 统一管线 CLI：分片、预算、`ONLY_SLUG`、`DATA_DIR` | `main` |
 | `scripts/pipeline_site.py` | 81 | 已迁移节目发布：导出 JSON、建 feed/index | `publish_show`、`merged_processed`、`stem_for` |
-| `scripts/publish_site.py` | 111 | publish job 入口：读 progress、写 `json/`、登记 progress | `main`、`merge_progress` |
+| `scripts/publish_site.py` | 111 | publish job 入口：读 progress、写 `json/`、登记 progress；无改动的节目跳过重建 | `main`、`merge_progress` |
+| `scripts/plan_shards.py` | 55 | 按待办集数决定分片数（≤20，一片一集为下限） | `effective_shards`、`pending_total` |
+| `scripts/changed_shows.py` | 40 | 发布后从 `git status` 列出改动过的节目目录，供增量提交 | `show_dirs` |
 | `scripts/word_transcript.py` | 97 | 内部 JSON → 公开词级 JSON（官方字段 + fork 扩展）与 raw URL | `build`、`export_show`、`public_url` |
 | `scripts/export_word_json.py` | 69 | 手动补导出：`--progress` 或 `--state` | `stems_from_progress`、`stems_from_state` |
 | `scripts/gemini_keys.py` | 149 | Gemini 配额桶（模型 × key）顺序轮换与错误分类（两条链路共用） | `GeminiKeyRing`、`gemini_models`、`is_quota_error`、`is_auth_error` |
@@ -67,38 +65,39 @@ Translate（每天 19:00 UTC + crawl/transcribe 成功后 + 手动）
 
 ## 四、持久化与站点结构
 
-### 三个状态文件
+### 两个状态文件
 
-- `progress.json`：`{ "podcasts": { "<slug>": { "processed": { "<guid>": {vtt_filename, title, processed_at, skipped, reason, source_url, audio_master?} }, "total_processed", "updated_at", "audio_master_gate"? } } }`（Crawl 独占）
+- `progress.json`：`{ "podcasts": { "<slug>": { "processed": { "<guid>": {vtt_filename, title, processed_at, skipped, reason, source_url, audio_master?} }, "total_processed", "updated_at", "audio_master_gate"? } } }`（Crawl / publish 写）
 - `state.json`：`{ "version", "podcasts": { "<slug>": { "feed_url", "processed", "transcripts": [...], "total_processed", "last_run", "feed_title" } } }`（Transcribe 独占）
-- `translations.json`：翻译缓存（Translate 独占）
 
-三者的键都是 **GUID**，所以任何"改音频地址/改时间轴"都不会让缓存失效、不会触发重转。
+两者的键都是 **GUID**，所以任何"改音频地址/改时间轴"都不会让缓存失效、不会触发重转。
+`data/<slug>/state-*.json` 是统一管线的分片进度，与上面两个文件互不替代。
 
 ### 站点结构
 
 ```
 json/<slug>/<stem>.json        ← 已迁移节目的词级 JSON（raw.githubusercontent 提供，不进 Pages）
 site/
-  index.html                 根索引（Transcribe 生成）
-  podcasts.html              抓取节目索引（Crawl 生成）
+  index.html                 根索引（Crawl 生成）
+  podcasts.html              节目索引（Crawl 生成）
   player.html                多节目播放器（静态；读 shows.json + 各节目 feed）
   shows.json                 播放器节目清单（新增节目时同步更新；无 feed 的节目 feed 为 null）
   <slug>/
-    feed.xml / feed-zh.xml   ← 已迁移节目只有 feed.xml
+    feed.xml                 ← 唯一的字幕 Feed（feed-zh.xml 已下线）
     index.html
-    transcripts/<stem>.vtt        ← 未迁移节目；形态因来源而异，见下
-    transcripts/zh/<stem>.vtt
-    timings/<stem>.json           ← 词级时间（sidecar）
+    transcripts/<stem>.vtt   ← 只剩 7 集未回填的历史字幕（hwmym 3、taproot 4）
+    transcripts/zh/<stem>.vtt ← 只剩 taproot 那 4 集的播放器译文
+    timings/<stem>.json      ← 只保留上述 hwmym 3 集的词级 sidecar
 ```
 
 ### 播放器（`site/player.html`）取字幕规则
 
 - 只认 feed 里属于本项目的 `podcast:transcript`（host 为 `lzoreal.github.io/MyTranscript` 或
   `raw.githubusercontent.com/lzoreal/MyTranscript`），忽略 Buzzsprout 等外部字幕链接；
-- `application/json` 直接按 `segments` 画词级并取 `body` 第二行中文；
-- `text/vtt` 解析后，英文单语再取 `transcripts/zh/<stem>.vtt`；`shows.json` 里该节目 `timings: true`
-  时才请求 `timings/<stem>.json`（目前只有 hwmym），否则按句级显示；
+- `application/json` 直接按 `segments` 画词级并取 `body` 第二行中文；JSON 的 `words` 是 ASR
+  原生时间，播放器不再做压缩词串平滑和首词重叠跳过（这两项修补只用于 VTT + `timings/` sidecar）；
+- `text/vtt` 只用于尚未回填的 7 集历史字幕：英文单语再取 `transcripts/zh/<stem>.vtt`；
+  `shows.json` 里该节目 `timings: true` 时才请求 `timings/<stem>.json`（目前只有 hwmym）；
 - 没有字幕的集仍然可以播放音频；
 - 音频优先用 feed enclosure（多跳跟踪 URL）；播放出错时自动重试、解析最终 CDN 地址、退回
   `media:content` 直链，并在播放器上方显示可点击重试的提示；
@@ -109,13 +108,15 @@ site/
 - 详情面板的“对齐到当前句”进入选句模式：先锁定按下按钮时的播放位置，再点击任意一句作为该时刻
   应高亮的句子，按 `offset = 锁定时间 − 该句 speechStart` 更新偏移；Esc 或再次点按钮取消。
 
-### VTT 有两种形态（必须区分）
+### 残余 VTT 有两种形态（必须区分）
+
+现在只剩 7 集历史字幕，但形态规则不变：
 
 | 文件 | 形态 | 行/块 |
 | --- | --- | --- |
-| hwmym 的 `transcripts/*.vtt` | **中英双语** | 4（序号/时间/英文/中文） |
-| 抓取节目的 `transcripts/*.vtt` | **英文单语** | 3（序号/时间/英文） |
-| 所有节目的 `transcripts/zh/*.vtt` | **中英双语** | 4 |
+| hwmym 的 `transcripts/*.vtt`（3 集） | **中英双语** | 4（序号/时间/英文/中文） |
+| taproot 的 `transcripts/*.vtt`（4 集） | **英文单语** | 3（序号/时间/英文） |
+| taproot 的 `transcripts/zh/*.vtt`（4 集） | **中英双语** | 4 |
 
 > 这一条是 2026-10-29 冒烟时才纠正的：早期设计文档假设"抓取节目的英文文件也是双语"，实现因此解析出 0 块。
 
@@ -174,17 +175,17 @@ site/
 
 | workflow | 触发 | 写什么 |
 | --- | --- | --- |
-| `crawl.yml` | 周一 05:00 UTC / 手动 | `progress.json`、12 个节目的英文 VTT、feed、index |
+| `crawl.yml` | 周一 05:00 UTC / 手动 | `progress.json`、未迁移节目的 VTT/feed、根索引 |
 | `transcribe.yml` | 周一 12:00 UTC / 手动（`backfill` 输入进入分片回填） | `state.json`、hwmym 的双语 VTT、`timings/`、hwmym feed/index |
-| `translate.yml` | 每天 19:00 UTC / crawl、transcribe 成功后 / 手动 | `site/*/transcripts/zh/`、`feed-zh.xml`、`translations.json` |
+| `transcripts.yml` | 手动 dispatch | `data/`、`json/`、各节目 feed/index、`progress.json` |
+| `fix-zh.yml` | 手动 | 修正 data 里的中文并重新发布 |
 | `deploy.yml` | push 到 main | Pages（从最新 main 重新 checkout） |
-| `align.yml` | crawl 成功后 / 手动分片 | 重写两份 VTT + `timings/` |
 
 ### 密钥
 
 | Secret | 必需 | 说明 |
 | --- | --- | --- |
-| `MY_CUSTOM_PAT` | ✅ | 四个 job 的 push；必须是 PAT，默认 `GITHUB_TOKEN` 的 push 不会触发下游 workflow |
+| `MY_CUSTOM_PAT` | ✅ | 各 job 的 push；必须是 PAT，默认 `GITHUB_TOKEN` 的 push 不会触发下游 workflow |
 | `GEMINI_API_KEYS` | 推荐 | 逗号分隔多把 key（**不同项目**才有意义），顺序轮换 |
 | `GEMINI_API_KEY` | 可选 | 单 key 兼容写法；与上面任一存在即可 |
 
@@ -242,23 +243,24 @@ for f in tests/test_*.py; do python "$f"; done     # 6 个文件、174 个用例
 - `scripts/transcribe.py` 的重依赖（faster-whisper / google-genai / feedparser）在测试里用 `sys.modules` 桩替代；`align_timings.py` 复用 `transcribe` 的下载与 sidecar，所以测试文件顶部先打桩再 import。
 - 真实转写只在 Python 3.10 上可跑（本机 `C:\Users\游梦\AppData\Local\Programs\Python\Python310\python.exe`），3.14 装不了 faster-whisper。
 
-## 八、当前状态（2026-11-03）
+## 八、当前状态（2026-11-14）
 
 **线上**：
 
-- hwmym 121/121、office-ladies 497/497 的词级数据已完成；feed 的 transcript 标签指向
-  `raw.githubusercontent.com/.../json/`，旧 VTT 归档在 `data/<slug>/legacy-vtt/`；
-- 两个已迁移节目只保留 `feed.xml`，`feed-zh.xml` 已下线；
-- smartless 迁移进行中：382 集旧字幕仍以 VTT 标签提供服务，回填完成的集逐批切到 JSON；
-  该节目 PodScripts 页面无内容，`text_source` 已改为 `asr`，直接用自己的转写文本；
-- Pages 站点约 646 MB，词级 JSON 约 369 MB（仓库内，不进 Pages）。
+- 13 个已发布节目的 transcript 标签全部指向 `json/` 词级 JSON；`data/`、`json/` 覆盖全部节目，
+  旧 VTT 归档在 `data/<slug>/legacy-vtt/`；
+- 旧翻译 / 对齐链路已删除：`translate.yml`、`align.yml`、`translate_vtt.py`、
+  `generate_zh_feed.py`、`translations.json`、`podcasts_translate.json`；
+- 站点资源已清理：`feed-zh.xml`、未引用的 `transcripts/*.vtt` 与 `transcripts/zh/` 已删除，
+  `site/` 从 646 MB 降到约 40 MB；
+- 仍以 VTT 发布的只有 7 集：hwmym 3 集、taproot 4 集；保留它们的 VTT、
+  taproot 的 4 个中文 VTT、hwmym 的 3 个 timings。
 
 **未完成 / 注意**：
 
-1. smartless 382 集回填完成后，需要归档 `site/smartless/transcripts/` 并删除 `feed-zh.xml`；
-2. 抓取节目的 240 集 align 回填尚未跑（只影响未迁移节目）；
-3. `align_timings.collect_shows` 遇到单个畸形 RSS 会整 job 失败（2026-11-03 实测某个 Substack 源），
-   与字幕数据无关。
+1. 这 7 集补转并导出 JSON 后，删除对应 VTT/timings，并从 `shows.json` 去掉 `timings`；
+2. crawl 仍每周运行，只服务 pragmatic-engineer（无已发布 feed）与根索引；
+3. `align_timings.collect_shows` 遇到单个畸形 RSS 会整 job 失败（2026-11-03 实测某个 Substack 源）。
 
 ## 九、已否证的方案（不要再提）
 
@@ -272,13 +274,13 @@ for f in tests/test_*.py; do python "$f"; done     # 6 个文件、174 个用例
 
 | 现象 | 先看什么 |
 | --- | --- |
-| 字幕与音频差约 30 秒 | 该节目没跑过 align；`timings/` 里有没有对应 sidecar |
+| 字幕与音频差约 30 秒 | 只可能是残余 VTT 集：看 `timings/` 里有没有对应 sidecar；词级 JSON 不需要 align |
 | 某集反复被回填选中 | sidecar 的 `attempts`；`complete` 是否为 false |
 | 翻译整批缺几条 | `translate_blocks` 的"只补缺失编号"日志；Gemini 是否返回了不完整对象 |
 | job 绿但什么都没做 | 分片参数被 `continue-on-error` 吞掉？看"检查回填参数"步骤与 `候选 N 集` |
 | push 被拒 | `git_push_retry.sh` 会 rebase 重试；同名集产物的 add/add 冲突自动保留远程版本，仍失败多半是 pathspec 越界改了别人的文件 |
 
-## 十一、统一链路（新，进行中）
+## 十一、统一链路
 
 2026-10-30 起，仓库里多了一条统一链路：`feeds.json` → `scripts/run_pipeline.py` → 双语词级 JSON
 （写 main 的 `data/`，不部署）。设计见 `docs/superpowers/specs/2026-10-30-unified-transcript-pipeline-design.md`。
@@ -306,11 +308,13 @@ for f in tests/test_*.py; do python "$f"; done     # 6 个文件、174 个用例
 | `scripts/run_pipeline.py` | CLI：分片、预算、`ONLY_SLUG`、`DATA_DIR` |
 | `scripts/fill_zh_words.py` | 离线补齐：门控放弃的句子按字数均分，写 `zh_word_mode="even"` |
 | `scripts/word_transcript.py` | `data/` 内部 JSON → 公开词级 JSON（官方字段 + fork 扩展）与 raw URL |
-| `scripts/publish_site.py` | publish job 入口：导出 JSON、重建 feed/index、登记 progress |
+| `scripts/publish_site.py` | publish job 入口：导出 JSON、重建 feed/index、登记 progress；内容未变则跳过 |
 | `scripts/export_word_json.py` | 手动补导出：`--progress`（office-ladies）或 `--state`（hwmym） |
 
 ### 分片与续跑
 
+- 分片数由 `plan_shards.py` 在 plan job 里算：`min(输入上限, 20, 待办集数)`，至少 1 片；
+  待办 20 集以内一片一集，超出 20 集才用满 20 片。待办数 = RSS 条目 − state 里 done/失败到上限的集。
 - 分片的单位是**集**，不是节目：首切时先剔除已完成（以及重试到上限、其它片已认领）的集，
   剩下的按 guid 排序后轮流分给各片，各片待办数差不超过 1。
 - **一个 run 内每片只切一次分片**，结果落在 `data/<slug>/plan-<shard>.json`（`run_id` 用
@@ -375,15 +379,14 @@ for f in tests/test_*.py; do python "$f"; done     # 6 个文件、174 个用例
    实测 hidden-brain 18/18 集都回退 ASR，`podscripts` 分支只留作历史兼容，不再配 `podscripts_id`）、
    `publish: true`；
 2. `podcasts.json` 给该节目加 `"migrated": true` —— crawl 跳过抓取与 feed/index，但总索引仍列出；
-3. `podcasts_translate.json` 移除该节目（旧翻译 job 不再碰它）；
-4. **决定是否回填历史集**：
+3. **决定是否回填历史集**：
    - 只切换新集：`python scripts/seed_state.py <slug> --data-dir data --shards 10`
      把 progress 里的旧集标成 done，新链路只处理新集；
    - 要让历史集也有词级 JSON：**不要 seed**，让 `data/<slug>/` 的 state 为空，直接分波跑；
-5. 分波跑 `transcripts.yml`：先用 `shards=10`、`max_minutes=45` 做金丝雀（每片约 1 集），
+4. 分波跑 `transcripts.yml`：先用 `shards=10`、`max_minutes=45` 做金丝雀（每片约 1 集），
    验证 JSON 结构、中文覆盖率与词时间；再用 `max_minutes=270` 反复 dispatch，直到 done 集数 = 目标；
-6. 全量完成并发布后收尾：VTT 移到 `data/<slug>/legacy-vtt/`（含 `zh/`），
-   `git rm site/<slug>/feed-zh.xml`。
+5. 全量完成并发布后收尾：VTT 移到 `data/<slug>/legacy-vtt/`（含 `zh/`），
+   删除该节目已不被 feed 引用的 `site/<slug>/transcripts/`。
 
 **分批迁移的硬约束**：`pipeline_site.merged_processed` 只有在
 `json/<slug>/<stem>.json` 实际存在时才把记录切到 JSON，否则保留 `vtt_filename`。
@@ -394,31 +397,30 @@ for f in tests/test_*.py; do python "$f"; done     # 6 个文件、174 个用例
 - `data/<slug>/` 里 done 集数 = 目标集数，失败 0；
 - feed `items` = 目标集数，transcript 标签全部 `application/json`、0 个 `text/vtt`；
 - 随机抽 3 个 raw JSON 返回 200，且 `version=1.0.0`；
-- `site/<slug>/feed-zh.xml` 与 `site/<slug>/transcripts/` 已删除，`site/` 总量 < 1 GB；
-- 未迁移节目的标签仍是 `text/vtt`，文件未变化。
+- 未回填的集仍保留 `text/vtt` 标签与对应文件，已回填的集不再引用 VTT。
 
 **同一节目只能有一个产出方**；切换后观察一周 `git log`，确认旧链路不再产生该节目的提交。
 回滚：把 slug 加回 `podcasts.json`、从 `feeds.json` 删除即可。
 
 ### 与旧链路的关系
 
-迁移完成前，旧的四条 workflow（crawl / transcribe / translate / align）照常运行；
+全量迁移后，旧链路只剩 crawl（未迁移节目 + 根索引）与 transcribe（hwmym）；
+translate / align 两条已在 2026-11-14 删除。
 统一链路的产物在 main 的 `data/`，`publish` job 才写 `site/` 和 Feed。
 `data/` 不进 Pages 上传（`deploy.yml` 只传 `site/`，且只由 `site/**` 的提交触发）。
 
 ### 词级 JSON 字幕（2026-11-02）
 
-- 已迁移节目（office-ladies、smartless）与 hwmym 的 transcript 是仓库里的
+- 13 个已发布节目与 hwmym 的 transcript 是仓库里的
   `json/<slug>/<stem>.json`，由 `https://raw.githubusercontent.com/lzoreal/MyTranscript/main/...`
   直接提供；**不进 Pages**（618 集实测 386.3 MB，放进站点会超过 1 GB）；
 - JSON = Podcasting 2.0 官方字段（`version`、`segments[].startTime/endTime/body`，秒）
   + AntennaPod fork 扩展（`segments[].start/end/text/words`，毫秒）；
 - 每集一个双语文件，`body/text` 是「英文句 + 换行 + 中文句」；`words` 只含英文词
   （fork 解析器要求单调递增，混入中文词会被整段丢弃）；
-- 已迁移节目只保留 `feed.xml`，不再生成 `feed-zh.xml`；hwmym 与 smartless 已从
-  `podcasts_translate.json` 移除；
+- 所有节目只保留 `feed.xml`，不再生成 `feed-zh.xml`；
 - 旧 VTT 原样归档在 `data/<slug>/legacy-vtt/`（含 `zh/`），不再发布；
-- 导出只读 `data/`：office-ladies、smartless 由 `transcripts.yml` 的 publish job，
+- 导出只读 `data/`：其余 12 个节目由 `transcripts.yml` 的 publish job，
   hwmym 由 `transcribe.yml` 在每次运行尾部完成；`scripts/export_word_json.py` 供手动补导出；
 - `scraper.is_episode_processed` 认得 `json/` 下的产物，VTT 归档后 feed 不会被清空；
   `transcribe.is_cached_episode` 同理，hwmym 不会因 VTT 移动而重转。

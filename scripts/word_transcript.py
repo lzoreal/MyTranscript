@@ -76,18 +76,24 @@ def dumps(document: dict) -> str:
     return json.dumps(build(document), ensure_ascii=False, separators=(",", ":"))
 
 
-def write_episode(document: dict, json_dir, slug: str, stem: str) -> str:
-    """写单集 JSON，返回文本。"""
+def write_episode(document: dict, json_dir, slug: str, stem: str) -> tuple[str, bool]:
+    """写单集 JSON，返回 (文本, 是否落盘)；内容相同就不重写，发布才能增量。"""
     text = dumps(document)
     target = Path(json_dir) / slug / f"{stem}.json"
     target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        if target.read_text(encoding="utf-8") == text:
+            return text, False
+    except OSError:
+        pass
     tmp = target.with_name(target.name + ".tmp")
     tmp.write_text(text, encoding="utf-8")
     tmp.replace(target)
-    return text
+    return text, True
 
 
 def export_show(data_dir, json_dir, slug: str, stems: dict[str, str]) -> int:
+    """导出该节目；返回真正改写的集数（内容没变的不计）。"""
     written = 0
     for path in sorted((Path(data_dir) / slug).glob("*.json")):
         if path.name.startswith("state"):
@@ -96,6 +102,6 @@ def export_show(data_dir, json_dir, slug: str, stems: dict[str, str]) -> int:
         stem = stems.get(document.get("guid"))
         if not stem:
             continue
-        write_episode(document, json_dir, slug, stem)
-        written += 1
+        _text, changed = write_episode(document, json_dir, slug, stem)
+        written += int(changed)
     return written

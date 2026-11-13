@@ -100,9 +100,10 @@ def main(argv=None) -> int:
         Path("progress.json").write_text(
             json.dumps(progress, ensure_ascii=False, indent=2) + chr(10), encoding="utf-8"
         )
+    state = "已重建 feed" if result["published"] else "无改动，未重建 feed"
     print(
         f"{args.slug}: 发布 {result['episodes']} 集（词级 JSON），"
-        f"progress 更新 {progress_changed} 条"
+        f"导出改动 {result['exported']} 集，progress 更新 {progress_changed} 条，{state}"
     )
     return 0
 
