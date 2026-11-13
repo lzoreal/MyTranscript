@@ -43,13 +43,25 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
-          # 仓库约 2 GB；判定分片只需要 feeds.json 和分片 state，别全量 checkout。
           filter: blob:none
           sparse-checkout: |
             feeds.json
             scripts
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/checkout@v4
+        with:
+          ref: data
+          path: data-repo
+          filter: blob:none
+          sparse-checkout: |
             data/*/state*.json
           sparse-checkout-cone-mode: false
+
+      - name: 链接数据目录
+        run: |
+          rm -rf data json
+          ln -s "$PWD/data-repo/data" data
 
       - uses: actions/setup-python@v5
         with:
@@ -107,6 +119,19 @@ jobs:
           # 分片提交的 state 看不到，会被重做。
           ref: main
           token: ${{ secrets.MY_CUSTOM_PAT }}
+
+      # 词级数据在 data 分支：检出到 data-repo，再把 data/、json/ 软链到根目录。
+      - uses: actions/checkout@v4
+        with:
+          ref: data
+          path: data-repo
+          token: ${{ secrets.MY_CUSTOM_PAT }}
+
+      - name: 链接数据目录
+        run: |
+          rm -rf data json
+          ln -s "$PWD/data-repo/data" data
+          ln -s "$PWD/data-repo/json" json
 
       - uses: actions/setup-python@v5
         with:
@@ -172,7 +197,7 @@ jobs:
             [ "$chunk" -gt 45 ] && chunk=45
             rc=0
             MAX_MINUTES=$chunk python -u scripts/run_pipeline.py || rc=$?
-            bash scripts/git_push_retry.sh \
+            GIT_WORKTREE="$PWD/data-repo" bash scripts/git_push_retry.sh \
               "auto: word transcripts (shard ${SHARD})" data \
               || echo "提交失败，文件留在工作区等兜底步骤"
             if [ "$rc" -eq 3 ]; then
@@ -190,8 +215,8 @@ jobs:
         env:
           MY_PAT: ${{ secrets.MY_CUSTOM_PAT }}
         run: |
-          git remote set-url origin "https://${MY_PAT}@github.com/${GITHUB_REPOSITORY}.git"
-          bash scripts/git_push_retry.sh \
+          git -C data-repo remote set-url origin "https://${MY_PAT}@github.com/${GITHUB_REPOSITORY}.git"
+          GIT_WORKTREE="$PWD/data-repo" bash scripts/git_push_retry.sh \
             "auto: word transcripts (shard ${SHARD}, tail)" data
 
   # 分片全部跑完后统一发布：导出词级 JSON、重建 feed/index，一个节目只由一个 job 写。
@@ -205,6 +230,18 @@ jobs:
         with:
           ref: main
           token: ${{ secrets.MY_CUSTOM_PAT }}
+
+      - uses: actions/checkout@v4
+        with:
+          ref: data
+          path: data-repo
+          token: ${{ secrets.MY_CUSTOM_PAT }}
+
+      - name: 链接数据目录
+        run: |
+          rm -rf data json
+          ln -s "$PWD/data-repo/data" data
+          ln -s "$PWD/data-repo/json" json
 
       - uses: actions/setup-python@v5
         with:
@@ -220,7 +257,16 @@ jobs:
             python scripts/publish_site.py "$slug" --data-dir data --json-dir json
           done
 
-      - name: 提交站点文件
+      - name: 提交词级 JSON（data 分支）
+        env:
+          MY_PAT: ${{ secrets.MY_CUSTOM_PAT }}
+        run: |
+          # 先推 data：feed 指向的 JSON 必须在站点更新前就绪。
+          git -C data-repo remote set-url origin "https://${MY_PAT}@github.com/${GITHUB_REPOSITORY}.git"
+          GIT_WORKTREE="$PWD/data-repo" bash scripts/git_push_retry.sh \
+            "auto: publish word transcripts" data json
+
+      - name: 提交站点文件（main）
         env:
           MY_PAT: ${{ secrets.MY_CUSTOM_PAT }}
         run: |

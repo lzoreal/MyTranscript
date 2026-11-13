@@ -11,8 +11,8 @@
 | hwmym（自转录） | https://lzoreal.github.io/MyTranscript |
 | 其余节目 | https://lzoreal.github.io/MyTranscript/podcasts.html |
 
-Pages 站点清理旧字幕后约 **40 MB**（`site/`）；词级 JSON 另存仓库 `json/`，由
-raw.githubusercontent 提供，不进 Pages。
+Pages 站点清理旧字幕后约 **40 MB**（`site/`）；词级数据 `data/`、`json/` 放在独立的
+**`data` 分支**（main 只有代码和 `site/`），由 raw.githubusercontent 提供，不进 Pages。
 
 **字幕来源现在只有一条**（状态文件仍彼此独立）：
 
@@ -73,10 +73,25 @@ Transcribe（周一 12:00 UTC / 手动，含回填分片）
 两者的键都是 **GUID**，所以任何"改音频地址/改时间轴"都不会让缓存失效、不会触发重转。
 `data/<slug>/state-*.json` 是统一管线的分片进度，与上面两个文件互不替代。
 
+### 数据分支（`data`）
+
+`data/`（内部双语 JSON + 分片 state）和 `json/`（对外词级 JSON）在 **`data` 分支**，
+main 不存。CI 任务用两次 checkout 把 data 分支放到 `data-repo/`，再软链回根目录：
+
+```bash
+rm -rf data json
+ln -s "$PWD/data-repo/data" data
+ln -s "$PWD/data-repo/json" json
+```
+
+提交时用 `GIT_WORKTREE="$PWD/data-repo" scripts/git_push_retry.sh ...` 推 data 分支；
+站点/状态文件仍推 main。feed 里的 transcript URL 指向 `.../MyTranscript/data/json/...`。
+本地克隆可用 `--filter=blob:none --sparse` 跳过 `data/`、`json/`，需要时再按需拉取。
+
 ### 站点结构
 
 ```
-json/<slug>/<stem>.json        ← 已迁移节目的词级 JSON（raw.githubusercontent 提供，不进 Pages）
+data/ + json/                  ← 在 data 分支（词级母版与导出，raw.githubusercontent 提供）
 site/
   index.html                 根索引（Crawl 生成）
   podcasts.html              节目索引（Crawl 生成）
@@ -176,9 +191,9 @@ site/
 | workflow | 触发 | 写什么 |
 | --- | --- | --- |
 | `crawl.yml` | 周一 05:00 UTC / 手动 | `progress.json`、未迁移节目的 VTT/feed、根索引 |
-| `transcribe.yml` | 周一 12:00 UTC / 手动（`backfill` 输入进入分片回填） | `state.json`、hwmym 的双语 VTT、`timings/`、hwmym feed/index |
-| `transcripts.yml` | 手动 dispatch | `data/`、`json/`、各节目 feed/index、`progress.json` |
-| `fix-zh.yml` | 手动 | 修正 data 里的中文并重新发布 |
+| `transcribe.yml` | 周一 12:00 UTC / 手动（`backfill` 输入进入分片回填） | `state.json`、hwmym 的双语 VTT、`timings/`、hwmym feed/index（main）；`data/`、`json/`（data 分支） |
+| `transcripts.yml` | 手动 dispatch | `data/`、`json/`（**推 data 分支**）、各节目 feed/index、`progress.json`（main） |
+| `fix-zh.yml` | 手动 | 修正 data 里的中文（推 data 分支）并重新发布（main） |
 | `deploy.yml` | push 到 main | Pages（从最新 main 重新 checkout） |
 
 ### 密钥
@@ -412,8 +427,9 @@ translate / align 两条已在 2026-11-14 删除。
 ### 词级 JSON 字幕（2026-11-02）
 
 - 13 个已发布节目与 hwmym 的 transcript 是仓库里的
-  `json/<slug>/<stem>.json`，由 `https://raw.githubusercontent.com/lzoreal/MyTranscript/main/...`
-  直接提供；**不进 Pages**（618 集实测 386.3 MB，放进站点会超过 1 GB）；
+  `json/<slug>/<stem>.json`，由 `https://raw.githubusercontent.com/lzoreal/MyTranscript/data/...`
+  直接提供；**不进 Pages**（当前约 2.2 GB，放进站点会超过 1 GB）；`data/`、`json/` 在
+  独立的 `data` 分支上，main 只保留代码和 `site/`；
 - JSON = Podcasting 2.0 官方字段（`version`、`segments[].startTime/endTime/body`，秒）
   + AntennaPod fork 扩展（`segments[].start/end/text/words`，毫秒）；
 - 每集一个双语文件，`body/text` 是「英文句 + 换行 + 中文句」；`words` 只含英文词

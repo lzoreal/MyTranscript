@@ -2744,7 +2744,7 @@ class WordJsonSyncTests(unittest.TestCase):
             self.assertTrue(out.exists())
             self.assertEqual(
                 records["g1"]["url"],
-                "https://raw.githubusercontent.com/lzoreal/MyTranscript/main"
+                "https://raw.githubusercontent.com/lzoreal/MyTranscript/data"
                 "/json/pod/Old.json",
             )
             self.assertEqual(records["g2"]["url"], "https://x/Other.vtt")

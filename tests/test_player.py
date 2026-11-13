@@ -22,7 +22,7 @@ def own_transcripts(item):
         url = entry.get("url") or ""
         if url.startswith("https://lzoreal.github.io/MyTranscript/"):
             found.append(("vtt", url))
-        elif url.startswith("https://raw.githubusercontent.com/lzoreal/MyTranscript/main/"):
+        elif url.startswith("https://raw.githubusercontent.com/lzoreal/MyTranscript/data/"):
             found.append(("json", url))
     return found
 

@@ -25,7 +25,7 @@ class MergeProgressTests(unittest.TestCase):
         self.assertEqual(entry["transcript_type"], "application/json")
         self.assertEqual(
             entry["url"],
-            "https://raw.githubusercontent.com/lzoreal/MyTranscript/main"
+            "https://raw.githubusercontent.com/lzoreal/MyTranscript/data"
             "/json/pod/Ep_One.json",
         )
         self.assertEqual(entry["path"], "json/pod/Ep_One.json")

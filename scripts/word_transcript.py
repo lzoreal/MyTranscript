@@ -10,7 +10,8 @@ import json
 from pathlib import Path
 from urllib.parse import quote
 
-RAW_BASE = "https://raw.githubusercontent.com/lzoreal/MyTranscript/main"
+# 词级 JSON 存在独立的 data 分支：main 只留代码和站点，本地克隆不再拉 5 GB 数据。
+RAW_BASE = "https://raw.githubusercontent.com/lzoreal/MyTranscript/data"
 
 
 def public_url(slug: str, filename: str, base: str = RAW_BASE) -> str:

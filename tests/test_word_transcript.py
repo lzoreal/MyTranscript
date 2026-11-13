@@ -114,7 +114,7 @@ class PublicUrlTests(unittest.TestCase):
     def test_raw_url_encodes_slug_and_filename(self):
         self.assertEqual(
             wt.public_url("99%-invisible", "Ep One!.json"),
-            "https://raw.githubusercontent.com/lzoreal/MyTranscript/main"
+            "https://raw.githubusercontent.com/lzoreal/MyTranscript/data"
             "/json/99%25-invisible/Ep%20One%21.json",
         )
 

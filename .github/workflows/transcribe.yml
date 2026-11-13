@@ -80,6 +80,19 @@ jobs:
         run: |
           git fetch origin
           git checkout "${GITHUB_REF_NAME}"
+
+      # 词级数据在 data 分支：检出到 data-repo，再把 data/、json/ 软链回根目录。
+      - uses: actions/checkout@v4
+        with:
+          ref: data
+          path: data-repo
+          token: ${{ secrets.MY_CUSTOM_PAT }}
+
+      - name: 链接数据目录
+        run: |
+          rm -rf data json
+          ln -s "$PWD/data-repo/data" data
+          ln -s "$PWD/data-repo/json" json
           git reset --hard "origin/${GITHUB_REF_NAME}"
 
       - name: 设置 BASE_URL
@@ -315,16 +328,28 @@ jobs:
               ':(exclude)**/*.part' \
               ':(exclude)**/*.tmp'
           else
-            # 本 job 拥有 state.json、自己 slug 的 feed.xml/en 字幕、词级 JSON 和根 index.html；
+            # 词级数据在 data 分支，state.json / feed / index 仍在 main，分开提交。
+            data_paths=()
+            for path in "data/${PODCAST_SLUG}" "json/${PODCAST_SLUG}"; do
+              if [ -d "data-repo/$path" ]; then
+                data_paths+=("$path")
+              fi
+            done
+            if [ "${#data_paths[@]}" -gt 0 ]; then
+              git -C data-repo remote set-url origin "https://${MY_PAT}@github.com/${GITHUB_REPOSITORY}.git"
+              GIT_WORKTREE="$PWD/data-repo" bash scripts/git_push_retry.sh \
+                "auto: update ${PODCAST_SLUG} data" \
+                "${data_paths[@]}" \
+                ':(exclude)**/*.part' \
+                ':(exclude)**/*.tmp'
+            fi
+            # 本 job 拥有 state.json、自己 slug 的 feed.xml/en 字幕和根 index.html；
             # progress.json 属其它 job，排除掉以免并发提交撞同一个文件。
             for path in state.json site; do
               if [ -e "$path" ]; then
                 paths+=("$path")
               fi
             done
-            if [ -d "json/${PODCAST_SLUG}" ]; then
-              paths+=("json/${PODCAST_SLUG}")
-            fi
             if [ "${#paths[@]}" -eq 0 ]; then
               echo "没有可提交的路径，跳过提交"
               exit 0

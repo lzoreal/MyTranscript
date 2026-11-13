@@ -187,7 +187,7 @@ class TranscriptFormatTests(unittest.TestCase):
                 node = feed.xpath("//*[local-name()='transcript']")[0]
                 self.assertEqual(
                     node.get("url"),
-                    "https://raw.githubusercontent.com/lzoreal/MyTranscript/main"
+                    "https://raw.githubusercontent.com/lzoreal/MyTranscript/data"
                     "/json/pod/one.json",
                 )
                 self.assertEqual(node.get("type"), "application/json")

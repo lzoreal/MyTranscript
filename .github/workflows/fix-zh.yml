@@ -45,6 +45,18 @@ jobs:
           ref: main
           token: ${{ secrets.MY_CUSTOM_PAT }}
 
+      - uses: actions/checkout@v4
+        with:
+          ref: data
+          path: data-repo
+          token: ${{ secrets.MY_CUSTOM_PAT }}
+
+      - name: 链接数据目录
+        run: |
+          rm -rf data json
+          ln -s "$PWD/data-repo/data" data
+          ln -s "$PWD/data-repo/json" json
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -75,6 +87,7 @@ jobs:
       - name: 逐节目补译、发布并提交
         if: ${{ github.event.inputs.dry_run != '1' }}
         env:
+          MY_PAT: ${{ secrets.MY_CUSTOM_PAT }}
           ONLY: ${{ github.event.inputs.slug }}
         run: |
           set -e
@@ -85,9 +98,17 @@ jobs:
             echo "== $slug"
             python -u scripts/fix_zh.py --slug "$slug"
             python scripts/publish_site.py "$slug" --data-dir data --json-dir json
-            paths="data progress.json"
+            # 先推 data 分支（词级 JSON），再推 main（站点与 progress）。
+            data_paths=()
+            [ -d "data-repo/data/$slug" ] && data_paths+=("data/$slug")
+            [ -d "data-repo/json/$slug" ] && data_paths+=("json/$slug")
+            if [ "${#data_paths[@]}" -gt 0 ]; then
+              git -C data-repo remote set-url origin "https://${MY_PAT}@github.com/${GITHUB_REPOSITORY}.git"
+              GIT_WORKTREE="$PWD/data-repo" bash scripts/git_push_retry.sh \
+                "auto: fill missing Chinese ($slug) data" "${data_paths[@]}"
+            fi
+            paths="progress.json"
             [ -d "site/$slug" ] && paths="$paths site/$slug"
-            [ -d "json/$slug" ] && paths="$paths json/$slug"
             bash scripts/git_push_retry.sh "auto: fill missing Chinese ($slug)" $paths
           done
 
