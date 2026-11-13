@@ -112,6 +112,37 @@ def claimed_guids(data_dir: Path, slug: str, run_id: str, shard: int) -> set[str
     return claimed
 
 
+def shard_plan_path(data_dir: Path, run_id: str, shard: int) -> Path:
+    """plan job 写、run job 读的本轮全局分片计划。"""
+    return Path(data_dir) / ".plans" / f"{run_id}-{shard}.json"
+
+
+def save_shard_plan(data_dir: Path, run_id: str, shard: int,
+                    shows: dict[str, list[str]]) -> None:
+    path = shard_plan_path(data_dir, run_id, shard)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_write(
+        path,
+        json.dumps({"run_id": run_id, "shows": shows},
+                   ensure_ascii=False, separators=(",", ":")),
+    )
+
+
+def read_shard_plan(data_dir: Path, run_id: str, shard: int) -> dict[str, list[str]] | None:
+    try:
+        data = json.loads(shard_plan_path(data_dir, run_id, shard)
+                          .read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(data, dict) or data.get("run_id") != run_id:
+        return None
+    shows = data.get("shows")
+    if not isinstance(shows, dict):
+        return None
+    return {str(slug): [str(guid) for guid in guids]
+            for slug, guids in shows.items()}
+
+
 def needs_work(state: dict[str, Any], guid: str) -> bool:
     record = state.get("episodes", {}).get(guid) or {}
     if record.get("status") == "done":

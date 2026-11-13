@@ -86,35 +86,38 @@ class EnvTests(unittest.TestCase):
         picked = {e["guid"] for part in parts for e in part}
         self.assertEqual(picked, {e["guid"] for e in episodes} - done)
 
-    def test_plan_is_cut_once_per_run(self):
-        # 每片一个 run 只切一次：后续分块不能把别的片正在跑的集抢过来，
-        # 否则两片写同一个 data/<slug>/<guid>.json，提交就撞车。
-        episodes = [{"guid": f"g{i}"} for i in range(11)]
+    def test_shard_plan_is_used_verbatim_and_drops_finished(self):
+        episodes = [{"guid": f"g{i}"} for i in range(6)]
         shows = [{"slug": "a", "feed_url": "u", "text_source": "asr"}]
-        plans, done = {}, set()
+        got = runmod.prepare_shows(
+            shows, shard=0, shards=3,
+            list_episodes=lambda url: episodes,
+            blocked_lookup=lambda slug: {"g0"},
+            shard_plan={"a": ["g0", "g1"]},
+        )[0]["episodes"]
+        self.assertEqual([e["guid"] for e in got], ["g1"])
 
-        def prep(shard):
-            return [e["guid"] for e in runmod.prepare_shows(
-                shows, shard=shard, shards=3, list_episodes=lambda url: episodes,
-                blocked_lookup=lambda slug: set(done),
-                plan_lookup=lambda slug: plans.get((slug, shard)),
-                claimed_lookup=lambda slug: {
-                    guid for (slug_, other), got in plans.items()
-                    if slug_ == slug and other != shard for guid in got
-                },
-                plan_save=lambda slug, guids: plans.__setitem__((slug, shard), list(guids)),
-            )[0]["episodes"]]
-
-        first, second, third = prep(0), prep(1), prep(2)
-        self.assertEqual(len(first) + len(second) + len(third),
-                         len(set(first) | set(second) | set(third)))
-        done.add(first[0])
-        self.assertEqual(prep(0), first[1:], "复用计划，只去掉已经做完的")
-
-        del plans[("a", 2)]
-        late = prep(2)
-        self.assertFalse(set(late) & (set(first) | set(second)),
-                         "晚启动的片要按别人的 plan 让开，而不是按 state")
+    def test_global_shard_keeps_every_shard_non_empty(self):
+        # 17 集待办 → 17 片各 1 集；按节目分别取模会出现 0 集和 2 集的分片。
+        shows = [
+            {"slug": "a", "feed_url": "ua", "text_source": "asr"},
+            {"slug": "b", "feed_url": "ub", "text_source": "asr"},
+        ]
+        by_feed = {
+            "ua": [{"guid": f"a{i}"} for i in range(3)],
+            "ub": [{"guid": f"b{i}"} for i in range(2)],
+        }
+        parts = [
+            runmod.prepare_shows(
+                shows, shard=shard, shards=5,
+                list_episodes=lambda url: by_feed[url],
+            )
+            for shard in range(5)
+        ]
+        counts = [sum(len(show["episodes"]) for show in part) for part in parts]
+        self.assertEqual(counts, [1, 1, 1, 1, 1])
+        picked = {e["guid"] for part in parts for show in part for e in show["episodes"]}
+        self.assertEqual(picked, {f"a{i}" for i in range(3)} | {f"b{i}" for i in range(2)})
 
     def test_single_shard_keeps_the_plain_state_file(self):
         shows = [{"slug": "a", "feed_url": "u", "text_source": "asr"}]

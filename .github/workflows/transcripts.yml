@@ -53,9 +53,11 @@ jobs:
         with:
           ref: data
           path: data-repo
+          token: ${{ secrets.MY_CUSTOM_PAT }}
           filter: blob:none
           sparse-checkout: |
             data/*/state*.json
+            data/.plans
           sparse-checkout-cone-mode: false
 
       - name: 链接数据目录
@@ -74,7 +76,19 @@ jobs:
         env:
           CAP: ${{ github.event.inputs.shards || '20' }}
           ONLY_SLUG: ${{ github.event.inputs.only_slug || '' }}
-        run: python scripts/plan_shards.py --cap "$CAP" --only-slug "$ONLY_SLUG" >> "$GITHUB_OUTPUT"
+        run: |
+          python scripts/plan_shards.py --cap "$CAP" --only-slug "$ONLY_SLUG" \
+            --write-plans >> "$GITHUB_OUTPUT"
+
+      # 计划落在 data 分支：run job 检出后按 data/.plans/<run_id>-<shard>.json 取活，
+      # 不再各自按 state 现切（那样会出现空片和重复集）。
+      - name: 提交分片计划
+        env:
+          MY_PAT: ${{ secrets.MY_CUSTOM_PAT }}
+        run: |
+          git -C data-repo remote set-url origin "https://${MY_PAT}@github.com/${GITHUB_REPOSITORY}.git"
+          GIT_WORKTREE="$PWD/data-repo" GIT_PUSH_BRANCH=data bash scripts/git_push_retry.sh \
+            "auto: shard plan ${GITHUB_RUN_ID}" data
 
   run:
     needs: plan

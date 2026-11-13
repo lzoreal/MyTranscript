@@ -10,6 +10,16 @@ SPEC.loader.exec_module(pstore)
 
 
 class StoreTests(unittest.TestCase):
+    def test_shard_plan_round_trips_and_ignores_other_runs(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data = Path(temp_dir)
+            pstore.save_shard_plan(data, "run-1", 3, {"pod": ["g1", "g2"]})
+            self.assertEqual(
+                pstore.read_shard_plan(data, "run-1", 3),
+                {"pod": ["g1", "g2"]},
+            )
+            self.assertIsNone(pstore.read_shard_plan(data, "run-2", 3))
+
     def test_state_round_trips_atomically(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             data = Path(temp_dir)

@@ -316,7 +316,7 @@ for f in tests/test_*.py; do python "$f"; done     # 6 个文件、174 个用例
 | `scripts/pipeline_text.py` | 文本源：`asr` 直接用 ASR 句子；`podscripts` 抓取后映射到词流 |
 | `scripts/clause_translation.py` | 小句翻译契约（en 拼接必须等于原句） |
 | `scripts/zh_align.py` | 中文分词驱动的时间分配 + DTW 兜底 |
-| `scripts/pipeline_store.py` | `data/<slug>/state<suffix>.json`、`plan-<shard>.json` 与单集 JSON 的原子写 |
+| `scripts/pipeline_store.py` | `data/<slug>/state<suffix>.json`、`data/.plans/` 分片计划与单集 JSON 的原子写 |
 | `scripts/pipeline_episode.py` | 单集编排（依赖注入，可单测） |
 | `scripts/pipeline_publish.py` | 双语 VTT 渲染 |
 | `scripts/pipeline_deps.py` | 把 ASR/翻译/抓取/嵌入装配成 deps |
@@ -330,17 +330,17 @@ for f in tests/test_*.py; do python "$f"; done     # 6 个文件、174 个用例
 
 - 分片数由 `plan_shards.py` 在 plan job 里算：`min(输入上限, 20, 待办集数)`，至少 1 片；
   待办 20 集以内一片一集，超出 20 集才用满 20 片。待办数 = RSS 条目 − state 里 done/失败到上限的集。
-- 分片的单位是**集**，不是节目：首切时先剔除已完成（以及重试到上限、其它片已认领）的集，
-  剩下的按 guid 排序后轮流分给各片，各片待办数差不超过 1。
-- **一个 run 内每片只切一次分片**，结果落在 `data/<slug>/plan-<shard>.json`（`run_id` 用
-  `GITHUB_RUN_ID`）。后续分块复用这份计划，只去掉已完成的集。
-  > 2026-11-04 踩过：改成"每个分块按当前待办集重切"后，别的片手上正在跑的那一集（单集
-  > 35~40 分钟不可中断，state 要等跑完才落盘）会被重新分配过来，两片写同一个
-  > `data/<slug>/<guid>.json`，提交时 rebase 撞车，整片的产出推不上去。实测同一集同时记在
-  > shard 11（done）和 shard 12（failed）的 state 里。
-- 每片写自己的 `data/<slug>/state-<shard>.json`（单片时仍叫 `state.json`）和
-  `plan-<shard>.json`。分片之间不共享文件，并发 push 时各改各的。
-  **完成的集要看所有 state 的并集。**
+- 分片的单位是**集**，不是节目：plan job 把所有节目的待办集合并成一条序列，按 guid 排序后
+  全局轮流分配（`pipeline_config.global_shard`），各片待办数差不超过 1。
+  > 2026-11-14 踩过：按节目分别取模时，分片数（全局待办数）大于某节目的待办数，会出现
+  > 2 个分片 0 集、2 个分片 2 集；17 集待办开 17 片却有 15 个分片才拿到活。
+- **分片计划由 plan job 一次性写好**：`data/.plans/<run_id>-<shard>.json`（`run_id` 用
+  `GITHUB_RUN_ID`），随 data 分支提交；run job 检出后按自己的计划取活，不再各自现切，
+  也不需要用别人的认领集来避让。后续分块复用同一份计划，只去掉已完成的集。
+  > 2026-11-04 踩过：每个分块按当前待办集重切，别的片正在跑的那一集（单集 35~40 分钟不可中断）
+  > 会被重新分配，两片写同一个 `data/<slug>/<guid>.json`，提交时 rebase 撞车。
+- 每片写自己的 `data/<slug>/state-<shard>.json`（单片时仍叫 `state.json`）。
+  分片之间不共享文件，并发 push 时各改各的。**完成的集要看所有 state 的并集。**
 - `git_push_retry.sh` 普通 rebase 冲突时改用 `git rebase -X ours` 重试：同名集的产物是等价
   重复劳动，保留远程那一份，本片其它文件照常提交，不再整片卡住。
 - 重试上限跨片生效：任一 state 里记满 3 次失败即不再分给任何片，要捞回来得手动改对应 state。

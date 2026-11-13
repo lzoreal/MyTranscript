@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -27,16 +28,21 @@ def effective_shards(pending: int, cap: int = MAX_SHARDS) -> int:
     return max(1, min(cap, int(pending)))
 
 
-def pending_total(shows, data_dir, list_episodes=None) -> int:
+def pending_by_show(shows, data_dir, list_episodes=None) -> dict[str, list[dict]]:
     list_episodes = list_episodes or pconfig.list_episodes
-    total = 0
+    pending = {}
     for show in shows:
         blocked = pstore.blocked_guids(Path(data_dir), show["slug"])
-        total += sum(
-            1 for episode in list_episodes(show["feed_url"])
+        pending[show["slug"]] = [
+            episode for episode in list_episodes(show["feed_url"])
             if episode["guid"] not in blocked
-        )
-    return total
+        ]
+    return pending
+
+
+def pending_total(shows, data_dir, list_episodes=None) -> int:
+    return sum(len(episodes) for episodes in
+               pending_by_show(shows, data_dir, list_episodes).values())
 
 
 def main(argv=None) -> int:
@@ -45,13 +51,29 @@ def main(argv=None) -> int:
     parser.add_argument("--data-dir", type=Path, default=Path("data"))
     parser.add_argument("--only-slug", default="")
     parser.add_argument("--cap", type=int, default=MAX_SHARDS)
+    parser.add_argument("--write-plans", action="store_true",
+                        help="把每片的全局切片写进 data/.plans/<run_id>-<shard>.json")
+    parser.add_argument("--run-id", default="")
     args = parser.parse_args(argv)
 
     shows = pconfig.load_feeds(args.feeds)
     if args.only_slug:
         shows = [show for show in shows if show["slug"] == args.only_slug]
-    pending = pending_total(shows, args.data_dir)
+    pending_map = pending_by_show(shows, args.data_dir)
+    pending = sum(len(episodes) for episodes in pending_map.values())
     count = effective_shards(pending, args.cap)
+    if args.write_plans:
+        run_id = args.run_id or os.environ.get("GITHUB_RUN_ID", "")
+        if run_id:
+            for shard in range(count):
+                picked = pconfig.global_shard(pending_map, shard, count)
+                pstore.save_shard_plan(
+                    args.data_dir, run_id, shard,
+                    {slug: [episode["guid"] for episode in episodes]
+                     for slug, episodes in picked.items()},
+                )
+        else:
+            print("没有 run_id，跳过写分片计划", file=sys.stderr)
     print(f"待办 {pending} 集，分片 {count}", file=sys.stderr)
     print(f"count={count}")
     print(f"pending={pending}")

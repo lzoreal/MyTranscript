@@ -48,6 +48,25 @@ def shard_episodes(episodes, shard: int = 0, shards: int = 1, done=None):
     return [episode for index, episode in enumerate(pending) if index % shards == shard]
 
 
+def global_shard(episodes_by_show: dict[str, list[dict]], shard: int,
+                 shards: int) -> dict[str, list[dict]]:
+    """全局分片：各节目待办合并后按 guid 排序轮流分配。
+
+    按节目分别取模会让分片数（全局待办数）大于某节目的待办数时出现空片；
+    合并成一条序列才能保证 17 集待办 → 17 片各 1 集。
+    """
+    items = []
+    for slug in sorted(episodes_by_show):
+        for episode in episodes_by_show[slug]:
+            items.append((str(episode["guid"]), slug, episode))
+    items.sort(key=lambda item: (item[0], item[1]))
+    picked: dict[str, list[dict]] = {}
+    for index, (_guid, slug, episode) in enumerate(items):
+        if index % shards == shard:
+            picked.setdefault(slug, []).append(episode)
+    return picked
+
+
 def list_episodes(feed_url: str, fetch: Callable[[str], bytes] | None = None):
     import feedparser
     import requests
