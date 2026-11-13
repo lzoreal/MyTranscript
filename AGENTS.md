@@ -6,14 +6,14 @@
 
 把 14 个英文播客做成"带字幕的增强版 RSS"，发布到 GitHub Pages：
 
-- 10 个节目：字幕来自 PodScripts 抓取（`scraper.py`），站点发 VTT；
-- 2 个节目（office-ladies、smartless）：统一管线产出双语词级 JSON，
-  存 `json/<slug>/`，feed 指向 raw.githubusercontent（不进 Pages）；
-- 1 个节目（how-we-made-your-mother，简称 hwmym）：字幕来自我们自己的 Whisper 转写（`transcribe.py`）；
-- 未迁移节目由 `translate_vtt.py` 生成中文、`generate_zh_feed.py` 生成中文 Feed；
-  已迁移节目的中文在同一个 JSON 文件里，没有 `feed-zh.xml`。
+- 13 个已发布节目全部走统一管线：RSS → ASR 词流 → 双语词级 JSON，
+  存 `data/<slug>/`，导出 `json/<slug>/` 由 raw.githubusercontent 提供（不进 Pages）；
+- how-we-made-your-mother（hwmym）的入口仍是 `transcribe.py`，但产物同样是 `data/` + `json/`；
+- 旧 VTT / 中文 VTT / `feed-zh.xml` 链路已下线（`translate_vtt.py`、`generate_zh_feed.py`、
+  `translate.yml`、`align.yml` 已删除）；只剩 7 集历史字幕仍以 VTT 发布，等回填后清掉。
 
-**永远不要把这几条来源合并成一套清单/一套流程**——它们的数据、状态文件、提交路径都不同。
+状态文件仍然彼此独立（`progress.json`、`state.json`、`data/<slug>/state-*.json`），
+不要为了省事把它们合成一份。
 
 ## 金科玉律
 
@@ -26,7 +26,7 @@
 ## 命令
 
 ```bash
-# 全部测试（6 个文件，174 个用例）
+# 全部测试
 for f in tests/test_*.py; do python "$f"; done
 
 # 单文件
@@ -48,12 +48,10 @@ WHISPER_MODEL="D:/tmp/tmlt-align/ct2-turbo" \
 
 | 路径 | 归属 job | 其他 job 不得写 |
 | --- | --- | --- |
-| `progress.json`、未迁移抓取节目的 `site/<slug>/transcripts/*.vtt`、`feed.xml`、`index.html` | Crawl | ✅ |
+| `progress.json`、站点根 `index.html`、`podcasts.html` | Crawl（只再抓 pragmatic-engineer 等未迁移节目） | ✅ |
 | `state.json`、hwmym 的 `transcripts/*.vtt`、`timings/`、hwmym 的 feed/index、`json/how-we-made-your-mother/**` | Transcribe | ✅ |
-| `site/*/transcripts/zh/`、`site/*/feed-zh.xml`、`translations.json`（仅未迁移节目） | Translate | ✅ |
-| `data/**`（双语词级 JSON + 分片 state）、已迁移节目的 `json/<slug>/**`、`feed.xml`、`index.html`、`progress.json` | Transcript Pipeline（`transcripts.yml`） | ✅ |
+| `data/**`（双语词级 JSON + 分片 state）、`json/<slug>/**`、`feed.xml`、`index.html`、`progress.json` | Transcript Pipeline（`transcripts.yml`） | ✅ |
 | 站点发布 | Deploy（main 上 `site/**` 变更触发，只读最新 main） | — |
-| 抓取节目的两份 VTT + `timings/` | Align（会**重写**字幕） | 见 `docs/handover.md` |
 
 ## 已知坑（都踩过）
 

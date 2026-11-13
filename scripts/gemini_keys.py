@@ -78,7 +78,7 @@ class GeminiKeyRing:
             raise QuotaExhausted("没有任何可用的 Gemini key")
         self._keys = list(keys)
         # 先走完一个模型的所有 key 再换模型：日额度是整块没的，同模型内换 key 救不回来。
-        # models=None 表示调用方自己带模型名（如 translate_vtt），桶只按 key 分。
+        # models=None 表示调用方自己带模型名，桶只按 key 分。
         # dead 按模型给出"已判死"的 key：同一个 job 里反复新建环时直接跳过，
         # 否则每批都会从 #1 重新撞一遍 429。
         dead = dead or {}
