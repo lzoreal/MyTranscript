@@ -32,7 +32,7 @@ if ! gitc commit -m "$message"; then
   exit 1
 fi
 
-branch=$(gitc rev-parse --abbrev-ref HEAD)
+branch=${GIT_PUSH_BRANCH:-$(gitc rev-parse --abbrev-ref HEAD)}
 for attempt in 1 2 3 4 5; do
   if gitc push origin "HEAD:${branch}"; then
     echo "已推送到 ${branch}（第 ${attempt} 次尝试）"

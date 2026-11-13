@@ -197,7 +197,7 @@ jobs:
             [ "$chunk" -gt 45 ] && chunk=45
             rc=0
             MAX_MINUTES=$chunk python -u scripts/run_pipeline.py || rc=$?
-            GIT_WORKTREE="$PWD/data-repo" bash scripts/git_push_retry.sh \
+            GIT_WORKTREE="$PWD/data-repo" GIT_PUSH_BRANCH=data bash scripts/git_push_retry.sh \
               "auto: word transcripts (shard ${SHARD})" data \
               || echo "提交失败，文件留在工作区等兜底步骤"
             if [ "$rc" -eq 3 ]; then
@@ -216,7 +216,7 @@ jobs:
           MY_PAT: ${{ secrets.MY_CUSTOM_PAT }}
         run: |
           git -C data-repo remote set-url origin "https://${MY_PAT}@github.com/${GITHUB_REPOSITORY}.git"
-          GIT_WORKTREE="$PWD/data-repo" bash scripts/git_push_retry.sh \
+          GIT_WORKTREE="$PWD/data-repo" GIT_PUSH_BRANCH=data bash scripts/git_push_retry.sh \
             "auto: word transcripts (shard ${SHARD}, tail)" data
 
   # 分片全部跑完后统一发布：导出词级 JSON、重建 feed/index，一个节目只由一个 job 写。
@@ -263,7 +263,7 @@ jobs:
         run: |
           # 先推 data：feed 指向的 JSON 必须在站点更新前就绪。
           git -C data-repo remote set-url origin "https://${MY_PAT}@github.com/${GITHUB_REPOSITORY}.git"
-          GIT_WORKTREE="$PWD/data-repo" bash scripts/git_push_retry.sh \
+          GIT_WORKTREE="$PWD/data-repo" GIT_PUSH_BRANCH=data bash scripts/git_push_retry.sh \
             "auto: publish word transcripts" data json
 
       - name: 提交站点文件（main）
