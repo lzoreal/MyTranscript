@@ -39,6 +39,43 @@ def podcast_config(show: dict, podcasts: list[dict]) -> dict:
     }
 
 
+def merge_state_records(progress: dict, state: dict, slug: str, json_dir) -> int:
+    """把老 state.json 的剧集记录并入 progress（hwmym 迁移用）。
+
+    progress 里没有 hwmym；不合并的话 publish 会把只存在于 state 的 VTT 集
+    从 feed 里删掉。JSON 已导出的集切到 .json，其余保留 VTT。
+    """
+    records = ((state.get("podcasts") or {}).get(slug) or {}).get("transcripts") or []
+    bucket = (
+        progress.setdefault("podcasts", {}).setdefault(slug, {}).setdefault("processed", {})
+    )
+    exported = Path(json_dir) / slug
+    changed = 0
+    for record in records:
+        guid = (record.get("identity") or "").strip()
+        path = (record.get("path") or "").strip()
+        if not guid or not path:
+            continue
+        vtt = Path(path).name
+        stem = Path(vtt).stem
+        entry = bucket.get(guid) or {}
+        merged = dict(entry)
+        merged.setdefault("vtt_filename", vtt)
+        merged.setdefault("title", record.get("title") or "")
+        if (exported / f"{stem}.json").exists():
+            merged["transcript_filename"] = f"{stem}.json"
+            merged["transcript_type"] = "application/json"
+            merged["url"] = word_transcript.public_url(slug, f"{stem}.json")
+            merged["path"] = f"json/{slug}/{stem}.json"
+        else:
+            merged.setdefault("transcript_filename", vtt)
+            merged.setdefault("transcript_type", "text/vtt")
+        if merged != entry:
+            bucket[guid] = merged
+            changed += 1
+    return changed
+
+
 def merge_progress(progress: dict, slug: str, documents, stems) -> int:
     """把新发布的集登记进 progress.json：总索引的集数、feed 合并都读它。"""
     bucket = (
@@ -82,6 +119,9 @@ def main(argv=None) -> int:
         return 2
     podcasts = load_json(Path("podcasts.json"), [])
     progress = load_json(Path("progress.json"), {"podcasts": {}})
+    state_changed = merge_state_records(
+        progress, load_json(Path("state.json"), {}), args.slug, args.json_dir
+    )
 
     result = pipeline_site.publish_show(
         show,
@@ -96,7 +136,7 @@ def main(argv=None) -> int:
         progress, args.slug, pipeline_site.load_documents(args.data_dir, args.slug),
         result["stems"],
     )
-    if progress_changed:
+    if progress_changed or state_changed:
         Path("progress.json").write_text(
             json.dumps(progress, ensure_ascii=False, indent=2) + chr(10), encoding="utf-8"
         )

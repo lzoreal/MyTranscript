@@ -9,12 +9,14 @@
 - 13 个已发布节目全部走统一管线：RSS → ASR 词流 → 双语词级 JSON，
   存 `data/<slug>/`，导出 `json/<slug>/`；**两者在独立的 `data` 分支**（main 不存），
   由 raw.githubusercontent 提供、不进 Pages；本地可 sparse 检出跳过；
-- how-we-made-your-mother（hwmym）的入口仍是 `transcribe.py`，但产物同样是 `data/` + `json/`；
+- how-we-made-your-mother（hwmym）也已并入统一管线（`feeds.json` 里同样 `publish: true`）；
+  `transcribe.py` 只保留作下载/代理工具库与历史回填，不再有独立 workflow；
 - 旧 VTT / 中文 VTT / `feed-zh.xml` 链路已下线（`translate_vtt.py`、`generate_zh_feed.py`、
   `translate.yml`、`align.yml` 已删除）；只剩 7 集历史字幕仍以 VTT 发布，等回填后清掉。
 
-状态文件仍然彼此独立（`progress.json`、`state.json`、`data/<slug>/state-*.json`），
-不要为了省事把它们合成一份。
+状态文件仍然彼此独立（`progress.json`、`data/<slug>/state-*.json`）；hwmym 的
+`state.json` 是历史记录，只在首次发布时由 `publish_site.merge_state_records` 读入，
+之后不再写，不要把它当成活状态。
 
 ## 金科玉律
 
@@ -58,8 +60,8 @@ WHISPER_MODEL="D:/tmp/tmlt-align/ct2-turbo" \
 | 路径 | 归属 job | 其他 job 不得写 |
 | --- | --- | --- |
 | `progress.json`、站点根 `index.html`、`podcasts.html` | Crawl（只再抓 pragmatic-engineer 等未迁移节目） | ✅ |
-| `state.json`、hwmym 的 `transcripts/*.vtt`、`timings/`、hwmym 的 feed/index | Transcribe | ✅ |
-| `data/**`（双语词级 JSON + 分片 state）、`json/<slug>/**`（**都在 `data` 分支**） | Transcript Pipeline / Transcribe | ✅ |
+| `state.json`（历史只读）、hwmym 的 3 集 `transcripts/*.vtt` 与 `timings/`（回填后删） | 无自动写入 | ✅ |
+| `data/**`（双语词级 JSON + 分片 state）、`json/<slug>/**`（**都在 `data` 分支**） | Transcript Pipeline（`transcripts.yml`） | ✅ |
 | `feed.xml`、`index.html`、`progress.json`（main） | Transcript Pipeline（`transcripts.yml` 的 publish） | ✅ |
 | 站点发布 | Deploy（main 上 `site/**` 变更触发，只读最新 main） | — |
 

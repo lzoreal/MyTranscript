@@ -14,14 +14,11 @@
 Pages 站点清理旧字幕后约 **40 MB**（`site/`）；词级数据 `data/`、`json/` 放在独立的
 **`data` 分支**（main 只有代码和 `site/`），由 raw.githubusercontent 提供，不进 Pages。
 
-**字幕来源现在只有一条**（状态文件仍彼此独立）：
-
-| | 13 个已发布节目 | hwmym |
-| --- | --- | --- |
-| 英文字幕来源 | 统一管线：RSS → 我们的 ASR 词流（`text_source: asr`） | `transcribe.py`（Whisper 词时间） |
-| 主状态文件 | `data/<slug>/state-*.json` + `progress.json` | `state.json` + `data/<slug>/state-*.json` |
-| 翻译 | `run_pipeline.py` 内部调 Gemini | `transcribe.py` 内部调 Gemini |
-| 发布 | `transcripts.yml` 的 publish job 写 JSON/feed/index | `transcribe.py` 写 feed/index，尾部导出 JSON |
+**字幕来源现在只有一条**：13 个已发布节目（含 hwmym）都走
+`feeds.json` → `transcripts.yml`：RSS → ASR 词流 → Gemini → `data` 分支的 JSON →
+publish job 写 feed/index。hwmym 的旧 `state.json` 只作为历史记录读取
+（`publish_site.merge_state_records` 在首次发布时把它并入 `progress.json`），
+`transcribe.py` 不再有独立 workflow。
 
 旧 VTT 翻译 / 对齐链路（`translate_vtt.py`、`generate_zh_feed.py`、`translate.yml`、`align.yml`）
 已于 2026-11-14 随全量迁移一起删除。只剩一处历史遗留：7 集尚未回填的 VTT 仍按 `text/vtt` 发布。
@@ -37,12 +34,12 @@ Crawl（周一 05:00 UTC / 手动）
 Transcript Pipeline（手动 dispatch；分片数 = min(待办集数, 20)）
   RSS → ASR 词流 → Gemini 翻译 → data/<slug>/<guid>.json
         → publish job：只对内容有改动的节目导出 json/、重建 feed.xml + index.html → progress.json
-  （13 个节目都走这条；hwmym 的 data 同格式，但 feed 仍由 transcribe.yml 收尾）
+  （13 个节目包括 hwmym 都走这条；没有单独的 transcribe 流程）
 
-Transcribe（周一 12:00 UTC / 手动，含回填分片）
-  仅 hwmym：下载(中国代理) → turbo 转写(词时间) → Gemini 翻译 → 双语 VTT + timings sidecar
-        → 导出 json/ 并把 feed 标签切到 JSON
 ```
+
+`transcribe.yml` 已删除；hwmym 的旧 VTT/`timings/` 只作为历史资源保留，3 集
+VTT-only 的集等统一管线跑出 JSON 后再清理。
 
 各 workflow 有独立 concurrency group，可并行；提交一律走 `scripts/git_push_retry.sh`（只 `git add` 自己的 pathspec，push 被拒就 rebase 重试）。
 
@@ -51,7 +48,7 @@ Transcribe（周一 12:00 UTC / 手动，含回填分片）
 | 文件 | 行数 | 职责 | 关键函数 |
 | --- | --- | --- | --- |
 | `scripts/scraper.py` | 959 | 生成增强版 Feed 与索引（publish 侧仍在用）；PodScripts 抓取只服务未迁移节目 | `process_podcast`、`generate_podcast_feed`、`parse_transcript` |
-| `scripts/transcribe.py` | 2279 | hwmym 全流程：下载、转写、翻译、写 VTT/sidecar、回填、导出 JSON | `whisper_transcribe`、`translate_cues_with_gemini`、`sync_data_transcripts`、`process_episode`、`run_backfill` |
+| `scripts/transcribe.py` | 2279 | 历史回填与下载/代理工具库（hwmym 已并入统一管线；不再有 workflow） | `whisper_transcribe`、`download_audio`、`run_backfill` |
 | `scripts/align_timings.py` | 641 | 词流映射与测时工具；`map_stream`/`classify_cues`/`assign_times` 仍被 `pipeline_text.py` 使用（CLI 随 `align.yml` 下线，文件保留） | `map_stream`、`classify_cues`、`assign_times` |
 | `scripts/run_pipeline.py` | 116 | 统一管线 CLI：分片、预算、`ONLY_SLUG`、`DATA_DIR` | `main` |
 | `scripts/pipeline_site.py` | 81 | 已迁移节目发布：导出 JSON、建 feed/index | `publish_show`、`merged_processed`、`stem_for` |
@@ -68,7 +65,7 @@ Transcribe（周一 12:00 UTC / 手动，含回填分片）
 ### 两个状态文件
 
 - `progress.json`：`{ "podcasts": { "<slug>": { "processed": { "<guid>": {vtt_filename, title, processed_at, skipped, reason, source_url, audio_master?} }, "total_processed", "updated_at", "audio_master_gate"? } } }`（Crawl / publish 写）
-- `state.json`：`{ "version", "podcasts": { "<slug>": { "feed_url", "processed", "transcripts": [...], "total_processed", "last_run", "feed_title" } } }`（Transcribe 独占）
+- `state.json`：`{ "version", "podcasts": { "<slug>": { "feed_url", "processed", "transcripts": [...], "total_processed", "last_run", "feed_title" } } }`（hwmym 历史记录，只读；首次发布时并入 `progress.json`）
 
 两者的键都是 **GUID**，所以任何"改音频地址/改时间轴"都不会让缓存失效、不会触发重转。
 `data/<slug>/state-*.json` 是统一管线的分片进度，与上面两个文件互不替代。
@@ -191,7 +188,6 @@ site/
 | workflow | 触发 | 写什么 |
 | --- | --- | --- |
 | `crawl.yml` | 周一 05:00 UTC / 手动 | `progress.json`、未迁移节目的 VTT/feed、根索引 |
-| `transcribe.yml` | 周一 12:00 UTC / 手动（`backfill` 输入进入分片回填） | `state.json`、hwmym 的双语 VTT、`timings/`、hwmym feed/index（main）；`data/`、`json/`（data 分支） |
 | `transcripts.yml` | 手动 dispatch | `data/`、`json/`（**推 data 分支**）、各节目 feed/index、`progress.json`（main） |
 | `fix-zh.yml` | 手动 | 修正 data 里的中文（推 data 分支）并重新发布（main） |
 | `deploy.yml` | push 到 main | Pages（从最新 main 重新 checkout） |
@@ -419,7 +415,7 @@ for f in tests/test_*.py; do python "$f"; done     # 6 个文件、174 个用例
 
 ### 与旧链路的关系
 
-全量迁移后，旧链路只剩 crawl（未迁移节目 + 根索引）与 transcribe（hwmym）；
+全量迁移后，旧链路只剩 crawl（未迁移节目 + 根索引）；
 translate / align 两条已在 2026-11-14 删除。
 统一链路的产物在 main 的 `data/`，`publish` job 才写 `site/` 和 Feed。
 `data/` 不进 Pages 上传（`deploy.yml` 只传 `site/`，且只由 `site/**` 的提交触发）。
@@ -436,7 +432,8 @@ translate / align 两条已在 2026-11-14 删除。
   （fork 解析器要求单调递增，混入中文词会被整段丢弃）；
 - 所有节目只保留 `feed.xml`，不再生成 `feed-zh.xml`；
 - 旧 VTT 原样归档在 `data/<slug>/legacy-vtt/`（含 `zh/`），不再发布；
-- 导出只读 `data/`：其余 12 个节目由 `transcripts.yml` 的 publish job，
-  hwmym 由 `transcribe.yml` 在每次运行尾部完成；`scripts/export_word_json.py` 供手动补导出；
-- `scraper.is_episode_processed` 认得 `json/` 下的产物，VTT 归档后 feed 不会被清空；
-  `transcribe.is_cached_episode` 同理，hwmym 不会因 VTT 移动而重转。
+- 所有节目（含 hwmym）都由 `transcripts.yml` 的 publish job 导出；
+  `scripts/export_word_json.py` 供手动补导出；hwmym 的旧 `state.json` 记录在
+  `publish_site.merge_state_records` 里首次并入 `progress.json`，其中 3 集只有 VTT 的
+  记录继续按 VTT 发布，直到它们跑出 JSON；
+- `scraper.is_episode_processed` 认得 `json/` 下的产物，VTT 归档后 feed 不会被清空。
