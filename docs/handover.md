@@ -21,7 +21,8 @@ publish job 写 feed/index。hwmym 的旧 `state.json` 只作为历史记录读�
 `transcribe.py` 不再有独立 workflow。
 
 旧 VTT 翻译 / 对齐链路（`translate_vtt.py`、`generate_zh_feed.py`、`translate.yml`、`align.yml`）
-已于 2026-11-14 随全量迁移一起删除。只剩一处历史遗留：7 集尚未回填的 VTT 仍按 `text/vtt` 发布。
+已于 2026-11-14 随全量迁移一起删除。13 个节目的 feed 现在全部是
+`application/json`，`site/` 里已无 VTT 与 `timings/` 资源。
 
 ## 二、数据流
 
@@ -38,8 +39,8 @@ Transcript Pipeline（手动 dispatch；分片数 = min(待办集数, 20)）
 
 ```
 
-`transcribe.yml` 已删除；hwmym 的旧 VTT/`timings/` 只作为历史资源保留，3 集
-VTT-only 的集等统一管线跑出 JSON 后再清理。
+`transcribe.yml` 已删除；hwmym 的 3 集历史 VTT 与 `timings/` 在 2026-11-14 切到
+JSON 后已删除，`state.json` 只作为历史记录保留。
 
 各 workflow 有独立 concurrency group，可并行；提交一律走 `scripts/git_push_retry.sh`（只 `git add` 自己的 pathspec，push 被拒就 rebase 重试）。
 
@@ -97,10 +98,10 @@ site/
   <slug>/
     feed.xml                 ← 唯一的字幕 Feed（feed-zh.xml 已下线）
     index.html
-    transcripts/<stem>.vtt   ← 只剩 7 集未回填的历史字幕（hwmym 3、taproot 4）
-    transcripts/zh/<stem>.vtt ← 只剩 taproot 那 4 集的播放器译文
-    timings/<stem>.json      ← 只保留上述 hwmym 3 集的词级 sidecar
-```
+    ```
+
+`site/` 里不再有字幕文件：feed 只引用 data 分支的 JSON；播放器仍保留 VTT/侧车
+导入能力，供本地实验用。
 
 ### 播放器（`site/player.html`）取字幕规则
 
@@ -108,8 +109,8 @@ site/
   `raw.githubusercontent.com/lzoreal/MyTranscript`），忽略 Buzzsprout 等外部字幕链接；
 - `application/json` 直接按 `segments` 画词级并取 `body` 第二行中文；JSON 的 `words` 是 ASR
   原生时间，播放器不再做压缩词串平滑和首词重叠跳过（这两项修补只用于 VTT + `timings/` sidecar）；
-- `text/vtt` 只用于尚未回填的 7 集历史字幕：英文单语再取 `transcripts/zh/<stem>.vtt`；
-  `shows.json` 里该节目 `timings: true` 时才请求 `timings/<stem>.json`（目前只有 hwmym）；
+- `text/vtt` / `timings/` 解析只保留给本地导入的实验数据；线上 feed 已不再有 VTT，
+  `shows.json` 里也去掉了 `timings` 标记；
 - 没有字幕的集仍然可以播放音频；
 - 音频优先用 feed enclosure（多跳跟踪 URL）；播放出错时自动重试、解析最终 CDN 地址、退回
   `media:content` 直链，并在播放器上方显示可点击重试的提示；
@@ -120,17 +121,17 @@ site/
 - 详情面板的“对齐到当前句”进入选句模式：先锁定按下按钮时的播放位置，再点击任意一句作为该时刻
   应高亮的句子，按 `offset = 锁定时间 − 该句 speechStart` 更新偏移；Esc 或再次点按钮取消。
 
-### 残余 VTT 有两种形态（必须区分）
+### VTT 导入格式（仅本地实验）
 
-现在只剩 7 集历史字幕，但形态规则不变：
+线上已不发布任何 VTT；播放器仍能导入 VTT/侧车做对比实验，旧形态规则保留在这里：
 
 | 文件 | 形态 | 行/块 |
 | --- | --- | --- |
-| hwmym 的 `transcripts/*.vtt`（3 集） | **中英双语** | 4（序号/时间/英文/中文） |
-| taproot 的 `transcripts/*.vtt`（4 集） | **英文单语** | 3（序号/时间/英文） |
-| taproot 的 `transcripts/zh/*.vtt`（4 集） | **中英双语** | 4 |
+| hwmym 风格 | **中英双语** | 4（序号/时间/英文/中文） |
+| 抓取节目风格 | **英文单语** | 3（序号/时间/英文） |
+| 中文轨 | **中英双语** | 4 |
 
-> 这一条是 2026-10-29 冒烟时才纠正的：早期设计文档假设"抓取节目的英文文件也是双语"，实现因此解析出 0 块。
+> 2026-10-29 冒烟教训：早期设计假设"抓取节目的英文文件也是双语"，解析出 0 块。
 
 ### 词级时间 sidecar（与 TMLT 同构）
 
@@ -262,14 +263,15 @@ for f in tests/test_*.py; do python "$f"; done     # 6 个文件、174 个用例
   旧 VTT 归档在 `data/<slug>/legacy-vtt/`；
 - 旧翻译 / 对齐链路已删除：`translate.yml`、`align.yml`、`translate_vtt.py`、
   `generate_zh_feed.py`、`translations.json`、`podcasts_translate.json`；
-- 站点资源已清理：`feed-zh.xml`、未引用的 `transcripts/*.vtt` 与 `transcripts/zh/` 已删除，
-  `site/` 从 646 MB 降到约 40 MB；
-- 仍以 VTT 发布的只有 7 集：hwmym 3 集、taproot 4 集；保留它们的 VTT、
-  taproot 的 4 个中文 VTT、hwmym 的 3 个 timings。
+- 站点资源已清理：`feed-zh.xml`、全部 VTT 与 `timings/` 已删除，`shows.json` 去掉了
+  `timings` 标记，`site/` 约 32 MB；
+- hwmym 也已迁到统一管线：`transcribe.yml` 删除，旧 `state.json` 首次发布时并入
+  `progress.json`（124 条），feed 124 集全部为 JSON。
 
 **未完成 / 注意**：
 
-1. 这 7 集补转并导出 JSON 后，删除对应 VTT/timings，并从 `shows.json` 去掉 `timings`；
+1. psych20s / algorithms 各有 1 集在中国代理池下载失败（attempts=3，已被判阻塞），
+   需要 AU 出口重跑并先清 attempts；
 2. crawl 仍每周运行，只服务 pragmatic-engineer（无已发布 feed）与根索引；
 3. `align_timings.collect_shows` 遇到单个畸形 RSS 会整 job 失败（2026-11-03 实测某个 Substack 源）。
 
@@ -285,7 +287,7 @@ for f in tests/test_*.py; do python "$f"; done     # 6 个文件、174 个用例
 
 | 现象 | 先看什么 |
 | --- | --- |
-| 字幕与音频差约 30 秒 | 只可能是残余 VTT 集：看 `timings/` 里有没有对应 sidecar；词级 JSON 不需要 align |
+| 字幕与音频差约 30 秒 | 词级 JSON 的时间来自 ASR，不需要 align；本地导入的 VTT 才看 `timings/` |
 | 某集反复被回填选中 | sidecar 的 `attempts`；`complete` 是否为 false |
 | 翻译整批缺几条 | `translate_blocks` 的"只补缺失编号"日志；Gemini 是否返回了不完整对象 |
 | job 绿但什么都没做 | 分片参数被 `continue-on-error` 吞掉？看"检查回填参数"步骤与 `候选 N 集` |

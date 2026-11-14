@@ -12,7 +12,8 @@
 - how-we-made-your-mother（hwmym）也已并入统一管线（`feeds.json` 里同样 `publish: true`）；
   `transcribe.py` 只保留作下载/代理工具库与历史回填，不再有独立 workflow；
 - 旧 VTT / 中文 VTT / `feed-zh.xml` 链路已下线（`translate_vtt.py`、`generate_zh_feed.py`、
-  `translate.yml`、`align.yml` 已删除）；只剩 7 集历史字幕仍以 VTT 发布，等回填后清掉。
+  `translate.yml`、`align.yml` 已删除）；所有节目都已切到词级 JSON，`site/` 里不再有
+  VTT 或 `timings/` 资源。
 
 状态文件仍然彼此独立（`progress.json`、`data/<slug>/state-*.json`）；hwmym 的
 `state.json` 是历史记录，只在首次发布时由 `publish_site.merge_state_records` 读入，
@@ -60,7 +61,7 @@ WHISPER_MODEL="D:/tmp/tmlt-align/ct2-turbo" \
 | 路径 | 归属 job | 其他 job 不得写 |
 | --- | --- | --- |
 | `progress.json`、站点根 `index.html`、`podcasts.html` | Crawl（只再抓 pragmatic-engineer 等未迁移节目） | ✅ |
-| `state.json`（历史只读）、hwmym 的 3 集 `transcripts/*.vtt` 与 `timings/`（回填后删） | 无自动写入 | ✅ |
+| `state.json`（历史只读，首次发布并入 progress） | 无自动写入 | ✅ |
 | `data/**`（双语词级 JSON + 分片 state）、`json/<slug>/**`（**都在 `data` 分支**） | Transcript Pipeline（`transcripts.yml`） | ✅ |
 | `feed.xml`、`index.html`、`progress.json`（main） | Transcript Pipeline（`transcripts.yml` 的 publish） | ✅ |
 | 站点发布 | Deploy（main 上 `site/**` 变更触发，只读最新 main） | — |
