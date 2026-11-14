@@ -1120,6 +1120,13 @@ function resolveFinalAudioUrl(url) {
     }).catch(() => resolve(null)).finally(() => clearTimeout(timer));
   });
 }
+// 音频常包在 dts.podtrac.com / pdst.fm / tracking.swap.fm 的跳转链里；浏览器
+// 追踪防护或广告拦截会拦掉这些域名，但 /track/<id>/ 后面就是直连 CDN 地址。
+function directAudioUrl(url) {
+  const m = /\/track\/[^/?#]+\/([^/?#]+\/.*)$/.exec(String(url || ''));
+  if (!m) return '';
+  try { return new URL('https://' + m[1]).href; } catch (e) { return ''; }
+}
 function tryAudioSource(url) {
   if (!url || state.audioUsed.has(url)) return false;
   rememberPosition();
@@ -1163,6 +1170,10 @@ async function onAudioError() {
   }
   if (state.audioRetried === 1) {
     state.audioRetried = 2;
+    if (tryAudioSource(directAudioUrl(item.url))) {
+      showToast('正在尝试直连音频…', 10000);
+      return;
+    }
     showToast('正在尝试直连音频…', 10000);
     const finalUrl = await resolveFinalAudioUrl(item.url);
     if (token !== state.audioToken) return;

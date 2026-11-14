@@ -133,6 +133,36 @@ assert.deepStrictEqual(starts(fastRepaired), [0, 0.6, 1.2, 2],
         self.assertEqual(proc.returncode, 0, proc.stderr)
 
 
+class PlayerDirectAudioTests(unittest.TestCase):
+    HARNESS = """
+const assert = require('assert');
+%s
+assert.strictEqual(
+  directAudioUrl('https://pdst.fm/e/pscrb.fm/rss/p/tracking.swap.fm/track/v9Uiw/serve.castfire.com/audio/1.mp3?rssID=1'),
+  'https://serve.castfire.com/audio/1.mp3?rssID=1');
+assert.strictEqual(
+  directAudioUrl('https://dts.podtrac.com/redirect.mp3/pdst.fm/e/x/tracking.swap.fm/track/abc/nyt.simplecastaudio.com/e/audio/128/default.mp3?aid=1'),
+  'https://nyt.simplecastaudio.com/e/audio/128/default.mp3?aid=1');
+assert.strictEqual(directAudioUrl('https://example.com/a.mp3'), '');
+"""
+
+    def test_tracking_chain_falls_back_to_the_cdn_host(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node 不在 PATH，跳过播放器逻辑测试")
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        start = page.index("function directAudioUrl")
+        end = page.index("function tryAudioSource")
+        source = self.HARNESS % page[start:end]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            script = Path(temp_dir) / "direct_audio.js"
+            script.write_text(source, encoding="utf-8")
+            proc = subprocess.run(
+                [node, str(script)], capture_output=True, text=True, encoding="utf-8"
+            )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+
 class PlayerOffsetTests(unittest.TestCase):
     def test_align_button_enters_pick_cue_mode(self):
         page = (SITE / "player.html").read_text(encoding="utf-8")
