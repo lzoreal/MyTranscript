@@ -15,6 +15,23 @@ scraper = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(scraper)
 
 
+class FetchRssCacheTests(unittest.TestCase):
+    def test_fetch_rss_uses_the_cached_feed_without_network(self):
+        xml = b"<rss><channel><title>T</title></channel></rss>"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            os.environ["RSS_CACHE_DIR"] = temp_dir
+            try:
+                url = "https://example.test/feed"
+                scraper.pipeline_config.rss_cache_path(temp_dir, url).write_bytes(xml)
+                with patch.object(scraper.SESSION, "get",
+                                  side_effect=AssertionError("network")):
+                    root = scraper.fetch_rss(url)
+            finally:
+                del os.environ["RSS_CACHE_DIR"]
+        self.assertIsNotNone(root)
+        self.assertEqual(root.xpath("string(//channel/title)"), "T")
+
+
 class FeedWriteTests(unittest.TestCase):
     def test_generate_podcast_feed_writes_percent_slug_directory(self):
         """lxml 把相对路径当 URI 解析，含 % 的 slug 在 Windows 上会写失败，必须走文件句柄。"""

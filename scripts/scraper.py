@@ -33,6 +33,7 @@ from lxml import etree
 from lxml import html as lxml_html
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import pipeline_config  # noqa: E402
 import word_transcript  # noqa: E402
 
 # ============================================================
@@ -174,6 +175,12 @@ def request_text(url, headers=None, retries=MAX_RETRIES):
 
 
 def fetch_rss(feed_url):
+    try:
+        cached = pipeline_config.read_rss_cache(feed_url)
+        if cached is not None:
+            return etree.fromstring(cached)
+    except Exception as exc:
+        print(f"   RSS 缓存解析失败：{exc}")
     try:
         response = SESSION.get(feed_url, headers=RSS_HEADERS, timeout=HTTP_TIMEOUT)
         response.raise_for_status()

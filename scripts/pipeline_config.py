@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any, Callable
 
@@ -67,11 +69,31 @@ def global_shard(episodes_by_show: dict[str, list[dict]], shard: int,
     return picked
 
 
+def rss_cache_path(cache_dir, feed_url: str) -> Path:
+    """plan job 抓到的原始 RSS 缓存，publish/chain_next 复用，避免重复超时。"""
+    digest = hashlib.sha1(feed_url.encode("utf-8")).hexdigest()
+    return Path(cache_dir) / f"{digest}.xml"
+
+
+def read_rss_cache(feed_url: str) -> bytes | None:
+    cache_dir = os.environ.get("RSS_CACHE_DIR", "").strip()
+    if not cache_dir:
+        return None
+    try:
+        return rss_cache_path(cache_dir, feed_url).read_bytes()
+    except OSError:
+        return None
+
+
 def list_episodes(feed_url: str, fetch: Callable[[str], bytes] | None = None):
     import feedparser
     import requests
 
-    fetch = fetch or (lambda url: requests.get(url, timeout=60).content)
+    if fetch is None:
+        cached = read_rss_cache(feed_url)
+        fetch = (lambda url: cached) if cached is not None else (
+            lambda url: requests.get(url, timeout=60).content
+        )
     parsed = feedparser.parse(fetch(feed_url))
     if parsed.bozo and not parsed.entries:
         raise RuntimeError(f"RSS 解析失败：{getattr(parsed, 'bozo_exception', '未知')}")

@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,6 +9,21 @@ MODULE = Path(__file__).parents[1] / "scripts" / "pipeline_config.py"
 SPEC = importlib.util.spec_from_file_location("pipeline_config", MODULE)
 pcfg = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(pcfg)
+
+
+class RssCacheTests(unittest.TestCase):
+    def test_list_episodes_prefers_the_cached_rss(self):
+        rss = (b"<rss><channel><item><guid>g1</guid><title>T</title>"
+               b"<enclosure url='a.mp3'/></item></channel></rss>")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            os.environ["RSS_CACHE_DIR"] = temp_dir
+            try:
+                url = "https://example.test/feed"
+                pcfg.rss_cache_path(temp_dir, url).write_bytes(rss)
+                episodes = pcfg.list_episodes(url)
+            finally:
+                del os.environ["RSS_CACHE_DIR"]
+        self.assertEqual([episode["guid"] for episode in episodes], ["g1"])
 
 
 class ConfigTests(unittest.TestCase):

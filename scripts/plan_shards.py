@@ -28,14 +28,25 @@ def effective_shards(pending: int, cap: int = MAX_SHARDS) -> int:
     return max(1, min(cap, int(pending)))
 
 
-def pending_by_show(shows, data_dir, list_episodes=None) -> dict[str, list[dict]]:
+def pending_by_show(shows, data_dir, list_episodes=None,
+                    rss_cache=None) -> dict[str, list[dict]]:
+    import requests
+
     list_episodes = list_episodes or pconfig.list_episodes
     pending = {}
     for show in shows:
         blocked = pstore.blocked_guids(Path(data_dir), show["slug"])
+        feed_url = show["feed_url"]
+        if rss_cache:
+            data = requests.get(feed_url, timeout=60).content
+            path = pconfig.rss_cache_path(rss_cache, feed_url)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+            episodes = list_episodes(feed_url, fetch=lambda url, data=data: data)
+        else:
+            episodes = list_episodes(feed_url)
         pending[show["slug"]] = [
-            episode for episode in list_episodes(show["feed_url"])
-            if episode["guid"] not in blocked
+            episode for episode in episodes if episode["guid"] not in blocked
         ]
     return pending
 
@@ -54,12 +65,14 @@ def main(argv=None) -> int:
     parser.add_argument("--write-plans", action="store_true",
                         help="把每片的全局切片写进 data/.plans/<run_id>-<shard>.json")
     parser.add_argument("--run-id", default="")
+    parser.add_argument("--rss-cache", default="",
+                        help="把原始 RSS 存到这个目录，供 publish/chain_next 复用")
     args = parser.parse_args(argv)
 
     shows = pconfig.load_feeds(args.feeds)
     if args.only_slug:
         shows = [show for show in shows if show["slug"] == args.only_slug]
-    pending_map = pending_by_show(shows, args.data_dir)
+    pending_map = pending_by_show(shows, args.data_dir, rss_cache=args.rss_cache)
     pending = sum(len(episodes) for episodes in pending_map.values())
     count = effective_shards(pending, args.cap)
     if args.write_plans:

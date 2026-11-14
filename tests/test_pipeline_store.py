@@ -10,6 +10,15 @@ SPEC.loader.exec_module(pstore)
 
 
 class StoreTests(unittest.TestCase):
+    def test_dirty_markers_track_changed_shows(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data = Path(temp_dir)
+            pstore.mark_dirty(data, "pod")
+            pstore.mark_dirty(data, "other")
+            self.assertEqual(pstore.dirty_shows(data), ["other", "pod"])
+            pstore.clear_dirty(data, "pod")
+            self.assertEqual(pstore.dirty_shows(data), ["other"])
+
     def test_shard_plan_round_trips_and_ignores_other_runs(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             data = Path(temp_dir)

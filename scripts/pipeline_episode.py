@@ -98,6 +98,8 @@ def process_episode(show, episode, deps, data_dir: Path, now=None) -> str:
         "generated_at": updated,
     }
     store.write_episode(store.episode_path(data_dir, show["slug"], guid), document)
+    # 只让 publish 重新处理有改动的节目；标记随分片提交，publish 消费后删除。
+    store.mark_dirty(data_dir, show["slug"])
     coarse = any(sentence.get("coarse") for sentence in sentences)
     _record(state, guid, "done", updated, attempts=attempts)
     state["episodes"][guid]["coarse"] = coarse

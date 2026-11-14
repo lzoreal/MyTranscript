@@ -55,6 +55,7 @@ class EpisodeTests(unittest.TestCase):
             )
             doc = json.loads(pstore.episode_path(data, "pod", "g1").read_text(encoding="utf-8"))
             state = pstore.load_state(data, "pod")
+            self.assertTrue(pstore.dirty_path(data, "pod").exists())
         self.assertEqual(status, "done")
         self.assertEqual(state["episodes"]["g1"]["status"], "done")
         self.assertEqual(doc["sentences"][0]["zh"], "译：hi there")

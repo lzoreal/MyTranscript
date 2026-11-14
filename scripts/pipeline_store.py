@@ -112,6 +112,29 @@ def claimed_guids(data_dir: Path, slug: str, run_id: str, shard: int) -> set[str
     return claimed
 
 
+def dirty_path(data_dir: Path, slug: str) -> Path:
+    """分片写过的节目标记；publish 只处理这些节目。"""
+    return Path(data_dir) / ".dirty" / slug
+
+
+def mark_dirty(data_dir: Path, slug: str) -> None:
+    path = dirty_path(data_dir, slug)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("", encoding="utf-8")
+
+
+def dirty_shows(data_dir: Path) -> list[str]:
+    directory = Path(data_dir) / ".dirty"
+    return sorted(path.name for path in directory.glob("*") if path.is_file())
+
+
+def clear_dirty(data_dir: Path, slug: str) -> None:
+    try:
+        dirty_path(data_dir, slug).unlink()
+    except FileNotFoundError:
+        pass
+
+
 def shard_plan_path(data_dir: Path, run_id: str, shard: int) -> Path:
     """plan job 写、run job 读的本轮全局分片计划。"""
     return Path(data_dir) / ".plans" / f"{run_id}-{shard}.json"
