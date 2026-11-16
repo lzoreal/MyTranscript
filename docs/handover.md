@@ -521,7 +521,7 @@ translate / align 两条已在 2026-11-14 删除。
 - 为什么不用 `MediaElementAudioSource` 采集：采集拿到的永远是「已经播出去」的音频，比播放头晚，不可能「提前 s 秒」生成。要提前，必须自己解还没播到的音频。
 - 为什么不是整文件下载：megaphone 顺序下载实测只有 150~240 KB/s，45 MB 的整集约 3~5 分钟；而且播放器常从记住的位置（如 918 秒）直接开播，顺序下载完全服务不了那个位置。Range 窗口方案在 918 秒处开启 4 秒内就出词级行。
 - 格式探针：先用 Range 取 0~128 KB，跳过 ID3v2（读 size 字段）找首帧，再走 256 帧确认码率/采样率恒定，得到 `{origin, bps = br/8, sr, spf}` 的 CBR 描述。VBR 与非 MP3 直接给明确错误（「这个音频是可变码率 MP3，暂时不支持提前生成」/「这个音频不是 MP3，暂时只支持 MP3 的提前生成」），不再兜底整集下载。
-- 「提前量」是设置页「实时字幕提前量」（`prefs.liveLead`，默认 60 秒，可选 0/15/30/60/120/300，0 表示只跟随播放）。pump 每 160 ms 把音频喂到 `min(总时长, 播放位置 + 提前量)`，每轮 70 ms CPU 预算、每次按 Range 取 10 秒窗口。解码窗口按帧对齐会多带一两秒，喂之前要截到 `本轮起点 + 需要多少秒`，否则提前量会系统性偏大（实测 15 秒档偏移到 17~18 秒）。
+- 「提前量」是设置页「实时字幕提前量」（`prefs.liveLead`，默认 15 秒，可选 0/15/30/60/120/300，0 表示只跟随播放）。pump 每 160 ms 把音频喂到 `min(总时长, 播放位置 + 提前量)`，每轮 70 ms CPU 预算、每次按 Range 取 10 秒窗口。解码窗口按帧对齐会多带一两秒，喂之前要截到 `本轮起点 + 需要多少秒`，否则提前量会系统性偏大（实测 15 秒档偏移到 17~18 秒）。
 - **取回来的 PCM 必须缓存跨轮复用**（`LIVE.pcm = {start, data}`）：早期每轮都重新取 30 秒字节 + `decodeAudioData` 整段，却只喂得进 1~2 秒、其余丢弃，一轮实测 1.5~3.6 秒，界面和播放一起卡，`next` 永远追不上播放头。现在按 0.5 秒一片喂、片间 `await setTimeout(0)` 让出事件循环，**一轮只跑一次 `transcribe()`**（它要按积压音频整跑一遍模型，积压多少秒就慢多少：12 秒积压一次 500 ms 以上），喂到窗口尾才置空重取。
 - 高亮抖动的两个坑：①流式文本每 0.5 秒重发一次同一句，早先每次 `replaceChildren` 整行重建会抹掉 `.word.active` 并连续重排，现在词数与各词起点不变时只改 span 文本；②行起点比它的首词早零点几秒、以及刚建出来还没带词的行会让 `.word.active` 空一帧（看起来像高亮消失再跳回来），所以无词行要回退到最近一条真的有词的行，行首之前先压住第一个词。取时一律用 `audio.currentTime`，`liveMediaTime()` 带倍速估算项，和音频时间轴对不上。
 - 播放头行用游标定位（行按时间递增），提前量会让最新一行排到播放头之后几十秒，所以**不能**用「最后几行」判断高亮；未播到的词是 `pending` 样式，视野跟着播放头走。游标行之前的行整体收成 `past`、之后整体保持 `pending`，只有游标行推进 `.word.active`——两行时间有重叠时否则会同时出现两个 active。
@@ -535,3 +535,48 @@ translate / align 两条已在 2026-11-14 删除。
 - 词级时间戳依赖 `decoder_kv_with_attention.ort`，而目录加载 `Transcriber.load` 的清单里没有这个文件：必须 `JSON.parse(wasm.sttDependencies('en','2',false))`（ABI 返回 JSON 字符串，不是对象）拿到 `base_url`，自己补上 attention 解码器的 URL 再走 `Transcriber.loadFromUrls`。只设 `word_timestamps:'true'` 不给文件，只会得到没有 `words` 的句子（已实测）。
 - 首轮要下载约 40 MB 模型（进浏览器 Cache Storage），之后秒开；`updateInterval` 用 0.5 s。本机用 `python -m http.server 8765 --directory site`（不设任何响应头）即可验证全链路，因为隔离头来自 SW。
 - 已知约束：只支持 CBR MP3（m4a/aac、VBR MP3 会明确报错）；直播/边录边播的流不在支持范围。停止实时识别、退出页面、刷新都会让正文回到原本的 VTT / 词级 JSON 渲染，原文字稿不受影响（实测 288 句 / 3881 词原样恢复，播放不中断）。
+
+### 播放页单流播放（MSE 接管播放器生命周期，2026-11-17）
+
+- 目标：不再让播放器和识别各下一份音频。自建 MSE 管线把 Range 取回的同一条 MP3
+  字节既 `appendBuffer` 给 `<audio>` 播放，又解成 16 kHz PCM 喂 Moonshine，
+  这样识别能真正跑到播放前面，不再受“播放器只缓冲十几秒”的限制。
+- 开关：设置页「单流播放（实验）」（`prefs.liveMse`，默认关）。能力检测
+  `MediaSource.isTypeSupported('audio/mpeg')` 为真才接管；Safari/iOS 不支持
+  audio/mpeg，自动留在原生播放 + Range 取音频的老路径。VBR/非 MP3 同样留在老路径。
+- 接管时机在 `liveEnable`：模型与 CBR 探针都成功之后才接管，接管抛错就
+  `liveMseStop()` 退回原生并把原因 toast 出来，不让“识别失败”连带播放一起坏。
+- 时间轴对齐是整个方案的关键，踩了三个坑：
+  ① **起点必须等于元素播放头**。`liveMseBegin` 的锚点取 `currentTime`，若还没开播
+  就用记住的进度（`state.resumeAt`）；append 的第一段 `timestampOffset` 用同一个
+  值，元素也 `seek` 到它。早先为了“不缺开头”往前挪 0.25 秒，结果元素落在没有数据的
+  区间，停在那里不动。
+  ② **换过 timestampOffset 就不要复用同一个 MediaSource**。实测新数据已经落进
+  `sb.buffered`，元素侧 `audio.buffered` 却只认旧区间（例如只报 `[160.1,170.1]`），
+  播放头一进去就卡住。现在跳转/重锚一律丢掉旧 ms、按新位置重建整条管线
+  （`liveMseReanchor`）。
+  ③ **MSE 里元素在拿到新位置数据之前不发 `seeked`**，靠事件重锚会死锁。所以 pump
+  每轮自己检查一次：播放头落在 `sb.buffered` 之外就重建（`seeked` 只当第二道保险，
+  且数据已在区间内时只重排游标、不重复重建）。
+- 生命周期接管：`loadEpisode` 先 `liveMseStop()` 把播放还给原生再换集；
+  `liveFollowCurrentEpisode` 重新探到新音频后等元数据、再自动接管一次（用户不必手动
+  开关识别）。停实时识别 / 关开关 / 接管失败都走 `liveMseStop`：记下 `currentTime`
+  与播放态，还原原始 `src`，在 `loadedmetadata`（或 3 秒兜底）后回到原位置继续播。
+- 播放侧两个必须遵守的规则：`appendBuffer` 一次只能有一个在跑，**不要在
+  `sb.updating` 上挂 `updateend` 等回调**（等不到就把整条队列永久挂死），改成 pump
+  每轮 tick 调 `liveMseKick()`；`ms.duration` 必须在没有 SourceBuffer 正在 updating
+  时设，否则报 `The updating attribute is true`。
+- append 的尾部必须落在帧边界上：随意截断会“append 成功、`updateend` 照样触发、
+  `buffered` 却是空区间”，所以窗口一律按帧扫描后 `slice`，两头都对帧。
+- 吞吐实测（本机 Chrome，单集 1891.5 秒）：`transcribe()` 单次约 100~120 ms，按 1 秒
+  PCM 攒一批调用（`LIVE_TR_BATCH`），识别侧实时因子 2.4~4 倍；单流模式下
+  `audio.buffered` 能领先播放 30~70 秒，「已提前」稳定在 10~12 秒。
+  **结论：下载不再是瓶颈，真正的天花板是“取窗 + 解码”偶发卡死**（实测一次
+  `decodeAudioData` 不回调就让整条识别停住 40 秒）。现在两处都加了超时（Range 15 秒、
+  解码 10 秒），超时即当这次窗口失败、下一轮重取。
+- 单流模式下 `LIVE.bytePos` 是播放与识别共用的字节游标，**不能并发取窗**：预取只在
+  不接管播放（原生 + Range）时启用，单流模式里仍然串行取；两路同时取会让游标错开
+  （实测请求 624 秒的窗，回来的是 745 秒的窗）。
+- 验证方法：`python -m http.server 8765 --directory site`，开「单流播放」后点实时识别，
+  看 `audio.src` 是否变 `blob:`、`audio.buffered` 是否随播放头推进增长、「已提前」是否
+  稳定在提前量附近；跳转一次确认能重锚继续播；停识别确认回到原生且播放位置不丢。
