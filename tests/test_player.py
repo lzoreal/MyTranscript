@@ -262,6 +262,40 @@ class PlayerShellTests(unittest.TestCase):
             self.assertIn(needle, page)
 
 
+class PlayerMiniTransportTests(unittest.TestCase):
+    HARNESS = """
+const assert = require('assert');
+%s
+const list = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+assert.strictEqual(stepTarget(list, 'b', -1).id, 'a');
+assert.strictEqual(stepTarget(list, 'b', 1).id, 'c');
+assert.strictEqual(stepTarget(list, 'a', -1), null);
+assert.strictEqual(stepTarget(list, 'c', 1), null);
+assert.strictEqual(stepTarget(list, 'missing', 1), null);
+"""
+
+    def test_mini_player_steps_episodes_and_shows_live_caption(self):
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        for needle in ['id="miniPrev"', 'id="miniNext"', 'aria-label="上一集"', 'aria-label="下一集"',
+                       'function stepTarget', 'function stepEpisode', 'id="miniCaption"',
+                       'function syncMiniCaption', 'syncMiniCaption();',
+                       "$('miniPrev').disabled = index <= 0", "$('miniNext').disabled = index < 0"]:
+            self.assertIn(needle, page)
+        self.assertIn("!document.body.classList.contains('player-open') && !!state.current && !!cue && !!cue.text", page)
+
+    def test_step_target_walks_the_episode_list(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node 不在 PATH，跳过播放器逻辑测试")
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        source = self.HARNESS % page[page.index("function stepTarget"):page.index("function stepEpisode")]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            script = Path(temp_dir) / "step_target.js"
+            script.write_text(source, encoding="utf-8")
+            proc = subprocess.run([node, str(script)], capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+
 class PlayerOpmlTests(unittest.TestCase):
     HARNESS = """
 const assert = require('assert');
@@ -335,11 +369,12 @@ assert.deepStrictEqual(apple.map(x => x.title), ['Alpha']);
 assert.strictEqual(apple[0].image, 'https://img/600');
 assert.strictEqual(apple[0].episodeCount, 12);
 const pi = mapPodcastIndexResults({feeds: [
-  {title: 'Beta', author: 'B', url: 'https://b/feed', image: 'https://img/b', episodeCount: 7},
+  {title: 'Beta', author: 'B', url: 'https://b/feed', image: 'https://img/b', episodeCount: 7, description: 'Feed blurb'},
   {title: 'No url'},
 ]});
 assert.deepStrictEqual(pi.map(x => x.title), ['Beta']);
 assert.strictEqual(pi[0].genre, '');
+assert.strictEqual(pi[0].description, 'Feed blurb');
 const merged = mergeSearchResults([
   [apple[0], {feedUrl: 'https://x/feed', title: 'X'}],
   [{feedUrl: 'https://x/feed', title: 'X'}, {feedUrl: 'https://c/feed', title: 'C'}],
@@ -377,6 +412,29 @@ assert.strictEqual(findBuiltinForTitle('SmartLess Presents ClueLess', shows), nu
                        'PODCAST_INDEX', 'function searchPodcastIndex',
                        'data-online-subscribe']:
             self.assertIn(needle, page)
+
+    def test_online_results_open_a_detail_preview(self):
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        for needle in ['data-online-detail="', 'function openOnlineDetail', 'function openOnlinePreview',
+                       'function onlineDetailHTML', 'class="online-detail-desc"',
+                       '[role="link"][data-online-detail]']:
+            self.assertIn(needle, page)
+        self.assertIn('if (el.dataset.onlineDetail) { openOnlineDetail(el.dataset.onlineDetail); return; }', page)
+
+
+class PlayerPodcastDetailTests(unittest.TestCase):
+    def test_detail_shows_full_intro_without_feed_url_line(self):
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        self.assertNotIn("class=\"feed-line\"", page)
+        self.assertNotIn("max-width:680px;display:-webkit-box;-webkit-line-clamp:4", page)
+        self.assertIn("const feedUrl = show.feed ? absoluteFeed(show.feed) : '';", page)
+
+
+class PlayerMiniOpenTests(unittest.TestCase):
+    def test_mini_cover_opens_the_transcript(self):
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        self.assertIn("$('miniCover').onclick = () => navigate('player'", page)
+        self.assertIn('id="miniCover" title="打开播放器"', page)
 
 
 
