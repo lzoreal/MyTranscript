@@ -3658,24 +3658,38 @@ async function liveEnable() {
 }
 
 // 换集之后音频换了：重新探测格式，识别流从新的播放点重建。
-async function liveFollowCurrentEpisode() {
+async function liveFollowCurrentEpisode(resumePlay) {
   if (!LIVE.on) return;
-  const src = audio.currentSrc || audio.getAttribute('src') || '';
-  if (!src) return;
   LIVE.session += 1;
   const session = LIVE.session;
+  // 换集瞬间 audio.currentSrc 可能还是空（新的 src 刚 load、资源还没选好），
+  // 这里等它落定再探测。以前直接取一次就拿去探测，换集后第一次探测必然失败，
+  // 整条识别会停在“取音频数据失败”再也不恢复。
+  let src = '';
+  for (let i = 0; i < 6 && !src; i++) {
+    src = audio.currentSrc || '';
+    if (src) break;
+    await new Promise(r => setTimeout(r, 1000));
+    if (LIVE.session !== session || !LIVE.on) return;
+  }
+  if (!src) {
+    // 还没选出可读的音频地址：过一会儿再跟一次，别把识别判死。
+    setTimeout(() => { if (LIVE.on) liveFollowCurrentEpisode(); }, 5000);
+    return;
+  }
   LIVE.audioUrl = src;
   LIVE.cbr = null;
   try {
     liveSetText('解析音频格式…', 'on');
-    LIVE.cbr = await liveProbeAudio();
+    // 源站首字节偶发失败（实测换集后很常见），这里和首次开启一样带重试。
+    LIVE.cbr = await liveRetry(() => liveProbeAudio(), 4, 900);
     if (LIVE.session !== session) return;
     liveClearRows();
     liveRebuildStream();
     // 换集后自动重新接管：单流在 loadEpisode 里已经停掉（播放还给原生），这里等新一集
     // 拿到元数据再接管一次，用户不用手动开关「实时识别」。
     if (prefs.liveMse && liveMseCapable()) {
-      const wasPlaying = !audio.paused || app.autoplay;
+      const wasPlaying = !!resumePlay || !audio.paused || app.autoplay;
       try {
         await liveWaitAudioReady(15000);
         if (LIVE.session !== session) return;
@@ -3683,11 +3697,16 @@ async function liveFollowCurrentEpisode() {
         if (wasPlaying) { app.autoplay = false; audio.play().catch(() => {}); }
       } catch (err) {
         if (LIVE.mse) liveMseStop();
+        if (wasPlaying) audio.play().catch(() => {});
       }
     }
   } catch (err) {
     const msg = err && err.message ? err.message : String(err);
-    liveSetText('实时识别不可用：' + msg, 'err');
+    liveSetText('正在等待新一集音频（' + msg + '）…', 'busy');
+    // 探测失败不等于这一集不能用：源站偶发失败过几秒就好，等一会儿重新跟一次。
+    if (LIVE.session === session) {
+      setTimeout(() => { if (LIVE.on && LIVE.session === session) liveFollowCurrentEpisode(); }, 6000);
+    }
   }
 }
 
@@ -3808,7 +3827,10 @@ function selectEpisode(item, keepDrawer = false) {
   state.progressSavedAt = 0;
   audio.dataset.ep = item.id;
   // 换集：单流模式把播放交给原生元素（下面这段会重设 src），实时识别继续走
-  // Range 路径；用户下次开关一次实时识别就会在新一集上重新接管。
+  // Range 路径；这里等新一集就绪后会自动再接管一次。
+  // 先记下换集前是不是在播：下面 audio.pause() 之后这个状态就没了，等重新接管完
+  // 要靠它决定是否接着播（否则换集后音频会停在原地不动，看起来像卡死）。
+  const wasPlaying = !audio.paused;
   if (LIVE.mse) liveMseStop();
   audio.pause();
   audio.removeAttribute('src');
@@ -3816,7 +3838,7 @@ function selectEpisode(item, keepDrawer = false) {
   if (audioUrl) { audio.src = audioUrl; audio.load(); }
   audio.playbackRate = prefs.speed || 1;
   // 换集会换掉音频字节与时间轴：上一集的实时结果必须清掉，再按新音频重建。
-  if (LIVE.on) { liveClearRows(); liveRebuildStream(); liveFollowCurrentEpisode(); }
+  if (LIVE.on) { liveClearRows(); liveRebuildStream(); liveFollowCurrentEpisode(wasPlaying); }
   if (app.autoplay) { app.autoplay = false; audio.play().catch(() => {}); }
   state.audioSeconds = 0; state.timeScale = 1; state.seekRaw = 0;
   $('total').textContent = '00:00'; $('now').textContent = '00:00';
