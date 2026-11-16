@@ -102,8 +102,14 @@ site/
     ```
 
 `catalog.json` 由 `scripts/build_catalog.py` 在 publish job 发布后重建；内容未变时不重写，
-避免空提交。每个节目含封面、简介、总集数和最近 20 集（标题、日期、时长、音频、字幕、
-400 字以内简介），只服务首页、播客库、发现和节目页的首屏；完整单集仍按需解析 `feed.xml`。
+避免空提交。每个节目含封面、简介、语言、分类、总集数、有本站文字稿的集数、
+最近更新时间、最近 20 集（标题、日期、时长、音频、字幕、400 字以内简介），
+只服务首页、播客库、发现和节目页的首屏；完整单集仍按需解析 `feed.xml`。
+
+- `episode_count` 是 feed 里的全部 item 数；`transcript_count` 只数真正带本站
+  `podcast:transcript` 的 item，`latest_transcript_count` 只数最近 20 集里的相应数量。
+- `language` 取 channel 的 `<language>`（小写），`categories` 收集 iTunes 主分类与子分类。
+- `latest_published_at` 是最近一集的 UTC 时间（`YYYY-MM-DDTHH:MM:SSZ`），发现页“最新更新优先”用它排序。
 
 根 `index.html` 现在是跳转到 `player.html#/home` 的入口页；逐节目清单保留在
 `podcasts.html`。两者的生成器在 `scripts/transcribe.py` / `scripts/scraper.py`。
@@ -126,11 +132,34 @@ site/
 | `myt-play-mode` / `myt-sleep` | 收听模式、睡眠定时 |
 | `myt-theme*` / `myt-reader` | 主题与阅读排版 |
 | `myt-cors-proxy` | 站外 feed 直连失败时的代理模板（`{url}` 占位） |
+| `myt-mini-caption` | 悬浮底栏字幕展开状态（`1` / `0`，默认展开） |
 
 站外 feed 先直连（Simplecast / Megaphone / Amperwave / Libsyn / Art19 等返回
 `Access-Control-Allow-Origin: *`），失败后尝试 `myt-cors-proxy`，再失败可由用户粘贴
-RSS 内容；原始 XML 缓存在 IndexedDB `myt-feeds`（6 小时）。站外节目只有音频，
-不提供增强字幕。
+RSS 内容；原始 XML 缓存在 IndexedDB `myt-feeds`（6 小时），内存里的解析结果
+（`app.feedCache`，值是 `{feed, at}`）同样按 6 小时过期，过期后重新请求，
+避免长时间不刷新页面一直用旧 feed。站外节目只有音频，不提供增强字幕。
+
+悬浮底栏（`#miniPlayer`）和实时字幕合成一个面板：字幕是面板顶行（`#miniCaption`），
+下面一行是封面、标题、上一集/播放/下一集和进度。右侧箭头（`#miniExpand`）只在有 cue 时
+出现，行为是展开/隐藏字幕（展开时朝下、收起时朝上，`aria-expanded` 同步），默认展开，
+选择写入 `myt-mini-caption`；收起后面板回到单行高度。封面和标题仍打开完整播放器。
+播放/暂停按钮使用几何居中的 SVG 图标（`▶` / `Ⅱ` 文本字形已不再使用）。
+
+### 播放器启动顺序（2026-11-16）
+
+`initPlayer()` 先读 `shows.json`（8 秒超时）和本地状态，然后立即 `bindShell()`、
+`applyRoute()`；`catalog.json`（12 秒超时）在后台加载，成功后 `mergeCatalog()` 并重绘
+首页、发现、播客库和搜索页，失败或超时则降级为 `shows.json` 的节目清单并在发现页提示。
+`getJson()` 统一带 `AbortController` 超时，任何清单请求都不会无限挂起。
+
+### 发现页目录（2026-11-16）
+
+发现页在在线搜索下方提供本站目录：搜索框、分类、排序（目录顺序 / 最新更新 / 集数最多 /
+名称）、订阅状态（全部 / 已订阅 / 未订阅）和“只看有增强文字稿”。筛选逻辑集中在
+`filterCatalogShows()`，只处理有 feed 的内置节目。节目卡片拆成链接（`a.pod-card-main`）
+和独立的订阅按钮，展示分类、语言、两行简介、文字稿覆盖率（`transcript_count/episode_count`）
+和最新单集；顶部搜索结果也会额外列出未订阅的本站目录节目。
 
 ### 线上播客搜索（2026-11-16）
 
@@ -139,8 +168,12 @@ RSS 内容；原始 XML 缓存在 IndexedDB `myt-feeds`（6 小时）。站外�
 `net/discovery/build.gradle` 里的公开默认凭据（会出现在网页源码里；不是机密），
 请求失败、超时或 CORS 被拦时静默回退 Apple 结果，来源标注会写明实际来源。
 Apple 搜索返回 `feedUrl/collectionName/artistName/artworkUrl600/trackCount`；
-Podcast Index 返回 `feeds[].url/title/author/image/episodeCount`。搜索结果标题与
-内置节目名精确匹配时，优先提供“打开增强版”，避免订阅同名的官方 feed。
+Podcast Index 返回 `feeds[].url/title/author/image/episodeCount`。结果按规范化后的
+feed URL 去重（忽略大小写、默认端口和尾部斜杠），重复项的简介、封面、分类等非空字段
+互相补齐；每次搜索先递增请求序号，空查询会清空结果并作废仍在路上的旧请求。
+合并后默认显示 20 条，可点“加载更多”。搜索结果标题与内置节目名精确匹配时，
+优先提供“打开增强版”（按产品决定保留标题优先；同名但 feed 不同的站外节目仍可能被
+标成本站增强版）；手动添加 RSS / OPML 导入则按规范化 feed URL 识别本站节目。
 
 `site/` 里不再有字幕文件：feed 只引用 data 分支的 JSON；播放器仍保留 VTT/侧车
 导入能力，供本地实验用。

@@ -31,6 +31,17 @@ def _text(node, path: str, default: str = "") -> str:
     return (found.text or "").strip() if found is not None and found.text else default
 
 
+def channel_categories(channel) -> list:
+    """收集 iTunes 主分类与子分类，供发现页筛选；去重但保留顺序。"""
+    found = []
+    for node in channel.findall(f"{ITUNES}category"):
+        for candidate in [node] + node.findall(f"{ITUNES}category"):
+            text = (candidate.get("text") or "").strip()
+            if text and text not in found:
+                found.append(text)
+    return found
+
+
 def channel_meta(channel) -> dict:
     image = channel.find(f"{ITUNES}image")
     artwork = image.get("href") if image is not None else ""
@@ -40,6 +51,8 @@ def channel_meta(channel) -> dict:
         "name": _text(channel, "title"),
         "artwork": artwork or "",
         "description": _text(channel, "description"),
+        "language": _text(channel, "language").strip().lower(),
+        "categories": channel_categories(channel),
     }
 
 
@@ -86,6 +99,12 @@ def _timestamp(date: str) -> float:
         return 0.0
 
 
+def _iso_utc(timestamp: float) -> str:
+    if not timestamp:
+        return ""
+    return datetime.fromtimestamp(timestamp, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def build_catalog(feeds, *, latest: int = 20) -> dict:
     shows = []
     for slug, path in feeds:
@@ -98,6 +117,8 @@ def build_catalog(feeds, *, latest: int = 20) -> dict:
         episodes = [episode_entry(item, meta["artwork"], i) for i, item in enumerate(items)]
         episodes = [e for e in episodes if e["title"] or e["url"]]
         episodes.sort(key=lambda e: _timestamp(e["date"]), reverse=True)
+        recent = episodes[:latest]
+        transcript_count = sum(1 for item in items if own_transcript(item))
         shows.append(
             {
                 "slug": slug,
@@ -105,8 +126,13 @@ def build_catalog(feeds, *, latest: int = 20) -> dict:
                 "feed": quote(slug, safe="") + "/feed.xml",
                 "artwork": meta["artwork"],
                 "description": meta["description"],
+                "language": meta["language"],
+                "categories": meta["categories"],
                 "episode_count": len(items),
-                "latest": episodes[:latest],
+                "transcript_count": transcript_count,
+                "latest_transcript_count": sum(1 for e in recent if e["transcript"]),
+                "latest_published_at": _iso_utc(_timestamp(recent[0]["date"])) if recent else "",
+                "latest": recent,
             }
         )
     shows.sort(key=lambda s: s["name"].lower())

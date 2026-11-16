@@ -28,6 +28,21 @@ def own_transcripts(item):
     return found
 
 
+def run_node(testcase, name, source):
+    """在临时目录里跑一段从 player.html 抽出的 JS，返回 CompletedProcess。"""
+    node = shutil.which("node")
+    if not node:
+        testcase.skipTest("node 不在 PATH，跳过播放器逻辑测试")
+    with tempfile.TemporaryDirectory() as temp_dir:
+        script = Path(temp_dir) / name
+        script.write_text(source, encoding="utf-8")
+        return subprocess.run([node, str(script)], capture_output=True, text=True, encoding="utf-8")
+
+
+def player_page():
+    return (SITE / "player.html").read_text(encoding="utf-8")
+
+
 class PlayerManifestTests(unittest.TestCase):
     def test_manifest_covers_every_podcast(self):
         shows = load_shows()
@@ -282,6 +297,23 @@ assert.strictEqual(stepTarget(list, 'missing', 1), null);
                        "$('miniPrev').disabled = index <= 0", "$('miniNext').disabled = index < 0"]:
             self.assertIn(needle, page)
         self.assertIn("!document.body.classList.contains('player-open') && !!state.current && !!cue && !!cue.text", page)
+
+    def test_mini_caption_row_merges_into_panel_and_toggles(self):
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        for needle in ['<div class="mini-main">', 'id="miniExpand"', 'aria-expanded=',
+                       'function toggleMiniCaption', "MINI_CAPTION_KEY = 'myt-mini-caption'",
+                       "classList.toggle('caption-collapsed'",
+                       "$('miniExpand').onclick = () => toggleMiniCaption();",
+                       "localStorage.setItem(MINI_CAPTION_KEY"]:
+            self.assertIn(needle, page)
+        self.assertNotIn("miniExpand').onclick = () => navigate('player'", page)
+
+    def test_mini_play_button_uses_centered_svg_icons(self):
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        self.assertIn("$('miniPlay').innerHTML = playing", page)
+        self.assertIn('M9.5 7.4v9.2L17.2 12z', page)
+        self.assertIn('M9 7.5h2.2v9H9zM12.8 7.5H15v9h-2.2z', page)
+        self.assertNotIn("$('miniPlay').textContent = audio.paused", page)
 
     def test_step_target_walks_the_episode_list(self):
         node = shutil.which("node")
@@ -561,6 +593,224 @@ class PlayerAccessibilityTests(unittest.TestCase):
                        'aria-valuetext', 'aria-label="搜索我的播客和单集"',
                        'input:focus-visible', 'aria-label="播放速度" inert']:
             self.assertIn(needle, page)
+
+
+class PlayerStartupTests(unittest.TestCase):
+    HARNESS = """
+const assert = require('assert');
+__SLICE__
+globalThis.fetch = (url, options) => new Promise((resolve, reject) => {
+  const signal = options && options.signal;
+  if (signal) signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+});
+(async () => {
+  const started = Date.now();
+  const value = await getJson('catalog.json', 40);
+  assert.strictEqual(value, null, '超时应降级为 null 而不是一直挂起');
+  assert.ok(Date.now() - started < 1500, '超时必须很快结束');
+})().catch(err => { console.error(err); process.exit(1); });
+"""
+
+    def test_shell_and_route_start_before_catalog_finishes(self):
+        page = player_page()
+        body = page[page.index("const SHELL_TIMEOUT"):page.index("function refreshCatalogPages")]
+        self.assertIn("async function initPlayer", body)
+        self.assertNotIn("await loadCatalog()", body)
+        self.assertLess(body.index("bindShell();"), body.index("applyRoute();"))
+        self.assertLess(body.index("applyRoute();"), body.index("loadCatalog().then"))
+        self.assertIn("app.catalogPending", body)
+        self.assertIn("refreshCatalogPages()", body)
+        self.assertIn("完整目录读取失败或超时", page)
+
+    def test_json_reads_time_out(self):
+        page = player_page()
+        source = self.HARNESS.replace("__SLICE__", page[page.index("function getJson"):page.index("// 英文 VTT 已不发布")])
+        proc = run_node(self, "get_json_timeout.js", source)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+
+class PlayerMemoryFeedCacheTests(unittest.TestCase):
+    HARNESS = """
+const assert = require('assert');
+const app = { feedCache: new Map() };
+const state = { feeds: new Map() };
+__SLICE__
+const ttl = 6 * 60 * 60 * 1000;
+rememberFeed('a', { episodes: [{ id: '1' }] });
+assert.strictEqual(memoryFeed('a').episodes[0].id, '1');
+assert.strictEqual(state.feeds.has('a'), true);
+assert.strictEqual(memoryFeed('a', Date.now() + ttl + 1), null);
+assert.strictEqual(app.feedCache.has('a'), false, '过期后必须清除内存缓存');
+assert.strictEqual(state.feeds.has('a'), false);
+assert.strictEqual(hasFreshFeed('missing'), false);
+rememberFeed('', { episodes: [] });
+assert.strictEqual(app.feedCache.size, 0);
+"""
+
+    def test_memory_feed_cache_honours_the_same_ttl(self):
+        page = player_page()
+        source = self.HARNESS.replace("__SLICE__", page[page.index("const FEED_CACHE_TTL"):page.index("async function fetchFeedText")])
+        proc = run_node(self, "memory_feed_cache.js", source)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+
+class PlayerOnlineSearchRaceTests(unittest.TestCase):
+    HARNESS = """
+const assert = require('assert');
+const app = { online: { query: '', loading: false, results: [], sources: [], piError: '', error: '', seq: 0, cache: new Map(), visible: 20 } };
+const ONLINE_PAGE = 20;
+let renders = 0;
+const renderOnlineResults = () => { renders++; };
+let release;
+const gate = new Promise(resolve => { release = resolve; });
+let appleCalls = 0;
+const searchApple = async () => { appleCalls++; await gate; return [{ feedUrl: 'https://slow/feed', title: 'Slow Show' }]; };
+const searchPodcastIndex = async () => [];
+const mergeSearchResults = lists => lists.flat();
+__SLICE__
+(async () => {
+  const first = runOnlineSearch('SmartLess');
+  await Promise.resolve();
+  const second = runOnlineSearch('   ');
+  release();
+  await Promise.all([first, second]);
+  assert.strictEqual(app.online.query, '', '清空查询后不能保留旧关键词');
+  assert.deepStrictEqual(app.online.results, [], '过期请求不得覆盖空结果');
+  assert.strictEqual(app.online.loading, false);
+  assert.strictEqual(renders >= 2, true);
+  app.online.cache.set('cached', { results: [{ feedUrl: 'https://c/feed', title: 'C' }], sources: ['Apple Podcasts'], piError: '', at: Date.now() });
+  await runOnlineSearch(' Cached ');
+  assert.strictEqual(app.online.results.length, 1);
+  assert.strictEqual(app.online.query, 'Cached');
+})().catch(err => { console.error(err); process.exit(1); });
+"""
+
+    def test_empty_query_invalidates_the_previous_request(self):
+        page = player_page()
+        source = self.HARNESS.replace("__SLICE__", page[page.index("async function runOnlineSearch"):page.index("function onlineRowHTML")])
+        proc = run_node(self, "online_search_race.js", source)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+    def test_online_results_are_paged(self):
+        page = player_page()
+        for needle in ["const ONLINE_PAGE = 20;", "data-online-more", "加载更多（还有 "]:
+            self.assertIn(needle, page)
+
+
+class PlayerSearchDedupeTests(unittest.TestCase):
+    HARNESS = """
+const assert = require('assert');
+const app = {
+  builtinShows: [{ slug: 'the-daily', name: 'The Daily (Unofficial) - Transcripts', feed: 'the-daily/feed.xml', builtin: true }],
+  subs: [],
+};
+__SLICE__
+__SLICE2__
+assert.strictEqual(feedKey('https://Example.com:443/Feed/'), feedKey('https://example.com/Feed'));
+assert.strictEqual(feedKey('https://example.com/feed/'), 'https://example.com/feed');
+assert.notStrictEqual(feedKey('https://example.com/feed?a=1'), feedKey('https://example.com/feed'));
+const merged = mergeSearchResults([
+  [{ feedUrl: 'https://Example.com/feed/', title: 'Merged', source: 'apple' }],
+  [{ feedUrl: 'https://example.com:443/feed', description: 'Blurb', image: 'https://img/x', source: 'podcastindex' }],
+]);
+assert.strictEqual(merged.length, 1, '同一 RSS 的不同写法必须去重');
+assert.strictEqual(merged[0].title, 'Merged');
+assert.strictEqual(merged[0].description, 'Blurb');
+assert.strictEqual(merged[0].image, 'https://img/x');
+assert.deepStrictEqual(merged[0].sources.sort(), ['apple', 'podcastindex']);
+assert.strictEqual(findBuiltinByFeed('https://THE-DAILY:443/feed.xml/').slug, 'the-daily');
+assert.strictEqual(findBuiltinByFeed('https://other.example/feed.xml'), null);
+const shows = [{ name: 'The Daily', slug: 'the-daily', feed: 'the-daily/feed.xml' }];
+assert.strictEqual(findBuiltinForTitle('The Daily!', shows).slug, 'the-daily');
+assert.strictEqual(findBuiltinForTitle('The Daily', [{ ...shows[0], feed: null }]), null);
+"""
+
+    def test_feed_url_formats_dedupe_and_url_match_beats_title(self):
+        page = player_page()
+        source = (self.HARNESS
+                  .replace("__SLICE2__", page[page.index("function searchTitleKey"):page.index("async function fetchJson")])
+                  .replace("__SLICE__", page[page.index("function normalizeFeedUrl"):page.index("function showByKey")]))
+        proc = run_node(self, "search_dedupe.js", source)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+
+class PlayerDiscoverFilterTests(unittest.TestCase):
+    HARNESS = """
+const assert = require('assert');
+const app = { catalog: { shows: [] }, subs: [{ key: 'news' }] };
+const isSubscribed = key => app.subs.some(sub => sub.key === key);
+const catalogLatest = show => show.latest || [];
+__SLICE__
+__SLICE2__
+const shows = [
+  { slug: 'news', name: 'The Daily', feed: 'x', description: 'Daily news briefing', categories: ['News', 'Daily News'],
+    language: 'en', episode_count: 10, transcript_count: 8, latest_published_at: '2026-11-15T11:00:00Z',
+    latest: [{ date: 'Sun, 15 Nov 2026 11:00:00 +0000' }] },
+  { slug: 'history', name: 'The Rest Is History', feed: 'y', description: 'History show', categories: ['History'],
+    language: 'en-gb', episode_count: 741, transcript_count: 741, latest_published_at: '2026-11-14T16:00:00Z', latest: [] },
+  { slug: 'comedy', name: 'SmartLess', feed: 'z', description: 'Comedy chat', categories: ['Comedy'],
+    language: 'en', episode_count: 387, transcript_count: 0, latest_published_at: '2026-11-13T08:00:00Z', latest: [] },
+  { slug: 'no-feed', name: 'Hidden', feed: null, categories: ['History'], episode_count: 0, transcript_count: 0 },
+];
+const ids = list => list.map(show => show.slug);
+assert.deepStrictEqual(ids(filterCatalogShows(shows, {})), ['news', 'history', 'comedy']);
+assert.deepStrictEqual(ids(filterCatalogShows(shows, { query: 'briefing' })), ['news']);
+assert.deepStrictEqual(ids(filterCatalogShows(shows, { query: 'rest' })), ['history'], '未订阅也能搜到');
+assert.deepStrictEqual(ids(filterCatalogShows(shows, { query: '历史' })), ['history'], '分类中文标签也能搜');
+assert.deepStrictEqual(ids(filterCatalogShows(shows, { category: 'History' })), ['history']);
+assert.deepStrictEqual(ids(filterCatalogShows(shows, { sub: 'sub' })), ['news']);
+assert.deepStrictEqual(ids(filterCatalogShows(shows, { sub: 'unsub' })), ['history', 'comedy']);
+assert.deepStrictEqual(ids(filterCatalogShows(shows, { sort: 'latest' })), ['news', 'history', 'comedy']);
+assert.deepStrictEqual(ids(filterCatalogShows(shows, { sort: 'episodes' })), ['history', 'comedy', 'news']);
+assert.deepStrictEqual(ids(filterCatalogShows(shows, { sort: 'name' })), ['comedy', 'news', 'history']);
+assert.deepStrictEqual(ids(filterCatalogShows(shows, { transcripts: true })), ['news', 'history']);
+"""
+
+    def test_catalog_filter_search_sort_and_status(self):
+        page = player_page()
+        source = (self.HARNESS
+                  .replace("__SLICE2__", page[page.index("function primaryCategory"):page.index("function syncDiscoverControls")])
+                  .replace("__SLICE__", page[page.index("const CATEGORY_LABELS"):page.index("function transcriptCoverage")]))
+        proc = run_node(self, "discover_filter.js", source)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+    def test_discover_page_exposes_the_filter_controls(self):
+        page = player_page()
+        for needle in ['id="discoverFilter"', 'id="discoverCategory"', 'id="discoverSort"',
+                       'id="discoverSub"', 'id="discoverTranscript"', 'id="discoverCount"',
+                       'id="discoverCatalogNote"']:
+            self.assertIn(needle, page)
+
+
+class PlayerTranscriptCoverageTests(unittest.TestCase):
+    HARNESS = """
+const assert = require('assert');
+__SLICE__
+assert.strictEqual(transcriptCoverage({ episode_count: 0, transcript_count: 0 }), 0);
+assert.strictEqual(transcriptCoverage({ episode_count: 3038, transcript_count: 1519 }), 50);
+const html = coverageHTML({ builtin: true, episode_count: 3038, transcript_count: 3038 });
+assert.ok(html.includes('3038/3038'));
+assert.ok(html.includes('100%'));
+assert.strictEqual(coverageHTML({ builtin: false, episode_count: 1, transcript_count: 1 }), '');
+"""
+
+    def test_coverage_is_reported_separately_from_episode_count(self):
+        page = player_page()
+        source = self.HARNESS.replace("__SLICE__", page[page.index("function transcriptCoverage"):page.index("function podCardHTML")])
+        proc = run_node(self, "coverage.js", source)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+
+class PlayerCardSemanticsTests(unittest.TestCase):
+    def test_card_link_and_subscribe_button_are_siblings(self):
+        page = player_page()
+        card = page[page.index("function podCardHTML"):page.index("function episodeRowHTML")]
+        self.assertIn('class="pod-card-main" href="', card)
+        self.assertIn('<div class="pod-actions">', card)
+        self.assertNotIn('<div class="pod-card" data-open-podcast=', card)
+        self.assertIn("coverageHTML(show)", card)
+        self.assertIn("pod-latest", card)
+        self.assertIn("showCategoryText(show)", card)
 
 
 if __name__ == "__main__":

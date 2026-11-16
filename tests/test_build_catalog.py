@@ -13,7 +13,11 @@ FEED = """<?xml version="1.0" encoding="UTF-8"?>
   <channel>
     <title>Demo Show</title>
     <description>Demo description</description>
+    <language>en-US</language>
     <itunes:image href="https://img.example/cover.jpg"/>
+    <itunes:category text="News">
+      <itunes:category text="Daily News"/>
+    </itunes:category>
     <item>
       <title>Older episode</title>
       <pubDate>Mon, 10 Nov 2026 08:00:00 +0000</pubDate>
@@ -52,6 +56,37 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(show["latest"][0]["transcript"]["type"], "application/json")
         self.assertEqual(show["latest"][0]["duration"], "01:00:00")
         self.assertIsNone(show["latest"][1]["transcript"])
+
+    def test_catalog_reports_language_categories_and_coverage(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            feed = Path(temp_dir) / "feed.xml"
+            feed.write_text(FEED, encoding="utf-8")
+            document = build_catalog.build_catalog([("demo", feed)], latest=1)
+
+        show = document["shows"][0]
+        self.assertEqual(show["language"], "en-us")
+        self.assertEqual(show["categories"], ["News", "Daily News"])
+        # 总集数与真正带本站文字稿的集数分开统计。
+        self.assertEqual(show["transcript_count"], 1)
+        self.assertEqual(show["latest_transcript_count"], 1)
+        self.assertEqual(show["latest_published_at"], "2026-11-12T08:00:00Z")
+
+    def test_coverage_counts_all_items_not_only_latest(self):
+        older_with_transcript = FEED.replace(
+            '<guid>old</guid>',
+            '<guid>old</guid>'
+            '<podcast:transcript url="https://raw.githubusercontent.com/lzoreal/MyTranscript/data/json/demo/old.json"'
+            ' type="application/json"/>',
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            feed = Path(temp_dir) / "feed.xml"
+            feed.write_text(older_with_transcript, encoding="utf-8")
+            document = build_catalog.build_catalog([("demo", feed)], latest=1)
+
+        show = document["shows"][0]
+        self.assertEqual(show["episode_count"], 2)
+        self.assertEqual(show["transcript_count"], 2)
+        self.assertEqual(show["latest_transcript_count"], 1)
 
     def test_latest_limit(self):
         with tempfile.TemporaryDirectory() as temp_dir:
