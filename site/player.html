@@ -3228,8 +3228,16 @@ $('liveStopBtn').onclick = () => {
 };
 audio.addEventListener('seeked', () => {
   if (!LIVE.on) return;
+  const head = audio.currentTime || 0;
   // 音频重载、缓冲重试也会发 seeked；位置几乎没变时别把刚识别出来的行清掉。
-  if (Math.abs(livePlayhead() - LIVE.anchorMedia) < 2) return;
+  if (Math.abs(head - LIVE.anchorMedia) < 2) return;
+  // 点在已经识别出来的区间里（点实时字幕的词就是这种）：这段文字本来就是这段话，
+  // 行照旧有效，只需要让游标重新落到播放头，清屏重建会白等几秒而且把已读内容抽走。
+  if (LIVE.order.length && head >= LIVE.anchorMedia - 0.5 && head <= LIVE.next + 0.5) {
+    LIVE.cursor = 0;
+    paint(true);
+    return;
+  }
   liveClearRows();
   liveRebuildStream();
 });
