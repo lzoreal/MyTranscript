@@ -143,7 +143,16 @@ assert.strictEqual(
 assert.strictEqual(
   directAudioUrl('https://dts.podtrac.com/redirect.mp3/pdst.fm/e/x/tracking.swap.fm/track/abc/nyt.simplecastaudio.com/e/audio/128/default.mp3?aid=1'),
   'https://nyt.simplecastaudio.com/e/audio/128/default.mp3?aid=1');
+assert.strictEqual(
+  directAudioUrl('https://dts.podtrac.com/redirect.mp3/stitcher.simplecastaudio.com/559b/episodes/1/audio/128/default.mp3?aid=rss_feed'),
+  'https://stitcher.simplecastaudio.com/559b/episodes/1/audio/128/default.mp3?aid=rss_feed');
+assert.strictEqual(directAudioUrl('https://dts.podtrac.com/redirect.mp3/pdst.fm/e/audio/1.mp3'), '');
 assert.strictEqual(directAudioUrl('https://example.com/a.mp3'), '');
+assert.strictEqual(
+  preferredAudioUrl({url: 'https://dts.podtrac.com/redirect.mp3/stitcher.simplecastaudio.com/a/b.mp3'}),
+  'https://stitcher.simplecastaudio.com/a/b.mp3');
+assert.strictEqual(preferredAudioUrl({url: 'https://example.com/a.mp3'}), 'https://example.com/a.mp3');
+assert.strictEqual(preferredAudioUrl({}), '');
 """
 
     def test_tracking_chain_falls_back_to_the_cdn_host(self):
@@ -161,6 +170,47 @@ assert.strictEqual(directAudioUrl('https://example.com/a.mp3'), '');
                 [node, str(script)], capture_output=True, text=True, encoding="utf-8"
             )
         self.assertEqual(proc.returncode, 0, proc.stderr)
+
+
+class PlayerArtworkTests(unittest.TestCase):
+    HARNESS = """
+const assert = require('assert');
+%s
+assert.strictEqual(
+  smallArtwork('https://image.simplecastcdn.com/images/a/b/3000x3000/cover-3000x3000-final.jpg?aid=rss_feed'),
+  'https://image.simplecastcdn.com/images/a/b/300x300/cover-3000x3000-final.jpg?aid=rss_feed');
+assert.strictEqual(smallArtwork('https://example.com/a.jpg'), '');
+assert.strictEqual(smallArtwork('https://image.simplecastcdn.com/images/a/b/300x300/a.jpg'), '');
+"""
+
+    def test_list_thumbnails_use_the_small_rendition(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node 不在 PATH，跳过播放器逻辑测试")
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        start = page.index("function smallArtwork")
+        end = page.index("function renderList")
+        source = self.HARNESS % page[start:end]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            script = Path(temp_dir) / "small_artwork.js"
+            script.write_text(source, encoding="utf-8")
+            proc = subprocess.run(
+                [node, str(script)], capture_output=True, text=True, encoding="utf-8"
+            )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+
+class PlayerNetworkTests(unittest.TestCase):
+    def test_playback_starts_on_the_direct_cdn(self):
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        self.assertIn('rel="preconnect" href="https://stitcher.simplecastaudio.com"', page)
+        self.assertIn("const audioUrl = preferredAudioUrl(item);", page)
+        self.assertIn("audio.src = audioUrl;", page)
+        self.assertIn("tryAudioSource(item.url) || tryAudioSource(item.directUrl)", page)
+
+    def test_episode_artwork_is_lazy_loaded(self):
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        self.assertIn('loading="lazy" decoding="async" referrerpolicy="no-referrer"', page)
 
 
 class PlayerOffsetTests(unittest.TestCase):

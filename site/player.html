@@ -5,6 +5,7 @@
 <title>MyTranscript Player</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://stitcher.simplecastaudio.com">
 <meta name="theme-color" content="#0a0e15">
 <style>
 /* Design tokens — design skill palette "Dark Academia":
@@ -1121,11 +1122,21 @@ function resolveFinalAudioUrl(url) {
   });
 }
 // 音频常包在 dts.podtrac.com / pdst.fm / tracking.swap.fm 的跳转链里；浏览器
-// 追踪防护或广告拦截会拦掉这些域名，但 /track/<id>/ 后面就是直连 CDN 地址。
+// 追踪防护或广告拦截会拦掉这些域名，而 /track/<id>/ 和 /redirect.mp3/ 之后就是
+// 直连 CDN 地址。直连省掉一次 TLS 握手和 302（实测首播快约 4 s）；广告由 CDN
+// 侧按会话插播，直连拿到的仍是同一条带广告的流。
 function directAudioUrl(url) {
-  const m = /\/track\/[^/?#]+\/([^/?#]+\/.*)$/.exec(String(url || ''));
+  const s = String(url || '');
+  const m = /\/track\/[^/?#]+\/([^/?#]+\/.*)$/.exec(s)
+    || /\/redirect\.mp3\/([^/?#]+\/.*)$/.exec(s);
   if (!m) return '';
-  try { return new URL('https://' + m[1]).href; } catch (e) { return ''; }
+  try {
+    const u = new URL('https://' + m[1]);
+    return /(^|\.)(podtrac\.com|pdst\.fm|pscrb\.fm|swap\.fm)$/i.test(u.hostname) ? '' : u.href;
+  } catch (e) { return ''; }
+}
+function preferredAudioUrl(item) {
+  return directAudioUrl(item?.url) || item?.url || '';
 }
 function tryAudioSource(url) {
   if (!url || state.audioUsed.has(url)) return false;
@@ -1142,10 +1153,11 @@ function retryCurrentAudio() {
   if (!item || !item.url) return;
   rememberPosition();
   state.audioRetried = 0;
-  state.audioUsed = new Set([item.url]);
+  const audioUrl = preferredAudioUrl(item);
+  state.audioUsed = new Set([item.url, audioUrl].filter(Boolean));
   state.audioToken += 1;
   audio.dataset.ep = item.id;
-  audio.src = item.url;
+  audio.src = audioUrl;
   audio.load();
   audio.play().catch(() => {});
 }
@@ -1170,14 +1182,14 @@ async function onAudioError() {
   }
   if (state.audioRetried === 1) {
     state.audioRetried = 2;
-    if (tryAudioSource(directAudioUrl(item.url))) {
-      showToast('正在尝试直连音频…', 10000);
+    if (tryAudioSource(item.url) || tryAudioSource(item.directUrl)) {
+      showToast('正在尝试备用音频…', 10000);
       return;
     }
-    showToast('正在尝试直连音频…', 10000);
+    showToast('正在尝试备用音频…', 10000);
     const finalUrl = await resolveFinalAudioUrl(item.url);
     if (token !== state.audioToken) return;
-    if (tryAudioSource(finalUrl) || tryAudioSource(item.directUrl)) return;
+    if (tryAudioSource(finalUrl)) return;
     audioFail(audio.error && audio.error.code);
     return;
   }
@@ -1889,7 +1901,8 @@ function selectEpisode(item, keepDrawer = false) {
   frameCover.onerror = () => { frameCover.onerror = null; frameCover.src = coverFallback; };
   frameCover.src = item.img || coverFallback;
   state.audioRetried = 0;
-  state.audioUsed = new Set(item.url ? [item.url] : []);
+  const audioUrl = preferredAudioUrl(item);
+  state.audioUsed = new Set([item.url, audioUrl].filter(Boolean));
   state.audioToken += 1;
   state.resumeEp = item.id;
   state.resumeAt = readProgress(item);
@@ -1899,7 +1912,7 @@ function selectEpisode(item, keepDrawer = false) {
   audio.pause();
   audio.removeAttribute('src');
   audio.load();
-  if (item.url) { audio.src = item.url; audio.load(); }
+  if (audioUrl) { audio.src = audioUrl; audio.load(); }
   state.audioSeconds = 0; state.timeScale = 1; state.seekRaw = 0;
   $('total').textContent = '00:00'; $('now').textContent = '00:00';
   $('seek').value = '0'; $('pfill').style.width = '0%';
@@ -1955,6 +1968,15 @@ function selectEpisode(item, keepDrawer = false) {
   }).catch(err => { if (seq === state.transcriptSeq) transcriptFailure(err); });
 }
 
+// 列表缩略图只有 44px，Simplecast 的 300×300 版本约 26 KB，而 3000×3000 原图约 700 KB。
+function smallArtwork(url) {
+  try {
+    const u = new URL(url);
+    if (u.hostname !== 'image.simplecastcdn.com') return '';
+    const small = u.href.replace(/\/(\d+)x(\d+)(?=\/)/, '/300x300');
+    return small === u.href ? '' : small;
+  } catch (e) { return ''; }
+}
 function renderList(filter = '') {
   const q = filter.trim().toLowerCase();
   const items = state.episodes.filter(e => !q || String(e.num).includes(q) || (e.title || '').toLowerCase().includes(q));
@@ -1964,10 +1986,15 @@ function renderList(filter = '') {
   for (const e of items) {
     const el = document.createElement('div');
     el.className = 'ep'; el.dataset.ep = e.id; el.tabIndex = 0;
-    el.innerHTML = '<img class="epArt" alt="" hidden referrerpolicy="no-referrer"><div class="epText"><div class="num"></div><div class="t"></div><div class="d"></div></div><span class="eq"><i></i><i></i><i></i></span>';
+    el.innerHTML = '<img class="epArt" alt="" hidden loading="lazy" decoding="async" referrerpolicy="no-referrer"><div class="epText"><div class="num"></div><div class="t"></div><div class="d"></div></div><span class="eq"><i></i><i></i><i></i></span>';
     const art = el.querySelector('.epArt');
     const artFallback = () => { const ph = document.createElement('div'); ph.className = 'epArt noart'; art.replaceWith(ph); };
-    if (e.img) { art.hidden = false; art.onerror = artFallback; art.src = e.img; } else artFallback();
+    if (e.img) {
+      art.hidden = false;
+      const small = smallArtwork(e.img);
+      art.onerror = small ? () => { art.onerror = artFallback; art.src = e.img; } : artFallback;
+      art.src = small || e.img;
+    } else artFallback();
     el.querySelector('.num').textContent = e.num ? '#' + e.num : '';
     el.querySelector('.t').textContent = e.title || '(无标题)';
     el.querySelector('.d').textContent = e.date ? new Date(e.date).toLocaleDateString('zh-CN') : '';
