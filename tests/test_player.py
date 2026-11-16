@@ -469,6 +469,17 @@ class PlayerMiniOpenTests(unittest.TestCase):
         self.assertIn('id="miniCover" title="打开播放器"', page)
 
 
+class PlayerCueFollowTests(unittest.TestCase):
+    def test_entering_the_player_forces_the_active_cue_into_view(self):
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        self.assertIn("state.pendingFollow = true;", page)
+        self.assertIn("if (state.cues.length) {\n    returnToCue();", page)
+        self.assertIn("const follow = force || state.pendingFollow;", page)
+        self.assertIn("} else if (ci >= 0 && state.pendingFollow) {", page)
+        self.assertIn("state.pendingFollow = false; state.userScrollUntil = Date.now() + 3000;", page)
+        self.assertIn("state.seekRaw = t;\n      state.pendingFollow = true;", page)
+
+
 
 class PlayerPrototypeThemeTests(unittest.TestCase):
     def test_prototype_theme_is_registered(self):

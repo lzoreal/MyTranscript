@@ -1443,7 +1443,7 @@ const listBox = $('epList'), box = $('transcript');
 const state = { shows: [], show: null, feeds: new Map(), episodes: [], current: null,
   cues: [], nodes: [], activeCue: -1, wordIdx: -1,
   vtt: null, sidecar: null, zhVtt: null, base: null, experiment: null,
-  mode: 'word', scroll: 'center', offset: 0, userScrollUntil: 0, immersive: false,
+  mode: 'word', scroll: 'center', offset: 0, userScrollUntil: 0, pendingFollow: false, immersive: false,
   timeScale: 1, audioSeconds: 0, seekRaw: 0, loadSeq: 0, transcriptSeq: 0,
   audioToken: 0, audioRetried: 0, audioUsed: new Set(),
   resumeEp: '', resumeAt: 0, audioKey: '', progressSavedAt: 0,
@@ -2493,7 +2493,17 @@ function paint(force = false) {
       old.words.forEach(w => { w.classList.remove('active','past'); w.classList.add('pending'); });
     }
     state.activeCue = ci; state.wordIdx = -1;
-    if (ci >= 0) { const n = state.nodes[ci]; n.el.classList.add('active'); scrollCue(n.el, force); }
+    if (ci >= 0) {
+      const n = state.nodes[ci];
+      n.el.classList.add('active');
+      // 刚进入播放器时即使暂停也要把当前句带回视野；之后仍按用户滚动和播放状态跟随。
+      const follow = force || state.pendingFollow;
+      state.pendingFollow = false;
+      scrollCue(n.el, follow);
+    }
+  } else if (ci >= 0 && state.pendingFollow) {
+    state.pendingFollow = false;
+    scrollCue(state.nodes[ci].el, true);
   }
   if (ci >= 0 && state.mode === 'word') paintWords(ci, t);
   $('now').textContent = fmt(t);
@@ -2895,6 +2905,7 @@ audio.addEventListener('loadedmetadata', () => {
     if (t > 5 && Number.isFinite(dur) && dur > 0 && t < dur - 10) {
       audio.currentTime = t;
       state.seekRaw = t;
+      state.pendingFollow = true;
     }
   }
   if (app.pendingSeek > 0 && audio.dataset.ep === state.current?.id) {
@@ -2902,6 +2913,7 @@ audio.addEventListener('loadedmetadata', () => {
     if (Number.isFinite(dur) && dur > 0) {
       audio.currentTime = Math.min(app.pendingSeek, Math.max(0, dur - 1));
       state.seekRaw = audio.currentTime;
+      state.pendingFollow = true;
     }
     app.pendingSeek = 0;
   }
@@ -2973,8 +2985,10 @@ $('alignCue').onclick = toggleAlignMode;
 $('offset').addEventListener('change', e => { state.offset = Number(e.target.value) || 0; renderCues(); });
 function returnToCue() {
   state.userScrollUntil = 0;
+  state.pendingFollow = false;
   stopScroll();
   if (state.activeCue >= 0) scrollCue(state.nodes[state.activeCue].el, true);
+  syncJumpPill();
 }
 $('follow').onclick = () => { returnToCue(); closeDetails(); };
 $('search').addEventListener('input', e => renderList(e.target.value));
@@ -3047,8 +3061,8 @@ document.addEventListener('click', e => {
   if (d.classList.contains('on') && !d.contains(e.target) && e.target !== $('detailsBtn') && e.target !== $('cover') && e.target !== $('openDetailsText')) closeDetails();
 });
 box.addEventListener('scroll', syncJumpPill, { passive: true });
-box.addEventListener('wheel', () => { stopScroll(); state.userScrollUntil = Date.now() + 3000; }, { passive: true });
-box.addEventListener('touchmove', () => { stopScroll(); state.userScrollUntil = Date.now() + 3000; }, { passive: true });
+box.addEventListener('wheel', () => { stopScroll(); state.pendingFollow = false; state.userScrollUntil = Date.now() + 3000; }, { passive: true });
+box.addEventListener('touchmove', () => { stopScroll(); state.pendingFollow = false; state.userScrollUntil = Date.now() + 3000; }, { passive: true });
 function jumpCue(delta) {
   if (!state.cues.length) return;
   const base = state.activeCue >= 0 ? state.activeCue : 0;
@@ -3865,6 +3879,7 @@ async function openPlayerRoute(route) {
   if (!key) { box.innerHTML = '<div class="empty">先选择一集开始收听。</div>'; return; }
   const show = showByKey(key);
   if (!show) { navigate('home'); return; }
+  state.pendingFollow = true;
   if (state.show?.slug !== show.slug || (ep && state.current?.id !== ep)) {
     await loadShow(show.slug, ep || undefined);
   } else if (!state.current) {
@@ -3876,6 +3891,13 @@ async function openPlayerRoute(route) {
     seekTo(t);
   }
   syncReaderTop(); syncMini(); syncBookmarkBtn();
+  // 从悬浮栏或别的页面进入时，当前句可能已经高亮，但 reader 之前是隐藏的，
+  // 高亮句并不在视野内；布局可同步读取，直接带回视野。
+  // 字幕尚未加载时保留 pendingFollow，由首帧 paint 在句子上线后强制滚动。
+  if (state.cues.length) {
+    returnToCue();
+    state.pendingFollow = false;
+  }
 }
 function renderPage(page, route) {
   if (page === 'home') renderHome();
