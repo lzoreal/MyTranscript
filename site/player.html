@@ -1036,6 +1036,8 @@ body.player-open .transcript{
   -webkit-mask-image:linear-gradient(180deg,transparent 0,#000 24px,#000 calc(100% - 22px),transparent 100%);
   mask-image:linear-gradient(180deg,transparent 0,#000 24px,#000 calc(100% - 22px),transparent 100%);
 }
+/* 实时行是往下长的，末尾要留出半屏空白，否则最新一行永远贴底、怎么滚都居不了中。 */
+body.live-on .transcript{padding-bottom:calc(48vh + 60px)}
 body.player-open .cue{
   padding:16px 0 16px 26px;margin:var(--cue-gap) 0;border-radius:0;
   line-height:var(--cue-lh);letter-spacing:var(--cue-ls);
@@ -2607,6 +2609,20 @@ function scrollWord(el) {
   const r = el.getBoundingClientRect(), br = box.getBoundingClientRect();
   if (r.top < br.top + 60 || r.bottom > br.bottom - 60) scrollIntoBox(el, 'edge');
 }
+// 实时模式没有原来的 scrollCue 可用（它按 VTT 的行推进，实时行不在它的窗口里），
+// 而且 scrollWord 在「居中」模式下直接 return——所以实时正文要靠这个函数自己跟：
+// 居中档要求高亮词始终落在正文框中间附近，边缘档只在快滚出去时挪一下。
+function liveFollow(el) {
+  if (!el || state.scroll === 'off') return;
+  if (Date.now() < state.userScrollUntil || audio.paused) return;
+  const br = box.getBoundingClientRect(), er = el.getBoundingClientRect();
+  if (state.scroll === 'center') {
+    const off = (er.top + er.height / 2) - (br.top + box.clientHeight / 2);
+    if (Math.abs(off) > box.clientHeight * 0.16) scrollIntoBox(el, 'center');
+    return;
+  }
+  if (er.top < br.top + 90 || er.bottom > br.bottom - 90) scrollIntoBox(el, 'edge');
+}
 
 /* ---------- 实时逐词字幕（实验功能，默认关闭） ----------
    链路：音频 URL（需 CORS）→ 拉取整个音频文件 → 扫 MP3 帧建「字节↔时间」索引
@@ -2654,6 +2670,15 @@ function liveProgressText(a, b, c) {
 
 // 音频只用来拿字节、按时间解码；<audio> 本身保持原样，不建音频图、不改 crossOrigin。
 function livePlayhead() { return audio.currentTime || 0; }
+// 当前这段音频自己还剩多少秒缓冲。用户那边 megaphone 只有一两百 KB/s，
+// 提前生成要抢带宽，音频缓冲见底时得先让播放。
+function liveBufferAhead() {
+  try {
+    const b = audio.buffered, t = audio.currentTime || 0;
+    for (let i = 0; i < b.length; i++) if (b.start(i) <= t + 0.5 && t < b.end(i)) return b.end(i) - t;
+  } catch (e) {}
+  return 0;
+}
 
 function liveAudioDuration() {
   return Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : Infinity;
@@ -2690,6 +2715,20 @@ async function liveFetchRange(from, to) {
   const bytes = await liveHttpGet(LIVE.audioUrl, from, to);
   if (!bytes.length) throw new Error('这个音频源不允许分段读取，取不到音频数据');
   return bytes;
+}
+
+// 开实时识别时第一枪经常是网络/代理的抖动（同一 URL 重试就通），
+// 一次失败就判「不可用」太脆，这里给几次重试再放弃。
+async function liveRetry(fn, times, delayMs) {
+  let last = null;
+  for (let i = 0; i < times; i++) {
+    try { return await fn(); } catch (err) {
+      last = err;
+      if (i < times - 1) liveSetText('取音频数据失败，正在重试（第 ' + (i + 2) + ' 次）…', 'busy');
+      if (i < times - 1) await new Promise(r => setTimeout(r, delayMs));
+    }
+  }
+  throw last;
 }
 
 // 头部探针：跳 ID3v2，找到第一帧，确认是 CBR（恒定码率）才能用「字节 = 时间 × 码率」定位。
@@ -2805,10 +2844,19 @@ function liveUpdateMeter() {
 // 并整段解码、却只喂得进一两秒，剩下全扔掉，一轮就要一两秒，界面和播放都卡。
 async function livePumpOnce(gen) {
   if (!LIVE.on || !LIVE.stream || !LIVE.cbr) return;
+  // 音频还没拿到元数据时 currentTime 是 0、时长是 NaN，这时候按 0 锚定去喂，
+  // 等播放器恢复到记住的位置（如 28:55）整段行的时间戳就全错。等它加载好再开始。
+  if (audio.readyState < 1 || !(audio.duration > 0)) {
+    liveSetText('等待音频加载…', 'busy');
+    return;
+  }
   const head = livePlayhead();
-  // 播放头跑到了我们前面（换过音频、长时间缓冲、进度恢复），重新对齐再喂。
-  if (LIVE.next < head - 2) {
-    liveClearRows();
+  // 播放头跑到了我们前面（换过音频、长时间缓冲、网络卡了一下、进度恢复）。
+  // 这里**不清行**：以前清行重建，网络一抖读者就看到整屏行消失、高亮跳回第一行。
+  // 阈值也不能小：慢网下一次取窗口要一两秒，next 天然落后播放头一两秒，
+  // 按 2 秒判就会每轮都重建流、永远喂不进音频（表现为高亮停在某一句不动）。
+  if (head - LIVE.next > 20) {
+    if (head - LIVE.next > 120) liveClearRows();
     liveRebuildStream();
     return;
   }
@@ -2821,6 +2869,11 @@ async function livePumpOnce(gen) {
     const p = LIVE.pcm;
     const covered = p && LIVE.next >= p.start - 0.05 && p.start + p.data.length / LIVE_RATE > LIVE.next + 0.05;
     if (!covered) {
+      // 播放优先：音频自己快没数据了（缓冲见底）就先别抢带宽去取新窗口，
+      // 源站只有一两百 KB/s，抢了播放就会卡。阈值取 2.5 秒：再大在弱网下
+      // 会一直让路，识别几乎不长行（读者看到的就是“不可用”）。
+      const ahead = liveBufferAhead();
+      if (ahead > 0 && ahead < 2.5) { liveSetText('等待播放缓冲…', 'busy'); return; }
       const need = Math.max(4, Math.min(LIVE_FETCH, target - LIVE.next + 1));
       let win;
       try {
@@ -2986,6 +3039,23 @@ function liveClearRows() {
   LIVE.cursor = 0;
 }
 
+// 跳转后只砍掉“落在播放头之后”的行：往前跳时新识别会从播放头接着往下走，
+// 留着旧行会时间倒退（新行会被单调校验挡掉，高亮就卡住）；往后跳时后面的行本来就作废。
+// 播放头之前的行是这段话的真识别结果，保留下来读者不会看到整屏突然清空。
+function liveTrimRowsAfter(t) {
+  let cut = false;
+  while (LIVE.order.length) {
+    const key = LIVE.order[LIVE.order.length - 1];
+    const row = LIVE.rows.get(key);
+    if (!row || row.start < t - 0.5) break;
+    LIVE.order.pop();
+    LIVE.rows.delete(key);
+    row.el.remove();
+    cut = true;
+  }
+  if (cut) { LIVE.activeRow = ''; LIVE.cursor = 0; }
+}
+
 // 换集、跳转、倍速都会让“PCM 时间轴”和播放器时间轴脱钩，直接重建一段新流。
 function liveRebuildStream() {
   if (!LIVE.engine) return;
@@ -3020,7 +3090,13 @@ function liveRenderLine(session, line) {
   const key = session + ':' + line.id;
   let row = LIVE.rows.get(key);
   if (!row) {
-    row = { el: document.createElement('div'), words: [], lastIdx: -1, sig: '', start: liveMediaOf(line.startTime) };
+    const start = liveMediaOf(line.startTime);
+    // 行必须按时间递增入列：重建流/跳转的瞬间偶尔会迟到半句旧时间，插进来会
+    // 让游标定位错行、高亮跳到别的句子上去。时间倒退的直接丢掉。
+    const prevKey = LIVE.order[LIVE.order.length - 1];
+    const prevRow = prevKey ? LIVE.rows.get(prevKey) : null;
+    if (prevRow && start < prevRow.start - 0.5) return;
+    row = { el: document.createElement('div'), words: [], lastIdx: -1, sig: '', start };
     row.el.className = 'cue live';
     LIVE.rows.set(key, row);
     LIVE.order.push(key);
@@ -3130,10 +3206,9 @@ function liveAdvance() {
     });
     row.lastIdx = idx;
     row.el.classList.toggle('active', idx >= 0 && i === ai);
-    if (idx >= 0 && i === ai) scrollWord(row.words[idx].el);
+    if (idx >= 0 && i === ai) liveFollow(row.words[idx].el);
   }
-  // 窗口外的旧行不会每帧重算，所以活动行换人时把上一行彻底收尾，
-  // 否则 .word.active 会一直停在很早以前那个词上。
+  // 活动行换人时把上一行彻底收尾（这里不动滚动，滚动只跟着高亮词）。
   if (LIVE.activeRow !== activeId) {
     const prev = LIVE.rows.get(LIVE.activeRow);
     if (prev && prev.words.length) {
@@ -3208,7 +3283,7 @@ async function liveEnable() {
       LIVE.audioUrl = src;
       LIVE.cbr = null;
       liveSetText('解析音频格式…', 'busy');
-      LIVE.cbr = await liveProbeAudio();
+      LIVE.cbr = await liveRetry(() => liveProbeAudio(), 4, 900);
     }
     if (LIVE.session !== session) return;
     if (!LIVE.ctx) {
@@ -3287,7 +3362,9 @@ audio.addEventListener('seeked', () => {
     paint(true);
     return;
   }
-  liveClearRows();
+  // 跳到已识别区间之外：不整屏清空，只砍掉播放头之后的行再接着识别，
+  // 前面已经识别好的句子留在原地（清屏会让读者以为功能坏了，还要白等几秒）。
+  liveTrimRowsAfter(head);
   liveRebuildStream();
 });
 audio.addEventListener('ended', () => {
