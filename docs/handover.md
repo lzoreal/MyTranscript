@@ -93,12 +93,44 @@ data/ + json/                  ← 在 data 分支（词级母版与导出，raw
 site/
   index.html                 根索引（Crawl 生成）
   podcasts.html              节目索引（Crawl 生成）
-  player.html                多节目播放器（静态；读 shows.json + 各节目 feed）
+  player.html                多节目播放器 + 站点外壳（静态；读 shows.json / catalog.json + 各节目 feed）
   shows.json                 播放器节目清单（新增节目时同步更新；无 feed 的节目 feed 为 null）
+  catalog.json               首屏轻量目录（build_catalog.py 生成：封面、简介、最近 20 集）
   <slug>/
     feed.xml                 ← 唯一的字幕 Feed（feed-zh.xml 已下线）
     index.html
     ```
+
+`catalog.json` 由 `scripts/build_catalog.py` 在 publish job 发布后重建；内容未变时不重写，
+避免空提交。每个节目含封面、简介、总集数和最近 20 集（标题、日期、时长、音频、字幕、
+400 字以内简介），只服务首页、播客库、发现和节目页的首屏；完整单集仍按需解析 `feed.xml`。
+
+根 `index.html` 现在是跳转到 `player.html#/home` 的入口页；逐节目清单保留在
+`podcasts.html`。两者的生成器在 `scripts/transcribe.py` / `scripts/scraper.py`。
+
+### 播放器外壳与本地状态（2026-11-16）
+
+`site/player.html` 同时是应用外壳和播放器，hash 路由（`#/home`、`#/library`、
+`#/discover`、`#/search`、`#/podcast/<key>`、`#/episode/<key>/<ep>`、
+`#/player/<key>/<ep>`、`#/queue`、`#/history`、`#/bookmarks`、`#/notes`、
+`#/listening`、`#/settings`）。旧的 `?show=&ep=` 深链仍可用。
+
+浏览器本地键：
+
+| 键 | 内容 |
+| --- | --- |
+| `myt-subs` | 订阅；不存在时默认全部内置节目，存在（含空数组）时以存储为准 |
+| `myt-progress` | 每集 `{t,d,at,show,title,img,key,feed}`；兼容旧 `{t,d,at}` |
+| `myt-queue` / `myt-bookmarks` / `myt-notes` | 队列、句级书签、笔记 |
+| `myt-prefs` | 默认倍速、自动连播、记住位置 |
+| `myt-play-mode` / `myt-sleep` | 收听模式、睡眠定时 |
+| `myt-theme*` / `myt-reader` | 主题与阅读排版 |
+| `myt-cors-proxy` | 站外 feed 直连失败时的代理模板（`{url}` 占位） |
+
+站外 feed 先直连（Simplecast / Megaphone / Amperwave / Libsyn / Art19 等返回
+`Access-Control-Allow-Origin: *`），失败后尝试 `myt-cors-proxy`，再失败可由用户粘贴
+RSS 内容；原始 XML 缓存在 IndexedDB `myt-feeds`（6 小时）。站外节目只有音频，
+不提供增强字幕。
 
 `site/` 里不再有字幕文件：feed 只引用 data 分支的 JSON；播放器仍保留 VTT/侧车
 导入能力，供本地实验用。

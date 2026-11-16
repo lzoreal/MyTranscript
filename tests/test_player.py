@@ -248,5 +248,74 @@ class PlayerEntryTests(unittest.TestCase):
         self.assertIn("player.html", (SITE / "index.html").read_text(encoding="utf-8"))
 
 
+class PlayerShellTests(unittest.TestCase):
+    def test_shell_and_routes_exist(self):
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        for needle in ['class="app"', 'id="page-home"', 'id="page-library"',
+                       'id="page-discover"', 'id="page-settings"',
+                       'id="miniPlayer"', 'function applyRoute', 'function routeHash',
+                       'myt-subs', 'parseOpml']:
+            self.assertIn(needle, page)
+
+
+class PlayerOpmlTests(unittest.TestCase):
+    HARNESS = """
+const assert = require('assert');
+%s
+const items = parseOpml('<opml><body><outline text="A &amp; B" xmlUrl="https://a/feed?x=1&amp;y=2"/><outline title="B" xmlUrl="https://b/rss"/></body></opml>');
+assert.deepStrictEqual(items.map(x => x.xmlUrl), ['https://a/feed?x=1&y=2', 'https://b/rss']);
+assert.strictEqual(items[0].title, 'A & B');
+const xml = buildOpml([{title: 'A & B', xmlUrl: 'https://a/feed?x=1&y=2'}], 'https://lzoreal.github.io/MyTranscript/');
+assert.ok(xml.includes('xmlUrl="https://a/feed?x=1&amp;y=2"'));
+assert.ok(xml.includes('text="A &amp; B"'));
+"""
+
+    def test_opml_round_trip(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node 不在 PATH，跳过播放器逻辑测试")
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        source = self.HARNESS % page[page.index("function decodeXml"):page.index("function downloadFile")]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            script = Path(temp_dir) / "opml.js"
+            script.write_text(source, encoding="utf-8")
+            proc = subprocess.run([node, str(script)], capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+
+class PlayerFeedUrlTests(unittest.TestCase):
+    HARNESS = """
+const assert = require('assert');
+%s
+assert.strictEqual(normalizeFeedUrl('example.com/rss'), 'https://example.com/rss');
+assert.strictEqual(normalizeFeedUrl(' https://a/feed '), 'https://a/feed');
+assert.strictEqual(extSlug('https://a/feed'), extSlug('https://a/feed'));
+assert.notStrictEqual(extSlug('https://a/feed'), extSlug('https://b/feed'));
+assert.ok(extSlug('https://a/feed').startsWith('ext-'));
+"""
+
+    def test_external_feed_keys_are_stable(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node 不在 PATH，跳过播放器逻辑测试")
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        source = self.HARNESS % page[page.index("function hash32"):page.index("function hostOf")]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            script = Path(temp_dir) / "feed_url.js"
+            script.write_text(source, encoding="utf-8")
+            proc = subprocess.run([node, str(script)], capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+
+
+class PlayerReaderLayoutTests(unittest.TestCase):
+    def test_flat_layout_honours_width_and_gap_sliders(self):
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        self.assertIn("(100vw - var(--reader-w))/2", page)
+        self.assertNotIn("(100vw - 850px)/2", page)
+        self.assertIn("margin:var(--cue-gap) 0", page)
+        self.assertIn("line-height:var(--cue-lh)", page)
+
+
 if __name__ == "__main__":
     unittest.main()

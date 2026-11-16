@@ -604,7 +604,8 @@ class ForceRetranscribeTests(unittest.TestCase):
 
 
 class RootIndexTests(unittest.TestCase):
-    def test_root_index_percent_encodes_slug(self):
+    def test_root_index_opens_the_app_shell(self):
+        # 根路径现在直接进入应用外壳；逐节目清单仍由 podcasts.html 提供。
         with tempfile.TemporaryDirectory() as temp_dir:
             site_dir = Path(temp_dir) / "site"
             (site_dir / "99%-invisible").mkdir(parents=True)
@@ -615,7 +616,9 @@ class RootIndexTests(unittest.TestCase):
                 transcriber.rebuild_root_index()
 
             page = (site_dir / "index.html").read_text(encoding="utf-8")
-            self.assertIn('href="99%25-invisible/index.html"', page)
+            self.assertIn('url=player.html#/home', page)
+            self.assertIn('href="player.html#/home"', page)
+            self.assertIn('href="favicon.svg"', page)
 
 
 class GeminiKeyRingTests(unittest.TestCase):

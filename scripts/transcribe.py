@@ -2364,16 +2364,8 @@ def build_podcast_index(
 
 
 def rebuild_root_index() -> None:
-    links = []
-    if SITE_DIR.exists():
-        for index_file in sorted(SITE_DIR.glob("*/index.html")):
-            slug = index_file.parent.name
-            if slug != "assets":
-                href = quote(slug, safe="-._~")
-                links.append(
-                    f'<li><a href="{escape_html(href)}/index.html">{escape_html(slug)}</a></li>'
-                )
-    page = f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" type="image/svg+xml" href="favicon.svg"><title>Podcast Transcript Library</title><style>body{{max-width:900px;margin:2rem auto;padding:0 1rem;font:16px/1.7 system-ui,sans-serif}}li{{margin:.7rem 0}}</style></head><body><h1>Podcast Transcript Library</h1><p>自动生成的播客字幕目录。</p><p><a href="player.html">▶ 打开播放器：收听全部节目</a></p><ul>{''.join(links)}</ul></body></html>"""
+    # 根路径直接进入应用外壳；节目清单仍可从 podcasts.html 查看。
+    page = """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" type="image/svg+xml" href="favicon.svg"><meta http-equiv="refresh" content="0; url=player.html#/home"><title>MyTranscript</title></head><body><p><a href="player.html#/home">打开 MyTranscript</a></p></body></html>"""
     atomic_write_text(SITE_DIR / "index.html", page)
 
 
