@@ -466,5 +466,44 @@ class PlayerBuiltinImportTests(unittest.TestCase):
         self.assertIn('data-action="import-builtin"', page)
 
 
+class PlayerFeedCacheTests(unittest.TestCase):
+    HARNESS = """
+const assert = require('assert');
+%s
+const now = 1800000000000;
+const ttl = 6 * 60 * 60 * 1000;
+assert.strictEqual(feedCacheFresh({ xml: '<rss/>', at: now - 1000 }, now), true);
+assert.strictEqual(feedCacheFresh({ xml: '<rss/>', at: now - ttl }, now), true);
+assert.strictEqual(feedCacheFresh({ xml: '<rss/>', at: now - ttl - 1 }, now), false);
+assert.strictEqual(feedCacheFresh({ xml: '<rss/>' }, now), false);
+assert.strictEqual(feedCacheFresh({ at: now }, now), false);
+assert.strictEqual(feedCacheFresh(null, now), false);
+"""
+
+    def test_external_feed_cache_expires_after_six_hours(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node 不在 PATH，跳过播放器逻辑测试")
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        source = self.HARNESS % page[page.index("const FEED_CACHE_TTL"):page.index("async function fetchFeedText")]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            script = Path(temp_dir) / "feed_cache.js"
+            script.write_text(source, encoding="utf-8")
+            proc = subprocess.run([node, str(script)], capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+
+class PlayerAccessibilityTests(unittest.TestCase):
+    def test_overlays_keyboard_and_labels_are_accessibly_wired(self):
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        for needle in ['<dialog class="modal"', 'showModal()', 'aria-modal="true"',
+                       'aria-labelledby="drawerTitle"', 'role="region" aria-label="文字稿"',
+                       "wrap.lang = 'en'", "z.lang = 'zh-CN'", 'function updateDocumentTitle',
+                       "el.setAttribute('role', 'link')",
+                       'aria-valuetext', 'aria-label="搜索我的播客和单集"',
+                       'input:focus-visible', 'aria-label="播放速度" inert']:
+            self.assertIn(needle, page)
+
+
 if __name__ == "__main__":
     unittest.main()
