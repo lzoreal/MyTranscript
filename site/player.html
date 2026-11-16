@@ -3754,11 +3754,28 @@ $('liveStopBtn').onclick = () => {
 audio.addEventListener('seeked', () => {
   if (!LIVE.on) return;
   const head = audio.currentTime || 0;
-  // 音频重载、缓冲重试也会发 seeked；位置几乎没变时别把刚识别出来的行清掉。
-  if (Math.abs(head - LIVE.anchorMedia) < 2) return;
-  // 点在已经识别出来的区间里（点实时字幕的词就是这种）：这段文字本来就是这段话，
-  // 行照旧有效，只需要让游标重新落到播放头，清屏重建会白等几秒而且把已读内容抽走。
-  if (LIVE.order.length && head >= LIVE.anchorMedia - 0.5 && head <= LIVE.next + 0.5) {
+  // 音频重载、缓冲重试也会发 seeked，位置没变时不能把刚识别出来的行清掉；
+  // 但“这段已经识别过”只能按**现有的行本身**判断，不能只看第一行起点 + LIVE.next：
+  // 往回跳时 pump 会先按新位置重锚、重建流（next 变了），保留下来的旧行是跳转前那一段，
+  // 只比首尾就会把中间的大空档也当成已识别 —— 于是既不裁行也不重建，新识别出来的行
+  // 全被 liveRenderLine 里“时间倒退就丢掉”的守卫拦下。实测表现：识别还在跑、
+  // 「已提前」仍是 14~15 秒，但正文永久停在跳转前那几句上。
+  // 判据：找到起点不晚于播放头的那一行，再要求播放头离下一个已知起点不超过 30 秒
+  // （中间空了这么久说明这段确实没识别过，得裁行重来）。
+  const coversHead = (t) => {
+    let last = null;
+    let nextStart = Infinity;
+    for (const key of LIVE.order) {
+      const row = LIVE.rows.get(key);
+      if (!row) continue;
+      if (row.start <= t + 0.5) last = row;
+      else { nextStart = row.start; break; }
+    }
+    if (!last) return false;
+    const end = Number.isFinite(nextStart) ? nextStart : LIVE.next;
+    return end - t <= 30;
+  };
+  if (LIVE.order.length && LIVE.next > head && coversHead(head)) {
     LIVE.cursor = 0;
     paint(true);
     return;
