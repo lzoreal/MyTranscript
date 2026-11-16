@@ -2619,13 +2619,14 @@ const LIVE_RATE = 16000;
 const LIVE_ENGINE = 'https://cdn.jsdelivr.net/npm/@moonshine-ai/moonshine-wasm@0.1.6/dist/index.js';
 const LIVE_ARCH = 2;   // ModelArch.TinyStreaming：先跑通再换 Small / Medium 对比
 const LIVE_LEAD_DEFAULT = 60;   // 默认提前 1 分钟
-const LIVE_FETCH = 30;          // 每次按 Range 取多少秒的音频字节
-const LIVE_BUDGET_MS = 220;     // 每轮最多让识别占用多久，避免卡住界面
+const LIVE_FETCH = 6;           // 每次按 Range 取多少秒的音频字节（decodeAudioData 约 50 毫秒/秒，窗口越小单次越短，但取太碎网络又跟不上）
+const LIVE_BUDGET_MS = 70;      // 每轮最多让识别占用多久，避免卡住界面/播放
+const LIVE_SLICE = LIVE_RATE / 2;  // 每次喂进去多少 PCM：片越小，单次识别越短（主线程不卡）
 const LIVE = {
   on: false, busy: false,
   engine: null, stream: null, session: 0,
   ctx: null, audioUrl: '', cbr: null, fail: 0,
-  anchorMedia: 0, next: 0, fed: 0, pumpTimer: 0, pumpGen: 0, pumping: false, text: '',
+  anchorMedia: 0, next: 0, fed: 0, lastTr: 0, pcm: null, pumpTimer: 0, pumpGen: 0, pumping: false, text: '',
   rows: new Map(), order: [], progressText: '', mode: 'idle', activeRow: '', cursor: 0,
 };
 
@@ -2800,6 +2801,8 @@ function liveUpdateMeter() {
 }
 
 // 每轮只喂到“播放位置 + 提前量”，并给每轮设 CPU 预算，避免长播客把界面拖住。
+// 取回来的窗口解出的 PCM 缓存在 LIVE.pcm 里，跨轮一片一片喂；否则每轮都重新取字节
+// 并整段解码、却只喂得进一两秒，剩下全扔掉，一轮就要一两秒，界面和播放都卡。
 async function livePumpOnce(gen) {
   if (!LIVE.on || !LIVE.stream || !LIVE.cbr) return;
   const head = livePlayhead();
@@ -2811,47 +2814,67 @@ async function livePumpOnce(gen) {
   }
   const target = Math.min(liveAudioDuration(), head + liveLeadSec());
   const started = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  const elapsed = () => (typeof performance !== 'undefined' ? performance.now() : Date.now()) - started;
   let guard = 0;
-  while (LIVE.on && gen === LIVE.pumpGen && LIVE.next < target - 1 && guard < 4) {
+  while (LIVE.on && gen === LIVE.pumpGen && LIVE.next < target - 1 && guard < 6 && elapsed() < LIVE_BUDGET_MS) {
     guard += 1;
-    const need = Math.max(4, Math.min(LIVE_FETCH, target - LIVE.next + 1));
-    let win;
+    const p = LIVE.pcm;
+    const covered = p && LIVE.next >= p.start - 0.05 && p.start + p.data.length / LIVE_RATE > LIVE.next + 0.05;
+    if (!covered) {
+      const need = Math.max(4, Math.min(LIVE_FETCH, target - LIVE.next + 1));
+      let win;
+      try {
+        win = await liveFetchWindow(LIVE.next, need);
+      } catch (err) {
+        LIVE.fail += 1;
+        const msg = '音频片段取不到，正在重试（第 ' + LIVE.fail + ' 次）：'
+          + (err && err.message ? err.message : err);
+        if (LIVE.fail >= 6) liveSetText(msg, 'err');
+        return;
+      }
+      if (!LIVE.on || !LIVE.stream || gen !== LIVE.pumpGen) return;
+      if (!win || !win.pcm || !win.pcm.length) return;
+      LIVE.fail = 0;
+      // 窗口起点可能和已喂过的位置重叠几帧，切掉重叠部分，时间轴才连续；
+      // 尾巴也截到本轮目标位置，提前量才准。
+      let data = win.pcm, start = win.start;
+      if (start < LIVE.next) {
+        const skipN = Math.min(data.length, Math.round((LIVE.next - start) * LIVE_RATE));
+        if (skipN > 0) { data = data.subarray(skipN); start += skipN / LIVE_RATE; }
+      }
+      const wantEnd = LIVE.next + need;
+      if (start + data.length / LIVE_RATE > wantEnd) {
+        data = data.subarray(0, Math.max(1, Math.round((wantEnd - start) * LIVE_RATE)));
+      }
+      if (!data.length) return;
+      LIVE.pcm = { start, data };
+    }
+    const cur = LIVE.pcm;
+    let off = Math.max(0, Math.round((LIVE.next - cur.start) * LIVE_RATE));
     try {
-      win = await liveFetchWindow(LIVE.next, need);
-    } catch (err) {
-      LIVE.fail += 1;
-      const msg = '音频片段取不到，正在重试（第 ' + LIVE.fail + ' 次）：'
-        + (err && err.message ? err.message : err);
-      if (LIVE.fail >= 6) liveSetText(msg, 'err');
-      return;
-    }
-    if (!LIVE.on || !LIVE.stream || gen !== LIVE.pumpGen) return;
-    if (!win || !win.pcm || !win.pcm.length) return;
-    LIVE.fail = 0;
-    // 窗口起点可能和已喂过的位置重叠几帧，切掉重叠部分，时间轴才连续。
-    let pcm = win.pcm, start = win.start;
-    if (start < LIVE.next) {
-      const skipN = Math.min(pcm.length, Math.round((LIVE.next - start) * LIVE_RATE));
-      if (skipN > 0) { pcm = pcm.subarray(skipN); start += skipN / LIVE_RATE; }
-    }
-    if (!pcm.length) return;
-    // 解码窗口会多带一点（按帧对齐），截到本轮目标位置，提前量才准。
-    const wantEnd = LIVE.next + need;
-    if (start + pcm.length / LIVE_RATE > wantEnd) {
-      const keep = Math.max(1, Math.round((wantEnd - start) * LIVE_RATE));
-      pcm = pcm.subarray(0, keep);
-    }
-    try {
-      LIVE.stream.addAudio(pcm, LIVE_RATE);
-      LIVE.stream.transcribe();
+      // transcribe() 是最贵的一步：它要把积压的音频跑一遍模型，积压越多越慢
+      // （实测一次积压 12 秒就要 500 毫秒以上，界面直接定住）。所以按 0.5 秒一片喂、
+      // 一片跑一次识别，且一轮只跑一次；跑之前先看预算，宁可留到下一轮再跑。
+      while (off < cur.data.length && elapsed() < LIVE_BUDGET_MS) {
+        const chunk = cur.data.subarray(off, Math.min(cur.data.length, off + LIVE_SLICE));
+        LIVE.stream.addAudio(chunk, LIVE_RATE);
+        off += chunk.length;
+        LIVE.fed += chunk.length;
+        LIVE.next = cur.start + off / LIVE_RATE;
+        if (LIVE.fed - LIVE.lastTr >= LIVE_SLICE) {
+          LIVE.stream.transcribe();
+          LIVE.lastTr = LIVE.fed;
+          break;   // 一轮只跑一次识别：多跑一次就多一段长任务，界面又开始顿
+        }
+        await new Promise(r => setTimeout(r, 0));
+        if (!LIVE.on || gen !== LIVE.pumpGen) return;
+      }
     } catch (err) {
       liveDisable('识别引擎出错，已停止实时识别：' + (err && err.message ? err.message : err));
       return;
     }
-    LIVE.fed += pcm.length;
-    LIVE.next = start + pcm.length / LIVE_RATE;
-    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    if (now - started > LIVE_BUDGET_MS) break;
+    if (off < cur.data.length) break;   // 预算用完，下一轮接着喂缓存里的同一段
+    LIVE.pcm = null;                    // 这段喂完了，下一轮再取新的
   }
 }
 
@@ -2868,7 +2891,7 @@ function liveStartPump() {
     livePumpOnce(gen).catch(() => {}).then(() => {
       LIVE.pumping = false;
       liveUpdateMeter();
-      if (LIVE.on && gen === LIVE.pumpGen) LIVE.pumpTimer = setTimeout(tick, 280);
+      if (LIVE.on && gen === LIVE.pumpGen) LIVE.pumpTimer = setTimeout(tick, 160);
     });
   };
   LIVE.pumpTimer = setTimeout(tick, 0);
@@ -2980,6 +3003,8 @@ function liveRebuildStream() {
   stream.start();
   LIVE.stream = stream;
   LIVE.fed = 0;
+  LIVE.lastTr = 0;
+  LIVE.pcm = null;
   LIVE.anchorMedia = livePlayhead();
   LIVE.next = LIVE.anchorMedia;   // 从这个播放点开始往后喂
   LIVE.fail = 0;
@@ -3008,6 +3033,20 @@ function liveRenderLine(session, line) {
     liveUpdateMeter();
   }
   const words = (line.words || []).map(w => ({ t: w.text, s: liveMediaOf(w.start), e: liveMediaOf(w.end) }));
+  const sameWords = words.length === row.words.length
+    && words.every((w, i) => w.s === row.words[i].s);
+  const stampText = fmt(liveMediaOf(line.startTime));
+  if (row.sig !== '' && sameWords) {
+    // 流式识别每 0.5 秒会重发一次同一句：词数没变时只改文字，不动 DOM 结构。
+    // 之前每次整行 replaceChildren，会把 .word.active 一起抹掉，高亮看起来在乱跳，
+    // 重建节点还会连续触发重排，播放也跟着卡。
+    words.forEach((w, i) => { const el = row.words[i].el; if (el.textContent !== w.t) el.textContent = w.t; });
+    const stampEl = row.el.firstChild;
+    if (stampEl && stampEl.className === 'stamp' && stampEl.textContent !== stampText) stampEl.textContent = stampText;
+    row.sig = line.text + '|' + words.length + '|' + (line.isComplete ? '1' : '0');
+    row.el.classList.toggle('done', !!line.isComplete);
+    return;
+  }
   const sig = line.text + '|' + words.length + '|' + (line.isComplete ? '1' : '0');
   if (row.sig !== sig) {
     row.sig = sig;
@@ -3041,7 +3080,9 @@ function liveRenderLine(session, line) {
 
 // 实时模式下由 paint() 转到这里：只驱动逐词高亮与进度显示。
 function liveAdvance() {
-  const t = liveMediaTime();
+  // 用音频元素的真实时间轴：识别喂进去的 PCM 就是这条时间轴上的位置，
+  // 不能走 liveMediaTime()（它带倍速估算项，倍速时会和音频对不上，高亮越跑越偏）。
+  const t = audio.currentTime || 0;
   $('now').textContent = fmt(t);
   $('seek').setAttribute('aria-valuetext', fmt(t) + ' / ' + fmt(state.audioSeconds || audio.duration || 0));
   if (Number.isFinite(audio.duration) && audio.duration > 0) {
@@ -3058,19 +3099,27 @@ function liveAdvance() {
   while (ci > 0 && startOf(ci) > t) ci -= 1;
   while (ci < order.length - 1 && startOf(ci + 1) <= t) ci += 1;
   LIVE.cursor = ci;
+  // 播放头可能正好落在一条“刚建出来、词还没到”的行上（流式识别先给文本再给词）。
+  // 这种行不能算当前行，否则上一行会立刻被收成 past、又没有新的词接上，
+  // 高亮就会空一帧再回来。往下退一行，退到最近一条真的有词的行。
+  let ai = ci;
+  while (ai > 0 && !(LIVE.rows.get(order[ai]) || { words: [] }).words.length) ai -= 1;
   let activeId = '';
-  for (let i = Math.max(0, ci - 1); i <= Math.min(order.length - 1, ci + 1); i++) {
+  for (let i = Math.max(0, ai - 1); i <= Math.min(order.length - 1, ai + 1); i++) {
     const id = order[i];
     const row = LIVE.rows.get(id);
     if (!row || !row.words.length) continue;
     // 只有播放头所在的那一行在推进；它前面的收成 past，后面的保持 pending，
     // 否则两行时间有重叠时会出现两个 .word.active。
     let idx;
-    if (i < ci) idx = row.words.length;
-    else if (i > ci) idx = -1;
+    if (i < ai) idx = row.words.length;
+    else if (i > ai) idx = -1;
     else {
       idx = -1;
       for (let k = 0; k < row.words.length; k++) { if (t >= row.words[k].s) idx = k; else break; }
+      // 行起点比它的第一个词早零点几秒：这时不要退出高亮，否则每换一句话
+      // 高亮都会消失一下再回来（看起来就是“跳动”）。直接先压住第一个词。
+      if (idx < 0 && t >= row.start) idx = 0;
     }
     if (idx >= 0) activeId = id;
     if (idx === row.lastIdx) continue;
@@ -3080,8 +3129,8 @@ function liveAdvance() {
       el.classList.add(k === idx ? 'active' : (k < idx ? 'past' : 'pending'));
     });
     row.lastIdx = idx;
-    row.el.classList.toggle('active', idx >= 0 && i === ci);
-    if (idx >= 0 && i === ci) scrollWord(row.words[idx].el);
+    row.el.classList.toggle('active', idx >= 0 && i === ai);
+    if (idx >= 0 && i === ai) scrollWord(row.words[idx].el);
   }
   // 窗口外的旧行不会每帧重算，所以活动行换人时把上一行彻底收尾，
   // 否则 .word.active 会一直停在很早以前那个词上。
