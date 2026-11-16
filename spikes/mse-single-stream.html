@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MSE 单流两用 spike（不进产品）</title>
+<style>
+  body{background:#101216;color:#e6e8ee;font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;padding:24px;max-width:900px}
+  h1{font-size:18px;margin:0 0 6px}
+  p.sub{color:#8b93a7;margin:0 0 18px}
+  button{background:#2453ff;border:0;color:#fff;padding:9px 16px;border-radius:8px;font-size:14px;cursor:pointer}
+  button:disabled{background:#2a2f3a;color:#6b7385;cursor:default}
+  table{border-collapse:collapse;margin:16px 0;width:100%}
+  td,th{border-bottom:1px solid #23272f;padding:7px 8px;text-align:left;font-variant-numeric:tabular-nums}
+  th{color:#8b93a7;font-weight:500}
+  .ok{color:#3ddc97}.bad{color:#ff6b6b}.warn{color:#ffc857}
+  pre{background:#0b0d11;border:1px solid #23272f;border-radius:8px;padding:12px;max-height:220px;overflow:auto;color:#9aa4b8}
+  audio{width:100%;margin-top:12px}
+</style>
+</head>
+<body>
+<h1>MSE 单流两用 spike</h1>
+<p class="sub">一次下载 → 同一份字节同时喂 <code>MediaSource</code>（播放）与 <code>AudioDecoder</code>（可喂 ASR 的 PCM）。不进产品，只出结论。</p>
+<button id="start">开始（抓 60 秒音频）</button>
+<audio id="a" controls></audio>
+<table>
+  <tr><th>判定</th><th>条件</th><th>实测</th><th>结果</th></tr>
+  <tr><td>A 一块字节两处可用</td><td>MSE 缓冲 &gt; 0 且已解码秒数 &gt; 0</td><td id="aVal">—</td><td id="aRes">—</td></tr>
+  <tr><td>B 只有一份下载</td><td>Range 请求数 = 1</td><td id="bVal">—</td><td id="bRes">—</td></tr>
+  <tr><td>C 识别能跑在播放前面</td><td>已解码 − 已播放 ≥ 40 秒</td><td id="cVal">—</td><td id="cRes">—</td></tr>
+</table>
+<table>
+  <tr><th>指标</th><th>值</th></tr>
+  <tr><td>已下载字节</td><td id="bytes">0</td></tr>
+  <tr><td>下载耗时</td><td id="cost">—</td></tr>
+  <tr><td>MSE 缓冲到</td><td id="mseEnd">—</td></tr>
+  <tr><td>已解码（PCM）</td><td id="decoded">—</td></tr>
+  <tr><td>播放到</td><td id="played">—</td></tr>
+  <tr><td>解码帧 / 采样率</td><td id="frames">—</td></tr>
+</table>
+<pre id="log"></pre>
+<script>
+(() => {
+  const EP = 'https://traffic.megaphone.fm/AMERICANPSYCHOLOGICALASSOCIATION5083352078.mp3';
+  const LEAD = 60;                       // 这一次抓 60 秒
+  const $ = id => document.getElementById(id);
+  const log = m => { $('log').textContent = m + '\n' + $('log').textContent; };
+  const fmtT = s => (s || 0).toFixed(1) + ' s';
+  const stats = { req: 0, bytes: 0, cost: 0, decoded: 0, mseEnd: 0, frames: 0 };
+  const audio = $('a');
+  let cbr = null, ms = null, sb = null, dec = null, leftovers = new Uint8Array(0), decTime = 0;
+
+  /* ---------- 取字节：fetch 流式，被拦时退回 XHR ---------- */
+  function xhrRange(url, from, to, onChunk) {
+    return new Promise((res, rej) => {
+      const x = new XMLHttpRequest();
+      x.open('GET', url, true);
+      x.responseType = 'arraybuffer';
+      x.setRequestHeader('Range', 'bytes=' + from + '-' + to);
+      let seen = 0;
+      x.onprogress = () => {
+        if (!x.response || x.response.byteLength <= seen) return;
+        const buf = new Uint8Array(x.response, seen);
+        seen = x.response.byteLength;
+        onChunk(buf);
+      };
+      x.onerror = () => rej(new Error('XHR 网络错误'));
+      x.onload = () => res();
+      x.send();
+    });
+  }
+  async function getRange(from, to, onChunk) {
+    stats.req += 1;
+    try {
+      const r = await fetch(EP, { headers: { Range: 'bytes=' + from + '-' + to } });
+      log('fetch 状态 ' + r.status + '，类型 ' + (r.headers.get('content-type') || '?'));
+      if (!r.ok && r.status !== 206) throw new Error('HTTP ' + r.status);
+      const reader = r.body.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value && value.length) { stats.bytes += value.length; onChunk(value); }
+      }
+      return;
+    } catch (e) {
+      log('fetch 被拦/失败，改走 XHR：' + (e && e.message ? e.message : e));
+      await xhrRange(EP, from, to, buf => { stats.bytes += buf.length; onChunk(buf); });
+    }
+  }
+
+  /* ---------- 探针：找首帧、算 CBR 参数 ---------- */
+  const BR1 = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320];
+  const BR2 = [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160];
+  const SR1 = [44100, 48000, 32000], SR2 = [22050, 24000, 16000], SR3 = [11025, 12000, 8000];
+  // 注意版本位：11 = MPEG1（不是 1）。早先把 ver 写成 1，等于只认 reserved，
+  // 于是整条流一个帧头都认不出来，只能靠伪同步误判成 320 kbps。
+  function frameHdr(b, i) {
+    if (i + 4 > b.length) return null;
+    if (b[i] !== 0xFF || (b[i + 1] & 0xE0) !== 0xE0) return null;
+    const ver = (b[i + 1] >> 3) & 3, lay = (b[i + 1] >> 1) & 3;
+    if (ver === 1 || lay !== 1) return null;                 // 只认 Layer III
+    const brI = (b[i + 2] >> 4) & 0xF, srI = (b[i + 2] >> 2) & 3, pad = (b[i + 2] >> 1) & 1;
+    if (brI === 0 || brI === 15 || srI === 3) return null;
+    let br, sr, spf;
+    if (ver === 3) { br = BR1[brI]; sr = SR1[srI]; spf = 1152; }
+    else if (ver === 2) { br = BR2[brI]; sr = SR2[srI]; spf = 576; }
+    else { br = BR2[brI]; sr = SR3[srI]; spf = 576; }
+    if (!br || !sr) return null;
+    const k = (ver === 3 ? 144 : 72) * br * 1000;
+    return { br, sr, spf, ver, len: Math.floor(k / sr) + pad };
+  }
+  async function probe() {
+    const head = new Uint8Array(512 * 1024);
+    let n = 0;
+    await getRange(0, 512 * 1024 - 1, buf => { head.set(buf, n); n += buf.length; });
+    log('探针收到 ' + n + ' 字节');
+    let start = 0;
+    // ID3v2 可能很大（封面图），先按 size 字段跳过去再找帧头；播客 MP3 很常见几百 KB 的封面。
+    if (n > 10 && head[0] === 0x49 && head[1] === 0x44 && head[2] === 0x33) {
+      const size = (head[6] << 21) | (head[7] << 14) | (head[8] << 7) | head[9];
+      start = 10 + size + ((head[5] & 0x10) ? 10 : 0);
+      log('跳过 ID3v2，标签 ' + size + ' 字节，从 ' + start + ' 开始找帧');
+    }
+    let first = -1, h = null;
+    // 不能只凭一个同步字就认帧：码流里 0xFFEx 这种伪同步很常见，认错了帧长会整段解不出来。
+    // 这里要求从候选位置连走 10 帧、码率采样率全都一致才算真的帧边界。
+    for (let i = start; i < n - 4 && first < 0; i++) {
+      const h0 = frameHdr(head, i);
+      if (!h0) continue;
+      let p = i, cnt = 0;
+      for (let k = 0; k < 10; k++) {
+        const hh = frameHdr(head, p);
+        if (!hh || hh.br !== h0.br || hh.sr !== h0.sr) break;
+        p += hh.len; cnt++;
+      }
+      if (cnt >= 8) { first = i; h = h0; }
+    }
+    if (!h) throw new Error('没找到 MP3 帧头（不是 CBR MP3？）');
+    cbr = { first, bps: h.br * 1000 / 8, sr: h.sr, spf: h.spf };
+    log('探针：首帧 @' + first + '，' + h.br + ' kbps / ' + h.sr + ' Hz，字节率 ' + cbr.bps.toFixed(0) + ' B/s');
+    return cbr;
+  }
+
+  /* ---------- 播放：MSE ---------- */
+  function setupMSE() {
+    ms = new MediaSource();
+    // 先挂 sourceopen 再设 src：反过来的话事件可能已经发过了，Promise 永远不 resolve（spike 里踩过）。
+    const ready = new Promise(res => {
+      ms.addEventListener('sourceopen', () => {
+        sb = ms.addSourceBuffer('audio/mpeg');
+        log('MSE sourceopen，SourceBuffer 就绪');
+        res();
+      }, { once: true });
+    });
+    audio.src = URL.createObjectURL(ms);
+    return ready;
+  }
+  const queue = [];
+  let appending = false;
+  function push(bytes) { queue.push(bytes.slice()); flush(); }
+  function flush() {
+    if (!sb || appending || sb.updating || !queue.length) return;
+    appending = true;
+    const b = queue.shift();
+    try { sb.appendBuffer(b); } catch (e) { log('appendBuffer 失败：' + e.message); appending = false; return; }
+    sb.addEventListener('updateend', () => {
+      appending = false;
+      try {
+        const n = sb.buffered.length;
+        stats.mseEnd = n ? sb.buffered.end(n - 1) : 0;
+      } catch (e) { log('SourceBuffer 已被移除，停止追加：' + e.message); queue.length = 0; return; }
+      flush();
+    }, { once: true });
+  }
+
+  /* ---------- 识别侧：WebCodecs 分块解码（代理 ASR 的 PCM 供给） ---------- */
+  async function setupDecoder() {
+    if (!('AudioDecoder' in window)) { log('这个浏览器没有 WebCodecs AudioDecoder，C 判定不成立'); return; }
+    const sup = await AudioDecoder.isConfigSupported({ codec: 'mp3', sampleRate: cbr.sr, numberOfChannels: 2 });
+    if (!sup.supported) { log('AudioDecoder 不支持 mp3'); return; }
+    dec = new AudioDecoder({
+      output: d => { stats.decoded += d.duration / 1e6; d.close(); },
+      error: e => log('解码错误：' + e.message)
+    });
+    dec.configure({ codec: 'mp3', sampleRate: cbr.sr, numberOfChannels: 2 });
+    log('AudioDecoder(mp3) 就绪');
+  }
+  function feedDecoder(chunk) {
+    // 拼上残留，按帧头切（CBR 帧长仍会因 padding 位 ±1，所以逐帧读头）
+    let merged = new Uint8Array(leftovers.length + chunk.length);
+    merged.set(leftovers); merged.set(chunk, leftovers.length);
+    let pos = 0;
+    while (true) {
+      const h = frameHdr(merged, pos);
+      if (!h) break;
+      if (pos + h.len > merged.length) break;
+      if (dec && dec.state === 'configured') {
+        dec.decode(new EncodedAudioChunk({
+          type: 'key',
+          timestamp: Math.round(decTime * 1e6),
+          duration: Math.round(h.spf / cbr.sr * 1e6),
+          data: merged.subarray(pos, pos + h.len)
+        }));
+        decTime += h.spf / cbr.sr;
+        stats.frames += 1;
+      }
+      pos += h.len;
+    }
+    leftovers = merged.subarray(pos);
+  }
+
+  /* ---------- 主流程 ---------- */
+  function judge() {
+    const head = Math.max(0, decTime - (audio.currentTime || 0));
+    const set = (k, v, pass) => { $(k + 'Val').textContent = v; const r = $(k + 'Res'); r.textContent = pass ? '✅ 通过' : '❌ 不通过'; r.className = pass ? 'ok' : 'bad'; };
+    set('a', 'MSE ' + fmtT(stats.mseEnd) + ' / PCM ' + fmtT(stats.decoded), stats.mseEnd > 0 && stats.decoded > 0);
+    set('b', stats.req + ' 个 Range 请求', stats.req === 1);
+    set('c', '领先 ' + head.toFixed(1) + ' 秒', head >= 40);
+  }
+  function tick() {
+    $('bytes').textContent = (stats.bytes / 1024).toFixed(0) + ' KB';
+    $('cost').textContent = stats.cost ? stats.cost.toFixed(2) + ' s' : '—';
+    $('mseEnd').textContent = fmtT(stats.mseEnd);
+    $('decoded').textContent = fmtT(decTime);
+    $('played').textContent = fmtT(audio.currentTime);
+    $('frames').textContent = stats.frames + ' / ' + cbr.sr + ' Hz';
+    judge();
+  }
+
+  $('start').addEventListener('click', async () => {
+    $('start').disabled = true;
+    try {
+      const t0 = performance.now();
+      await probe();
+      await setupMSE();
+      await setupDecoder();
+      const from = cbr.first, to = Math.round(cbr.first + cbr.bps * LEAD) - 1;
+      log('开始抓 ' + LEAD + ' 秒窗口：bytes=' + from + '-' + to);
+      stats.req = 0;
+      await getRange(from, to, buf => { push(buf); feedDecoder(buf); });
+      stats.cost = (performance.now() - t0) / 1000;
+      log('下载结束，共 ' + (stats.bytes / 1024).toFixed(0) + ' KB');
+      tick();
+      // 缓冲够了就开播（模拟“播放继续往下走，识别已经在前面了”）
+      const waitPlay = () => {
+        const n = sb.buffered.length;
+        const bufEnd = n ? sb.buffered.end(n - 1) : 0;
+        if (bufEnd >= 8) {
+          if (!isFinite(ms.duration) || ms.duration === 0) { try { ms.duration = bufEnd; } catch (e) {} }
+          audio.play().then(() => log('开始播放')).catch(e => log('播放失败：' + e.message));
+        } else setTimeout(waitPlay, 120);
+      };
+      waitPlay();
+      setInterval(tick, 500);
+    } catch (e) {
+      log('失败：' + (e && e.message ? e.message : e));
+      $('start').disabled = false;
+    }
+  });
+})();
+</script>
+</body>
+</html>
