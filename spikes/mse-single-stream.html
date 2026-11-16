@@ -22,6 +22,8 @@
 <h1>MSE 单流两用 spike</h1>
 <p class="sub">一次下载 → 同一份字节同时喂 <code>MediaSource</code>（播放）与 <code>AudioDecoder</code>（可喂 ASR 的 PCM）。不进产品，只出结论。</p>
 <button id="start">开始（抓 60 秒音频）</button>
+<button id="scan" style="background:#39424f">扫时间↔字节（7 个点）</button>
+<button id="from900" style="background:#1f7a4c">从第 900 秒开播（40 秒）</button>
 <audio id="a" controls></audio>
 <table>
   <tr><th>判定</th><th>条件</th><th>实测</th><th>结果</th></tr>
@@ -39,6 +41,11 @@
   <tr><td>解码帧 / 采样率</td><td id="frames">—</td></tr>
 </table>
 <pre id="log"></pre>
+<h2 style="font-size:15px;margin-top:22px">场景扫描：字节↔时间是否一直线性（DAI 接缝会在这里暴露）</h2>
+<table id="scanTable">
+  <tr><th>目标时间</th><th>预测字节</th><th>实际帧边界</th><th>偏差</th><th>该处码率/采样率</th><th>偏移秒数</th></tr>
+</table>
+<pre id="scanLog"></pre>
 <script>
 (() => {
   const EP = 'https://traffic.megaphone.fm/AMERICANPSYCHOLOGICALASSOCIATION5083352078.mp3';
@@ -209,6 +216,92 @@
     leftovers = merged.subarray(pos);
   }
 
+  /* ---------- 按时间定位字节：验证 CBR 假设在整集里是否一直成立 ---------- */
+  const scanLog = m => { $('scanLog').textContent = m + '\n' + $('scanLog').textContent; };
+
+  async function fetchInto(from, span) {
+    const buf = new Uint8Array(span);
+    let n = 0;
+    const put = chunk => { if (n + chunk.length > span) chunk = chunk.subarray(0, span - n); buf.set(chunk, n); n += chunk.length; };
+    const to = from + span - 1;
+    try {
+      const r = await fetch(EP, { headers: { Range: 'bytes=' + from + '-' + to } });
+      if (!r.ok && r.status !== 206) throw new Error('HTTP ' + r.status);
+      const reader = r.body.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value && value.length) put(value);
+      }
+    } catch (e) {
+      await xhrRange(EP, from, to, put);
+    }
+    return { buf, n };
+  }
+
+  // 找第一处「连走 8 帧参数一致」的帧边界；参数可能与文件头不同（那就是插进来的广告段）
+  function findChain(buf, n) {
+    for (let i = 0; i + 4 < n; i++) {
+      const h0 = frameHdr(buf, i);
+      if (!h0) continue;
+      let p = i, cnt = 0;
+      for (let k = 0; k < 10; k++) {
+        const hh = frameHdr(buf, p);
+        if (!hh || hh.br !== h0.br || hh.sr !== h0.sr) break;
+        p += hh.len; cnt++;
+      }
+      if (cnt >= 8) return { offset: i, h: h0, frames: cnt };
+    }
+    return null;
+  }
+
+  async function locate(tSec) {
+    const pred = cbr.first + Math.round(cbr.bps * tSec);
+    // 窗口要窄：CBR 对齐正确时，离预测位置最近的帧边界就在一个帧长（~627 B）以内；
+    // 窗口开太大，找出来的“第一个帧边界”永远贴着窗口起点，误差看起来恒等于回看量（踩过）。
+    const back = 16 * 1024, span = 48 * 1024;
+    const from = Math.max(0, pred - back);
+    const { buf, n } = await fetchInto(from, span);
+    let best = null;
+    for (let i = 0; i + 4 < n; i++) {
+      const h0 = frameHdr(buf, i);
+      if (!h0) continue;
+      let p = i, cnt = 0;
+      for (let k = 0; k < 10; k++) {
+        const hh = frameHdr(buf, p);
+        if (!hh || hh.br !== h0.br || hh.sr !== h0.sr) break;
+        p += hh.len; cnt++;
+      }
+      if (cnt < 8) continue;
+      const actual = from + i, err = actual - pred;
+      if (!best || Math.abs(err) < Math.abs(best.err)) best = { t: tSec, pred, actual, err, br: h0.br, sr: h0.sr, got: n };
+    }
+    return best || { t: tSec, pred, actual: null, err: null, got: n };
+  }
+
+  function scanRow(r) {
+    // 别把整串拼接塞进三元式里：`a + b ? 'x' : 'y'` 会把左边整串当条件，结果整行只剩 'bad'（踩过）。
+    const tr = document.createElement('tr');
+    const errTxt = r.actual === null ? ('没找到帧（收到 ' + (r.got || 0) + ' B）') : (r.err >= 0 ? '+' : '') + r.err + ' B';
+    const secTxt = r.actual === null ? '—' : ((r.err / cbr.bps) >= 0 ? '+' : '') + (r.err / cbr.bps).toFixed(3) + ' s';
+    const bad = r.actual === null || Math.abs(r.err) > cbr.bps;
+    const cells = [
+      r.t + ' s',
+      String(r.pred),
+      r.actual === null ? '—' : String(r.actual),
+      errTxt,
+      r.br ? r.br + ' kbps / ' + r.sr + ' Hz' : '—',
+      secTxt
+    ];
+    cells.forEach((v, i) => {
+      const td = document.createElement('td');
+      td.textContent = v;
+      if (i === 3) td.className = bad ? 'bad' : 'ok';
+      tr.appendChild(td);
+    });
+    $('scanTable').appendChild(tr);
+  }
+
   /* ---------- 主流程 ---------- */
   function judge() {
     const head = Math.max(0, decTime - (audio.currentTime || 0));
@@ -257,6 +350,70 @@
       $('start').disabled = false;
     }
   });
+
+  /* ---------- 场景 1：扫 7 个时间点，看字节↔时间是否一直线性 ---------- */
+  $('scan').addEventListener('click', async () => {
+    $('scan').disabled = true;
+    try {
+      if (!cbr) await probe();
+      const points = [60, 300, 600, 900, 1200, 1500, 1800];
+      for (const t of points) {
+        const r = await locate(t);
+        scanRow(r);
+        scanLog(t + 's → 偏差 ' + (r.err === null ? '未找到帧' : r.err + ' B（' + (r.err / cbr.bps).toFixed(2) + ' s）' +
+          (r.br && r.br !== 192 ? ' ★ 该处码率 ' + r.br + ' kbps' : '')));
+      }
+      scanLog('扫描结束。|偏差| 都在一个帧长（~630 B）以内 → 整集字节↔时间保持线性，可以按字节定位开播；' +
+        '某个点之后偏差跳到 KB 级 → 那里是 DAI 接缝或码率变化，后面的定位要重新锚定。');
+    } catch (e) {
+      scanLog('扫描失败：' + (e && e.message ? e.message : e));
+    } finally {
+      $('scan').disabled = false;
+    }
+  });
+
+  /* ---------- 场景 2：从第 900 秒开播（对应“恢复记住的位置”） ---------- */
+  const EP_DUR = 1891.525;              // 这集的总时长（RSS/播放器元数据）
+  async function playFrom(tSec, needSec) {
+    if (!cbr) await probe();
+    const loc = await locate(tSec);
+    log('定位 ' + tSec + 's：预测 ' + loc.pred + '，实际帧 ' + (loc.actual === null ? '未找到' : loc.actual) +
+      '，偏差 ' + (loc.err === null ? '—' : loc.err + ' B'));
+    if (loc.actual === null) { log('该位置附近找不到帧边界，这一秒开不了播'); return; }
+    // 重建一个 MediaSource，让时间轴从 tSec 起步（timestampOffset 必须在 append 之前设）
+    if (sb) { try { sb.abort(); } catch (e) {} }
+    queue.length = 0; leftovers = new Uint8Array(0);
+    decTime = tSec; stats.decoded = 0; stats.frames = 0;
+    if (dec) { try { dec.reset(); } catch (e) {} dec.configure({ codec: 'mp3', sampleRate: cbr.sr, numberOfChannels: 2 }); }
+    else await setupDecoder();
+    ms = new MediaSource();
+    const ready = new Promise(res => ms.addEventListener('sourceopen', () => {
+      sb = ms.addSourceBuffer('audio/mpeg');
+      sb.timestampOffset = tSec;
+      res();
+    }, { once: true }));
+    audio.src = URL.createObjectURL(ms);
+    setTimeout(() => log('diagnose：ms.readyState=' + ms.readyState + '，audio readyState=' + audio.readyState + ' net=' + audio.networkState), 3000);
+    await ready;
+    const from = loc.actual, to = from + Math.round(cbr.bps * needSec) - 1;
+    stats.bytes = 0; stats.req = 0;
+    const t0 = performance.now();
+    await getRange(from, to, buf => { push(buf); feedDecoder(buf); });
+    stats.cost = (performance.now() - t0) / 1000;
+    try { ms.duration = EP_DUR; } catch (e) { log('设 duration 失败：' + e.message); }
+    const ranges = () => { try { const n = sb.buffered.length; return n ? [+sb.buffered.start(0).toFixed(1), +sb.buffered.end(n - 1).toFixed(1)] : null; } catch (e) { return null; } };
+    log('追加完成，缓冲区间 ' + JSON.stringify(ranges()));
+    const go = () => {
+      const rg = ranges();
+      if (rg && rg[1] >= tSec + 4) {
+        audio.currentTime = tSec + 1;
+        audio.play().then(() => log('从 ' + (tSec + 1) + ' 秒开始播放')).catch(e => log('播放失败：' + e.message));
+      } else setTimeout(go, 150);
+    };
+    go();
+    setInterval(tick, 500);
+  }
+  $('from900').addEventListener('click', () => { $('from900').disabled = true; playFrom(900, 40).catch(e => log('失败：' + (e && e.message ? e.message : e))); });
 })();
 </script>
 </body>
