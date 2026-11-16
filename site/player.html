@@ -204,6 +204,26 @@ button{cursor:pointer;background:none;border:0;padding:0}
   -webkit-mask-image:linear-gradient(180deg,transparent 0,#000 30px,#000 calc(100% - 38px),transparent 100%);
   mask-image:linear-gradient(180deg,transparent 0,#000 30px,#000 calc(100% - 38px),transparent 100%);
 }
+/* 实时识别状态条：只显示状态、下载进度与输入电平，成功识别后停在“实时识别中”。 */
+/* 开启实时识别时正文只留实时行，原文字稿先藏起来（关掉后原样恢复，不删数据）。 */
+body.live-on .cue:not(.live){display:none}
+.livebar{
+  position:absolute;z-index:3;left:50%;top:58px;transform:translateX(-50%);
+  display:flex;align-items:center;gap:9px;max-width:min(92vw,760px);
+  padding:7px 8px 7px 12px;border-radius:999px;
+  background:color-mix(in srgb,var(--bg) 88%,transparent);border:1px solid var(--edge);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  font:10.5px/1.3 var(--mono);letter-spacing:.07em;color:var(--soft);
+}
+.livebar[hidden]{display:none}
+.livebar .dot{width:7px;height:7px;flex:none;border-radius:50%;background:var(--accent);animation:livePulse 1.7s ease-in-out infinite}
+.livebar .meter{width:52px;height:3px;flex:none;border-radius:2px;background:var(--line);overflow:hidden}
+.livebar .meter i{display:block;height:100%;width:0;background:var(--accent);transition:width .12s linear}
+.livebar .ltxt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.livebar .lbtn{flex:none;border:0;background:none;color:var(--accent);font:inherit;letter-spacing:inherit;padding:2px 6px;cursor:pointer}
+.livebar.err .dot{background:#c96363;animation:none}
+@keyframes livePulse{0%,100%{opacity:.35;transform:scale(.9)}50%{opacity:1;transform:scale(1.15)}}
+@media (prefers-reduced-motion:reduce){.livebar .dot{animation:none}}
 .cue{
   position:relative;padding:11px 0 11px 26px;margin:var(--cue-gap) 0;
   color:color-mix(in srgb, var(--ink) 46%, transparent);
@@ -464,6 +484,8 @@ html[data-scheme="light"] .themebtn .ico-moon{display:block}
   transition:color .16s var(--ease),border-color .16s var(--ease),background .16s var(--ease);
 }
 .dockicon:hover{color:var(--ink);border-color:var(--line);background:var(--hover)}
+.dockicon.on,.dockicon[aria-pressed="true"]{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 55%,transparent)}
+.dockicon.busy{color:var(--accent2);border-color:color-mix(in srgb,var(--accent2) 45%,transparent)}
 .dockicon svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 .typesheet{
   position:fixed;right:max(20px,calc((100vw - 1040px)/2 + 26px));bottom:calc(var(--bottom) + 8px);z-index:47;
@@ -1220,6 +1242,7 @@ body.car-mode .ptitle{font-size:20px}
               <div class="setting-row"><div><strong>自动连续播放</strong><p>当前单集结束后播放队列或下一集</p></div><button class="switch" id="setAutoNext" role="switch" aria-checked="false"></button></div>
               <div class="setting-row"><div><strong>记住播放位置</strong><p>下次打开单集从上次位置继续</p></div><button class="switch" id="setRemember" role="switch" aria-checked="true"></button></div>
               <div class="setting-row"><div><strong>默认文字稿语言</strong><p>进入播放器时显示的语言</p></div><select id="setLang"><option value="en">English</option><option value="zh">中文</option><option value="both">双语</option></select></div>
+              <div class="setting-row"><div><strong>实时字幕提前量</strong><p>识别跑到播放前面多少秒；0 表示只跟随播放</p></div><select id="setLiveLead"><option value="0">0 秒（跟随播放）</option><option value="15">15 秒</option><option value="30">30 秒</option><option value="60">1 分钟</option><option value="120">2 分钟</option><option value="300">5 分钟</option></select></div>
             </div>
             <div class="settings-pane" id="pane-reader">
               <div class="setting-row"><div><strong>字号</strong><p>文字稿缩放</p></div><input type="range" id="setScale" min="85" max="140" step="1"><span class="smalltext" id="setScaleOut"></span></div>
@@ -1267,6 +1290,12 @@ body.car-mode .ptitle{font-size:20px}
 </div>
 
 <main class="reader">
+  <div class="livebar" id="liveBar" hidden role="status" aria-live="polite">
+    <span class="dot" aria-hidden="true"></span>
+    <span class="ltxt" id="liveText">实时识别</span>
+    <span class="meter" aria-hidden="true"><i id="liveMeter"></i></span>
+    <button class="lbtn" id="liveStopBtn" aria-label="停止实时识别">停止</button>
+  </div>
   <div id="transcript" class="transcript" role="region" aria-label="文字稿" tabindex="0"><div class="empty"><div class="loader"><span class="bars"><i></i><i></i><i></i></span><span>正在读取 feed…</span></div></div></div>
 </main>
 
@@ -1313,6 +1342,9 @@ body.car-mode .ptitle{font-size:20px}
         </div>
       </div>
       <span class="vsep"></span>
+      <button id="liveBtn" class="dockicon" aria-pressed="false" aria-label="实时识别" title="实时识别（实验功能）">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12h2M8 8.2v7.6M12 5v14M16 8.2v7.6M20.5 12h-2"/></svg>
+      </button>
       <button id="detailsBtn" class="dockicon" aria-label="剧集信息" title="剧集信息" aria-expanded="false" aria-controls="details">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.2M12 7.8h.01"/></svg>
       </button>
@@ -2377,6 +2409,7 @@ function alignZhLines() {
   for (const [z, d] of items) z.style.marginLeft = d ? d + 'px' : '';
 }
 function renderCues() {
+  if (LIVE.on) return;   // 实时模式自己管正文 DOM，别被 VTT 渲染覆盖
   box.innerHTML = ''; state.nodes = []; state.activeCue = -1; state.wordIdx = -1;
   if (!state.cues.length) { box.innerHTML = '<div class="empty">没有可显示的逐字稿。</div>'; syncJumpPill(); return; }
   const wordMode = state.mode === 'word';
@@ -2478,6 +2511,7 @@ function locateCue(t) {
 }
 
 function paint(force = false) {
+  if (LIVE.on) { liveAdvance(); return; }
   if (!state.cues.length) { syncJumpPill(); return; }
   const raw = audio.currentTime || 0;
   // 浏览器按标称码率估算时长，seek 落点会超前，但播放时钟仍与音频 1:1；
@@ -2574,6 +2608,609 @@ function scrollWord(el) {
   if (r.top < br.top + 60 || r.bottom > br.bottom - 60) scrollIntoBox(el, 'edge');
 }
 
+/* ---------- 实时逐词字幕（实验功能，默认关闭） ----------
+   链路：音频 URL（需 CORS）→ 拉取整个音频文件 → 扫 MP3 帧建「字节↔时间」索引
+    → 按「播放位置 + 提前量」解码出 16 kHz 单声道 PCM 喂给 Moonshine 流式识别
+    （cross-attention + DTW 的词级时间戳）→ 时间轴映射 → 正文逐词渲染。
+   用解码而不是 Web Audio 采集，是因为采集只能拿到「已经播出去」的音频，永远
+   落后于播放头；要提前 s 秒生成，必须自己把还没播到的音频解出来。关闭后正文
+   立刻回到原本的 VTT / 词级 JSON 渲染，原有播放、重试、跳转逻辑不受影响。 */
+const LIVE_RATE = 16000;
+const LIVE_ENGINE = 'https://cdn.jsdelivr.net/npm/@moonshine-ai/moonshine-wasm@0.1.6/dist/index.js';
+const LIVE_ARCH = 2;   // ModelArch.TinyStreaming：先跑通再换 Small / Medium 对比
+const LIVE_LEAD_DEFAULT = 60;   // 默认提前 1 分钟
+const LIVE_FETCH = 30;          // 每次按 Range 取多少秒的音频字节
+const LIVE_BUDGET_MS = 220;     // 每轮最多让识别占用多久，避免卡住界面
+const LIVE = {
+  on: false, busy: false,
+  engine: null, stream: null, session: 0,
+  ctx: null, audioUrl: '', cbr: null, fail: 0,
+  anchorMedia: 0, next: 0, fed: 0, pumpTimer: 0, pumpGen: 0, pumping: false, text: '',
+  rows: new Map(), order: [], progressText: '', mode: 'idle', activeRow: '', cursor: 0,
+};
+
+function liveMediaTime() {
+  return (audio.currentTime || 0) + (state.timeScale - 1) * state.seekRaw;
+}
+// 喂给识别的是媒体时间上连续的 PCM，倍速不影响这条时间轴，所以只是一个起点偏移。
+function liveMediaOf(sec) {
+  return LIVE.anchorMedia + Number(sec || 0);
+}
+function liveSetText(text, cls) {
+  $('liveText').textContent = text;
+  const bar = $('liveBar');
+  bar.classList.toggle('err', cls === 'err');
+  bar.classList.toggle('busy', cls === 'busy');
+}
+function liveProgressText(a, b, c) {
+  let pct = null;
+  if (typeof b === 'string') { const f = Number(a); if (Number.isFinite(f)) pct = Math.round(f * 100); }
+  else if (typeof b === 'number' && b > 0 && Number.isFinite(Number(a))) pct = Math.round(Number(a) / b * 100);
+  const file = typeof b === 'string' ? b : (typeof c === 'string' ? c : '');
+  const name = file ? String(file).split(/[\\/]/).pop() : '';
+  return '下载识别模型' + (pct === null ? '…' : ' ' + Math.max(0, Math.min(100, pct)) + '%') + (name ? '（' + name + '）' : '');
+}
+
+// 音频只用来拿字节、按时间解码；<audio> 本身保持原样，不建音频图、不改 crossOrigin。
+function livePlayhead() { return audio.currentTime || 0; }
+
+function liveAudioDuration() {
+  return Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : Infinity;
+}
+
+function liveLeadSec() {
+  const v = Number(prefs.liveLead);
+  if (Number.isFinite(v) && v >= 0) return Math.min(600, v);
+  return LIVE_LEAD_DEFAULT;
+}
+
+// 只取需要的那一段字节：整集顺序下载既慢又重，而且一跳到别处就没法用。
+async function liveFetchRange(from, to) {
+  const res = await fetch(LIVE.audioUrl, {
+    mode: 'cors', credentials: 'omit',
+    headers: { Range: 'bytes=' + from + '-' + to },
+  });
+  if (!res.ok && res.status !== 206) throw new Error('这个音频源不允许分段读取，取不到音频数据');
+  return new Uint8Array(await res.arrayBuffer());
+}
+
+// 头部探针：跳 ID3v2，找到第一帧，确认是 CBR（恒定码率）才能用「字节 = 时间 × 码率」定位。
+async function liveProbeAudio() {
+  const head = await liveFetchRange(0, 131071);
+  let origin = 0;
+  if (head[0] === 0x49 && head[1] === 0x44 && head[2] === 0x33) {
+    const size = ((head[6] & 0x7f) << 21) | ((head[7] & 0x7f) << 14) | ((head[8] & 0x7f) << 7) | (head[9] & 0x7f);
+    origin = 10 + size;
+  }
+  let i = Math.min(origin, head.length);
+  while (i + 4 <= head.length) {
+    if (head[i] === 0xFF && (head[i + 1] & 0xE0) === 0xE0) {
+      const h = liveMp3Frame(head, i);
+      if (h) break;
+    }
+    i += 1;
+  }
+  if (i + 4 > head.length) throw new Error('这个音频不是 MP3，暂时只支持 MP3 的提前生成');
+  const first = liveMp3Frame(head, i);
+  let p = i, frames = 0, br = first.br, sr = first.sr, spf = first.spf, cbr = true;
+  while (p + 4 <= head.length && frames < 256) {
+    const h = liveMp3Frame(head, p);
+    if (!h) break;
+    if (h.br !== br || h.sr !== sr) cbr = false;
+    p += h.len;
+    frames += 1;
+  }
+  if (frames < 8) throw new Error('这个音频不是 MP3，暂时只支持 MP3 的提前生成');
+  if (!cbr) throw new Error('这个音频是可变码率 MP3，暂时不支持提前生成');
+  return { origin: i, bps: br / 8, sr, spf };
+}
+
+// 取 [startSec, startSec+seconds) 这段：按码率算出字节范围 → 重同步到帧边界 → 解码成 16k 单声道。
+async function liveFetchWindow(startSec, seconds) {
+  const c = LIVE.cbr;
+  if (!c || !LIVE.ctx) return null;
+  const from = Math.max(0, c.origin + Math.floor(startSec * c.bps) - 8192);
+  const to = c.origin + Math.ceil((startSec + seconds) * c.bps) + 16384;
+  const bytes = await liveFetchRange(from, to);
+  let i = 0;
+  while (i + 4 <= bytes.length) {
+    if (bytes[i] === 0xFF && (bytes[i + 1] & 0xE0) === 0xE0) {
+      const h = liveMp3Frame(bytes, i);
+      // 连续两帧都对上才算真的帧边界，避免把帧内数据误当同步字。
+      if (h && i + h.len + 4 <= bytes.length && liveMp3Frame(bytes, i + h.len)) break;
+    }
+    i += 1;
+  }
+  if (i + 4 > bytes.length) return null;
+  let p = i, frames = 0;
+  while (p + 4 <= bytes.length) {
+    const h = liveMp3Frame(bytes, p);
+    if (!h || p + h.len > bytes.length) break;
+    p += h.len;
+    frames += 1;
+    if (frames * c.spf / c.sr >= seconds + 2) break;   // 别因为服务端忽略 Range 就解出一整集
+  }
+  if (p <= i) return null;
+  const slice = bytes.slice(i, p);
+  const start = Math.max(0, (from + i - c.origin) / c.bps);
+  return new Promise((resolve, reject) => {
+    LIVE.ctx.decodeAudioData(
+      slice.buffer,
+      buf => resolve({ pcm: buf.getChannelData(0), start }),
+      () => reject(new Error('音频解码失败')),
+    );
+  });
+}
+
+const MP3_BR_V1L3 = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320];
+const MP3_BR_V2L3 = [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160];
+const MP3_SR_V1 = [44100, 48000, 32000];
+const MP3_SR_V2 = [22050, 24000, 16000];
+function liveMp3Frame(u8, i) {
+  const b1 = u8[i + 1], b2 = u8[i + 2];
+  if ((b1 & 0xE0) !== 0xE0) return null;
+  const ver = (b1 >> 3) & 3;        // 3=MPEG1 2=MPEG2 0=MPEG2.5
+  const layer = (b1 >> 1) & 3;      // 1 = Layer III
+  if (ver === 1 || layer !== 1) return null;
+  const brIdx = (b2 >> 4) & 15, srIdx = (b2 >> 2) & 3, pad = (b2 >> 1) & 1;
+  if (!brIdx || brIdx === 15 || srIdx === 3) return null;
+  const bitrate = (ver === 3 ? MP3_BR_V1L3 : MP3_BR_V2L3)[brIdx] * 1000;
+  const sr = (ver === 3 ? MP3_SR_V1 : MP3_SR_V2)[srIdx];
+  const spf = ver === 3 ? 1152 : 576;
+  const len = Math.floor((ver === 3 ? 144 : 72) * bitrate / sr) + pad;
+  return len > 0 ? { len, sr, spf, br: bitrate } : null;
+}
+
+function liveUpdateMeter() {
+  const lead = liveLeadSec();
+  const ahead = LIVE.on ? Math.max(0, LIVE.next - livePlayhead()) : 0;
+  $('liveMeter').style.width = (lead > 0
+    ? Math.min(100, Math.round(ahead / lead * 100))
+    : (LIVE.on ? 100 : 0)) + '%';
+  if (!LIVE.on) return;
+  if (!LIVE.order.length) {
+    // 还一句都没出来时也要更新文案，否则取音频失败会一直停在“实时识别中”，
+    // 用户完全看不到问题（之前就踩过这个坑）。
+    const wait = LIVE.fail
+      ? '实时识别中 · 正在重试取音频（失败 ' + LIVE.fail + ' 次）'
+      : '实时识别中 · 正在取音频…';
+    if (wait !== LIVE.text) { LIVE.text = wait; liveSetText(wait, 'on'); }
+    return;
+  }
+  const text = '实时识别中 · 已识别 ' + LIVE.order.length + ' 句'
+    + (lead > 0 ? ' · 已提前 ' + Math.round(ahead) + ' 秒' : '');
+  if (text !== LIVE.text) { LIVE.text = text; liveSetText(text, 'on'); }
+}
+
+// 每轮只喂到“播放位置 + 提前量”，并给每轮设 CPU 预算，避免长播客把界面拖住。
+async function livePumpOnce(gen) {
+  if (!LIVE.on || !LIVE.stream || !LIVE.cbr) return;
+  const head = livePlayhead();
+  // 播放头跑到了我们前面（换过音频、长时间缓冲、进度恢复），重新对齐再喂。
+  if (LIVE.next < head - 2) {
+    liveClearRows();
+    liveRebuildStream();
+    return;
+  }
+  const target = Math.min(liveAudioDuration(), head + liveLeadSec());
+  const started = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  let guard = 0;
+  while (LIVE.on && gen === LIVE.pumpGen && LIVE.next < target - 1 && guard < 4) {
+    guard += 1;
+    const need = Math.max(4, Math.min(LIVE_FETCH, target - LIVE.next + 1));
+    let win;
+    try {
+      win = await liveFetchWindow(LIVE.next, need);
+    } catch (err) {
+      LIVE.fail += 1;
+      const msg = '音频片段取不到，正在重试（第 ' + LIVE.fail + ' 次）：'
+        + (err && err.message ? err.message : err);
+      if (LIVE.fail >= 6) liveSetText(msg, 'err');
+      return;
+    }
+    if (!LIVE.on || !LIVE.stream || gen !== LIVE.pumpGen) return;
+    if (!win || !win.pcm || !win.pcm.length) return;
+    LIVE.fail = 0;
+    // 窗口起点可能和已喂过的位置重叠几帧，切掉重叠部分，时间轴才连续。
+    let pcm = win.pcm, start = win.start;
+    if (start < LIVE.next) {
+      const skipN = Math.min(pcm.length, Math.round((LIVE.next - start) * LIVE_RATE));
+      if (skipN > 0) { pcm = pcm.subarray(skipN); start += skipN / LIVE_RATE; }
+    }
+    if (!pcm.length) return;
+    // 解码窗口会多带一点（按帧对齐），截到本轮目标位置，提前量才准。
+    const wantEnd = LIVE.next + need;
+    if (start + pcm.length / LIVE_RATE > wantEnd) {
+      const keep = Math.max(1, Math.round((wantEnd - start) * LIVE_RATE));
+      pcm = pcm.subarray(0, keep);
+    }
+    try {
+      LIVE.stream.addAudio(pcm, LIVE_RATE);
+      LIVE.stream.transcribe();
+    } catch (err) {
+      liveDisable('识别引擎出错，已停止实时识别：' + (err && err.message ? err.message : err));
+      return;
+    }
+    LIVE.fed += pcm.length;
+    LIVE.next = start + pcm.length / LIVE_RATE;
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    if (now - started > LIVE_BUDGET_MS) break;
+  }
+}
+
+function liveStartPump() {
+  // 不能用“正在跑”挡住重启：rebuild 常常是在一次 pump 内部同步触发的，
+  // 这时 pumping 还是 true，挡住就再也不会有人调度下一轮（表现为识别停住）。
+  // 在飞的旧泵靠 pumpGen 判断自己过期，不会重复喂音频。
+  if (LIVE.pumpTimer) return;
+  const gen = LIVE.pumpGen;
+  const tick = () => {
+    LIVE.pumpTimer = 0;
+    if (!LIVE.on || gen !== LIVE.pumpGen) return;
+    LIVE.pumping = true;
+    livePumpOnce(gen).catch(() => {}).then(() => {
+      LIVE.pumping = false;
+      liveUpdateMeter();
+      if (LIVE.on && gen === LIVE.pumpGen) LIVE.pumpTimer = setTimeout(tick, 280);
+    });
+  };
+  LIVE.pumpTimer = setTimeout(tick, 0);
+}
+
+function liveStopPump() {
+  LIVE.pumpGen += 1;          // 在飞的 pump 用它判断“自己已经过期”
+  if (LIVE.pumpTimer) clearTimeout(LIVE.pumpTimer);
+  LIVE.pumpTimer = 0;
+}
+
+async function liveLoadEngine() {
+  if (LIVE.engine) return LIVE.engine;
+  // 多线程 WASM 要 SharedArrayBuffer，而 SAB 只在跨域隔离页面可用；这里提前拦，
+  // 否则 Emscripten 的 pthread 引导会抛一个没人接的 DataCloneError，await 永远挂住。
+  if (!self.crossOriginIsolated) throw new Error('识别引擎需要跨域隔离（COOP/COEP），请刷新页面后重试');
+  const base = LIVE_ENGINE.replace(/index\.js$/, '');
+  const [mod, moduleMod] = await Promise.all([import(LIVE_ENGINE), import(base + 'module.js')]);
+  if (!mod || typeof mod.Transcriber !== 'function') throw new Error('识别引擎模块加载异常');
+  const wasm = await moduleMod.loadMoonshineModule();
+  // 目录加载接口拿不到带 attention 的解码器（catalog 清单里没有它），
+  // 所以自己按清单拼 URL：词级时间戳依赖 decoder_kv_with_attention.ort，
+  // 只设 word_timestamps=true 而不给这个文件，只会得到没有 words 的句子。
+  const files = {};
+  let baseUrl = '';
+  try {
+    // sttDependencies 返回的是 JSON 字符串（ABI 里是 std::string），不是对象。
+    const manifest = JSON.parse(wasm.sttDependencies('en', String(LIVE_ARCH), false));
+    (manifest.groups || []).forEach(group => {
+      if (!baseUrl && group.base_url) baseUrl = String(group.base_url).replace(/\/$/, '');
+      (group.files || []).forEach(f => { if (f && f.name && f.url) files[f.name] = f.url; });
+    });
+  } catch (err) {
+    throw new Error('读不出模型清单：' + (err && err.message ? err.message : err));
+  }
+  if (!Object.keys(files).length) throw new Error('模型清单为空');
+  if (baseUrl) files['decoder_kv_with_attention.ort'] = baseUrl + '/decoder_kv_with_attention.ort';
+  const engine = await mod.Transcriber.loadFromUrls(files, {
+    modelArch: LIVE_ARCH,
+    module: wasm,
+    options: { word_timestamps: 'true' },
+    onProgress: (a, b, c) => {
+      if (!LIVE.busy) return;
+      const text = liveProgressText(a, b, c);
+      if (text !== LIVE.progressText) { LIVE.progressText = text; liveSetText(text, 'busy'); }
+    },
+  });
+  LIVE.engine = engine;
+  return engine;
+}
+
+function liveCloseStream() {
+  if (!LIVE.stream) return;
+  try { LIVE.stream.stop(); } catch (e) {}
+  try { LIVE.stream.close(); } catch (e) {}
+  LIVE.stream = null;
+}
+
+function liveClearRows() {
+  LIVE.order.forEach(id => { const row = LIVE.rows.get(id); if (row) row.el.remove(); });
+  LIVE.rows.clear();
+  LIVE.order.length = 0;
+  LIVE.activeRow = '';
+  LIVE.cursor = 0;
+}
+
+// 换集、跳转、倍速都会让“PCM 时间轴”和播放器时间轴脱钩，直接重建一段新流。
+function liveRebuildStream() {
+  if (!LIVE.engine) return;
+  liveCloseStream();
+  const stream = LIVE.engine.createStream({ updateInterval: 0.5 });
+  LIVE.session += 1;
+  const session = LIVE.session;
+  stream.addListener({
+    onLineStarted: e => liveRenderLine(session, e.line),
+    onLineTextChanged: e => liveRenderLine(session, e.line),
+    onLineUpdated: e => liveRenderLine(session, e.line),
+    onLineCompleted: e => liveRenderLine(session, e.line),
+    onError: e => console.warn('[live] ASR', e.error && e.error.message ? e.error.message : e.error),
+  });
+  stream.start();
+  LIVE.stream = stream;
+  LIVE.fed = 0;
+  LIVE.anchorMedia = livePlayhead();
+  LIVE.next = LIVE.anchorMedia;   // 从这个播放点开始往后喂
+  LIVE.fail = 0;
+  LIVE.text = '';
+  liveStopPump();
+  liveStartPump();
+}
+
+function liveRenderLine(session, line) {
+  if (session !== LIVE.session || !line) return;
+  if (box.querySelector('.empty')) box.innerHTML = '';
+  // 每次重建流 line.id 都会从头开始，带上 session 才不会把旧行覆盖掉。
+  const key = session + ':' + line.id;
+  let row = LIVE.rows.get(key);
+  if (!row) {
+    row = { el: document.createElement('div'), words: [], lastIdx: -1, sig: '', start: liveMediaOf(line.startTime) };
+    row.el.className = 'cue live';
+    LIVE.rows.set(key, row);
+    LIVE.order.push(key);
+    box.append(row.el);
+    if (LIVE.order.length > 240) {      // 只留最近若干句，长播客不会把 DOM 撑爆
+      const drop = LIVE.order.shift();
+      const old = LIVE.rows.get(drop);
+      if (old) { old.el.remove(); LIVE.rows.delete(drop); }
+    }
+    liveUpdateMeter();
+  }
+  const words = (line.words || []).map(w => ({ t: w.text, s: liveMediaOf(w.start), e: liveMediaOf(w.end) }));
+  const sig = line.text + '|' + words.length + '|' + (line.isComplete ? '1' : '0');
+  if (row.sig !== sig) {
+    row.sig = sig;
+    row.lastIdx = -1;
+    const frag = document.createDocumentFragment();
+    const stamp = document.createElement('span');
+    stamp.className = 'stamp';
+    stamp.textContent = fmt(liveMediaOf(line.startTime));
+    frag.append(stamp);
+    row.words = [];
+    if (words.length) {
+      words.forEach(w => {
+        const span = document.createElement('span');
+        span.className = 'word pending';
+        span.textContent = w.t;
+        span.addEventListener('click', ev => { ev.stopPropagation(); seekTo(w.s); });
+        frag.append(span, document.createTextNode(' '));
+        row.words.push({ el: span, s: w.s, e: w.e });
+      });
+    } else {
+      const span = document.createElement('span');
+      span.textContent = line.text;
+      frag.append(span);
+    }
+    row.el.replaceChildren(frag);
+    row.el.classList.toggle('done', !!line.isComplete);
+  }
+  // 视野跟着播放头走，而不是跟着“已经生成到哪”：提前量一大，最新一行还在
+  // 60 秒之后，滚过去会把读者从正在读的位置拽走。
+}
+
+// 实时模式下由 paint() 转到这里：只驱动逐词高亮与进度显示。
+function liveAdvance() {
+  const t = liveMediaTime();
+  $('now').textContent = fmt(t);
+  $('seek').setAttribute('aria-valuetext', fmt(t) + ' / ' + fmt(state.audioSeconds || audio.duration || 0));
+  if (Number.isFinite(audio.duration) && audio.duration > 0) {
+    const pct = Math.min(100, Math.max(0, (audio.currentTime || 0) / audio.duration * 100));
+    $('seek').value = String(Math.round(pct * 10));
+    $('pfill').style.width = pct + '%';
+  }
+  const order = LIVE.order;
+  if (!order.length) return;
+  // 行按时间递增。提前量会把最新一行排到播放头之后几十秒，所以不能只看末尾几行：
+  // 用游标前后微调，找到播放头所在行，再只给它和相邻行上色。
+  const startOf = i => { const r = LIVE.rows.get(order[i]); return r ? r.start : Infinity; };
+  let ci = Math.max(0, Math.min(LIVE.cursor, order.length - 1));
+  while (ci > 0 && startOf(ci) > t) ci -= 1;
+  while (ci < order.length - 1 && startOf(ci + 1) <= t) ci += 1;
+  LIVE.cursor = ci;
+  let activeId = '';
+  for (let i = Math.max(0, ci - 1); i <= Math.min(order.length - 1, ci + 1); i++) {
+    const id = order[i];
+    const row = LIVE.rows.get(id);
+    if (!row || !row.words.length) continue;
+    // 只有播放头所在的那一行在推进；它前面的收成 past，后面的保持 pending，
+    // 否则两行时间有重叠时会出现两个 .word.active。
+    let idx;
+    if (i < ci) idx = row.words.length;
+    else if (i > ci) idx = -1;
+    else {
+      idx = -1;
+      for (let k = 0; k < row.words.length; k++) { if (t >= row.words[k].s) idx = k; else break; }
+    }
+    if (idx >= 0) activeId = id;
+    if (idx === row.lastIdx) continue;
+    row.words.forEach((w, k) => {
+      const el = w.el;
+      el.classList.remove('active', 'past', 'pending');
+      el.classList.add(k === idx ? 'active' : (k < idx ? 'past' : 'pending'));
+    });
+    row.lastIdx = idx;
+    row.el.classList.toggle('active', idx >= 0 && i === ci);
+    if (idx >= 0 && i === ci) scrollWord(row.words[idx].el);
+  }
+  // 窗口外的旧行不会每帧重算，所以活动行换人时把上一行彻底收尾，
+  // 否则 .word.active 会一直停在很早以前那个词上。
+  if (LIVE.activeRow !== activeId) {
+    const prev = LIVE.rows.get(LIVE.activeRow);
+    if (prev && prev.words.length) {
+      prev.words.forEach(w => { w.el.classList.remove('active', 'pending'); w.el.classList.add('past'); });
+      prev.lastIdx = prev.words.length - 1;
+      prev.el.classList.remove('active');
+    }
+    LIVE.activeRow = activeId;
+  }
+}
+
+function liveDisable(hint) {
+  LIVE.on = false;
+  LIVE.mode = 'idle';
+  LIVE.session += 1;
+  liveStopPump();
+  liveCloseStream();
+  liveClearRows();
+  document.body.classList.remove('live-on');
+  $('liveBtn').setAttribute('aria-pressed', 'false');
+  $('liveBtn').classList.remove('on');
+  $('liveBar').hidden = true;
+  $('liveMeter').style.width = '0%';
+  if (state.base) renderCues();
+  if (hint) showToast(hint, 5000);
+}
+
+// 页面默认不是跨域隔离的（GitHub Pages 不能设响应头）。同源 Service Worker 会在
+// 下一次导航时给文档补 COOP/COEP:credentialless，所以这里只负责注册并请用户刷新一次。
+async function liveEnsureIsolation() {
+  if (self.crossOriginIsolated) return 'ready';
+  if (!('serviceWorker' in navigator)) return 'unsupported';
+  try {
+    await navigator.serviceWorker.register('live-sw.js', { scope: './' });
+    await navigator.serviceWorker.ready;
+    return 'reload';
+  } catch (e) {
+    return 'unsupported';
+  }
+}
+
+async function liveEnable() {
+  if (LIVE.busy || LIVE.on) return;
+  if (!state.current) { showToast('先选一集，再开启实时识别。'); return; }
+  const src = audio.currentSrc || audio.getAttribute('src') || '';
+  if (!src) { showToast('这一集没有可采集的音频地址。'); return; }
+  LIVE.busy = true;
+  LIVE.mode = 'busy';
+  LIVE.progressText = '';
+  LIVE.text = '';
+  $('liveBtn').classList.add('busy');
+  $('liveBar').hidden = false;
+  $('liveStopBtn').textContent = '停止';
+  liveSetText('检查运行环境…', 'busy');
+  try {
+    const iso = await liveEnsureIsolation();
+    if (iso !== 'ready') {
+      LIVE.mode = 'needReload';
+      $('liveStopBtn').textContent = iso === 'reload' ? '刷新页面' : '关闭';
+      if (iso === 'reload') {
+        // 记住这次意图，刷新回来自动接着开，不用再点一次。
+        try { sessionStorage.setItem('myt-live-auto', '1'); } catch (e) {}
+        liveSetText('需要刷新一次以启用跨域隔离，刷新后会自动继续', 'busy');
+      } else {
+        liveSetText('这个浏览器不支持 Service Worker，实时识别不可用', 'err');
+      }
+      return;
+    }
+    LIVE.session += 1;
+    const session = LIVE.session;
+    if (LIVE.audioUrl !== src || !LIVE.cbr) {
+      LIVE.audioUrl = src;
+      LIVE.cbr = null;
+      liveSetText('解析音频格式…', 'busy');
+      LIVE.cbr = await liveProbeAudio();
+    }
+    if (LIVE.session !== session) return;
+    if (!LIVE.ctx) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) throw new Error('这个浏览器不支持 Web Audio 解码');
+      LIVE.ctx = new Ctx({ sampleRate: LIVE_RATE });
+    }
+    liveSetText('下载识别模型…', 'busy');
+    const engine = await Promise.race([
+      liveLoadEngine(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('识别引擎加载超时（首次需下载约 40 MB 模型，缓存后秒开）')), 120000)),
+    ]);
+    if (!engine) throw new Error('识别引擎未就绪');
+    LIVE.on = true;
+    LIVE.mode = 'on';
+    document.body.classList.add('live-on');
+    $('liveBtn').setAttribute('aria-pressed', 'true');
+    $('liveBtn').classList.add('on');
+    liveClearRows();
+    liveRebuildStream();
+    liveSetText('实时识别中', 'on');
+    status('实时识别已开启：正文显示本次播放的实时识别结果，原文字稿未被改动。', 'good');
+  } catch (err) {
+    const msg = err && err.message ? err.message : String(err);
+    LIVE.mode = 'failed';
+    document.body.classList.remove('live-on');
+    liveSetText('实时识别不可用：' + msg, 'err');
+    showToast('实时识别不可用：' + msg, 9000);
+    $('liveBtn').setAttribute('aria-pressed', 'false');
+    $('liveBtn').classList.remove('on');
+    LIVE.on = false;
+    liveStopPump();
+    liveCloseStream();
+    $('liveMeter').style.width = '0%';
+  } finally {
+    LIVE.busy = false;
+    $('liveBtn').classList.remove('busy');
+  }
+}
+
+// 换集之后音频换了：重新探测格式，识别流从新的播放点重建。
+async function liveFollowCurrentEpisode() {
+  if (!LIVE.on) return;
+  const src = audio.currentSrc || audio.getAttribute('src') || '';
+  if (!src) return;
+  LIVE.session += 1;
+  const session = LIVE.session;
+  LIVE.audioUrl = src;
+  LIVE.cbr = null;
+  try {
+    liveSetText('解析音频格式…', 'on');
+    LIVE.cbr = await liveProbeAudio();
+    if (LIVE.session !== session) return;
+    liveClearRows();
+    liveRebuildStream();
+  } catch (err) {
+    const msg = err && err.message ? err.message : String(err);
+    liveSetText('实时识别不可用：' + msg, 'err');
+  }
+}
+
+$('liveBtn').onclick = () => { if (LIVE.on) liveDisable('已停止实时识别，正文回到原文字稿。'); else liveEnable(); };
+$('liveStopBtn').onclick = () => {
+  if (LIVE.mode === 'needReload') { location.reload(); return; }
+  liveDisable('已停止实时识别，正文回到原文字稿。');
+};
+audio.addEventListener('seeked', () => {
+  if (!LIVE.on) return;
+  // 音频重载、缓冲重试也会发 seeked；位置几乎没变时别把刚识别出来的行清掉。
+  if (Math.abs(livePlayhead() - LIVE.anchorMedia) < 2) return;
+  liveClearRows();
+  liveRebuildStream();
+});
+audio.addEventListener('ended', () => {
+  if (LIVE.on && LIVE.stream) { try { LIVE.stream.transcribe(1); } catch (e) {} }
+});
+
+// 刷新回来接着开：第一次启用要先装 Service Worker 再刷新，不该让用户再点一次。
+(function liveAutoResume() {
+  let flag = '';
+  try { flag = sessionStorage.getItem('myt-live-auto') || ''; } catch (e) {}
+  if (!flag) return;
+  let tries = 0;
+  const attempt = () => {
+    tries += 1;
+    if (!self.crossOriginIsolated || !document.body.classList.contains('player-open') || !state.current) {
+      if (tries < 60) setTimeout(attempt, 250);
+      return;
+    }
+    try { sessionStorage.removeItem('myt-live-auto'); } catch (e) {}
+    liveEnable();
+    if (audio.paused) audio.play().catch(() => {});
+  };
+  setTimeout(attempt, 600);
+})();
+
 function applyEpisodeData(vtt, sidecar, zhVtt) {
   state.vtt = vtt; state.sidecar = sidecar; state.zhVtt = zhVtt;
   state.base = { vtt, sidecar, zhVtt };
@@ -2637,6 +3274,8 @@ function selectEpisode(item, keepDrawer = false) {
   audio.load();
   if (audioUrl) { audio.src = audioUrl; audio.load(); }
   audio.playbackRate = prefs.speed || 1;
+  // 换集会换掉音频字节与时间轴：上一集的实时结果必须清掉，再按新音频重建。
+  if (LIVE.on) { liveClearRows(); liveRebuildStream(); liveFollowCurrentEpisode(); }
   if (app.autoplay) { app.autoplay = false; audio.play().catch(() => {}); }
   state.audioSeconds = 0; state.timeScale = 1; state.seekRaw = 0;
   $('total').textContent = '00:00'; $('now').textContent = '00:00';
@@ -3104,7 +3743,7 @@ const app = {
   discover: { query: '', category: '', sort: 'default', sub: 'all', transcripts: false },
   online: { query: '', loading: false, results: [], sources: [], piError: '', error: '', seq: 0, cache: new Map(), visible: 20 },
 };
-let prefs = { speed: 1, autoNext: false, remember: true };
+let prefs = { speed: 1, autoNext: false, remember: true, liveLead: LIVE_LEAD_DEFAULT };
 const PAGE_NAMES = {
   home: '首页', library: '播客库', discover: '发现', search: '搜索', podcast: '节目详情',
   episode: '单集详情', player: '播放器', queue: '播放队列', history: '收听历史',
@@ -4400,6 +5039,7 @@ function renderSettings() {
   const auto = $('setAutoNext'); if (auto) auto.setAttribute('aria-checked', String(!!prefs.autoNext));
   const remember = $('setRemember'); if (remember) remember.setAttribute('aria-checked', String(prefs.remember !== false));
   const lang = $('setLang'); if (lang) lang.value = reader.lang;
+  const lead = $('setLiveLead'); if (lead) lead.value = String(liveLeadSec());
   const fields = [['setScale', reader.scale, 'setScaleOut', reader.scale + '%'], ['setLh', reader.lh, 'setLhOut', Number(reader.lh).toFixed(2)],
     ['setWidth', reader.width, 'setWidthOut', reader.width + ' px'], ['setGap', reader.gap, 'setGapOut', reader.gap + ' px'],
     ['setPending', reader.pending, 'setPendingOut', reader.pending + '%']];
@@ -4961,6 +5601,11 @@ function bindShell() {
   $('setAutoNext').onclick = () => { prefs.autoNext = !prefs.autoNext; savePrefs(); $('setAutoNext').setAttribute('aria-checked', String(prefs.autoNext)); };
   $('setRemember').onclick = () => { prefs.remember = prefs.remember === false; savePrefs(); $('setRemember').setAttribute('aria-checked', String(prefs.remember !== false)); };
   $('setLang').onchange = event => { reader.lang = event.target.value; applyReader(); rebuildCues(); };
+  $('setLiveLead').onchange = event => {
+    prefs.liveLead = Math.max(0, Math.min(600, Number(event.target.value) || 0));
+    savePrefs();
+    if (LIVE.on) liveUpdateMeter();
+  };
   [['setScale', 'scale', 'setScaleOut', value => value + '%'], ['setLh', 'lh', 'setLhOut', value => Number(value).toFixed(2)],
     ['setWidth', 'width', 'setWidthOut', value => value + ' px'], ['setGap', 'gap', 'setGapOut', value => value + ' px'],
     ['setPending', 'pending', 'setPendingOut', value => value + '%']].forEach(([id, key, outId, label]) => {

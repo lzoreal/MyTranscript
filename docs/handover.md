@@ -514,3 +514,19 @@ translate / align 两条已在 2026-11-14 删除。
   `publish_site.merge_state_records` 里首次并入 `progress.json`，其中 3 集只有 VTT 的
   记录继续按 VTT 发布，直到它们跑出 JSON；
 - `scraper.is_episode_processed` 认得 `json/` 下的产物，VTT 归档后 feed 不会被清空。
+
+### 播放页实时逐词字幕（2026-11-16）
+
+- 链路：`fetch(音频 URL, {headers:{Range}})` 按时间窗抓字节（需 CORS）→ 按 CBR 码率把 `播放位置 + 提前量` 换算成字节偏移，前后留余量 → 扫 MP3 帧重同步到帧边界 → 走帧到目标时长（防止服务端忽略 Range 解出整集）→ `AudioContext({sampleRate:16000})` 解成 16 kHz 单声道 PCM → `Moonshine tiny-streaming`（`@moonshine-ai/moonshine-wasm@0.1.6`，jsDelivr 动态 import）→ 正文逐词行渲染。**`<audio>` 完全不动**：不改 `crossOrigin`、不建 `createMediaElementSource`，所以失败模式只是「拿不到字节」，不会把音频图锁死或变哑。
+- 为什么不用 `MediaElementAudioSource` 采集：采集拿到的永远是「已经播出去」的音频，比播放头晚，不可能「提前 s 秒」生成。要提前，必须自己解还没播到的音频。
+- 为什么不是整文件下载：megaphone 顺序下载实测只有 150~240 KB/s，45 MB 的整集约 3~5 分钟；而且播放器常从记住的位置（如 918 秒）直接开播，顺序下载完全服务不了那个位置。Range 窗口方案在 918 秒处开启 4 秒内就出词级行。
+- 格式探针：先用 Range 取 0~128 KB，跳过 ID3v2（读 size 字段）找首帧，再走 256 帧确认码率/采样率恒定，得到 `{origin, bps = br/8, sr, spf}` 的 CBR 描述。VBR 与非 MP3 直接给明确错误（「这个音频是可变码率 MP3，暂时不支持提前生成」/「这个音频不是 MP3，暂时只支持 MP3 的提前生成」），不再兜底整集下载。
+- 「提前量」是设置页「实时字幕提前量」（`prefs.liveLead`，默认 60 秒，可选 0/15/30/60/120/300，0 表示只跟随播放）。pump 每 280 ms 把音频喂到 `min(总时长, 播放位置 + 提前量)`，每轮有 220 ms CPU 预算、每次按 Range 取 30 秒窗口。解码窗口按帧对齐会多带一两秒，喂之前要截到 `本轮起点 + 需要多少秒`，否则提前量会系统性偏大（实测 15 秒档偏移到 17~18 秒）。
+- 播放头行用游标定位（行按时间递增），提前量会让最新一行排到播放头之后几十秒，所以**不能**用「最后几行」判断高亮；未播到的词是 `pending` 样式，视野跟着播放头走。游标行之前的行整体收成 `past`、之后整体保持 `pending`，只有游标行推进 `.word.active`——两行时间有重叠时否则会同时出现两个 active。
+- 三种「播放头与喂音频起点脱钩」的入口都要管住：①`seeked` 里如果位置和当前起点差不到 2 秒就**不清行也不重建**（音频重载、缓冲重试也会发 `seeked`，否则会把刚识别出来的行清掉）；②pump 每轮开头若发现 `next < 播放头 - 2`，说明播放头跑到前面去了（换过音频、长时间缓冲、进度恢复），清行重建重新对齐；③重建时 `next` 重置到当前播放头。
+- pump 的重启不能被「正在跑」挡住：重建经常是在一次 pump 内部同步触发的，此时 `pumping` 仍是 true，若 `liveStartPump()` 因此提前 return，就再也没人调度下一轮，表现为「状态条停在实时识别中、一行都不出」。在飞的旧泵靠 `pumpGen` 代际号判断自己过期，不会重复喂音频。
+- 状态条文案每轮都更新（`liveUpdateMeter`）：一句都没识别出来时也要显示「正在取音频…」或「音频片段取不到，正在重试（第 N 次）」，否则取字节失败会被完全静默掉（之前出现过 24 秒无输出、界面却停在“实时识别中”）。
+- `site/live-sw.js` 是同源 Service Worker，只给 `mode==='navigate'` 的同源文档响应补 `COOP: same-origin` + `COEP: credentialless`。Moonshine 默认构建是多线程 WASM，`SharedArrayBuffer` 只在跨域隔离页面可用，而 GitHub Pages 不能自定义响应头，所以靠 SW 补；用 `credentialless` 而不是 `require-corp`，避免挡掉没有 CORP 的封面图。首次点「实时识别」会提示刷新一次，此时把意图写进 `sessionStorage['myt-live-auto']`，刷新回来后自动接着开（不用再点）。
+- 词级时间戳依赖 `decoder_kv_with_attention.ort`，而目录加载 `Transcriber.load` 的清单里没有这个文件：必须 `JSON.parse(wasm.sttDependencies('en','2',false))`（ABI 返回 JSON 字符串，不是对象）拿到 `base_url`，自己补上 attention 解码器的 URL 再走 `Transcriber.loadFromUrls`。只设 `word_timestamps:'true'` 不给文件，只会得到没有 `words` 的句子（已实测）。
+- 首轮要下载约 40 MB 模型（进浏览器 Cache Storage），之后秒开；`updateInterval` 用 0.5 s。本机用 `python -m http.server 8765 --directory site`（不设任何响应头）即可验证全链路，因为隔离头来自 SW。
+- 已知约束：只支持 CBR MP3（m4a/aac、VBR MP3 会明确报错）；直播/边录边播的流不在支持范围。停止实时识别、退出页面、刷新都会让正文回到原本的 VTT / 词级 JSON 渲染，原文字稿不受影响（实测 288 句 / 3881 词原样恢复，播放不中断）。
