@@ -258,7 +258,7 @@ class PlayerShellTests(unittest.TestCase):
         for needle in ['class="app"', 'id="page-home"', 'id="page-library"',
                        'id="page-discover"', 'id="page-settings"',
                        'id="miniPlayer"', 'function applyRoute', 'function routeHash',
-                       'myt-subs', 'parseOpml']:
+                       'myt-subs', 'parseOpml', 'el.dataset.openEpisode !== undefined']:
             self.assertIn(needle, page)
 
 
@@ -429,6 +429,41 @@ class PlayerThemeContrastTests(unittest.TestCase):
                 for surface in ("bg", "panel"):
                     ratio = self._contrast(tokens[key], tokens[surface])
                     self.assertGreaterEqual(ratio, floor, f"{name}.{key} on {surface}: {ratio:.2f}")
+
+
+class PlayerRemovalRoutingTests(unittest.TestCase):
+    HARNESS = """
+const assert = require('assert');
+%s
+assert.strictEqual(removalLeavesCurrentShow({page: 'podcast', args: ['ext-x']}, 'ext-x'), true);
+assert.strictEqual(removalLeavesCurrentShow({page: 'episode', args: ['ext-x', 'e1']}, 'ext-x'), true);
+assert.strictEqual(removalLeavesCurrentShow({page: 'player', args: ['ext-x', 'e1']}, 'ext-x'), true);
+assert.strictEqual(removalLeavesCurrentShow({page: 'settings', args: []}, 'ext-x'), false);
+assert.strictEqual(removalLeavesCurrentShow({page: 'podcast', args: ['ext-y']}, 'ext-x'), false);
+assert.strictEqual(removalLeavesCurrentShow({page: 'podcast', args: []}, ''), false);
+"""
+
+    def test_removing_the_open_show_returns_home(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node 不在 PATH，跳过播放器逻辑测试")
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        source = self.HARNESS % page[page.index("function removalLeavesCurrentShow"):page.index("function unsubscribeKey")]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            script = Path(temp_dir) / "removal_route.js"
+            script.write_text(source, encoding="utf-8")
+            proc = subprocess.run([node, str(script)], capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+
+class PlayerBuiltinImportTests(unittest.TestCase):
+    def test_builtin_sources_require_explicit_import(self):
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        self.assertIn("if (stored == null) {\n    app.subs = [];", page)
+        self.assertIn("function openBuiltinImport", page)
+        self.assertIn('id="libBuiltinBtn"', page)
+        self.assertIn('id="discoverBuiltinBtn"', page)
+        self.assertIn('data-action="import-builtin"', page)
 
 
 if __name__ == "__main__":

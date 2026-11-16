@@ -91,7 +91,7 @@
 
 | 键 | 内容 |
 | --- | --- |
-| `myt-subs` | 订阅数组；不存在时默认订阅全部内置节目，存在（含空数组）时按存储为准 |
+| `myt-subs` | 订阅数组；不存在时为空，内置源需显式选择导入 |
 | `myt-progress` | 每集 `{t,d,at,show,title,img,key,feed}`；旧 `{t,d,at}` 兼容 |
 | `myt-queue` | 队列数组（节目/单集元数据） |
 | `myt-bookmarks` | 句级书签 `{id,key,ep,show,title,t,en,zh,at}` |
@@ -107,7 +107,7 @@
 
 ### 订阅
 
-内置节目默认全部订阅（无 feed 的 the-pragmatic-engineer 不计入）。
+内置节目首次启动不自动订阅；用户通过发现页/播客库的「选择导入内置源」或单节目订阅按钮显式导入（无 feed 的 the-pragmatic-engineer 不计入）。
 站外节目以 `ext-<hash>` 作为 key；`feed` 为绝对 URL。
 
 添加站外节目流程：

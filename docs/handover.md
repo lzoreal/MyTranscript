@@ -119,7 +119,7 @@ site/
 
 | 键 | 内容 |
 | --- | --- |
-| `myt-subs` | 订阅；不存在时默认全部内置节目，存在（含空数组）时以存储为准 |
+| `myt-subs` | 订阅；不存在时为空（不再自动订阅内置源），通过「选择导入内置源」或单节目订阅显式导入 |
 | `myt-progress` | 每集 `{t,d,at,show,title,img,key,feed}`；兼容旧 `{t,d,at}` |
 | `myt-queue` / `myt-bookmarks` / `myt-notes` | 队列、句级书签、笔记 |
 | `myt-prefs` | 默认倍速、自动连播、记住位置 |
