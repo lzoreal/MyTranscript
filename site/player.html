@@ -2635,7 +2635,9 @@ function liveFollow(el) {
 const LIVE_RATE = 16000;
 const LIVE_ENGINE = 'https://cdn.jsdelivr.net/npm/@moonshine-ai/moonshine-wasm@0.1.6/dist/index.js';
 const LIVE_ARCH = 2;   // ModelArch.TinyStreaming：先跑通再换 Small / Medium 对比
-const LIVE_LEAD_DEFAULT = 15;   // 默认提前 15 秒：实测识别吞吐才是上限，60 秒只是把缓冲堆得更满
+const LIVE_LEAD_DEFAULT = 60;   // 默认提前 60 秒（用户最初要的 1 分钟）。单流接管后识别侧能稳定跑在
+                                // 播放前面 60 秒（实测 59~60 秒连续 60 秒不抖），所以不再需要为了
+                                // “堆不满”把它压到 15 秒；想要低延迟的读者可以在设置里选 15 秒。
 const LIVE_FETCH = 10;          // 每次按 Range 取多少秒的音频字节。取小单次快但弱网下请求次数太多、
                                 // 一轮赶不上播放；取 10 秒把请求数砍掉四成，decodeAudioData 在后台线程解码，峰值可接受。
 const LIVE_BUDGET_MS = 220;     // 每轮最多让识别占用多久，避免卡住界面/播放。实测单次 transcribe
@@ -2703,6 +2705,17 @@ function liveLeadSec() {
   const v = Number(prefs.liveLead);
   if (Number.isFinite(v) && v >= 0) return Math.min(600, v);
   return LIVE_LEAD_DEFAULT;
+}
+
+// 设置页那个下拉只有 0/15/30/60/120/300 六个值。提前量算出来的值不在列表里（比如
+// 老缓存里没这个键、或者曾被写成别的数字）时，直接把 select 设成那个值会被浏览器
+// 拒绝、停在第一项 “0 秒”，用户看到的就是“设置显示 0 秒、实际提前 60 秒”。
+function syncLiveLeadSelect() {
+  const el = $('setLiveLead');
+  if (!el) return;
+  const sec = String(liveLeadSec());
+  if (Array.prototype.some.call(el.options, o => o.value === sec)) el.value = sec;
+  else el.value = String(LIVE_LEAD_DEFAULT);
 }
 
 // 只取需要的那一段字节：整集顺序下载既慢又重，而且一跳到别处就没法用。
@@ -5625,7 +5638,7 @@ function renderSettings() {
   const auto = $('setAutoNext'); if (auto) auto.setAttribute('aria-checked', String(!!prefs.autoNext));
   const remember = $('setRemember'); if (remember) remember.setAttribute('aria-checked', String(prefs.remember !== false));
   const lang = $('setLang'); if (lang) lang.value = reader.lang;
-  const lead = $('setLiveLead'); if (lead) lead.value = String(liveLeadSec());
+  const lead = $('setLiveLead'); if (lead) syncLiveLeadSelect();
   const mse = $('setLiveMse'); if (mse) mse.setAttribute('aria-checked', String(!!prefs.liveMse));
   const fields = [['setScale', reader.scale, 'setScaleOut', reader.scale + '%'], ['setLh', reader.lh, 'setLhOut', Number(reader.lh).toFixed(2)],
     ['setWidth', reader.width, 'setWidthOut', reader.width + ' px'], ['setGap', reader.gap, 'setGapOut', reader.gap + ' px'],
