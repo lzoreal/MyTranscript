@@ -2641,6 +2641,22 @@ const LIVE_ARCH = (() => {
   const v = m ? Number(m[1]) : 2;
   return [2, 3, 4, 5].includes(v) ? v : 2;
 })();
+// 识别引擎：sherpa-onnx 流式 zipformer（带逐 token 时间戳）是默认引擎；
+// 加 ?engine=moonshine 退回 Moonshine 流式（它基本不给词时间，逐词高亮只能均分）。
+const LIVE_ENGINE_KIND = /[?&]engine=moonshine/.test(location.search) ? 'moonshine' : 'sherpa';
+const SHERPA_CDN = 'https://cdn.jsdelivr.net/npm/@siteed/sherpa-onnx.rn@1.1.2/wasm/';
+// github 的 tar.bz2 在浏览器里解不了，所以从 Hugging Face 按单文件取（和我们取音频一样走 XHR）。
+const SHERPA_BASE = 'https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-en-20M-2023-02-17/resolve/main/';
+const SHERPA_FILES = {
+  encoder: 'encoder-epoch-99-avg-1.int8.onnx',
+  decoder: 'decoder-epoch-99-avg-1.int8.onnx',
+  joiner: 'joiner-epoch-99-avg-1.int8.onnx',
+  tokens: 'tokens.txt',
+};
+// 流式 zipformer 在「发出 token 的 encoder 帧」上报时间，比词的真实起点晚一个 chunk。
+// AntennaPod 在 en-20M 上实测中位 400 ms，这里照抄同一个常数。
+const SHERPA_LAG = 0.4;
+const SHERPA_CACHE = 'myt-sherpa-model';
 const LIVE_LEAD_DEFAULT = 60;   // 默认提前 60 秒（用户最初要的 1 分钟）。单流接管后识别侧能稳定跑在
                                 // 播放前面 60 秒（实测 59~60 秒连续 60 秒不抖），所以不再需要为了
                                 // “堆不满”把它压到 15 秒；想要低延迟的读者可以在设置里选 15 秒。
@@ -3225,7 +3241,11 @@ async function livePumpOnce(gen) {
         off += chunk.length;
         LIVE.fed += chunk.length;
         LIVE.next = cur.start + off / LIVE_RATE;
-        if (LIVE.fed - LIVE.lastTr >= LIVE_TR_BATCH) {
+        // 识别多久跑一次：Moonshine 每 2 秒攒一批（它的 transcribe 一次 100~200 ms，
+        // 跑太勤界面会顿）；sherpa 是增量解码，单次便宜得多，0.5 秒一片就跟着解一次，
+        // 高亮才跟得上词。
+        const trBatch = LIVE.engine && LIVE.engine.kind === 'sherpa' ? LIVE_SLICE : LIVE_TR_BATCH;
+        if (LIVE.fed - LIVE.lastTr >= trBatch) {
           LIVE.stream.transcribe();
           LIVE.lastTr = LIVE.fed;
           break;   // 一轮只跑一次识别：多跑一次就多一段长任务，界面又开始顿
@@ -3299,6 +3319,11 @@ async function liveLoadEngine() {
   // 多线程 WASM 要 SharedArrayBuffer，而 SAB 只在跨域隔离页面可用；这里提前拦，
   // 否则 Emscripten 的 pthread 引导会抛一个没人接的 DataCloneError，await 永远挂住。
   if (!self.crossOriginIsolated) throw new Error('识别引擎需要跨域隔离（COOP/COEP），请刷新页面后重试');
+  if (LIVE_ENGINE_KIND === 'sherpa') {
+    const engine = await liveSherpaLoad();
+    LIVE.engine = engine;
+    return engine;
+  }
   const base = LIVE_ENGINE.replace(/index\.js$/, '');
   const [mod, moduleMod] = await Promise.all([import(LIVE_ENGINE), import(base + 'module.js')]);
   if (!mod || typeof mod.Transcriber !== 'function') throw new Error('识别引擎模块加载异常');
@@ -3364,6 +3389,214 @@ async function liveLoadEngine() {
   }
 }
 
+/* ---------- 备用识别引擎：sherpa-onnx 流式 zipformer（WASM） ----------
+   它和 Moonshine 最大的差别是结果里带「逐 token 的时间戳」，这是逐词高亮能准的前提。
+   模型与 wasm 都不放我们自己服务器上：wasm 走 jsdelivr、模型走 Hugging Face，
+   字节用 XHR 取回后写进 Emscripten 的虚拟文件系统（跨域 fetch 在 COEP 页面会被拦）。 */
+function liveLoadScript(url) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = url;
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('脚本加载失败：' + url));
+    document.head.appendChild(s);
+  });
+}
+
+// 二进制先查 Cache Storage，没有再 XHR。模型 43 MB，第二次进来就不该再下。
+async function liveSherpaBytes(name, baseUrl) {
+  const key = new URL('/__myt_model/sherpa/' + encodeURIComponent(name), location.href).href;
+  try {
+    const cache = await caches.open(SHERPA_CACHE);
+    const hit = await cache.match(new Request(key));
+    if (hit) {
+      const buf = await hit.arrayBuffer();
+      if (buf.byteLength) return new Uint8Array(buf);
+    }
+  } catch (e) {}
+  const bytes = await liveHttpGet(baseUrl + name, null, null);
+  try {
+    const cache = await caches.open(SHERPA_CACHE);
+    await cache.put(new Request(key), new Response(bytes, {
+      headers: { 'Content-Type': 'application/octet-stream' },
+    }));
+  } catch (e) {}
+  return new Uint8Array(bytes);
+}
+
+async function liveSherpaLoad() {
+  if (LIVE.busy) liveSetText('下载识别模型…（wasm）', 'busy');
+  const wasm = await liveSherpaBytes('sherpa-onnx-wasm-combined.wasm', SHERPA_CDN);
+  // 提前把二进制塞给 Emscripten：页面是 COEP: credentialless，跨域 fetch 会被
+  // 地址空间策略拦掉，让 Emscripten 自己去 fetch 就会挂在这。
+  window.Module = {
+    locateFile: f => SHERPA_CDN + f,
+    wasmBinary: wasm.buffer,
+    print: () => {},
+    printErr: () => {},
+  };
+  await liveLoadScript(SHERPA_CDN + 'sherpa-onnx-wasm-combined.js');
+  await liveLoadScript(SHERPA_CDN + 'sherpa-onnx-core.js');
+  await new Promise((resolve, reject) => {
+    const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const tick = () => {
+      if (window.Module && window.Module.calledRun) return resolve();
+      if ((typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0 > 180000) {
+        return reject(new Error('WASM 初始化超时'));
+      }
+      setTimeout(tick, 100);
+    };
+    tick();
+  });
+  await liveLoadScript(SHERPA_CDN + 'sherpa-onnx-asr.js');
+  if (!window.SherpaOnnx || !window.SherpaOnnx.ASR || !window.OnlineRecognizer) {
+    throw new Error('sherpa-onnx 模块没有挂上（JS 世界不一致？）');
+  }
+  const FS = window.Module.FS;
+  const dir = '/myt-sherpa';
+  try { FS.mkdir(dir); } catch (e) {}
+  const names = Object.keys(SHERPA_FILES).map(k => SHERPA_FILES[k]);
+  let done = 0;
+  const fetchOne = async name => {
+    const bytes = await liveSherpaBytes(name, SHERPA_BASE);
+    FS.writeFile(dir + '/' + name, bytes);
+    done += 1;
+    if (LIVE.busy) liveSetText('下载识别模型…（' + done + '/' + names.length + '）', 'busy');
+  };
+  const queue = names.slice();
+  await Promise.all(Array.from({ length: Math.min(3, queue.length) }, async () => {
+    while (queue.length) await fetchOne(queue.shift());
+  }));
+  const rec = window.SherpaOnnx.ASR.createOnlineRecognizer({
+    modelDir: dir, type: 'transducer',
+    actualPaths: {
+      encoder: dir + '/' + SHERPA_FILES.encoder,
+      decoder: dir + '/' + SHERPA_FILES.decoder,
+      joiner: dir + '/' + SHERPA_FILES.joiner,
+      tokens: dir + '/' + SHERPA_FILES.tokens,
+    },
+  }, {
+    debug: 0, sampleRate: 16000, enableEndpoint: 0,
+    rule1MinTrailingSilence: 2.4, rule2MinTrailingSilence: 1.2, rule3MinUtteranceLength: 20,
+  });
+  if (!rec || !rec.handle) throw new Error('sherpa 识别器创建失败');
+  return { kind: 'sherpa', rec };
+}
+
+// token → 词。sherpa 给的是 SentencePiece 片段（" YE"、"LL"、"OW"），
+// 以空格或 ▁ 开头的 token 才是新词的开始，其余接着拼到当前词上。
+function liveSherpaWords(tokens, times, fedSec) {
+  const words = [];
+  let cur = null;
+  for (let i = 0; i < tokens.length; i++) {
+    const raw = String(tokens[i] == null ? '' : tokens[i]);
+    const t = Number(times[i]);
+    if (!raw || !Number.isFinite(t)) continue;
+    const boundary = raw.charAt(0) === ' ' || raw.charAt(0) === '▁';
+    const piece = (boundary ? raw.slice(1) : raw).trim();
+    if (!piece) continue;
+    if (boundary || !cur) {
+      cur = { text: piece, s: t, e: t };
+      words.push(cur);
+    } else {
+      cur.text += piece;
+      cur.e = t;
+    }
+  }
+  if (!words.length) return words;
+  // 词尾 = 下一个词的起点（AntennaPod 的 computeWordEndTimes 同一套兜底），
+  // 最后一个词用「已喂到哪」夹一下，避免行尾一个超长的词一直亮着。
+  for (let i = 0; i < words.length - 1; i++) words[i].e = words[i + 1].s;
+  words[words.length - 1].e = Math.min(fedSec, Math.max(words[words.length - 1].s + 0.15, fedSec));
+  // 发射滞后校正：整段往前挪 SHERPA_LAG，再保证不倒退、不为负。
+  let prev = -1;
+  words.forEach(w => {
+    w.s = Math.max(0, prev < 0 ? w.s - SHERPA_LAG : Math.max(prev, w.s - SHERPA_LAG));
+    w.e = Math.max(w.s + 0.08, w.e - SHERPA_LAG);
+    prev = w.s;
+  });
+  return words;
+}
+
+// 把 sherpa 的“当前句”结果转成页面已有的行模型（和 Moonshine 的 line 形状对齐），
+// 这样 liveRenderLine / liveWordTimes / 高亮那一套完全不用改。
+function liveSherpaStream(session, anchor) {
+  const rec = LIVE.engine.rec;
+  const st = rec.createStream();
+  let fed = 0;        // 已喂进去的秒数（相对这一路流起点）
+  let segBase = 0;    // 当前句在流内的起点；endpoint 之后重置流，起点跟着往前走
+  let lineId = 0;
+  let cursor = 0;     // 已经定稿（写进正文不再改）的词数
+  let lastSig = '';
+  let closed = false;
+  const emit = () => {
+    if (closed || session !== LIVE.session) return;
+    let loops = 0;
+    while (rec.isReady(st) && loops < 8) { rec.decode(st); loops += 1; }
+    const r = rec.getResult(st) || {};
+    const words = liveSherpaWords(r.tokens || [], r.timestamps || [], fed);
+    if (!words.length) return;
+    // 只显示还没定稿的那一段：词典是只追加的，已经写进正文的词不必再动。
+    const tail = words.slice(Math.min(cursor, words.length));
+    if (!tail.length) return;
+    const lineStart = segBase + tail[0].s;
+    const lineWords = tail.map(w => ({
+      text: w.text,
+      start: w.s - tail[0].s,
+      end: w.e - tail[0].s,
+    }));
+    const duration = Math.max(0.1, lineWords[lineWords.length - 1].end);
+    // zipformer 的输出习惯是全大写（" THE YELLOW LAMPS"），转小写才像正常字幕。
+    const letters = lineWords.map(w => w.text).join('').replace(/[^A-Za-z]/g, '');
+    if (letters.length && letters.replace(/[^A-Z]/g, '').length * 10 >= letters.length * 9) {
+      lineWords.forEach(w => { w.text = w.text.toLowerCase(); });
+    }
+    const sig = lineId + '|' + lineWords.length + '|' + lineWords[lineWords.length - 1].text;
+    // 断行：这里不看 isEndpoint。zipformer 的端点判定在我们这种「一直有人说话」的
+    // 播客里会连着多轮为真，靠它断句就变成每 0.5 秒重置一次、正文一行一个词。
+    // 改成按显示需要自己断：一行最长 12 秒 or 40 个词。
+    const span = tail[tail.length - 1].e - tail[0].s;
+    const needBreak = span > 12 || tail.length > 40;
+    if (sig === lastSig && !needBreak) return;
+    lastSig = sig;
+    liveRenderLine(session, {
+      id: lineId, text: lineWords.map(w => w.text).join(' '),
+      startTime: lineStart, duration, words: lineWords, isComplete: needBreak,
+    });
+    if (needBreak) {
+      // 只断显示、不重置解码器：识别还在同一句里继续，时间轴也没断。
+      cursor = words.length;
+      lineId += 1;
+      lastSig = '';
+      // 解码器迟早要重置一次，否则这一路流里的特征帧会一直攒着（每小时几十 MB）。
+      // 攒够 200 个词（约 1 分钟语音）就重置，下一段的 token 时间从当前喂点重新起算。
+      if (words.length > 200) {
+        try { rec.reset(st); } catch (e) {}
+        cursor = 0;
+        segBase = fed;
+      }
+      return;
+    }
+  };
+  return {
+    addAudio(chunk, rate) {
+      if (closed) return;
+      st.acceptWaveform(rate, chunk);
+      fed += chunk.length / rate;
+    },
+    transcribe() { emit(); },
+    stop() {},
+    close() {
+      if (closed) return;
+      closed = true;
+      try { st.free(); } catch (e) {}
+    },
+  };
+}
+
+
+
 function liveCloseStream() {
   if (!LIVE.stream) return;
   try { LIVE.stream.stop(); } catch (e) {}
@@ -3400,22 +3633,28 @@ function liveTrimRowsAfter(t) {
 function liveRebuildStream() {
   if (!LIVE.engine) return;
   liveCloseStream();
-  const stream = LIVE.engine.createStream({ updateInterval: 0.5 });
   LIVE.session += 1;
   const session = LIVE.session;
-  stream.addListener({
-    onLineStarted: e => liveRenderLine(session, e.line),
-    onLineTextChanged: e => liveRenderLine(session, e.line),
-    onLineUpdated: e => liveRenderLine(session, e.line),
-    onLineCompleted: e => liveRenderLine(session, e.line),
-    onError: e => console.warn('[live] ASR', e.error && e.error.message ? e.error.message : e.error),
-  });
-  stream.start();
-  LIVE.stream = stream;
+  // 锚点要在建流之前定：sherpa 那一路流自己要把 t=0 对到媒体时间上。
+  const anchor = livePlayhead();
+  if (LIVE.engine.kind === 'sherpa') {
+    LIVE.stream = liveSherpaStream(session, anchor);
+  } else {
+    const stream = LIVE.engine.createStream({ updateInterval: 0.5 });
+    stream.addListener({
+      onLineStarted: e => liveRenderLine(session, e.line),
+      onLineTextChanged: e => liveRenderLine(session, e.line),
+      onLineUpdated: e => liveRenderLine(session, e.line),
+      onLineCompleted: e => liveRenderLine(session, e.line),
+      onError: e => console.warn('[live] ASR', e.error && e.error.message ? e.error.message : e.error),
+    });
+    stream.start();
+    LIVE.stream = stream;
+  }
   LIVE.fed = 0;
   LIVE.lastTr = 0;
   LIVE.pcm = null;
-  LIVE.anchorMedia = livePlayhead();
+  LIVE.anchorMedia = anchor;
   LIVE.next = LIVE.anchorMedia;   // 从这个播放点开始往后喂
   LIVE.prefetchQ = [];            // 预取队列里的窗口是按旧位置取的，重建时必须丢掉
   LIVE.prefetchFrom = LIVE.next;

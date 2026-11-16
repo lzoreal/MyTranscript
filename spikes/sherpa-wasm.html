@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>sherpa-onnx WASM 可行性验证</title>
+<style>
+  body { font: 14px/1.6 ui-monospace, Consolas, monospace; background:#111; color:#ddd; margin: 20px; }
+  h1 { font-size: 16px; }
+  button { background:#2a2a2a; color:#eee; border:1px solid #555; padding:6px 12px; cursor:pointer; }
+  #log { white-space: pre-wrap; margin-top: 14px; }
+  .ok { color:#6ee7a0; } .bad { color:#ff7b7b; } .dim { color:#888; }
+</style>
+</head>
+<body>
+<h1>sherpa-onnx streaming zipformer（WASM）可行性验证</h1>
+<p class="dim">目标：在浏览器里加载 sherpa-onnx WASM + streaming zipformer 模型，喂一段 wav，看能不能拿到
+<b>每个 token 的时间戳</b>。这是逐词高亮的关键前提。</p>
+<button id="go">开始</button>
+<div id="log"></div>
+<script>
+const LOG = (s, cls) => {
+  const el = document.getElementById('log');
+  el.insertAdjacentHTML('beforeend', '<div class="' + (cls || '') + '">' + String(s).replace(/[&<>]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;' }[c])) + '</div>');
+  el.scrollTop = el.scrollHeight;
+};
+const CDN = 'https://cdn.jsdelivr.net/npm/@siteed/sherpa-onnx.rn@1.1.2/wasm/';
+const HF = 'https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-en-20M-2023-02-17/resolve/main/';
+const FILES = {
+  encoder: 'encoder-epoch-99-avg-1.int8.onnx',
+  decoder: 'decoder-epoch-99-avg-1.int8.onnx',
+  joiner: 'joiner-epoch-99-avg-1.int8.onnx',
+  tokens: 'tokens.txt',
+};
+
+function xhrBytes(url, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.responseType = 'arraybuffer';
+    xhr.onprogress = e => onProgress && onProgress(e.loaded, e.total);
+    xhr.onload = () => xhr.status >= 200 && xhr.status < 400 ? resolve(new Uint8Array(xhr.response)) : reject(new Error('HTTP ' + xhr.status + ' ' + url));
+    xhr.onerror = () => reject(new Error('network ' + url));
+    xhr.send();
+  });
+}
+
+function loadScript(url) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = url;
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('script fail ' + url));
+    document.head.appendChild(s);
+  });
+}
+
+function waitModule() {
+  return new Promise((resolve, reject) => {
+    const t0 = performance.now();
+    const tick = () => {
+      if (window.Module && window.Module.calledRun) return resolve();
+      if (performance.now() - t0 > 180000) return reject(new Error('module init timeout'));
+      setTimeout(tick, 100);
+    };
+    tick();
+  });
+}
+
+// 极简 WAV 解析：只需要 RIFF + fmt + data 三个块。
+function decodeWav(bytes) {
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let off = 12, fmt = null, data = null;
+  while (off + 8 <= bytes.length) {
+    const id = String.fromCharCode(bytes[off], bytes[off+1], bytes[off+2], bytes[off+3]);
+    const size = dv.getUint32(off + 4, true);
+    const body = off + 8;
+    if (id === 'fmt ') {
+      fmt = { format: dv.getUint16(body, true), channels: dv.getUint16(body + 2, true),
+              rate: dv.getUint32(body + 4, true), bits: dv.getUint16(body + 14, true) };
+    } else if (id === 'data') {
+      data = { start: body, size: Math.min(size, bytes.length - body) };
+      break;
+    }
+    off = body + size + (size % 2);
+  }
+  if (!fmt || !data) throw new Error('wav 解析失败');
+  if (fmt.bits !== 16) throw new Error('只支持 16 bit wav，实际 ' + fmt.bits);
+  const n = data.size / 2 / fmt.channels;
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    let v = 0;
+    for (let c = 0; c < fmt.channels; c++) v += dv.getInt16(data.start + (i * fmt.channels + c) * 2, true);
+    out[i] = v / (32768 * fmt.channels);
+  }
+  return { samples: out, rate: fmt.rate };
+}
+
+function resampleTo(samples, from, to) {
+  if (from === to) return samples;
+  const ratio = to / from, n = Math.floor(samples.length * ratio), out = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const pos = i / ratio, j = Math.floor(pos), f = pos - j;
+    out[i] = (samples[j] || 0) * (1 - f) + (samples[j + 1] || 0) * f;
+  }
+  return out;
+}
+
+async function run() {
+  const t0 = performance.now();
+  const stamp = () => ((performance.now() - t0) / 1000).toFixed(2) + 's ';
+
+  // 1) wasm 二进制：自己下，避免页面 COEP 下跨域 fetch 被拦（产品页已经有这个坑）
+  LOG(stamp() + '下载 wasm 二进制…');
+  const wasmBytes = await xhrBytes(CDN + 'sherpa-onnx-wasm-combined.wasm',
+    (l, t) => t && LOG('  wasm ' + (l / 1048576).toFixed(1) + '/' + (t / 1048576).toFixed(1) + ' MB'));
+  LOG(stamp() + 'wasm ' + (wasmBytes.length / 1048576).toFixed(1) + ' MB');
+
+  window.Module = {
+    locateFile: f => CDN + f,
+    wasmBinary: wasmBytes.buffer,
+    print: s => console.log('[wasm]', s),
+    printErr: s => console.warn('[wasm]', s),
+    onRuntimeInitialized: () => { LOG(stamp() + 'wasm runtime 就绪', 'ok'); },
+  };
+
+  await loadScript(CDN + 'sherpa-onnx-wasm-combined.js');
+  await loadScript(CDN + 'sherpa-onnx-core.js');
+  await waitModule();
+  await loadScript(CDN + 'sherpa-onnx-asr.js');
+  LOG(stamp() + 'SherpaOnnx 命名空间：' + (!!window.SherpaOnnx) + ' / ASR：' + !!(window.SherpaOnnx && window.SherpaOnnx.ASR) + ' / OnlineRecognizer：' + !!window.OnlineRecognizer);
+
+  // 2) 模型文件：XHR 取字节直接写进 Emscripten FS（不依赖库内部的 fetch）
+  LOG(stamp() + '下载模型…');
+  Module.FS.mkdir('/m');
+  for (const key of Object.keys(FILES)) {
+    const name = FILES[key];
+    const bytes = await xhrBytes(HF + name, (l, t) => t && LOG('  ' + name + ' ' + (l / 1048576).toFixed(1) + '/' + (t / 1048576).toFixed(1) + ' MB'));
+    Module.FS.writeFile('/m/' + name, bytes);
+    LOG(stamp() + '写入 /m/' + name + ' ' + (bytes.length / 1024).toFixed(0) + ' KB');
+  }
+
+  // 3) 建识别器
+  const model = {
+    modelDir: '/m', type: 'transducer',
+    actualPaths: {
+      encoder: '/m/' + FILES.encoder, decoder: '/m/' + FILES.decoder,
+      joiner: '/m/' + FILES.joiner, tokens: '/m/' + FILES.tokens,
+    },
+  };
+  const rec = SherpaOnnx.ASR.createOnlineRecognizer(model, {
+    debug: 0, sampleRate: 16000, enableEndpoint: 1,
+    rule1MinTrailingSilence: 2.4, rule2MinTrailingSilence: 1.2, rule3MinUtteranceLength: 20,
+  });
+  LOG(stamp() + '识别器创建：' + (!!rec && !!rec.handle));
+
+  // 4) 测试音频
+  LOG(stamp() + '下载测试 wav…');
+  const wav = decodeWav(await xhrBytes(HF + 'test_wavs/0.wav'));
+  const pcm = resampleTo(wav.samples, wav.rate, 16000);
+  LOG(stamp() + 'wav ' + wav.rate + ' Hz ' + wav.samples.length + ' 采样 → 16k ' + pcm.length + ' 采样（' + (pcm.length / 16000).toFixed(1) + ' 秒）');
+
+  // 5) 逐块喂，每块 decode 一次，最后打印 token 时间
+  const stream = rec.createStream();
+  const BLOCK = 8000;   // 0.5 秒
+  let lastText = '';
+  for (let off = 0; off < pcm.length; off += BLOCK) {
+    stream.acceptWaveform(16000, pcm.subarray(off, Math.min(pcm.length, off + BLOCK)));
+    while (rec.isReady(stream)) rec.decode(stream);
+    const r = rec.getResult(stream);
+    if (r.text && r.text !== lastText) {
+      lastText = r.text;
+      LOG('  t=' + (off / 16000).toFixed(1) + 's  ' + r.text);
+    }
+  }
+  stream.inputFinished();
+  while (rec.isReady(stream)) rec.decode(stream);
+  const fin = rec.getResult(stream);
+  console.log('final result', fin);
+
+  const toks = fin.tokens || [], ts = fin.timestamps || [];
+  LOG(stamp() + '最终文本：' + fin.text, 'ok');
+  LOG('token 数量：' + toks.length + ' / 时间戳数量：' + ts.length + (toks.length === ts.length ? '（对齐，可用）' : '（不齐）'),
+      toks.length === ts.length && ts.length > 0 ? 'ok' : 'bad');
+  const rows = [];
+  for (let i = 0; i < Math.min(toks.length, ts.length); i++) {
+    rows.push(i + '  ' + ts[i].toFixed(2) + 's  ' + JSON.stringify(toks[i]));
+  }
+  LOG('前 40 个 token（时间、文本）：\n' + rows.slice(0, 40).join('\n'));
+  LOG(stamp() + '完成');
+}
+
+document.getElementById('go').addEventListener('click', () => {
+  document.getElementById('log').innerHTML = '';
+  LOG('开始');
+  run().catch(e => { console.error(e); LOG('失败：' + (e && e.stack || e), 'bad'); });
+});
+</script>
+</body>
+</html>

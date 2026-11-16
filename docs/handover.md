@@ -628,3 +628,50 @@ translate / align 两条已在 2026-11-14 删除。
 - 验证方法：`python -m http.server 8765 --directory site`，开「单流播放」后点实时识别，
   看 `audio.src` 是否变 `blob:`、`audio.buffered` 是否随播放头推进增长、「已提前」是否
   稳定在提前量附近；跳转一次确认能重锚继续播；停识别确认回到原生且播放位置不丢。
+
+### 换识别引擎：sherpa-onnx 流式 zipformer（2026-11-17）
+
+**为什么换**：`liveWordTimes()` 的兜底能救“不跟随”，救不了精度——Moonshine 流式压根
+不给可靠的词时间。逐行统计同一集：`tiny` 有真实词时间的行 4/102，`small` 2/126，
+其余行只能按词长均分，均分到 12 秒长的一行里误差就有零点几秒，看起来永远是“慢半拍/
+乱跳”。所以不修算法，换引擎。
+
+**对照 AntennaPod**（`D:\AntennaPod`，本地读代码，未跑真机）：它高亮稳的原因也在引擎，
+`asr/AsrResultMapper.toSegment(text, tokens, timestamps,…)` 拿的是 **token 级 float
+timestamps**，先做 `TOKEN_EMISSION_LAG_MS = 400`（token 在发射它的 encoder 帧上报，
+比词起点晚约一个 chunk；casefile 14056 中位 400 ms、14049 434 ms）再 clamp 到
+`[startMs, endMs]`；`AsrTokenizer` 按 `▁`/空格前缀把 SentencePiece 片段拼成词；
+缺词尾用 `computeWordEndTimes`（下一个更大 start / `max(start+120, segmentEnd)`）。
+它同样做“预读 PCM 喂识别”（`PreReadPcmPipeline` / `LookaheadPlanner` / `MediaRange`），
+和我们 MSE 单流取窗是同一套思路。
+
+**实现（`site/player.html`）**：默认引擎现在是 sherpa（`?engine=moonshine` 可退回）。
+
+- 资源不自托管：wasm 走 `@siteed/sherpa-onnx.rn@1.1.2/wasm/`（jsDelivr，那个包自带完整
+  wasm 产物，JS 只挂 `window.SherpaOnnx` / `OnlineRecognizer`，不依赖 React Native）；
+  模型走 `csukuangfj/sherpa-onnx-streaming-zipformer-en-20M-2023-02-17`（HF 单文件
+  `encoder/decoder/joiner .int8.onnx` + `tokens.txt`，合计约 43 MB）。二进制**用 XHR 取**
+  再写进 Emscripten 的虚拟 FS：页面是 `COEP: credentialless`，让 Emscripten 自己 fetch
+  跨域资源会被地址空间策略拦（`target IP address space of public yet the resource is in
+  address space unknown`）。字节按文件名存进 Cache Storage `myt-sherpa-model`，第二次
+  秒开。
+- `liveSherpaWords()`：按空格 / `▁` 前缀拼词，词尾取下一个词起点，最后一词用“已喂到哪”
+  夹；整段前移 `SHERPA_LAG = 0.4` 秒（照抄 AntennaPod 的实测值，本集未重新标定），
+  并保证不倒退、不为负。
+- `liveSherpaStream()` 包成和 Moonshine 同形的流对象（`addAudio / transcribe / stop /
+  close`），`liveRenderLine` 那一套一行都不用改。
+- **断句不能交给 `isEndpoint`**：播客里几乎一直在说话，endpoint 判完还会连着几轮为真，
+  靠它 reset 就变成每轮重置、正文一行一个词（实测行数飙到 60）。现在 `enableEndpoint: 0`，
+  按显示需要自己断行：**一行最长 12 秒或 40 个词**，只断显示（`cursor` 往后切、`lineId += 1`），
+  解码器不动，时间轴不断；攒够 200 个词才 reset 一次（不然流里的特征帧一直涨）。
+- pump 里 sherpa 的识别批从 2 秒改成 0.5 秒（增量解码单次便宜，跟得上词）；Moonshine
+  仍是 2 秒一批。
+- 实测（本机 Chrome，`?engine=sherpa`，从 24:38 起播）：`已提前` 稳定 12~14 秒；行按
+  12 秒左右自然断开（每行 2~29 词）；**当前词起点与播放头差 0.1~0.7 秒**（高频采样
+  8 次全部对齐），跳转 1600 秒后继续出词、高亮照样跟随。行数与词数随时间单调增长，
+  没有重复行。
+
+**已知代价/未决**：①文本准确率低于 Moonshine（人名、生词更容易错，spike 里把“squalid”
+拼成“SQUALID”级别）；②首轮要下 12 MB wasm + 43 MB 模型；③`SHERPA_LAG` 是别人的实测值；
+④Safari/iOS 走原生 + Range 的老路径，未真机验证；⑤`spikes/sherpa-wasm.html` 是这轮的
+最小验证页（0.5 秒块喂 `test_wavs/0.wav`，token 31 / timestamps 31 对齐），保留作回归用。
