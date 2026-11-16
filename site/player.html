@@ -2893,6 +2893,13 @@ async function liveMseBegin(atSec) {
   // 起点必须和元素当前的播放头一致：append 的时间轴从 base 开始，元素也 seek 到
   // base，两边差一点点（比如往前挪 0.25 秒）就会落到没有数据的区间、停在那里不动。
   const anchor = Math.max(0, Number.isFinite(atSec) ? atSec : liveMseAnchor());
+  // 先把上一个 MediaSource 从元素上彻底摘掉再建新的。同一个标签页里反复
+  // new MediaSource() 时，旧实例还挂在元素上会让新实例一直停在 'closed'
+  // （实测第三次接管开始必现，换新标签页就正常）。先 removeAttribute + load
+  // 断开，等一拍让 detach 生效，再建新实例。
+  try { audio.pause(); } catch (e) {}
+  try { audio.removeAttribute('src'); audio.load(); } catch (e) {}
+  await new Promise(r => setTimeout(r, 250));
   const ms = new MediaSource();
   const m = {
     media: ms, sb: null, url: '', first: true, total, seq: 0, pending: [], queuedBytes: 0,
