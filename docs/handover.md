@@ -132,6 +132,16 @@ site/
 RSS 内容；原始 XML 缓存在 IndexedDB `myt-feeds`（6 小时）。站外节目只有音频，
 不提供增强字幕。
 
+### 线上播客搜索（2026-11-16）
+
+发现页的在线搜索并行请求 Apple Podcasts（iTunes Search API）与 Podcast Index，
+按 feedUrl 去重并参考 AntennaPod 的排名权重合并。Podcast Index 使用 AntennaPod
+`net/discovery/build.gradle` 里的公开默认凭据（会出现在网页源码里；不是机密），
+请求失败、超时或 CORS 被拦时静默回退 Apple 结果，来源标注会写明实际来源。
+Apple 搜索返回 `feedUrl/collectionName/artistName/artworkUrl600/trackCount`；
+Podcast Index 返回 `feeds[].url/title/author/image/episodeCount`。搜索结果标题与
+内置节目名精确匹配时，优先提供“打开增强版”，避免订阅同名的官方 feed。
+
 `site/` 里不再有字幕文件：feed 只引用 data 分支的 JSON；播放器仍保留 VTT/侧车
 导入能力，供本地实验用。
 

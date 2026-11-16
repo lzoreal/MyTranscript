@@ -1,4 +1,5 @@
 import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -181,6 +182,9 @@ assert.strictEqual(
   'https://image.simplecastcdn.com/images/a/b/300x300/cover-3000x3000-final.jpg?aid=rss_feed');
 assert.strictEqual(smallArtwork('https://example.com/a.jpg'), '');
 assert.strictEqual(smallArtwork('https://image.simplecastcdn.com/images/a/b/300x300/a.jpg'), '');
+assert.strictEqual(
+  smallArtwork('https://is1-ssl.mzstatic.com/image/thumb/Podcasts211/v4/x/600x600bb.jpg'),
+  'https://is1-ssl.mzstatic.com/image/thumb/Podcasts211/v4/x/200x200bb.jpg');
 """
 
     def test_list_thumbnails_use_the_small_rendition(self):
@@ -315,6 +319,116 @@ class PlayerReaderLayoutTests(unittest.TestCase):
         self.assertNotIn("(100vw - 850px)/2", page)
         self.assertIn("margin:var(--cue-gap) 0", page)
         self.assertIn("line-height:var(--cue-lh)", page)
+
+
+class PlayerOnlineSearchTests(unittest.TestCase):
+    HARNESS = """
+const assert = require('assert');
+%s
+const apple = mapAppleResults({results: [
+  {collectionName: 'Alpha', artistName: 'A', feedUrl: 'https://a/feed',
+   artworkUrl600: 'https://img/600', artworkUrl100: 'https://img/100',
+   trackCount: 12, primaryGenreName: 'Tech'},
+  {collectionName: 'No feed', artistName: 'B'},
+]});
+assert.deepStrictEqual(apple.map(x => x.title), ['Alpha']);
+assert.strictEqual(apple[0].image, 'https://img/600');
+assert.strictEqual(apple[0].episodeCount, 12);
+const pi = mapPodcastIndexResults({feeds: [
+  {title: 'Beta', author: 'B', url: 'https://b/feed', image: 'https://img/b', episodeCount: 7},
+  {title: 'No url'},
+]});
+assert.deepStrictEqual(pi.map(x => x.title), ['Beta']);
+assert.strictEqual(pi[0].genre, '');
+const merged = mergeSearchResults([
+  [apple[0], {feedUrl: 'https://x/feed', title: 'X'}],
+  [{feedUrl: 'https://x/feed', title: 'X'}, {feedUrl: 'https://c/feed', title: 'C'}],
+]);
+assert.deepStrictEqual(merged.map(x => x.feedUrl), ['https://x/feed', 'https://a/feed', 'https://c/feed']);
+assert.ok(appleSearchUrl('a b').includes('term=a%%20b'));
+assert.ok(podcastIndexSearchUrl('a b').includes('q=a%%20b'));
+const shows = [{name: 'SmartLess', slug: 'smartless', feed: 'x'}];
+assert.strictEqual(findBuiltinForTitle('SmartLess!', shows).slug, 'smartless');
+assert.strictEqual(findBuiltinForTitle('SmartLess Presents ClueLess', shows), null);
+(async () => {
+  assert.strictEqual(await sha1Hex('abc'), 'a9993e364706816aba3e25717850c26c9cd0d89d');
+  const headers = await podcastIndexAuth('k', 's', 0);
+  assert.strictEqual(headers['X-Auth-Key'], 'k');
+  assert.strictEqual(headers['X-Auth-Date'], '0');
+  assert.strictEqual(headers['Authorization'].length, 40);
+})().catch(err => { console.error(err); process.exit(1); });
+"""
+
+    def test_online_search_mapping_and_merge(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node 不在 PATH，跳过播放器逻辑测试")
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        source = self.HARNESS % page[page.index("function appleSearchUrl"):page.index("function subscribedShowForFeed")]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            script = Path(temp_dir) / "online_search.js"
+            script.write_text(source, encoding="utf-8")
+            proc = subprocess.run([node, str(script)], capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+    def test_online_search_entry_exists(self):
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        for needle in ['id="onlineSearchInput"', 'function runOnlineSearch',
+                       'PODCAST_INDEX', 'function searchPodcastIndex',
+                       'data-online-subscribe']:
+            self.assertIn(needle, page)
+
+
+
+class PlayerPrototypeThemeTests(unittest.TestCase):
+    def test_prototype_theme_is_registered(self):
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        self.assertIn('[data-theme="prototype"]{', page)
+        self.assertIn("prototype: '原型'", page)
+        self.assertIn("LIGHT_THEMES = new Set(['paper', 'mist', 'prototype'])", page)
+        self.assertIn('data-theme="prototype"', page)
+
+
+class PlayerThemeContrastTests(unittest.TestCase):
+    THEMES = ["brass", "midnight", "forest", "oxblood", "celadon", "paper", "mist", "prototype"]
+
+    def _block(self, page, name):
+        if name == "brass":
+            match = re.search(r":root\{\s*color-scheme:dark;(.*?)\n\}", page, re.S)
+        else:
+            match = re.search(r'\[data-theme="' + name + r'"\]\{(.*?)\n\}', page, re.S)
+        self.assertIsNotNone(match, name)
+        return dict(re.findall(r"--([A-Za-z0-9-]+):([^;]+);", match.group(1)))
+
+    @staticmethod
+    def _rgb(value):
+        value = value.strip()
+        if value.startswith("#"):
+            return tuple(int(value[i:i + 2], 16) for i in (1, 3, 5))
+        match = re.fullmatch(r"rgba?\(([^)]+)\)", value)
+        return tuple(int(float(part)) for part in match.group(1).split(",")[:3])
+
+    @staticmethod
+    def _luminance(rgb):
+        def channel(value):
+            value /= 255
+            return value / 12.92 if value <= 0.03928 else ((value + 0.055) / 1.055) ** 2.4
+        r, g, b = (channel(part) for part in rgb)
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+    def _contrast(self, a, b):
+        high, low = sorted((self._luminance(self._rgb(a)), self._luminance(self._rgb(b))), reverse=True)
+        return (high + 0.05) / (low + 0.05)
+
+    def test_every_theme_keeps_secondary_text_readable(self):
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        minimum = {"muted": 5.5, "dim": 4.5, "soft": 6.5, "meta": 5.0, "accent": 4.5}
+        for name in self.THEMES:
+            tokens = self._block(page, name)
+            for key, floor in minimum.items():
+                for surface in ("bg", "panel"):
+                    ratio = self._contrast(tokens[key], tokens[surface])
+                    self.assertGreaterEqual(ratio, floor, f"{name}.{key} on {surface}: {ratio:.2f}")
 
 
 if __name__ == "__main__":
