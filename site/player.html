@@ -3665,10 +3665,13 @@ async function liveEnable() {
 }
 
 // 换集之后音频换了：重新探测格式，识别流从新的播放点重建。
+// 这里用自己的 generation 判断“这次跟进是否还有效”，不再借用 LIVE.session：
+// liveRebuildStream()（重建识别流）本身就会把 session 加一，用它当 token 会被自己
+// 作废；而换集时可能同时来两次跟进，也需要“最新的那次赢、旧的自己退场”。
 async function liveFollowCurrentEpisode(resumePlay) {
   if (!LIVE.on) return;
-  LIVE.session += 1;
-  let session = LIVE.session;
+  const gen = LIVE.followGen = (LIVE.followGen || 0) + 1;
+  const alive = () => LIVE.followGen === gen && LIVE.on;
   // 换集瞬间 audio.currentSrc 可能还是空（新的 src 刚 load、资源还没选好），
   // 这里等它落定再探测。以前直接取一次就拿去探测，换集后第一次探测必然失败，
   // 整条识别会停在“取音频数据失败”再也不恢复。
@@ -3677,11 +3680,13 @@ async function liveFollowCurrentEpisode(resumePlay) {
     src = audio.currentSrc || '';
     if (src) break;
     await new Promise(r => setTimeout(r, 1000));
-    if (LIVE.session !== session || !LIVE.on) return;
+    if (!alive()) return;
   }
   if (!src) {
     // 还没选出可读的音频地址：过一会儿再跟一次，别把识别判死。
-    setTimeout(() => { if (LIVE.on) liveFollowCurrentEpisode(); }, 5000);
+    // 只在自己还是最新那次跟进时才排这一次重试，否则会把正在跑的那次顶掉。
+    const p = resumePlay;
+    if (alive()) setTimeout(() => { if (LIVE.on && LIVE.followGen === gen) liveFollowCurrentEpisode(p); }, 5000);
     return;
   }
   LIVE.audioUrl = src;
@@ -3690,24 +3695,30 @@ async function liveFollowCurrentEpisode(resumePlay) {
     liveSetText('解析音频格式…', 'on');
     // 源站首字节偶发失败（实测换集后很常见），这里和首次开启一样带重试。
     LIVE.cbr = await liveRetry(() => liveProbeAudio(), 4, 900);
-    if (LIVE.session !== session) return;
+    if (!alive()) return;
     liveClearRows();
     liveRebuildStream();
-    // liveRebuildStream 自己也会把 session 加一（它要作废旧流的回调），
-    // 所以重建之后必须把这里的 token 更新到新值，否则下面的接管检查必然判定“过期”，
-    // 接管就永远不执行——表现为换集后再接管时有时无。
-    session = LIVE.session;
     // 换集后自动重新接管：单流在 loadEpisode 里已经停掉（播放还给原生），这里等新一集
     // 拿到元数据再接管一次，用户不用手动开关「实时识别」。
     if (prefs.liveMse && liveMseCapable()) {
       const wasPlaying = !!resumePlay || !audio.paused || app.autoplay;
       try {
-        await liveWaitAudioReady(15000);
-        if (LIVE.session !== session) return;
+        const ready = await liveWaitAudioReady(15000);
+        if (!alive()) return;
+        // 新一集还在加载（源站慢时元数据十几秒才到）：这时候去接管会先把正在加载的原生
+        // src 摘掉，结果两边都读不到数据，界面一直停在“等待音频加载…”。等它加载好再接管。
+        if (!ready) {
+          if (LIVE.on) setTimeout(() => { if (LIVE.on && LIVE.followGen === gen) liveFollowCurrentEpisode(resumePlay); }, 8000);
+          return;
+        }
         await liveMseBegin();
         if (wasPlaying) { app.autoplay = false; audio.play().catch(() => {}); }
       } catch (err) {
         if (LIVE.mse) liveMseStop();
+        // 接管半途失败时元素可能已经被我们摘掉 src：把原生地址挂回去，别让播放停在这。
+        else if (LIVE.audioUrl && audio.src !== LIVE.audioUrl) {
+          audio.src = LIVE.audioUrl; try { audio.load(); } catch (e) {}
+        }
         if (wasPlaying) audio.play().catch(() => {});
       }
     }
@@ -3715,8 +3726,9 @@ async function liveFollowCurrentEpisode(resumePlay) {
     const msg = err && err.message ? err.message : String(err);
     liveSetText('正在等待新一集音频（' + msg + '）…', 'busy');
     // 探测失败不等于这一集不能用：源站偶发失败过几秒就好，等一会儿重新跟一次。
-    if (LIVE.session === session) {
-      setTimeout(() => { if (LIVE.on && LIVE.session === session) liveFollowCurrentEpisode(); }, 6000);
+    const p = resumePlay;
+    if (alive()) {
+      setTimeout(() => { if (LIVE.on && LIVE.followGen === gen) liveFollowCurrentEpisode(p); }, 6000);
     }
   }
 }
