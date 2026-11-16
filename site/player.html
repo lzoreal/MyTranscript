@@ -2634,7 +2634,13 @@ function liveFollow(el) {
    立刻回到原本的 VTT / 词级 JSON 渲染，原有播放、重试、跳转逻辑不受影响。 */
 const LIVE_RATE = 16000;
 const LIVE_ENGINE = 'https://cdn.jsdelivr.net/npm/@moonshine-ai/moonshine-wasm@0.1.6/dist/index.js';
-const LIVE_ARCH = 2;   // ModelArch.TinyStreaming：先跑通再换 Small / Medium 对比
+const LIVE_ARCH = (() => {
+  // ModelArch：2=TinyStreaming（默认）、3=BaseStreaming、4=SmallStreaming、5=MediumStreaming。
+  // 加 ?arch=3 这类参数可以临时换成更大的模型做对比，不用改代码再刷一遍。
+  const m = /[?&]arch=(\d+)/.exec(location.search);
+  const v = m ? Number(m[1]) : 2;
+  return [2, 3, 4, 5].includes(v) ? v : 2;
+})();
 const LIVE_LEAD_DEFAULT = 60;   // 默认提前 60 秒（用户最初要的 1 分钟）。单流接管后识别侧能稳定跑在
                                 // 播放前面 60 秒（实测 59~60 秒连续 60 秒不抖），所以不再需要为了
                                 // “堆不满”把它压到 15 秒；想要低延迟的读者可以在设置里选 15 秒。
@@ -3324,7 +3330,9 @@ async function liveLoadEngine() {
   const fetchOne = async name => {
     const bytes = await liveHttpGet(files[name], null, null);
     const cache = await caches.open(stage);
-    const url = new URL('/__myt_model/' + encodeURIComponent(name), location.href).href;
+    // 路径里带架构号：不同架构的清单文件名是一样的（encoder.ort 等），
+    // 共用同一个虚拟路径会让 Cache Storage 把小模型的字节喂给大模型。
+    const url = new URL('/__myt_model/a' + LIVE_ARCH + '/' + encodeURIComponent(name), location.href).href;
     await cache.put(new Request(url), new Response(bytes, {
       headers: { 'Content-Type': 'application/octet-stream' },
     }));
@@ -3444,18 +3452,18 @@ function liveWordTimes(line) {
     return true;
   });
   if (engineOk) {
-    return ws.map(w => ({ t: w.text, s: liveMediaOf(start + Number(w.start)), e: liveMediaOf(start + Number(w.end)) }));
+    return { engine: true, times: ws.map(w => ({ t: w.text, s: liveMediaOf(start + Number(w.start)), e: liveMediaOf(start + Number(w.end)) })) };
   }
   const weights = ws.map(w => Math.max(1, String(w.text || '').trim().length + 1));
   const total = weights.reduce((a, b) => a + b, 0) || 1;
   let acc = 0;
-  return ws.map((w, i) => {
+  return { engine: false, times: ws.map((w, i) => {
     const a = acc;
     acc += weights[i] / total * span;
     const s = liveMediaOf(start + a);
     const e = liveMediaOf(start + (i === ws.length - 1 ? span : acc));
     return { t: w.text, s, e: Math.max(s + 0.05, e) };
-  });
+  }) };
 }
 
 function liveRenderLine(session, line) {
@@ -3483,7 +3491,8 @@ function liveRenderLine(session, line) {
     }
     liveUpdateMeter();
   }
-  const words = liveWordTimes(line);
+  const wt = liveWordTimes(line);
+  const words = wt.times;
   const sameWords = words.length === row.words.length
     && words.every((w, i) => w.t === row.words[i].t);
   const stampText = fmt(liveMediaOf(line.startTime));
