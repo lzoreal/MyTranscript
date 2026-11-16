@@ -3423,6 +3423,41 @@ function liveRebuildStream() {
   liveStartPump();
 }
 
+// Moonshine 的 `line.words` 里只有最前面几个词带真实时间，后面补进来的词 `start/end`
+// 常常是 0（偶尔还会出现 end < start、时间倒退）。直接拿它们做逐词高亮，表现就是：
+// 前几个词正常走，然后高亮卡住，接着一下子跳到行尾 —— 也就是“不跟随、乱跳”。
+// 行的 `startTime` 和 `duration` 是可靠的，所以先看引擎给的时间能不能用（单调、落在
+// 行区间内、长度非负），不能用就按词长把整行的词均分到 [start, start+duration]，
+// 至少保证单调、连续、跟得上。
+function liveWordTimes(line) {
+  const ws = line.words || [];
+  if (!ws.length) return [];
+  const start = Number(line.startTime) || 0;
+  const dur = Number(line.duration) || 0;
+  const span = dur > 0.05 ? dur : Math.max(0.4, ws.length * 0.45);
+  const engineOk = ws.every((w, i) => {
+    const s = Number(w.start), e = Number(w.end);
+    if (!Number.isFinite(s) || !Number.isFinite(e)) return false;
+    if (s < -0.02 || s > span + 0.02) return false;   // 词的 start 是相对行起点的
+    if (e < s - 0.02) return false;
+    if (i > 0 && s < Number(ws[i - 1].start) - 0.02) return false;
+    return true;
+  });
+  if (engineOk) {
+    return ws.map(w => ({ t: w.text, s: liveMediaOf(start + Number(w.start)), e: liveMediaOf(start + Number(w.end)) }));
+  }
+  const weights = ws.map(w => Math.max(1, String(w.text || '').trim().length + 1));
+  const total = weights.reduce((a, b) => a + b, 0) || 1;
+  let acc = 0;
+  return ws.map((w, i) => {
+    const a = acc;
+    acc += weights[i] / total * span;
+    const s = liveMediaOf(start + a);
+    const e = liveMediaOf(start + (i === ws.length - 1 ? span : acc));
+    return { t: w.text, s, e: Math.max(s + 0.05, e) };
+  });
+}
+
 function liveRenderLine(session, line) {
   if (session !== LIVE.session || !line) return;
   if (box.querySelector('.empty')) box.innerHTML = '';
@@ -3448,15 +3483,22 @@ function liveRenderLine(session, line) {
     }
     liveUpdateMeter();
   }
-  const words = (line.words || []).map(w => ({ t: w.text, s: liveMediaOf(w.start), e: liveMediaOf(w.end) }));
+  const words = liveWordTimes(line);
   const sameWords = words.length === row.words.length
-    && words.every((w, i) => w.s === row.words[i].s);
+    && words.every((w, i) => w.t === row.words[i].t);
   const stampText = fmt(liveMediaOf(line.startTime));
   if (row.sig !== '' && sameWords) {
     // 流式识别每 0.5 秒会重发一次同一句：词数没变时只改文字，不动 DOM 结构。
     // 之前每次整行 replaceChildren，会把 .word.active 一起抹掉，高亮看起来在乱跳，
     // 重建节点还会连续触发重排，播放也跟着卡。
-    words.forEach((w, i) => { const el = row.words[i].el; if (el.textContent !== w.t) el.textContent = w.t; });
+    words.forEach((w, i) => {
+      const el = row.words[i].el;
+      if (el.textContent !== w.t) el.textContent = w.t;
+      // 时间会随行不断变长而重算（尤其是兜底均分那条路径），原地更新，
+      // 不然高亮还按建行时那套旧时间去比，越到后面越对不上。
+      row.words[i].s = w.s;
+      row.words[i].e = w.e;
+    });
     const stampEl = row.el.firstChild;
     if (stampEl && stampEl.className === 'stamp' && stampEl.textContent !== stampText) stampEl.textContent = stampText;
     row.sig = line.text + '|' + words.length + '|' + (line.isComplete ? '1' : '0');
