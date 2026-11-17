@@ -2641,9 +2641,17 @@ const LIVE_ARCH = (() => {
   const v = m ? Number(m[1]) : 2;
   return [2, 3, 4, 5].includes(v) ? v : 2;
 })();
-// 识别引擎：sherpa-onnx 流式 zipformer（带逐 token 时间戳）是默认引擎；
+// 识别引擎：默认 sherpa-onnx 流式 zipformer（带逐 token 时间戳）。
+// 桌面壳（Tauri）里优先走「原生推理」：ASR 在 Rust 侧跑 sherpa-onnx 的 DLL，
+// 不占 WebView 的 JS 线程，也不依赖 COOP/COEP。没有壳时退回 WASM 版 sherpa；
 // 加 ?engine=moonshine 退回 Moonshine 流式（它基本不给词时间，逐词高亮只能均分）。
-const LIVE_ENGINE_KIND = /[?&]engine=moonshine/.test(location.search) ? 'moonshine' : 'sherpa';
+const LIVE_ENGINE_ARG = (() => {
+  const m = /[?&]engine=(\w+)/.exec(location.search);
+  return m ? m[1] : '';
+})();
+const LIVE_ENGINE_KIND = LIVE_ENGINE_ARG === 'moonshine' ? 'moonshine'
+  : LIVE_ENGINE_ARG === 'wasm' ? 'sherpa'
+  : (window.__TAURI__ && window.__TAURI__.core ? 'native' : 'sherpa');
 const SHERPA_CDN = 'https://cdn.jsdelivr.net/npm/@siteed/sherpa-onnx.rn@1.1.2/wasm/';
 // github 的 tar.bz2 在浏览器里解不了，所以从 Hugging Face 按单文件取（和我们取音频一样走 XHR）。
 const SHERPA_BASE = 'https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-en-20M-2023-02-17/resolve/main/';
@@ -2745,6 +2753,49 @@ function syncLiveLeadSelect() {
 // 请求，在代理/VPN 后面会被 Chrome 的地址空间策略拦掉（控制台报
 // “target IP address space of public yet the resource is in address space unknown”）。
 // 同一个 Range 请求走 XHR 不做这个转换，实测 206 能拿到字节。
+// 桌面壳（Electron）和手机壳（Capacitor）会在启动时挂一个取字节桥：由原生侧发请求，
+// 完全不受浏览器 CORS 约束，所以那些「音频源不给 CORS 头」的节目在壳里也能实时识别。
+// 壳会挂一个取字节 + 原生识别的桥：取字节由原生侧发请求，完全不受浏览器 CORS 约束，
+// 所以那些「音频源不给 CORS 头」的节目在壳里也能实时识别；
+// 识别交给原生 sherpa-onnx（多线程、不占 JS 线程、不需要 COOP/COEP）。
+// Tauri 壳提供 window.__TAURI__，这里就地包出一个同形状的宿主对象；
+// 别的壳（比如安卓 WebView）可以在页面脚本之前自己挂 window.MyTranscriptHost。
+const LIVE_HOST = (() => {
+  if (window.MyTranscriptHost) return window.MyTranscriptHost;
+  const T = window.__TAURI__;
+  if (!T || !T.core || typeof T.core.invoke !== 'function') return null;
+  const call = (cmd, args) => T.core.invoke(cmd, args || {});
+  return {
+    kind: 'tauri',
+    // 原生发 Range 请求，返回 ArrayBuffer（Tauri 的 ipc::Response 直接给字节）。
+    fetchRange: (url, from, to) => call('read_range', { url, from, to }),
+    // 原生识别：prepare 落盘模型（首次会下载），open 建一路流。
+    asrPrepare: () => call('asr_prepare', {}),
+    asrOpen: (modelDir, threads) => call('asr_open', { modelDir, threads }),
+    asrFeed: (id, samples, sampleRate) => call('asr_feed', { id, samples, sampleRate }),
+    asrResult: id => call('asr_result', { id }),
+    asrReset: id => call('asr_reset', { id }),
+    asrClose: id => call('asr_close', { id }),
+  };
+})();
+
+function liveHostFetch(url, from, to) {
+  if (!LIVE_HOST || typeof LIVE_HOST.fetchRange !== 'function') {
+    throw new Error('没有原生取字节桥');
+  }
+  return LIVE_HOST.fetchRange(url, from, to).then(buf => new Uint8Array(buf));
+}
+
+// 取字节的唯一入口：有壳就走壳，没有壳就走浏览器 XHR。
+async function liveGetBytes(url, from, to, timeoutMs) {
+  if (LIVE_HOST && typeof LIVE_HOST.fetchRange === 'function') {
+    const bytes = await liveHostFetch(url, from, to);
+    if (!bytes.length) throw new Error('取不到音频数据（空响应）');
+    return bytes;
+  }
+  return liveHttpGet(url, from, to, timeoutMs);
+}
+
 function liveHttpGet(url, from, to, timeoutMs) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -2810,7 +2861,7 @@ function liveDecodeAudio(ab, timeoutMs = 10000) {
 }
 
 async function liveFetchRange(from, to, timeoutMs = 15000) {
-  const bytes = await liveHttpGet(LIVE.audioUrl, from, to, timeoutMs);
+  const bytes = await liveGetBytes(LIVE.audioUrl, from, to, timeoutMs);
   if (!bytes.length) throw new Error('这个音频源不允许分段读取，取不到音频数据');
   return bytes;
 }
@@ -2831,35 +2882,59 @@ async function liveRetry(fn, times, delayMs) {
   throw last;
 }
 
-// 头部探针：跳 ID3v2，找到第一帧，确认是 CBR（恒定码率）才能用「字节 = 时间 × 码率」定位。
-async function liveProbeAudio() {
-  const head = await liveFetchRange(0, 131071);
+// 在一个字节窗口里找第一段连续帧：返回 {offset, bps, sr, spf}，找不到返回 null。
+function liveProbeScan(head) {
   let origin = 0;
   if (head[0] === 0x49 && head[1] === 0x44 && head[2] === 0x33) {
+    // ID3v2 头：只有 size 字段靠谱时才按它跳；有的文件（Lavf 出的）size 明显偏小，
+    // 这时先按 size 跳，再从 size 之后一路扫，靠「连续帧」自己定位。
     const size = ((head[6] & 0x7f) << 21) | ((head[7] & 0x7f) << 14) | ((head[8] & 0x7f) << 7) | (head[9] & 0x7f);
-    origin = 10 + size;
+    origin = Math.min(10 + size, head.length);
   }
-  let i = Math.min(origin, head.length);
+  let i = origin;
   while (i + 4 <= head.length) {
     if (head[i] === 0xFF && (head[i + 1] & 0xE0) === 0xE0) {
       const h = liveMp3Frame(head, i);
-      if (h) break;
+      // 连续两帧都对上才算真的帧边界，避免把帧内数据误当同步字。
+      if (h && i + h.len + 4 <= head.length && liveMp3Frame(head, i + h.len)) break;
     }
     i += 1;
   }
-  if (i + 4 > head.length) throw new Error('这个音频不是 MP3，暂时只支持 MP3 的提前生成');
+  if (i + 4 > head.length) return null;
   const first = liveMp3Frame(head, i);
   let p = i, frames = 0, br = first.br, sr = first.sr, spf = first.spf, cbr = true;
   while (p + 4 <= head.length && frames < 256) {
     const h = liveMp3Frame(head, p);
-    if (!h) break;
+    if (!h || p + h.len > head.length) break;
     if (h.br !== br || h.sr !== sr) cbr = false;
     p += h.len;
     frames += 1;
   }
-  if (frames < 8) throw new Error('这个音频不是 MP3，暂时只支持 MP3 的提前生成');
+  if (frames < 8) return null;
   if (!cbr) throw new Error('这个音频是可变码率 MP3，暂时不支持提前生成');
-  return { origin: i, bps: br / 8, sr, spf };
+  return { offset: i, bps: br / 8, sr, spf };
+}
+
+// 头部探针：跳 ID3v2，找到第一帧，确认是 CBR（恒定码率）才能用「字节 = 时间 × 码率」定位。
+// 有的节目把 3000×3000 封面塞进 ID3（实测光封面就 ~1.4 MB），128 KB 的窗口根本到不了
+// 第一帧，以前会误报「这个音频不是 MP3」。所以按 128 KB → 2 MB → 8 MB 递进取窗口。
+async function liveProbeAudio() {
+  const sizes = [131072, 2 * 1024 * 1024, 8 * 1024 * 1024];
+  let last = null;
+  for (const size of sizes) {
+    const head = await liveFetchRange(0, size - 1);
+    try {
+      const r = liveProbeScan(head);
+      if (r) return { origin: r.offset, bps: r.bps, sr: r.sr, spf: r.spf };
+    } catch (err) {
+      // 已经认出是 VBR 就没必要再放大窗口了，直接把这个错误交给调用方。
+      last = err;
+      break;
+    }
+    last = null;
+  }
+  if (last) throw last;
+  throw new Error('这个音频不是 MP3，暂时只支持 MP3 的提前生成');
 }
 
 // 取 [startSec, startSec+seconds) 这段：按码率算出字节范围 → 重同步到帧边界 → 解码成 16k 单声道。
@@ -3324,14 +3399,21 @@ function liveStopPump() {
 
 async function liveLoadEngine() {
   if (LIVE.engine) return LIVE.engine;
-  // 多线程 WASM 要 SharedArrayBuffer，而 SAB 只在跨域隔离页面可用；这里提前拦，
-  // 否则 Emscripten 的 pthread 引导会抛一个没人接的 DataCloneError，await 永远挂住。
-  if (!self.crossOriginIsolated) throw new Error('识别引擎需要跨域隔离（COOP/COEP），请刷新页面后重试');
+  if (LIVE_ENGINE_KIND === 'native') {
+    const engine = await liveNativeLoad();
+    LIVE.engine = engine;
+    return engine;
+  }
   if (LIVE_ENGINE_KIND === 'sherpa') {
+    // sherpa 的这个 wasm 产物是单线程构建（没有 pthread / SharedArrayBuffer 依赖），
+    // 所以在桌面壳、手机壳里不需要伪造 COOP/COEP 也能跑。
     const engine = await liveSherpaLoad();
     LIVE.engine = engine;
     return engine;
   }
+  // 多线程 WASM 要 SharedArrayBuffer，而 SAB 只在跨域隔离页面可用；这里提前拦，
+  // 否则 Emscripten 的 pthread 引导会抛一个没人接的 DataCloneError，await 永远挂住。
+  if (!self.crossOriginIsolated) throw new Error('识别引擎需要跨域隔离（COOP/COEP），请刷新页面后重试');
   const base = LIVE_ENGINE.replace(/index\.js$/, '');
   const [mod, moduleMod] = await Promise.all([import(LIVE_ENGINE), import(base + 'module.js')]);
   if (!mod || typeof mod.Transcriber !== 'function') throw new Error('识别引擎模块加载异常');
@@ -3423,7 +3505,7 @@ async function liveSherpaBytes(name, baseUrl) {
       if (buf.byteLength) return new Uint8Array(buf);
     }
   } catch (e) {}
-  const bytes = await liveHttpGet(baseUrl + name, null, null);
+  const bytes = await liveGetBytes(baseUrl + name, null, null, 0);
   try {
     const cache = await caches.open(SHERPA_CACHE);
     await cache.put(new Request(key), new Response(bytes, {
@@ -3527,73 +3609,72 @@ function liveSherpaWords(tokens, times, fedSec) {
   return words;
 }
 
+// 把「这一路流当前的 token/时间戳」变成一行行字幕。sherpa-wasm 和原生推理共用这一套：
+// 断行不看 endpoint（播客几乎一直在说话，端点会连着为真，靠它就变成一行一个词），
+// 改成按显示需要自己断：一行最长 12 秒 or 40 个词；定稿的词不再回头改。
+// 返回 true 表示这一路流的特征帧攒得太多了（>200 词），调用方该重置解码器。
+function liveEmitTokens(session, st, tokens, times) {
+  const words = liveSherpaWords(tokens || [], times || [], st.fed);
+  if (!words.length) return false;
+  // 只显示还没定稿的那一段：词典是只追加的，已经写进正文的词不必再动。
+  const tail = words.slice(Math.min(st.cursor, words.length));
+  if (!tail.length) return false;
+  const lineStart = st.segBase + tail[0].s;
+  const lineWords = tail.map(w => ({
+    text: w.text,
+    start: w.s - tail[0].s,
+    end: w.e - tail[0].s,
+  }));
+  const duration = Math.max(0.1, lineWords[lineWords.length - 1].end);
+  // zipformer 的输出习惯是全大写（" THE YELLOW LAMPS"），转小写才像正常字幕。
+  const letters = lineWords.map(w => w.text).join('').replace(/[^A-Za-z]/g, '');
+  if (letters.length && letters.replace(/[^A-Z]/g, '').length * 10 >= letters.length * 9) {
+    lineWords.forEach(w => { w.text = w.text.toLowerCase(); });
+  }
+  const sig = st.lineId + '|' + lineWords.length + '|' + lineWords[lineWords.length - 1].text;
+  const span = tail[tail.length - 1].e - tail[0].s;
+  const needBreak = span > 12 || tail.length > 40;
+  if (sig === st.lastSig && !needBreak) return false;
+  st.lastSig = sig;
+  liveRenderLine(session, {
+    id: st.lineId, text: lineWords.map(w => w.text).join(' '),
+    startTime: lineStart, duration, words: lineWords, isComplete: needBreak,
+  });
+  if (!needBreak) return false;
+  // 只断显示、不重置解码器：识别还在同一句里继续，时间轴也没断。
+  st.cursor = words.length;
+  st.lineId += 1;
+  st.lastSig = '';
+  // 解码器迟早要重置一次，否则这一路流里的特征帧会一直攒着（每小时几十 MB）。
+  return words.length > 200;
+}
+
 // 把 sherpa 的“当前句”结果转成页面已有的行模型（和 Moonshine 的 line 形状对齐），
 // 这样 liveRenderLine / liveWordTimes / 高亮那一套完全不用改。
 function liveSherpaStream(session, anchor) {
   const rec = LIVE.engine.rec;
   const st = rec.createStream();
-  let fed = 0;        // 已喂进去的秒数（相对这一路流起点）
-  let segBase = 0;    // 当前句在流内的起点；endpoint 之后重置流，起点跟着往前走
-  let lineId = 0;
-  let cursor = 0;     // 已经定稿（写进正文不再改）的词数
-  let lastSig = '';
+  const seg = { fed: 0, segBase: 0, lineId: 0, cursor: 0, lastSig: '' };
   let closed = false;
-  const emit = () => {
-    if (closed || session !== LIVE.session) return;
-    let loops = 0;
-    while (rec.isReady(st) && loops < 8) { rec.decode(st); loops += 1; }
-    const r = rec.getResult(st) || {};
-    const words = liveSherpaWords(r.tokens || [], r.timestamps || [], fed);
-    if (!words.length) return;
-    // 只显示还没定稿的那一段：词典是只追加的，已经写进正文的词不必再动。
-    const tail = words.slice(Math.min(cursor, words.length));
-    if (!tail.length) return;
-    const lineStart = segBase + tail[0].s;
-    const lineWords = tail.map(w => ({
-      text: w.text,
-      start: w.s - tail[0].s,
-      end: w.e - tail[0].s,
-    }));
-    const duration = Math.max(0.1, lineWords[lineWords.length - 1].end);
-    // zipformer 的输出习惯是全大写（" THE YELLOW LAMPS"），转小写才像正常字幕。
-    const letters = lineWords.map(w => w.text).join('').replace(/[^A-Za-z]/g, '');
-    if (letters.length && letters.replace(/[^A-Z]/g, '').length * 10 >= letters.length * 9) {
-      lineWords.forEach(w => { w.text = w.text.toLowerCase(); });
-    }
-    const sig = lineId + '|' + lineWords.length + '|' + lineWords[lineWords.length - 1].text;
-    // 断行：这里不看 isEndpoint。zipformer 的端点判定在我们这种「一直有人说话」的
-    // 播客里会连着多轮为真，靠它断句就变成每 0.5 秒重置一次、正文一行一个词。
-    // 改成按显示需要自己断：一行最长 12 秒 or 40 个词。
-    const span = tail[tail.length - 1].e - tail[0].s;
-    const needBreak = span > 12 || tail.length > 40;
-    if (sig === lastSig && !needBreak) return;
-    lastSig = sig;
-    liveRenderLine(session, {
-      id: lineId, text: lineWords.map(w => w.text).join(' '),
-      startTime: lineStart, duration, words: lineWords, isComplete: needBreak,
-    });
-    if (needBreak) {
-      // 只断显示、不重置解码器：识别还在同一句里继续，时间轴也没断。
-      cursor = words.length;
-      lineId += 1;
-      lastSig = '';
-      // 解码器迟早要重置一次，否则这一路流里的特征帧会一直攒着（每小时几十 MB）。
-      // 攒够 200 个词（约 1 分钟语音）就重置，下一段的 token 时间从当前喂点重新起算。
-      if (words.length > 200) {
-        try { rec.reset(st); } catch (e) {}
-        cursor = 0;
-        segBase = fed;
-      }
-      return;
-    }
-  };
   return {
     addAudio(chunk, rate) {
       if (closed) return;
       st.acceptWaveform(rate, chunk);
-      fed += chunk.length / rate;
+      seg.fed += chunk.length / rate;
     },
-    transcribe() { emit(); },
+    transcribe() {
+      if (closed || session !== LIVE.session) return;
+      let loops = 0;
+      while (rec.isReady(st) && loops < 8) { rec.decode(st); loops += 1; }
+      const r = rec.getResult(st) || {};
+      const needReset = liveEmitTokens(session, seg, r.tokens, r.timestamps);
+      if (needReset) {
+        // 攒够 200 个词（约 1 分钟语音）就重置，下一段的 token 时间从当前喂点重新起算。
+        try { rec.reset(st); } catch (e) {}
+        seg.cursor = 0;
+        seg.segBase = seg.fed;
+      }
+    },
     stop() {},
     close() {
       if (closed) return;
@@ -3601,6 +3682,76 @@ function liveSherpaStream(session, anchor) {
       try { st.free(); } catch (e) {}
     },
   };
+}
+
+/* ---------- 原生推理（Tauri 壳）：sherpa-onnx 的 Windows DLL ----------
+   和上面 WASM 版是同一个模型、同一套切词规则，只是把 decode 挪到了 Rust 侧：
+   WebView 只负责喂 PCM、取 JSON，主线程不再被推理占住。 */
+async function liveNativeLoad() {
+  if (LIVE.busy) liveSetText('准备原生识别模型（首次会下载约 41 MB）…', 'busy');
+  const dir = await LIVE_HOST.asrPrepare();
+  // 线程数留一个核给播放/界面；sherpa 的 intra-op 线程超过 4 收益很小。
+  const cores = navigator.hardwareConcurrency || 4;
+  const threads = Math.max(2, Math.min(4, cores > 4 ? cores - 1 : 2));
+  const id = await LIVE_HOST.asrOpen(dir, threads);
+  if (typeof id !== 'number') throw new Error('原生识别器创建失败');
+  return { kind: 'native', id, threads };
+}
+
+function liveNativeStream(session, anchor) {
+  const id = LIVE.engine.id;
+  const seg = { fed: 0, segBase: 0, lineId: 0, cursor: 0, lastSig: '' };
+  let closed = false;
+  let buf = null;        // 还没交给原生侧的那部分 PCM
+  let inflight = false;  // 同一条命令通道串行，避免 feed/result 乱序
+  const flush = async () => {
+    if (closed || inflight || session !== LIVE.session) return;
+    if (!buf || !buf.length) return;
+    const samples = Array.from(buf);
+    buf = null;
+    inflight = true;
+    try {
+      await LIVE_HOST.asrFeed(id, samples, 16000);
+      if (closed || session !== LIVE.session) return;
+      const json = await LIVE_HOST.asrResult(id);
+      if (closed || session !== LIVE.session) return;
+      let r = null;
+      try { r = JSON.parse(json || '{}'); } catch (e) { r = null; }
+      if (!r) return;
+      const needReset = liveEmitTokens(session, seg, r.tokens, r.timestamps);
+      if (needReset) {
+        await LIVE_HOST.asrReset(id);
+        seg.cursor = 0;
+        seg.segBase = seg.fed;
+      }
+    } catch (err) {
+      console.warn('[live] 原生识别失败', err && err.message ? err.message : err);
+    } finally {
+      inflight = false;
+    }
+  };
+  return {
+    addAudio(chunk, rate) {
+      if (closed || !chunk || !chunk.length) return;
+      buf = buf && buf.length ? liveConcatFloat(buf, chunk) : chunk;
+      seg.fed += chunk.length / rate;
+    },
+    transcribe() { flush(); },
+    stop() {},
+    close() {
+      if (closed) return;
+      closed = true;
+      buf = null;
+      try { LIVE_HOST.asrClose(id); } catch (e) {}
+    },
+  };
+}
+
+function liveConcatFloat(a, b) {
+  const out = new Float32Array(a.length + b.length);
+  out.set(a, 0);
+  out.set(b, a.length);
+  return out;
 }
 
 
@@ -3647,6 +3798,8 @@ function liveRebuildStream() {
   const anchor = livePlayhead();
   if (LIVE.engine.kind === 'sherpa') {
     LIVE.stream = liveSherpaStream(session, anchor);
+  } else if (LIVE.engine.kind === 'native') {
+    LIVE.stream = liveNativeStream(session, anchor);
   } else {
     const stream = LIVE.engine.createStream({ updateInterval: 0.5 });
     stream.addListener({
@@ -3903,18 +4056,22 @@ async function liveEnable() {
   $('liveStopBtn').textContent = '停止';
   liveSetText('检查运行环境…', 'busy');
   try {
-    const iso = await liveEnsureIsolation();
-    if (iso !== 'ready') {
-      LIVE.mode = 'needReload';
-      $('liveStopBtn').textContent = iso === 'reload' ? '刷新页面' : '关闭';
-      if (iso === 'reload') {
-        // 记住这次意图，刷新回来自动接着开，不用再点一次。
-        try { sessionStorage.setItem('myt-live-auto', '1'); } catch (e) {}
-        liveSetText('需要刷新一次以启用跨域隔离，刷新后会自动继续', 'busy');
-      } else {
-        liveSetText('这个浏览器不支持 Service Worker，实时识别不可用', 'err');
+    // 跨域隔离只为 Moonshine 的多线程 WASM 准备；sherpa（WASM 单线程构建）和
+    // 原生推理都不需要这一关。
+    if (LIVE_ENGINE_KIND === 'moonshine') {
+      const iso = await liveEnsureIsolation();
+      if (iso !== 'ready') {
+        LIVE.mode = 'needReload';
+        $('liveStopBtn').textContent = iso === 'reload' ? '刷新页面' : '关闭';
+        if (iso === 'reload') {
+          // 记住这次意图，刷新回来自动接着开，不用再点一次。
+          try { sessionStorage.setItem('myt-live-auto', '1'); } catch (e) {}
+          liveSetText('需要刷新一次以启用跨域隔离，刷新后会自动继续', 'busy');
+        } else {
+          liveSetText('这个浏览器不支持 Service Worker，实时识别不可用', 'err');
+        }
+        return;
       }
-      return;
     }
     LIVE.session += 1;
     const session = LIVE.session;
@@ -4105,14 +4262,17 @@ audio.addEventListener('ended', () => {
 });
 
 // 刷新回来接着开：第一次启用要先装 Service Worker 再刷新，不该让用户再点一次。
+// ?live=1 是给桌面壳联调用的：开局就播、直接开实时识别，省掉手动点两下。
 (function liveAutoResume() {
   let flag = '';
   try { flag = sessionStorage.getItem('myt-live-auto') || ''; } catch (e) {}
-  if (!flag) return;
+  const forced = /[?&]live=1/.test(location.search);
+  if (!flag && !forced) return;
   let tries = 0;
   const attempt = () => {
     tries += 1;
-    if (!self.crossOriginIsolated || !document.body.classList.contains('player-open') || !state.current) {
+    // 非强开路径仍然要求跨域隔离（Moonshine 的多线程 WASM 需要它）。
+    if ((!forced && !self.crossOriginIsolated) || !document.body.classList.contains('player-open') || !state.current) {
       if (tries < 60) setTimeout(attempt, 250);
       return;
     }

@@ -685,3 +685,49 @@ timestamps**，先做 `TOKEN_EMISSION_LAG_MS = 400`（token 在发射它的 enco
 「这个节目的音频源不允许跨域读取字节，实时字幕用不了（播放和原文字稿不受影响）」。
 实测这一集：点实时识别 4 秒内给出该提示，播放正常、434 句原文字稿照常渲染。
 想覆盖这类节目只能自建中继代理（与本仓库“不自托管”的前提冲突，暂不做）。
+
+
+### 桌面壳：Tauri 2 + sherpa-onnx 原生推理（2026-11-17）
+
+**为什么做壳**：网页版有两个浏览器级天花板——①音频源不给 `Access-Control-Allow-Origin`
+就彻底读不到字节（`99% Invisible` 那类落在 `stitcher.simplecastaudio.com` 的节目只能降级提示）；②识别跑在 WebView 的 JS 线程里，
+WASM 单线程还要背 COOP/COEP。桌面壳把这两件事同时绕开：字节走 Rust（reqwest 带 Range，
+不受 CORS 约束），识别走原生 `sherpa-onnx-c-api`（多线程、体积小、CPU 低）。
+选型过程中否掉了 Electron（自带 Chromium 200 MB / 250–400 MB 内存）和 Capacitor。
+
+**结构（`apps/windows/`，详见该目录 README）**：
+
+- `src/main.rs` 命令层：`read_range(url, from, to)`（reqwest + `Range`，返回 `tauri::ipc::Response`）、
+  `asr_prepare / asr_open / asr_feed / asr_result / asr_reset / asr_close`，状态
+  `AppState{engines: Mutex<HashMap<u32, Asr>>, next_id}`。
+- `src/asr.rs` 手写 `#[repr(C)]` FFI。`sherpa-rs` 在 crates.io 只封装离线模型、没有 streaming
+  模块，`sherpa-rs-sys` 的 build.rs 又强制 bindgen（本机无 libclang），所以直接对着
+  `c-api.h`（v1.12.15）写结构体和签名：16 kHz/80 维、`num_threads`、`provider=cpu`、
+  `model_type=zipformer`、`enable_endpoint=0`、`greedy_search`。
+- `build.rs` 链接 `vendor/sherpa/lib` 并把 3 个 DLL 拷到 `target/{debug,release}`。
+- `tauri.conf.json`：`frontendDist="../../../site"`（直接用仓库 site，不复制副本），
+  窗口 x=60/y=40 固定位置（GUI 联调时坐标可复算），`withGlobalTauri=true`。
+- 页面侧只加了宿主桥：`LIVE_HOST` 从 `window.__TAURI__.core.invoke` 包出
+  `{kind:'tauri', fetchRange, asrPrepare, asrOpen, asrFeed, asrResult, asrReset, asrClose}`，
+  `LIVE_ENGINE_KIND` 变成 `native`；`liveEmitTokens()` 抽出来给 sherpa-wasm 和原生共用
+  （切词/断行/`cursor` 定稿逻辑一份）。网页版分支完全不动。
+
+**踩过的坑（都会复现，别猜）**：
+
+| 坑 | 结论 |
+| --- | --- |
+| `cargo build` 报 `Failed to clean up ...out\probe: 目录不是空的 (os error 145)` | target 目录放在 D 盘必挂（`thiserror`/`proc-macro2` 的 build script），`cargo clean` 无效；`CARGO_TARGET_DIR` 换到 C 盘一次通过 |
+| 识别器创建失败、日志说 `tokens.txt does not exist` 但文件在 | sherpa 用 `std::ifstream` 判存在，路径含非 ASCII（用户名「游梦」）就挂；模型固定放 `%ProgramData%\MyTranscript\sherpa-en-20M`，旧 `app_data` 目录自动搬 |
+| 第一次下 DLL 得 404 | v1.12.15 的 Windows 资产名是 `sherpa-onnx-v1.12.15-win-x64-shared-no-tts.tar.bz2`（带 `-no-tts`） |
+| HF 直连下模型超时 | 改 `hf-mirror.com` + `curl -L --retry 5` |
+| 壳里报「这个音频不是 MP3」 | 这集 ID3v2.4 里嵌了 3000×3000 PNG 封面（APIC 帧约 1,364,202 B），128 KB 探针到不了第一帧。`liveProbeAudio` 改成 128 KB→2 MB→8 MB 递进取窗口，并把“连续两帧都对上”才算帧边界 |
+| 发行版启动报 `WebView2 error 0x800700AA 请求的资源在使用中` / `os error 5` | exe 所在目录是**低完整性级别**（`icacls` 显示 `Mandatory Label\Low Mandatory Level:(NW)`）。本仓库 `D:\MyTranscript` 被沙箱写成 Low IL，从那里启动的进程也是 Low IL，WebView2 不肯建环境；解压到桌面/下载目录（Medium）即正常 |
+
+**实机结果**：speaking-of-psychology 集原生命中识别通过（逐词高亮跟随）；99% Invisible
+（CORS + 大封面）在壳里取到 206/131072 字节、探针放大后定位到真正的第一帧、原生识别
+连出词（实测 38 句）。网页版行为未变。
+
+**未决**：Windows 分发形态（单 exe+同目录 3 DLL vs NSIS 安装包，未签名有 SmartScreen）；
+模型分发（首次下载 41 MB vs 随包内置）；`SHERPA_LAG=0.4` 未在本集重标；原生 CPU 只采到
+“追赶提前量”时的瞬时值（约 62% 单核），稳态对比未做；Android 未动工（计划原生 Kotlin
+WebView + 同一套 C API 的 JNI 包）。
