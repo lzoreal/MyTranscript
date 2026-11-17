@@ -675,3 +675,13 @@ timestamps**，先做 `TOKEN_EMISSION_LAG_MS = 400`（token 在发射它的 enco
 拼成“SQUALID”级别）；②首轮要下 12 MB wasm + 43 MB 模型；③`SHERPA_LAG` 是别人的实测值；
 ④Safari/iOS 走原生 + Range 的老路径，未真机验证；⑤`spikes/sherpa-wasm.html` 是这轮的
 最小验证页（0.5 秒块喂 `test_wavs/0.wav`，token 31 / timestamps 31 对齐），保留作回归用。
+
+**有些节目就是不能实时识别（不是引擎的问题）**：`99% Invisible` 的音频落在
+`stitcher.simplecastaudio.com`，那个域名**完全不带 CORS 头**（直连实测：Range 请求返回
+206，响应里没有 `Access-Control-Allow-Origin`；播放地址还要先经 `mgln.ai` →
+`dts.podtrac.com` 两跳重定向）。浏览器拿不到字节，实时识别从原理上做不了，
+单流 MSE 也一样不行（它同样要读字节）。所以 `liveHttpGet` 的 `onerror` 会给错误打
+`err.cors` 标记，`liveRetry` 见到就直接放弃（重试没有意义），`liveEnable` 报
+「这个节目的音频源不允许跨域读取字节，实时字幕用不了（播放和原文字稿不受影响）」。
+实测这一集：点实时识别 4 秒内给出该提示，播放正常、434 句原文字稿照常渲染。
+想覆盖这类节目只能自建中继代理（与本仓库“不自托管”的前提冲突，暂不做）。

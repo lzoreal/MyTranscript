@@ -2763,7 +2763,13 @@ function liveHttpGet(url, from, to, timeoutMs) {
       if (!xhr.response) { reject(new Error('取不到音频数据（空响应）')); return; }
       resolve(new Uint8Array(xhr.response));
     });
-    xhr.onerror = () => done(() => reject(new Error('取音频数据失败（网络错误或跨域被拦）')));
+    xhr.onerror = () => done(() => {
+      // XHR 走到 onerror 基本只有两种：网络断了，或者响应没给 CORS 头被浏览器拦掉。
+      // 后者是确定性的（重试也不会好），带个标记上去，让上层直接报原因、别空转重试。
+      const err = new Error('取音频数据失败（网络错误或跨域被拦）');
+      err.cors = true;
+      reject(err);
+    });
     // abort() 触发的是 abort 事件，不是 error；不接这个事件，超时 abort 之后 Promise
     // 会永远 pending，整条 pump 就卡在那里（实测卡 40 秒才被别的分支重建救回来）。
     xhr.onabort = () => done(() => reject(new Error('取音频请求被中断（超时后自动重试）')));
@@ -2816,6 +2822,8 @@ async function liveRetry(fn, times, delayMs) {
   for (let i = 0; i < times; i++) {
     try { return await fn(); } catch (err) {
       last = err;
+      // 跨域被拦是确定性的：这个节目的音频源不给我们字节，重试多少次都一样。
+      if (err && err.cors) throw err;
       if (i < times - 1) liveSetText('取音频数据失败，正在重试（第 ' + (i + 2) + ' 次）…', 'busy');
       if (i < times - 1) await new Promise(r => setTimeout(r, delayMs));
     }
@@ -3950,7 +3958,11 @@ async function liveEnable() {
     liveSetText('实时识别中', 'on');
     status('实时识别已开启：正文显示本次播放的实时识别结果，原文字稿未被改动。', 'good');
   } catch (err) {
-    const msg = err && err.message ? err.message : String(err);
+    // 音频源不给 CORS 头（stitcher/simplecast 那类 CDN 就是这样）：浏览器读不到字节，
+    // 实时字幕在原理上就用不了，也别让它重试一阵再报错。
+    const msg = err && err.cors
+      ? '这个节目的音频源不允许跨域读取字节，实时字幕用不了（播放和原文字稿不受影响）'
+      : (err && err.message ? err.message : String(err));
     LIVE.mode = 'failed';
     document.body.classList.remove('live-on');
     liveSetText('实时识别不可用：' + msg, 'err');
