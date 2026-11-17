@@ -74,6 +74,7 @@
   const T = window.__TAURI__;
   const $ = (id) => document.getElementById(id);
   if (!T || !T.event) return;
+  try { T.core.invoke('dbg_note', { msg: location.href + ' els=' + document.body.childElementCount }); } catch (e) {}
 
   const emit = (payload) => { try { T.event.emit('myt://mini-cmd', payload); } catch (e) {} };
   $('play').onclick = () => emit({ cmd: 'toggle' });
@@ -135,7 +136,12 @@
   }
 
   render(null);
-  T.event.listen('myt://mini-state', (ev) => render(ev.payload || null));
+  let got = 0;
+  T.event.listen('myt://mini-state', (ev) => {
+    got += 1;
+    if (got <= 3) { try { T.core.invoke('dbg_note', { msg: 'state#' + got + ' ' + JSON.stringify(ev.payload || null).slice(0, 90) }); } catch (e) {} }
+    render(ev.payload || null);
+  });
 })();
 </script>
 </body>

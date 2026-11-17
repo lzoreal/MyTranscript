@@ -169,6 +169,26 @@ fn asr_close(state: State<AppState>, id: u32) -> Result<(), String> {
     Ok(())
 }
 
+/// 诊断日志：只有设了 MYT_DEBUG 才写 `%TEMP%\myt-mini.log`，正常用户不受影响。
+fn dbg_log(line: &str) {
+    if std::env::var("MYT_DEBUG").is_err() {
+        return;
+    }
+    use std::io::Write;
+    if let Ok(dir) = std::env::var("TEMP") {
+        let path = std::path::Path::new(&dir).join("myt-mini.log");
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+            let _ = writeln!(f, "{line}");
+        }
+    }
+}
+
+/// 迷你窗页面自己报一句“我起来了”，用来分清「没加载」还是「加载了没渲染」。
+#[tauri::command]
+fn dbg_note(msg: String) {
+    dbg_log(&format!("boot {msg}"));
+}
+
 /// 托盘左键：可见且在前台就收起，否则亮出来并聚焦。
 fn toggle_main(app: &tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
@@ -203,10 +223,26 @@ fn open_mini(app: tauri::AppHandle) -> Result<(), String> {
         .minimizable(false)
         .skip_taskbar(true)
         .shadow(true)
+        // 先不显示，等页面画出来再亮，避免闪一块白板；底色也先铺成深色。
+        .visible(false)
+        .background_color(tauri::utils::config::Color(22, 24, 29, 255))
+        .on_page_load(|_webview, payload| {
+            dbg_log(&format!(
+                "mini page_load {:?} {}",
+                payload.event(),
+                payload.url()
+            ));
+        })
         // 主窗收进托盘后 JS 定时器不能被节流，否则实时识别和进度上报会停摆。
         .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
         .build()
         .map_err(|e| format!("迷你窗打开失败：{e}"))?;
+    if let Some(w) = app.get_webview_window("mini") {
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(600));
+            let _ = w.show();
+        });
+    }
     Ok(())
 }
 
@@ -270,6 +306,10 @@ fn main() {
             if let Err(e) = build_tray(app.handle()) {
                 eprintln!("托盘创建失败：{e}");
             }
+            // 联调开关：MYT_MINI_AUTO=1 时开局自动弹迷你窗（配合 MYT_DEBUG 抓日志）。
+            if std::env::var("MYT_MINI_AUTO").is_ok() {
+                let _ = open_mini(app.handle().clone());
+            }
             Ok(())
         })
         .manage(AppState {
@@ -285,7 +325,8 @@ fn main() {
             asr_reset,
             asr_close,
             open_mini,
-            close_mini
+            close_mini,
+            dbg_note
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
