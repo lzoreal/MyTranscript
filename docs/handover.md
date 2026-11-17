@@ -515,6 +515,23 @@ translate / align 两条已在 2026-11-14 删除。
   记录继续按 VTT 发布，直到它们跑出 JSON；
 - `scraper.is_episode_processed` 认得 `json/` 下的产物，VTT 归档后 feed 不会被清空。
 
+### 文字稿交互：本集内搜索 / 文字卡 / 键盘逐句（2026-11-17）
+
+- **本集内搜索**：`Ctrl+F` 或 `/` 打开顶部搜索条（`#findBar`）；输入即按句子匹配（`cue.text` + `cue.zh`，
+  小写、空白折叠），命中句加 `.find-hit`，当前命中再加 `.find-cur`；`Enter`/`↓` 下一处、`Shift+Enter`/`↑`
+  上一处，每次跳转会 `seekTo(cue.start)` 并滚到那句，`Esc` 关闭并清标记。输入时只高亮+滚动、不改播放位置，
+  避免边打字边把音频拖走。范围只有当前单集（跨集搜索是库搜索，不是这个）。
+- **文字卡**：在文字稿里拖选任意文字 → 浮出 `#selTools`（复制 / 文字卡）。「文字卡」拼成 Markdown：
+  `> 原文` + `> 译文`（有中文时）+ 空行 + `— 节目 · 集标题 · mm:ss` + 回跳链接（`origin+pathname#/player/<slug>/<id>`）。
+  复制优先 `navigator.clipboard`，失败退回 `textarea + execCommand`。
+- 拖选完立刻松手会触发 `.cue` 的 click（原本是「点句跳转」），两个 click 处理器都加了
+  `if (!getSelection().isCollapsed) return`，否则一拖选就把播放位置跳走。
+- 浮条位置取 `range.getBoundingClientRect()`，上方放不下就翻到选区下方，左右夹在窗口内；文字稿一滚动就收起。
+- **键盘逐句**：`↑`/`↓`、`j`/`k`、`[`/`]` 都是上/下一句（`jumpCue(±1)`，跳转即 seek + 滚到该句）；
+  `Space` 播放/暂停，`←`/`→` −15/+30 秒。输入框、按钮等可交互元素上的按键不劫持。
+- 换集/重新渲染时由 `window.mytFindReset`（在 `renderCues()` 开头调用）关掉搜索条与浮条，
+  避免把上一集的命中标记带进新的一集。
+
 ### 播放页实时逐词字幕（2026-11-16）
 
 - 链路：`fetch(音频 URL, {headers:{Range}})` 按时间窗抓字节（需 CORS）→ 按 CBR 码率把 `播放位置 + 提前量` 换算成字节偏移，前后留余量 → 扫 MP3 帧重同步到帧边界 → 走帧到目标时长（防止服务端忽略 Range 解出整集）→ `AudioContext({sampleRate:16000})` 解成 16 kHz 单声道 PCM → `Moonshine tiny-streaming`（`@moonshine-ai/moonshine-wasm@0.1.6`，jsDelivr 动态 import）→ 正文逐词行渲染。**`<audio>` 完全不动**：不改 `crossOrigin`、不建 `createMediaElementSource`，所以失败模式只是「拿不到字节」，不会把音频图锁死或变哑。

@@ -264,6 +264,40 @@ body.live-on .cue:not(.live){display:none}
   display:block;margin-top:6px;font-size:.82em;line-height:1.72;letter-spacing:.01em;
   color:color-mix(in srgb, var(--ink) 60%, transparent);transition:color .2s var(--ease);
 }
+/* 本集内搜索：命中的句子铺一层浅色，当前命中再补一条左边线 */
+.cue.find-hit{background:color-mix(in srgb, var(--accent2) 9%, transparent)}
+.cue.find-cur{box-shadow:inset 2px 0 0 var(--accent2);background:color-mix(in srgb, var(--accent2) 17%, transparent)}
+.find-bar{
+  position:fixed;z-index:40;left:50%;top:62px;transform:translateX(-50%);display:none;align-items:center;gap:6px;
+  padding:7px 9px;border-radius:12px;border:1px solid var(--edge);background:color-mix(in srgb,var(--panel) 96%,transparent);
+  box-shadow:0 22px 44px -26px rgba(0,0,0,.7);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+}
+.find-bar.on{display:flex}
+.find-bar .ficon{font:11px/1 var(--mono);letter-spacing:.1em;color:var(--accent2);padding:0 2px}
+.find-bar input{
+  width:min(46vw,340px);padding:5px 6px;border:0;border-bottom:1px solid var(--edge);border-radius:0;
+  background:transparent;color:var(--ink);font:12.5px/1.5 var(--sans);outline:none;
+}
+.find-bar input::placeholder{color:var(--dim)}
+.find-bar .cnt{font:9.5px/1.4 var(--mono);letter-spacing:.08em;color:var(--muted);min-width:44px;text-align:center;font-variant-numeric:tabular-nums}
+.find-bar button{
+  width:26px;height:24px;border:0;border-radius:7px;background:transparent;color:var(--soft);
+  font:inherit;font-size:12px;line-height:1;display:grid;place-items:center;cursor:pointer;
+}
+.find-bar button:hover{background:color-mix(in srgb,var(--ink) 12%,transparent);color:var(--bright)}
+/* 划句后的浮动工具条 */
+.sel-tools{
+  position:fixed;z-index:41;display:none;align-items:center;gap:3px;padding:5px;
+  border-radius:9px;border:1px solid var(--edge);background:color-mix(in srgb,var(--panel) 97%,transparent);
+  box-shadow:0 18px 38px -22px rgba(0,0,0,.75);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+}
+.sel-tools.on{display:flex}
+.sel-tools button{
+  border:0;border-radius:6px;background:transparent;color:var(--soft);cursor:pointer;
+  padding:5px 9px;font:10.5px/1.2 var(--sans);letter-spacing:.04em;white-space:nowrap;
+}
+.sel-tools button:hover{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--bright)}
+.sel-tools button[data-sel="card"]{color:var(--accent2)}
 .cue.active .zh{color:color-mix(in srgb, var(--ink) 84%, transparent)}
 .badge{
   margin-left:10px;vertical-align:4px;font:9px/1 var(--mono);letter-spacing:.12em;
@@ -1311,6 +1345,19 @@ body.car-mode .ptitle{font-size:20px}
   </div>
   <div id="transcript" class="transcript" role="region" aria-label="文字稿" tabindex="0"><div class="empty"><div class="loader"><span class="bars"><i></i><i></i><i></i></span><span>正在读取 feed…</span></div></div></div>
 </main>
+
+<div class="find-bar" id="findBar" hidden>
+  <span class="ficon" aria-hidden="true">⌕</span>
+  <input id="findInput" type="text" placeholder="在本集文字稿里搜…" autocomplete="off" spellcheck="false" aria-label="在本集文字稿里搜索">
+  <span class="cnt" id="findCount">0/0</span>
+  <button type="button" id="findPrev" title="上一处（Shift+Enter）" aria-label="上一处">↑</button>
+  <button type="button" id="findNext" title="下一处（Enter）" aria-label="下一处">↓</button>
+  <button type="button" id="findClose" title="关闭（Esc）" aria-label="关闭搜索">✕</button>
+</div>
+<div class="sel-tools" id="selTools" hidden>
+  <button type="button" data-sel="copy">复制</button>
+  <button type="button" data-sel="card">文字卡</button>
+</div>
 
 <footer class="dock">
   <div class="pbar">
@@ -2424,6 +2471,7 @@ function alignZhLines() {
 function renderCues() {
   if (LIVE.on) return;   // 实时模式自己管正文 DOM，别被 VTT 渲染覆盖
   box.innerHTML = ''; state.nodes = []; state.activeCue = -1; state.wordIdx = -1;
+  if (window.mytFindReset) window.mytFindReset();
   if (!state.cues.length) { box.innerHTML = '<div class="empty">没有可显示的逐字稿。</div>'; syncJumpPill(); return; }
   const wordMode = state.mode === 'word';
   let wordCount = 0, fallback = 0;
@@ -2445,6 +2493,8 @@ function renderCues() {
           sp.className = 'word pending'; sp.textContent = w.t; sp.dataset.wi = wi;
           sp.addEventListener('click', e => {
             e.stopPropagation();
+            const sel = getSelection();
+            if (sel && !sel.isCollapsed) return;   // 拖选文字时不要顺手跳播放位置
             if (state.alignMode) { alignToCue(cue); return; }
             seekTo(w.s + state.offset);
           });
@@ -2464,6 +2514,8 @@ function renderCues() {
       el.append(z);
     }
     el.addEventListener('click', () => {
+      const sel = getSelection();
+      if (sel && !sel.isCollapsed) return;   // 刚拖选完文字，别把点击当成跳转
       if (state.alignMode) { alignToCue(cue); return; }
       seekTo(cue.start + state.offset);
     });
@@ -4872,9 +4924,189 @@ function jumpCue(delta) {
   stopScroll();
   if (node) scrollCue(node.el, true);
 }
+
+/* ---------- 文字稿交互：本集内搜索 / 划句文字卡 ---------- */
+const findBar = $('findBar'), findInput = $('findInput'), findCount = $('findCount'), selTools = $('selTools');
+let findHits = [], findAt = -1, selCueIdx = -1, selText = '';
+
+function findNorm(s) { return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+
+function clearFindMarks() {
+  state.nodes.forEach(n => { if (n && n.el) n.el.classList.remove('find-hit', 'find-cur'); });
+  findHits = []; findAt = -1;
+  if (findCount) findCount.textContent = '0/0';
+}
+
+function showFindAt(target, seek) {
+  if (!findHits.length) { if (findCount) findCount.textContent = '0/0'; return; }
+  findAt = Math.max(0, Math.min(findHits.length - 1, target));
+  state.nodes.forEach(n => { if (n && n.el) n.el.classList.remove('find-cur'); });
+  const ci = findHits[findAt], node = state.nodes[ci], cue = state.cues[ci];
+  if (findCount) findCount.textContent = (findAt + 1) + ' / ' + findHits.length;
+  if (!node) return;
+  node.el.classList.add('find-cur');
+  stopScroll();
+  scrollCue(node.el, true);
+  if (seek && cue) seekTo(cue.start + state.offset);
+}
+
+function runFind(query) {
+  clearFindMarks();
+  const q = findNorm(query);
+  if (!q) return;
+  state.cues.forEach((cue, ci) => {
+    const hay = findNorm(cue.text) + ' ' + findNorm(cue.zh);
+    if (hay.includes(q)) {
+      findHits.push(ci);
+      const n = state.nodes[ci];
+      if (n && n.el) n.el.classList.add('find-hit');
+    }
+  });
+  if (!findHits.length) { if (findCount) findCount.textContent = '0/0'; return; }
+  // 从当前播放位置往后找第一处，符合“接着往下找”的直觉
+  const from = state.activeCue >= 0 ? state.activeCue : 0;
+  const start = findHits.findIndex(ci => ci >= from);
+  showFindAt(start >= 0 ? start : 0, false);
+}
+
+function openFind() {
+  if (!state.cues.length) { showToast('这集还没有文字稿。'); return; }
+  findBar.hidden = false; findBar.classList.add('on');
+  findInput.value = '';
+  clearFindMarks();
+  findInput.focus();
+}
+function closeFind() {
+  findBar.classList.remove('on'); findBar.hidden = true;
+  clearFindMarks();
+  try { getSelection().removeAllRanges(); } catch (e) {}
+}
+
+function hideSelTools() {
+  selTools.classList.remove('on'); selTools.hidden = true;
+  selCueIdx = -1; selText = '';
+}
+
+function pickedCue() {
+  const sel = getSelection();
+  if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
+  let text = sel.toString().replace(/\s+/g, ' ').trim();
+  // 拖选时容易把行首的时间戳一起选进来（"00:14You feel…"），去掉它再进卡片
+  text = text.replace(/^\d{1,2}:\d{2}(?::\d{2})?\s*/, '').trim();
+  if (!text) return null;
+  let node = sel.anchorNode;
+  if (node && node.nodeType === 3) node = node.parentElement;
+  if (!node || !box.contains(node)) return null;
+  const cueEl = node.closest('.cue');
+  if (!cueEl) return null;
+  const ci = Number(cueEl.dataset.ci);
+  if (!state.cues[ci]) return null;
+  return { ci, text };
+}
+
+function placeSelTools(rect) {
+  const w = selTools.offsetWidth || 118, h = selTools.offsetHeight || 32;
+  let x = rect.left + rect.width / 2 - w / 2;
+  let y = rect.top - h - 8;
+  if (y < 8) y = rect.bottom + 8;
+  x = Math.max(8, Math.min(window.innerWidth - w - 8, x));
+  selTools.style.left = Math.round(x) + 'px';
+  selTools.style.top = Math.round(y) + 'px';
+}
+
+function cardLink(slug, id) {
+  const hash = '#/player/' + slug + '/' + id;
+  const host = location.hostname || '';
+  // 桌面壳里 location 是 tauri.localhost，粘出去没用；一律换成发布站点
+  if (host === 'tauri.localhost' || host === 'localhost' || host === '127.0.0.1') {
+    return 'https://lzoreal.github.io/MyTranscript/player.html' + hash;
+  }
+  return location.origin + location.pathname + hash;
+}
+
+function cardFor(ci, text) {
+  const cue = state.cues[ci] || {};
+  const show = state.show || {}, ep = state.current || {};
+  const head = [show.name, ep.title].filter(Boolean).join(' · ');
+  const link = (show.slug && ep.id) ? cardLink(show.slug, ep.id) : location.href;
+  const lines = ['> ' + text];
+  if (cue.zh) lines.push('> ' + String(cue.zh).replace(/\s+/g, ' ').trim());
+  lines.push('');
+  lines.push('— ' + (head ? head + ' · ' : '') + fmt((cue.start || 0) + state.offset));
+  lines.push(link);
+  return lines.join('\n');
+}
+
+async function copyPlain(text) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (e) {}
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed'; ta.style.top = '-1000px'; ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  } catch (err) { return false; }
+}
+
+document.addEventListener('mouseup', e => {
+  if (e.target && e.target.closest && e.target.closest('#selTools')) return;
+  setTimeout(() => {
+    const hit = pickedCue();
+    if (!hit) { hideSelTools(); return; }
+    const sel = getSelection();
+    const range = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+    const rect = range ? range.getBoundingClientRect() : null;
+    if (!rect || (!rect.width && !rect.height)) { hideSelTools(); return; }
+    selCueIdx = hit.ci; selText = hit.text;
+    selTools.hidden = false; selTools.classList.add('on');
+    placeSelTools(rect);
+  }, 0);
+}, true);
+
+selTools.addEventListener('click', async e => {
+  const btn = e.target.closest('[data-sel]');
+  if (!btn) return;
+  e.preventDefault(); e.stopPropagation();
+  if (selCueIdx < 0 || !selText) return;
+  const isCard = btn.dataset.sel === 'card';
+  const payload = isCard ? cardFor(selCueIdx, selText) : selText;
+  const ok = await copyPlain(payload);
+  hideSelTools();
+  try { getSelection().removeAllRanges(); } catch (err) {}
+  showToast(ok ? (isCard ? '文字卡已复制' : '已复制选中文字') : '复制失败，请手动选择后再试', ok ? 2200 : 3200);
+});
+
+box.addEventListener('scroll', () => { if (selTools.classList.contains('on')) hideSelTools(); }, { passive: true });
+window.mytFindReset = () => { hideSelTools(); if (findBar.classList.contains('on')) closeFind(); };
+
+findInput.addEventListener('input', () => runFind(findInput.value));
+findInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    showFindAt(findAt + (e.shiftKey ? -1 : 1), true);
+  } else if (e.key === 'Escape') {
+    e.preventDefault();
+    closeFind();
+  }
+});
+$('findPrev').addEventListener('click', () => showFindAt(findAt - 1, true));
+$('findNext').addEventListener('click', () => showFindAt(findAt + 1, true));
+$('findClose').addEventListener('click', closeFind);
+
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     if ($('modal').open) { closeModal(); return; }
+    if (findBar.classList.contains('on')) { closeFind(); return; }
+    if (selTools.classList.contains('on')) { hideSelTools(); return; }
     if (state.alignMode) { setAlignMode(false); showToast('已取消对齐。', 2500); }
     else if ($('typeSheet').classList.contains('on')) closeTypeSheet();
     else if (speedMenu.classList.contains('on')) closeSpeedMenu();
@@ -4883,10 +5115,19 @@ document.addEventListener('keydown', e => {
     return;
   }
   if ($('modal').open) return;
-  if (e.target.closest('input, select, textarea, button, a, summary, [role="link"], [role="button"], [contenteditable="true"]')) return;
-  if (e.code === 'Space') { e.preventDefault(); $('play').click(); }
+  // Ctrl/Cmd+F 与 / 打开本集内搜索（输入框里的按键不劫持）
+  const typing = e.target.closest('input, select, textarea, [contenteditable="true"]');
+  if (!typing && (e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
+    e.preventDefault(); openFind(); return;
+  }
+  if (typing) return;
+  if (e.target.closest('button, a, summary, [role="link"], [role="button"]')) return;
+  if (e.key === '/') { e.preventDefault(); openFind(); }
+  else if (e.code === 'Space') { e.preventDefault(); $('play').click(); }
   else if (e.code === 'ArrowLeft') { e.preventDefault(); seekBy(-15); }
   else if (e.code === 'ArrowRight') { e.preventDefault(); seekBy(30); }
+  else if (e.code === 'ArrowUp' || e.key === 'k' || e.key === 'K') { e.preventDefault(); jumpCue(-1); }
+  else if (e.code === 'ArrowDown' || e.key === 'j' || e.key === 'J') { e.preventDefault(); jumpCue(1); }
   else if (e.key === '[') { e.preventDefault(); jumpCue(-1); }
   else if (e.key === ']') { e.preventDefault(); jumpCue(1); }
 });
