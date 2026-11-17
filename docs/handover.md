@@ -711,6 +711,12 @@ WASM 单线程还要背 COOP/COEP。桌面壳把这两件事同时绕开：字�
   `{kind:'tauri', fetchRange, asrPrepare, asrOpen, asrFeed, asrResult, asrReset, asrClose}`，
   `LIVE_ENGINE_KIND` 变成 `native`；`liveEmitTokens()` 抽出来给 sherpa-wasm 和原生共用
   （切词/断行/`cursor` 定稿逻辑一份）。网页版分支完全不动。
+- 窗口去掉了系统标题栏（`decorations: false`），顶栏当标题栏用：`shellFrame()` 把 `.topbar`、
+  `.brand` 里的文本叶子标 `data-tauri-drag-region`（Tauri 只认 mousedown 落点自身带属性的元素，
+  标在父容器上无效，也不标按钮/输入框），右上角自绘最小化/最大化/关闭；播放页另铺 38px 透明
+  拖拽带。对应要在 capabilities 里放 `core:window:allow-start-dragging`、
+  `allow-internal-toggle-maximize`、`allow-minimize`、`allow-toggle-maximize`、
+  `allow-is-maximized`、`allow-close`。
 
 **踩过的坑（都会复现，别猜）**：
 

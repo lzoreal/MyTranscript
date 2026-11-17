@@ -76,6 +76,21 @@ cargo build --release
 
 `?live=1` 是联调用开关：开局自动 `liveEnable()` + `audio.play()`，省掉手点。
 
+## 窗口是沉浸式的（没有系统标题栏）
+
+`tauri.conf.json` 里 `"decorations": false`，窗口边框和白色标题栏全部交给页面自己画：
+`site/player.html` 的 `shellFrame()`（检测到 `window.__TAURI__` 才执行）把顶栏、面包屑、侧栏品牌
+标成 `data-tauri-drag-region` 当拖拽区，并在右上角补一组最小化/最大化/关闭按钮；播放页是全屏
+阅读器，顶部浮层 `pointer-events:none` 拖不动，所以另铺一条 38px 的透明拖拽带。
+
+两个必须知道的点：
+
+- Tauri 的拖拽只认 **mousedown 落点自身**带 `data-tauri-drag-region` 的元素，属性在父容器上不生效；
+  所以 `shellFrame()` 会把容器内的文本叶子一起标上，按钮/输入框不标（否则点不动）。
+- 这些操作要靠 capabilities 授权：`core:window:allow-start-dragging`（拖拽）、
+  `core:window:allow-internal-toggle-maximize`（双击标题栏最大化）、`allow-minimize`、
+  `allow-toggle-maximize`、`allow-is-maximized`、`allow-close`。
+
 ## 已知坑
 
 | 现象 | 原因 / 处理 |

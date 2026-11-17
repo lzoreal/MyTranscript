@@ -747,6 +747,17 @@ body:not(.player-open) .details,body:not(.player-open) .drawer,body:not(.player-
 .search-global input{flex:1;min-width:0;border:0;outline:0;background:none;color:var(--ink);font-size:12px}
 .icon-btn{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;border:1px solid var(--line);background:var(--panel);color:var(--muted);font-size:15px;transition:color .16s,border-color .16s}
 .icon-btn:hover{color:var(--ink);border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+/* 桌面壳（Tauri）专用：系统标题栏已去掉，顶栏当标题栏用，窗口按钮自绘。
+   网页版没有 __TAURI__，下面这些元素不会被创建。 */
+.win-ctl{display:flex;align-items:center;gap:2px;flex:0 0 auto}
+.win-ctl-app{margin-left:4px;padding-left:10px;border-left:1px solid var(--line)}
+.win-ctl button{width:30px;height:26px;border:0;border-radius:7px;background:transparent;color:inherit;opacity:.6;font:inherit;font-size:12px;line-height:1;display:grid;place-items:center;cursor:pointer;transition:background .15s,opacity .15s,color .15s}
+.win-ctl button:hover{opacity:1;background:color-mix(in srgb,currentColor 14%,transparent)}
+.win-ctl button[data-win="close"]:hover{background:#d13438;color:#fff;opacity:1}
+.win-drag{position:fixed;left:0;right:0;top:0;height:38px;z-index:11;display:none}
+body.player-open .win-drag{display:block}
+body.deco .topbar,body.deco .brand{-webkit-user-select:none;user-select:none}
+body.deco .topbar [data-tauri-drag-region],body.deco .brand [data-tauri-drag-region]{cursor:default}
 .theme-pop{position:absolute;top:62px;right:96px;z-index:40;display:none;grid-template-columns:repeat(4,1fr);gap:10px;padding:14px;border:1px solid var(--line);border-radius:13px;background:var(--panel);box-shadow:0 24px 50px -24px rgba(0,0,0,.6)}
 .theme-pop.on{display:grid}
 .theme-pop button{width:30px;height:30px;border-radius:50%;border:2px solid var(--swborder);background:var(--sw-bg);position:relative}
@@ -4260,6 +4271,75 @@ audio.addEventListener('seeked', () => {
 audio.addEventListener('ended', () => {
   if (LIVE.on && LIVE.stream) { try { LIVE.stream.transcribe(1); } catch (e) {} }
 });
+
+// 桌面壳：窗口去掉了系统标题栏（tauri.conf 里 decorations:false），这里把应用自己的
+// 顶栏当标题栏用——顶栏/面包屑/侧栏品牌可以拖动窗口，右侧补一组自绘的最小化/最大化/关闭。
+// 网页版没有 __TAURI__，整段不执行，行为不变。
+(function shellFrame() {
+  const T = window.__TAURI__;
+  if (!T || !T.window) return;
+  let win = null;
+  try {
+    if (T.window.getCurrentWindow) win = T.window.getCurrentWindow();
+    else if (T.window.getCurrent) win = T.window.getCurrent();
+  } catch (e) { win = null; }
+  if (!win) return;
+  document.body.classList.add('deco');
+
+  // 拖拽只认“mousedown 落点自己带属性”的元素，所以要把容器里的文本叶子一起标上；
+  // 按钮/输入框保持不标，否则点不动。
+  const markDrag = (el) => {
+    if (!el) return;
+    el.setAttribute('data-tauri-drag-region', '');
+    el.querySelectorAll('*').forEach((kid) => {
+      if (/^(BUTTON|INPUT|A|SELECT|TEXTAREA|SVG|PATH)$/.test(kid.tagName)) return;
+      if (kid.dataset && kid.dataset.action) return;
+      kid.setAttribute('data-tauri-drag-region', '');
+    });
+  };
+  markDrag(document.querySelector('.topbar'));
+  markDrag(document.querySelector('.brand'));
+
+  // 播放页是全屏阅读器，顶部那圈浮层是 pointer-events:none，拖不动；
+  // 单独铺一条透明的拖拽带（按钮在更高层，照样能点）。
+  const strip = document.createElement('div');
+  strip.className = 'win-drag';
+  strip.setAttribute('data-tauri-drag-region', '');
+  document.body.appendChild(strip);
+
+  const makeCtl = () => {
+    const box = document.createElement('div');
+    box.className = 'win-ctl';
+    box.innerHTML =
+      '<button type="button" data-win="min" title="最小化" aria-label="最小化">－</button>' +
+      '<button type="button" data-win="max" title="最大化" aria-label="最大化">▢</button>' +
+      '<button type="button" data-win="close" title="关闭" aria-label="关闭">✕</button>';
+    box.addEventListener('click', async (e) => {
+      const btn = e.target.closest('[data-win]');
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const k = btn.dataset.win;
+      try {
+        if (k === 'min') win.minimize();
+        else if (k === 'max') win.toggleMaximize();
+        else if (k === 'close') win.close();
+      } catch (err) { /* 权限缺失就静默，不把按钮点成异常 */ }
+      if (k === 'max') {
+        try {
+          const maxed = await win.isMaximized();
+          btn.textContent = maxed ? '❐' : '▢';
+          btn.title = maxed ? '还原' : '最大化';
+        } catch (err) {}
+      }
+    });
+    return box;
+  };
+  const topActions = document.querySelector('.top-actions');
+  if (topActions) { const c = makeCtl(); c.classList.add('win-ctl-app'); topActions.appendChild(c); }
+  const readerRight = document.querySelector('.reader-top-right');
+  if (readerRight) readerRight.appendChild(makeCtl());
+})();
 
 // 刷新回来接着开：第一次启用要先装 Service Worker 再刷新，不该让用户再点一次。
 // ?live=1 是给桌面壳联调用的：开局就播、直接开实时识别，省掉手动点两下。
