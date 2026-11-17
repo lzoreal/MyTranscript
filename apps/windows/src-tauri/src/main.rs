@@ -206,14 +206,15 @@ fn toggle_main(app: &tauri::AppHandle) {
 /// 迷你窗：独立置顶小窗，常驻在桌面角落；主窗收进托盘时它还在，音频照走。
 /// 它自己不播音频，只把按钮 emit 给主窗，主窗再把状态 emit 回来——
 /// 音频实例只允许有一个（两个 WebView 各播一遍就成双声道了）。
-#[tauri::command]
-fn open_mini(app: tauri::AppHandle) -> Result<(), String> {
+/// 注意：Windows 上 `build()` 在同步命令或事件回调（都跑在主线程）里会死锁，
+/// 所以这里只留一份「真正的实现」，对外一律从异步命令或独立线程调用。
+fn open_mini_from(app: &tauri::AppHandle) -> Result<(), String> {
     if let Some(w) = app.get_webview_window("mini") {
         let _ = w.show();
         let _ = w.set_focus();
         return Ok(());
     }
-    tauri::WebviewWindowBuilder::new(&app, "mini", tauri::WebviewUrl::App("mini.html".into()))
+    tauri::WebviewWindowBuilder::new(app, "mini", tauri::WebviewUrl::App("mini.html".into()))
         .title("MyTranscript")
         .inner_size(344.0, 132.0)
         .decorations(false)
@@ -246,8 +247,14 @@ fn open_mini(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// 前端调用：从 WebView 点 ⧉ 走这里。必须是 async 命令，否则在 Windows 上建窗会卡死主线程。
 #[tauri::command]
-fn close_mini(app: tauri::AppHandle) {
+async fn open_mini(app: tauri::AppHandle) -> Result<(), String> {
+    open_mini_from(&app)
+}
+
+#[tauri::command]
+async fn close_mini(app: tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("mini") {
         let _ = w.close();
     }
@@ -277,9 +284,13 @@ fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
             "toggle" => toggle_main(app),
             "quit" => app.exit(0),
             "mini" => {
-                if open_mini(app.clone()).is_err() {
-                    let _ = app.emit_to("main", "myt://tray", "mini");
-                }
+                // 菜单回调在主线程，建窗必须挪到独立线程，否则 Windows 上会死锁。
+                let app2 = app.clone();
+                std::thread::spawn(move || {
+                    if open_mini_from(&app2).is_err() {
+                        let _ = app2.emit_to("main", "myt://tray", "mini");
+                    }
+                });
             }
             id => {
                 let _ = app.emit_to("main", "myt://tray", id);
@@ -308,7 +319,20 @@ fn main() {
             }
             // 联调开关：MYT_MINI_AUTO=1 时开局自动弹迷你窗（配合 MYT_DEBUG 抓日志）。
             if std::env::var("MYT_MINI_AUTO").is_ok() {
-                let _ = open_mini(app.handle().clone());
+                let app2 = app.handle().clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(Duration::from_millis(300));
+                    let _ = open_mini_from(&app2);
+                });
+            }
+            // 联调开关：MYT_EVAL 里放一段 JS，主窗起来 2.5s 后执行（不用手点就能进播放页）。
+            if let Ok(js) = std::env::var("MYT_EVAL") {
+                if let Some(w) = app.get_webview_window("main") {
+                    std::thread::spawn(move || {
+                        std::thread::sleep(Duration::from_millis(2500));
+                        let _ = w.eval(&js);
+                    });
+                }
             }
             Ok(())
         })
