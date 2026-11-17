@@ -5,7 +5,9 @@ mod asr;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;
-use tauri::{Manager, State};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{Emitter, Manager, State};
 
 const MODEL_FILES: [&str; 4] = [
     "encoder-epoch-99-avg-1.int8.onnx",
@@ -167,8 +169,109 @@ fn asr_close(state: State<AppState>, id: u32) -> Result<(), String> {
     Ok(())
 }
 
+/// 托盘左键：可见且在前台就收起，否则亮出来并聚焦。
+fn toggle_main(app: &tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let visible = w.is_visible().unwrap_or(false);
+        let focused = w.is_focused().unwrap_or(false);
+        if visible && focused {
+            let _ = w.hide();
+        } else {
+            let _ = w.show();
+            let _ = w.set_focus();
+        }
+    }
+}
+
+/// 迷你窗：独立置顶小窗，常驻在桌面角落；主窗收进托盘时它还在，音频照走。
+/// 它自己不播音频，只把按钮 emit 给主窗，主窗再把状态 emit 回来——
+/// 音频实例只允许有一个（两个 WebView 各播一遍就成双声道了）。
+#[tauri::command]
+fn open_mini(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(w) = app.get_webview_window("mini") {
+        let _ = w.show();
+        let _ = w.set_focus();
+        return Ok(());
+    }
+    tauri::WebviewWindowBuilder::new(&app, "mini", tauri::WebviewUrl::App("mini.html".into()))
+        .title("MyTranscript")
+        .inner_size(344.0, 132.0)
+        .decorations(false)
+        .always_on_top(true)
+        .resizable(false)
+        .maximizable(false)
+        .minimizable(false)
+        .skip_taskbar(true)
+        .shadow(true)
+        // 主窗收进托盘后 JS 定时器不能被节流，否则实时识别和进度上报会停摆。
+        .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
+        .build()
+        .map_err(|e| format!("迷你窗打开失败：{e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+fn close_mini(app: tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("mini") {
+        let _ = w.close();
+    }
+}
+
+/// 托盘图标：左键显示/隐藏主窗，右键给一组最小菜单。
+/// 菜单里的播放控制统一 emit 给前端执行，壳层不另存一份播放状态。
+fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
+    let toggle = MenuItem::with_id(app, "toggle", "显示 / 隐藏窗口", true, None::<&str>)?;
+    let play = MenuItem::with_id(app, "play", "播放 / 暂停", true, None::<&str>)?;
+    let prev = MenuItem::with_id(app, "prev", "上一集", true, None::<&str>)?;
+    let next = MenuItem::with_id(app, "next", "下一集", true, None::<&str>)?;
+    let mini = MenuItem::with_id(app, "mini", "迷你窗", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+    let s1 = PredefinedMenuItem::separator(app)?;
+    let s2 = PredefinedMenuItem::separator(app)?;
+    let menu = Menu::with_items(app, &[&toggle, &s1, &play, &prev, &next, &s2, &mini, &quit])?;
+    let mut tray = TrayIconBuilder::with_id("main")
+        .menu(&menu)
+        .tooltip("MyTranscript")
+        .show_menu_on_left_click(false);
+    if let Some(icon) = app.default_window_icon() {
+        tray = tray.icon(icon.clone());
+    }
+    tray.on_menu_event(|app, event| {
+        match event.id().as_ref() {
+            "toggle" => toggle_main(app),
+            "quit" => app.exit(0),
+            "mini" => {
+                if open_mini(app.clone()).is_err() {
+                    let _ = app.emit_to("main", "myt://tray", "mini");
+                }
+            }
+            id => {
+                let _ = app.emit_to("main", "myt://tray", id);
+            }
+        }
+    })
+    .on_tray_icon_event(|tray, event| {
+        if let TrayIconEvent::Click {
+            button: MouseButton::Left,
+            button_state: MouseButtonState::Up,
+            ..
+        } = event
+        {
+            toggle_main(tray.app_handle());
+        }
+    })
+    .build(app)?;
+    Ok(())
+}
+
 fn main() {
     tauri::Builder::default()
+        .setup(|app| {
+            if let Err(e) = build_tray(app.handle()) {
+                eprintln!("托盘创建失败：{e}");
+            }
+            Ok(())
+        })
         .manage(AppState {
             engines: Mutex::new(HashMap::new()),
             next_id: Mutex::new(0),
@@ -180,7 +283,9 @@ fn main() {
             asr_feed,
             asr_result,
             asr_reset,
-            asr_close
+            asr_close,
+            open_mini,
+            close_mini
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

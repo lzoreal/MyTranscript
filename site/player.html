@@ -4311,7 +4311,8 @@ audio.addEventListener('ended', () => {
     const box = document.createElement('div');
     box.className = 'win-ctl';
     box.innerHTML =
-      '<button type="button" data-win="min" title="最小化" aria-label="最小化">－</button>' +
+      '<button type="button" data-win="mini" title="迷你窗" aria-label="迷你窗">⧉</button>' +
+      '<button type="button" data-win="min" title="收进托盘" aria-label="收进托盘">－</button>' +
       '<button type="button" data-win="max" title="最大化" aria-label="最大化">▢</button>' +
       '<button type="button" data-win="close" title="关闭" aria-label="关闭">✕</button>';
     box.addEventListener('click', async (e) => {
@@ -4321,7 +4322,9 @@ audio.addEventListener('ended', () => {
       e.stopPropagation();
       const k = btn.dataset.win;
       try {
-        if (k === 'min') win.minimize();
+        // 最小化 = 收进托盘继续播：音频留在主窗，托盘图标能把它叫回来。
+        if (k === 'min') win.hide();
+        else if (k === 'mini') { if (T.core && T.core.invoke) T.core.invoke('open_mini'); }
         else if (k === 'max') win.toggleMaximize();
         else if (k === 'close') win.close();
       } catch (err) { /* 权限缺失就静默，不把按钮点成异常 */ }
@@ -6348,6 +6351,112 @@ function syncMini() {
   $('miniNext').disabled = index < 0 || index >= list.length - 1;
   syncMiniCaption();
 }
+
+/* 桌面壳桥：系统媒体控件（MediaSession）、托盘菜单、独立迷你窗。
+   网页版没有 __TAURI__，整段不执行；播放状态仍然只有 audio 一份，这里只做转发。 */
+(function desktopBridge() {
+  const T = window.__TAURI__;
+  if (!T || !T.event) return;
+
+  const jump = (delta) => {
+    if (!state.current) return;
+    rawSeek((audio.currentTime || 0) + delta);
+    paint(true);
+  };
+
+  // 1) 系统媒体控件：Windows 媒体浮层、键盘媒体键、耳机键。
+  //    先走 WebView 的 MediaSession（零成本）；实测按键不响应再换 Rust 侧 SMTC。
+  const ms = 'mediaSession' in navigator ? navigator.mediaSession : null;
+  let msKey = '';
+  if (ms) {
+    const bind = (action, fn) => { try { ms.setActionHandler(action, fn); } catch (e) {} };
+    bind('play', () => { if (state.current) audio.play().catch(() => {}); });
+    bind('pause', () => audio.pause());
+    bind('stop', () => audio.pause());
+    bind('seekbackward', (d) => jump(-Math.max(1, (d && d.seekOffset) || 10)));
+    bind('seekforward', (d) => jump(Math.max(1, (d && d.seekOffset) || 30)));
+    bind('previoustrack', () => stepEpisode(-1));
+    bind('nexttrack', () => stepEpisode(1));
+  }
+  function msSync() {
+    if (!ms) return;
+    if (!state.current) {
+      try { ms.metadata = null; ms.playbackState = 'none'; } catch (e) {}
+      return;
+    }
+    const key = state.current.id + '|' + (state.show?.name || '');
+    if (key !== msKey) {
+      msKey = key;
+      const art = state.current.img || state.show?.artwork || '';
+      try {
+        ms.metadata = new MediaMetadata({
+          title: state.current.title || '未在播放',
+          artist: state.show?.name || 'MyTranscript',
+          album: 'MyTranscript',
+          artwork: art ? [{ src: art, sizes: '512x512' }] : [],
+        });
+      } catch (e) {}
+    }
+    try {
+      ms.playbackState = audio.paused ? 'paused' : 'playing';
+      const dur = audio.duration || 0;
+      if (dur > 0 && ms.setPositionState) {
+        ms.setPositionState({
+          duration: dur,
+          position: Math.min(audio.currentTime || 0, dur),
+          playbackRate: audio.playbackRate || 1,
+        });
+      }
+    } catch (e) {}
+  }
+
+  // 2) 迷你窗：状态往那边推，按钮命令从那边收回。
+  function pushMini() {
+    if (!state.current) {
+      try { T.event.emit('myt://mini-state', { empty: true }); } catch (e) {}
+      return;
+    }
+    const list = currentPlaylist();
+    const index = list.findIndex((item) => item.id === state.current.id);
+    const img = state.current.img || state.show?.artwork || '';
+    try {
+      T.event.emit('myt://mini-state', {
+        title: state.current.title || '(无标题)',
+        meta: (state.show?.name || '') + (state.current.date ? ' · ' + formatDate(state.current.date) : ''),
+        cover: img ? (smallArtwork(img) || img) : '',
+        pos: audio.currentTime || 0,
+        dur: audio.duration || 0,
+        playing: !audio.paused,
+        canPrev: index > 0,
+        canNext: index >= 0 && index < list.length - 1,
+      });
+    } catch (e) {}
+  }
+  T.event.listen('myt://mini-cmd', (ev) => {
+    const p = ev.payload || {};
+    if (p.cmd === 'toggle') { audio.paused ? audio.play().catch(() => {}) : audio.pause(); }
+    else if (p.cmd === 'prev') stepEpisode(-1);
+    else if (p.cmd === 'next') stepEpisode(1);
+    else if (p.cmd === 'seekRel') jump(Number(p.value) || 0);
+    else if (p.cmd === 'seekTo') {
+      const dur = audio.duration || 0;
+      if (dur > 0) { rawSeek(Math.max(0, Math.min(1, Number(p.value) || 0)) * dur); paint(true); }
+    }
+  });
+
+  // 3) 托盘菜单：播放控制统一交给前端执行，壳层不另存一份状态。
+  T.event.listen('myt://tray', (ev) => {
+    const cmd = String(ev.payload || '');
+    if (cmd === 'play') { audio.paused ? audio.play().catch(() => {}) : audio.pause(); }
+    else if (cmd === 'prev') stepEpisode(-1);
+    else if (cmd === 'next') stepEpisode(1);
+    else if (cmd === 'mini') { if (T.core && T.core.invoke) T.core.invoke('open_mini'); }
+  });
+
+  pushMini(); msSync();
+  setInterval(() => { pushMini(); msSync(); }, 800);
+})();
+
 function saveSleep() {
   if (app.sleepUntil || app.sleepEnd) localStorage.setItem('myt-sleep', JSON.stringify({ until: app.sleepUntil, end: app.sleepEnd }));
   else localStorage.removeItem('myt-sleep');

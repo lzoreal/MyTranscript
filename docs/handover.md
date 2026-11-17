@@ -716,7 +716,17 @@ WASM 单线程还要背 COOP/COEP。桌面壳把这两件事同时绕开：字�
   标在父容器上无效，也不标按钮/输入框），右上角自绘最小化/最大化/关闭；播放页另铺 38px 透明
   拖拽带。对应要在 capabilities 里放 `core:window:allow-start-dragging`、
   `allow-internal-toggle-maximize`、`allow-minimize`、`allow-toggle-maximize`、
-  `allow-is-maximized`、`allow-close`。
+  `allow-is-maximized`、`allow-hide`、`allow-close`（迷你窗共用同一份，`windows: ["main","mini"]`）。
+- 桌面集成三件套（2026-11-17 追加）：
+  - **托盘**（`build_tray`）：左键显示/隐藏主窗，右键菜单 显示/隐藏、播放/暂停、上一集、下一集、
+    迷你窗、退出。播放控制一律 `emit_to("main", "myt://tray", …)` 交给前端，壳层不存第二份状态。
+  - **－ = 收进托盘**（`win.hide()`），✕ 仍是退出；主窗与迷你窗都设
+    `backgroundThrottling: "disabled"`，否则窗口一隐藏 JS 定时器被节流，实时识别与进度上报会停。
+  - **独立迷你窗**（`open_mini` / `close_mini` + `site/mini.html`）：置顶、无边框、不占任务栏，
+    344×132。它不加载音频，只发 `myt://mini-cmd`，主窗每 800ms 回推 `myt://mini-state`
+    （标题/封面/进度/播放态/能否切集），所以音频实例永远只有一个。
+  - **系统媒体键**走页面里的 `MediaSession`（`desktopBridge()`）：Windows 媒体浮层、键盘媒体键、
+    耳机键都能播/停/前后跳/切集；若实测按键不响应，再换 Rust 侧 SMTC。
 
 **踩过的坑（都会复现，别猜）**：
 
@@ -733,7 +743,8 @@ WASM 单线程还要背 COOP/COEP。桌面壳把这两件事同时绕开：字�
 （CORS + 大封面）在壳里取到 206/131072 字节、探针放大后定位到真正的第一帧、原生识别
 连出词（实测 38 句）。网页版行为未变。
 
-**未决**：Windows 分发形态（单 exe+同目录 3 DLL vs NSIS 安装包，未签名有 SmartScreen）；
-模型分发（首次下载 41 MB vs 随包内置）；`SHERPA_LAG=0.4` 未在本集重标；原生 CPU 只采到
+**未决**：Windows 分发形态（单 exe+同目录 3 DLL vs NSIS 安装包，未签名有 SmartScreen）——
+已定为先用便携 zip，等 UI 稳定再上 NSIS + GitHub Releases 自动更新；系统媒体键若在 WebView2 上
+实测不响应，改用 Rust 侧 SMTC；模型分发（首次下载 41 MB vs 随包内置）；`SHERPA_LAG=0.4` 未在本集重标；原生 CPU 只采到
 “追赶提前量”时的瞬时值（约 62% 单核），稳态对比未做；Android 未动工（计划原生 Kotlin
 WebView + 同一套 C API 的 JNI 包）。

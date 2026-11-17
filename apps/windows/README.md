@@ -89,7 +89,23 @@ cargo build --release
   所以 `shellFrame()` 会把容器内的文本叶子一起标上，按钮/输入框不标（否则点不动）。
 - 这些操作要靠 capabilities 授权：`core:window:allow-start-dragging`（拖拽）、
   `core:window:allow-internal-toggle-maximize`（双击标题栏最大化）、`allow-minimize`、
-  `allow-toggle-maximize`、`allow-is-maximized`、`allow-close`。
+  `allow-toggle-maximize`、`allow-is-maximized`、`allow-hide`（收进托盘）、`allow-close`。
+  迷你窗共享同一份权限，所以 capabilities 的 `windows` 写成 `["main", "mini"]`。
+
+## 托盘、迷你窗与系统媒体键
+
+壳层三件套，都是网页版没有的能力：
+
+- **托盘常驻**（`build_tray`）：左键点图标 = 显示/隐藏主窗，右键菜单 = 显示/隐藏、播放/暂停、
+  上一集、下一集、迷你窗、退出。菜单里的播放控制不存状态，只 `emit_to("main", "myt://tray", …)`
+  交给前端执行，播放状态仍然只有 `audio` 一份。
+- **✕ 仍是退出，－ 改成「收进托盘」**：`win.hide()`，音频留在主窗继续播（主窗和迷你窗都设了
+  `backgroundThrottling: "disabled"`，否则窗口一隐藏 JS 定时器就被节流，实时识别和进度上报会停）。
+- **独立迷你窗**（`open_mini` / `close_mini` + `site/mini.html`）：置顶、无边框、不占任务栏，
+  344×132。它**不加载音频**——按钮把 `myt://mini-cmd` emit 给主窗，主窗每 800ms 把
+  `myt://mini-state`（标题/封面/进度/播放态/能否切集）推回来，避免两个 WebView 各播一遍。
+- **系统媒体键走 MediaSession**（`player.html` 的 `desktopBridge()`）：Windows 媒体浮层、键盘
+  媒体键、耳机键都能播/停/跳。若实测按键不响应（WebView2 该版本不支持），下一步换 Rust 侧 SMTC。
 
 ## 已知坑
 

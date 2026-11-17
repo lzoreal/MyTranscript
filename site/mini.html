@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MyTranscript</title>
+<style>
+  /* 迷你窗（桌面壳专用）：自己不放音频，只把按钮 emit 给主窗，主窗把状态 emit 回来。
+     窗口本身无边框、置顶、不占任务栏，所以这里整块当标题栏用（顶部可拖）。 */
+  :root{
+    --bg:#16181d; --pane:#1d2026; --line:#2a2e36;
+    --fg:#e7e9ee; --muted:#8f959f; --accent:#8ab4ff;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    background:var(--bg);color:var(--fg);
+    font:12px/1.4 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+    -webkit-user-select:none;user-select:none;overflow:hidden;
+    border:1px solid var(--line);
+  }
+  .strip{height:18px;display:flex;align-items:center;justify-content:space-between;padding:0 4px 0 6px;color:var(--muted)}
+  .strip .dots{font-size:10px;letter-spacing:2px;opacity:.5;cursor:default}
+  .strip button{border:0;background:transparent;color:var(--muted);width:20px;height:16px;border-radius:4px;font-size:11px;cursor:pointer}
+  .strip button:hover{background:#d13438;color:#fff}
+  .main{display:flex;gap:8px;align-items:center;padding:0 8px}
+  .cover{width:44px;height:44px;flex:0 0 auto;border-radius:6px;overflow:hidden;background:var(--pane);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px}
+  .cover img{width:100%;height:100%;object-fit:cover;display:block}
+  .txt{min-width:0;flex:1 1 auto}
+  .txt strong{display:block;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .txt small{display:block;margin-top:2px;font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ctl{display:flex;align-items:center;gap:2px;padding:4px 8px 0}
+  .ctl button{
+    flex:1 1 auto;height:24px;border:1px solid transparent;border-radius:6px;
+    background:transparent;color:var(--fg);font-size:11px;cursor:pointer;
+  }
+  .ctl button:hover{background:var(--pane);border-color:var(--line)}
+  .ctl button:disabled{opacity:.35;cursor:default}
+  .ctl .play{font-size:13px;background:var(--pane);border-color:var(--line);font-weight:600}
+  .foot{display:flex;align-items:center;gap:6px;padding:6px 8px 8px;color:var(--muted);font-size:10px}
+  .foot span{flex:0 0 auto;font-variant-numeric:tabular-nums}
+  .track{position:relative;flex:1 1 auto;height:10px;display:flex;align-items:center;cursor:pointer}
+  .track::before{content:"";position:absolute;left:0;right:0;height:3px;border-radius:2px;background:#2c3038}
+  .fill{position:relative;height:3px;border-radius:2px;background:var(--accent);width:0}
+  .empty .txt strong{color:var(--muted);font-weight:500}
+</style>
+</head>
+<body>
+  <div class="strip" data-tauri-drag-region="">
+    <span class="dots" data-tauri-drag-region="">⠿</span>
+    <button id="close" title="关闭迷你窗" aria-label="关闭迷你窗">✕</button>
+  </div>
+  <div class="main">
+    <div class="cover" id="cover"><span id="initials">M</span></div>
+    <div class="txt">
+      <strong id="title" title="拖动这里移动窗口" data-tauri-drag-region="">未在播放</strong>
+      <small id="meta" data-tauri-drag-region=""></small>
+    </div>
+  </div>
+  <div class="ctl">
+    <button id="seekb" title="后退 5 秒" aria-label="后退 5 秒">−5s</button>
+    <button id="prev" title="上一集" aria-label="上一集">‹</button>
+    <button id="play" class="play" title="播放" aria-label="播放">▶</button>
+    <button id="next" title="下一集" aria-label="下一集">›</button>
+    <button id="seekf" title="前进 5 秒" aria-label="前进 5 秒">+5s</button>
+  </div>
+  <div class="foot">
+    <span id="pos">0:00</span>
+    <div class="track" id="track"><div class="fill" id="fill"></div></div>
+    <span id="dur">0:00</span>
+  </div>
+<script>
+(function () {
+  const T = window.__TAURI__;
+  const $ = (id) => document.getElementById(id);
+  if (!T || !T.event) return;
+
+  const emit = (payload) => { try { T.event.emit('myt://mini-cmd', payload); } catch (e) {} };
+  $('play').onclick = () => emit({ cmd: 'toggle' });
+  $('prev').onclick = () => emit({ cmd: 'prev' });
+  $('next').onclick = () => emit({ cmd: 'next' });
+  $('seekb').onclick = () => emit({ cmd: 'seekRel', value: -5 });
+  $('seekf').onclick = () => emit({ cmd: 'seekRel', value: 5 });
+  $('close').onclick = () => { try { T.core.invoke('close_mini'); } catch (e) {} };
+  $('track').onclick = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (!rect.width) return;
+    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    emit({ cmd: 'seekTo', value: ratio });
+  };
+
+  const fmt = (t) => {
+    if (!isFinite(t) || t <= 0) return '0:00';
+    const total = Math.floor(t);
+    const h = Math.floor(total / 3600), m = Math.floor((total % 3600) / 60), s = total % 60;
+    return (h ? h + ':' + String(m).padStart(2, '0') : String(m)) + ':' + String(s).padStart(2, '0');
+  };
+
+  function initialsOf(name) {
+    return (name || '').split(/[^A-Za-z0-9\u4e00-\u9fa5]+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || 'M';
+  }
+
+  let coverFor = '';
+  function render(s) {
+    const empty = !s || s.empty || !s.title;
+    document.body.classList.toggle('empty', empty);
+    $('title').textContent = empty ? '未在播放' : s.title;
+    $('meta').textContent = empty ? '回到主窗口选一集' : (s.meta || '');
+    const playing = !empty && !!s.playing;
+    $('play').textContent = playing ? '❚❚' : '▶';
+    $('play').title = playing ? '暂停' : '播放';
+    $('play').setAttribute('aria-label', playing ? '暂停' : '播放');
+    $('prev').disabled = empty || !s.canPrev;
+    $('next').disabled = empty || !s.canNext;
+    $('seekb').disabled = empty;
+    $('seekf').disabled = empty;
+    const dur = empty ? 0 : (s.dur || 0);
+    const pos = empty ? 0 : (s.pos || 0);
+    $('pos').textContent = fmt(pos);
+    $('dur').textContent = fmt(dur);
+    $('fill').style.width = (dur > 0 ? Math.min(100, pos / dur * 100) : 0) + '%';
+
+    const key = empty ? '' : (s.cover || '');
+    if (key !== coverFor) {
+      coverFor = key;
+      const box = $('cover');
+      if (key) {
+        box.innerHTML = '<img src="' + key.replace(/"/g, '%22') + '" alt="" referrerpolicy="no-referrer">';
+        const img = box.querySelector('img');
+        img.onerror = () => { box.innerHTML = '<span>' + initialsOf(s.meta) + '</span>'; };
+      } else {
+        box.innerHTML = '<span>' + initialsOf(s.meta) + '</span>';
+      }
+    }
+  }
+
+  render(null);
+  T.event.listen('myt://mini-state', (ev) => render(ev.payload || null));
+})();
+</script>
+</body>
+</html>
