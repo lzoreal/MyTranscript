@@ -23,6 +23,9 @@
   .strip .dots{font-size:10px;letter-spacing:2px;opacity:.5;cursor:default}
   .strip button{border:0;background:transparent;color:var(--muted);width:20px;height:16px;border-radius:4px;font-size:11px;cursor:pointer}
   .strip button:hover{background:#d13438;color:#fff}
+  .strip #capToggle{width:22px;margin-right:2px;font-size:10px;letter-spacing:0}
+  .strip #capToggle:hover{background:var(--pane);color:var(--fg)}
+  .strip #capToggle[aria-pressed="false"]{opacity:.55}
   .main{display:flex;gap:8px;align-items:center;padding:0 8px}
   .cover{width:44px;height:44px;flex:0 0 auto;border-radius:6px;overflow:hidden;background:var(--pane);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px}
   .cover img{width:100%;height:100%;object-fit:cover;display:block}
@@ -43,11 +46,27 @@
   .track::before{content:"";position:absolute;left:0;right:0;height:3px;border-radius:2px;background:#2c3038}
   .fill{position:relative;height:3px;border-radius:2px;background:var(--accent);width:0}
   .empty .txt strong{color:var(--muted);font-weight:500}
+  /* 字幕区：跟着播放位置走，句间停顿保持上一句；实时识别开启时显示识别输出。 */
+  .cap{padding:2px 10px 0;border-top:1px solid var(--line);margin-top:2px;min-width:0}
+  .cap[hidden]{display:none}
+  .cap .tag{display:inline-block;margin-right:5px;font-size:9px;letter-spacing:.08em;color:var(--accent);vertical-align:1px}
+  .cap .tag[hidden]{display:none}
+  .cap .en{
+    display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;
+    color:var(--fg);font:12.5px/1.4 "Segoe UI","Microsoft YaHei",sans-serif;
+  }
+  .cap .zh{
+    display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;
+    margin-top:2px;color:var(--muted);font:11px/1.35 "Segoe UI","Microsoft YaHei",sans-serif;
+  }
+  .cap .zh[hidden]{display:none}
+  .cap.dim .en{color:var(--muted)}
 </style>
 </head>
 <body>
   <div class="strip" data-tauri-drag-region="">
     <span class="dots" data-tauri-drag-region="">⠿</span>
+    <button id="capToggle" title="显示文字稿" aria-label="显示文字稿" aria-pressed="true">字</button>
     <button id="close" title="关闭迷你窗" aria-label="关闭迷你窗">✕</button>
   </div>
   <div class="main">
@@ -56,6 +75,10 @@
       <strong id="title" title="拖动这里移动窗口" data-tauri-drag-region="">未在播放</strong>
       <small id="meta" data-tauri-drag-region=""></small>
     </div>
+  </div>
+  <div class="cap" id="cap" hidden aria-live="polite">
+    <div class="en"><span class="tag" id="capTag" hidden>LIVE</span><span id="capEn"></span></div>
+    <div class="zh" id="capZh" hidden></div>
   </div>
   <div class="ctl">
     <button id="seekb" title="后退 5 秒" aria-label="后退 5 秒">−5s</button>
@@ -77,6 +100,30 @@
   try { T.core.invoke('dbg_note', { msg: location.href + ' els=' + document.body.childElementCount }); } catch (e) {}
 
   const emit = (payload) => { try { T.event.emit('myt://mini-cmd', payload); } catch (e) {} };
+  const CAP_KEY = 'myt-mini-cap';
+  let capOn = true;
+  try { capOn = localStorage.getItem(CAP_KEY) !== '0'; } catch (e) {}
+  let lastState = null, lastFit = 0;
+  function applyFit() {
+    // 有字幕时窗口长高到能放下两句英文 + 两句中文，关掉字幕再缩回播放条高度。
+    const want = capOn && lastState && lastState.cap ? 188 : 132;
+    if (want === lastFit) return;
+    lastFit = want;
+    try { T.core.invoke('mini_fit', { height: want }); } catch (e) {}
+  }
+  function syncCapToggle() {
+    const b = $('capToggle');
+    b.setAttribute('aria-pressed', capOn ? 'true' : 'false');
+    b.title = capOn ? '隐藏文字稿' : '显示文字稿';
+    b.setAttribute('aria-label', b.title);
+  }
+  syncCapToggle();
+  $('capToggle').onclick = () => {
+    capOn = !capOn;
+    try { localStorage.setItem(CAP_KEY, capOn ? '1' : '0'); } catch (e) {}
+    syncCapToggle();
+    render(lastState);
+  };
   $('play').onclick = () => emit({ cmd: 'toggle' });
   $('prev').onclick = () => emit({ cmd: 'prev' });
   $('next').onclick = () => emit({ cmd: 'next' });
@@ -103,6 +150,7 @@
 
   let coverFor = '';
   function render(s) {
+    lastState = s || null;
     const empty = !s || s.empty || !s.title;
     document.body.classList.toggle('empty', empty);
     $('title').textContent = empty ? '未在播放' : s.title;
@@ -120,6 +168,15 @@
     $('pos').textContent = fmt(pos);
     $('dur').textContent = fmt(dur);
     $('fill').style.width = (dur > 0 ? Math.min(100, pos / dur * 100) : 0) + '%';
+
+    const cap = (!empty && capOn && s.cap) ? s.cap : '';
+    const zh = cap ? (s.capZh || '') : '';
+    $('cap').hidden = !cap;
+    $('capEn').textContent = cap;
+    $('capTag').hidden = !cap || !s.capLive;
+    $('capZh').hidden = !zh;
+    $('capZh').textContent = zh;
+    applyFit();
 
     const key = empty ? '' : (s.cover || '');
     if (key !== coverFor) {

@@ -10,6 +10,7 @@ from urllib.parse import quote, unquote, urlparse
 
 ROOT = Path(__file__).parents[1]
 SITE = ROOT / "site"
+BUILTIN = ROOT / "apps" / "windows" / "builtin-plugins"
 TRANSCRIPT_NS = "{https://podcastindex.org/namespace/1.0}transcript"
 
 
@@ -95,12 +96,160 @@ class PlayerProgressTests(unittest.TestCase):
         self.assertIn("audio.currentTime = t", page)
 
 
+class PlayerOfflineTranscriptTests(unittest.TestCase):
+    def test_whole_episode_download_includes_transcript(self):
+        page = player_page()
+        self.assertIn("offlineTranscriptSave", page)
+        self.assertIn("offlineTranscriptLoad", page)
+        self.assertIn("hasTranscript", page)
+        self.assertIn("saveOfflineTranscript", page)
+        self.assertIn("readTranscriptDoc", page)
+        self.assertIn("整集下载", page)
+        self.assertIn("[data-offline-transcript]", page)
+
+    def test_desktop_offline_storage_persists_transcript_sidecar(self):
+        rust = (ROOT / "apps" / "windows" / "src-tauri" / "src" / "main.rs").read_text(encoding="utf-8")
+        self.assertIn("fn offline_save_transcript", rust)
+        self.assertIn("fn offline_transcript_load", rust)
+        self.assertIn("TRANSCRIPT_SUFFIX", rust)
+        self.assertIn(".transcript.json", rust)
+        self.assertIn("\"hasTranscript\"", rust)
+
+
+class PlayerStudySummaryTests(unittest.TestCase):
+    def test_episode_summary_has_topics_and_jump_actions(self):
+        page = player_page()
+        self.assertIn("data-ai-episode", page)
+        self.assertIn("studyOpenEpisodeSummary", page)
+        self.assertIn("studyTopicHTML", page)
+        self.assertIn("topics (array of {title, start, end, summary})", page)
+        self.assertIn("ads (array of {start, end, label})", page)
+        self.assertIn("function studyAdHTML", page)
+        self.assertIn('data-study-act="ad"', page)
+        self.assertIn("studyApplyCachedAdRanges", page)
+        self.assertIn("state.adRanges = mergeAdRanges", page)
+        self.assertIn("merged.version = 3", page)
+        self.assertIn('data-study-act="topic"', page)
+        self.assertIn("studyCopyEpisode", page)
+
+    def test_ad_ranges_from_ai_merge_into_playback_skip_ranges(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node 不在 PATH，跳过播放器逻辑测试")
+        page = player_page()
+        clock = page[page.index("function studyClockSeconds"):page.index("function studyTopicHTML")]
+        ranges = page[page.index("function sanitizeAdRanges"):page.index("function detectAdRanges")]
+        source = """
+const assert = require('assert');
+%s
+%s
+const ai = sanitizeAdRanges([
+  {start: '01:00', end: '01:30', label: '赞助口播'},
+  {start: '00:50', end: '01:05', label: ''},
+]);
+assert.strictEqual(ai.length, 2);
+assert.strictEqual(ai[0].start, 60);
+assert.strictEqual(ai[1].label, '广告');
+const merged = mergeAdRanges([ai, [{start: 40, end: 55, label: '文字稿广告标记', source: 'transcript'}]]);
+assert.strictEqual(merged.length, 1);
+assert.strictEqual(merged[0].start, 40);
+assert.strictEqual(merged[0].end, 90);
+""" % (clock, ranges)
+        proc = run_node(self, "ai_ad_ranges.js", source)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+    def test_ai_provider_picker_and_native_adapters(self):
+        page = player_page()
+        self.assertIn('id="studyProvider"', page)
+        for provider in ("openai", "claude", "gemini", "deepseek", "kimi", "glm", "custom"):
+            self.assertIn(f'value="{provider}"', page)
+        self.assertIn("STUDY_PROVIDERS", page)
+        self.assertIn("engine: STUDY.provider", page)
+        self.assertIn("studyModelFetch", page)
+        self.assertIn("studyModelList", page)
+        self.assertIn("studyModelPicker", page)
+        self.assertIn("studyPickModel", page)
+        self.assertIn("STUDY_SUMMARY_CHUNKS = 3", page)
+        self.assertIn("':partial'", page)
+        self.assertIn("episodeFresh", page)
+        rust = (ROOT / "apps" / "windows" / "src-tauri" / "src" / "translate.rs").read_text(encoding="utf-8")
+        self.assertIn("async fn openai_chat", rust)
+        self.assertIn("async fn claude_chat", rust)
+        self.assertIn("async fn gemini_chat", rust)
+        self.assertIn("pub async fn llm_models", rust)
+        self.assertIn("fn parse_gemini_models", rust)
+        self.assertIn("llm_models", (ROOT / "apps" / "windows" / "src-tauri" / "src" / "main.rs").read_text(encoding="utf-8"))
+        self.assertIn('"x-api-key"', rust)
+        self.assertIn('"anthropic-version"', rust)
+        self.assertIn('"x-goog-api-key"', rust)
+        self.assertIn(":generateContent", rust)
+
+
+class PlayerStudyAskTests(unittest.TestCase):
+    """问答、章节、金句都只让模型给行号，时间一律回查 ASR cue。"""
+
+    def test_ask_tab_is_grounded_and_citable(self):
+        page = player_page()
+        self.assertIn('data-study-view="ask"', page)
+        self.assertIn("function studyRenderAsk", page)
+        self.assertIn("function studyAskContext", page)
+        self.assertIn("function studyAskCites", page)
+        self.assertIn("function studyAskCitesFromText", page)
+        self.assertIn("1-4 integer line numbers you actually relied on", page)
+        self.assertIn("total_lines: context.count", page)
+        self.assertIn("previous_turns", page)
+        self.assertIn('data-study-act="askCite"', page)
+        self.assertIn("if (!cites.length) cites = studyAskCitesFromText(answer);", page)
+        self.assertIn("return out.slice(0, 4)", page)
+        self.assertIn("studyCache['ch:'", page)
+        self.assertIn("const STUDY_ASK_KEY = 'myt-study-ask'", page)
+
+    def test_citations_are_sanitized_against_cues(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node 不在 PATH，跳过播放器逻辑测试")
+        page = player_page()
+        block = page[page.index("function studyAskTimeCue"):page.index("function studyAskSuggestions")]
+        source = """
+const assert = require('assert');
+const state = { cues: [
+  { start: 0, text: 'intro' },
+  { start: 61, text: 'second' },
+  { start: 185, text: 'third' },
+] };
+%s
+assert.deepStrictEqual(studyAskCites([2, 99, '1', { cue: 0 }]), [2, 1, 0]);
+assert.deepStrictEqual(studyAskCites(['#0', 'garbage', [], null, 0]), [0]);
+assert.deepStrictEqual(studyAskCites([2, '02:00']), [2]);
+assert.deepStrictEqual(studyAskCitesFromText('he said [01:01], then 03:05 and 99:99'), [1, 2]);
+assert.deepStrictEqual(studyAskCitesFromText('no timestamps here'), []);
+""" % block
+        proc = run_node(self, "study_ask_cites.js", source)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+    def test_chapters_and_quotes_map_line_numbers_to_cue_time(self):
+        page = player_page()
+        self.assertIn("function studyAnalyzeChapters", page)
+        self.assertIn("function studyChaptersHTML", page)
+        self.assertIn('data-study-act="chapters"', page)
+        self.assertIn("line numbers that literally appear in the given lines", page)
+        self.assertIn("if (!Number.isInteger(ci) || ci < Math.max(0, from - 2)", page)
+        self.assertIn("function studyAnalyzeQuotes", page)
+        self.assertIn("function studyQuotesHTML", page)
+        self.assertIn('data-study-act="quotes"', page)
+        self.assertIn('data-study-act="quoteCard"', page)
+        self.assertIn("function studyWrapCanvasText", page)
+        self.assertIn("data-quote-download", page)
+        self.assertIn("data-quote-copy", page)
+        self.assertIn("studyCueStamp(cue)", page)
+
+
 class PlayerWordTimingTests(unittest.TestCase):
     """词级 JSON 用 ASR 原生时间，不能再被 VTT 压缩时间轴的修补改写。"""
 
     HARNESS = """
 const assert = require('assert');
-const reader = { lang: 'en', segment: false };
+const opts = { lang: 'en', segment: false };
 %s
 
 const vtt = [
@@ -113,8 +262,8 @@ const segments = [
   { start: 2000, end: 5000, text: 'And then',
     words: [['And', 2000, 2000], ['then', 4000, 1000]] },
 ];
-const nativeCues = mergeCues(vtt, { native: true, segments }, null);
-const repairedCues = mergeCues(vtt, { segments }, null);
+const nativeCues = merge(vtt, { native: true, segments }, null, opts);
+const repairedCues = merge(vtt, { segments }, null, opts);
 assert.strictEqual(nativeCues[1].speechStart, 2,
   'native 首词 2.0s 起说话，不能被当成上一句粘过来的尾巴');
 assert.strictEqual(repairedCues[1].speechStart, 4,
@@ -123,8 +272,8 @@ assert.strictEqual(repairedCues[1].speechStart, 4,
 const fastVtt = [{ start: 0, end: 3, text: 'A B C D', speaker: '' }];
 const fastSegments = [{ start: 0, end: 3000, text: 'A B C D',
   words: [['A', 0, 50], ['B', 50, 50], ['C', 100, 50], ['D', 2000, 500]] }];
-const fastNative = mergeCues(fastVtt, { native: true, segments: fastSegments }, null);
-const fastRepaired = mergeCues(fastVtt, { segments: fastSegments }, null);
+const fastNative = merge(fastVtt, { native: true, segments: fastSegments }, null, opts);
+const fastRepaired = merge(fastVtt, { segments: fastSegments }, null, opts);
 const starts = cues => cues[0].words.map(w => Number(w.s.toFixed(2)));
 assert.deepStrictEqual(starts(fastNative), [0, 0.05, 0.1, 2],
   '原生词时间必须原样保留');
@@ -136,10 +285,8 @@ assert.deepStrictEqual(starts(fastRepaired), [0, 0.6, 1.2, 2],
         node = shutil.which("node")
         if not node:
             self.skipTest("node 不在 PATH，跳过播放器逻辑测试")
-        page = (SITE / "player.html").read_text(encoding="utf-8")
-        start = page.index("function splitBilingual(text)")
-        end = page.index("function splitLabel(text, words)")
-        source = self.HARNESS % page[start:end]
+        kernel = (BUILTIN / "subtitles" / "kernel.js").read_text(encoding="utf-8")
+        source = "global.window = global;\n" + (self.HARNESS % kernel)
         with tempfile.TemporaryDirectory() as temp_dir:
             script = Path(temp_dir) / "player_word_timing.js"
             script.write_text(source, encoding="utf-8")
@@ -481,17 +628,77 @@ class PlayerCueFollowTests(unittest.TestCase):
 
 
 
+class PlayerTranscriptToolbarTests(unittest.TestCase):
+    def test_b_layout_moves_secondary_controls_into_more_sheet(self):
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        self.assertIn('id="dockLangBtn"', page)
+        self.assertIn("function syncDockLang", page)
+        self.assertIn('id="studyBtn" class="dstile"', page)
+        self.assertIn('id="floatBtn" class="dstile"', page)
+        self.assertIn('id="dockSleepBtn" class="dstile"', page)
+        self.assertIn('id="immersiveBtn" class="dstile"', page)
+        self.assertIn('id="drawerBtn" class="dstile"', page)
+        self.assertIn("body.player-open .reader-top-actions", page)
+        self.assertIn(">剧集</button>", page)
+        self.assertIn(">笔记</button>", page)
+
+    def test_collapsed_nav_uses_one_grid_column(self):
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        self.assertIn("body.nav-collapsed .app{grid-template-columns:minmax(0,1fr)}", page)
+        self.assertNotIn("body.nav-collapsed .app{grid-template-columns:0 minmax(0,1fr)}", page)
+
+    def test_wallpaper_mode_has_fullscreen_and_minimal_controls(self):
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        self.assertIn('id="wallpaper"', page)
+        self.assertIn('id="wallpaperBtn"', page)
+        self.assertIn('id="wpLines"', page)
+        self.assertIn('id="wpPlay"', page)
+        self.assertIn('id="wpExit"', page)
+        self.assertIn("async function setWallpaper", page)
+        self.assertIn("win.setFullscreen(true)", page)
+        self.assertIn("requestFullscreen", page)
+        self.assertIn("body.wallpaper-mode .dock", page)
+        self.assertIn("windowSize = 7", page)
+        self.assertIn("wp-word", page)
+        self.assertIn("wallpaperWordPaint", page)
+        self.assertIn("if (state.wallpaper) wallpaperWordPaint(t);", page)
+        self.assertIn("if (state.wallpaper) wallpaperRefresh();", page)
+        self.assertIn("if (state.wallpaper) { setWallpaper(false); return; }", page)
+
+
+class PlayerStudyTermTooltipTests(unittest.TestCase):
+    def test_generated_summary_terms_have_hover_definitions(self):
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        self.assertIn("function studyAnnotateText", page)
+        self.assertIn("studySetVocabulary(data.vocabulary)", page)
+        self.assertIn("studyAnnotatedLines(data.summary", page)
+        self.assertIn('class="study-term" data-term=', page)
+        self.assertIn("bindStudyTermTips();", page)
+        self.assertIn(".study-term-tip{", page)
+
+    def test_whole_transcript_marks_wordbook_and_generated_vocabulary(self):
+        page = (SITE / "player.html").read_text(encoding="utf-8")
+        self.assertIn("function studyTranscriptMarkData", page)
+        self.assertIn("w.classList.add('vocab-mark')", page)
+        self.assertIn(".word.vocab-mark{", page)
+        self.assertIn("studySetVocabulary(studyVocab)", page)
+        self.assertIn("studyTermChipHTML(v.word)", page)
+        self.assertIn("for (let len = 1; len <= 4", page)
+
+
 class PlayerPrototypeThemeTests(unittest.TestCase):
     def test_prototype_theme_is_registered(self):
         page = (SITE / "player.html").read_text(encoding="utf-8")
         self.assertIn('[data-theme="prototype"]{', page)
         self.assertIn("prototype: '原型'", page)
-        self.assertIn("LIGHT_THEMES = new Set(['paper', 'mist', 'prototype'])", page)
+        self.assertIn("LIGHT_THEMES = new Set(['paper', 'mist', 'prototype', 'ledger'])", page)
         self.assertIn('data-theme="prototype"', page)
+        self.assertIn('[data-theme="ledger"]{', page)
+        self.assertIn("ledger: '编辑部'", page)
 
 
 class PlayerThemeContrastTests(unittest.TestCase):
-    THEMES = ["brass", "midnight", "forest", "oxblood", "celadon", "paper", "mist", "prototype"]
+    THEMES = ["brass", "midnight", "forest", "oxblood", "celadon", "paper", "mist", "prototype", "ledger"]
 
     def _block(self, page, name):
         if name == "brass":
@@ -597,13 +804,20 @@ assert.strictEqual(feedCacheFresh(null, now), false);
 class PlayerAccessibilityTests(unittest.TestCase):
     def test_overlays_keyboard_and_labels_are_accessibly_wired(self):
         page = (SITE / "player.html").read_text(encoding="utf-8")
+        # 字幕视图已搬到 subtitles 插件，无障碍标记分散在宿主和插件两处。
+        page += (BUILTIN / "subtitles" / "view.js").read_text(encoding="utf-8")
         for needle in ['<dialog class="modal"', 'showModal()', 'aria-modal="true"',
                        'aria-labelledby="drawerTitle"', 'role="region" aria-label="文字稿"',
                        "wrap.lang = 'en'", "z.lang = 'zh-CN'", 'function updateDocumentTitle',
                        "el.setAttribute('role', 'link')",
                        'aria-valuetext', 'aria-label="搜索我的播客和单集"',
-                       'input:focus-visible', 'aria-label="播放速度" inert']:
+                       'input:focus-visible',
+                       # 底栏收敛：速度/高亮/睡眠/剧集都已一级化，面板不再重复这些控件
+                       'id="dockSheet"', 'aria-label="播放工具"',
+                       'aria-controls="dockSheet"', 'id="dockRateBtn"', 'aria-label="播放速度"']:
             self.assertIn(needle, page)
+        # 旧的底栏速度下拉菜单已经搬进面板，不能再回到「bar 内 popover」
+        self.assertNotIn('id="speedMenu"', page)
 
 
 class PlayerStartupTests(unittest.TestCase):
@@ -822,6 +1036,224 @@ class PlayerCardSemanticsTests(unittest.TestCase):
         self.assertIn("coverageHTML(show)", card)
         self.assertIn("pod-latest", card)
         self.assertIn("showCategoryText(show)", card)
+
+
+class AsrModelManagerTests(unittest.TestCase):
+    def test_settings_pane_and_bridge_are_wired(self):
+        html = (SITE / "player.html").read_text(encoding="utf-8")
+        self.assertIn('id="asrModelList"', html)
+        self.assertIn('id="asrImportBtn"', html)
+        self.assertIn('id="asrModelStatus"', html)
+        self.assertIn("asr_prepare', { model:", html)
+        self.assertIn("asr_models", html)
+        self.assertIn("asr_remove", html)
+        self.assertIn("asr_import", html)
+        self.assertIn("asr_cancel", html)
+        self.assertIn("asr_open_dir", html)
+        self.assertIn("plugin:dialog|open", html)
+        self.assertIn("prefs.asrModel", html)
+
+    def test_model_rows_offer_resume_and_cancel(self):
+        html = (SITE / "player.html").read_text(encoding="utf-8")
+        self.assertIn("继续下载", html)
+        self.assertIn("data-asr-cancel", html)
+        self.assertIn("data-asr-open", html)
+        self.assertIn("chaptersCache", html)
+        self.assertIn("pendingSeekEp", html)
+
+    def test_live_status_bar_auto_hides_when_steady(self):
+        html = (SITE / "player.html").read_text(encoding="utf-8")
+        self.assertIn("liveBarHideTimer", html)
+        self.assertIn("if (LIVE.on) bar.hidden = true;", html)
+
+
+class PlayerMiniTranscriptTests(unittest.TestCase):
+    def test_floating_window_carries_the_current_caption(self):
+        html = (SITE / "player.html").read_text(encoding="utf-8")
+        self.assertIn("capZh", html)
+        self.assertIn("capLive", html)
+        self.assertIn("id=\"floatBtn\"", html)
+        self.assertIn("open_mini", html)
+
+        mini = (SITE / "mini.html").read_text(encoding="utf-8")
+        self.assertIn('id="capEn"', mini)
+        self.assertIn('id="capZh"', mini)
+        self.assertIn('id="capToggle"', mini)
+        self.assertIn("mini_fit", mini)
+        self.assertIn("myt-mini-cap", mini)
+
+        rust = (ROOT / "apps" / "windows" / "src-tauri" / "src" / "main.rs").read_text(encoding="utf-8")
+        self.assertIn("async fn mini_fit", rust)
+        self.assertIn("mini_fit,", rust)
+
+
+class PlayerAutoTranslateTests(unittest.TestCase):
+    def test_translation_is_configurable_and_wired(self):
+        html = (SITE / "player.html").read_text(encoding="utf-8")
+        self.assertIn('id="trOn"', html)
+        self.assertIn('id="trEngine"', html)
+        self.assertIn('id="trTarget"', html)
+        self.assertIn('id="trTest"', html)
+        self.assertIn("tr_translate", html)
+        self.assertIn("myt-translate", html)
+        self.assertIn("trPrimeCues", html)
+        self.assertIn("liveTranslateRow", html)
+        for engine in ("mymemory", "openai", "deepl", "microsoft", "libre", "google"):
+            self.assertIn(f'value="{engine}"', html)
+
+        rust = (ROOT / "apps" / "windows" / "src-tauri" / "src" / "translate.rs").read_text(encoding="utf-8")
+        self.assertIn("async fn mymemory", rust)
+        self.assertIn("async fn openai", rust)
+        self.assertIn("async fn deepl", rust)
+        self.assertIn("async fn libre", rust)
+        self.assertIn("async fn microsoft", rust)
+        self.assertIn("async fn google", rust)
+        self.assertIn("tr_translate", (ROOT / "apps" / "windows" / "src-tauri" / "src" / "main.rs").read_text(encoding="utf-8"))
+
+
+class PlayerPodcastManagerTests(unittest.TestCase):
+    def test_per_show_settings_skip_rules_and_queue_order_are_wired(self):
+        html = (SITE / "player.html").read_text(encoding="utf-8")
+        for needle in ("这档节目的设置", "data-show-speed", "data-show-intro", "data-show-outro",
+                       "setQueueOrder", "setVolumeCap", "applySkipRules", "nextTarget"):
+            self.assertIn(needle, html)
+
+    def test_cue_skip_plan_logic_runs_in_node(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node 不在 PATH，跳过播放器逻辑测试")
+        page = player_page()
+        block = page[page.index("function skipUrlOf"):page.index("function transcriptFailure")]
+        source = """
+const assert = require('assert');
+const prefs = {skipAds: true, skipLevel: 2};
+const state = {cues: [], audioSeconds: 0, skipPlan: null, skipDone: new Set(), skipMuted: new Set()};
+__BLOCK__
+// 1) i 命中且 start 对得上 → 直接按索引落标签
+state.cues = [{start: 0}, {start: 10}, {start: 20}];
+state.audioSeconds = 100;
+let plan = buildSkipPlan({
+  audio_seconds: 100,
+  segments: [{i: 2, start: 20, tag: 'promo', conf: 0.9}],
+  ranges: [],
+});
+assert.strictEqual(plan.tags.get(2).tag, 'promo');
+// 2) 索引对不上时按 start 找最近句，不整集错位
+plan = buildSkipPlan({audio_seconds: 100, segments: [{i: 1, start: 60, tag: 'ad', conf: 0.9}], ranges: []});
+assert.strictEqual(plan.tags.get(2).tag, 'ad');
+assert.strictEqual(plan.tags.size, 1);
+// 3) 单集 40% 上限：从置信度最低的区间开始砍
+plan = buildSkipPlan({
+  audio_seconds: 100,
+  segments: [],
+  ranges: [
+    {start: 0, end: 30, tag: 'ad', conf: 0.9},
+    {start: 40, end: 60, tag: 'promo', conf: 0.5},
+    {start: 70, end: 95, tag: 'filler', conf: 0.6},
+  ],
+});
+assert.strictEqual(plan.limited, true);
+assert.ok(plan.ranges.reduce((n, r) => n + (r.end - r.start), 0) <= 40);
+assert.ok(plan.ranges.every(r => Math.round(r.start) !== 40));
+// 4) 区间内 0.4 秒才跳；1 秒以上就是用户自己拖进来的，本次不再跳
+state.skipPlan = buildSkipPlan({audio_seconds: 100, ranges: [{start: 10, end: 40, tag: 'promo', conf: 0.9}]});
+state.skipDone = new Set(); state.skipMuted = new Set();
+assert.ok(findSkipRange(10.2));
+state.skipMuted = new Set(); state.skipDone = new Set();
+assert.strictEqual(findSkipRange(12), null);
+assert.ok(state.skipMuted.size > 0);
+state.skipMuted = new Set(); state.skipDone = new Set();
+const hit = findSkipRange(10.1);
+state.skipDone.add(hit.id);
+assert.strictEqual(findSkipRange(10.2), null);
+// 5) 级别门槛：filler 只有 3 级且 conf >= 0.8 才跳
+prefs.skipLevel = 2;
+assert.strictEqual(skipWanted('filler', 0.95), false);
+prefs.skipLevel = 3;
+assert.strictEqual(skipWanted('filler', 0.75), false);
+assert.strictEqual(skipWanted('filler', 0.85), true);
+"""
+        source = source.replace("__BLOCK__", block)
+        proc = run_node(self, "cue_skip_plan.js", source)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+    def test_cue_skip_plan_is_gated_to_offline_audio_and_local_transcript(self):
+        html = (SITE / "player.html").read_text(encoding="utf-8")
+        for needle in ("buildSkipPlan", "loadSkipPlan", "skipUrlOf", "skipEligible", "skipWanted",
+                       "findSkipRange", "state.skipMuted", "state.skipDone", "setSkipLevel",
+                       "offlineSkipLoad", "offlineSkipSave",
+                       "只对「离线音频 + 本机文字稿」的单集生效"):
+            self.assertIn(needle, html)
+        # 上限保护：单段 120 秒、单集 40%、手动 seek 进区间不跳。
+        self.assertIn("Math.min(hit.end, now + 120)", html)
+        self.assertIn("dur * 0.4", html)
+        self.assertIn("now - r.start > 0.5", html)
+        rust = (ROOT / "apps" / "windows" / "src-tauri" / "src" / "main.rs").read_text(encoding="utf-8")
+        for needle in ("fn offline_save_skip", "fn offline_skip_load", "offline_save_skip,",
+                       "offline_skip_load,", "hasSkip"):
+            self.assertIn(needle, rust)
+
+    def test_p2_stats_echo_ad_skip_and_local_folder_are_wired(self):
+        html = (SITE / "player.html").read_text(encoding="utf-8")
+        for page in ("page-stats", "page-local", "page-video"):
+            self.assertIn(f'id="{page}"', html)
+        # 年度回顾已并入统计页，不再单独占一个导航页。
+        for part in ("echoYear", "echoCards", "echoBody"):
+            self.assertIn(f'id="{part}"', html)
+        for needle in ("setSkipAds", "detectAdRanges", "renderStats", "renderEcho", "renderLocal",
+                       "local_scan", "importLocalFolder", "myt-local", "dataImportFile"):
+            self.assertIn(needle, html)
+        rust = (ROOT / "apps" / "windows" / "src-tauri" / "src" / "main.rs").read_text(encoding="utf-8")
+        self.assertIn("fn local_scan", rust)
+        self.assertIn("local_scan,", rust)
+        conf = (ROOT / "apps" / "windows" / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8")
+        self.assertIn('"**"', conf)
+
+
+class PlayerStudyShortcutTests(unittest.TestCase):
+    """AI 面板原本只有鼠标入口，S 键开关是纯键盘场景的唯一通道，别被后续改动弄丢。"""
+
+    def setUp(self):
+        self.html = player_page()
+
+    def test_s_key_toggles_study_sheet(self):
+        self.assertRegex(self.html, r"e\.key === 's' \|\| e\.key === 'S'")
+        self.assertIn("function toggleStudySheet()", self.html)
+        self.assertIn("closeStudySheet(); return;", self.html)
+        self.assertIn("openStudySheet();", self.html)
+
+    def test_s_key_is_claimed_from_dock_buttons(self):
+        self.assertIn("'s', 'S']", self.html)
+        self.assertIn("'s', 'S'", self.html)
+
+    def test_toggle_respects_module_switch(self):
+        body = self.html.split("function toggleStudySheet()", 1)[1].split("\n}", 1)[0]
+        self.assertIn("moduleOn('study')", body)
+        self.assertIn("AI 学英语模块已关闭", body)
+
+    def test_dock_hint_mentions_shortcut(self):
+        hint = re.search(r'id="dockHint">([^<]+)<', self.html).group(1)
+        self.assertIn("S AI 学英语", hint)
+
+    def test_study_sheet_waits_for_late_cues(self):
+        """S 键可能抢在字幕 fetch 之前打开面板，空态必须能自愈而不是停在「没有文字稿」。"""
+        self.assertIn("function studyWithCues(fn)", self.html)
+        self.assertIn("字幕加载中…", self.html)
+        self.assertNotIn("if (!cur) { body.innerHTML = studyEmpty('这一集没有可用的文字稿。'); return; }", self.html)
+        self.assertEqual(self.html.count("studyWithCues(() =>"), 2)
+
+    def test_study_tabs_are_keyboard_operable(self):
+        """打开面板后焦点要落在当前页签，页签之间用 →/← 切换。"""
+        self.assertIn('onTab.focus({ preventScroll: true })', self.html)
+        self.assertIn("['ArrowLeft', 'ArrowRight', 'Home', 'End']", self.html)
+        self.assertIn("setStudyView(btns[n].dataset.studyView)", self.html)
+
+    def test_extension_module_shares_main_iife_scope(self):
+        """扩展模块必须写在主 IIFE 内：另起 <script> 拿不到 state / studyRender* 等私有绑定，
+        包装会静默失效（缓存徽标、前情回顾、练习扩展按钮曾经整块消失）。"""
+        self.assertEqual(self.html.count("<script"), 1)
+        self.assertNotIn("</script>\n<script", self.html)
+        self.assertIn("window.__xai", self.html)
 
 
 if __name__ == "__main__":

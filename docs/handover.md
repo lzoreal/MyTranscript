@@ -1,6 +1,6 @@
 # MyTranscript 交接文档
 
-最后更新：2026-11-14。面向接手者：先读本文件，再看 [AGENTS.md](../AGENTS.md) 的作业规则。
+最后更新：2026-11-18。面向接手者：先读本文件，再看 [AGENTS.md](../AGENTS.md) 的作业规则。
 
 ## 一、这个项目是什么
 
@@ -744,6 +744,26 @@ WASM 单线程还要背 COOP/COEP。桌面壳把这两件事同时绕开：字�
     （标题/封面/进度/播放态/能否切集），所以音频实例永远只有一个。
   - **系统媒体键**走页面里的 `MediaSession`（`desktopBridge()`）：Windows 媒体浮层、键盘媒体键、
     耳机键都能播/停/前后跳/切集；若实测按键不响应，再换 Rust 侧 SMTC。
+  - **整集下载含词级文字稿**（2026-11-18）：`offline_save_transcript(url, key)` 把 feed 里的
+    `podcast:transcript` JSON 落成 `<key>.transcript.json`，与音频同目录；`offline_list` 为每个
+    音频条目补 `hasTranscript` / `transcriptSize`。播放页 `readTranscriptDoc` 先读本机 JSON，
+    再回落远端；旧版本只下过音频的集，在播放或离线列表点「＋ 字幕」会补下文字稿。
+    删除离线时音频和 `.transcript.json` 一起删，容量统计也把文字稿算进去。
+  - **AI 整集总结与主题时间戳**（2026-11-18）：单集页「AI 总结」按钮先以暂停态打开播放页，
+    等文字稿就绪后打开学习面板并调用 `studyAnalyzeEpisode()`。整集按字幕条数均分成 3 块
+    （短集只发 1 块），不再按 13k 字符切 6 块；每块 prompt 要求返回
+    `summary` + `topics[{title,start,end,summary}]`，前端把分块结果按 `start` 排序去重，
+    主题按钮点击走 `seekTo()`。每完成一块就写 `ep:<id>:partial` 断点；某块失败时重试只跑
+    失败块及剩余块，`episodeFresh` 才从头开始。`version:2` 标记新缓存；旧缓存会提示重新总结。
+    结果可「复制总结」为纯文本。
+    设置里的 AI 服务商可选 OpenAI / Claude / Gemini / DeepSeek / Kimi / GLM / 自定义兼容接口；
+    前端把 `provider` 作为 `config.engine` 传给 `llm_chat`，Rust 侧分发：OpenAI 系走
+    `/chat/completions`，Claude 走 `/v1/messages`（`x-api-key` + `anthropic-version`），
+    Gemini 走 `/models/{model}:generateContent`（`x-goog-api-key`）。
+    设置里的「获取列表」通过 `llm_models` 请求厂商模型目录：OpenAI 系 `GET /models`，
+    Claude `GET /v1/models`，Gemini `GET /v1beta/models` 并过滤 `supportedGenerationMethods`
+    含 `generateContent` 的条目；前端把结果渲染成可滚动、可筛选的模型列表，点选后写回输入框，
+    也可手动填写。
 
 **踩过的坑（都会复现，别猜）**：
 
@@ -754,12 +774,65 @@ WASM 单线程还要背 COOP/COEP。桌面壳把这两件事同时绕开：字�
 | 播放页（字幕页）点 ⧉/－/▢/✕ 没反应 | `.reader-top-actions` 是 `pointer-events:none`，只有「← 主页」「ⓘ」「☆」单独设了 `auto`，这些窗口按钮挂在 `.reader-top-right` 下就继承了 `none`，点击穿透到下面的透明拖拽带。`.win-ctl` 必须自己写 `pointer-events:auto` |
 | 播放页顶部 38px 的控件/字幕首行点不着 | 早期为了拖窗口铺了一条 `top:0;height:38px` 的全宽透明 `.win-drag` 带（`z-index:11`），它盖住了 `z-index:1` 的 `.reader`。已删除，改为把 `.reader` / `#transcript` **容器本身**标 `data-tauri-drag-region`：Tauri 的裸属性只在「按下点就是该元素」时才拖，点句子照样跳转 |
 | 迷你窗开局是一块纯白矩形 | 窗口创建即可见、页面首帧没画完，露出 WebView2 默认白底。改 `visible(false)` + `background_color(Color(22,24,29,255))`，页面画完 600ms 再 `show()`（`on_page_load` 打点确认加载成功） |
+| 整集下载时 raw.githubusercontent 返回 503，音频已下但文字稿失败 | `saveOfflineTranscript` 首次失败会用 `transcriptMirror()` 的 jsDelivr 地址重试；仍失败则保留音频，离线列表显示「仅音频 · 可补字幕」，点「＋ 字幕」重试 |
 | 迷你窗显示「未在播放」但其实在播 | 多半是**两个 app 实例**各自开了一个迷你窗（重叠），你看到的是没在播的那个。排查前先 `Get-Process mytranscript-desktop` 清干净。通道本身可用 `MYT_DEBUG=1` 验证：日志里应出现主窗推送 + 迷你窗 `state {…}` |
 | 识别器创建失败、日志说 `tokens.txt does not exist` 但文件在 | sherpa 用 `std::ifstream` 判存在，路径含非 ASCII（用户名「游梦」）就挂；模型固定放 `%ProgramData%\MyTranscript\sherpa-en-20M`，旧 `app_data` 目录自动搬 |
 | 第一次下 DLL 得 404 | v1.12.15 的 Windows 资产名是 `sherpa-onnx-v1.12.15-win-x64-shared-no-tts.tar.bz2`（带 `-no-tts`） |
 | HF 直连下模型超时 | 改 `hf-mirror.com` + `curl -L --retry 5` |
 | 壳里报「这个音频不是 MP3」 | 这集 ID3v2.4 里嵌了 3000×3000 PNG 封面（APIC 帧约 1,364,202 B），128 KB 探针到不了第一帧。`liveProbeAudio` 改成 128 KB→2 MB→8 MB 递进取窗口，并把“连续两帧都对上”才算帧边界 |
 | 发行版启动报 `WebView2 error 0x800700AA 请求的资源在使用中` / `os error 5` | exe 所在目录是**低完整性级别**（`icacls` 显示 `Mandatory Label\Low Mandatory Level:(NW)`）。本仓库 `D:\MyTranscript` 被沙箱写成 Low IL，从那里启动的进程也是 Low IL，WebView2 不肯建环境；解压到桌面/下载目录（Medium）即正常 |
+| 加了 `assetProtocol` 后 `cargo build` 直接失败 | `tauri.conf.json` 的 `app.security.assetProtocol` 与 `Cargo.toml` 的 tauri features 必须同时存在：报错原文「The `tauri` dependency features ... does not match the allowlist ... add the `protocol-asset` feature」。两处都要改 |
+| 离线文件名里出现中文/emoji | Rust 侧落盘前统一走 `safe_name()`（只留 ASCII 字母数字 `- _`，其他字符换 `_`，截断 120）；JS 侧 `offlineKeyOf()` 用同一套规则拼 `<showSlug>-<epId>`，两边规则必须一致，否则「已离线」判断和实际文件对不上 |
+
+**播放侧四项（2026-11-17 追加，都在 `site/player.html`）**
+
+- **章节导航**：`parseFeed` 每条 item 增收 `chaptersUrl`（`podcast:chapters` 的 `url`）与
+  `chapters`（Podlove `<psc:chapter start="…">`，用遍历匹配 `tagName` 末尾是否 `chapter`，
+  别按前缀取——命名空间前缀在各家 feed 里不统一）。选中单集后 `loadChapters()`：先用手上已有的
+  内嵌章节，有 URL 再走壳的 `http_text` 取章节 JSON（读 `chapters[].startTime`）。
+  面板是阅读页右上角的 `☰` + 右侧 `#chapterSheet`，点一条 = `seekTo(start)`；当前章节同步到
+  `#chapterNow` 与底栏 `#chapterChip`（`syncChapterNow(t)` 在 `paint()` 里跑）。
+- **播放列表**：存储键 `myt-playlists`，形如
+  `[{id,name,items:[{key,ep,title,show,date,duration,img}],at}]`。单集页「＋ 列表」开对话框
+  选已有列表或新建；「收听模式」页多一张列表卡片，`▶ 播放` 把整批 items 塞进 `app.queue`
+  （`saveQueue()`）再播首集，连播直接沿用既有队列逻辑，不另建播放通道。
+- **点词查义**：词 span 上右键或 `Alt+点击` → `#wordPanel`（音标 + 词性 + 最多 4 组释义）。
+  取词走壳的 `http_text` 打 `https://api.dictionaryapi.dev/api/v2/entries/en/<word>`（绕 CORS），
+  结果在内存 `wordCache` 里缓存；这个词不在词典库里时接口返回 404，面板显示「查不到这个词」。
+  点击只查词，不动播放位置，也不参与拖选/划句那套浮条。
+- **离线下载**：`offline_save(url, key)` 流式写 `app_local_data_dir()/offline/<safe_name(key)>.mp3`
+  （先写 `.part` 再 `rename`），进度事件 `myt://offline`（`{key,got,total,pct}`，完成带 `done:true`）；
+  `offline_list()` / `offline_remove(key)` 负责列表与删除。播放本地文件走
+  `convertFileSrc()` + `asset:` 协议，所以 `tauri.conf.json` 要开
+  `app.security.assetProtocol={enable:true, scope:["$APPLOCALDATA/offline/**"]}`，
+  Cargo 的 tauri features 也要带 `protocol-asset`。`preferredAudioUrl(item)` 命中离线副本时
+  直接返回 asset URL，因此「下载过的单集」在断网时也能播，不用另开一条播放路径。
+
+验收方式（壳里用 DOM 探针，`webview.eval` 看不到 IIFE 里的 `state`）：导入一条带
+`psc:chapters` 的测试 feed → 单集页播放 → 章节面板列出 3 条并能跳；Alt+点词出 4 条释义；
+点「⤓ 离线」约 9 s 落盘 0.1 MB 后按钮变「✓ 已离线」、收听页出现 1 行；再播这一集时
+`audio.src` 实测是 `http://asset.localhost/...offline/...mp3`；「＋ 列表」→ 收听页出现列表卡片 →
+`▶ 播放` 跳到 `#/player/<key>/<ep>` 且队列被写入。
+
+**底栏收敛（2026-11-17 追加，`site/player.html`）**
+
+底栏原先一条 bar 里塞了 8 个控件（速度下拉、分隔线、实时、详情、列表、沉浸、主题、Aa），
+窗口一窄就换成两行 grid、bar 高度变化顶到字幕区；四种二级容器（bar 内 popover、右下 sheet、
+全屏抽屉、右侧栏）各有一套关闭规则，容易残留。现在：
+
+- 底栏只留三块：进度条（时间 / 轨道 / 总时长）、`−15″` / 播放 / `+30″`、当前节目信息（含
+  `#chapterChip` 章节名），右侧只剩一个「⋯」`#dockToolsBtn`。速度、逐词/逐句、实时识别、
+  剧集信息、剧集列表、阅读排版、沉浸、主题全部搬进 `#dockSheet`，没有任何第二个入口。
+- 互斥只有一条：`openDockSheet()` 先关 drawer/details/typeSheet，`openDrawer/openDetails/
+  openTypeSheet/closeOverlays/setImmersive` 反过来都先关面板；点面板外、按 Esc、选完动作都走
+  `closeDockSheet()`，并把焦点还给触发按钮。非默认状态（非 1× 速度、实时开、逐句）显示在
+  「⋯」右上角的小徽标 `#dockBadge` 上，收起来也能一眼看到。
+- 进度条改成「拖动预览 + 松手跳」：`input` 只更新预览（`#now` 文本、`#pfill` 填充、轨道上方
+  时间气泡 `#seekTip`），`change` 才 `rawSeek`；单击轨道因为原生 range 的 input+change 连着
+  来，等于直接跳；双击轨道 `seekTo(当前句 speechStart + offset)`，并把预览收掉。
+- 关键约束：`paint()` 与 `liveAdvance()` 都在 `state.seekPreview != null` 时跳过对
+  `#now/#seek/#pfill` 的写入，否则拖动会被每一帧的时间回写抢回去；`blur`/`pointercancel`/Esc
+  都会丢弃预览并 `paint(true)` 复原。
 
 **实机结果**：speaking-of-psychology 集原生命中识别通过（逐词高亮跟随）；99% Invisible
 （CORS + 大封面）在壳里取到 206/131072 字节、探针放大后定位到真正的第一帧、原生识别
@@ -770,3 +843,449 @@ WASM 单线程还要背 COOP/COEP。桌面壳把这两件事同时绕开：字�
 实测不响应，改用 Rust 侧 SMTC；模型分发（首次下载 41 MB vs 随包内置）；`SHERPA_LAG=0.4` 未在本集重标；原生 CPU 只采到
 “追赶提前量”时的瞬时值（约 62% 单核），稳态对比未做；Android 未动工（计划原生 Kotlin
 WebView + 同一套 C API 的 JNI 包）。
+## 底栏补三项基本播放能力（2026-11-17 追加）
+
+自查发现播放页有三个基本功能空洞，补在 `#dockSheet` 里（不再往底栏加控件，维持三块结构）：
+
+- **音量 / 静音**：原来整个播放器没有任何音量入口（仓库里只有 `--muted` 颜色变量）。
+  现在面板里一行：`#muteBtn`（扬声器图标，静音时画斜线、`aria-pressed=true`）+ `#volRange`
+  + `#volOut` 百分比。音量存在 `prefs.volume`（0–1）、静音存 `prefs.muted`，随
+  `myt-prefs` 一起落盘；启动时 `applyVolume(false)` 恢复。键盘 `M` 切换静音（静音且音量
+  为 0 时恢复 0.5）。静音状态也会进底栏「⋯」的徽标。
+- **上一集 / 下一集**：`stepEpisode(±1)` 早就存在，但只绑了迷你窗按钮、媒体键和托盘菜单，
+  播放页没有入口。现在面板里给「上一集 / 下一集」两个按钮，和迷你窗同一套口径（走
+  `currentPlaylist()` → `stepTarget()` → `selectEpisode()`，在播就接着播）；键盘 `N` 下一集、
+  `P` 上一集。
+- **睡眠定时快捷档**：原来只在设置页 `#sleepOptions` 里。现在面板里 30′ / 60′ / 本集 / 关
+  四个档，直接复用 `setSleep()`；`syncDockSleep()` 把剩余时间写成「剩 mm:ss」贴在标签后，
+  面板开着时每秒刷新，`end`/`off` 用 `.on` 标出当前档。
+
+**键盘守卫的坑**：底栏和面板里的按钮点过一次就会留下焦点，原来的
+`if (e.target.closest('button, a, ...')) return;` 会让之后的 Space / 方向键 / 快捷键全部失灵。
+现在这条守卫对 `.dock`、`.docksheet` 内的焦点放行，并先 `e.target.blur()`——不 blur 的话
+Space 会在 keyup 时再触发一次那个按钮自己的动作。
+
+## 播放时钟降频与 DOM 写入去重（2026-11-17 追加）
+
+原来驱动播放头的是一个常驻 `requestAnimationFrame` 循环：
+
+```js
+(function loop() { if (!audio.paused) paint(); requestAnimationFrame(loop); })();
+```
+
+即使暂停，它也在每秒唤醒 60 次；播放时每帧 `paint()` 会写三次 DOM（`#now` 文本、`#seek`
+的 `value` 与 `aria-valuetext`、`#pfill` 的宽度），再调 `syncJumpPill()` 读两次
+`getBoundingClientRect()`——后者是**每帧一次强制同步布局**，是长列表页面最贵的一步。实时识别
+模式也吃这条循环。
+
+现在改成「有播放才走表」：
+
+- `PLAY_TICK_MS = 120` 的 `setInterval`，`play` 启动、`pause` / `ended` / `visibilitychange`
+  停表；暂停和窗口隐藏时是 0 唤醒（原来始终 60 Hz 空转）。
+- `paint()` 里三个写入各自带缓存（`state.lastNowText` / `lastAriaText` / `lastSeekBucket`），
+  值没变就不写；`#now` 也只有跨过整秒才变，实际写入掉到约 1 次/秒。
+- `syncJumpPill()` 限流 400 ms（或 `force`）；`syncChapterNow()` 用 `idx|title` 记忆，
+  不再每帧重写 `#chapterNow` 和 `#chapterChip`。
+- `paintWords()` 只重设 `lastIdx → idx` 之间那几个词，不再每次遍历整句 30+ 个词。
+  同时修了一个隐藏 bug：切句时把旧句单词重置为 pending，却没有清 `old.lastIdx`，回看同一句
+  会命中「idx 没变」的早退，整句停在 pending、没有高亮。
+- **缓存作废**：`seekPreviewAt()` 是绕过 `paint()` 直接写 DOM 的，所以 `endSeekPreview()`
+  必须把三个缓存置空，否则松手后的 `paint()` 会认为「值没变」而不落值，进度条停在预览位置；
+  `liveAdvance()` 里同样的写入也顺手回写缓存，避免实时模式与普通模式互相污染。
+
+效果（结构层面）：播放时 DOM 写入从 60 Hz 降到约 8 Hz，强制布局读取从 120 次/秒降到
+≤2.5 次/秒；空闲时不再有任何定时唤醒。撤销方式：把这段 ticker 换回原 rAF 即可，其余缓存
+都是纯性能优化、不改变行为。
+
+## 模式记忆与模式冲突（2026-11-17 追加）
+
+播放器里其实有四组互相独立的「模式」：收听模式（`app.playMode`：沉浸收听 / 连续播放 /
+节目电台 / 简洁驾驶）、高亮模式（`state.mode`：逐词 / 逐句）、跟随滚动（`state.scroll`：
+边缘 / 居中 / 关闭）、阅读沉浸（`state.immersive`，不是收听模式里的那个「沉浸」）。只有收听
+模式被持久化了，其余每次启动都悄悄回到默认，用户以为自己的选择没生效。
+
+- **记忆**：`state.mode` 存 `myt-mode`，`state.scroll` 存 `myt-scroll`；启动时在
+  `initApp()` 里读回并同步 `#modeSeg`（`aria-selected`）与 `#scroll` 的选中值。切同一个
+  模式不再重建整张字幕（原来点「逐词」已经选中时也会 `renderCues()`）。
+- **两个「沉浸」会互相踩**：驾驶模式（`body.car-mode`）隐藏正文，阅读沉浸（`body.immersive`）
+  隐藏底栏，叠在一起就是一块空屏。现在进驾驶模式会先收起浮层并退出阅读沉浸；进阅读沉浸
+  会先把收听模式切回「沉浸收听」（直接改状态和 `car-mode`，不弹两次 toast）。
+- **驾驶模式不再空转**：`paint()` 和 `liveAdvance()` 在 `car-mode` 下跳过逐词上色、
+  字幕滚动和 `syncJumpPill()`（它要读两次 rect），只更新时间和进度——正文本来就看不见。
+  退出驾驶模式时把 `state.nodes[*].lastIdx` 与 `LIVE.rows` 的 `lastIdx` 全部置脏、
+  `activeCue = -1`，下一次 `paint(true)` 按「重新定位」的方式一次画对，不会停在旧高亮上。
+- `setPlayMode()` 末尾补了 `paint(true)`：切换模式后跟随策略立刻按新模式生效。
+
+### 收听模式拆成两组独立设置（同日追加）
+
+原来一个 `LISTEN_MODES` 把「外观」和「续播」塞进四个互斥值（`immersive` / `continuous` /
+`radio` / `car`），于是**选驾驶就等于关掉连续播放**，选电台就不能用驾驶界面，而且 `immersive`
+那一档没有任何视觉差异——四个值里只有一个真改布局。现在拆开：
+
+- `LISTEN_APPEARANCE` = `default` / `car`，只切 `body.car-mode`（正文显隐、按钮尺寸）。
+  存 `myt-appearance`。
+- `LISTEN_CONTINUE` = `single` / `continuous` / `radio`，只决定 `ended` 之后怎么走。
+  存 `myt-continue`。两组合法组合都能成立（例如「驾驶界面 + 节目电台」）。
+- **迁移**：旧 `myt-play-mode` 读一次，`car` → 驾驶界面、`continuous`/`radio` → 续播，
+  然后删掉这个键；旧的 `prefs.autoNext` 只作为 `single`/`continuous` 的兜底。
+- **去重真值来源**：设置页那个「自动连续播放」开关不再是独立状态，它现在就是
+  「播完之后 ≠ 播完即停」的快捷开关（`syncAutoNextSwitch()`），点它等于切
+  `continuous`/`single`，两处永远一致，不会出现「开关开着但续播设置是播完即停」。
+- 页面拆成「界面」与「播完之后」两组卡片（`#listenAppearance` / `#listenContinue`），
+  选中态用 `role=radio` + `aria-checked`；点击委托从 `[data-mode]` 改成
+  `[data-appearance]` / `[data-continue]`，不再和底栏「逐词/逐句」（那个也用 `data-mode`）
+  抢同一个 CSS 选择器。
+
+### 桌面壳：识别模型管理（2026-11-18）
+
+原来原生识别只有一个写死的模型（英文 20M，`%ProgramData%\MyTranscript\sherpa-en-20M`，
+文件名带 epoch），想换模型只能改代码重编。现在拆成「清单 + 目录 + 选用」三件事：
+
+- **目录**：`%ProgramData%\MyTranscript\models\<id>\`，每个模型一个 ASCII 目录，
+  文件名一律规范化成 `encoder.onnx` / `decoder.onnx` / `joiner.onnx` / `tokens.txt`，
+  再加一个 `model.json` 记录 `{id,name,type,files}`。`asr.rs` 的 `ModelSpec::load()`
+  先读 `model.json`，没有就按老的 epoch 名兜底——所以老用户不用重下。
+- **内置清单**（`main.rs` 的 `MODELS`）：英文迷你 41 MB（en-20M int8）、英文标准 69 MB
+  （zipformer-en-2023 int8 left-128）、英文大 253 MB（同仓库 fp32）、中英双语 189 MB
+  （bilingual zh-en int8）。远端文件名与仓库都在清单里，HF 连不上自动退 `hf-mirror.com`，
+  下载用 `http_long()`（1800 s）并按块写文件、边下边 `emit("myt://asr-model", {pct})`。
+- **命令**：`asr_models` 列安装状态与体积（含手工导入的目录）、`asr_prepare(model)` 缺哪个
+  下哪个、`asr_remove(model)` 删目录、`asr_import(path)` 把本地文件夹复制成新模型。
+  选择状态只存在页面（`prefs.asrModel`，默认 `en-mini`），壳里不存第二份。
+- **导入**：任意目录（中文路径也行）只要是 sherpa-onnx 结构就复制进 ASCII 模型目录，
+  自动挑 `encoder*/decoder*/joiner*.onnx`（同槽位优先 int8）+ `tokens.txt`；
+  有 joiner 记 transducer，没有记 paraformer（`Asr::new` 按 `type` 分别填
+  `transducer` / `paraformer` 结构）。
+- **删除保护**：正在使用的模型按钮直接禁用；前端再拦一次，删之前要 confirm。
+  是否「使用中」由页面判断，壳只校验 id 合法（防目录穿越）。
+- **设置页**：`设置 → 文字稿与字幕 → 实时识别模型`，列出每档的说明/体积/安装状态，
+  可「使用 / 下载并使用 / 删除」；「导入模型」走 `tauri-plugin-dialog` 的目录选择
+  （capabilities 加 `dialog:allow-open`）。切换后提示「下次开启实时识别生效」——
+  已开着的识别会话不会中途换模型。
+**补强（同日追加）**：下载改成可中断/可续传——`.part` 留着，下次带 `Range` 从断点接着下；
+设置页每行有「取消」（`asr_cancel`，保留断点），下载中显示百分比与体积，非安装态若已有断点
+显示「已下载 X MB，可续传」并把按钮改成「继续下载」。下载加了两个上限：响应头 60 秒、
+每个分块 180 秒，镜像卡住会失败退出而不是把界面吊在「下载中」。另外每一行加了「目录」
+按钮（`explorer` 打开模型目录），`asr_models` 现在跑在阻塞线程池里（首次搬 41 MB 老模型不再
+卡主线程），并额外返回 `part` 字节数。
+## 桌面壳：自动翻译（2026-11-18）
+
+设置 → 文字稿与字幕里新增「自动翻译」。翻译请求由 Rust 代发（`tr_translate`，`src/translate.rs`），
+避开浏览器 CORS；引擎、地址、Key、模型、目标语言全部由前端 `myt-translate` 配置传入，壳不落盘。
+
+- 引擎：`mymemory`（默认，免费无需 Key，国内可直连）、`google`（网页接口，海外网络）、
+  `openai`（兼容 Chat Completions，批量 JSON 数组）、`deepl`（按 Key 后缀自动选 free/pro）、
+  `libre`（自建或公共实例）。
+- 范围：原文字稿里播放头附近缺中文的句子按需翻译并写回 `cue.zh`；实时识别的行在文字稳定
+  0.7 秒后翻译，作为该行下面的 `.zh.live-zh` 显示。译文缓存在内存 `TR_CACHE`，按原文去重。
+- 开启时如果正文只显示英文，会自动切到「双语」，否则译完也看不见。
+- 目标语言：zh-CN / zh-TW / en / ja。
+## 桌面壳：订阅自动化与单集管理（2026-11-18，P0）
+
+新增本机状态键：`myt-auto`（刷新/下载/清理/通知配置）、`myt-favorites`（单集收藏 key 列表）、
+`myt-played`（已听时间表）、`myt-inbox`（新单集收件箱）、`myt-seen`（每档已见过的单集 id）、
+`myt-showprefs`（每档播客偏好，P1 用）。键格式统一为 `showSlug:episodeId`。
+
+- 定时刷新：`auto.refreshHours` 为 0 时关闭；开启后每 5 分钟检查一次，到期才真正刷新。
+  首次刷新只建立 `seen` 基线，不把全部历史集塞进收件箱。
+- 新单集：写入收件箱，按 `auto.notify` 发系统通知（Rust `notify` 命令，走
+  `tauri-plugin-notification`，不依赖 WebView 的 Notification 权限）。
+- 自动下载：`autoDownload` + `downloadCount`，只下未听、未离线、未在下载中的新集。
+- 自动清理：`deletePlayed` / `deleteNotInQueue` / `keepFavorites` / `capMB`；
+  永远跳过正在播放的单集，收藏保护优先。
+- 播放结束：`markCurrentPlayed()` 写入已听表；`deletePlayed` 打开时延迟触发一次清理。
+- 节目页支持筛选：全部 / 未听 / 已听 / 收藏 / 离线；单集行显示收藏、已听、离线徽章。
+- 媒体键：Windows 下 `RegisterHotKey` 注册播放/暂停、上一集、下一集，经 `myt://media` 交给前端；
+  注册失败就静默跳过，不影响托盘菜单。
+
+## 桌面壳：P1 播客管理与 P2 年回顾/本地文件（2026-11-18）
+
+P1：
+- 节目页新增「这档节目的设置」：播放速度、跳过开头/结尾秒数、自动下载、新集通知；
+  存 `myt-showprefs`，进入该档时覆盖全局速度与跳过规则。
+- `applySkipRules()` 在 `timeupdate` 执行：开头只跳一次；结尾按 `app.cont` 自动下一集或暂停；
+  广告跳过是实验项，默认关闭，只按文字稿 cue 里的赞助/广告关键词合并区间。
+- 队列顺序 `prefs.queueOrder = sequential | unplayed | shuffle`，同时作用于自动续播和
+  播放队列取集；`nextTarget()` 是唯一选择入口。
+- 音量上限 `prefs.volumeCap` 把输出压到 100/90/80/70%，不改变单集响度曲线。
+- 「统计」页按 `readAllProgress()` 汇总累计小时、听过/听完集数、节目排行和最近 7 天。
+
+P2：
+- 「年度回顾」按记录里的 `at` 年份筛选，展示年度小时、听完数、最忙月份、Top 5 节目和
+  每月条形；不跨设备合并。
+- 本地文件夹：Rust `local_scan(path)` 递归最多 3 层、最多 500 个音频，扩展名
+  mp3/m4a/aac/ogg/opus/wav/flac/wma/mp4/m4v/webm/mov/mkv；前端存 `myt-local`，以 `local-files` 这个虚拟节目
+  出现在节目页和「本地文件」页。播放走 asset 协议，`tauri.conf.json` 的 asset scope 已放宽到
+  `**`。清空列表只删记录，不删磁盘文件。
+- 跨设备同步：设置 → 数据 → 「从文件同步」导入另一台设备导出的 JSON，按 key 合并订阅、
+  队列、书签、笔记、收藏、已听、收件箱、自动化与节目偏好；进度按 `at` 取新。
+- 本地视频：扫描结果按扩展名标记 `kind=video`，点条目进入「视频播放」页，用 `<video controls>` 直接播放；
+  本地视频不做文字稿/逐词高亮。
+
+## 学习侧七项扩展（2026-11-19）
+
+前端全部在 `site/player.html` 末尾的**主 IIFE 内部**（再接一段 `(() => { ... })()`，仍挂
+`window.__xai`），通过包装 `studyRenderEpisode` / `studyEpisodeHTML` / `studyRenderPractice` /
+`studyRenderVocab` 注入，不改 1.2 万行主脚本的既有分支。主脚本只在 `lookupWord` 成功/失败
+两处调用 `window.__xai.attachWord`。
+
+**坑（2026-11-19 踩过）**：这段模块曾经放在 `</script>` 之后的第二个 `<script>` 里，看起来能跑，
+实际全部失效——主脚本是 `(() => { ... })()`，`state`、`studyCache`、`studyView` 与那批
+`studyRender*` 都是 IIFE 私有绑定，外层脚本既读不到也改不动；`studyRenderPractice = function…`
+只是在 window 上新建了同名全局，面板永远只显示旧 UI（缓存徽标、前情回顾、跨集时间线、
+多空/盲听按钮全部没出现）。模块必须写在主 IIFE 里才能包装成功。以后再加同类扩展，
+先确认代码在同一个 IIFE 作用域内。
+
+### 预生成资产 `<stem>.ai.json`（data 分支）
+
+- 位置：与单集 JSON 同目录，按 `<transcript-url>` 把 `.json` 换成 `.ai.json`；
+  另有一条 `feed` 同级 `ai/<stem>.ai.json` 作为回退。
+- 结构：`{ version: 3, prompt: "ads-v1", model, generatedAt, data: { summary, topics, ads,
+  keyPoints, vocabulary, hardSentences, questions } }`。`data` 里的字段与 `studyCache`
+  的 `ep:<id>` 形状一致，前端命中即直接灌入 `studyCache` 并标 `source: "disk"`。
+- 生成：`scripts/ai_pregen.py`，从 `feed.xml` 的 `<podcast:transcript>` 枚举全部单集，
+  按 3 块切分调用 Gemini，`merge_parts` 去重、按时间排序、按上限截断。
+  密钥走 `scripts/gemini_keys.py`，`--dry-run` 只打印不调用。
+- 未命中时前端照旧现算，并在整集页顶部显示「缓存未命中」。
+
+### 质检脚本 `scripts/qa_terms.py`
+
+纯离线，扫 `data/<slug>` 或 `feed.xml` 指向的 JSON，按「内部大小写异常 / 含数字 /
+短全大写 / 低频专名 / 同集近形变体」几类启发式挑可疑专名，输出 `build/qa/<slug>.md`。
+只收专名：小写常用词、句首大写、月份/星期一律不判。`--llm-top N` 可让模型复核前 N 条。
+
+### 前端新增的 localStorage 键
+
+- `myt-word-ai`：AI 查词结果（按小写词缓存）。
+- `myt-ai-recap`：前情回顾（按 `ep:<id>` 缓存）。
+- 学习计划、Anki 导出都从既有 `myt-study-vocab` 读，不另存。
+
+## cue 级跳过（2026-11-19，P0）
+
+在原有「关键词 + AI 整段区间」之上加了一层逐句标签，但**只在本机音频 + 本机文字稿的单集生效**：
+
+- 数据：`data/<slug>/<stem>.skip.json`（或 `feed` 同级 `skip/<stem>.skip.json`），结构
+  `{version, prompt:"skip-v1", model, audio_seconds, cue_count, segments[], ranges[], stats}`；
+  `segments` 只列非 `content` 的句子，按 `start` 秒锚定，`i` 只是快路径。
+- 生成：`scripts/ai_skip.py`（Gemini，密钥走 `gemini_keys.py`）；`--heuristic` 是纯正则基线，
+  `--repost` 在规则修正后按已有标签重算区间，`--dry-run` 只打印切块。
+- 标签：`ad`（赞助/广告/优惠码）、`promo`（订阅/周边/巡演/求评价/个人作品）、`filler`（寒暄/跑题/节目事务）。
+- 规则层：广告壳配对（"And now, commercials" ↔ "End of commercials"、"a word from our sponsor" ↔
+  "back to the show"）不依赖模型；壳区间带 `rule:"shell"`，合并时优先级最高，置信度 0.95。
+- 门控（`skipEligible()`）：桌面壳 + 音频为 `asset:` 本地文件 + 文字稿 `local === true`。
+- 存储：`<key>.skip.json` 与 `<key>.transcript.json` 同目录（Rust `offline_save_skip` /
+  `offline_skip_load`，`offline_list` 增 `hasSkip/skipSize`，删除时一起删）。
+- 播放：`buildSkipPlan()` 建 `state.skipPlan`（tags + ranges + limited）；`applySkipRules()`
+  按 `prefs.skipLevel`（1/2/3）取标签。四条保护：单段 ≤120 s、单集 ≤40%、
+  进入区间 >0.5 s 不跳（视为手动拖入）、已跳区间按 `id` 去重（`state.skipDone` / `skipMuted`）。
+- 设置：`prefs.skipAds` 仍是总开关（默认关），`prefs.skipLevel` 默认 2；设置页「跳过级别」下拉。
+- 实测样本（2026-11-19，3 集）：模型可跳 2.1%–6.3%，正则基线 0.2%–1.0%；
+  动态插播广告不在转写里，所以收益主要来自 baked-in 推广与寒暄。
+- 未验证：Rust 未出安装包、真机链路未实测；`ai_skip.py` 尚未接 workflow 与全库回填。
+
+## 桌面壳：全局字幕（2026-11-19）
+
+只服务"本机离线转写"的实时字幕，不改动数据格式。代码在
+`apps/windows/src-tauri/src/{wasapi.rs,captions.rs,asr.rs,punct.rs,main.rs}` 与
+`site/{overlay,picker,wordcard}.html`。
+
+- 采集：设备级 WASAPI loopback（默认设备，2 秒巡检重连）；进程级
+  `ActivateAudioInterfaceAsync(VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK)`，按进程树抓，
+  托盘"选择应用…"用 `IAudioSessionManager2` 枚举出声会话。**激活参数必须 `Box::leak`
+  活到会话结束**，否则 `open_process` 返回即 0xC0000374。
+- 识别：sherpa 流式 `en-mini`，关端点、16k 单声道；首词约 1.4 秒丢字是已知代价。
+- 后处理链：词流 → 停顿断句（>0.8 s 补句号）→ 离线标点模型
+  `sherpa-onnx-online-punct-en-2024-08-06`（int8 7.5 MB，
+  `C:\ProgramData\MyTranscript\models\punct-en\`，缺失则只走停顿规则）
+  → `terms.txt`（`错写 => 正写`）→ 句首大写/术语保形 → 每句一行。
+- 查词：字幕逐词 span，点词走 `dictionaryapi.dev`；词卡 `wordcard.html`（620×260）；
+  收藏写 `%APPDATA%\com.myt.transcript.desktop\vocab.json`，可托盘导出 CSV（UTF-8 BOM）。
+- 中文字幕：英文整句稳定后调 `captions_translate`（MyMemory，只发该句），第二行显示。
+- 热词：sherpa 对词表外 token 直接报错（`Cannot find ID for token`），**解码器级热词不可用**，
+  已改为识别后纠错。
+- 界面坑：WebView 会缓存 `overlay/wordcard/picker`，打开时必须带 `v=<unix>`；
+  本机 CSS 视口与窗口物理尺寸不成比例，右对齐会被裁，词卡因此定宽 360、窗口 620×260。
+
+## 桌面壳：本地无稿音频预转写（2026-11-20）
+
+给"本地文件"里的音频补文字稿，不动站点数据格式。
+
+- 解码：symphonia（mp3 / aac+m4a / wav / flac / ogg），按原采样率喂 sherpa，
+  重采样交给 sherpa；单声道由壳里求平均。没有引入 ffmpeg。
+- 识别：复用 `en-mini` 流式模型（`Asr::feed`/`result`），边解码边 decode，
+  长文件内存只增特征不增 PCM。
+- 词边界：sherpa 的 token 有两类边界——`▁` 前缀和独立的 `" "` token；
+  后者会被当成空串跳过，必须用 `pending_boundary` 接力，否则会粘成 `Thequick`。
+- 产物：`<音频路径>.transcript.json`，格式
+  `{audio_seconds,complete,native,source:"local-asr",segments:[{start,end,text,words:[[w,startMs,durMs]]}]}`，
+  播放页 `cuesFromJson` 直接吃。
+- 命令：`local_transcribe_start(path)`（立即返回）、`local_transcribe_status()`、
+  `local_transcribe_stop()`、`local_transcript_load(path)`；进度事件 `myt://localasr`，
+  页面同时按 1.2 s 轮询兜底。一次只允许一个任务。
+- 播放页：本地单集没有稿时显示"整集预转写"入口；转完自动 `applyEpisodeData`，
+  并把 `transcript={url:'local-asr'}` 写回 `myt-local`，下次直接读盘。
+- 顺手修的旧 bug：`loadShow` 对 `show.local` 直接走 `episodesOf`，不再因为
+  `feed` 为空显示"没有已发布的增强 Feed"（此前本地文件从列表点进去打不开）。
+- 未做：多任务并行、断点续转、中文标点模型、转写期间的取消按钮。
+- 速度：必须"按 0.5 s 喂一次 + 每次 drain 到没有可解帧"。一次性灌完整集会让
+  sherpa 特征队列只留开头，10 分钟音频也只出 10 秒。整集转写线程数取
+  `available_parallelism`（上限 8），实测 22 分钟音频 **44 秒**（约 30× 实时）。
+
+
+
+
+## 桌面壳：模型管理设置（2026-11-20）
+
+把"识别模型"从实时字幕的附属项提升成独立设置页，并让整集预转写共用同一档模型。
+
+- 设置页新增"模型管理"栏：四档模型（迷你 41 MB / 标准 69 MB / 大 253 MB / 中英 189 MB）、
+  已装大小、下载/续传/取消、切换、打开目录、删除、导入本地 sherpa 目录，都在这里。
+  "文字稿与字幕"里只留一个入口按钮，不再重复一份列表（避免两个 `#asrModelList`）。
+- 整集预转写：`local_transcribe_start(path, model)` 新增可选 `model`，页面传
+  `prefs.asrModel`；未安装的模型直接报错并提示去模型管理，不再偷偷用默认档。
+  产物 JSON 多写一个 `model` 字段，播放页完成提示会带上模型名，方便回溯是哪档跑出来的。
+- 修了目录里的一个真 bug：`en-large` 之前和 `en-standard` 指向同一组 int8 文件，
+  所谓"大模型"下来其实是 69 MB 的同一份。已改成 fp32
+  `encoder-epoch-99-avg-1-chunk-16-left-128.onnx`（实为 250 MB），才算真的更高精度。
+- 实测（同一集 SmartLess，39:55，2392 s 有效音频）：
+  - 迷你：**182.6 s**（13.1× 实时），200 段 / 6715 词，64 MB 内存；
+  - 标准：**270.8 s**（8.8× 实时），201 段 / 6708 词；
+  - 90 秒真实切片：迷你 9 s，标准 15 s（都含加载模型）。
+- 质量结论：标准档能把 `pot castead` 修成 `pod caste`、`pod castical` 修成 `podcast`，
+  但 `Jason Bateman`→`jason bamen`、`Sean Hayes`→`shone haze` 依旧错。
+  流式 zipformer 的英文档对人名/品牌就是弱项，换更大档只能改善一部分；
+  要真正解决，得把 `terms.txt` 式纠错接进 `localasr`（目前只作用于实时字幕）。
+- 验收：设置页切"标准"→ localStorage `asrModel` 变 `en-standard`，提示"整集预转写会用这一档"；
+  本地 90 秒条目点"整集预转写"跑完自动出 8 段字幕，JSON 里 `model:"en-standard"`。
+
+## 桌面壳：单句精听（2026-11-20）
+
+听不清某一句时，不用重跑整集：把这一句单独切片重转。
+
+- 后端 `localasr::transcribe_clip(audio, start_s, end_s, model_dir)`：
+  symphonia 先退 0.6 s 做解码预热，再按 packet 时间戳把 `[start, end]` 之外的样本切掉；
+  只喂这段 PCM 给 sherpa，产出仍是标准 `segments`，时间戳已加回绝对偏移，
+  附带 `model` 与 `clip{start_ms,end_ms}`。单次上限 90 秒。
+- 命令 `local_clip_transcribe(path, start_ms, end_ms, model)` 同步等结果；
+  模型未安装直接报错，指向设置 → 模型管理。
+- 播放页：所有音频的每一句 hover 时出现「精听」小按钮，点击后在该句下面插入结果卡：
+  模型名 + 耗时 + 文本，附「复制 / 再来一次 / 关闭」。切片前后各留 1.2 s / 1.0 s 上下文，
+  所以结果里可能带半句邻居的话，这是故意的，方便判断连读。
+- 三种音频来源：
+  - 本地文件：直接用 `localPath` 切片；
+  - 已离线下载：用 `app.offline` 里的 `path`，不重复下载；
+  - 在线流：优先 `remote_clip_transcribe(url,key,start_ms,end_ms,model)` 只取这一句附近的字节：
+    先 `Range: bytes=0-131071` 拿头部，解析 ID3 长度与首个 MPEG 帧，按码率换算时间→字节偏移，
+    往前多取 2.5 s、向后多取 5 s（约 300–400 KB），Range 拉回后裁掉同步字前的杂字节，
+    再 `transcribe_clip(frag, 0, 片段时长)`。同一句再次点会复用 `clips/<key>-<start>.mp3`。
+  - Range 不可用（服务器忽略 Range）、非 MP3（m4a/AAC 等）、或头部带 `Xing/Info`（VBR，
+    首帧码率线性推算会漂）时，回退 `clip_audio_cache` 整集下载，卡片显示「正在缓存整集音频 X%…」。
+- 缓存目录单独放 `C:\ProgramData\MyTranscript\cache\audio\`（片段在其下 `clips/`），
+  **不能放进 offline 目录**：离线列表是扫目录的，混进去会在用户列表里冒出一条没有标题的假离线。
+- 踩坑：**不要复用 sherpa stream**。试过缓存引擎 + `reset()`，第二次精听的开头会混进
+  上一段的话（实测第二次结果以 `Puzzle now the one half dozen...` 开头）。
+  改为每次新建 `Asr`，多花 2–3 秒加载，但两次调用结果完全一致。
+- 实测（40 分钟 SmartLess 单集，118.4→129.8 s 这段，标准档）：
+  **6.8–7.5 秒/次**，两次输出逐字相同；结果里 "Jason Bateman" 被听成 "jason bayman"，
+  仍受模型上限，但足够判断原句在说什么。
+- 实测（在线单集，60,657,685 B、128 kbps CBR）：`300→320 s` 用 Range 只落 **345 KB**、
+  **12.9 秒**返回（其中 6–7 秒是 ASR），与整集下载后本地切同段对照，正文一致；
+  首次不再需要 20 秒级整集下载、也不占 57 MB 磁盘。整集缓存仅在兜底路径出现。
+- 播客官方稿的时间轴可能和实际音频有前导偏差，0:00 那句可能落在片头音乐上，
+  精听结果自然不对；以播放器里的偏移校准为准。
+- **没有文字稿也能精听**：播放器右上角固定一个「◉ 精听刚才」按钮，不依赖 cue。
+  按当前 `audio.currentTime` 取最近 15 秒（播放中向后多留 1 秒、暂停时只留 0.4 秒），
+  走同一套 `clipRun(start,end,panel)`；结果落在底栏上方的浮动卡里，带复制 / 再来一次。
+  本地、离线、在线三种来源与单句精听共用同一条后端路径。
+- 实测（无文字稿的本地 mp3，播到 12 秒点按钮）：**3.2 秒**返回，
+  卡片显示「精听刚才 · 最近 15 秒 · 英文 · 迷你」，正文可直接读。
+
+## 桌面壳：下载管理页（2026-11-20）
+
+侧栏新增「下载管理」（`#/downloads`），把 `offline_list` 的平铺列表按**节目名分组**：
+
+- 每个节目一张分组头：封面、节目名、集数、占用空间；下面列单集标题、大小、
+  是否带文字稿，操作有「▶ 播放 / ＋ 字幕 / ✕ 删除」。
+- 页面顶部显示总集数、节目数和总占用；带搜索框，可按节目名或单集标题过滤。
+- 分组靠 `offlineKey` 前缀匹配已知 show slug；下载时另把
+  `{showName, artwork, epTitle}` 记进 `localStorage['myt-download-meta']`，
+  这样节目列表没加载、或订阅已移除时也能正确归类、显示标题。该表只保留最近 500 条。
+- 删除走 `removeOffline`（音频 + 字幕 + 跳过标签一起删），删完当前页立即刷新。
+- 实测：下载一集 69 MB 后页面显示「1 集 · 1 个节目 · 共 69 MB」，
+  分组头为节目名，行内标题、大小、文字稿大小都正确；删除后回到空状态。
+
+## 桌面壳：自定义主题（2026-11-20）
+
+设置 → 外观与主题底部新增「自定义主题」，用 CSS / HTML 在现有九套主题之上做覆盖：
+
+- 配置存 `localStorage['myt-theme-custom']`：`{css, html, enabled, updatedAt}`。
+- CSS 写进 head 末尾的 `<style id="ctStyle">`，所以能覆盖任意主题变量和选择器；
+  `:root{--accent:…;--bg:…}` 就会全站生效。停用只把 `enabled` 置 false，内容保留，改坏了能一键恢复。
+- HTML 是静态区块，插到首页顶部 `#customHomeMount`，适合做横幅/公告；不是整页替换。
+- HTML 经过 `sanitizeCustomHtml()`：移除 `script/iframe/object/embed/link/meta/base/form`
+  和所有 `on*` 内联事件、`javascript:` 链接，再由模板写入，不执行脚本。
+- 提供「插入模板 / 复制配置（JSON）/ 恢复默认」；导出的本机数据 JSON 里也带 `customTheme`。
+- 启动时 `applyCustomTheme()` 在任何页面渲染前执行，刷新后仍然生效。
+- 实测：`:root{--accent:#ff0055}` 应用后变量立刻变、刷新仍在；带 `onclick` 和 `<script>` 的
+  HTML 落库后只剩 `<div class="my-banner">自定义横幅</div>`，两个脚本标记都没有执行；停用后变量回到主题值。
+
+## 桌面壳：插件接口与字幕插件（2026-11-20）
+
+插件运行时与现有页面并行；用户手册见 [plugins.md](plugins.md)。字幕功能已收编为一个内置插件 `subtitles`。
+
+- 插件目录 `C:\ProgramData\MyTranscript\plugins\<id>\`：
+  `plugin.json`（id/name/version/description/author/main/style/enabled）+ `main.js` + 可选 `style.css`。
+  启用状态单独写 `plugins/enabled.json`，不改用户清单；`enabled` 只是首次默认。
+- Rust 命令：`plugin_list`（扫描目录并把启用插件的 JS/CSS 源码一起返回）、
+  `plugin_set_enabled`、`plugin_open_dir`、`plugin_example`（生成 hello-world 示例，已存在时不覆盖）。
+- 前端启动时 `loadPlugins()` 在 `bindShell()` / `applyRoute()` 之前跑：注入 `<style data-plugin-css>`、
+  用 `<script>` 执行 `main.js`（外层包 try/catch），再调 `MyTPlugins.start(id)`。
+  插件用 `MyTPlugins.register(id,{setup(api)})` 注册；页面走 `api.page()`，
+  路由 `#/plugin/<pluginId>/<pageId>`，侧栏单独一个「插件」分组（`#pluginNav`）。
+- API：`toast / navigate / openEpisode / page / on / command / cues / player{state,play,pause,toggle,seek,seekBy,setRate} / subtitles / storage / el`。
+  事件：`player:open/play/pause/ended/time`（time 约 1 秒一次）、`player:cue`、`route:change`。
+
+### 内置 `subtitles` 插件
+
+- 源码在 `apps/windows/builtin-plugins/subtitles/`，Rust 启动时铺到
+  `C:\ProgramData\MyTranscript\plugins\subtitles\`；已存在的文件不覆盖。
+- `main.js` 调用 `api.subtitles.claim()` 后才算接管。主程序 `subtitlePluginOn()`
+  只看这个 claim 结果：没有插件时播放器不下载文字稿，`selectEpisode` / `renderCues` /
+  `applyEpisodeData` 都直接返回，`body.subs-off` 隐藏阅读区、阅读栏、迷你字幕、壁纸、
+  学习、精听、导出、分享、查找和字幕设置。
+- 插件启用时现有字幕链路照常工作；插件页「字幕中心」提供句数/词数、双语切换、
+  实时识别、精听刚才、导出和阅读设置入口。
+- 全局字幕（overlay）在 Rust 侧也做门控：`start_captions_session` 先检查
+  `subtitles_plugin_enabled()`，插件停用时 `captions_start` / 托盘入口直接报错。
+- `plugin.json` 新增可选 `requires` 数组；前端 `PluginHost` 递归解析依赖，缺依赖的插件不注入 JS，
+  设置页显示“需要先启用：……”。`study` 声明 `requires:["subtitles"]`。
+- 插件 `plugin.json` 支持 `scripts` 数组：Rust 按顺序把脚本拼到入口 `main.js` 之前，
+  因此字幕插件可以把内核拆到 `kernel.js`，入口只负责 claim 和页面。
+- 当前分层：插件拥有字幕功能的装配、入口和生命周期；字幕数据内核
+  （JSON/VTT 解析、词级对齐、句子切分、双语合并）在 `subtitles/kernel.js`，
+  视图内核（句块 DOM、窗口渲染、双语列对齐）在 `subtitles/view.js`，两者合并后
+  通过 `api.host.registerKernel('transcript', …)` 注册。主程序只保留
+  `cuesFromJson / parseVttSmart / parseZhVTT / vttFromSidecar / mergeCues / renderCues`
+  桥接，并把 `state / box / reader` 作为适配器交给插件。
+  实时 ASR、全局字幕采集仍是宿主服务，后续继续迁移。
+- 实测：插件启用时打开 how-we-made-your-mother 单集，240 句正常显示；插件页显示
+  「908 句 · 9555 个词级时间点」，双语按钮切换后 239 条中文行出现；停用并刷新后
+  `body` 变 `subs-off`，`#transcript` 句数为 0，阅读区/阅读栏/字幕工具全部隐藏，
+  音频和集标题仍在；重新启用刷新后恢复 240 句。
+
+### 内置 `study` 插件
+
+- 源码 `apps/windows/builtin-plugins/study/`，第一次启动铺到
+  `C:\ProgramData\MyTranscript\plugins\study\`，已有文件不覆盖；默认启用。
+- 插件调用 `api.study.claim()`；`studyPluginOn()` 同时要求 `subtitles` 已 claim，
+  因为学习卡、整集总结、词卡都依赖 cue。
+- 停用后 `body.study-off` 隐藏 `#studyBtn`、`#studySheet`、`#wordPanel`、
+  单集页 `[data-ai-episode]`、设置里的 AI 学英语页和模块开关；`openStudySheet` /
+  `studyOpenEpisodeSummary` / `studyApplyWordMarks` / `lookupWord` 全部提前返回。
+- 「学习中心」页显示生词本、今日到期、缓存和 AI 服务状态，并提供当前句卡、整集总结、
+  复习、生词本和设置入口。
+- 实测：默认两插件同时启用时，字幕插件页显示字幕正常；停用 `study` 并刷新后
+  字幕仍有 240 句，`#studyBtn` 与学习设置页隐藏，词卡不弹出；重新启用后恢复。
+
+
+

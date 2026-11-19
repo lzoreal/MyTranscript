@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MyTranscript Captions</title>
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: transparent;
+    overflow: hidden;
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  .bar {
+    position: relative;
+    height: 100%;
+    box-sizing: border-box;
+    background: rgba(12, 14, 19, var(--bar-alpha, 0.88));
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 16px;
+    color: #eceef3;
+    overflow: hidden;
+  }
+  .bar.drag {
+    border: 1px dashed rgba(120, 180, 255, 0.6);
+    cursor: move;
+  }
+  .hint {
+    position: absolute;
+    left: 18px;
+    right: 18px;
+    bottom: 6px;
+    height: 14px;
+    font-size: 11px;
+    letter-spacing: 0.03em;
+    color: #8d96a8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .text {
+    position: absolute;
+    left: 18px;
+    right: 18px;
+    top: 10px;
+    max-height: 52px;
+    overflow: hidden;
+    font-size: 16px;
+    line-height: 1.4;
+    font-weight: 450;
+    white-space: pre-wrap;
+  }
+  .text.err { color: #ff9d9d; font-size: 13px; line-height: 1.4; }
+  .zh {
+    position: absolute;
+    left: 18px;
+    right: 18px;
+    top: 38px;
+    max-height: 26px;
+    overflow: hidden;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #a9b6cc;
+    white-space: pre-wrap;
+    display: none;
+  }
+  .text.single { max-height: 26px; }
+  .text.lookup .word {
+    cursor: pointer;
+    border-radius: 3px;
+    padding: 0 1px;
+    transition: background-color .12s ease;
+  }
+  .text.lookup .word:hover { background: rgba(90, 150, 255, .35); }
+  .dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin-right: 6px;
+    border-radius: 50%;
+    background: #56b6ff;
+    vertical-align: 1px;
+  }
+  .bar.idle .hint {
+    top: 24px;
+    bottom: auto;
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+<div class="bar" id="bar" data-tauri-drag-region>
+  <div class="hint" id="hint" data-tauri-drag-region><span class="dot"></span>正在听…</div>
+  <div class="text" id="text" data-tauri-drag-region></div>
+  <div class="zh" id="zh"></div>
+</div>
+<script>
+  const bar = document.getElementById('bar');
+  const hint = document.getElementById('hint');
+  const text = document.getElementById('text');
+  const zhEl = document.getElementById('zh');
+  let lastText = '';
+  let lookupMode = false;
+  let zhMode = false;
+  let commitMode = false;
+  let zhTimer = null;
+  let zhSent = '';
+
+  function setDragRegion(on) {
+    for (const el of [bar, hint, text]) {
+      if (on) el.setAttribute('data-tauri-drag-region', '');
+      else el.removeAttribute('data-tauri-drag-region');
+    }
+  }
+
+  function applyUi(drag, alpha, lookup, zh, commit) {
+    document.documentElement.style.setProperty('--bar-alpha', String(alpha || 0.88));
+    const nextLookup = !!lookup;
+    const nextZh = !!zh;
+    const nextCommit = commit !== false;
+    if (nextLookup !== lookupMode || nextZh !== zhMode || nextCommit !== commitMode) {
+      lastText = '';
+      zhSent = '';
+      zhEl.textContent = '';
+    }
+    lookupMode = nextLookup;
+    zhMode = nextZh;
+    commitMode = nextCommit;
+    zhEl.style.display = zhMode ? 'block' : 'none';
+    text.classList.toggle('single', zhMode);
+    bar.classList.toggle('drag', !!drag && !lookupMode);
+    text.classList.toggle('lookup', lookupMode);
+    // 查词时要能点到字，就不能再让整条字幕当拖拽区。
+    setDragRegion(!!drag && !lookupMode);
+  }
+  const params = new URLSearchParams(location.search);
+  applyUi(params.get('drag') === '1', parseFloat(params.get('alpha') || '0.88'), params.get('lookup') === '1', params.get('zh') === '1', params.get('commit') !== '0');
+
+  function lastSentence(s) {
+    const parts = String(s || '').split(/(?<=[.!?])\s+/).filter(Boolean);
+    const last = parts.slice(-1)[0] || '';
+    if (last.length >= 100) return last.split(/\s+/).slice(-14).join(' ');
+    return last;
+  }
+
+  function scheduleTranslate(s) {
+    if (!zhMode) return;
+    clearTimeout(zhTimer);
+    zhTimer = setTimeout(async () => {
+      const sentence = lastSentence(s).trim();
+      if (sentence.length < 6 || sentence === zhSent) return;
+      zhSent = sentence;
+      try {
+        const z = await window.__TAURI__.core.invoke('captions_translate', { text: sentence });
+        if (zhMode && zhSent === sentence && z) zhEl.textContent = z;
+      } catch (_) {
+        zhEl.textContent = '';
+      }
+    }, 900);
+  }
+
+  function wrapLines(s, maxW) {
+    // 按字符数硬断行：这台机器 WebView 的 CSS 视口和窗口物理尺寸不成比例，
+    // measureText 得到的是“虚拟宽度”，按它换行仍会溢出。44 字符在 900px 内一定放得下。
+    const words = String(s || '').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+    const lines = [];
+    let cur = '';
+    for (const w of words) {
+      if (!cur) {
+        cur = w;
+      } else if ((cur + ' ' + w).length <= 44) {
+        cur += ' ' + w;
+      } else {
+        lines.push(cur);
+        cur = w;
+      }
+    }
+    if (cur) lines.push(cur);
+    return lines;
+  }
+
+  function capFirst(s) {
+    return String(s).replace(/^([^A-Za-z]*)([a-z])/, (m, a, b) => a + b.toUpperCase());
+  }
+
+  function tail(s) {
+    const parts = String(s || '').split(/(?<=[.!?])\s+/).filter(Boolean);
+    const last = parts.slice(-1)[0] || '';
+    if (last.length >= 80) return capFirst(last);
+    return capFirst(parts.slice(-2).join(' '));
+  }
+
+  function committedPart(s) {
+    const m = String(s || '').match(/^(.*[.!?])(?:\s|$)/s);
+    return m ? m[1] : '';
+  }
+
+  function render(p) {
+    if (!p) return;
+    if (p.error) {
+      bar.classList.remove('idle');
+      hint.textContent = '字幕启动失败';
+      text.className = 'text err';
+      text.textContent = p.error;
+      return;
+    }
+    if (!p.active) {
+      bar.classList.add('idle');
+      hint.textContent = '';
+      text.textContent = '';
+      zhEl.textContent = '';
+      return;
+    }
+    text.className = 'text';
+    if (p.text) {
+      bar.classList.remove('idle');
+      const display = commitMode ? committedPart(p.text) : p.text;
+      // 成句模式：还没断出句号时先保持上一句，不把半句刷出来。
+      if (commitMode && !display) {
+        hint.textContent = p.silent ? '没有声音了' : '';
+        return;
+      }
+      if (display !== lastText) {
+        lastText = display;
+        const width = Math.max(200, (text.clientWidth || (window.innerWidth - 36)) - 4);
+        const sentences = String(display).split(/(?<=[.!?])\s+/).filter(Boolean);
+        const cur = capFirst(sentences.slice(-1)[0] || '');
+        // 只显示最后一句，避免为了凑两行把上一句截成半句。
+        const shown = wrapLines(cur, width).slice(0, zhMode ? 1 : 2).map((line, i) => (i === 0 ? capFirst(line) : line));
+        if (lookupMode) {
+          text.innerHTML = '';
+          shown.forEach((line, li) => {
+            for (const w of line.split(' ')) {
+              const span = document.createElement('span');
+              span.className = 'word';
+              span.textContent = w;
+              span.dataset.w = w.replace(/[^A-Za-z'-]/g, '');
+              text.appendChild(span);
+              text.appendChild(document.createTextNode(' '));
+            }
+            if (li < shown.length - 1) text.appendChild(document.createTextNode('\n'));
+          });
+        } else {
+          text.textContent = shown.join('\n');
+        }
+        if (zhMode) scheduleTranslate(p.text);
+      }
+      hint.textContent = p.silent ? '没有声音了' : '';
+      return;
+    }
+    bar.classList.add('idle');
+    lastText = '';
+    text.textContent = '';
+    zhEl.textContent = '';
+    zhSent = '';
+    if (p.silent) {
+      hint.textContent = '未捕获到音频（系统静音，或该应用使用独占模式）';
+    } else {
+      hint.innerHTML = '<span class="dot"></span>正在听…';
+    }
+  }
+
+  render({ active: true, listening: true, silent: false, text: '' });
+  if (window.__TAURI__ && window.__TAURI__.event) {
+    window.__TAURI__.event.listen('myt://caption', (e) => render(e.payload));
+    window.__TAURI__.event.listen('myt://caption-ui', (e) => {
+      const p = e.payload || {};
+      applyUi(p.drag, p.alpha, p.lookup, p.zh, p.commit);
+    });
+  }
+
+  text.addEventListener('click', (e) => {
+    if (!lookupMode) return;
+    const el = e.target.closest ? e.target.closest('.word') : null;
+    if (!el || !el.dataset.w) return;
+    window.__TAURI__.core.invoke('captions_lookup_word', { word: el.dataset.w })
+      .catch((err) => { hint.textContent = '查词失败：' + err; });
+  });
+</script>
+</body>
+</html>

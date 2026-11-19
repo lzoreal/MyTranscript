@@ -126,6 +126,52 @@ extern "C" {
     fn SherpaOnnxOnlineStreamReset(r: *const Recognizer, s: *const Stream);
 }
 
+/// 模型目录里的 `model.json` 决定用哪套文件、哪种结构。
+/// 老版本只有固定的 epoch 文件名，没有 model.json，按 transducer 兜底。
+pub struct ModelSpec {
+    pub kind: String,
+    pub encoder: String,
+    pub decoder: String,
+    pub joiner: String,
+}
+
+impl ModelSpec {
+    fn load(dir: &str) -> ModelSpec {
+        let mut spec = ModelSpec {
+            kind: "transducer".to_string(),
+            encoder: "encoder-epoch-99-avg-1.int8.onnx".to_string(),
+            decoder: "decoder-epoch-99-avg-1.int8.onnx".to_string(),
+            joiner: "joiner-epoch-99-avg-1.int8.onnx".to_string(),
+        };
+        let raw = match std::fs::read_to_string(format!("{dir}/model.json")) {
+            Ok(text) => text,
+            Err(_) => return spec,
+        };
+        let v: serde_json::Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(_) => return spec,
+        };
+        if let Some(kind) = v.get("type").and_then(|x| x.as_str()) {
+            spec.kind = kind.to_string();
+        }
+        let file = |key: &str| v
+            .get("files")
+            .and_then(|f| f.get(key))
+            .and_then(|x| x.as_str())
+            .map(|s| s.to_string());
+        if let Some(x) = file("encoder") {
+            spec.encoder = x;
+        }
+        if let Some(x) = file("decoder") {
+            spec.decoder = x;
+        }
+        if let Some(x) = file("joiner") {
+            spec.joiner = x;
+        }
+        spec
+    }
+}
+
 pub struct Asr {
     rec: *const Recognizer,
     st: *const Stream,
@@ -136,6 +182,7 @@ unsafe impl Send for Asr {}
 
 impl Asr {
     pub fn new(model_dir: &str, threads: i32) -> Result<Asr, String> {
+        let spec = ModelSpec::load(model_dir);
         let path = |name: &str| -> *const c_char {
             CString::new(format!("{model_dir}/{name}"))
                 .map(|c| c.into_raw() as *const c_char)
@@ -144,11 +191,19 @@ impl Asr {
         let mut cfg: OnlineRecognizerConfig = Default::default();
         cfg.feat_config.sample_rate = 16000;
         cfg.feat_config.feature_dim = 80;
-        cfg.model_config.transducer = Transducer {
-            encoder: path("encoder-epoch-99-avg-1.int8.onnx"),
-            decoder: path("decoder-epoch-99-avg-1.int8.onnx"),
-            joiner: path("joiner-epoch-99-avg-1.int8.onnx"),
-        };
+        if spec.kind == "paraformer" {
+            cfg.model_config.paraformer = Paraformer {
+                encoder: path(&spec.encoder),
+                decoder: path(&spec.decoder),
+            };
+            cfg.model_config.model_type = CString::new("paraformer").unwrap().into_raw();
+        } else {
+            cfg.model_config.transducer = Transducer {
+                encoder: path(&spec.encoder),
+                decoder: path(&spec.decoder),
+                joiner: path(&spec.joiner),
+            };
+        }
         cfg.model_config.tokens = path("tokens.txt");
         cfg.model_config.num_threads = threads.max(1);
         cfg.model_config.provider = CString::new("cpu").unwrap().into_raw();
@@ -208,6 +263,25 @@ impl Asr {
 
     pub fn reset(&self) {
         unsafe { SherpaOnnxOnlineStreamReset(self.rec, self.st) }
+    }
+
+    /// 还有没有攒着没解的特征帧。
+    pub fn ready(&self) -> bool {
+        unsafe { SherpaOnnxIsOnlineStreamReady(self.rec, self.st) == 1 }
+    }
+
+    /// 一直解到没有可解的帧为止；返回最后一次结果 JSON。
+    /// 整集转写必须用这个，不然一次 `result()` 只解 32 帧，
+    /// 长音频会越积越多，最后只出开头几秒。
+    pub fn drain(&self) -> Result<String, String> {
+        let mut last = String::from("{}");
+        loop {
+            last = self.result()?;
+            if !self.ready() {
+                break;
+            }
+        }
+        Ok(last)
     }
 }
 

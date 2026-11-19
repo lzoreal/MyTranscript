@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>查词</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; padding: 12px 16px;
+    background: rgba(20, 22, 26, .97); color: #e8eaed;
+    font: 14px/1.45 "Segoe UI", system-ui, sans-serif;
+    box-sizing: border-box;
+    max-width: 360px;
+    -webkit-app-region: drag;
+  }
+  .head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .word { font-size: 20px; font-weight: 650; }
+  .phonetic { color: #8fb0e8; font-size: 13px; }
+  .tools { display: flex; gap: 8px; margin-bottom: 8px; }
+  .defs { max-height: 140px; overflow-y: auto; }
+  .meaning { margin-bottom: 6px; }
+  .pos { color: #8b929c; font-size: 12px; font-style: italic; }
+  .def { color: #d7dbe2; font-size: 13px; }
+  .status { color: #6f7681; font-size: 11px; margin-top: 6px; min-height: 14px; }
+  button {
+    -webkit-app-region: no-drag;
+    font: inherit; font-size: 12px; color: #cfd4dc;
+    background: #22262e; border: 1px solid #333a45;
+    border-radius: 7px; padding: 4px 10px; cursor: pointer;
+  }
+  button:hover { background: #2a303a; }
+</style>
+</head>
+<body>
+  <div class="head">
+    <span class="word" id="word">…</span>
+    <span class="phonetic" id="phonetic"></span>
+  </div>
+  <div class="tools">
+    <button id="save">收藏</button>
+    <button id="close">关闭</button>
+  </div>
+  <div class="defs" id="defs"></div>
+  <div class="status" id="status"></div>
+<script>
+  const { invoke } = window.__TAURI__.core;
+  const { listen } = window.__TAURI__.event;
+  let current = null;
+
+  function render(data) {
+    if (!data) return;
+    current = data;
+    document.getElementById('word').textContent = data.word;
+    document.getElementById('phonetic').textContent = data.phonetic || '';
+    const defs = document.getElementById('defs');
+    defs.innerHTML = '';
+    for (const m of data.meanings || []) {
+      const box = document.createElement('div');
+      box.className = 'meaning';
+      const pos = document.createElement('div');
+      pos.className = 'pos';
+      pos.textContent = m.pos || '';
+      box.appendChild(pos);
+      for (const d of m.defs || []) {
+        const p = document.createElement('div');
+        p.className = 'def';
+        p.textContent = d;
+        box.appendChild(p);
+      }
+      defs.appendChild(box);
+    }
+    document.getElementById('status').textContent = '';
+  }
+
+  async function init() {
+    render(await invoke('captions_word_current'));
+  }
+
+  listen('myt://word', (e) => render(e.payload));
+  document.getElementById('close').addEventListener('click', () => {
+    window.__TAURI__.window.getCurrentWindow().close();
+  });
+  document.getElementById('save').addEventListener('click', async () => {
+    if (!current) return;
+    const first = (current.meanings && current.meanings[0] && current.meanings[0].defs || [])[0] || '';
+    try {
+      const n = await invoke('captions_add_vocab', { word: current.word, meaning: first });
+      document.getElementById('status').textContent = '已收藏，共 ' + n + ' 个';
+    } catch (e) {
+      document.getElementById('status').textContent = '收藏失败：' + e;
+    }
+  });
+  init();
+</script>
+</body>
+</html>

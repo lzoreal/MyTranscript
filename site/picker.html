@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>选择要加字幕的应用</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; padding: 16px 16px 12px;
+    background: #14161a; color: #e8eaed;
+    font: 13px/1.5 "Segoe UI", system-ui, sans-serif;
+    user-select: none;
+  }
+  h1 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+  .hint { color: #8b929c; font-size: 12px; margin-bottom: 12px; }
+  .list { display: flex; flex-direction: column; gap: 6px; min-height: 220px; }
+  .row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 12px; border-radius: 8px;
+    background: #1d2026; border: 1px solid #2a2f38;
+    cursor: pointer;
+  }
+  .row:hover { background: #232833; border-color: #3b4250; }
+  .row.active { border-color: #3d6fe0; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #4b5260; flex: none; }
+  .row.active .dot { background: #4ade80; }
+  .name { flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .meta { color: #8b929c; font-size: 11px; }
+  .empty { color: #8b929c; padding: 24px 0; text-align: center; }
+  .bar { display: flex; justify-content: space-between; margin-top: 12px; }
+  button {
+    font: inherit; color: #cfd4dc; background: #22262e; border: 1px solid #333a45;
+    border-radius: 7px; padding: 6px 12px; cursor: pointer;
+  }
+  button:hover { background: #2a303a; }
+</style>
+</head>
+<body>
+  <h1>选择要加字幕的应用</h1>
+  <div class="hint">只抓这个应用（含它的子进程）发出的声音；其他应用不会混进来。</div>
+  <div class="list" id="list"><div class="empty">正在读取…</div></div>
+  <div class="bar">
+    <button id="refresh">刷新</button>
+    <button id="cancel">取消</button>
+  </div>
+<script>
+  const { invoke } = window.__TAURI__.core;
+  const listEl = document.getElementById('list');
+  let rows = [];
+
+  function draw(items) {
+    listEl.innerHTML = '';
+    if (!items.length) {
+      listEl.innerHTML = '<div class="empty">现在没有应用在出声，先播放再刷新。</div>';
+      return;
+    }
+    rows = items;
+    for (const it of items) {
+      const row = document.createElement('div');
+      row.className = 'row' + (it.active ? ' active' : '');
+      row.innerHTML = '<span class="dot"></span>' +
+        '<span class="name"></span>' +
+        '<span class="meta"></span>';
+      row.querySelector('.name').textContent = it.name;
+      row.querySelector('.meta').textContent = 'PID ' + it.pid + (it.active ? ' · 出声中' : '');
+      row.addEventListener('click', () => pick(it.pid));
+      listEl.appendChild(row);
+    }
+  }
+
+  async function load() {
+    try {
+      const items = await invoke('captions_list_sessions');
+      draw(items);
+    } catch (e) {
+      listEl.innerHTML = '<div class="empty">读取失败：' + e + '</div>';
+    }
+  }
+
+  async function pick(pid) {
+    try {
+      await invoke('captions_start_process', { pid });
+      window.__TAURI__.window.getCurrentWindow().close();
+    } catch (e) {
+      alert('启动失败：' + e);
+    }
+  }
+
+  document.getElementById('refresh').addEventListener('click', load);
+  document.getElementById('cancel').addEventListener('click', () => {
+    window.__TAURI__.window.getCurrentWindow().close();
+  });
+  load();
+</script>
+</body>
+</html>
