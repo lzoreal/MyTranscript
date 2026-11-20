@@ -84,6 +84,9 @@ MyTPlugins.host.available('study'); // 插件自身及依赖是否都启用
 - 负责播放器里的 AI 学英语入口、句子卡、整集总结、复习、练习、生词本、词卡和 AI 服务设置；
 - 停用后隐藏学习入口、学习面板、词卡、生词本设置和单集页的 AI 总结按钮；字幕本身继续正常显示；
 - 「学习中心」页面显示生词本数量、今日到期、缓存条数和 AI 服务配置状态，并能打开当前句卡、整集总结、复习和生词本。
+- 数据引擎在插件里（`engine.js`）：AI 服务设置、缓存、生词本、词状态和 SRS 复习节奏由插件持有并写回原来的
+  `myt-study*` localStorage 键；宿主 `08-study-ai.js` 只保留渲染、播放控制和没有插件时的本地回退。
+  `api.study.engine()` 返回当前引擎，`api.study.registerEngine(impl)` 由插件注册（同一时间只允许一个 owner）。
 
 ## 入口
 
@@ -137,7 +140,15 @@ MyTPlugins.register('hello-world', {
 | `api.study.open(view)` | 打开学习面板：`card` / `episode` / `review` / `practice` / `vocab` |
 | `api.study.openEpisode(showKey, episodeId)` | 打开某集的整集总结 |
 | `api.study.openSettings()` | 打开 AI 学英语服务设置 |
+| `api.study.cleanWord(raw)` | 宿主同款单词归一（去标点、转小写），给插件数据层用 |
+| `api.study.registerEngine(impl)` | 注册学习数据引擎（设置/缓存/生词本/状态/SRS），同一时间只允许一个插件 |
+| `api.study.engine()` | 取当前学习引擎；没有插件时返回 `null` |
 | `api.storage.get(key, fallback)` / `set` / `remove` | 插件命名空间下的 localStorage，键前缀 `myt-plugin:<id>:` |
+
+`registerEngine` 的 `impl` 需要提供这四个活对象：`settings`（AI 服务配置）、`cache`（句子/整集缓存）、
+`vocab`（生词本）、`status`（词状态表），以及 `saveSettings` / `saveCache` / `saveVocab` / `saveStatus`、
+`wordStatusOf` / `markWord` / `dueItems` / `srsGrade` / `stats`。宿主接管这些引用后，设置页、词状态高亮、
+到期徽标和复习按钮都直接读写插件持有的对象；插件停用时回退到宿主本地实现。
 | `api.el(id)` | `document.getElementById` |
 
 插件仍与宿主同处一个 DOM 环境：`window`、`document`、`localStorage` 都可用（`fetch` 这类网络入口受 `net` 权限约束，见「权限与限制」）。

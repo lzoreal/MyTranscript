@@ -709,6 +709,9 @@ function pluginApiFor(id) {
     study: only('study', {
       claim: () => PluginHost.claim(id, 'study'),
       active: () => PluginHost.owner('study') === id,
+      cleanWord: raw => cleanWord(raw),
+      registerEngine: impl => registerStudyEngine(id, impl),
+      engine: () => studyEngine(),
       status: () => ({
         owner: app.studyOwner,
         subtitles: subtitlePluginOn(),
@@ -735,6 +738,27 @@ function pluginApiFor(id) {
     }),
   };
 }
+/* 学习实现的宿主侧接缝：内置 study 插件注册引擎后，数据/设置/复习算法由插件持有，
+   宿主只保留渲染与播放控制。没有引擎时宿主用本地回退，保证网页版与旧安装仍可用。 */
+let STUDY_ENGINE = null;
+let STUDY_ENGINE_OWNER = '';
+function registerStudyEngine(pluginId, impl) {
+  const owner = String(pluginId || '');
+  if (STUDY_ENGINE_OWNER && STUDY_ENGINE_OWNER !== owner) {
+    throw new Error('学习引擎已由插件 ' + STUDY_ENGINE_OWNER + ' 注册');
+  }
+  STUDY_ENGINE = impl || null;
+  STUDY_ENGINE_OWNER = owner;
+  if (typeof applyStudyEngine === 'function') applyStudyEngine(STUDY_ENGINE);
+  trackPlugin(owner, () => {
+    if (STUDY_ENGINE_OWNER !== owner) return;
+    STUDY_ENGINE = null;
+    STUDY_ENGINE_OWNER = '';
+    if (typeof applyStudyEngine === 'function') applyStudyEngine(null);
+  });
+  return true;
+}
+function studyEngine() { return STUDY_ENGINE; }
 function ensurePluginApi() {
   if (pluginApiReady) return;
   pluginApiReady = true;

@@ -17,6 +17,7 @@
 | 9 | 签名私钥轮换（多公钥验签） | 已完成：`PLUGIN_PUBKEYS` 两把钥并行 |
 | 10 | 前端脚本真正模块化 | 已完成第一步：`player.js` 为 ES module，kernel 独立导出 |
 | 11 | 复核后五条修正（权限定位、失败清理、内核归属、Provider 栈、摘要覆盖） | 已完成 |
+| 12 | 学习数据与 SRS 迁到 study 插件（阶段一） | 已完成；渲染/AI/播放控制仍待迁 |
 
 ## 1. 依赖与宿主测试
 
@@ -184,7 +185,27 @@ registerCoreProvider / coreProvider / releaseCoreProviders`，插件侧入口
 - 这一步只把“整包 + kernel”变成模块，01–10 仍共享同一模块作用域；再往下拆成每片独立模块
   需要把跨片引用全部改成显式 import/export，尚未做。
 
-## 7. 测试
+## 7. 学习实现迁往插件（阶段一）
+
+目标不是“插件里放个入口”，而是学习数据与复习算法由插件持有，宿主只做渲染和播放控制。
+
+已完成（阶段一，数据层）：
+
+- 宿主新增 `STUDY_ENGINE` 接缝：`api.study.registerEngine(impl)` 注册、`api.study.engine()` 读取；
+  owner 唯一，注册时 `trackPlugin` 记账，插件停用/软重载自动清空；
+- 内置 `study` 插件增加 `engine.js`，持有 AI 服务设置、缓存、生词本、词状态与 SRS：
+  `dueItems` / `srsGrade` / `stats` / `markWord` / `wordStatusOf` 和 4 个 `save*`，继续写原来的
+  `myt-study*` 键，老用户数据不用迁移；
+- 宿主 `08-study-ai.js` 把 `studyVocab/studyCache/STUDY/studyStatus` 换成插件引擎对象的引用，
+  `saveStudy*`、到期列表、SRS、统计优先走引擎；没有插件（网页版/旧安装/停用）时保留本地回退；
+- 实机：学习中心显示「AI 学英语已由插件接管」「生词本 1 个 · 今日到期 1 个 · 已缓存 1 条」
+  「AI 服务：gemini · 已配置」，说明宿主状态读到的确实是插件引擎里的数据；
+- 单测 `tests/test_study_engine.py` 覆盖老数据补齐、词状态归一、到期队列、SRS 间隔、缓存上限和设置写回。
+
+还没迁（阶段二、三）：句子卡/整集总结/复习页/词卡的渲染，AI 请求与播放控制仍由宿主实现；
+它们依赖 `state`、`audio`、DOM 与流式请求，需要先把这些做成宿主原语，才能整体搬进插件。
+
+## 8. 测试
 
 - `tests/test_plugin_host.py` 八组：依赖/能力规则（含内核归属回收）、API 主版本兼容、生命周期回收
   （逆序、幂等、抛错不中断、`dispose` 只跑一次、setup 失败清理）、授权三态、核心 Provider 栈、

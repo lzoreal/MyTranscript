@@ -203,6 +203,7 @@ pub fn ensure_builtin_plugins() -> Result<(), String> {
         "study",
         &[
             ("plugin.json", include_str!("../../builtin-plugins/study/plugin.json")),
+            ("engine.js", include_str!("../../builtin-plugins/study/engine.js")),
             ("main.js", include_str!("../../builtin-plugins/study/main.js")),
             ("style.css", include_str!("../../builtin-plugins/study/style.css")),
         ],

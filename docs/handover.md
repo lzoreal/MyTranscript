@@ -1309,6 +1309,11 @@ P2：
   `studyOpenEpisodeSummary` / `studyApplyWordMarks` / `lookupWord` 全部提前返回。
 - 「学习中心」页显示生词本、今日到期、缓存和 AI 服务状态，并提供当前句卡、整集总结、
   复习、生词本和设置入口。
+- 数据引擎在插件 `engine.js` 里（manifest `scripts` 先于 `main`）：AI 服务设置、缓存、
+  生词本、词状态和 SRS 由它持有并写回 `myt-study*` localStorage；`setup` 里
+  `api.study.registerEngine(createStudyEngine(api))` 交给宿主。宿主 `08-study-ai.js`
+  只接引用（`applyStudyEngine`），没有插件时用本地回退；停用/软重载时引擎槽清空。
+  目前渲染、AI 请求和播放控制仍在宿主，是后续迁移项。
 - 实测：默认两插件同时启用时，字幕插件页显示字幕正常；停用 `study` 并刷新后
   字幕仍有 240 句，`#studyBtn` 与学习设置页隐藏，词卡不弹出；重新启用后恢复。
 

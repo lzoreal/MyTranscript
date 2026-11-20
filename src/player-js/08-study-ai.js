@@ -30,6 +30,19 @@ let studyTranscriptTermData = new Map();
 let studyReviewRevealed = false, studyHideZh = false, studyAutoPause = false;
 let studyExercise = null, studyLoop = null, studyAutoPauseDone = -1, studyVocabContext = null, studyVocabContextMode = null;
 let pendingStudyEpisode = '';
+/* 内置 study 插件注册引擎后，设置、缓存、生词本、状态与复习算法由插件持有；
+   这里只把引用接过来，渲染与播放控制仍留在宿主。没有引擎时保留本地回退。 */
+function applyStudyEngine(engine) {
+  if (engine) {
+    if (engine.settings) STUDY = engine.settings;
+    if (engine.cache) studyCache = engine.cache;
+    if (engine.vocab) studyVocab = engine.vocab;
+    if (engine.status) studyStatus = engine.status;
+  }
+  try { syncStudySettings(); } catch (e) {}
+  try { studyUpdateDueBadge(); } catch (e) {}
+  try { studyApplyWordMarks(); } catch (e) {}
+}
 studyVocab.forEach(v => {
   if (!v.status) v.status = 'learning';
   if (!Number.isFinite(Number(v.ease))) v.ease = 2.5;
@@ -41,29 +54,49 @@ studyVocab.forEach(v => {
   if (k && !studyStatus[k]) studyStatus[k] = v.status;
 });
 
-function saveStudy() { try { localStorage.setItem(STUDY_KEY, JSON.stringify(STUDY)); } catch (e) {} }
+function saveStudy() {
+  const engine = studyEngine();
+  if (engine && typeof engine.saveSettings === 'function') { engine.saveSettings(); return; }
+  try { localStorage.setItem(STUDY_KEY, JSON.stringify(STUDY)); } catch (e) {}
+}
 function saveStudyCache() {
+  const engine = studyEngine();
+  if (engine && typeof engine.saveCache === 'function') { engine.saveCache(); return; }
   try {
     const keys = Object.keys(studyCache);
     if (keys.length > 300) keys.slice(0, keys.length - 300).forEach(k => delete studyCache[k]);
     localStorage.setItem(STUDY_CACHE_KEY, JSON.stringify(studyCache));
   } catch (e) {}
 }
-function saveStudyVocab() { try { localStorage.setItem(STUDY_VOCAB_KEY, JSON.stringify(studyVocab)); } catch (e) {} }
-function saveStudyStatus() { try { localStorage.setItem(STUDY_STATUS_KEY, JSON.stringify(studyStatus)); } catch (e) {} }
+function saveStudyVocab() {
+  const engine = studyEngine();
+  if (engine && typeof engine.saveVocab === 'function') { engine.saveVocab(); return; }
+  try { localStorage.setItem(STUDY_VOCAB_KEY, JSON.stringify(studyVocab)); } catch (e) {}
+}
+function saveStudyStatus() {
+  const engine = studyEngine();
+  if (engine && typeof engine.saveStatus === 'function') { engine.saveStatus(); return; }
+  try { localStorage.setItem(STUDY_STATUS_KEY, JSON.stringify(studyStatus)); } catch (e) {}
+}
 function studyWordStatusOf(raw) {
+  const engine = studyEngine();
+  if (engine && typeof engine.wordStatusOf === 'function') return engine.wordStatusOf(raw);
   const k = cleanWord(raw);
   return k ? (studyStatus[k] || '') : '';
 }
 function studyMarkWord(raw, status) {
-  const k = cleanWord(raw);
-  if (!k) return;
-  if (status) studyStatus[k] = status; else delete studyStatus[k];
-  saveStudyStatus();
-  const item = studyVocab.find(v => cleanWord(v.word) === k);
-  if (item) {
-    item.status = status || 'learning';
-    saveStudyVocab();
+  const engine = studyEngine();
+  if (engine && typeof engine.markWord === 'function') engine.markWord(raw, status);
+  else {
+    const k = cleanWord(raw);
+    if (!k) return;
+    if (status) studyStatus[k] = status; else delete studyStatus[k];
+    saveStudyStatus();
+    const item = studyVocab.find(v => cleanWord(v.word) === k);
+    if (item) {
+      item.status = status || 'learning';
+      saveStudyVocab();
+    }
   }
   studyApplyWordMarks();
   studyUpdateDueBadge();
@@ -155,6 +188,8 @@ function studyApplyWordMarks() {
   });
 }
 function studyDueItems() {
+  const engine = studyEngine();
+  if (engine && typeof engine.dueItems === 'function') return engine.dueItems();
   const now = Date.now();
   return studyVocab
     .filter(v => v.status !== 'known' && v.status !== 'ignored' && Number(v.due || 0) <= now)
@@ -179,6 +214,8 @@ function studyDueLabel(ms) {
   return Math.round(hours / 24) + ' 天后';
 }
 function studySrsGrade(item, grade) {
+  const engine = studyEngine();
+  if (engine && typeof engine.srsGrade === 'function') { engine.srsGrade(item, grade); return; }
   const ease = Math.max(1.3, Number(item.ease) || 2.5);
   let interval = Math.max(0, Number(item.interval) || 0);
   if (grade === 0) {
@@ -200,6 +237,8 @@ function studySrsGrade(item, grade) {
   item.due = interval ? Date.now() + interval * 86400000 : Date.now() + 600000;
 }
 function studyStats() {
+  const engine = studyEngine();
+  if (engine && typeof engine.stats === 'function') return engine.stats();
   const total = studyVocab.length;
   const known = studyVocab.filter(v => v.status === 'known').length;
   const due = studyDueItems().length;

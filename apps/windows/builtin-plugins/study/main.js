@@ -8,6 +8,9 @@ MyTPlugins.register('study', {
       return;
     }
     study.claim();
+    if (typeof study.registerEngine === 'function' && typeof createStudyEngine === 'function') {
+      study.registerEngine(createStudyEngine(api));
+    }
     document.body.classList.add('study-plugin-on');
     let cleanup = null;
 
