@@ -47,6 +47,11 @@ def run_node(testcase, name, source):
         return subprocess.run([node, str(script)], capture_output=True, text=True, encoding="utf-8")
 
 
+def study_ui():
+    """学习面板的渲染层已经搬进内置 study 插件，静态断言要和插件源码拼起来看。"""
+    return (BUILTIN / "study" / "ui.js").read_text(encoding="utf-8")
+
+
 def player_page():
     """把拆出去的外链样式与脚本内联回文档，还原成单文件形态再做文本断言。"""
     page = (SITE / "player.html").read_text(encoding="utf-8")
@@ -139,7 +144,7 @@ class PlayerOfflineTranscriptTests(unittest.TestCase):
 
 class PlayerStudySummaryTests(unittest.TestCase):
     def test_episode_summary_has_topics_and_jump_actions(self):
-        page = player_page()
+        page = player_page() + study_ui()
         self.assertIn("data-ai-episode", page)
         self.assertIn("studyOpenEpisodeSummary", page)
         self.assertIn("studyTopicHTML", page)
@@ -157,8 +162,9 @@ class PlayerStudySummaryTests(unittest.TestCase):
         node = shutil.which("node")
         if not node:
             self.skipTest("node 不在 PATH，跳过播放器逻辑测试")
+        ui = study_ui()
         page = player_page()
-        clock = page[page.index("function studyClockSeconds"):page.index("function studyTopicHTML")]
+        clock = ui[ui.index("function studyClockSeconds"):ui.index("function studyTopicHTML")]
         ranges = page[page.index("function sanitizeAdRanges"):page.index("function detectAdRanges")]
         source = """
 const assert = require('assert');
@@ -180,7 +186,7 @@ assert.strictEqual(merged[0].end, 90);
         self.assertEqual(proc.returncode, 0, proc.stderr)
 
     def test_ai_provider_picker_and_native_adapters(self):
-        page = player_page()
+        page = player_page() + study_ui()
         self.assertIn('id="studyProvider"', page)
         for provider in ("openai", "claude", "gemini", "deepseek", "kimi", "glm", "custom"):
             self.assertIn(f'value="{provider}"', page)
@@ -210,7 +216,7 @@ class PlayerStudyAskTests(unittest.TestCase):
     """问答、章节、金句都只让模型给行号，时间一律回查 ASR cue。"""
 
     def test_ask_tab_is_grounded_and_citable(self):
-        page = player_page()
+        page = player_page() + study_ui()
         self.assertIn('data-study-view="ask"', page)
         self.assertIn("function studyRenderAsk", page)
         self.assertIn("function studyAskContext", page)
@@ -229,8 +235,8 @@ class PlayerStudyAskTests(unittest.TestCase):
         node = shutil.which("node")
         if not node:
             self.skipTest("node 不在 PATH，跳过播放器逻辑测试")
-        page = player_page()
-        block = page[page.index("function studyAskTimeCue"):page.index("function studyAskSuggestions")]
+        ui = study_ui()
+        block = ui[ui.index("function studyAskTimeCue"):ui.index("function studyAskSuggestions")]
         source = """
 const assert = require('assert');
 const state = { cues: [
@@ -238,6 +244,7 @@ const state = { cues: [
   { start: 61, text: 'second' },
   { start: 185, text: 'third' },
 ] };
+const host = { state };
 %s
 assert.deepStrictEqual(studyAskCites([2, 99, '1', { cue: 0 }]), [2, 1, 0]);
 assert.deepStrictEqual(studyAskCites(['#0', 'garbage', [], null, 0]), [0]);
@@ -249,7 +256,7 @@ assert.deepStrictEqual(studyAskCitesFromText('no timestamps here'), []);
         self.assertEqual(proc.returncode, 0, proc.stderr)
 
     def test_chapters_and_quotes_map_line_numbers_to_cue_time(self):
-        page = player_page()
+        page = player_page() + study_ui()
         self.assertIn("function studyAnalyzeChapters", page)
         self.assertIn("function studyChaptersHTML", page)
         self.assertIn('data-study-act="chapters"', page)
@@ -689,7 +696,7 @@ class PlayerTranscriptToolbarTests(unittest.TestCase):
 
 class PlayerStudyTermTooltipTests(unittest.TestCase):
     def test_generated_summary_terms_have_hover_definitions(self):
-        page = player_page()
+        page = player_page() + study_ui()
         self.assertIn("function studyAnnotateText", page)
         self.assertIn("studySetVocabulary(data.vocabulary)", page)
         self.assertIn("studyAnnotatedLines(data.summary", page)
@@ -698,7 +705,7 @@ class PlayerStudyTermTooltipTests(unittest.TestCase):
         self.assertIn(".study-term-tip{", page)
 
     def test_whole_transcript_marks_wordbook_and_generated_vocabulary(self):
-        page = player_page()
+        page = player_page() + study_ui()
         self.assertIn("function studyTranscriptMarkData", page)
         self.assertIn("w.classList.add('vocab-mark')", page)
         self.assertIn(".word.vocab-mark{", page)
@@ -1235,7 +1242,7 @@ class PlayerStudyShortcutTests(unittest.TestCase):
     """AI 面板原本只有鼠标入口，S 键开关是纯键盘场景的唯一通道，别被后续改动弄丢。"""
 
     def setUp(self):
-        self.html = player_page()
+        self.html = player_page() + study_ui()
 
     def test_s_key_toggles_study_sheet(self):
         self.assertRegex(self.html, r"e\.key === 's' \|\| e\.key === 'S'")

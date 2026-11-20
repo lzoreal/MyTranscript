@@ -1427,12 +1427,11 @@ initPlayer();
     el.textContent = '准备读取缓存';
   }
 
-  var origRenderEpisode = studyRenderEpisode;
-  studyRenderEpisode = function () {
+  registerStudyUiHook('beforeEpisode', function () {
     var id = curEpId();
     if (id && !hasCache(id)) ensureDisk(id);
-    var r = origRenderEpisode.apply(this, arguments);
-    var body = document.getElementById('studyBody');
+  });
+  registerStudyUiHook('episode', function (body) {
     if (body && studyView === 'episode' && state.current) {
       var row = document.createElement('div');
       row.className = 'study-actions';
@@ -1454,8 +1453,7 @@ initPlayer();
       }
     }
     bindEpisodeExtras();
-    return r;
-  };
+  });
 
   /* ---------- 2. 点词即查 ---------- */
   var wordAiStore = store('myt-word-ai');
@@ -1721,10 +1719,7 @@ initPlayer();
     renderDrill();
   }
 
-  var origPractice = studyRenderPractice;
-  studyRenderPractice = function () {
-    var r = origPractice.apply(this, arguments);
-    var body = document.getElementById('studyBody');
+  registerStudyUiHook('practice', function (body) {
     if (body && !document.getElementById('xaiDrillRow') && body.querySelector('[data-study-ex]') && !document.getElementById('studyPracticeInput')) {
       var row = document.createElement('div');
       row.className = 'study-actions';
@@ -1737,8 +1732,7 @@ initPlayer();
         btn.onclick = function () { openDrill(btn.dataset.xaiOpen); };
       });
     }
-    return r;
-  };
+  });
 
   /* ---------- 4. 前情卡 ---------- */
   var recapStore = store('myt-ai-recap');
@@ -1887,9 +1881,7 @@ initPlayer();
   }
 
   /* ---------- 6. 整集页扩展区块 ---------- */
-  var origEpisodeHTML = studyEpisodeHTML;
-  studyEpisodeHTML = function (data) {
-    var base = origEpisodeHTML.apply(this, arguments);
+  registerStudyUiHook('episodeHtml', function (base, data) {
     if (!data) return base;
     return base +
       '<div class="study-section"><h4>前情回顾</h4><div id="xaiRecapBox">' + recapHTML() + '</div></div>' +
@@ -1897,7 +1889,7 @@ initPlayer();
       '<div class="study-actions"><input class="study-input" id="xaiTlInput" placeholder="关键词，如某个人名或话题" style="max-width:220px">' +
       '<button class="btn ghost small" data-xai-tl-go="1">搜索</button></div>' +
       '<div id="xaiTlBox">' + timelineHTML([], '') + '</div></div>';
-  };
+  });
 
   function bindEpisodeExtras() {
     document.querySelectorAll('[data-xai-recap]').forEach(function (btn) {
@@ -1979,10 +1971,7 @@ initPlayer();
     say('已导出 Anki 文本（' + (lines.length - 3) + ' 个词）。', 3200);
   }
 
-  var origVocab = studyRenderVocab;
-  studyRenderVocab = function () {
-    var r = origVocab.apply(this, arguments);
-    var body = document.getElementById('studyBody');
+  registerStudyUiHook('vocab', function (body) {
     if (body) {
       var box = document.createElement('div');
       box.id = 'xaiPlanBox';
@@ -1998,8 +1987,7 @@ initPlayer();
       });
       bindPlan();
     }
-    return r;
-  };
+  });
 
   function bindPlan() {
     var box = document.getElementById('xaiPlanBox');

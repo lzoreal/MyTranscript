@@ -85,8 +85,12 @@ MyTPlugins.host.available('study'); // 插件自身及依赖是否都启用
 - 停用后隐藏学习入口、学习面板、词卡、生词本设置和单集页的 AI 总结按钮；字幕本身继续正常显示；
 - 「学习中心」页面显示生词本数量、今日到期、缓存条数和 AI 服务配置状态，并能打开当前句卡、整集总结、复习和生词本。
 - 数据引擎在插件里（`engine.js`）：AI 服务设置、缓存、生词本、词状态和 SRS 复习节奏由插件持有并写回原来的
-  `myt-study*` localStorage 键；宿主 `08-study-ai.js` 只保留渲染、播放控制和没有插件时的本地回退。
-  `api.study.engine()` 返回当前引擎，`api.study.registerEngine(impl)` 由插件注册（同一时间只允许一个 owner）。
+  `myt-study*` localStorage 键；渲染层在 `ui.js`（`createStudyUi(api, host)`），宿主 `08-study-ai.js`
+  只保留同名转发包装和没有插件时的本地回退。
+  `api.study.engine()` / `api.study.ui()` 返回当前实现，`registerEngine` / `registerUi` 由插件注册（同一时间只允许一个 owner）。
+- 桌面壳的增强补丁通过宿主 hook 接在插件渲染之后：`10-desktop-bridge-tail.js` 注册
+  `beforeEpisode` / `episode` / `practice` / `vocab` / `episodeHtml`，由 `ui.js` 在对应视图里调用
+  `api.study.runHook(...)`。补丁仍可读宿主 `state`，但不再覆盖 `studyRender*`。
 
 ## 入口
 
@@ -143,12 +147,24 @@ MyTPlugins.register('hello-world', {
 | `api.study.cleanWord(raw)` | 宿主同款单词归一（去标点、转小写），给插件数据层用 |
 | `api.study.registerEngine(impl)` | 注册学习数据引擎（设置/缓存/生词本/状态/SRS），同一时间只允许一个插件 |
 | `api.study.engine()` | 取当前学习引擎；没有插件时返回 `null` |
+| `api.study.registerRuntime(impl)` | 注册学习运行时（AI 请求、cue 定位、音频循环/自动暂停） |
+| `api.study.runtime()` | 取当前学习运行时；没有插件时返回 `null` |
+| `api.study.registerUi(impl)` | 注册学习渲染实现（面板/复习/词卡/总结/设置），同一时间只允许一个插件 |
+| `api.study.ui()` | 取当前学习渲染实现；没有插件时返回 `null` |
+| `api.study.runHook(name, ...args)` | 调用桌面补丁注册的 hook（`beforeEpisode` / `episode` / `practice` / `vocab` / `episodeHtml`） |
+| `api.study.host()` | 学习实现需要的宿主原语：`state` / `audio` / `reader` / `TR` / `TR_CACHE` 活引用，`seekTo` / `showToast` / `navigate` / `setView` / `closeDockSheet`、广告区间归一与 `copyPlain`、自动暂停读写等 |
 | `api.storage.get(key, fallback)` / `set` / `remove` | 插件命名空间下的 localStorage，键前缀 `myt-plugin:<id>:` |
 
 `registerEngine` 的 `impl` 需要提供这四个活对象：`settings`（AI 服务配置）、`cache`（句子/整集缓存）、
 `vocab`（生词本）、`status`（词状态表），以及 `saveSettings` / `saveCache` / `saveVocab` / `saveStatus`、
 `wordStatusOf` / `markWord` / `dueItems` / `srsGrade` / `stats`。宿主接管这些引用后，设置页、词状态高亮、
 到期徽标和复习按钮都直接读写插件持有的对象；插件停用时回退到宿主本地实现。
+
+`registerRuntime` 的 `impl` 需要提供 `chat` / `parseJson` / `config` / `ready` / `native`、
+`currentCue` / `withCues` / `currentKey` / `sourceLabel`、`cueBounds` / `playRange` / `playCue` /
+`playItem` / `audioTick` / `stopAudio`，以及 `notePlaybackStart` / `notePlaybackEnded` / `resetAutoPause`。
+宿主的 `08-study-ai.js` 只保留同名转发包装；AI 请求、cue 定位、循环播放和自动暂停都在 `runtime.js`。
+`registerUi` / `ui()` 与 `registerRuntime` 并列，学习面板的 DOM 渲染在 `ui.js`。
 | `api.el(id)` | `document.getElementById` |
 
 插件仍与宿主同处一个 DOM 环境：`window`、`document`、`localStorage` 都可用（`fetch` 这类网络入口受 `net` 权限约束，见「权限与限制」）。

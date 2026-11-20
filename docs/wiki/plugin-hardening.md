@@ -17,7 +17,9 @@
 | 9 | 签名私钥轮换（多公钥验签） | 已完成：`PLUGIN_PUBKEYS` 两把钥并行 |
 | 10 | 前端脚本真正模块化 | 已完成第一步：`player.js` 为 ES module，kernel 独立导出 |
 | 11 | 复核后五条修正（权限定位、失败清理、内核归属、Provider 栈、摘要覆盖） | 已完成 |
-| 12 | 学习数据与 SRS 迁到 study 插件（阶段一） | 已完成；渲染/AI/播放控制仍待迁 |
+| 12 | 学习数据与 SRS 迁到 study 插件（阶段一） | 已完成 |
+| 13 | 学习 AI 请求/播放控制迁到 study 插件（阶段三） | 已完成 |
+| 14 | 学习渲染迁到 study 插件（阶段二） | 代码完成，待实机验收 |
 
 ## 1. 依赖与宿主测试
 
@@ -202,8 +204,44 @@ registerCoreProvider / coreProvider / releaseCoreProviders`，插件侧入口
   「AI 服务：gemini · 已配置」，说明宿主状态读到的确实是插件引擎里的数据；
 - 单测 `tests/test_study_engine.py` 覆盖老数据补齐、词状态归一、到期队列、SRS 间隔、缓存上限和设置写回。
 
-还没迁（阶段二、三）：句子卡/整集总结/复习页/词卡的渲染，AI 请求与播放控制仍由宿主实现；
-它们依赖 `state`、`audio`、DOM 与流式请求，需要先把这些做成宿主原语，才能整体搬进插件。
+阶段二、三已经迁完：句子卡/整集总结/复习页/词卡/设置的渲染在 `ui.js`，AI 请求与播放控制在
+`runtime.js`；宿主只保留同名包装和没有插件时的回退。
+
+阶段三（运行时）已补上：
+
+- 插件增加 `runtime.js`：AI provider 配置解析、`llm_chat` 调用、JSON 解析、cue 定位等待、
+  音频循环与自动暂停状态都在插件里；
+- 宿主 `08-study-ai.js` 只留同名包装（`studyChat` / `studyCueBounds` / `studyPlayRange` …），
+  内部转发到 `api.study.runtime()`；`api.study.host()` 提供 `state`/`audio`/`studyAutoPause`
+  活引用、`seekTo`/`showToast`/`tauriHost`；
+- 注册走 `api.study.registerRuntime(impl)`，owner 唯一、停用/软重载自动清空；
+- 单测 `tests/test_study_runtime.py` 覆盖 offset 后的句界、循环重播/用完后暂停、句末自动暂停、
+  provider 配置与 `llm_chat`、JSON 围栏解析；
+- 实机：学习中心正常显示，说明插件 setup 里的 engine + runtime 注册都成功。
+
+阶段二（渲染）已实现：
+
+- 先把 `10-desktop-bridge-tail.js` 的四处猴补改成宿主 hook：`registerStudyUiHook('beforeEpisode' /
+  'episode' / 'practice' / 'vocab' / 'episodeHtml')`，由插件渲染完对应视图后调用
+  `api.study.runHook(...)`；磁盘缓存徽标、前情回顾、跨集时间线、盲听/多空/慢速入口和学习计划仍由 10 提供；
+- 插件增加 `ui.js`（`createStudyUi(api, host)`），整段接管 `08-study-ai.js` 的学习面板、复习、词卡、
+  整集总结、AI 设置、模型选择、练习和翻译设置入口；
+- 宿主 `08-study-ai.js` 重写成薄包装，只做转发与回退；`04` 增加 `STUDY_UI` 槽、
+  `registerStudyUi` / `studyUi()`，并扩展 `studyHostBridge()` 提供 `state` / `audio` / `reader` /
+  `TR` / `TR_CACHE` 活引用、`seekTo` / `showToast` / `navigate` / `setView` / 自动暂停读写等原语；
+- `plugin.json` 的 `scripts` 增加 `ui.js`，Rust seed 列表同步；`main.js` 在 engine/runtime 之后
+  调用 `registerUi(createStudyUi(api, study.host()))`；
+- 静态测试已覆盖：`tests/test_player.py` 的渲染断言改为 `player_page() + study_ui()` 合并检查；
+  `tests/test_study_runtime.py` 覆盖运行时的循环与自动暂停。
+
+自动探针验收（MYT_EVAL 注入页面 + 本地日志回传，未替代用户手动点击）：
+
+- 学习面板能打开（`#studySheet` 带 `on`），当前句/问答/整集/练习/生词本页签切换无未捕获异常；
+- 生词本页显示「学习计划 / 1 个词条 / Barreling 的释义、词根、复习按钮」；
+- 打开真实播放页的缓存集后，整集页显示「本地缓存 / 内容摘要」与缓存正文，前情/时间线 hook 未报错；
+- 学习中心「学习服务设置」能打开设置页，服务商、API Key、模型、讲解语言字段齐全。
+
+**待用户实测确认后提交**。
 
 ## 8. 测试
 

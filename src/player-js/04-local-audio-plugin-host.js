@@ -712,6 +712,12 @@ function pluginApiFor(id) {
       cleanWord: raw => cleanWord(raw),
       registerEngine: impl => registerStudyEngine(id, impl),
       engine: () => studyEngine(),
+      registerRuntime: impl => registerStudyRuntime(id, impl),
+      runtime: () => studyRuntime(),
+      registerUi: impl => registerStudyUi(id, impl),
+      ui: () => studyUi(),
+      runHook: (name, ...args) => runStudyUiHook(name, ...args),
+      host: () => studyHostBridge(),
       status: () => ({
         owner: app.studyOwner,
         subtitles: subtitlePluginOn(),
@@ -742,6 +748,89 @@ function pluginApiFor(id) {
    宿主只保留渲染与播放控制。没有引擎时宿主用本地回退，保证网页版与旧安装仍可用。 */
 let STUDY_ENGINE = null;
 let STUDY_ENGINE_OWNER = '';
+let STUDY_RUNTIME = null;
+let STUDY_RUNTIME_OWNER = '';
+let STUDY_UI = null;
+let STUDY_UI_OWNER = '';
+const STUDY_UI_HOOKS = new Map();
+/* 桌面壳对学习渲染的扩展（磁盘缓存徽标、前情、时间线、盲听入口、学习计划）
+   通过 hook 挂到插件渲染之后，不再赋值覆盖全局渲染函数。 */
+function registerStudyUiHook(name, fn) {
+  if (typeof fn === 'function') STUDY_UI_HOOKS.set(String(name), fn);
+}
+function runStudyUiHook(name, ...args) {
+  const fn = STUDY_UI_HOOKS.get(String(name));
+  return fn ? fn(...args) : args[0];
+}
+function registerStudyUi(pluginId, impl) {
+  const owner = String(pluginId || '');
+  if (STUDY_UI_OWNER && STUDY_UI_OWNER !== owner) throw new Error('学习界面已由插件 ' + STUDY_UI_OWNER + ' 注册');
+  STUDY_UI = impl || null;
+  STUDY_UI_OWNER = owner;
+  if (STUDY_UI && typeof STUDY_UI.bindStudyUI === 'function') STUDY_UI.bindStudyUI();
+  trackPlugin(owner, () => {
+    if (STUDY_UI_OWNER !== owner) return;
+    STUDY_UI = null;
+    STUDY_UI_OWNER = '';
+  });
+  return true;
+}
+function studyUi() { return STUDY_UI; }
+function registerStudyRuntime(pluginId, impl) {
+  const owner = String(pluginId || '');
+  if (STUDY_RUNTIME_OWNER && STUDY_RUNTIME_OWNER !== owner) {
+    throw new Error('学习运行时已由插件 ' + STUDY_RUNTIME_OWNER + ' 注册');
+  }
+  STUDY_RUNTIME = impl || null;
+  STUDY_RUNTIME_OWNER = owner;
+  if (typeof applyStudyRuntime === 'function') applyStudyRuntime(STUDY_RUNTIME);
+  trackPlugin(owner, () => {
+    if (STUDY_RUNTIME_OWNER !== owner) return;
+    STUDY_RUNTIME = null;
+    STUDY_RUNTIME_OWNER = '';
+    if (typeof applyStudyRuntime === 'function') applyStudyRuntime(null);
+  });
+  return true;
+}
+function studyRuntime() { return STUDY_RUNTIME; }
+function studyHostBridge() {
+  return {
+    get state() { return state; },
+    get audio() { return audio; },
+    get reader() { return reader; },
+    get TR() { return TR; },
+    get TR_CACHE() { return TR_CACHE; },
+    get studyAutoPause() { return studyAutoPause; },
+    getAutoPause: () => studyAutoPause,
+    setAutoPause: value => { studyAutoPause = !!value; },
+    setView: value => { studyView = String(value || 'card'); },
+    wordCurrentMeaning: () => wordCurrentMeaning,
+    cleanWord: raw => cleanWord(raw),
+    esc: text => esc(text),
+    fmt: value => fmt(value),
+    seekTo: at => seekTo(at),
+    showToast: (text, ms) => showToast(text, ms),
+    navigate: (page, args, params) => navigate(page, args, params),
+    moduleOn: name => moduleOn(name),
+    showByKey: key => showByKey(key),
+    episodesOf: show => episodesOf(show),
+    rebuildCues: () => rebuildCues(),
+    applyReader: () => applyReader(),
+    applySidebarCustomization: () => applySidebarCustomization(),
+    syncTranslateSettings: () => syncTranslateSettings(),
+    studyPluginOn: () => studyPluginOn(),
+    subtitlePluginOn: () => subtitlePluginOn(),
+    tauriHost: () => tauriHost(),
+    openSettingsPane: pane => openSettingsPane(pane),
+    closeDockSheet: (restore = true) => closeDockSheet(restore),
+    sanitizeAdRanges: (ranges, fallbackSource) => sanitizeAdRanges(ranges, fallbackSource),
+    mergeAdRanges: lists => mergeAdRanges(lists),
+    studyAdRangesFromData: data => studyAdRangesFromData(data),
+    studyApplyAiAdRanges: (data, epId) => studyApplyAiAdRanges(data, epId),
+    studyNormText: text => studyNormText(text),
+    copyPlain: text => copyPlain(text),
+  };
+}
 function registerStudyEngine(pluginId, impl) {
   const owner = String(pluginId || '');
   if (STUDY_ENGINE_OWNER && STUDY_ENGINE_OWNER !== owner) {

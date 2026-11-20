@@ -11,6 +11,12 @@ MyTPlugins.register('study', {
     if (typeof study.registerEngine === 'function' && typeof createStudyEngine === 'function') {
       study.registerEngine(createStudyEngine(api));
     }
+    if (typeof study.registerRuntime === 'function' && typeof createStudyRuntime === 'function') {
+      study.registerRuntime(createStudyRuntime(api, study.host()));
+    }
+    if (typeof study.registerUi === 'function' && typeof createStudyUi === 'function') {
+      study.registerUi(createStudyUi(api, study.host()));
+    }
     document.body.classList.add('study-plugin-on');
     let cleanup = null;
 

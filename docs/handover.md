@@ -1313,9 +1313,19 @@ P2：
   生词本、词状态和 SRS 由它持有并写回 `myt-study*` localStorage；`setup` 里
   `api.study.registerEngine(createStudyEngine(api))` 交给宿主。宿主 `08-study-ai.js`
   只接引用（`applyStudyEngine`），没有插件时用本地回退；停用/软重载时引擎槽清空。
-  目前渲染、AI 请求和播放控制仍在宿主，是后续迁移项。
+  另外 `runtime.js`（阶段三）接管 AI provider 解析、`llm_chat`、JSON 解析、cue 定位、音频循环与
+  自动暂停：`api.study.registerRuntime(createStudyRuntime(api, api.study.host()))`，宿主只留
+  `studyChat` / `studyPlayRange` 等转发包装；`api.study.host()` 提供 state/audio 活引用与
+  seekTo/showToast/tauriHost。
+- 渲染层在插件 `ui.js`（阶段二）：`createStudyUi(api, host)` 接管学习面板、复习、词卡、整集总结、
+  AI 设置、模型选择和练习；`main.js` 里 `api.study.registerUi(...)`。宿主 `08-study-ai.js` 只留
+  同名转发包装。`10-desktop-bridge-tail.js` 不再覆盖 `studyRender*`，改为注册
+  `beforeEpisode` / `episode` / `practice` / `vocab` / `episodeHtml` hook，由插件在对应视图里调用
+  `api.study.runHook(...)`；前情回顾、跨集时间线、缓存徽标、盲听/多空/慢速入口仍由 10 提供。
 - 实测：默认两插件同时启用时，字幕插件页显示字幕正常；停用 `study` 并刷新后
-  字幕仍有 240 句，`#studyBtn` 与学习设置页隐藏，词卡不弹出；重新启用后恢复。
+  字幕仍有 240 句，`#studyBtn` 与学习设置页隐藏，词卡不弹出；重新启用后恢复。阶段二已经
+  重建 exe，并用 `MYT_EVAL` 探针验证：学习面板/复习/生词本/整集摘要/学习服务设置均可渲染且无
+  未捕获异常；仍需用户手动点一遍确认后再提交。
 
 
 
