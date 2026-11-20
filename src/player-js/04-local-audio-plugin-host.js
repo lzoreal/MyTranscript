@@ -417,12 +417,27 @@ const PluginHost = {
     if (error) return { id, state: 'error', missing, error };
     return { id, state: definitionStarted(id) ? 'active' : 'ready', missing, error };
   },
-  registerKernel(name, impl) {
+  registerKernel(ownerId, name, impl) {
     if (!name || !impl) throw new Error('registerKernel 需要名称和实现');
-    PluginHost.kernels.set(String(name), impl);
+    const key = String(name), owner = String(ownerId || '');
+    const hit = PluginHost.kernels.get(key);
+    if (hit && hit.owner && owner && hit.owner !== owner) {
+      throw new Error('内核 ' + key + ' 已由插件 ' + hit.owner + ' 注册，先停用对方再接管');
+    }
+    PluginHost.kernels.set(key, { owner, impl });
+    if (owner) {
+      // 停用/软重载时只摘掉自己这一层；同名内核已被别人接走就不动。
+      trackPlugin(owner, () => {
+        const cur = PluginHost.kernels.get(key);
+        if (cur && cur.impl === impl) PluginHost.kernels.delete(key);
+      });
+    }
     return true;
   },
-  kernel(name) { return PluginHost.kernels.get(String(name)) || null; },
+  kernel(name) {
+    const hit = PluginHost.kernels.get(String(name));
+    return hit ? hit.impl : null;
+  },
   applyLayout() {
     const sig = Object.keys(app.capabilities).sort().map(k => k + '=' + app.capabilities[k]).join('|');
     if (PluginHost.__layoutReady && sig === PluginHost.__layoutSig) return;
@@ -553,19 +568,22 @@ function pluginApiCompatible(version) {
   return !want || want.split('.')[0] === PLUGIN_API_VERSION.split('.')[0];
 }
 let pluginHostFacadeCache = null;
-/* 对外只给能力查询与内核注册，不把 PluginHost 的内部表（kernels / 能力映射）交出去。 */
-function pluginHostFacade() {
-  if (!pluginHostFacadeCache) {
-    pluginHostFacadeCache = Object.freeze({
+/* 对外只给能力查询与内核注册，不把 PluginHost 的内部表（kernels / 能力映射）交出去。
+   内核注册按插件 id 记账：同一个门面实例只代表一个插件（或宿主自己，owner 为空）。 */
+function pluginHostFacade(ownerId) {
+  const key = String(ownerId || '');
+  if (!pluginHostFacadeCache) pluginHostFacadeCache = new Map();
+  if (!pluginHostFacadeCache.has(key)) {
+    pluginHostFacadeCache.set(key, Object.freeze({
       can: name => PluginHost.can(name),
       owner: name => PluginHost.owner(name),
       status: id => PluginHost.status(id),
       available: id => PluginHost.available(id),
-      registerKernel: (name, impl) => PluginHost.registerKernel(name, impl),
+      registerKernel: (name, impl) => PluginHost.registerKernel(key, name, impl),
       providerOwner: name => coreProviderOwner(name),
-    });
+    }));
   }
-  return pluginHostFacadeCache;
+  return pluginHostFacadeCache.get(key);
 }
 /* 插件拿到的字幕是一份只读快照：改它不会影响宿主状态。 */
 function cuesSnapshot() {
@@ -599,6 +617,14 @@ function stopPlugin(id) {
   PLUGIN_GRANTS.delete(key);
   if (def) def.__started = false;
 }
+/* setup 中途失败：已注册的页面/事件/CSS/能力必须按停用同样的路径回收。 */
+function abortPluginStart(id, definition) {
+  const key = String(id);
+  runPluginCleanup(key);
+  releasePluginCapabilities(key);
+  PLUGIN_GRANTS.delete(key);
+  if (definition) { definition.__started = false; definition.__dispose = null; }
+}
 function pluginApiFor(id) {
   const storagePrefix = 'myt-plugin:' + id + ':';
   // 每个能力组只在方法调用时校验一次，属性读取（比如 api.player.state）不受影响。
@@ -613,10 +639,13 @@ function pluginApiFor(id) {
     id,
     version: PLUGIN_API_VERSION,
     apiVersion: PLUGIN_API_VERSION,
-    host: pluginHostFacade(),
+    host: pluginHostFacade(id),
     toast: (message, type) => showToast(String(message || ''), type === 'warn' ? 5000 : 3000),
     navigate: (page, args = [], params = {}) => navigate(page, args, params),
-    openEpisode: (showKey, episodeId) => playEpisode(showKey, episodeId),
+    openEpisode: (showKey, episodeId) => {
+      pluginRequire(id, 'player');
+      return playEpisode(showKey, episodeId);
+    },
     el: elementId => $(elementId),
     page: (pageId, opts) => registerPluginPage(id, pageId, opts),
     on: (event, fn) => addPluginListener(id, event, fn),
@@ -733,7 +762,8 @@ function ensurePluginApi() {
         const ret = definition.setup(pluginApiFor(key));
         if (typeof ret === 'function') definition.__dispose = ret;
       } catch (err) {
-        definition.__started = false;
+        // 初始化失败要和停用一样清理，否则已注册的页面/事件/能力会留在宿主里。
+        abortPluginStart(key, definition);
         throw err;
       }
     },
@@ -749,13 +779,13 @@ function ensurePluginApi() {
 const PLUGIN_CONSENT_PREFIX = 'myt-plugin-consent:';
 const PLUGIN_HASH_PREFIX = 'myt-plugin-hash:';
 /* 能力粒度授权：清单声明 permissions 就按声明收窄；没声明（老清单）沿用全权限，
-   内置插件始终全权限。权限只在宿主 API 与外部请求入口上生效。 */
+   内置插件始终全权限。权限是宿主 API 层的调用约束，不是安全边界：插件与宿主共用
+   同一个 JS 环境，仍可以直接摸 window.fetch / __TAURI__，真正隔离要换进程或独立 WebView。 */
 const PLUGIN_PERMISSIONS = {
   'ui.dom': '读写页面内容（节目、字幕、学习数据）',
   net: '发起外部网络请求',
-  player: '控制播放（播放 / 暂停 / 跳转 / 倍速）',
+  player: '控制播放（播放 / 暂停 / 跳转 / 倍速 / 打开某集）',
   storage: '读写插件自己的本地存储',
-  desktop: '调用桌面壳能力（本地文件、离线下载）',
   providers: '接管核心能力（目录 / 播放 / 下载 / 队列）',
   subtitles: '接管字幕功能',
   study: '接管学英语功能',

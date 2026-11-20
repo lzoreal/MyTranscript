@@ -86,21 +86,31 @@ fn hex_decode(text: &str) -> Option<Vec<u8>> {
     Some(out)
 }
 
-/// 插件内容摘要：id、版本，加上每个文件的「文件名 + 内容」，按文件名排序。
-/// 签名针对这份摘要；改一个字节、改名或增删文件，摘要都会变。
-fn plugin_digest(id: &str, version: &str, files: &[(String, String)]) -> String {
+/// 插件内容摘要：id、版本、有效清单字段，加上每个文件的「文件名 + 内容」，按文件名排序。
+/// 签名针对这份摘要；改一个字节、改名、增删文件，或改 requires / apiVersion / permissions，
+/// 摘要都会变。`meta` 是清单字段的紧凑 JSON（键按字典序）。
+fn plugin_digest(id: &str, version: &str, meta: &str, files: &[(String, String)]) -> String {
     let mut files = files.to_vec();
     files.sort_by(|a, b| a.0.cmp(&b.0));
     let mut hasher = Sha256::new();
     hasher.update(id.as_bytes());
     hasher.update(b"\n");
     hasher.update(version.as_bytes());
+    hasher.update(b"\n");
+    hasher.update(meta.as_bytes());
     for (name, body) in files {
         hasher.update(b"\nfile ");
         hasher.update(name.as_bytes());
         hasher.update(b"\n");
         hasher.update(body.as_bytes());
     }
+    hex_encode(&hasher.finalize())
+}
+
+/// 授权钉扎用的内容指纹：SHA-256（原来用 64 位 FNV-1a，冲突空间太小）。
+fn content_sha256(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
     hex_encode(&hasher.finalize())
 }
 
@@ -375,17 +385,6 @@ fn plugin_view(dir_name: &str, dir: &std::path::Path, enabled_map: &HashMap<Stri
                 }
             }
         }
-        let digest = plugin_digest(&id, &version, &digest_files);
-        let signature = manifest.get("signature").and_then(|v| v.as_str()).unwrap_or("").trim();
-        let signature_status = if signature.is_empty() {
-            "absent"
-        } else if verify_plugin_signature(&digest, signature) {
-            "ok"
-        } else {
-            "bad"
-        };
-        let content_hash = content_fingerprint(digest.as_bytes());
-        // permissions 缺省 = null：老清单没写，按旧行为（全权限）；写了就按声明收窄。
         let permissions = manifest.get("permissions").map(|value| match value.as_array() {
             Some(items) => serde_json::Value::Array(
                 items
@@ -397,6 +396,27 @@ fn plugin_view(dir_name: &str, dir: &std::path::Path, enabled_map: &HashMap<Stri
             ),
             None => serde_json::json!([]),
         });
+        // 签名和授权钉扎都要覆盖“真正生效的清单字段”，否则改 requires / apiVersion /
+        // permissions 不会让旧签名或旧授权失效。to_string 的键序由 serde_json 的 BTreeMap 保证。
+        let digest_meta = serde_json::json!({
+            "main": main_name.clone(),
+            "style": css_name.clone(),
+            "scripts": script_names.clone(),
+            "requires": manifest.get("requires").cloned().unwrap_or_else(|| serde_json::json!([])),
+            "permissions": permissions.clone().unwrap_or_else(|| serde_json::json!([])),
+            "apiVersion": manifest.get("apiVersion").cloned().unwrap_or(serde_json::Value::Null),
+        })
+        .to_string();
+        let digest = plugin_digest(&id, &version, &digest_meta, &digest_files);
+        let signature = manifest.get("signature").and_then(|v| v.as_str()).unwrap_or("").trim();
+        let signature_status = if signature.is_empty() {
+            "absent"
+        } else if verify_plugin_signature(&digest, signature) {
+            "ok"
+        } else {
+            "bad"
+        };
+        let content_hash = content_sha256(digest.as_bytes());
         serde_json::json!({
             "id": id,
             "builtin": builtin,
@@ -704,25 +724,42 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
     }
 
+    const DEMO_META: &str =
+        r#"{"apiVersion":null,"main":"main.js","permissions":[],"requires":[],"scripts":[],"style":"style.css"}"#;
+
     #[test]
     fn digest_covers_content_and_version() {
         let files = vec![("main.js".to_string(), "console.log(1)\n".to_string())];
-        let digest = plugin_digest("demo", "1.0", &files);
-        assert_eq!(digest, "f7ab0c366b9eceb7c56c1b08c6430baf194eabd884f51ac158167f17e4a248e3");
+        let digest = plugin_digest("demo", "1.0", DEMO_META, &files);
+        assert_eq!(digest, "37b8348b68714e2d84a60d4e565a78be71be360efe50b1d1d3120eeff93d49f1");
         let edited = vec![("main.js".to_string(), "console.log(2)\n".to_string())];
-        assert_ne!(plugin_digest("demo", "1.0", &edited), digest);
-        assert_ne!(plugin_digest("demo", "1.1", &files), digest);
-        assert_ne!(plugin_digest("other", "1.0", &files), digest);
+        assert_ne!(plugin_digest("demo", "1.0", DEMO_META, &edited), digest);
+        assert_ne!(plugin_digest("demo", "1.1", DEMO_META, &files), digest);
+        assert_ne!(plugin_digest("other", "1.0", DEMO_META, &files), digest);
+        // 清单字段也要进摘要：只改 requires 就应换摘要。
+        let other_meta = DEMO_META.replace(r#""requires":[]"#, r#""requires":["subtitles"]"#);
+        assert_ne!(plugin_digest("demo", "1.0", &other_meta, &files), digest, "requires 变更必须改变摘要");
+    }
+
+    #[test]
+    fn digest_covers_manifest_fields() {
+        // 与 tests/test_sign_plugin.py 的 test_manifest_fields_fixture 共用同一条向量。
+        let meta = r#"{"apiVersion":"2.0","main":"main.js","permissions":["net","player"],"requires":["subtitles"],"scripts":[],"style":"style.css"}"#;
+        let files = vec![("main.js".to_string(), "console.log(1)\n".to_string())];
+        assert_eq!(
+            plugin_digest("demo", "1.0", meta, &files),
+            "d7a9774cb05c711a8d8eb1b260028ed667f3c59431542bc68bd43bab198ec29a"
+        );
     }
 
     #[test]
     fn signature_verifies_only_matching_digest() {
         let files = vec![("main.js".to_string(), "console.log(1)\n".to_string())];
-        let digest = plugin_digest("demo", "1.0", &files);
-        let sig = "9ddab151a93d67dd217535b5dee4c9153c014f7fae07c8be71ebdf0802954acf\
-980cf921f3f95903e6f390a52d95c7898b3d592897d3328da3d9c8d28d802b08";
+        let digest = plugin_digest("demo", "1.0", DEMO_META, &files);
+        let sig = "8a84a47339f84c75f3683ccf797fbc8c5ace67a35b747f3243e76d5d194a42f2\
+9d947d49edf006a05ff087cbbd021d0c1dd397c3b374d758195a05652d335c01";
         assert!(verify_plugin_signature(&digest, sig), "同一份摘要应通过");
-        let tampered = plugin_digest("demo", "1.0", &vec![("main.js".to_string(), "x\n".to_string())]);
+        let tampered = plugin_digest("demo", "1.0", DEMO_META, &vec![("main.js".to_string(), "x\n".to_string())]);
         assert!(!verify_plugin_signature(&tampered, sig), "内容变了签名必须失效");
         assert!(!verify_plugin_signature(&digest, &sig[..126]), "截断的签名不算合法");
     }

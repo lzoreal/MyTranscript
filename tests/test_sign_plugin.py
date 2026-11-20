@@ -62,12 +62,41 @@ class SignPluginTests(unittest.TestCase):
     def test_digest_matches_rust_fixture(self):
         d = self.plugin()
         manifest = json.loads((d / "plugin.json").read_text(encoding="utf-8"))
-        value = self.mod.digest("demo", "1.0", self.mod.plugin_files(d, manifest))
+        value = self.mod.digest(
+            "demo", "1.0", self.mod.manifest_meta(manifest), self.mod.plugin_files(d, manifest)
+        )
         # 与 src/plugins.rs 里 digest_covers_content_and_version 用的向量一致
         self.assertEqual(
             value,
-            "f7ab0c366b9eceb7c56c1b08c6430baf194eabd884f51ac158167f17e4a248e3",
+            "37b8348b68714e2d84a60d4e565a78be71be360efe50b1d1d3120eeff93d49f1",
         )
+
+    def test_manifest_fields_fixture(self):
+        # 与 src/plugins.rs 的 digest_covers_manifest_fields 共用同一条向量
+        d = self.plugin()
+        manifest = {
+            "id": "demo", "version": "1.0", "apiVersion": "2.0",
+            "requires": ["subtitles"], "permissions": ["net", "player"],
+        }
+        value = self.mod.digest(
+            "demo", "1.0", self.mod.manifest_meta(manifest), self.mod.plugin_files(d, manifest)
+        )
+        self.assertEqual(
+            value,
+            "d7a9774cb05c711a8d8eb1b260028ed667f3c59431542bc68bd43bab198ec29a",
+        )
+
+    def test_manifest_fields_are_in_digest(self):
+        d = self.plugin()
+        manifest = json.loads((d / "plugin.json").read_text(encoding="utf-8"))
+        before = self.mod.digest(
+            "demo", "1.0", self.mod.manifest_meta(manifest), self.mod.plugin_files(d, manifest)
+        )
+        manifest["requires"] = ["subtitles"]
+        after = self.mod.digest(
+            "demo", "1.0", self.mod.manifest_meta(manifest), self.mod.plugin_files(d, manifest)
+        )
+        self.assertNotEqual(before, after, "改 requires 必须改变摘要，旧签名才会失效")
 
     def test_sign_then_verify(self):
         d = self.plugin()

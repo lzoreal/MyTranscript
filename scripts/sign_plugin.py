@@ -2,8 +2,10 @@
 """给本地插件签名 / 验签。
 
 摘要算法必须和 `apps/windows/src-tauri/src/plugins.rs` 的 `plugin_digest` 完全一致：
-    sha256(id + "\\n" + version + 每个文件("\\nfile " + 文件名 + "\\n" + 内容))，
+    sha256(id + "\n" + version + "\n" + meta + 每个文件("\nfile " + 文件名 + "\n" + 内容))，
 文件按文件名排序，只算 manifest 里 scripts + main + style 指向且真实存在的文件。
+`meta` 是有效清单字段的紧凑 JSON（键按字典序）：main / style / scripts / requires /
+permissions / apiVersion；改这些字段也会让旧签名失效。
 
 私钥默认读 `~/.config/myt/plugin-signing.json`（`private_hex`），可用环境变量
 `MYT_PLUGIN_SIGNING_KEY` 指到别的路径。私钥永不进仓库。
@@ -52,8 +54,29 @@ def plugin_files(dir_path: pathlib.Path, manifest: dict) -> list[tuple[str, str]
     return out
 
 
-def digest(plugin_id: str, version: str, files: list[tuple[str, str]]) -> str:
-    body = plugin_id + "\n" + version
+def manifest_meta(manifest: dict) -> str:
+    """有效清单字段的紧凑 JSON；键序与 serde_json::Value::to_string 一致（BTreeMap）。"""
+    main = manifest.get("main") if isinstance(manifest.get("main"), str) else "main.js"
+    style = manifest.get("style") if isinstance(manifest.get("style"), str) else "style.css"
+    scripts = [name for name in manifest.get("scripts") or [] if isinstance(name, str)]
+    raw_perms = manifest.get("permissions")
+    permissions = []
+    if isinstance(raw_perms, list):
+        permissions = [item.strip() for item in raw_perms
+                       if isinstance(item, str) and item.strip()]
+    meta = {
+        "main": main,
+        "style": style,
+        "scripts": scripts,
+        "requires": manifest.get("requires", []),
+        "permissions": permissions,
+        "apiVersion": manifest.get("apiVersion"),
+    }
+    return json.dumps(meta, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def digest(plugin_id: str, version: str, meta: str, files: list[tuple[str, str]]) -> str:
+    body = plugin_id + "\n" + version + "\n" + meta
     for name, text in sorted(files, key=lambda item: item[0]):
         body += "\nfile " + name + "\n" + text
     return hashlib.sha256(body.encode("utf-8")).hexdigest()
@@ -80,7 +103,7 @@ def main(argv: list[str]) -> int:
     files = plugin_files(dir_path, manifest)
     if not files:
         raise SystemExit("manifest 指向的文件一个都不存在，没什么可签的")
-    value = digest(plugin_id, version, files)
+    value = digest(plugin_id, version, manifest_meta(manifest), files)
     verify_only = "--verify" in argv[2:]
     keys = load_key()
     public = Ed25519PublicKey.from_public_bytes(bytes.fromhex(keys["public_hex"]))

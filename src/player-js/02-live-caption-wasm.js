@@ -23,12 +23,13 @@ function transcriberFor(kind) { return TRANSCRIBER_ADAPTERS.get(String(kind)) ||
    停用或重载时自动回退。覆盖实现可以调 provider.fallback 回到原行为。 */
 const CORE_PROVIDER_NAMES = ['catalog', 'playback', 'downloads', 'queue'];
 const CORE_PROVIDER_DEFAULTS = new Map();
-const CORE_PROVIDER_OVERRIDES = new Map();
+const CORE_PROVIDER_STACKS = new Map();
 function defineCoreProvider(name, impl) {
   const key = String(name);
   if (!CORE_PROVIDER_NAMES.includes(key)) throw new Error('未知核心能力：' + key);
   if (!CORE_PROVIDER_DEFAULTS.has(key)) CORE_PROVIDER_DEFAULTS.set(key, impl);
 }
+/* 覆盖实现按注册顺序入栈；停用/重载只摘掉自己那层，恢复上一层（最后回到默认实现）。 */
 function registerCoreProvider(ownerId, name, impl) {
   const key = String(name);
   if (!CORE_PROVIDER_NAMES.includes(key)) throw new Error('未知核心能力：' + key);
@@ -38,22 +39,31 @@ function registerCoreProvider(ownerId, name, impl) {
       throw new Error('核心能力 ' + key + ' 需要实现 ' + fn + '()');
     }
   });
-  CORE_PROVIDER_OVERRIDES.set(key, { owner: String(ownerId), impl });
+  const stack = CORE_PROVIDER_STACKS.get(key) || [];
+  stack.push({ owner: String(ownerId), impl });
+  CORE_PROVIDER_STACKS.set(key, stack);
+}
+function coreProviderLayer(name) {
+  const stack = CORE_PROVIDER_STACKS.get(String(name)) || [];
+  return stack.length ? stack[stack.length - 1] : null;
 }
 function coreProvider(name) {
   const key = String(name);
   const fallback = CORE_PROVIDER_DEFAULTS.get(key) || {};
-  const hit = CORE_PROVIDER_OVERRIDES.get(key);
+  const hit = coreProviderLayer(key);
   return Object.freeze({ ...(hit ? hit.impl : fallback), owner: hit ? hit.owner : '', fallback });
 }
 function releaseCoreProviders(ownerId) {
   const key = String(ownerId);
-  [...CORE_PROVIDER_OVERRIDES.entries()].forEach(([name, hit]) => {
-    if (hit.owner === key) CORE_PROVIDER_OVERRIDES.delete(name);
+  CORE_PROVIDER_STACKS.forEach((stack, name) => {
+    for (let i = stack.length - 1; i >= 0; i -= 1) {
+      if (stack[i].owner === key) stack.splice(i, 1);
+    }
+    if (!stack.length) CORE_PROVIDER_STACKS.delete(name);
   });
 }
 function coreProviderOwner(name) {
-  const hit = CORE_PROVIDER_OVERRIDES.get(String(name));
+  const hit = coreProviderLayer(name);
   return hit ? hit.owner : '';
 }
 

@@ -15,6 +15,12 @@ const app = { capabilities: {}, plugins: [], pluginErrors: new Map() };
 const document = { body: { dataset: {} } };
 function definitionStarted() { return false; }
 function host() { return null; }
+const pluginCleanups = new Map();
+function trackPlugin(id, fn) {
+  const key = String(id);
+  if (!pluginCleanups.has(key)) pluginCleanups.set(key, []);
+  pluginCleanups.get(key).push(fn);
+}
 """
 
 CASES = r"""
@@ -52,6 +58,15 @@ try { PluginHost.claim('p2', 'subtitles'); } catch (e) { threw = true; }
 assert(threw, '第二个插件 claim 同一能力应抛错');
 assert(PluginHost.claim('p1', 'subtitles') === true, '同一插件重复 claim 应允许');
 
+// 6. 内核注册要带 owner：别人不能覆盖，停用后按 owner 回收
+PluginHost.registerKernel('p1', 'transcript', { render: () => 'p1' });
+assert(PluginHost.kernel('transcript').render() === 'p1', '内核应按名字取回');
+threw = false;
+try { PluginHost.registerKernel('p2', 'transcript', { render: () => 'p2' }); } catch (e) { threw = true; }
+assert(threw, '另一个插件不能直接覆盖已注册内核');
+pluginCleanups.get('p1').forEach(fn => fn());
+assert(PluginHost.kernel('transcript') === null, '插件停用后内核必须移除');
+
 console.log('plugin host OK');
 """
 
@@ -61,7 +76,8 @@ LIFECYCLE_CASES = r"""
 const PLUGIN_REGISTRY = new Map();
 const PLUGIN_GRANTS = new Map();
 function pluginReportError(id, err) { throw err; }
-function releasePluginCapabilities() {}
+const releasedCaps = [];
+function releasePluginCapabilities(id) { releasedCaps.push(String(id)); }
 let disposed = 0;
 PLUGIN_REGISTRY.set('demo', { __started: true, __dispose() { disposed += 1; } });
 
@@ -85,6 +101,18 @@ trackPlugin('bad', () => { seen.push(1); throw new Error('boom'); });
 trackPlugin('bad', () => seen.push(2));
 runPluginCleanup('bad');
 assert(seen.length === 2, '抛错的清理函数不应中断其余回收');
+
+// setup 中途失败：已注册物、能力、权限都要回收，和停用走同一条路径
+const failed = { __started: true };
+PLUGIN_REGISTRY.set('boom', failed);
+PLUGIN_GRANTS.set('boom', new Set(['ui.dom']));
+trackPlugin('boom', () => calls.push('cleanup-on-fail'));
+abortPluginStart('boom', failed);
+assert(calls.includes('cleanup-on-fail'), 'setup 失败必须回收已注册物');
+assert(releasedCaps.includes('boom'), 'setup 失败必须释放已接管的能力');
+assert(!PLUGIN_GRANTS.has('boom'), 'setup 失败必须清掉权限授予');
+assert(failed.__started === false, 'setup 失败必须复位 __started');
+
 console.log('lifecycle OK');
 """
 
@@ -149,7 +177,10 @@ def extract_lifecycle() -> str:
     body = text[head:tail]
     stop_at = text.index("function stopPlugin(id)")
     brace = text.index("{", stop_at)
-    return body + text[stop_at:brace] + slice_block(text, brace)
+    abort_at = text.index("function abortPluginStart")
+    abort_brace = text.index("{", abort_at)
+    return (body + text[stop_at:brace] + slice_block(text, brace)
+            + text[abort_at:abort_brace] + slice_block(text, abort_brace))
 
 def extract_consent() -> str:
     text = PART.read_text(encoding="utf-8")
@@ -247,6 +278,17 @@ const window = { fetch: () => Promise.resolve(), XMLHttpRequest: function Ghost(
         self.assertIn("setPluginPinnedHash(id, plugin.hash", text[load:], "授权通过时要把内容指纹钉住")
         self.assertIn("pluginConsentChanged(plugin)", text[load:], "已授权的插件也要复查文件是否被改")
 
+    def test_permission_gates_on_api_entries(self):
+        text = PART.read_text(encoding="utf-8")
+        start = text.index("openEpisode: (showKey, episodeId) =>")
+        end = text.index("},", start)
+        self.assertIn("pluginRequire(id, 'player')", text[start:end], "api.openEpisode 必须检查 player 权限")
+        start_fn = text.index("catch (err) {", text.index("definition.setup(pluginApiFor(key))"))
+        self.assertIn("abortPluginStart(key, definition)", text[start_fn:start_fn + 300],
+                      "setup 失败必须走清理路径，不能只复位 __started")
+        perm_block = text[text.index("const PLUGIN_PERMISSIONS"):text.index("const PLUGIN_PERMISSION_ALL")]
+        self.assertNotIn("desktop:", perm_block, "没有对应 API 的 desktop 权限不该继续挂名")
+
     def test_core_provider_seams(self):
         cases = r"""
 defineCoreProvider('catalog', { loadShows: async () => ['default'] });
@@ -267,6 +309,15 @@ assert(threw, '缺必需方法必须报错');
 
 releaseCoreProviders('demo');
 assert(coreProviderOwner('catalog') === '', '停用插件应回退默认实现');
+
+// 两个插件先后接管：后停用要恢复到前一个，而不是直接掉回默认实现
+registerCoreProvider('first', 'catalog', { loadShows: async () => ['first'] });
+registerCoreProvider('second', 'catalog', { loadShows: async () => ['second'] });
+assert(coreProviderOwner('catalog') === 'second', '后注册的插件应在栈顶');
+releaseCoreProviders('second');
+assert(coreProviderOwner('catalog') === 'first', '上层停用后应恢复下层插件');
+releaseCoreProviders('first');
+assert(coreProviderOwner('catalog') === '', '全部停用后才回默认实现');
 threw = false;
 try { defineCoreProvider('nope', {}); } catch (e) { threw = true; }
 assert(threw, '默认实现也只能用认得的名字');

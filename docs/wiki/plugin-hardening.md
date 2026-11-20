@@ -16,6 +16,7 @@
 | 8 | 桌面 IPC 收口（插件不得直接调 Tauri 命令） | 已完成：`installIpcGuard` |
 | 9 | 签名私钥轮换（多公钥验签） | 已完成：`PLUGIN_PUBKEYS` 两把钥并行 |
 | 10 | 前端脚本真正模块化 | 已完成第一步：`player.js` 为 ES module，kernel 独立导出 |
+| 11 | 复核后五条修正（权限定位、失败清理、内核归属、Provider 栈、摘要覆盖） | 已完成 |
 
 ## 1. 依赖与宿主测试
 
@@ -39,7 +40,8 @@
 - 宿主按插件记账（`trackPlugin`）：页面、事件监听、命令、插件 CSS、能力占用；
 - `MyTPlugins.stop(id)` + `reloadPlugins()` 软重载：回收注册物、重新 `loadPlugins`，
   设置页「重新加载」不再 `location.reload()`；
-- `start()` 失败会回滚 `__started`，不会留下半注册状态。
+- `start()` 失败会回滚 `__started`，并以停用同一条路径回收已注册物（`abortPluginStart`：
+  逆序清理、释放能力、清权限授予），不会把半启动插件的页面/事件/CSS 留在宿主里；
 
 ## 4. 信任模型（已落地：首次启用弹授权）
 
@@ -57,13 +59,14 @@
 
 ## 4.5 签名与内容钉扎
 
-- `plugin.json` 可带 `signature`（Ed25519 hex）：`plugins.rs` 对 `id + version + 每个脚本/样式的
+- `plugin.json` 可带 `signature`（Ed25519 hex）：`plugins.rs` 对 `id + version + 生效清单字段`
+  （`main`/`style`/`scripts`/`requires`/`permissions`/`apiVersion` 的紧凑 JSON）+ `每个脚本/样式的
   「文件名 + 内容」`做 SHA-256 摘要，用编译进二进制的公钥验签；不符 → 设 `signature: "bad"`，
   JS 加载前直接拒绝，设置页显示「签名校验失败」；
 - 私钥只存在 `~/.config/myt/plugin-signing.json`（可用 `MYT_PLUGIN_SIGNING_KEY` 改路径），
   `scripts/sign_plugin.py <插件目录>` 签名、`--verify` 校验；私钥不进仓库、不进安装包；
-- 未签名插件仍走首次启用授权，但授权时把内容指纹（`content_fingerprint(摘要)`）写进
-  `localStorage` 的 `myt-plugin-hash:<id>`；之后文件变动 → 指纹不符 → 撤销授权并弹「文件已被修改，
+- 未签名插件仍走首次启用授权，但授权时把内容指纹（`content_sha256(摘要)`，SHA-256）写进
+  `localStorage` 的 `myt-plugin-hash:<id>`；之后文件或清单字段变动 → 指纹不符 → 撤销授权并弹「文件已被修改，
   旧指纹 → 新指纹」重新确认；
 - 常量向量锁定两侧一致：`demo/1.0/main.js=console.log(1)\n` 的摘要
   `f7ab…48e3` 同时出现在 `plugins.rs` 单测与 `tests/test_sign_plugin.py`；
@@ -74,14 +77,17 @@
 
 清单 `permissions` 声明式收窄，缺省（老清单）= 全权限，内置插件始终全权限。
 
-- 取值：`ui.dom`（自动附带）、`net`、`player`、`storage`、`desktop`、`providers`、`subtitles`、`study`；
+- 取值：`ui.dom`（自动附带）、`net`、`player`、`storage`、`providers`、`subtitles`、`study`；
+  （原来的 `desktop` 没有对应 API 入口，已移除，避免挂名权限）
 - 宿主 API 按组校验：`api.player` / `api.storage` / `api.subtitles` / `api.study` 用 `Proxy` 包一层，
-  方法调用时 `pluginRequire` 抛错；`registerProvider` 需要 `providers`；
+  方法调用时 `pluginRequire` 抛错；`api.openEpisode` 单独检查 `player`；`registerProvider` 需要 `providers`；
+- **定位是 API 层约束，不是安全边界**：插件仍在同一 JS 环境，直接 `window.fetch`、直接摸 `__TAURI__`
+  都不受 `permissions` 约束；CSP 的 `connect-src` 也放行 http/https；IPC 守卫只是拦 blob 帧的调用栈检查。
+  真要隔离得换进程或独立 WebView，当前未做；
 - 网络门：注入插件脚本时用 IIFE 参数遮蔽 `fetch` / `XMLHttpRequest` / `WebSocket` / `EventSource`，
   无 `net` 时只放行同源、`blob:`、`data:`、`asset:`；
 - 授权层列出的是「实际可用能力」，不再是笼统的“完整权限”；权限集合变化会触发重新授权；
-- 边界：同域 JS 环境，插件仍可 `window.fetch` 或 `document` 绕过（这是防手滑与误扩权，不是沙箱）；
-  真要隔离得换进程或独立 WebView。
+- 边界：同域 JS 环境，插件仍可 `window.fetch` 或 `document` 绕过（这是防手滑与误扩权，不是沙箱）。
 
 ## 4.7 桌面 IPC 收口
 
@@ -135,7 +141,11 @@ registerCoreProvider / coreProvider / releaseCoreProviders`，插件侧入口
 | `queue` | `next(radioOnly)` | `defaultPlayNextAuto`（节目内顺播 + 播放队列） |
 
 - 覆盖实现能拿到 `fallback`，可以只在特定条件下接管、其余转调原逻辑；
-- `registerProvider` 记账进 `trackPlugin`，停用/软重载时 `releaseCoreProviders` 回退默认；
+- 覆盖按注册顺序入栈：后注册者在栈顶；停用/软重载只摘自己那层，恢复前一个插件，
+  全部退出后才回默认（早期实现只有单个槽位，后注册会顶掉先注册，停用直接掉回默认）；
+- `registerProvider` 记账进 `trackPlugin`，停用/软重载时 `releaseCoreProviders` 回退；
+- 内核（`api.host.registerKernel`）也按插件 id 记账：已被别的插件占用时直接拒绝，
+  停用时从 `PluginHost.kernels` 移除，不会留下旧内核（`kernel()` 返回的是实现本体）；
 - 形状校验在登记时做（缺方法、未知名字直接报错），不会留半接管状态。
 
 ## 6. Rust 拆分：插件 / 离线下载 / 识别模型各自成模块
@@ -176,11 +186,12 @@ registerCoreProvider / coreProvider / releaseCoreProviders`，插件侧入口
 
 ## 7. 测试
 
-- `tests/test_plugin_host.py` 四组：依赖/能力规则、API 主版本兼容、生命周期回收（逆序、幂等、抛错不中断、
-  `dispose` 只跑一次）、授权三态；
-- `src/plugins.rs` 单测共 13 条：清单解析失败、缺清单、非法目录名、`main` 路径穿越、`scripts + main`
+- `tests/test_plugin_host.py` 八组：依赖/能力规则（含内核归属回收）、API 主版本兼容、生命周期回收
+  （逆序、幂等、抛错不中断、`dispose` 只跑一次、setup 失败清理）、授权三态、核心 Provider 栈、
+  权限授予与网络门、入口权限检查；
+- `src/plugins.rs` 单测共 14 条：清单解析失败、缺清单、非法目录名、`main` 路径穿越、`scripts + main`
   拼接、`enabled.json` 覆盖默认值、`builtin` 标记、内置插件铺设/升级/保留用户修改/老安装基线，
-  以及签名摘要、坏签名与第二把公钥轮换；
-- `cargo test --bin mytranscript-desktop` 合计 21 条（含原有字幕分词 4 条）。
+  以及签名摘要（含清单字段跨语言向量）、坏签名与第二把公钥轮换；
+- `cargo test --bin mytranscript-desktop` 合计 22 条（含原有字幕分词 4 条）。
 
 

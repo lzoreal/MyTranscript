@@ -1,6 +1,6 @@
 # 插件接口
 
-桌面壳从 2026-11-20 起扫描本机插件目录。插件默认拥有**完整页面、网络与桌面桥权限**（和主页面同一个 JS 环境），清单里写 `permissions` 可以按能力收窄；只装自己信得过的代码。
+桌面壳从 2026-11-20 起扫描本机插件目录。插件默认拥有**完整页面与网络权限**（和主页面同一个 JS 环境），清单里写 `permissions` 可以按能力收窄；这只约束宿主 API，不是安全边界，只装自己信得过的代码。
 
 ## 目录
 
@@ -32,7 +32,7 @@ C:\ProgramData\MyTranscript\plugins\
 
 - `id` 只能包含字母、数字、`-`、`_`，启停状态以它为准。
 - `enabled` 只是首次发现的默认值；之后以 `enabled.json` 为准。
-- `permissions` 可选，字符串数组，声明插件要用的能力；不写（或非数组）= 老行为，全权限。写了就只放行声明项，`ui.dom` 自动附带。可用值：`ui.dom`、`net`、`player`、`storage`、`desktop`、`providers`、`subtitles`、`study`。缺 `net` 时插件里的 `fetch`/`XMLHttpRequest`/`WebSocket`/`EventSource` 只放行同源、`blob:`、`data:`、`asset:`；`api.player`/`api.storage`/`api.subtitles`/`api.study`/`api.registerProvider` 缺权限会抛错。
+- `permissions` 可选，字符串数组，声明插件要用的能力；不写（或非数组）= 老行为，全权限。写了就只放行声明项，`ui.dom` 自动附带。可用值：`ui.dom`、`net`、`player`、`storage`、`providers`、`subtitles`、`study`。缺 `net` 时插件里的 `fetch`/`XMLHttpRequest`/`WebSocket`/`EventSource` 只放行同源、`blob:`、`data:`、`asset:`；`api.player`/`api.storage`/`api.subtitles`/`api.study`/`api.openEpisode`/`api.registerProvider` 缺权限会抛错。**这是 API 层约束，不是安全边界**：插件与宿主同一 JS 环境，仍可直接用 `window.fetch` 或 `__TAURI__`。
 - `requires` 可选，字符串数组；依赖插件被停用时，本插件进入 `blocked`，不会注入 JS。
 - `scripts` 可选，按数组顺序先于 `main` 拼进同一个插件脚本；适合把解析/渲染内核拆成独立文件。
 - `main` / `style` / `scripts` 只能是插件目录内的文件名，不能带路径。
@@ -144,8 +144,12 @@ MyTPlugins.register('hello-world', {
 
 ## 核心能力接缝
 
-`api.registerProvider(name, impl)` 可以让插件替换宿主原有的四件事；`impl` 缺方法会当场报错，
-停用/软重载时自动回退。覆盖实现可以通过 `coreProvider(name).fallback` 调用原逻辑。
+`api.registerProvider(name, impl)` 可以让插件替换宿主原有的四件事；`impl` 缺方法会当场报错。
+覆盖实现按注册顺序入栈：后注册者在栈顶；停用/软重载只摘掉自己那层，恢复到前一个插件，
+全部退出后才回默认实现。覆盖实现可以通过 `coreProvider(name).fallback` 调用原逻辑。
+
+内核注册（`api.host.registerKernel(name, impl)`）按插件 id 记账：同名内核已被别的插件占用时
+直接报错，停用/软重载自动移除，不会留在宿主里被下一个插件取到。
 
 | name | 必须实现 | 默认行为 |
 | --- | --- | --- |
@@ -168,10 +172,11 @@ MyTPlugins.register('hello-world', {
 ## 权限与限制
 
 - 无沙箱：插件可以改任意 DOM、发任意请求、读页面里的数据。安装前先看代码。
+- **权限是 API 层约束，不是安全边界**：`permissions` 只拦宿主的 `api.*` 入口与注入时的网络门；插件仍可直接 `window.fetch`（CSP 的 `connect-src` 放行 http/https）、直接摸 `__TAURI__`。要真正隔离需另起进程或独立 WebView，当前没做。
 - 第三方插件（非内置）首次启用会弹页面内授权层，写明可读页面、可发请求、可调桌面能力；点「允许」才注入脚本，选择记在 `localStorage`（`myt-plugin-consent:<id>`）；
 - 授权时同时钉住插件内容指纹（`myt-plugin-hash:<id>`）。之后 `plugin.json` 指向的脚本/样式只要改了一个字节，指纹就对不上，插件会被降级为「需重新授权」，弹层里列出旧指纹 → 新指纹；
 - 授权同时记下当时的权限集合（`myt-plugin-perms:<id>`）。清单里新增权限后，下次加载会重新弹授权，不会悄悄扩权；授权层与设置页都按 `permissions` 列出实际可用能力；
-- 清单可带 `signature`（Ed25519 hex），宿主用编译进二进制的公钥验签；签名不符直接拒绝加载，设置页显示「签名校验失败」。签名覆盖 `id`、`version` 与全部脚本/样式内容，工具是 `python scripts/sign_plugin.py <插件目录>`（私钥默认 `~/.config/myt/plugin-signing.json`，不进仓库），验签用 `--verify`；
+- 清单可带 `signature`（Ed25519 hex），宿主用编译进二进制的公钥验签；签名不符直接拒绝加载，设置页显示「签名校验失败」。签名覆盖 `id`、`version`、**生效清单字段**（`main`/`style`/`scripts`/`requires`/`permissions`/`apiVersion`）与全部脚本/样式内容；授权指纹用 SHA-256。工具是 `python scripts/sign_plugin.py <插件目录>`（私钥默认 `~/.config/myt/plugin-signing.json`，不进仓库），验签用 `--verify`；
 - 设置页的插件行会显示授权状态，并提供「撤销授权」，撤销后下次加载重新询问；内置 `subtitles` / `study` 不询问（`plugin.json` 打 `builtin` 标记）；
 - `tauri.conf.json` 已启用 CSP（2026-11-20）：`script-src` 只放行自身、`blob:`、cdn.jsdelivr 与 wasm；`style-src` 允许内联（插件 CSS）；`img/media/connect` 放行 https + asset 协议 + 本机 http。授权层是产品级门禁，CSP 是第二道门，两者都不替代签名；
 - 插件脚本以 `blob:` URL 注入（Tauri 的 CSP 会注入 nonce，使 `'unsafe-inline'` 对内联块失效），样式仍用内联 `<style>`；新增外部域名要在 `script-src` / `connect-src` 里显式登记。
