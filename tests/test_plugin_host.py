@@ -56,6 +56,45 @@ console.log('plugin host OK');
 """
 
 
+
+LIFECYCLE_CASES = r"""
+const PLUGIN_REGISTRY = new Map();
+function pluginReportError(id, err) { throw err; }
+function releasePluginCapabilities() {}
+let disposed = 0;
+PLUGIN_REGISTRY.set('demo', { __started: true, __dispose() { disposed += 1; } });
+
+const calls = [];
+trackPlugin('demo', () => calls.push('a'));
+trackPlugin('demo', () => calls.push('b'));
+trackPlugin('other', () => calls.push('x'));
+runPluginCleanup('demo');
+assert(calls.join(',') === 'b,a', '应按注册逆序回收本插件注册物：' + calls.join(','));
+runPluginCleanup('demo');
+assert(calls.length === 2, '重复回收不应再调用');
+stopPlugin('demo');
+assert(disposed === 1, 'stopPlugin 应调用一次 dispose');
+const def = PLUGIN_REGISTRY.get('demo');
+assert(def.__dispose === null, 'dispose 用过后应清空');
+assert(def.__started === false, 'stopPlugin 应把 __started 置 false');
+
+// 单个清理函数抛错不影响后续回收
+const seen = [];
+trackPlugin('bad', () => { seen.push(1); throw new Error('boom'); });
+trackPlugin('bad', () => seen.push(2));
+runPluginCleanup('bad');
+assert(seen.length === 2, '抛错的清理函数不应中断其余回收');
+console.log('lifecycle OK');
+"""
+
+API_CASES = r"""
+assert(pluginApiCompatible("") === true, '未声明视为兼容');
+assert(pluginApiCompatible("2.1") === true, '同主版本兼容');
+assert(pluginApiCompatible("3.0") === false, '主版本不同拒绝');
+assert(pluginApiCompatible("2") === true, '只有主版本也兼容');
+console.log('api version OK');
+"""
+
 CONSENT_CASES = r"""
 const key = 'demo';
 assert(pluginConsentState(key) === '', '未授权时应为空');
@@ -81,6 +120,24 @@ def slice_block(text: str, starts: int, open_char: str = "{", close_char: str = 
                 return text[starts:i + 1]
     raise AssertionError("块没有闭合")
 
+
+def extract_api() -> str:
+    text = PART.read_text(encoding="utf-8")
+    head = text.index("const PLUGIN_API_VERSION")
+    tail = text.index("let pluginHostFacadeCache")
+    return text[head:tail]
+
+
+
+def extract_lifecycle() -> str:
+    """切出插件注册物记账（trackPlugin / runPluginCleanup）与 stopPlugin。"""
+    text = PART.read_text(encoding="utf-8")
+    head = text.index("const PLUGIN_CLEANUP")
+    tail = text.index("let pluginApiReady")
+    body = text[head:tail]
+    stop_at = text.index("function stopPlugin(id)")
+    brace = text.index("{", stop_at)
+    return body + text[stop_at:brace] + slice_block(text, brace)
 
 def extract_consent() -> str:
     text = PART.read_text(encoding="utf-8")
@@ -114,6 +171,26 @@ class PluginHostTests(unittest.TestCase):
         Path(path).unlink(missing_ok=True)
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn("plugin host OK", proc.stdout)
+
+    def test_lifecycle_cleanup(self):
+        script = "function assert(c, m){ if(!c){ console.error('FAIL: '+m); process.exit(1); } }\n" + extract_lifecycle() + "\n" + LIFECYCLE_CASES
+        with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as fh:
+            fh.write(script)
+            path = fh.name
+        proc = subprocess.run(["node", path], capture_output=True, text=True)
+        Path(path).unlink(missing_ok=True)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("lifecycle OK", proc.stdout)
+
+    def test_api_version_compat(self):
+        script = "function assert(c, m){ if(!c){ console.error('FAIL: '+m); process.exit(1); } }\n" + extract_api() + "\n" + API_CASES
+        with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as fh:
+            fh.write(script)
+            path = fh.name
+        proc = subprocess.run(["node", path], capture_output=True, text=True)
+        Path(path).unlink(missing_ok=True)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("api version OK", proc.stdout)
 
     def test_consent_tristate(self):
         stub = """

@@ -3989,6 +3989,11 @@ function pluginPlayerState() {
   };
 }
 const PLUGIN_API_VERSION = '2.0';
+/* 兼容只谈主版本：插件写 2.x 都认，3.x 直接拒绝；空值视为不声明，按当前版本跑。 */
+function pluginApiCompatible(version) {
+  const want = String(version || '');
+  return !want || want.split('.')[0] === PLUGIN_API_VERSION.split('.')[0];
+}
 let pluginHostFacadeCache = null;
 /* 对外只给能力查询与内核注册，不把 PluginHost 的内部表（kernels / 能力映射）交出去。 */
 function pluginHostFacade() {
@@ -4135,7 +4140,7 @@ function ensurePluginApi() {
         throw new Error('MyTPlugins.register 需要 id 和 setup(api)');
       }
       const want = definition.apiVersion ? String(definition.apiVersion) : '';
-      if (want && want.split('.')[0] !== PLUGIN_API_VERSION.split('.')[0]) {
+      if (!pluginApiCompatible(want)) {
         throw new Error('插件要求 API ' + want + '，宿主只支持 ' + PLUGIN_API_VERSION);
       }
       PLUGIN_REGISTRY.set(String(id), definition);
@@ -4164,6 +4169,17 @@ function ensurePluginApi() {
   };
 }
 const PLUGIN_CONSENT_PREFIX = 'myt-plugin-consent:';
+/* 开了 CSP 之后，Tauri 会给页面注入 nonce；带 nonce 的 CSP 会让 'unsafe-inline' 失效。
+   插件的脚本和样式都是运行时建的，必须自带同一个 nonce，否则整段被拦。 */
+function cspNonceValue() {
+  const el = document.querySelector('script[nonce], style[nonce]');
+  if (!el) return '';
+  return el.nonce || el.getAttribute('nonce') || '';
+}
+function applyCspNonce(el) {
+  const nonce = cspNonceValue();
+  if (nonce) el.setAttribute('nonce', nonce);
+}
 function pluginConsentState(id) {
   try { return localStorage.getItem(PLUGIN_CONSENT_PREFIX + id) || ''; } catch (e) { return ''; }
 }
@@ -4245,7 +4261,7 @@ async function loadPlugins() {
         setPluginConsent(id, true);
       }
     }
-    if (plugin.apiVersion && String(plugin.apiVersion).split('.')[0] !== PLUGIN_API_VERSION.split('.')[0]) {
+    if (plugin.apiVersion && !pluginApiCompatible(plugin.apiVersion)) {
       pluginReportError(id, '插件要求 API ' + plugin.apiVersion + '，宿主只支持 ' + PLUGIN_API_VERSION);
       continue;
     }
@@ -4257,6 +4273,7 @@ async function loadPlugins() {
     if (plugin.css) {
       const style = document.createElement('style');
       style.dataset.pluginCss = id;
+      applyCspNonce(style);
       style.textContent = plugin.css;
       document.head.append(style);
       trackPlugin(id, () => style.remove());
@@ -4264,10 +4281,31 @@ async function loadPlugins() {
     if (!plugin.js) { pluginReportError(id, '入口 JS 为空，检查 plugin.json 的 main 字段'); continue; }
     const script = document.createElement('script');
     script.dataset.plugin = id;
-    script.textContent = '(function(){try{\n' + plugin.js + '\n}catch(e){MyTPlugins._error(' +
+    const code = '(function(){try{\n' + plugin.js + '\n}catch(e){MyTPlugins._error(' +
       JSON.stringify(id) + ', e);}})();';
+    // CSP 生效后，运行时拼出来的内联脚本拿不到宿主 nonce 就会被拦；改走 blob: URL，
+    // 这样脚本是「外部源」而不是内联块，只要 script-src 放行 blob: 就能跑。
+    let blobUrl = '';
+    try {
+      blobUrl = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+      script.src = blobUrl;
+    } catch (e) {
+      script.textContent = code;
+      applyCspNonce(script);
+    }
     document.body.append(script);
-    script.remove();
+    // blob 脚本是异步执行的：等它跑完（插件在顶层调 register）再 start。
+    await new Promise(resolve => {
+      script.addEventListener('load', resolve, { once: true });
+      script.addEventListener('error', resolve, { once: true });
+      setTimeout(resolve, 3000);
+    });
+    if (blobUrl) {
+      URL.revokeObjectURL(blobUrl);
+      script.remove();
+    } else {
+      script.remove();
+    }
     try {
       window.MyTPlugins.start(id);
       app.pluginStartedIds = app.pluginStartedIds || [];

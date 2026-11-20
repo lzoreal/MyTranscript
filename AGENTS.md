@@ -48,6 +48,9 @@ python tests/test_align_timings.py
 python -c "import ast,pathlib; ast.parse(pathlib.Path('scripts/xxx.py').read_text(encoding='utf-8'))"
 python -c "import yaml; yaml.safe_load(open('.github/workflows/xxx.yml', encoding='utf-8'))"
 
+# 桌面壳：Rust 单测（插件清单解析、字幕分词等）
+cd apps/windows/src-tauri && cargo test --bin mytranscript-desktop
+
 # 播放器层边界（kernel 纯度 / 跨分片重名 / 平台检测点唯一）
 python scripts/check_layers.py
 

@@ -37,6 +37,8 @@ C:\ProgramData\MyTranscript\plugins\
 
 设置 → 插件：打开目录、重新加载、生成示例插件、逐个启停。启停后点「重新加载」生效。
 
+内置插件目录里的 `.builtin.json` 是宿主记的「上次随应用铺下去的版本指纹」，不要手改；改过的文件宿主不会覆盖，升级也不会冲掉。
+
 ## 内置字幕插件
 
 应用第一次启动会把 `subtitles` 插件铺到插件目录（已有文件不会被覆盖），默认启用。它通过 `api.subtitles.claim()` 接管字幕功能：
@@ -152,7 +154,8 @@ MyTPlugins.register('hello-world', {
 - 无沙箱：插件可以改任意 DOM、发任意请求、读页面里的数据。安装前先看代码。
 - 第三方插件（非内置）首次启用会弹页面内授权层，写明可读页面、可发请求、可调桌面能力；点「允许」才注入脚本，选择记在 `localStorage`（`myt-plugin-consent:<id>`）；
 - 设置页的插件行会显示授权状态，并提供「撤销授权」，撤销后下次加载重新询问；内置 `subtitles` / `study` 不询问（`plugin.json` 打 `builtin` 标记）；
-- `tauri.conf.json` 仍是 `"csp": null`，授权层是产品级门禁，不替代 CSP / 签名；签名或清单校验属于后续工作。
+- `tauri.conf.json` 已启用 CSP（2026-11-20）：`script-src` 只放行自身、`blob:`、cdn.jsdelivr 与 wasm；`style-src` 允许内联（插件 CSS）；`img/media/connect` 放行 https + asset 协议 + 本机 http。授权层是产品级门禁，CSP 是第二道门，两者都不替代签名；
+- 插件脚本以 `blob:` URL 注入（Tauri 的 CSP 会注入 nonce，使 `'unsafe-inline'` 对内联块失效），样式仍用内联 `<style>`；新增外部域名要在 `script-src` / `connect-src` 里显式登记。
 - 依赖环、重复 ID、无效清单这类配置错误会在插件行里显示错误，不会静默半加载（`tests/test_plugin_host.py` 锁定依赖解析与能力占用规则）。
 - 示例插件通过 `MyTPlugins._error` 由壳记录错误，设置页会显示在插件行下面。
 - 字幕功能已由内置 `subtitles` 插件接管，学英语由 `study` 插件接管；首页、播客库、下载管理等其他内置功能仍留在主程序，尚未插件化。

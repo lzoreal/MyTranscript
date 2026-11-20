@@ -8,10 +8,11 @@
 | --- | --- | --- |
 | 1 | 依赖环 + 插件宿主最小测试 | 已完成 |
 | 2 | 收紧公开 API（白名单 host、只读 cues、版本协商） | 已完成 |
-| 3 | 卸载/软重载生命周期（setup 返回 dispose、资源记账） | 已完成（Rust 侧升级策略未动） |
-| 4 | 信任模型（首次启用授权 + 撤销） | 已落地；签名 / CSP 未做 |
+| 3 | 卸载/软重载生命周期（setup 返回 dispose、资源记账） | 已完成 |
+| 4 | 信任模型（首次启用授权 + 撤销 + CSP） | 已落地；签名 / 权限粒度未做 |
 | 5 | 可替换插件接缝（ASR 引擎 PoC） | 已完成：native / sherpa / moonshine 三个适配器 |
-| 6 | Rust 拆分（插件目录成模块） | 已完成；`main.rs` 约 2 520 行 |
+| 6 | Rust 拆分（插件 + 离线下载成模块） | 已完成；`main.rs` 1 977 行 |
+| 7 | 内置插件升级策略（基线指纹） | 已完成 |
 
 ## 1. 依赖与宿主测试
 
@@ -45,7 +46,11 @@
 - 第三方插件未记录授权时，注入脚本前弹层：列出“读页面内容 / 发网络请求 / 调桌面能力”，
   背景点按等同拒绝；选择写入 `localStorage` 的 `myt-plugin-consent:<id>`（allow / deny）；
 - 设置页插件行显示授权状态，并给「撤销授权」，撤销后下次加载重新询问；
-- `tauri.conf.json` 的 `"csp": null` 仍未动，弹层是产品级门禁，不替代 CSP / 签名。
+- `tauri.conf.json` 已启用 CSP：`script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob: https://cdn.jsdelivr.net`，
+  `style-src` 允许内联，`img/media/connect` 放行 https + asset 协议；
+- 关键坑：Tauri 会给 CSP 注入 nonce，带 nonce 后 `'unsafe-inline'` 对内联脚本失效，插件脚本改走
+  `blob:` URL 注入并用 `await load` 等它执行完再 `start()`；否则字幕插件不加载、整块文字稿空白；
+- 已验证：启用 CSP 后首页、播放页（文字稿 + 词级高亮 + 播放）、设置页插件列表均正常。
 
 ## 5. 可替换接缝：识别引擎
 
@@ -58,16 +63,30 @@
   `liveMoonshineLoad()`；
 - 选引擎仍走 `?engine=moonshine|wasm`，没有壳时默认 sherpa。
 
-## 6. Rust 拆分：插件目录独立成模块
+## 6. Rust 拆分：插件 / 离线下载各自成模块
 
-- `apps/windows/src-tauri/src/plugins.rs`：插件目录、`enabled.json`、清单扫描、内置插件铺设、
-  示例插件生成、`plugin_list / plugin_set_enabled / plugin_open_dir / plugin_example` 四个命令；
-- `main.rs` 只保留 `mod plugins;`、`plugins::…` 调用与 `AppState`（`captions` 字段放开给同 crate）；
-- 行数从 2 888 降到约 2 520，插件相关逻辑不再和下载、模型、字幕窗口混在一起。
+- `apps/windows/src-tauri/src/plugins.rs`（599 行）：插件目录、`enabled.json`、清单扫描、内置插件铺设与升级、
+  示例插件生成、四个插件命令；
+- `apps/windows/src-tauri/src/offline.rs`（550 行）：整集音频落盘、片段缓存、文字稿/跳过点旁挂文件、
+  `offline_list` / `offline_remove` 等 9 个命令；
+- `main.rs` 从 2 888 行降到 1 977 行，剩下的主要是模型管理、字幕窗口、媒体键与应用装配。
+
+## 6.5 内置插件升级规则
+
+老实现只在文件不存在时写盘，应用升级永远更新不到已有安装。现在每个插件目录多一个
+`.builtin.json`（文件 → 上次随应用铺下去的内容指纹，FNV-1a）：
+
+- 文件不存在 → 写入并记基线；
+- 文件内容 == 基线 → 认为用户没改，跟随新版本覆盖并更新基线；
+- 文件内容 != 基线 → 用户改过，保留不动，也不更新基线（后续升级继续跳过）；
+- 老安装首次接管：把当前内容记成基线，这一轮不改文件，下一次升级起正常跟随。
 
 ## 7. 测试
 
-- `tests/test_plugin_host.py` 现在两组：依赖/能力规则 + 授权三态（未授权 → allow → deny → 撤销）；
-- 清单校验、重复 id、脚本加载失败、生命周期回滚仍缺 Rust 侧测试（`plugin_list` 需要
-  可注入目录的纯函数才好测，留作下一步）。
+- `tests/test_plugin_host.py` 四组：依赖/能力规则、API 主版本兼容、生命周期回收（逆序、幂等、抛错不中断、
+  `dispose` 只跑一次）、授权三态；
+- `src/plugins.rs` 单测共 12 条：清单解析失败、缺清单、非法目录名、`main` 路径穿越、`scripts + main`
+  拼接、`enabled.json` 覆盖默认值、`builtin` 标记，以及内置插件铺设/升级/保留用户修改/老安装基线；
+- `cargo test --bin mytranscript-desktop` 合计 16 条（含原有字幕分词 4 条）。
+
 

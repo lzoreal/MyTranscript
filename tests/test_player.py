@@ -9,6 +9,13 @@ from pathlib import Path
 from urllib.parse import quote, unquote, urlparse
 
 ROOT = Path(__file__).parents[1]
+
+
+def rust_sources() -> str:
+    """桌面壳全部 Rust 源码；模块会继续拆分，测试按内容找符号而不是认死 main.rs。"""
+    root = Path(__file__).parents[1] / "apps" / "windows" / "src-tauri" / "src"
+    return "\n".join(f.read_text(encoding="utf-8") for f in sorted(root.glob("*.rs")))
+
 SITE = ROOT / "site"
 BUILTIN = ROOT / "apps" / "windows" / "builtin-plugins"
 TRANSCRIPT_NS = "{https://podcastindex.org/namespace/1.0}transcript"
@@ -122,7 +129,7 @@ class PlayerOfflineTranscriptTests(unittest.TestCase):
         self.assertIn("[data-offline-transcript]", page)
 
     def test_desktop_offline_storage_persists_transcript_sidecar(self):
-        rust = (ROOT / "apps" / "windows" / "src-tauri" / "src" / "main.rs").read_text(encoding="utf-8")
+        rust = rust_sources()
         self.assertIn("fn offline_save_transcript", rust)
         self.assertIn("fn offline_transcript_load", rust)
         self.assertIn("TRANSCRIPT_SUFFIX", rust)
@@ -192,7 +199,7 @@ assert.strictEqual(merged[0].end, 90);
         self.assertIn("async fn gemini_chat", rust)
         self.assertIn("pub async fn llm_models", rust)
         self.assertIn("fn parse_gemini_models", rust)
-        self.assertIn("llm_models", (ROOT / "apps" / "windows" / "src-tauri" / "src" / "main.rs").read_text(encoding="utf-8"))
+        self.assertIn("llm_models", rust_sources())
         self.assertIn('"x-api-key"', rust)
         self.assertIn('"anthropic-version"', rust)
         self.assertIn('"x-goog-api-key"', rust)
@@ -1096,7 +1103,7 @@ class PlayerMiniTranscriptTests(unittest.TestCase):
         self.assertIn("mini_fit", mini)
         self.assertIn("myt-mini-cap", mini)
 
-        rust = (ROOT / "apps" / "windows" / "src-tauri" / "src" / "main.rs").read_text(encoding="utf-8")
+        rust = rust_sources()
         self.assertIn("async fn mini_fit", rust)
         self.assertIn("mini_fit,", rust)
 
@@ -1122,7 +1129,7 @@ class PlayerAutoTranslateTests(unittest.TestCase):
         self.assertIn("async fn libre", rust)
         self.assertIn("async fn microsoft", rust)
         self.assertIn("async fn google", rust)
-        self.assertIn("tr_translate", (ROOT / "apps" / "windows" / "src-tauri" / "src" / "main.rs").read_text(encoding="utf-8"))
+        self.assertIn("tr_translate", rust_sources())
 
 
 class PlayerPodcastManagerTests(unittest.TestCase):
@@ -1202,7 +1209,7 @@ assert.strictEqual(skipWanted('filler', 0.85), true);
         self.assertIn("Math.min(hit.end, now + 120)", html)
         self.assertIn("dur * 0.4", html)
         self.assertIn("now - r.start > 0.5", html)
-        rust = (ROOT / "apps" / "windows" / "src-tauri" / "src" / "main.rs").read_text(encoding="utf-8")
+        rust = rust_sources()
         for needle in ("fn offline_save_skip", "fn offline_skip_load", "offline_save_skip,",
                        "offline_skip_load,", "hasSkip"):
             self.assertIn(needle, rust)
@@ -1217,7 +1224,7 @@ assert.strictEqual(skipWanted('filler', 0.85), true);
         for needle in ("setSkipAds", "detectAdRanges", "renderStats", "renderEcho", "renderLocal",
                        "local_scan", "importLocalFolder", "myt-local", "dataImportFile"):
             self.assertIn(needle, html)
-        rust = (ROOT / "apps" / "windows" / "src-tauri" / "src" / "main.rs").read_text(encoding="utf-8")
+        rust = rust_sources()
         self.assertIn("fn local_scan", rust)
         self.assertIn("local_scan,", rust)
         conf = (ROOT / "apps" / "windows" / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8")
