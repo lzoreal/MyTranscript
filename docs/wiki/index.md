@@ -8,3 +8,4 @@
 - [risks.md](risks.md) —— 已知风险与回滚办法
 - [../superpowers/specs/2026-11-20-player-js-layering.md](../superpowers/specs/2026-11-20-player-js-layering.md) —— 分期方案
 - [../player-js-dependency-map.md](../player-js-dependency-map.md) —— 声明级依赖清单（脚本生成）
+- [插件体系加固](plugin-hardening.md)：依赖环、API 门面、卸载/软重载的进度与待办

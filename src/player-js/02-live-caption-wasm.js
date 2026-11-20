@@ -9,6 +9,15 @@
    立刻回到原本的 VTT / 词级 JSON 渲染，原有播放、重试、跳转逻辑不受影响。 */
 const LIVE_RATE = 16000;
 const LIVE_ENGINE = 'https://cdn.jsdelivr.net/npm/@moonshine-ai/moonshine-wasm@0.1.6/dist/index.js';
+/* 识别引擎接缝：适配器只暴露 { load() → engine }，engine 形状由 liveStartStream 约定
+   （addAudio / transcribe / stop / close）。换引擎时只加一个适配器，不动调用方。 */
+const TRANSCRIBER_ADAPTERS = new Map();
+function registerTranscriber(kind, adapter) {
+  if (!kind || !adapter || typeof adapter.load !== 'function') throw new Error('识别适配器需要 kind 和 load()');
+  TRANSCRIBER_ADAPTERS.set(String(kind), adapter);
+}
+function transcriberFor(kind) { return TRANSCRIBER_ADAPTERS.get(String(kind)) || null; }
+
 const LIVE_ARCH = (() => {
   // ModelArch：2=TinyStreaming（默认）、3=BaseStreaming、4=SmallStreaming、5=MediumStreaming。
   // 加 ?arch=3 这类参数可以临时换成更大的模型做对比，不用改代码再刷一遍。
@@ -811,20 +820,21 @@ function liveStopPump() {
   LIVE.pumpTimer = 0;
 }
 
+registerTranscriber('native', { load: () => liveNativeLoad() });
+registerTranscriber('sherpa', { load: () => liveSherpaLoad() });
+registerTranscriber('moonshine', { load: () => liveMoonshineLoad() });
+
 async function liveLoadEngine() {
   if (LIVE.engine) return LIVE.engine;
-  if (LIVE_ENGINE_KIND === 'native') {
-    const engine = await liveNativeLoad();
-    LIVE.engine = engine;
-    return engine;
-  }
-  if (LIVE_ENGINE_KIND === 'sherpa') {
-    // sherpa 的这个 wasm 产物是单线程构建（没有 pthread / SharedArrayBuffer 依赖），
-    // 所以在桌面壳、手机壳里不需要伪造 COOP/COEP 也能跑。
-    const engine = await liveSherpaLoad();
-    LIVE.engine = engine;
-    return engine;
-  }
+  const adapter = transcriberFor(LIVE_ENGINE_KIND);
+  if (!adapter) throw new Error('未知识别引擎：' + LIVE_ENGINE_KIND);
+  const engine = await adapter.load();
+  LIVE.engine = engine;
+  return engine;
+}
+
+/* ---------- 适配器：Moonshine 流式（WASM，词时间靠均分） ---------- */
+async function liveMoonshineLoad() {
   // 多线程 WASM 要 SharedArrayBuffer，而 SAB 只在跨域隔离页面可用；这里提前拦，
   // 否则 Emscripten 的 pthread 引导会抛一个没人接的 DataCloneError，await 永远挂住。
   if (!self.crossOriginIsolated) throw new Error('识别引擎需要跨域隔离（COOP/COEP），请刷新页面后重试');
@@ -885,7 +895,6 @@ async function liveLoadEngine() {
         if (text !== LIVE.progressText) { LIVE.progressText = text; liveSetText(text, 'busy'); }
       },
     });
-    LIVE.engine = engine;
     return engine;
   } finally {
     // 库自己会把这些 URL 再存一份，暂存区不用留着占 40 MB。

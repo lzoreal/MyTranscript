@@ -360,6 +360,20 @@ const PLUGIN_REGISTRY = new Map();
 const PLUGIN_PAGES = new Map();
 const PLUGIN_HOOKS = new Map();
 const PLUGIN_COMMANDS = new Map();
+/* 每个插件注册出去的东西都记账：停用/重载时按插件回收，不靠刷新整页。 */
+const PLUGIN_CLEANUP = new Map();
+function trackPlugin(id, fn) {
+  const key = String(id);
+  if (!PLUGIN_CLEANUP.has(key)) PLUGIN_CLEANUP.set(key, new Set());
+  PLUGIN_CLEANUP.get(key).add(fn);
+  return fn;
+}
+function runPluginCleanup(id) {
+  const set = PLUGIN_CLEANUP.get(String(id));
+  if (!set) return;
+  [...set].reverse().forEach(fn => { try { fn(); } catch (err) { console.warn('[plugin cleanup]', err); } });
+  set.clear();
+}
 let pluginApiReady = false;
 
 /* 插件宿主：能力图 + 依赖解析 + 内核注册 + 生命周期。字幕/学习等功能不再由主程序写死开关，
@@ -383,9 +397,12 @@ const PluginHost = {
     const key = String(id);
     const plugin = (list || []).find(p => p && p.id === key);
     if (!plugin || !plugin.enabled) return false;
-    if (stack.has(key)) return true;
-    stack.add(key);
-    return (Array.isArray(plugin.requires) ? plugin.requires : []).every(req => PluginHost.available(req, list, stack));
+    // 依赖环直接判不满足（历史实现返回 true，会把 A→B→A 当合法配置）。
+    if (stack.has(key)) return false;
+    const path = new Set(stack);
+    path.add(key);
+    return (Array.isArray(plugin.requires) ? plugin.requires : [])
+      .every(req => PluginHost.available(req, list, new Set(path)));
   },
   missingRequires(plugin, list) {
     return (Array.isArray(plugin?.requires) ? plugin.requires : []).filter(req => !PluginHost.available(req, list));
@@ -470,12 +487,19 @@ function pluginReportError(id, err) {
 }
 function registerPluginPage(pluginId, pageId, opts) {
   if (!pluginId || !pageId) throw new Error('页面需要 pluginId 和 pageId');
-  PLUGIN_PAGES.set(pluginPageKey(pluginId, pageId), {
+  const key = pluginPageKey(pluginId, pageId);
+  const rec = {
     pluginId, pageId,
     title: String(opts?.title || pageId),
     subtitle: String(opts?.subtitle || ''),
     render: typeof opts?.render === 'function' ? opts.render : null,
     destroy: typeof opts?.destroy === 'function' ? opts.destroy : null,
+  };
+  PLUGIN_PAGES.set(key, rec);
+  trackPlugin(pluginId, () => {
+    PLUGIN_PAGES.delete(key);
+    if (app.pluginPageActive === rec) app.pluginPageActive = null;
+    renderPluginNav();
   });
   renderPluginNav();
 }
@@ -496,7 +520,9 @@ function addPluginListener(pluginId, event, fn) {
   if (!PLUGIN_HOOKS.has(event)) PLUGIN_HOOKS.set(event, new Set());
   const rec = { pluginId, fn };
   PLUGIN_HOOKS.get(event).add(rec);
-  return () => { PLUGIN_HOOKS.get(event)?.delete(rec); };
+  const off = () => { PLUGIN_HOOKS.get(event)?.delete(rec); };
+  trackPlugin(pluginId, off);
+  return off;
 }
 function emitPlugin(event, payload) {
   const set = PLUGIN_HOOKS.get(event);
@@ -520,20 +546,71 @@ function pluginPlayerState() {
     cueIndex: state.activeCue,
   };
 }
+const PLUGIN_API_VERSION = '2.0';
+let pluginHostFacadeCache = null;
+/* 对外只给能力查询与内核注册，不把 PluginHost 的内部表（kernels / 能力映射）交出去。 */
+function pluginHostFacade() {
+  if (!pluginHostFacadeCache) {
+    pluginHostFacadeCache = Object.freeze({
+      can: name => PluginHost.can(name),
+      owner: name => PluginHost.owner(name),
+      status: id => PluginHost.status(id),
+      available: id => PluginHost.available(id),
+      registerKernel: (name, impl) => PluginHost.registerKernel(name, impl),
+    });
+  }
+  return pluginHostFacadeCache;
+}
+/* 插件拿到的字幕是一份只读快照：改它不会影响宿主状态。 */
+function cuesSnapshot() {
+  return Object.freeze(state.cues.map(cue => Object.freeze({
+    ...cue,
+    words: Array.isArray(cue.words)
+      ? Object.freeze(cue.words.map(word => (Array.isArray(word) ? Object.freeze([...word])
+        : (word && typeof word === 'object' ? Object.freeze({ ...word }) : word))))
+      : cue.words,
+  })));
+}
+function releasePluginCapabilities(id) {
+  const key = String(id);
+  Object.keys(app.capabilities || {}).forEach(cap => {
+    if (app.capabilities[cap] !== key) return;
+    app.capabilities[cap] = '';
+    if (cap === 'subtitles') { app.subtitleOwner = ''; delete document.body.dataset.subtitlePlugin; }
+    if (cap === 'study') { app.studyOwner = ''; delete document.body.dataset.studyPlugin; }
+  });
+  PluginHost.applyLayout();
+}
+function stopPlugin(id) {
+  const key = String(id);
+  const def = PLUGIN_REGISTRY.get(key);
+  if (def && typeof def.__dispose === 'function') {
+    try { def.__dispose(); } catch (err) { pluginReportError(key, err); }
+    def.__dispose = null;
+  }
+  runPluginCleanup(key);
+  releasePluginCapabilities(key);
+  if (def) def.__started = false;
+}
 function pluginApiFor(id) {
   const storagePrefix = 'myt-plugin:' + id + ':';
   return {
     id,
-    version: '2.0',
-    host: PluginHost,
+    version: PLUGIN_API_VERSION,
+    apiVersion: PLUGIN_API_VERSION,
+    host: pluginHostFacade(),
     toast: (message, type) => showToast(String(message || ''), type === 'warn' ? 5000 : 3000),
     navigate: (page, args = [], params = {}) => navigate(page, args, params),
     openEpisode: (showKey, episodeId) => playEpisode(showKey, episodeId),
     el: elementId => $(elementId),
     page: (pageId, opts) => registerPluginPage(id, pageId, opts),
     on: (event, fn) => addPluginListener(id, event, fn),
-    command: (name, fn) => { PLUGIN_COMMANDS.set(id + ':' + name, fn); },
-    cues: () => state.cues,
+    command: (name, fn) => {
+      const key = id + ':' + name;
+      PLUGIN_COMMANDS.set(key, fn);
+      trackPlugin(id, () => PLUGIN_COMMANDS.delete(key));
+    },
+    cues: () => cuesSnapshot(),
     player: {
       state: pluginPlayerState,
       play: () => audio.play().catch(() => {}),
@@ -608,21 +685,34 @@ function ensurePluginApi() {
   if (pluginApiReady) return;
   pluginApiReady = true;
   window.MyTPlugins = {
-    version: '2.0',
-    host: PluginHost,
+    version: PLUGIN_API_VERSION,
+    apiVersion: PLUGIN_API_VERSION,
+    host: pluginHostFacade(),
     register(id, definition) {
       if (!id || !definition || typeof definition.setup !== 'function') {
         throw new Error('MyTPlugins.register 需要 id 和 setup(api)');
       }
+      const want = definition.apiVersion ? String(definition.apiVersion) : '';
+      if (want && want.split('.')[0] !== PLUGIN_API_VERSION.split('.')[0]) {
+        throw new Error('插件要求 API ' + want + '，宿主只支持 ' + PLUGIN_API_VERSION);
+      }
       PLUGIN_REGISTRY.set(String(id), definition);
     },
     start(id) {
-      const definition = PLUGIN_REGISTRY.get(String(id));
+      const key = String(id);
+      const definition = PLUGIN_REGISTRY.get(key);
       if (!definition) throw new Error('插件没有调用 MyTPlugins.register(' + id + ')');
       if (definition.__started) return;
       definition.__started = true;
-      definition.setup(pluginApiFor(String(id)));
+      try {
+        const ret = definition.setup(pluginApiFor(key));
+        if (typeof ret === 'function') definition.__dispose = ret;
+      } catch (err) {
+        definition.__started = false;
+        throw err;
+      }
     },
+    stop(id) { stopPlugin(id); },
     _error(id, err) { pluginReportError(id, err); },
     runCommand(pluginId, name) {
       const fn = PLUGIN_COMMANDS.get(String(pluginId) + ':' + String(name));
@@ -630,6 +720,55 @@ function ensurePluginApi() {
       return undefined;
     },
   };
+}
+const PLUGIN_CONSENT_PREFIX = 'myt-plugin-consent:';
+function pluginConsentState(id) {
+  try { return localStorage.getItem(PLUGIN_CONSENT_PREFIX + id) || ''; } catch (e) { return ''; }
+}
+function setPluginConsent(id, allow) {
+  try { localStorage.setItem(PLUGIN_CONSENT_PREFIX + id, allow ? 'allow' : 'deny'); } catch (e) {}
+}
+function clearPluginConsent(id) {
+  try { localStorage.removeItem(PLUGIN_CONSENT_PREFIX + id); } catch (e) {}
+}
+/* 第三方插件在同一个 WebView 里跑，与页面同权：首次启用必须显式授权。
+   用页面内弹层而不是 window.confirm —— wry 默认不实现 JS 对话框。 */
+function askPluginConsent(plugin) {
+  return new Promise(resolve => {
+    const name = String(plugin.name || plugin.id || '');
+    const wrap = document.createElement('div');
+    wrap.dataset.pluginConsent = '1';
+    wrap.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;' +
+      'justify-content:center;background:rgba(8,10,16,.55);backdrop-filter:blur(2px);';
+    wrap.innerHTML =
+      '<div role="dialog" aria-modal="true" aria-labelledby="pluginConsentTitle" ' +
+      'style="width:min(520px,calc(100vw - 48px));background:var(--panel,#111826);color:var(--ink,#f2eadb);' +
+      'border:1px solid var(--line,#343b4a);border-radius:16px;padding:22px 24px;box-shadow:0 30px 80px -30px #000;' +
+      'font:14px/1.7 var(--sans,system-ui);">' +
+      '<h3 id="pluginConsentTitle" style="margin:0 0 10px;font-size:17px;">允许「' + esc(name) + '」运行？</h3>' +
+      '<p style="margin:0 0 12px;color:var(--soft,#ccbfa9);">这个插件不是随应用内置的。启用后它将获得页面与网络的完整权限：</p>' +
+      '<ul style="margin:0 0 16px;padding-left:18px;color:var(--soft,#ccbfa9);">' +
+      '<li>读取页面上显示的内容（节目、字幕、学习数据）</li>' +
+      '<li>发起任意网络请求、加载远程脚本</li>' +
+      '<li>调用桌面壳暴露的能力</li></ul>' +
+      '<div style="display:flex;gap:10px;justify-content:flex-end;">' +
+      '<button type="button" data-consent="deny" style="padding:8px 16px;border-radius:10px;border:1px solid var(--line,#343b4a);' +
+      'background:transparent;color:inherit;cursor:pointer;">取消</button>' +
+      '<button type="button" data-consent="allow" style="padding:8px 16px;border-radius:10px;border:0;' +
+      'background:var(--accent,#e0bd92);color:var(--accentText,#141008);cursor:pointer;font-weight:600;">允许</button>' +
+      '</div></div>';
+    const done = allow => { wrap.remove(); resolve(allow); };
+    wrap.addEventListener('click', event => {
+      const btn = event.target.closest('[data-consent]');
+      if (btn) done(btn.dataset.consent === 'allow');
+      else if (event.target === wrap) done(false);
+    });
+    document.addEventListener('keydown', function onKey(event) {
+      if (!wrap.isConnected) { document.removeEventListener('keydown', onKey); return; }
+      if (event.key === 'Escape') { document.removeEventListener('keydown', onKey); done(false); }
+    });
+    document.body.append(wrap);
+  });
 }
 async function loadPlugins() {
   ensurePluginApi();
@@ -644,11 +783,30 @@ async function loadPlugins() {
   }
   app.plugins = Array.isArray(list) ? list : [];
   app.pluginErrors = new Map();
+  const seenIds = new Set();
   for (const plugin of app.plugins) {
     if (!plugin || !plugin.enabled) continue;
     if (plugin.error) { pluginReportError(plugin.id, plugin.error); continue; }
     const id = String(plugin.id || '');
     if (!id) continue;
+    if (seenIds.has(id)) { pluginReportError(id, '插件 id 重复，只加载第一个：' + id); continue; }
+    seenIds.add(id);
+    if (!plugin.builtin) {
+      const consent = pluginConsentState(id);
+      if (consent === 'deny') { pluginReportError(id, '未授权：已跳过该插件'); continue; }
+      if (consent !== 'allow') {
+        if (!(await askPluginConsent(plugin))) {
+          setPluginConsent(id, false);
+          pluginReportError(id, '未授权：已跳过该插件');
+          continue;
+        }
+        setPluginConsent(id, true);
+      }
+    }
+    if (plugin.apiVersion && String(plugin.apiVersion).split('.')[0] !== PLUGIN_API_VERSION.split('.')[0]) {
+      pluginReportError(id, '插件要求 API ' + plugin.apiVersion + '，宿主只支持 ' + PLUGIN_API_VERSION);
+      continue;
+    }
     const missing = PluginHost.missingRequires(plugin, app.plugins);
     if (missing.length) {
       pluginReportError(id, '需要先启用插件：' + missing.join('、'));
@@ -659,6 +817,7 @@ async function loadPlugins() {
       style.dataset.pluginCss = id;
       style.textContent = plugin.css;
       document.head.append(style);
+      trackPlugin(id, () => style.remove());
     }
     if (!plugin.js) { pluginReportError(id, '入口 JS 为空，检查 plugin.json 的 main 字段'); continue; }
     const script = document.createElement('script');
@@ -667,9 +826,22 @@ async function loadPlugins() {
       JSON.stringify(id) + ', e);}})();';
     document.body.append(script);
     script.remove();
-    try { window.MyTPlugins.start(id); }
+    try {
+      window.MyTPlugins.start(id);
+      app.pluginStartedIds = app.pluginStartedIds || [];
+      app.pluginStartedIds.push(id);
+    }
     catch (err) { pluginReportError(id, err); }
   }
+}
+/* 软重载：按插件回收注册物后重新加载，不刷新整页。 */
+async function reloadPlugins() {
+  (app.pluginStartedIds || []).forEach(id => stopPlugin(id));
+  app.pluginStartedIds = [];
+  app.pluginErrors = new Map();
+  await loadPlugins();
+  renderPluginNav();
+  if (typeof applyStudyAvailability === 'function') applyStudyAvailability();
 }
 function renderPluginPage(pluginId, pageId) {
   const body = $('pluginPageBody');
@@ -721,9 +893,17 @@ async function refreshPluginSettings() {
       const err = plugin.error || (app.pluginErrors && app.pluginErrors.get(plugin.id)) || '';
       const missing = PluginHost.missingRequires(plugin, app.plugins);
       const dep = missing.length ? '需要先启用：' + missing.join('、') : '';
+      const consent = plugin.builtin ? ''
+        : (pluginConsentState(plugin.id) === 'allow' ? '已授权运行'
+          : (pluginConsentState(plugin.id) === 'deny' ? '已拒绝运行' : '待授权，下次加载时会询问'));
+      const revoke = plugin.builtin ? ''
+        : '<button data-plugin-revoke="' + esc(plugin.id) +
+          '" style="margin-left:8px;border:0;background:none;padding:0;cursor:pointer;' +
+          'font:11px/1 var(--sans);color:var(--muted);text-decoration:underline">撤销授权</button>';
       return '<div class="ep-row"><div class="ep-body"><span class="ep-title">' + esc(plugin.name || plugin.id) +
         ' <span class="pill dim">' + esc(plugin.id) + '</span></span><span class="ep-sub">' +
         esc([plugin.version ? 'v' + plugin.version : '', plugin.author, plugin.description].filter(Boolean).join(' · ') || '无描述') +
+        (consent ? '<br><span class="pill dim">' + esc(consent) + '</span> ' + revoke : '') +
         (dep ? '<br><span style="color:#e08a7a">' + esc(dep) + '</span>' : '') +
         (err && !dep ? '<br><span style="color:#e08a7a">' + esc(err) + '</span>' : '') + '</span></div>' +
         '<button class="switch" role="switch" aria-checked="' + (plugin.enabled ? 'true' : 'false') +

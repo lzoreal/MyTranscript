@@ -1025,7 +1025,14 @@ function bindShell() {
     try { await host().pluginOpenDir(); }
     catch (err) { showToast('打开失败：' + ((err && err.message) || err), 5000); }
   };
-  if ($('pluginReload')) $('pluginReload').onclick = () => location.reload();
+  if ($('pluginReload')) $('pluginReload').onclick = async () => {
+    try {
+      await reloadPlugins();
+      showToast('插件已重新加载', 3000);
+    } catch (err) {
+      showToast('重新加载失败：' + ((err && err.message) || err), 5000);
+    }
+  };
   if ($('pluginExample')) $('pluginExample').onclick = async () => {
     try {
       const dir = await host().pluginExample();
@@ -1042,6 +1049,13 @@ function bindShell() {
     navigate('plugin', [raw.slice(0, at), raw.slice(at + 1)]);
   });
   document.addEventListener('click', async event => {
+    const revoke = event.target.closest('[data-plugin-revoke]');
+    if (revoke) {
+      clearPluginConsent(revoke.dataset.pluginRevoke);
+      await refreshPluginSettings();
+      showToast('已撤销授权，下次加载会重新询问。', 4000);
+      return;
+    }
     const el = event.target.closest('[data-plugin-toggle]');
     if (!el) return;
     const id = el.dataset.pluginToggle;
