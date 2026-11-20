@@ -93,13 +93,36 @@ data/ + json/                  ← 在 data 分支（词级母版与导出，raw
 site/
   index.html                 根索引（Crawl 生成）
   podcasts.html              节目索引（Crawl 生成）
-  player.html                多节目播放器 + 站点外壳（静态；读 shows.json / catalog.json + 各节目 feed）
+  player.html                多节目播放器 + 站点外壳的标记（静态；读 shows.json / catalog.json + 各节目 feed）
+  player.js                  播放器全部脚本的成品（由 src/player-js/*.js 拼接，勿手改）
+  player.css                 播放器全部样式（外置，player.html 用 <link> 引入）
   shows.json                 播放器节目清单（新增节目时同步更新；无 feed 的节目 feed 为 null）
   catalog.json               首屏轻量目录（build_catalog.py 生成：封面、简介、最近 20 集）
   <slug>/
     feed.xml                 ← 唯一的字幕 Feed（feed-zh.xml 已下线）
     index.html
-    ```
+
+src/player-js/               播放器脚本分片（00…10，按文件名顺序拼接，内容顺序与原脚本一致）
+  00-kernel.js                      纯函数层（时间格式化、HTML 转义、括号判定、loader），挂 `MYTK`
+  01-theme-reader-shell.js          主题、阅读器、导入、壁纸（主 IIFE 开头，用同名解构接回 kernel）
+  02-live-caption-wasm.js           实时逐词字幕 + Moonshine/sherpa WASM 引擎
+  03-native-asr-service-worker.js   Tauri 原生推理（sherpa C API）、跨域隔离 Service Worker
+  04-local-audio-plugin-host.js     本地预转写、精听、插件宿主（能力图/生命周期）
+  05-transport-transcript-nav.js    transport、进度/音量、文字稿交互、章节、点词、播放列表、离线下载、模型管理
+  06-catalog-feeds-search.js        目录与本地状态、feed 缓存、OPML、封面、在线搜索
+  07-routes-pages.js                路由、页面片段、首页/库/发现/搜索/节目/收件箱/设置
+  08-study-ai.js                    自动翻译、AI 学英语（含 window.__xai 挂接）
+  09-player-integration.js          播放器与页面集成入口
+  10-desktop-bridge-tail.js         桌面壳桥（MediaSession/托盘/迷你窗）与主 IIFE 收尾
+```
+
+改分片后必须重建成品，否则站点加载的还是旧脚本：
+
+```bash
+python scripts/build_player_js.py          # 拼接 src/player-js/*.js → site/player.js
+python scripts/build_player_js.py --check  # 只校验是否同步（tests/test_player_build.py 用）
+```
+
 
 `catalog.json` 由 `scripts/build_catalog.py` 在 publish job 发布后重建；内容未变时不重写，
 避免空提交。每个节目含封面、简介、语言、分类、总集数、有本站文字稿的集数、
@@ -116,7 +139,8 @@ site/
 
 ### 播放器外壳与本地状态（2026-11-16）
 
-`site/player.html` 同时是应用外壳和播放器，hash 路由（`#/home`、`#/library`、
+`site/player.html` 同时是应用外壳和播放器（样式在 `site/player.css`、脚本在 `site/player.js`，
+HTML 只留标记与外链），hash 路由（`#/home`、`#/library`、
 `#/discover`、`#/search`、`#/podcast/<key>`、`#/episode/<key>/<ep>`、
 `#/player/<key>/<ep>`、`#/queue`、`#/history`、`#/bookmarks`、`#/notes`、
 `#/listening`、`#/settings`）。旧的 `?show=&ep=` 深链仍可用。
@@ -1024,7 +1048,7 @@ P2：
 
 ## 学习侧七项扩展（2026-11-19）
 
-前端全部在 `site/player.html` 末尾的**主 IIFE 内部**（再接一段 `(() => { ... })()`，仍挂
+前端全部在 `site/player.js` 末尾的**主 IIFE 内部**（再接一段 `(() => { ... })()`，仍挂
 `window.__xai`），通过包装 `studyRenderEpisode` / `studyEpisodeHTML` / `studyRenderPractice` /
 `studyRenderVocab` 注入，不改 1.2 万行主脚本的既有分支。主脚本只在 `lookupWord` 成功/失败
 两处调用 `window.__xai.attachWord`。

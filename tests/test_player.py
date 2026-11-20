@@ -41,7 +41,21 @@ def run_node(testcase, name, source):
 
 
 def player_page():
-    return (SITE / "player.html").read_text(encoding="utf-8")
+    """把拆出去的外链样式与脚本内联回文档，还原成单文件形态再做文本断言。"""
+    page = (SITE / "player.html").read_text(encoding="utf-8")
+    css_path = SITE / "player.css"
+    js_path = SITE / "player.js"
+    if css_path.is_file():
+        page = page.replace(
+            '<link rel="stylesheet" href="player.css">',
+            "<style>\n" + css_path.read_text(encoding="utf-8") + "</style>",
+        )
+    if js_path.is_file():
+        page = page.replace(
+            '<script src="player.js"></script>',
+            "<script>\n" + js_path.read_text(encoding="utf-8") + "</script>",
+        )
+    return page
 
 
 class PlayerManifestTests(unittest.TestCase):
@@ -89,7 +103,7 @@ class PlayerTranscriptTests(unittest.TestCase):
 
 class PlayerProgressTests(unittest.TestCase):
     def test_player_persists_and_restores_playback_position(self):
-        page = (SITE / "player.html").read_text(encoding="utf-8")
+        page = player_page()
         self.assertIn("myt-progress", page)
         self.assertIn("saveProgress(true)", page)
         self.assertIn("state.resumeAt", page)
@@ -127,7 +141,7 @@ class PlayerStudySummaryTests(unittest.TestCase):
         self.assertIn("function studyAdHTML", page)
         self.assertIn('data-study-act="ad"', page)
         self.assertIn("studyApplyCachedAdRanges", page)
-        self.assertIn("state.adRanges = mergeAdRanges", page)
+        self.assertIn("setState('adRanges', mergeAdRanges(", page)
         self.assertIn("merged.version = 3", page)
         self.assertIn('data-study-act="topic"', page)
         self.assertIn("studyCopyEpisode", page)
@@ -322,7 +336,7 @@ assert.strictEqual(preferredAudioUrl({}), '');
         node = shutil.which("node")
         if not node:
             self.skipTest("node 不在 PATH，跳过播放器逻辑测试")
-        page = (SITE / "player.html").read_text(encoding="utf-8")
+        page = player_page()
         start = page.index("function directAudioUrl")
         end = page.index("function tryAudioSource")
         source = self.HARNESS % page[start:end]
@@ -353,7 +367,7 @@ assert.strictEqual(
         node = shutil.which("node")
         if not node:
             self.skipTest("node 不在 PATH，跳过播放器逻辑测试")
-        page = (SITE / "player.html").read_text(encoding="utf-8")
+        page = player_page()
         start = page.index("function smallArtwork")
         end = page.index("function renderList")
         source = self.HARNESS % page[start:end]
@@ -368,20 +382,20 @@ assert.strictEqual(
 
 class PlayerNetworkTests(unittest.TestCase):
     def test_playback_starts_on_the_direct_cdn(self):
-        page = (SITE / "player.html").read_text(encoding="utf-8")
+        page = player_page()
         self.assertIn('rel="preconnect" href="https://stitcher.simplecastaudio.com"', page)
         self.assertIn("const audioUrl = preferredAudioUrl(item);", page)
         self.assertIn("audio.src = audioUrl;", page)
         self.assertIn("tryAudioSource(item.url) || tryAudioSource(item.directUrl)", page)
 
     def test_episode_artwork_is_lazy_loaded(self):
-        page = (SITE / "player.html").read_text(encoding="utf-8")
+        page = player_page()
         self.assertIn('loading="lazy" decoding="async" referrerpolicy="no-referrer"', page)
 
 
 class PlayerOffsetTests(unittest.TestCase):
     def test_align_button_enters_pick_cue_mode(self):
-        page = (SITE / "player.html").read_text(encoding="utf-8")
+        page = player_page()
         self.assertIn('id="alignCue"', page)
         self.assertIn("function toggleAlignMode", page)
         self.assertIn("function alignToCue", page)
@@ -393,7 +407,7 @@ class SiteIconTests(unittest.TestCase):
     def test_icon_assets_exist_and_every_page_links_them(self):
         self.assertTrue((SITE / "favicon.svg").is_file())
         self.assertTrue((SITE / "apple-touch-icon.png").is_file())
-        player = (SITE / "player.html").read_text(encoding="utf-8")
+        player = player_page()
         self.assertIn('href="favicon.svg"', player)
         self.assertIn('href="apple-touch-icon.png"', player)
         for page in [SITE / "index.html", SITE / "podcasts.html"]:
@@ -405,7 +419,7 @@ class SiteIconTests(unittest.TestCase):
 
 class PlayerEntryTests(unittest.TestCase):
     def test_player_page_is_wired_to_manifest(self):
-        page = (SITE / "player.html").read_text(encoding="utf-8")
+        page = player_page()
         self.assertIn("shows.json", page)
         self.assertIn('id="showSel"', page)
 
@@ -416,7 +430,7 @@ class PlayerEntryTests(unittest.TestCase):
 
 class PlayerShellTests(unittest.TestCase):
     def test_shell_and_routes_exist(self):
-        page = (SITE / "player.html").read_text(encoding="utf-8")
+        page = player_page()
         for needle in ['class="app"', 'id="page-home"', 'id="page-library"',
                        'id="page-discover"', 'id="page-settings"',
                        'id="miniPlayer"', 'function applyRoute', 'function routeHash',
@@ -437,7 +451,7 @@ assert.strictEqual(stepTarget(list, 'missing', 1), null);
 """
 
     def test_mini_player_steps_episodes_and_shows_live_caption(self):
-        page = (SITE / "player.html").read_text(encoding="utf-8")
+        page = player_page()
         for needle in ['id="miniPrev"', 'id="miniNext"', 'aria-label="上一集"', 'aria-label="下一集"',
                        'function stepTarget', 'function stepEpisode', 'id="miniCaption"',
                        'function syncMiniCaption', 'syncMiniCaption();',
@@ -446,7 +460,7 @@ assert.strictEqual(stepTarget(list, 'missing', 1), null);
         self.assertIn("!document.body.classList.contains('player-open') && !!state.current && !!cue && !!cue.text", page)
 
     def test_mini_caption_row_merges_into_panel_and_toggles(self):
-        page = (SITE / "player.html").read_text(encoding="utf-8")
+        page = player_page()
         for needle in ['<div class="mini-main">', 'id="miniExpand"', 'aria-expanded=',
                        'function toggleMiniCaption', "MINI_CAPTION_KEY = 'myt-mini-caption'",
                        "classList.toggle('caption-collapsed'",
@@ -456,7 +470,7 @@ assert.strictEqual(stepTarget(list, 'missing', 1), null);
         self.assertNotIn("miniExpand').onclick = () => navigate('player'", page)
 
     def test_mini_play_button_uses_centered_svg_icons(self):
-        page = (SITE / "player.html").read_text(encoding="utf-8")
+        page = player_page()
         self.assertIn("$('miniPlay').innerHTML = playing", page)
         self.assertIn('M9.5 7.4v9.2L17.2 12z', page)
         self.assertIn('M9 7.5h2.2v9H9zM12.8 7.5H15v9h-2.2z', page)
@@ -466,7 +480,7 @@ assert.strictEqual(stepTarget(list, 'missing', 1), null);
         node = shutil.which("node")
         if not node:
             self.skipTest("node 不在 PATH，跳过播放器逻辑测试")
-        page = (SITE / "player.html").read_text(encoding="utf-8")
+        page = player_page()
         source = self.HARNESS % page[page.index("function stepTarget"):page.index("function stepEpisode")]
         with tempfile.TemporaryDirectory() as temp_dir:
             script = Path(temp_dir) / "step_target.js"
@@ -491,7 +505,7 @@ assert.ok(xml.includes('text="A &amp; B"'));
         node = shutil.which("node")
         if not node:
             self.skipTest("node 不在 PATH，跳过播放器逻辑测试")
-        page = (SITE / "player.html").read_text(encoding="utf-8")
+        page = player_page()
         source = self.HARNESS % page[page.index("function decodeXml"):page.index("function downloadFile")]
         with tempfile.TemporaryDirectory() as temp_dir:
             script = Path(temp_dir) / "opml.js"
@@ -515,7 +529,7 @@ assert.ok(extSlug('https://a/feed').startsWith('ext-'));
         node = shutil.which("node")
         if not node:
             self.skipTest("node 不在 PATH，跳过播放器逻辑测试")
-        page = (SITE / "player.html").read_text(encoding="utf-8")
+        page = player_page()
         source = self.HARNESS % page[page.index("function hash32"):page.index("function hostOf")]
         with tempfile.TemporaryDirectory() as temp_dir:
             script = Path(temp_dir) / "feed_url.js"
@@ -527,7 +541,7 @@ assert.ok(extSlug('https://a/feed').startsWith('ext-'));
 
 class PlayerReaderLayoutTests(unittest.TestCase):
     def test_flat_layout_honours_width_and_gap_sliders(self):
-        page = (SITE / "player.html").read_text(encoding="utf-8")
+        page = player_page()
         self.assertIn("(100vw - var(--reader-w))/2", page)
         self.assertNotIn("(100vw - 850px)/2", page)
         self.assertIn("margin:var(--cue-gap) 0", page)
@@ -577,7 +591,7 @@ assert.strictEqual(findBuiltinForTitle('SmartLess Presents ClueLess', shows), nu
         node = shutil.which("node")
         if not node:
             self.skipTest("node 不在 PATH，跳过播放器逻辑测试")
-        page = (SITE / "player.html").read_text(encoding="utf-8")
+        page = player_page()
         source = self.HARNESS % page[page.index("function appleSearchUrl"):page.index("function subscribedShowForFeed")]
         with tempfile.TemporaryDirectory() as temp_dir:
             script = Path(temp_dir) / "online_search.js"
@@ -586,14 +600,14 @@ assert.strictEqual(findBuiltinForTitle('SmartLess Presents ClueLess', shows), nu
         self.assertEqual(proc.returncode, 0, proc.stderr)
 
     def test_online_search_entry_exists(self):
-        page = (SITE / "player.html").read_text(encoding="utf-8")
+        page = player_page()
         for needle in ['id="onlineSearchInput"', 'function runOnlineSearch',
                        'PODCAST_INDEX', 'function searchPodcastIndex',
                        'data-online-subscribe']:
             self.assertIn(needle, page)
 
     def test_online_results_open_a_detail_preview(self):
-        page = (SITE / "player.html").read_text(encoding="utf-8")
+        page = player_page()
         for needle in ['data-online-detail="', 'function openOnlineDetail', 'function openOnlinePreview',
                        'function onlineDetailHTML', 'class="online-detail-desc"',
                        '[role="link"][data-online-detail]']:
@@ -603,7 +617,7 @@ assert.strictEqual(findBuiltinForTitle('SmartLess Presents ClueLess', shows), nu
 
 class PlayerPodcastDetailTests(unittest.TestCase):
     def test_detail_shows_full_intro_without_feed_url_line(self):
-        page = (SITE / "player.html").read_text(encoding="utf-8")
+        page = player_page()
         self.assertNotIn("class=\"feed-line\"", page)
         self.assertNotIn("max-width:680px;display:-webkit-box;-webkit-line-clamp:4", page)
         self.assertIn("const feedUrl = show.feed ? absoluteFeed(show.feed) : '';", page)
@@ -611,26 +625,26 @@ class PlayerPodcastDetailTests(unittest.TestCase):
 
 class PlayerMiniOpenTests(unittest.TestCase):
     def test_mini_cover_opens_the_transcript(self):
-        page = (SITE / "player.html").read_text(encoding="utf-8")
+        page = player_page()
         self.assertIn("$('miniCover').onclick = () => navigate('player'", page)
         self.assertIn('id="miniCover" title="打开播放器"', page)
 
 
 class PlayerCueFollowTests(unittest.TestCase):
     def test_entering_the_player_forces_the_active_cue_into_view(self):
-        page = (SITE / "player.html").read_text(encoding="utf-8")
-        self.assertIn("state.pendingFollow = true;", page)
+        page = player_page()
+        self.assertIn("setState('pendingFollow', true);", page)
         self.assertIn("if (state.cues.length) {\n    returnToCue();", page)
         self.assertIn("const follow = force || state.pendingFollow;", page)
         self.assertIn("} else if (ci >= 0 && state.pendingFollow) {", page)
-        self.assertIn("state.pendingFollow = false; state.userScrollUntil = Date.now() + 3000;", page)
-        self.assertIn("state.seekRaw = t;\n      state.pendingFollow = true;", page)
+        self.assertIn("setState('pendingFollow', false); setState('userScrollUntil', Date.now() + 3000);", page)
+        self.assertIn("setState('seekRaw', t);\n      setState('pendingFollow', true);", page)
 
 
 
 class PlayerTranscriptToolbarTests(unittest.TestCase):
     def test_b_layout_moves_secondary_controls_into_more_sheet(self):
-        page = (SITE / "player.html").read_text(encoding="utf-8")
+        page = player_page()
         self.assertIn('id="dockLangBtn"', page)
         self.assertIn("function syncDockLang", page)
         self.assertIn('id="studyBtn" class="dstile"', page)
@@ -643,12 +657,12 @@ class PlayerTranscriptToolbarTests(unittest.TestCase):
         self.assertIn(">笔记</button>", page)
 
     def test_collapsed_nav_uses_one_grid_column(self):
-        page = (SITE / "player.html").read_text(encoding="utf-8")
+        page = player_page()
         self.assertIn("body.nav-collapsed .app{grid-template-columns:minmax(0,1fr)}", page)
         self.assertNotIn("body.nav-collapsed .app{grid-template-columns:0 minmax(0,1fr)}", page)
 
     def test_wallpaper_mode_has_fullscreen_and_minimal_controls(self):
-        page = (SITE / "player.html").read_text(encoding="utf-8")
+        page = player_page()
         self.assertIn('id="wallpaper"', page)
         self.assertIn('id="wallpaperBtn"', page)
         self.assertIn('id="wpLines"', page)
@@ -668,7 +682,7 @@ class PlayerTranscriptToolbarTests(unittest.TestCase):
 
 class PlayerStudyTermTooltipTests(unittest.TestCase):
     def test_generated_summary_terms_have_hover_definitions(self):
-        page = (SITE / "player.html").read_text(encoding="utf-8")
+        page = player_page()
         self.assertIn("function studyAnnotateText", page)
         self.assertIn("studySetVocabulary(data.vocabulary)", page)
         self.assertIn("studyAnnotatedLines(data.summary", page)
@@ -677,7 +691,7 @@ class PlayerStudyTermTooltipTests(unittest.TestCase):
         self.assertIn(".study-term-tip{", page)
 
     def test_whole_transcript_marks_wordbook_and_generated_vocabulary(self):
-        page = (SITE / "player.html").read_text(encoding="utf-8")
+        page = player_page()
         self.assertIn("function studyTranscriptMarkData", page)
         self.assertIn("w.classList.add('vocab-mark')", page)
         self.assertIn(".word.vocab-mark{", page)
@@ -688,7 +702,7 @@ class PlayerStudyTermTooltipTests(unittest.TestCase):
 
 class PlayerPrototypeThemeTests(unittest.TestCase):
     def test_prototype_theme_is_registered(self):
-        page = (SITE / "player.html").read_text(encoding="utf-8")
+        page = player_page()
         self.assertIn('[data-theme="prototype"]{', page)
         self.assertIn("prototype: '原型'", page)
         self.assertIn("LIGHT_THEMES = new Set(['paper', 'mist', 'prototype', 'ledger'])", page)
@@ -729,7 +743,7 @@ class PlayerThemeContrastTests(unittest.TestCase):
         return (high + 0.05) / (low + 0.05)
 
     def test_every_theme_keeps_secondary_text_readable(self):
-        page = (SITE / "player.html").read_text(encoding="utf-8")
+        page = player_page()
         minimum = {"muted": 5.5, "dim": 4.5, "soft": 6.5, "meta": 5.0, "accent": 4.5}
         for name in self.THEMES:
             tokens = self._block(page, name)
@@ -755,7 +769,7 @@ assert.strictEqual(removalLeavesCurrentShow({page: 'podcast', args: []}, ''), fa
         node = shutil.which("node")
         if not node:
             self.skipTest("node 不在 PATH，跳过播放器逻辑测试")
-        page = (SITE / "player.html").read_text(encoding="utf-8")
+        page = player_page()
         source = self.HARNESS % page[page.index("function removalLeavesCurrentShow"):page.index("function unsubscribeKey")]
         with tempfile.TemporaryDirectory() as temp_dir:
             script = Path(temp_dir) / "removal_route.js"
@@ -766,7 +780,7 @@ assert.strictEqual(removalLeavesCurrentShow({page: 'podcast', args: []}, ''), fa
 
 class PlayerBuiltinImportTests(unittest.TestCase):
     def test_builtin_sources_require_explicit_import(self):
-        page = (SITE / "player.html").read_text(encoding="utf-8")
+        page = player_page()
         self.assertIn("if (stored == null) {\n    app.subs = [];", page)
         self.assertIn("function openBuiltinImport", page)
         self.assertIn('id="libBuiltinBtn"', page)
@@ -792,7 +806,7 @@ assert.strictEqual(feedCacheFresh(null, now), false);
         node = shutil.which("node")
         if not node:
             self.skipTest("node 不在 PATH，跳过播放器逻辑测试")
-        page = (SITE / "player.html").read_text(encoding="utf-8")
+        page = player_page()
         source = self.HARNESS % page[page.index("const FEED_CACHE_TTL"):page.index("async function fetchFeedText")]
         with tempfile.TemporaryDirectory() as temp_dir:
             script = Path(temp_dir) / "feed_cache.js"
@@ -803,7 +817,7 @@ assert.strictEqual(feedCacheFresh(null, now), false);
 
 class PlayerAccessibilityTests(unittest.TestCase):
     def test_overlays_keyboard_and_labels_are_accessibly_wired(self):
-        page = (SITE / "player.html").read_text(encoding="utf-8")
+        page = player_page()
         # 字幕视图已搬到 subtitles 插件，无障碍标记分散在宿主和插件两处。
         page += (BUILTIN / "subtitles" / "view.js").read_text(encoding="utf-8")
         for needle in ['<dialog class="modal"', 'showModal()', 'aria-modal="true"',
@@ -1040,7 +1054,7 @@ class PlayerCardSemanticsTests(unittest.TestCase):
 
 class AsrModelManagerTests(unittest.TestCase):
     def test_settings_pane_and_bridge_are_wired(self):
-        html = (SITE / "player.html").read_text(encoding="utf-8")
+        html = player_page()
         self.assertIn('id="asrModelList"', html)
         self.assertIn('id="asrImportBtn"', html)
         self.assertIn('id="asrModelStatus"', html)
@@ -1054,7 +1068,7 @@ class AsrModelManagerTests(unittest.TestCase):
         self.assertIn("prefs.asrModel", html)
 
     def test_model_rows_offer_resume_and_cancel(self):
-        html = (SITE / "player.html").read_text(encoding="utf-8")
+        html = player_page()
         self.assertIn("继续下载", html)
         self.assertIn("data-asr-cancel", html)
         self.assertIn("data-asr-open", html)
@@ -1062,14 +1076,14 @@ class AsrModelManagerTests(unittest.TestCase):
         self.assertIn("pendingSeekEp", html)
 
     def test_live_status_bar_auto_hides_when_steady(self):
-        html = (SITE / "player.html").read_text(encoding="utf-8")
+        html = player_page()
         self.assertIn("liveBarHideTimer", html)
         self.assertIn("if (LIVE.on) bar.hidden = true;", html)
 
 
 class PlayerMiniTranscriptTests(unittest.TestCase):
     def test_floating_window_carries_the_current_caption(self):
-        html = (SITE / "player.html").read_text(encoding="utf-8")
+        html = player_page()
         self.assertIn("capZh", html)
         self.assertIn("capLive", html)
         self.assertIn("id=\"floatBtn\"", html)
@@ -1089,7 +1103,7 @@ class PlayerMiniTranscriptTests(unittest.TestCase):
 
 class PlayerAutoTranslateTests(unittest.TestCase):
     def test_translation_is_configurable_and_wired(self):
-        html = (SITE / "player.html").read_text(encoding="utf-8")
+        html = player_page()
         self.assertIn('id="trOn"', html)
         self.assertIn('id="trEngine"', html)
         self.assertIn('id="trTarget"', html)
@@ -1113,7 +1127,7 @@ class PlayerAutoTranslateTests(unittest.TestCase):
 
 class PlayerPodcastManagerTests(unittest.TestCase):
     def test_per_show_settings_skip_rules_and_queue_order_are_wired(self):
-        html = (SITE / "player.html").read_text(encoding="utf-8")
+        html = player_page()
         for needle in ("这档节目的设置", "data-show-speed", "data-show-intro", "data-show-outro",
                        "setQueueOrder", "setVolumeCap", "applySkipRules", "nextTarget"):
             self.assertIn(needle, html)
@@ -1178,7 +1192,7 @@ assert.strictEqual(skipWanted('filler', 0.85), true);
         self.assertEqual(proc.returncode, 0, proc.stderr)
 
     def test_cue_skip_plan_is_gated_to_offline_audio_and_local_transcript(self):
-        html = (SITE / "player.html").read_text(encoding="utf-8")
+        html = player_page()
         for needle in ("buildSkipPlan", "loadSkipPlan", "skipUrlOf", "skipEligible", "skipWanted",
                        "findSkipRange", "state.skipMuted", "state.skipDone", "setSkipLevel",
                        "offlineSkipLoad", "offlineSkipSave",
@@ -1194,7 +1208,7 @@ assert.strictEqual(skipWanted('filler', 0.85), true);
             self.assertIn(needle, rust)
 
     def test_p2_stats_echo_ad_skip_and_local_folder_are_wired(self):
-        html = (SITE / "player.html").read_text(encoding="utf-8")
+        html = player_page()
         for page in ("page-stats", "page-local", "page-video"):
             self.assertIn(f'id="{page}"', html)
         # 年度回顾已并入统计页，不再单独占一个导航页。
