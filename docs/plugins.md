@@ -23,6 +23,7 @@ C:\ProgramData\MyTranscript\plugins\
   "description": "一句话说明",
   "author": "you",
   "enabled": true,
+  "permissions": ["ui.dom", "net"],
   "scripts": ["kernel.js"],
   "main": "main.js",
   "style": "style.css"
@@ -31,6 +32,7 @@ C:\ProgramData\MyTranscript\plugins\
 
 - `id` 只能包含字母、数字、`-`、`_`，启停状态以它为准。
 - `enabled` 只是首次发现的默认值；之后以 `enabled.json` 为准。
+- `permissions` 可选，字符串数组，声明插件要用的能力；不写（或非数组）= 老行为，全权限。写了就只放行声明项，`ui.dom` 自动附带。可用值：`ui.dom`、`net`、`player`、`storage`、`desktop`、`providers`、`subtitles`、`study`。缺 `net` 时插件里的 `fetch`/`XMLHttpRequest`/`WebSocket`/`EventSource` 只放行同源、`blob:`、`data:`、`asset:`；`api.player`/`api.storage`/`api.subtitles`/`api.study`/`api.registerProvider` 缺权限会抛错。
 - `requires` 可选，字符串数组；依赖插件被停用时，本插件进入 `blocked`，不会注入 JS。
 - `scripts` 可选，按数组顺序先于 `main` 拼进同一个插件脚本；适合把解析/渲染内核拆成独立文件。
 - `main` / `style` / `scripts` 只能是插件目录内的文件名，不能带路径。
@@ -116,6 +118,8 @@ MyTPlugins.register('hello-world', {
 | `api.page(pageId, {title, subtitle?, render(el), destroy?})` | 注册一个插件页面，自动出现在侧栏「插件」分组；路由 `#/plugin/<pluginId>/<pageId>` |
 | `api.on(event, fn)` | 监听事件，返回取消函数 |
 | `api.command(name, fn)` | 注册命令，主程序可用 `MyTPlugins.runCommand(pluginId, name)` 调用 |
+| `api.registerProvider(name, impl)` | 接管核心能力，见下表；停用/重载自动回退默认实现 |
+| `api.providers()` | 当前每个核心能力的归属（插件 id 或 `default`），只读 |
 | `api.cues()` | 当前文字稿的只读快照（`Object.freeze`），改它不影响宿主；没有文字稿时为空数组 |
 | `api.player.state()` | `{showKey, showName, episodeId, title, time, duration, paused, rate, cueIndex}` |
 | `api.player.play/pause/toggle()` | 播放控制 |
@@ -138,6 +142,18 @@ MyTPlugins.register('hello-world', {
 
 插件也可以直接使用 `window`、`document`、`fetch`、`localStorage`，不受限制。
 
+## 核心能力接缝
+
+`api.registerProvider(name, impl)` 可以让插件替换宿主原有的四件事；`impl` 缺方法会当场报错，
+停用/软重载时自动回退。覆盖实现可以通过 `coreProvider(name).fallback` 调用原逻辑。
+
+| name | 必须实现 | 默认行为 |
+| --- | --- | --- |
+| `catalog` | `loadShows()` | 读 `shows.json` 得到节目清单 |
+| `playback` | `play(showKey, episodeId, time?)` | 原来的 `playEpisode`：切路由、定位、开播 |
+| `downloads` | `save(show, ep, opts?)` | 原来的整集离线落盘 |
+| `queue` | `next(radioOnly)` | 原来的「下一集」策略：节目内顺播 + 播放队列 |
+
 ## 事件
 
 | 事件 | 触发 | payload |
@@ -153,6 +169,9 @@ MyTPlugins.register('hello-world', {
 
 - 无沙箱：插件可以改任意 DOM、发任意请求、读页面里的数据。安装前先看代码。
 - 第三方插件（非内置）首次启用会弹页面内授权层，写明可读页面、可发请求、可调桌面能力；点「允许」才注入脚本，选择记在 `localStorage`（`myt-plugin-consent:<id>`）；
+- 授权时同时钉住插件内容指纹（`myt-plugin-hash:<id>`）。之后 `plugin.json` 指向的脚本/样式只要改了一个字节，指纹就对不上，插件会被降级为「需重新授权」，弹层里列出旧指纹 → 新指纹；
+- 授权同时记下当时的权限集合（`myt-plugin-perms:<id>`）。清单里新增权限后，下次加载会重新弹授权，不会悄悄扩权；授权层与设置页都按 `permissions` 列出实际可用能力；
+- 清单可带 `signature`（Ed25519 hex），宿主用编译进二进制的公钥验签；签名不符直接拒绝加载，设置页显示「签名校验失败」。签名覆盖 `id`、`version` 与全部脚本/样式内容，工具是 `python scripts/sign_plugin.py <插件目录>`（私钥默认 `~/.config/myt/plugin-signing.json`，不进仓库），验签用 `--verify`；
 - 设置页的插件行会显示授权状态，并提供「撤销授权」，撤销后下次加载重新询问；内置 `subtitles` / `study` 不询问（`plugin.json` 打 `builtin` 标记）；
 - `tauri.conf.json` 已启用 CSP（2026-11-20）：`script-src` 只放行自身、`blob:`、cdn.jsdelivr 与 wasm；`style-src` 允许内联（插件 CSS）；`img/media/connect` 放行 https + asset 协议 + 本机 http。授权层是产品级门禁，CSP 是第二道门，两者都不替代签名；
 - 插件脚本以 `blob:` URL 注入（Tauri 的 CSP 会注入 nonce，使 `'unsafe-inline'` 对内联块失效），样式仍用内联 `<style>`；新增外部域名要在 `script-src` / `connect-src` 里显式登记。

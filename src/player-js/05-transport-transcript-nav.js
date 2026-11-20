@@ -1249,7 +1249,10 @@ async function importAsrModel() {
     showToast('导入失败：' + ((e && e.message) || e), 9000);
   }
 }
-async function downloadEpisode(show, ep, opts = {}) {
+/* 下载接缝：插件可以接管整集落盘（比如换成自己的缓存/转码管线）。 */
+defineCoreProvider('downloads', { save: (show, ep, opts) => defaultDownloadEpisode(show, ep, opts) });
+function downloadEpisode(show, ep, opts) { return coreProvider('downloads').save(show, ep, opts); }
+async function defaultDownloadEpisode(show, ep, opts = {}) {
   if (!show || !ep) return;
   const quiet = !!opts.quiet;
   if (!host() || typeof host().offlineSave !== 'function') {

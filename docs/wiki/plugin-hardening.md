@@ -9,9 +9,9 @@
 | 1 | 依赖环 + 插件宿主最小测试 | 已完成 |
 | 2 | 收紧公开 API（白名单 host、只读 cues、版本协商） | 已完成 |
 | 3 | 卸载/软重载生命周期（setup 返回 dispose、资源记账） | 已完成 |
-| 4 | 信任模型（首次启用授权 + 撤销 + CSP） | 已落地；签名 / 权限粒度未做 |
-| 5 | 可替换插件接缝（ASR 引擎 PoC） | 已完成：native / sherpa / moonshine 三个适配器 |
-| 6 | Rust 拆分（插件 + 离线下载成模块） | 已完成；`main.rs` 1 977 行 |
+| 4 | 信任模型（首次启用授权 + 撤销 + CSP + 签名/指纹） | 已完成：授权门禁 + 内容钉扎 + Ed25519 验签 |
+| 5 | 可替换插件接缝（ASR 引擎 + 核心能力） | 已完成：三个 ASR 适配器；catalog / playback / downloads / queue 四接缝 |
+| 6 | Rust 拆分（插件 + 离线下载 + 识别模型成模块） | 已完成；`main.rs` 1 321 行 |
 | 7 | 内置插件升级策略（基线指纹） | 已完成 |
 
 ## 1. 依赖与宿主测试
@@ -52,6 +52,34 @@
   `blob:` URL 注入并用 `await load` 等它执行完再 `start()`；否则字幕插件不加载、整块文字稿空白；
 - 已验证：启用 CSP 后首页、播放页（文字稿 + 词级高亮 + 播放）、设置页插件列表均正常。
 
+## 4.5 签名与内容钉扎
+
+- `plugin.json` 可带 `signature`（Ed25519 hex）：`plugins.rs` 对 `id + version + 每个脚本/样式的
+  「文件名 + 内容」`做 SHA-256 摘要，用编译进二进制的公钥验签；不符 → 设 `signature: "bad"`，
+  JS 加载前直接拒绝，设置页显示「签名校验失败」；
+- 私钥只存在 `~/.config/myt/plugin-signing.json`（可用 `MYT_PLUGIN_SIGNING_KEY` 改路径），
+  `scripts/sign_plugin.py <插件目录>` 签名、`--verify` 校验；私钥不进仓库、不进安装包；
+- 未签名插件仍走首次启用授权，但授权时把内容指纹（`content_fingerprint(摘要)`）写进
+  `localStorage` 的 `myt-plugin-hash:<id>`；之后文件变动 → 指纹不符 → 撤销授权并弹「文件已被修改，
+  旧指纹 → 新指纹」重新确认；
+- 常量向量锁定两侧一致：`demo/1.0/main.js=console.log(1)\n` 的摘要
+  `f7ab…48e3` 同时出现在 `plugins.rs` 单测与 `tests/test_sign_plugin.py`；
+- 边界：内置插件不打签名（随应用铺下 + `.builtin.json` 基线），签名只解决「谁允许改」和
+  「装的是不是原来那份」，不提供沙箱。
+
+## 4.6 能力粒度授权
+
+清单 `permissions` 声明式收窄，缺省（老清单）= 全权限，内置插件始终全权限。
+
+- 取值：`ui.dom`（自动附带）、`net`、`player`、`storage`、`desktop`、`providers`、`subtitles`、`study`；
+- 宿主 API 按组校验：`api.player` / `api.storage` / `api.subtitles` / `api.study` 用 `Proxy` 包一层，
+  方法调用时 `pluginRequire` 抛错；`registerProvider` 需要 `providers`；
+- 网络门：注入插件脚本时用 IIFE 参数遮蔽 `fetch` / `XMLHttpRequest` / `WebSocket` / `EventSource`，
+  无 `net` 时只放行同源、`blob:`、`data:`、`asset:`；
+- 授权层列出的是「实际可用能力」，不再是笼统的“完整权限”；权限集合变化会触发重新授权；
+- 边界：同域 JS 环境，插件仍可 `window.fetch` 或 `document` 绕过（这是防手滑与误扩权，不是沙箱）；
+  真要隔离得换进程或独立 WebView。
+
 ## 5. 可替换接缝：识别引擎
 
 `src/player-js/02-live-caption-wasm.js` 里 `TRANSCRIBER_ADAPTERS` + `registerTranscriber(kind, {load})`，
@@ -63,13 +91,33 @@
   `liveMoonshineLoad()`；
 - 选引擎仍走 `?engine=moonshine|wasm`，没有壳时默认 sherpa。
 
-## 6. Rust 拆分：插件 / 离线下载各自成模块
+## 5.5 可替换接缝：核心能力
+
+`src/player-js/02-live-caption-wasm.js` 的 `CORE_PROVIDER_NAMES / defineCoreProvider /
+registerCoreProvider / coreProvider / releaseCoreProviders`，插件侧入口
+`api.registerProvider(name, impl)`：
+
+| name | 必须实现 | 默认实现 |
+| --- | --- | --- |
+| `catalog` | `loadShows()` | `getJson('shows.json')` |
+| `playback` | `play(showKey, episodeId, time?)` | `defaultPlayEpisode`（原 `playEpisode` 函数体） |
+| `downloads` | `save(show, ep, opts?)` | `defaultDownloadEpisode`（原整集落盘逻辑） |
+| `queue` | `next(radioOnly)` | `defaultPlayNextAuto`（节目内顺播 + 播放队列） |
+
+- 覆盖实现能拿到 `fallback`，可以只在特定条件下接管、其余转调原逻辑；
+- `registerProvider` 记账进 `trackPlugin`，停用/软重载时 `releaseCoreProviders` 回退默认；
+- 形状校验在登记时做（缺方法、未知名字直接报错），不会留半接管状态。
+
+## 6. Rust 拆分：插件 / 离线下载 / 识别模型各自成模块
 
 - `apps/windows/src-tauri/src/plugins.rs`（599 行）：插件目录、`enabled.json`、清单扫描、内置插件铺设与升级、
   示例插件生成、四个插件命令；
 - `apps/windows/src-tauri/src/offline.rs`（550 行）：整集音频落盘、片段缓存、文字稿/跳过点旁挂文件、
   `offline_list` / `offline_remove` 等 9 个命令；
-- `main.rs` 从 2 888 行降到 1 977 行，剩下的主要是模型管理、字幕窗口、媒体键与应用装配。
+- `apps/windows/src-tauri/src/models.rs`（669 行）：`ModelSpec` / `MODELS` / `MODEL_MIRRORS`、
+  `models_root` / `model_dir_for`，以及模型下载（多镜像 + 断点分块）、导入、删除、状态列表与
+  `asr_*` 共 11 个命令；模型命令在 `generate_handler!` 里写 `models::asr_*`；
+- `main.rs` 从 2 888 行降到 1 321 行，剩下的主要是 `AppState`、字幕窗口、媒体键、代理命令与应用装配。
 
 ## 6.5 内置插件升级规则
 

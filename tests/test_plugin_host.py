@@ -59,6 +59,7 @@ console.log('plugin host OK');
 
 LIFECYCLE_CASES = r"""
 const PLUGIN_REGISTRY = new Map();
+const PLUGIN_GRANTS = new Map();
 function pluginReportError(id, err) { throw err; }
 function releasePluginCapabilities() {}
 let disposed = 0;
@@ -104,6 +105,17 @@ setPluginConsent(key, false);
 assert(pluginConsentState(key) === 'deny', '拒绝后应记 deny');
 clearPluginConsent(key);
 assert(pluginConsentState(key) === '', '撤销后应清空');
+
+// 文件指纹钉扎：授权时记下内容，之后变了就要重新授权
+setPluginConsent(key, true);
+setPluginPinnedHash(key, 'h1');
+assert(pluginPinnedHash(key) === 'h1', '授权时要把指纹钉住');
+assert(pluginConsentChanged({ id: key, hash: 'h1' }) === false, '内容没变不必重新授权');
+assert(pluginConsentChanged({ id: key, hash: 'h2' }) === true, '内容变了必须重新授权');
+assert(pluginConsentChanged({ id: key, builtin: true, hash: 'h2' }) === false, '内置插件不参与钉扎');
+assert(pluginConsentChanged({ id: key }) === false, '没有指纹时不做变更判断');
+clearPluginConsent(key);
+assert(pluginPinnedHash(key) === '', '撤销授权要连指纹一起清掉');
 console.log('consent OK');
 """
 
@@ -161,6 +173,22 @@ def extract_host() -> str:
     raise AssertionError("没有找到 PluginHost 对象的结尾")
 
 
+def extract_providers() -> str:
+    text = (ROOT / "src" / "player-js" / "02-live-caption-wasm.js").read_text(encoding="utf-8")
+    head = text.index("const CORE_PROVIDER_NAMES")
+    tail_at = text.index("function coreProviderOwner")
+    tail = text.index("{", tail_at)
+    return text[head:tail_at] + text[tail_at:tail] + slice_block(text, tail)
+
+
+def extract_permissions() -> str:
+    text = PART.read_text(encoding="utf-8")
+    start = text.index("const PLUGIN_PERMISSIONS")
+    end = text.index("window.MyTGuard = {")
+    tail = text.index("};", end) + 2
+    return text[start:tail]
+
+
 class PluginHostTests(unittest.TestCase):
     def test_dependency_and_capability_rules(self):
         script = PRELUDE + "\n" + extract_host() + "\n" + CASES
@@ -201,6 +229,7 @@ const localStorage = {
   setItem: (k, v) => store.set(k, String(v)),
   removeItem: k => store.delete(k),
 };
+const window = { fetch: () => Promise.resolve(), XMLHttpRequest: function Ghost(){}, WebSocket: function GhostWs(){}, EventSource: function GhostEs(){} };
 """
         script = stub + extract_consent() + "\n" + CONSENT_CASES
         with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as fh:
@@ -210,6 +239,111 @@ const localStorage = {
         Path(path).unlink(missing_ok=True)
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn("consent OK", proc.stdout)
+
+    def test_signature_gate_wired_into_loader(self):
+        text = PART.read_text(encoding="utf-8")
+        load = text.index("async function loadPlugins()")
+        self.assertIn("plugin.signature === 'bad'", text[load:], "加载前必须拦下签名不符的插件")
+        self.assertIn("setPluginPinnedHash(id, plugin.hash", text[load:], "授权通过时要把内容指纹钉住")
+        self.assertIn("pluginConsentChanged(plugin)", text[load:], "已授权的插件也要复查文件是否被改")
+
+    def test_core_provider_seams(self):
+        cases = r"""
+defineCoreProvider('catalog', { loadShows: async () => ['default'] });
+assert(coreProvider('catalog').owner === '', '没有插件接管时应回退到默认实现');
+assert(coreProvider('catalog').fallback.loadShows !== undefined, '覆盖实现要能拿到 fallback');
+
+registerCoreProvider('demo', 'catalog', { loadShows: async () => ['demo'] });
+assert(coreProviderOwner('catalog') === 'demo', '登记后 owner 应指向插件');
+assert(typeof coreProvider('catalog').fallback.loadShows === 'function', '覆盖后仍保留默认实现');
+
+let threw = false;
+try { registerCoreProvider('demo', 'nope', {}); } catch (e) { threw = true; }
+assert(threw, '未知核心能力必须报错');
+
+threw = false;
+try { registerCoreProvider('demo', 'catalog', {}); } catch (e) { threw = true; }
+assert(threw, '缺必需方法必须报错');
+
+releaseCoreProviders('demo');
+assert(coreProviderOwner('catalog') === '', '停用插件应回退默认实现');
+threw = false;
+try { defineCoreProvider('nope', {}); } catch (e) { threw = true; }
+assert(threw, '默认实现也只能用认得的名字');
+console.log('providers OK');
+"""
+        script = "function assert(c, m){ if(!c){ console.error('FAIL: '+m); process.exit(1); } }\n" + extract_providers() + "\n" + cases
+        with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as fh:
+            fh.write(script)
+            path = fh.name
+        proc = subprocess.run(["node", path], capture_output=True, text=True)
+        Path(path).unlink(missing_ok=True)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("providers OK", proc.stdout)
+
+    def test_permission_grants_and_network_guard(self):
+        stub = r"""
+function assert(c, m){ if(!c){ console.error('FAIL: '+m); process.exit(1); } }
+const store = new Map();
+const localStorage = {
+  getItem: k => (store.has(k) ? store.get(k) : null),
+  setItem: (k, v) => store.set(k, String(v)),
+  removeItem: k => store.delete(k),
+};
+const fetched = [];
+const window = {
+  fetch: (url) => { fetched.push(String(url)); return Promise.resolve('ok'); },
+  XMLHttpRequest: function FakeXhr() {},
+  WebSocket: function FakeWs() {},
+  EventSource: function FakeEs() {},
+};
+const location = { href: 'http://localhost/player.html', origin: 'http://localhost' };
+"""
+        cases = r"""
+const builtin = { id: 'b', builtin: true };
+assert(pluginPermissions(builtin).size === PLUGIN_PERMISSION_ALL.length, '内置插件应全权限');
+assert(pluginPermissions({ id: 'old' }).size === PLUGIN_PERMISSION_ALL.length, '老清单没声明权限时保持全权限');
+
+const narrow = pluginPermissions({ id: 'demo', permissions: ['net'] });
+assert(narrow.has('ui.dom') && narrow.has('net'), '声明的权限要生效');
+assert(!narrow.has('player') && !narrow.has('storage'), '没声明的不能拿到');
+
+PLUGIN_GRANTS.set('demo', narrow);
+assert(pluginRequire('demo', 'net') === true, '声明过就该放行');
+let threw = false;
+try { pluginRequire('demo', 'player'); } catch (e) { threw = true; }
+assert(threw, '没声明的能力调用必须被拒绝');
+
+assert(pluginUrlIsLocal('/json/x.json'), '同源相对路径算本地');
+assert(pluginUrlIsLocal('http://localhost/a.json'), '同源绝对路径算本地');
+assert(pluginUrlIsLocal('blob:http://localhost/abc'), 'blob 算本地');
+assert(!pluginUrlIsLocal('https://cdn.example.com/x.js'), '外域不算本地');
+
+const noNet = new Set(['ui.dom']);
+PLUGIN_GRANTS.set('plain', noNet);
+const guarded = window.MyTGuard.fetch('plain');
+guarded('/json/x.json').then(() => {
+  assert(fetched.length === 1, '同源请求应放行');
+  return guarded('https://cdn.example.com/x.js').then(
+    () => { assert(false, '无 net 权限时外域请求必须被拒绝'); },
+    err => {
+      assert(/net/.test(err.message), '拒绝原因要说清缺 net 权限');
+      assert(fetched.length === 1, '被拦的请求不应真的发出去');
+      let wsThrew = false;
+      try { window.MyTGuard.ws('plain')('wss://x/y'); } catch (e) { wsThrew = true; }
+      assert(wsThrew, '无 net 权限时不能建 WebSocket');
+      console.log('permissions OK');
+    });
+}).catch(err => { console.error('FAIL: ' + (err && err.message)); process.exit(1); });
+"""
+        script = stub + extract_permissions() + "\n" + cases
+        with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as fh:
+            fh.write(script)
+            path = fh.name
+        proc = subprocess.run(["node", path], capture_output=True, text=True)
+        Path(path).unlink(missing_ok=True)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("permissions OK", proc.stdout)
 
 
 if __name__ == "__main__":

@@ -562,6 +562,7 @@ function pluginHostFacade() {
       status: id => PluginHost.status(id),
       available: id => PluginHost.available(id),
       registerKernel: (name, impl) => PluginHost.registerKernel(name, impl),
+      providerOwner: name => coreProviderOwner(name),
     });
   }
   return pluginHostFacadeCache;
@@ -595,10 +596,19 @@ function stopPlugin(id) {
   }
   runPluginCleanup(key);
   releasePluginCapabilities(key);
+  PLUGIN_GRANTS.delete(key);
   if (def) def.__started = false;
 }
 function pluginApiFor(id) {
   const storagePrefix = 'myt-plugin:' + id + ':';
+  // 每个能力组只在方法调用时校验一次，属性读取（比如 api.player.state）不受影响。
+  const only = (perm, group) => new Proxy(group, {
+    get(target, prop) {
+      const value = target[prop];
+      if (typeof value !== 'function') return value;
+      return (...args) => { pluginRequire(id, perm); return value.apply(target, args); };
+    },
+  });
   return {
     id,
     version: PLUGIN_API_VERSION,
@@ -615,8 +625,18 @@ function pluginApiFor(id) {
       PLUGIN_COMMANDS.set(key, fn);
       trackPlugin(id, () => PLUGIN_COMMANDS.delete(key));
     },
+    registerProvider: (name, impl) => {
+      pluginRequire(id, 'providers');
+      registerCoreProvider(id, name, impl);
+      // 同一插件重复覆盖只保留最后一次；回收时统一回退默认实现。
+      trackPlugin(id, () => releaseCoreProviders(id));
+      return true;
+    },
+    providers: () => Object.freeze(Object.fromEntries(
+      CORE_PROVIDER_NAMES.map(name => [name, coreProvider(name).owner || 'default'])),
+    ),
     cues: () => cuesSnapshot(),
-    player: {
+    player: only('player', {
       state: pluginPlayerState,
       play: () => audio.play().catch(() => {}),
       pause: () => audio.pause(),
@@ -624,8 +644,8 @@ function pluginApiFor(id) {
       seek: seconds => seekTo(Math.max(0, Number(seconds) || 0)),
       seekBy: delta => seekBy(Number(delta) || 0),
       setRate: rate => { audio.playbackRate = Math.max(0.5, Math.min(3, Number(rate) || 1)); },
-    },
-    subtitles: {
+    }),
+    subtitles: only('subtitles', {
       claim: () => PluginHost.claim(id, 'subtitles'),
       active: () => PluginHost.owner('subtitles') === id,
       status: () => ({
@@ -656,8 +676,8 @@ function pluginApiFor(id) {
       },
       clipNow: span => clipNow(Number(span) || 15),
       exportSubtitle: kind => exportSubtitle(kind || 'txt'),
-    },
-    study: {
+    }),
+    study: only('study', {
       claim: () => PluginHost.claim(id, 'study'),
       active: () => PluginHost.owner('study') === id,
       status: () => ({
@@ -678,12 +698,12 @@ function pluginApiFor(id) {
         navigate('settings');
         setTimeout(() => openSettingsPane('study'), 0);
       },
-    },
-    storage: {
+    }),
+    storage: only('storage', {
       get: (key, fallback = null) => readJSON(storagePrefix + key, fallback),
       set: (key, value) => writeJSON(storagePrefix + key, value),
       remove: key => { try { localStorage.removeItem(storagePrefix + key); } catch (e) {} },
-    },
+    }),
   };
 }
 function ensurePluginApi() {
@@ -727,6 +747,104 @@ function ensurePluginApi() {
   };
 }
 const PLUGIN_CONSENT_PREFIX = 'myt-plugin-consent:';
+const PLUGIN_HASH_PREFIX = 'myt-plugin-hash:';
+/* 能力粒度授权：清单声明 permissions 就按声明收窄；没声明（老清单）沿用全权限，
+   内置插件始终全权限。权限只在宿主 API 与外部请求入口上生效。 */
+const PLUGIN_PERMISSIONS = {
+  'ui.dom': '读写页面内容（节目、字幕、学习数据）',
+  net: '发起外部网络请求',
+  player: '控制播放（播放 / 暂停 / 跳转 / 倍速）',
+  storage: '读写插件自己的本地存储',
+  desktop: '调用桌面壳能力（本地文件、离线下载）',
+  providers: '接管核心能力（目录 / 播放 / 下载 / 队列）',
+  subtitles: '接管字幕功能',
+  study: '接管学英语功能',
+};
+const PLUGIN_PERMISSION_ALL = Object.keys(PLUGIN_PERMISSIONS);
+const PLUGIN_GRANTS = new Map();
+const PLUGIN_PERMS_KEY_PREFIX = 'myt-plugin-perms:';
+function pluginPermissionSignature(plugin) {
+  return [...pluginPermissions(plugin)].sort().join(',');
+}
+function pluginPermissionChanged(plugin) {
+  if (!plugin || plugin.builtin) return false;
+  try {
+    const saved = localStorage.getItem(PLUGIN_PERMS_KEY_PREFIX + plugin.id) || '';
+    return Boolean(saved) && saved !== pluginPermissionSignature(plugin);
+  } catch (e) { return false; }
+}
+function setPluginPermissionSignature(plugin) {
+  try { localStorage.setItem(PLUGIN_PERMS_KEY_PREFIX + plugin.id, pluginPermissionSignature(plugin)); } catch (e) {}
+}
+function pluginPermissions(plugin) {
+  if (!plugin) return new Set();
+  if (plugin.builtin) return new Set(PLUGIN_PERMISSION_ALL);
+  if (!Array.isArray(plugin.permissions)) return new Set(PLUGIN_PERMISSION_ALL);
+  const set = new Set(['ui.dom']);
+  plugin.permissions.forEach(name => { if (PLUGIN_PERMISSIONS[name]) set.add(name); });
+  return set;
+}
+function pluginRequire(id, name) {
+  const granted = PLUGIN_GRANTS.get(String(id)) || new Set(PLUGIN_PERMISSION_ALL);
+  if (!granted.has(name)) throw new Error('插件未声明 ' + name + ' 权限，调用被拒绝');
+  return true;
+}
+function pluginPermissionLabels(plugin) {
+  const granted = pluginPermissions(plugin);
+  return PLUGIN_PERMISSION_ALL.filter(name => granted.has(name))
+    .map(name => PLUGIN_PERMISSIONS[name]);
+}
+/* 外部请求门：没 net 权限时只放行同源、blob/data/asset 这些本地资源。 */
+function pluginUrlIsLocal(input) {
+  try {
+    const url = new URL(typeof input === 'string' ? input : (input && input.url) || '', location.href);
+    if (url.origin === location.origin) return true;
+    return url.protocol === 'blob:' || url.protocol === 'data:' || url.protocol === 'asset:'
+      || url.hostname === 'asset.localhost';
+  } catch (e) {
+    return true; // 相对路径解析失败交给底层抛错，不当成外泄
+  }
+}
+function guardedFetchFor(id) {
+  const allowNet = (PLUGIN_GRANTS.get(String(id)) || new Set()).has('net');
+  return function guardedFetch(input, init) {
+    if (!allowNet && !pluginUrlIsLocal(input)) {
+      return Promise.reject(new Error('插件未声明 net 权限，已阻止外部请求：' + String(input && input.url || input)));
+    }
+    return window.fetch(input, init);
+  };
+}
+function guardedXhrFor(id) {
+  const allowNet = (PLUGIN_GRANTS.get(String(id)) || new Set()).has('net');
+  return class GuardedXhr extends window.XMLHttpRequest {
+    open(method, url, ...rest) {
+      if (!allowNet && !pluginUrlIsLocal(url)) {
+        throw new Error('插件未声明 net 权限，已阻止外部请求：' + String(url));
+      }
+      return super.open(method, url, ...rest);
+    }
+  };
+}
+function guardedSocketFor(id) {
+  const allowNet = (PLUGIN_GRANTS.get(String(id)) || new Set()).has('net');
+  return function GuardedSocket(url, protocols) {
+    if (!allowNet) throw new Error('插件未声明 net 权限，不能建立 WebSocket');
+    return new window.WebSocket(url, protocols);
+  };
+}
+function guardedEventsourceFor(id) {
+  const allowNet = (PLUGIN_GRANTS.get(String(id)) || new Set()).has('net');
+  return function GuardedEventSource(url, config) {
+    if (!allowNet) throw new Error('插件未声明 net 权限，不能建立 EventSource');
+    return new window.EventSource(url, config);
+  };
+}
+window.MyTGuard = {
+  fetch: guardedFetchFor,
+  xhr: guardedXhrFor,
+  ws: guardedSocketFor,
+  es: guardedEventsourceFor,
+};
 /* 开了 CSP 之后，Tauri 会给页面注入 nonce；带 nonce 的 CSP 会让 'unsafe-inline' 失效。
    插件的脚本和样式都是运行时建的，必须自带同一个 nonce，否则整段被拦。 */
 function cspNonceValue() {
@@ -744,12 +862,29 @@ function pluginConsentState(id) {
 function setPluginConsent(id, allow) {
   try { localStorage.setItem(PLUGIN_CONSENT_PREFIX + id, allow ? 'allow' : 'deny'); } catch (e) {}
 }
+/* 授权时把插件内容指纹一起钉住：之后文件被改（哪怕只是加一行）都要重新授权。 */
+function pluginPinnedHash(id) {
+  try { return localStorage.getItem(PLUGIN_HASH_PREFIX + id) || ''; } catch (e) { return ''; }
+}
+function setPluginPinnedHash(id, hash) {
+  try {
+    if (hash) localStorage.setItem(PLUGIN_HASH_PREFIX + id, hash);
+    else localStorage.removeItem(PLUGIN_HASH_PREFIX + id);
+  } catch (e) {}
+}
+function pluginConsentChanged(plugin) {
+  if (!plugin || plugin.builtin || !plugin.hash) return false;
+  const pinned = pluginPinnedHash(plugin.id);
+  return Boolean(pinned) && pinned !== plugin.hash;
+}
 function clearPluginConsent(id) {
   try { localStorage.removeItem(PLUGIN_CONSENT_PREFIX + id); } catch (e) {}
+  try { localStorage.removeItem(PLUGIN_PERMS_KEY_PREFIX + id); } catch (e) {}
+  setPluginPinnedHash(id, '');
 }
 /* 第三方插件在同一个 WebView 里跑，与页面同权：首次启用必须显式授权。
    用页面内弹层而不是 window.confirm —— wry 默认不实现 JS 对话框。 */
-function askPluginConsent(plugin) {
+function askPluginConsent(plugin, reason) {
   return new Promise(resolve => {
     const name = String(plugin.name || plugin.id || '');
     const wrap = document.createElement('div');
@@ -762,11 +897,10 @@ function askPluginConsent(plugin) {
       'border:1px solid var(--line,#343b4a);border-radius:16px;padding:22px 24px;box-shadow:0 30px 80px -30px #000;' +
       'font:14px/1.7 var(--sans,system-ui);">' +
       '<h3 id="pluginConsentTitle" style="margin:0 0 10px;font-size:17px;">允许「' + esc(name) + '」运行？</h3>' +
-      '<p style="margin:0 0 12px;color:var(--soft,#ccbfa9);">这个插件不是随应用内置的。启用后它将获得页面与网络的完整权限：</p>' +
+      (reason ? '<p style="margin:0 0 12px;color:#e08a7a;">' + esc(reason) + '</p>' : '') +
+      '<p style="margin:0 0 12px;color:var(--soft,#ccbfa9);">这个插件不是随应用内置的。启用后它将获得下列权限（其余调用会被宿主拒绝）：</p>' +
       '<ul style="margin:0 0 16px;padding-left:18px;color:var(--soft,#ccbfa9);">' +
-      '<li>读取页面上显示的内容（节目、字幕、学习数据）</li>' +
-      '<li>发起任意网络请求、加载远程脚本</li>' +
-      '<li>调用桌面壳暴露的能力</li></ul>' +
+      pluginPermissionLabels(plugin).map(text => '<li>' + esc(text) + '</li>').join('') + '</ul>' +
       '<div style="display:flex;gap:10px;justify-content:flex-end;">' +
       '<button type="button" data-consent="deny" style="padding:8px 16px;border-radius:10px;border:1px solid var(--line,#343b4a);' +
       'background:transparent;color:inherit;cursor:pointer;">取消</button>' +
@@ -807,18 +941,36 @@ async function loadPlugins() {
     if (!id) continue;
     if (seenIds.has(id)) { pluginReportError(id, '插件 id 重复，只加载第一个：' + id); continue; }
     seenIds.add(id);
+    if (plugin.signature === 'bad') {
+      pluginReportError(id, '签名校验失败：文件与 plugin.json 里的 signature 不符，已拒绝加载');
+      continue;
+    }
     if (!plugin.builtin) {
       const consent = pluginConsentState(id);
       if (consent === 'deny') { pluginReportError(id, '未授权：已跳过该插件'); continue; }
-      if (consent !== 'allow') {
-        if (!(await askPluginConsent(plugin))) {
+      const changed = pluginConsentChanged(plugin);
+      const permChanged = pluginPermissionChanged(plugin);
+      const pinnedBefore = changed ? pluginPinnedHash(id) : '';
+      if (changed) clearPluginConsent(id);
+      if (consent !== 'allow' || changed || permChanged) {
+        const reason = changed
+          ? '插件文件自上次授权后被修改（指纹 ' + pinnedBefore + ' → ' + plugin.hash + '），需要重新确认。'
+          : (permChanged ? '插件申请的权限变了（' + pluginPermissionSignature(plugin) + '），需要重新确认。' : '');
+        if (!(await askPluginConsent(plugin, reason))) {
           setPluginConsent(id, false);
           pluginReportError(id, '未授权：已跳过该插件');
           continue;
         }
         setPluginConsent(id, true);
+        setPluginPinnedHash(id, plugin.hash || '');
+        setPluginPermissionSignature(plugin);
+      } else if (!pluginPinnedHash(id) && plugin.hash) {
+        // 老安装：早先授权时还没记指纹，这次补记，之后就能发现改动。
+        setPluginPinnedHash(id, plugin.hash);
+        setPluginPermissionSignature(plugin);
       }
     }
+    PLUGIN_GRANTS.set(id, pluginPermissions(plugin));
     if (plugin.apiVersion && !pluginApiCompatible(plugin.apiVersion)) {
       pluginReportError(id, '插件要求 API ' + plugin.apiVersion + '，宿主只支持 ' + PLUGIN_API_VERSION);
       continue;
@@ -839,8 +991,10 @@ async function loadPlugins() {
     if (!plugin.js) { pluginReportError(id, '入口 JS 为空，检查 plugin.json 的 main 字段'); continue; }
     const script = document.createElement('script');
     script.dataset.plugin = id;
-    const code = '(function(){try{\n' + plugin.js + '\n}catch(e){MyTPlugins._error(' +
-      JSON.stringify(id) + ', e);}})();';
+    const code = '(function(fetch, XMLHttpRequest, WebSocket, EventSource){try{\n' + plugin.js +
+      '\n}catch(e){MyTPlugins._error(' + JSON.stringify(id) + ', e);}})' +
+      '(MyTGuard.fetch(' + JSON.stringify(id) + '), MyTGuard.xhr(' + JSON.stringify(id) + '), ' +
+      'MyTGuard.ws(' + JSON.stringify(id) + '), MyTGuard.es(' + JSON.stringify(id) + '));';
     // CSP 生效后，运行时拼出来的内联脚本拿不到宿主 nonce 就会被拦；改走 blob: URL，
     // 这样脚本是「外部源」而不是内联块，只要 script-src 放行 blob: 就能跑。
     let blobUrl = '';
@@ -934,6 +1088,15 @@ async function refreshPluginSettings() {
       const consent = plugin.builtin ? ''
         : (pluginConsentState(plugin.id) === 'allow' ? '已授权运行'
           : (pluginConsentState(plugin.id) === 'deny' ? '已拒绝运行' : '待授权，下次加载时会询问'));
+      const sig = plugin.builtin ? '内置插件，随应用升级'
+        : plugin.signature === 'ok' ? '签名已验证'
+          : plugin.signature === 'bad' ? '签名校验失败，已拒绝加载'
+            : '未签名（首次启用需授权）';
+      const changedNote = pluginConsentChanged(plugin) ? '文件已变更，需重新授权' : '';
+      const permNote = plugin.builtin ? '全部权限（内置）'
+        : (Array.isArray(plugin.permissions)
+          ? (plugin.permissions.length ? '权限：' + plugin.permissions.join('、') : '权限：仅 ui.dom')
+          : '权限：全部（老清单未声明）');
       const revoke = plugin.builtin ? ''
         : '<button data-plugin-revoke="' + esc(plugin.id) +
           '" style="margin-left:8px;border:0;background:none;padding:0;cursor:pointer;' +
@@ -942,6 +1105,9 @@ async function refreshPluginSettings() {
         ' <span class="pill dim">' + esc(plugin.id) + '</span></span><span class="ep-sub">' +
         esc([plugin.version ? 'v' + plugin.version : '', plugin.author, plugin.description].filter(Boolean).join(' · ') || '无描述') +
         (consent ? '<br><span class="pill dim">' + esc(consent) + '</span> ' + revoke : '') +
+        '<br><span class="pill dim">' + esc(sig) + '</span>' +
+        (changedNote ? ' <span style="color:#e08a7a">' + esc(changedNote) + '</span>' : '') +
+        (permNote ? '<br><span class="pill dim">' + esc(permNote) + '</span>' : '') +
         (dep ? '<br><span style="color:#e08a7a">' + esc(dep) + '</span>' : '') +
         (err && !dep ? '<br><span style="color:#e08a7a">' + esc(err) + '</span>' : '') + '</span></div>' +
         '<button class="switch" role="switch" aria-checked="' + (plugin.enabled ? 'true' : 'false') +
@@ -954,10 +1120,12 @@ async function refreshPluginSettings() {
   }
 }
 
+/* 目录接缝：节目清单从哪来可以被插件替换（比如换成远端索引或本地缓存）。 */
+defineCoreProvider('catalog', { loadShows: () => getJson('shows.json', SHELL_TIMEOUT) });
 async function initPlayer() {
   const params = new URLSearchParams(location.search);
   try {
-    const data = await getJson('shows.json', SHELL_TIMEOUT);
+    const data = await coreProvider('catalog').loadShows();
     if (!Array.isArray(data) || !data.length) throw new Error('shows.json 格式错误');
     app.builtinShows = data.map((s, index) => ({
       ...s, builtin: true, key: s.slug, artwork: s.artwork || '',

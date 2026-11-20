@@ -18,6 +18,45 @@ function registerTranscriber(kind, adapter) {
 }
 function transcriberFor(kind) { return TRANSCRIBER_ADAPTERS.get(String(kind)) || null; }
 
+/* 核心能力接缝：目录 / 播放 / 下载 / 队列都可以被插件替换。
+   默认实现就是宿主原来的函数；插件用 api.registerProvider(name, impl) 覆盖，
+   停用或重载时自动回退。覆盖实现可以调 provider.fallback 回到原行为。 */
+const CORE_PROVIDER_NAMES = ['catalog', 'playback', 'downloads', 'queue'];
+const CORE_PROVIDER_DEFAULTS = new Map();
+const CORE_PROVIDER_OVERRIDES = new Map();
+function defineCoreProvider(name, impl) {
+  const key = String(name);
+  if (!CORE_PROVIDER_NAMES.includes(key)) throw new Error('未知核心能力：' + key);
+  if (!CORE_PROVIDER_DEFAULTS.has(key)) CORE_PROVIDER_DEFAULTS.set(key, impl);
+}
+function registerCoreProvider(ownerId, name, impl) {
+  const key = String(name);
+  if (!CORE_PROVIDER_NAMES.includes(key)) throw new Error('未知核心能力：' + key);
+  const shape = CORE_PROVIDER_DEFAULTS.get(key) || {};
+  Object.keys(shape).forEach(fn => {
+    if (typeof (impl && impl[fn]) !== 'function') {
+      throw new Error('核心能力 ' + key + ' 需要实现 ' + fn + '()');
+    }
+  });
+  CORE_PROVIDER_OVERRIDES.set(key, { owner: String(ownerId), impl });
+}
+function coreProvider(name) {
+  const key = String(name);
+  const fallback = CORE_PROVIDER_DEFAULTS.get(key) || {};
+  const hit = CORE_PROVIDER_OVERRIDES.get(key);
+  return Object.freeze({ ...(hit ? hit.impl : fallback), owner: hit ? hit.owner : '', fallback });
+}
+function releaseCoreProviders(ownerId) {
+  const key = String(ownerId);
+  [...CORE_PROVIDER_OVERRIDES.entries()].forEach(([name, hit]) => {
+    if (hit.owner === key) CORE_PROVIDER_OVERRIDES.delete(name);
+  });
+}
+function coreProviderOwner(name) {
+  const hit = CORE_PROVIDER_OVERRIDES.get(String(name));
+  return hit ? hit.owner : '';
+}
+
 const LIVE_ARCH = (() => {
   // ModelArch：2=TinyStreaming（默认）、3=BaseStreaming、4=SmallStreaming、5=MediumStreaming。
   // 加 ?arch=3 这类参数可以临时换成更大的模型做对比，不用改代码再刷一遍。

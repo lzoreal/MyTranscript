@@ -2,9 +2,15 @@
 //! 纯文件系统逻辑，命令层只做参数校验与窗口联动。
 
 use std::collections::HashMap;
+use ed25519_dalek::{Signature, VerifyingKey, Verifier};
+use sha2::{Digest, Sha256};
 use tauri::Manager;
 
 use crate::AppState;
+
+/// 插件签名公钥（Ed25519）。私钥只在发布流程里使用，不进仓库、不进安装包；
+/// 源码里的公钥就是「谁能给插件签名」的唯一凭据。换钥等于让所有旧签名失效。
+const PLUGIN_PUBKEY_HEX: &str = "18f069b154b7261b16d76858ecda75f48904f268f9f9984aa49624d6312b49bd";
 
 pub fn plugins_root() -> Result<std::path::PathBuf, String> {
     let program_data = std::env::var("ProgramData")
@@ -52,6 +58,56 @@ fn content_fingerprint(bytes: &[u8]) -> String {
         hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
     }
     format!("{hash:016x}")
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        out.push_str(&format!("{byte:02x}"));
+    }
+    out
+}
+
+fn hex_decode(text: &str) -> Option<Vec<u8>> {
+    if text.len() % 2 != 0 {
+        return None;
+    }
+    let bytes = text.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len() / 2);
+    for pair in bytes.chunks(2) {
+        let hi = (pair[0] as char).to_digit(16)?;
+        let lo = (pair[1] as char).to_digit(16)?;
+        out.push((hi * 16 + lo) as u8);
+    }
+    Some(out)
+}
+
+/// 插件内容摘要：id、版本，加上每个文件的「文件名 + 内容」，按文件名排序。
+/// 签名针对这份摘要；改一个字节、改名或增删文件，摘要都会变。
+fn plugin_digest(id: &str, version: &str, files: &[(String, String)]) -> String {
+    let mut files = files.to_vec();
+    files.sort_by(|a, b| a.0.cmp(&b.0));
+    let mut hasher = Sha256::new();
+    hasher.update(id.as_bytes());
+    hasher.update(b"\n");
+    hasher.update(version.as_bytes());
+    for (name, body) in files {
+        hasher.update(b"\nfile ");
+        hasher.update(name.as_bytes());
+        hasher.update(b"\n");
+        hasher.update(body.as_bytes());
+    }
+    hex_encode(&hasher.finalize())
+}
+
+/// 只验签，不产生签名：公钥写死在二进制里，私钥由发布者保管。
+fn verify_plugin_signature(digest: &str, sig_hex: &str) -> bool {
+    let Some(pubkey) = hex_decode(PLUGIN_PUBKEY_HEX) else { return false };
+    let Ok(pubkey) = <[u8; 32]>::try_from(pubkey.as_slice()) else { return false };
+    let Ok(key) = VerifyingKey::from_bytes(&pubkey) else { return false };
+    let Some(sig_bytes) = hex_decode(sig_hex) else { return false };
+    let Ok(sig) = <[u8; 64]>::try_from(sig_bytes.as_slice()) else { return false };
+    key.verify(digest.as_bytes(), &Signature::from_bytes(&sig)).is_ok()
 }
 
 fn read_fingerprints(path: &std::path::Path) -> HashMap<String, String> {
@@ -293,11 +349,52 @@ fn plugin_view(dir_name: &str, dir: &std::path::Path, enabled_map: &HashMap<Stri
             }
         }
         let builtin = matches!(id.as_str(), "subtitles" | "study");
+        let version = manifest.get("version").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        // 摘要覆盖真正会被执行的脚本与样式；单个文件读不到就不进摘要（读取失败另有 error 提示）。
+        let mut digest_files: Vec<(String, String)> = Vec::new();
+        if safe_plugin_file(main_name)
+            && safe_plugin_file(css_name)
+            && script_names.iter().all(|name| safe_plugin_file(name))
+        {
+            let names: Vec<&str> = script_names
+                .iter()
+                .map(|name| name.as_str())
+                .chain(std::iter::once(main_name))
+                .chain(std::iter::once(css_name))
+                .collect();
+            for name in names {
+                if let Ok(text) = std::fs::read_to_string(dir.join(name)) {
+                    digest_files.push((name.to_string(), text));
+                }
+            }
+        }
+        let digest = plugin_digest(&id, &version, &digest_files);
+        let signature = manifest.get("signature").and_then(|v| v.as_str()).unwrap_or("").trim();
+        let signature_status = if signature.is_empty() {
+            "absent"
+        } else if verify_plugin_signature(&digest, signature) {
+            "ok"
+        } else {
+            "bad"
+        };
+        let content_hash = content_fingerprint(digest.as_bytes());
+        // permissions 缺省 = null：老清单没写，按旧行为（全权限）；写了就按声明收窄。
+        let permissions = manifest.get("permissions").map(|value| match value.as_array() {
+            Some(items) => serde_json::Value::Array(
+                items
+                    .iter()
+                    .filter_map(|item| item.as_str())
+                    .filter(|item| !item.trim().is_empty())
+                    .map(|item| serde_json::Value::String(item.trim().to_string()))
+                    .collect(),
+            ),
+            None => serde_json::json!([]),
+        });
         serde_json::json!({
             "id": id,
             "builtin": builtin,
             "name": manifest.get("name").and_then(|v| v.as_str()).unwrap_or(dir_name),
-            "version": manifest.get("version").and_then(|v| v.as_str()).unwrap_or(""),
+            "version": version,
             "description": manifest.get("description").and_then(|v| v.as_str()).unwrap_or(""),
             "author": manifest.get("author").and_then(|v| v.as_str()).unwrap_or(""),
             "enabled": enabled,
@@ -309,6 +406,9 @@ fn plugin_view(dir_name: &str, dir: &std::path::Path, enabled_map: &HashMap<Stri
             "js": js,
             "css": css,
             "error": error,
+            "signature": signature_status,
+            "hash": content_hash,
+            "permissions": permissions,
         })
 }
 
@@ -595,5 +695,71 @@ mod tests {
         seed_into(&root, "demo", &[("main.js", "newer shipped")]).unwrap();
         assert_eq!(std::fs::read_to_string(dir.join("main.js")).unwrap(), "newer shipped");
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn digest_covers_content_and_version() {
+        let files = vec![("main.js".to_string(), "console.log(1)\n".to_string())];
+        let digest = plugin_digest("demo", "1.0", &files);
+        assert_eq!(digest, "f7ab0c366b9eceb7c56c1b08c6430baf194eabd884f51ac158167f17e4a248e3");
+        let edited = vec![("main.js".to_string(), "console.log(2)\n".to_string())];
+        assert_ne!(plugin_digest("demo", "1.0", &edited), digest);
+        assert_ne!(plugin_digest("demo", "1.1", &files), digest);
+        assert_ne!(plugin_digest("other", "1.0", &files), digest);
+    }
+
+    #[test]
+    fn signature_verifies_only_matching_digest() {
+        let files = vec![("main.js".to_string(), "console.log(1)\n".to_string())];
+        let digest = plugin_digest("demo", "1.0", &files);
+        let sig = "9ddab151a93d67dd217535b5dee4c9153c014f7fae07c8be71ebdf0802954acf\
+980cf921f3f95903e6f390a52d95c7898b3d592897d3328da3d9c8d28d802b08";
+        assert!(verify_plugin_signature(&digest, sig), "同一份摘要应通过");
+        let tampered = plugin_digest("demo", "1.0", &vec![("main.js".to_string(), "x\n".to_string())]);
+        assert!(!verify_plugin_signature(&tampered, sig), "内容变了签名必须失效");
+        assert!(!verify_plugin_signature(&digest, &sig[..126]), "截断的签名不算合法");
+    }
+
+    #[test]
+    fn view_marks_bad_signature() {
+        let dir = tmp("sig-bad");
+        put(
+            &dir,
+            "plugin.json",
+            r#"{"id":"demo","version":"1.0","signature":"00ff"}"#,
+        );
+        put(&dir, "main.js", "// noop");
+        let mut map = HashMap::new();
+        map.insert("demo".to_string(), true);
+        let v = plugin_view("demo", &dir, &map);
+        assert_eq!(str_field(&v, "signature"), "bad");
+        assert!(!str_field(&v, "hash").is_empty(), "指纹要回传给前端做授权钉扎");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let dir = tmp("sig-absent");
+        put(&dir, "plugin.json", r#"{"id":"demo","version":"1.0"}"#);
+        put(&dir, "main.js", "// noop");
+        let v = plugin_view("demo", &dir, &HashMap::new());
+        assert_eq!(str_field(&v, "signature"), "absent");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn view_exposes_declared_permissions() {
+        let dir = tmp("perms");
+        put(&dir, "plugin.json", r#"{"id":"demo","permissions":["net","player"]}"#);
+        put(&dir, "main.js", "// noop");
+        let v = plugin_view("demo", &dir, &HashMap::new());
+        let perms = v.get("permissions").and_then(|x| x.as_array()).expect("声明了就要回传数组");
+        assert_eq!(perms.len(), 2);
+        assert!(perms.iter().any(|p| p.as_str() == Some("net")));
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let dir = tmp("perms-none");
+        put(&dir, "plugin.json", r#"{"id":"demo"}"#);
+        put(&dir, "main.js", "// noop");
+        let v = plugin_view("demo", &dir, &HashMap::new());
+        assert!(v.get("permissions").map(|x| x.is_null()).unwrap_or(false), "没声明要回传 null，前端按老行为处理");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

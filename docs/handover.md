@@ -969,7 +969,7 @@ Space 会在 keyup 时再触发一次那个按钮自己的动作。
   文件名一律规范化成 `encoder.onnx` / `decoder.onnx` / `joiner.onnx` / `tokens.txt`，
   再加一个 `model.json` 记录 `{id,name,type,files}`。`asr.rs` 的 `ModelSpec::load()`
   先读 `model.json`，没有就按老的 epoch 名兜底——所以老用户不用重下。
-- **内置清单**（`main.rs` 的 `MODELS`）：英文迷你 41 MB（en-20M int8）、英文标准 69 MB
+- **内置清单**（`models.rs` 的 `MODELS`）：英文迷你 41 MB（en-20M int8）、英文标准 69 MB
   （zipformer-en-2023 int8 left-128）、英文大 253 MB（同仓库 fp32）、中英双语 189 MB
   （bilingual zh-en int8）。远端文件名与仓库都在清单里，HF 连不上自动退 `hf-mirror.com`，
   下载用 `http_long()`（1800 s）并按块写文件、边下边 `emit("myt://asr-model", {pct})`。
@@ -1110,7 +1110,7 @@ P2：
 ## 桌面壳：全局字幕（2026-11-19）
 
 只服务"本机离线转写"的实时字幕，不改动数据格式。代码在
-`apps/windows/src-tauri/src/{wasapi.rs,captions.rs,asr.rs,punct.rs,main.rs}` 与
+`apps/windows/src-tauri/src/{wasapi.rs,captions.rs,asr.rs,punct.rs,models.rs,main.rs}` 与
 `site/{overlay,picker,wordcard}.html`。
 
 - 采集：设备级 WASAPI loopback（默认设备，2 秒巡检重连）；进程级

@@ -206,7 +206,10 @@ function syncAutoNextSwitch() {
   const auto = $('setAutoNext');
   if (auto) auto.setAttribute('aria-checked', String(app.cont !== 'single'));
 }
-async function playNextAuto(radioOnly) {
+/* 队列接缝：下一集怎么选可以被插件替换（比如换随机/按标签排序策略）。 */
+defineCoreProvider('queue', { next: radioOnly => defaultPlayNextAuto(radioOnly) });
+function playNextAuto(radioOnly) { return coreProvider('queue').next(radioOnly); }
+async function defaultPlayNextAuto(radioOnly) {
   const current = state.current;
   if (!current) return;
   const list = currentPlaylist();
@@ -533,7 +536,10 @@ async function autoCleanup() {
 
 /* ---------- shell bindings ---------- */
 function savePrefs() { writeJSON(PREFS_KEY, prefs); }
-function playEpisode(key, epId, time) {
+/* 播放接缝：插件可以覆盖 play()（比如换播放器内核），不覆盖时就是原行为。 */
+defineCoreProvider('playback', { play: (key, epId, time) => defaultPlayEpisode(key, epId, time) });
+function playEpisode(key, epId, time) { return coreProvider('playback').play(key, epId, time); }
+function defaultPlayEpisode(key, epId, time) {
   if (!key || !epId) return;
   app.autoplay = true;
   if (Number(time) > 0) { app.pendingSeek = Number(time); app.pendingSeekEp = epId; }
