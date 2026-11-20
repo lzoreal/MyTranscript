@@ -131,5 +131,19 @@ console.log('owner OK');
         self.assertNotIn("bindTranslateUI()", host10)
 
 
+    def test_host_does_not_write_migrated_study_state(self):
+        for name in ("01-theme-reader-shell.js", "03-native-asr-service-worker.js"):
+            text = (ROOT / "src" / "player-js" / name).read_text(encoding="utf-8")
+            for ident in ("studyLoop", "studyAutoPauseDone", "studyExercise",
+                          "studyVocabContext", "studyVocabContextMode"):
+                self.assertIsNone(
+                    re.search(rf"(?<![\w.]){ident}\s*=", text),
+                    f"{name} 不能直接写已迁到插件的 {ident}",
+                )
+        host08 = (ROOT / "src" / "player-js" / "08-study-ai.js").read_text(encoding="utf-8")
+        for name in ("studyResetPlayback", "studyResetAutoPause", "studyResetContext"):
+            self.assertIn(f"function {name}", host08)
+
+
 if __name__ == "__main__":
     unittest.main()

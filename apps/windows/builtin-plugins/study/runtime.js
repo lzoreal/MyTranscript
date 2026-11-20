@@ -153,11 +153,12 @@ function createStudyRuntime(api, host) {
   }
   function notePlaybackEnded() { loop = null; }
   function resetAutoPause() { autoPauseDone = -1; }
+  function resetPlayback() { loop = null; autoPauseDone = -1; }
 
   return {
     hash, langName, providerMeta, config, native, ready, chat, parseJson,
     currentCue, withCues, currentKey, sourceLabel,
     cueBounds, stopAudio, playRange, playCue, playItem, audioTick,
-    notePlaybackStart, notePlaybackEnded, resetAutoPause,
+    notePlaybackStart, notePlaybackEnded, resetAutoPause, resetPlayback,
   };
 }

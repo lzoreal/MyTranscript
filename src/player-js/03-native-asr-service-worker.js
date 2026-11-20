@@ -902,7 +902,7 @@ function selectEpisode(item, keepDrawer = false) {
   saveProgress(true);
   setAlignMode(false);
   setState('current', item);
-  studyLoop = null; studyAutoPauseDone = -1; studyExercise = null; studyVocabContext = null; studyVocabContextMode = null;
+  studyResetPlayback(); studyResetContext();
   item.showKey = state.show.slug;
   if (document.body.classList.contains('player-open')) {
     const want = routeHash('player', [state.show.slug, item.id]);

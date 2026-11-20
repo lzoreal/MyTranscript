@@ -57,6 +57,9 @@ function closeStudySheet() {
 }
 function openStudySheet(view) { return studyUiCall('openStudySheet', view); }
 function syncStudySettings() { return studyUiCall('syncStudySettings'); }
+function studyResetContext() { return studyUiCall('resetStudyContext'); }
+function studyResetPlayback() { const r = studyRuntime(); if (r && r.resetPlayback) r.resetPlayback(); }
+function studyResetAutoPause() { const r = studyRuntime(); if (r && r.resetAutoPause) r.resetAutoPause(); }
 function wordStatusHTML(word) { return studyUiCall('wordStatusHTML', word) || ''; }
 function studyApplyWordMarks() { return studyUiCall('studyApplyWordMarks'); }
 function studyUpdateDueBadge() { return studyUiCall('studyUpdateDueBadge'); }

@@ -32,6 +32,11 @@ function createStudyUi(api, host) {
     if (uiAbort) { try { uiAbort.abort(); } catch (e) {} uiAbort = null; }
     studyTermTipsBound = false;
   }
+  function resetStudyContext() {
+    studyExercise = null;
+    studyVocabContext = null;
+    studyVocabContextMode = null;
+  }
 /* ================== AI 学英语 ================== */
 const STUDY_KEY = 'myt-study', STUDY_CACHE_KEY = 'myt-study-cache', STUDY_VOCAB_KEY = 'myt-study-vocab', STUDY_STATUS_KEY = 'myt-study-status';
 const STUDY_SUMMARY_CHUNKS = 3;
@@ -2022,5 +2027,5 @@ function bindStudyUI() {
   bindTranslateUI();
 }
 
-  return {applyStudyProvider,bindStudyUI,bindWordStatusButtons,closeStudySheet,disposeStudyUI,openStudySheet,setStudyView,studyAddVocab,studyAnalyzeCurrent,studyAnalyzeEpisode,studyApplyWordMarks,studyAsk,studyChat,studyCheckExercise,studyClearModels,studyConfig,studyCueBounds,studyCurrentCue,studyCurrentKey,studyDueItems,studyEpisodeHTML,studyExportCsv,studyFetchModels,studyHash,studyLangName,studyMarkWord,studyModelStatus,studyNative,studyOpenEpisodeSummary,studyOpenModels,studyParseJson,studyPickModel,studyPlayCue,studyPlayItem,studyPlayRange,studyProviderMeta,studyReady,studyRenderCurrent,studyRenderEpisode,studyRenderModelList,studyRenderNow,studyRenderPractice,studyRenderReview,studyRenderVocab,studySourceLabel,studyStartExercise,studyStats,studyTestConnection,studyUpdateDueBadge,studyWithCues,syncStudySettings,wordStatusHTML};
+  return {applyStudyProvider,bindStudyUI,bindWordStatusButtons,closeStudySheet,disposeStudyUI,openStudySheet,resetStudyContext,setStudyView,studyAddVocab,studyAnalyzeCurrent,studyAnalyzeEpisode,studyApplyWordMarks,studyAsk,studyChat,studyCheckExercise,studyClearModels,studyConfig,studyCueBounds,studyCurrentCue,studyCurrentKey,studyDueItems,studyEpisodeHTML,studyExportCsv,studyFetchModels,studyHash,studyLangName,studyMarkWord,studyModelStatus,studyNative,studyOpenEpisodeSummary,studyOpenModels,studyParseJson,studyPickModel,studyPlayCue,studyPlayItem,studyPlayRange,studyProviderMeta,studyReady,studyRenderCurrent,studyRenderEpisode,studyRenderModelList,studyRenderNow,studyRenderPractice,studyRenderReview,studyRenderVocab,studySourceLabel,studyStartExercise,studyStats,studyTestConnection,studyUpdateDueBadge,studyWithCues,syncStudySettings,wordStatusHTML};
 }

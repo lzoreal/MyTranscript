@@ -1056,7 +1056,7 @@ function rawSeek(r) {
   setState('seekRaw', x);
   audio.currentTime = x;
 }
-function seekTo(t) { if (!state.current) return; studyLoop = null; rawSeek(t / (state.timeScale || 1)); audio.play().catch(() => {}); paint(true); }
+function seekTo(t) { if (!state.current) return; studyResetPlayback(); rawSeek(t / (state.timeScale || 1)); audio.play().catch(() => {}); paint(true); }
 
 function locateCue(t) {
   // 正常播放时先扫当前句附近，避免每 120ms 线性扫几千句；跳转/越界时再全量扫描。
@@ -1120,7 +1120,7 @@ function paint(force = false) {
       const cue = state.cues[ci];
       emitPlugin('player:cue', { index: ci, text: cue?.text || '', start: cue?.start, end: cue?.end });
     }
-    studyAutoPauseDone = -1;
+    studyResetAutoPause();
     if (state.wallpaper) wallpaperRefresh();
     if (ci >= 0) trPrimeCues(ci);
     if (ci >= 0) {
@@ -3337,7 +3337,7 @@ function selectEpisode(item, keepDrawer = false) {
   saveProgress(true);
   setAlignMode(false);
   setState('current', item);
-  studyLoop = null; studyAutoPauseDone = -1; studyExercise = null; studyVocabContext = null; studyVocabContextMode = null;
+  studyResetPlayback(); studyResetContext();
   item.showKey = state.show.slug;
   if (document.body.classList.contains('player-open')) {
     const want = routeHash('player', [state.show.slug, item.id]);
@@ -8707,6 +8707,9 @@ function closeStudySheet() {
 }
 function openStudySheet(view) { return studyUiCall('openStudySheet', view); }
 function syncStudySettings() { return studyUiCall('syncStudySettings'); }
+function studyResetContext() { return studyUiCall('resetStudyContext'); }
+function studyResetPlayback() { const r = studyRuntime(); if (r && r.resetPlayback) r.resetPlayback(); }
+function studyResetAutoPause() { const r = studyRuntime(); if (r && r.resetAutoPause) r.resetAutoPause(); }
 function wordStatusHTML(word) { return studyUiCall('wordStatusHTML', word) || ''; }
 function studyApplyWordMarks() { return studyUiCall('studyApplyWordMarks'); }
 function studyUpdateDueBadge() { return studyUiCall('studyUpdateDueBadge'); }

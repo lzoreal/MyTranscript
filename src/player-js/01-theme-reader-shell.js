@@ -1055,7 +1055,7 @@ function rawSeek(r) {
   setState('seekRaw', x);
   audio.currentTime = x;
 }
-function seekTo(t) { if (!state.current) return; studyLoop = null; rawSeek(t / (state.timeScale || 1)); audio.play().catch(() => {}); paint(true); }
+function seekTo(t) { if (!state.current) return; studyResetPlayback(); rawSeek(t / (state.timeScale || 1)); audio.play().catch(() => {}); paint(true); }
 
 function locateCue(t) {
   // 正常播放时先扫当前句附近，避免每 120ms 线性扫几千句；跳转/越界时再全量扫描。
@@ -1119,7 +1119,7 @@ function paint(force = false) {
       const cue = state.cues[ci];
       emitPlugin('player:cue', { index: ci, text: cue?.text || '', start: cue?.start, end: cue?.end });
     }
-    studyAutoPauseDone = -1;
+    studyResetAutoPause();
     if (state.wallpaper) wallpaperRefresh();
     if (ci >= 0) trPrimeCues(ci);
     if (ci >= 0) {
