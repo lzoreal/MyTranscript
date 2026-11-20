@@ -4,6 +4,16 @@ const STUDY_ENGINE_SETTINGS_KEY = 'myt-study';
 const STUDY_ENGINE_CACHE_KEY = 'myt-study-cache';
 const STUDY_ENGINE_VOCAB_KEY = 'myt-study-vocab';
 const STUDY_ENGINE_STATUS_KEY = 'myt-study-status';
+// AI 服务商的地址/模型只在这里维护一份；运行时和渲染层都通过 engine.providers 读。
+const STUDY_PROVIDERS = {
+  openai: { name: 'OpenAI', endpoint: 'https://api.openai.com/v1', model: 'gpt-4o-mini', hint: 'OpenAI 官方或任意 OpenAI 兼容接口', modelHint: '建议用支持中文的通用模型，如 gpt-4o-mini', keyHint: 'sk-...' },
+  claude: { name: 'Claude', endpoint: 'https://api.anthropic.com/v1/messages', model: 'claude-3-5-sonnet-latest', hint: 'Anthropic Messages API，Key 以 sk-ant- 开头', modelHint: '如 claude-3-5-sonnet-latest，可手动换成当前可用模型', keyHint: 'sk-ant-...' },
+  gemini: { name: 'Gemini', endpoint: 'https://generativelanguage.googleapis.com/v1beta', model: 'gemini-2.5-flash', hint: 'Google Generative Language API，填 AI Studio 的 API Key', modelHint: '如 gemini-2.5-flash，可手动换模型', keyHint: 'AIza...' },
+  deepseek: { name: 'DeepSeek', endpoint: 'https://api.deepseek.com/v1', model: 'deepseek-chat', hint: 'OpenAI 兼容接口，适合长文总结', modelHint: '如 deepseek-chat', keyHint: 'sk-...' },
+  kimi: { name: 'Kimi', endpoint: 'https://api.moonshot.cn/v1', model: 'kimi-k2-0905-preview', hint: 'Moonshot 开放平台，OpenAI 兼容接口', modelHint: '如 kimi-k2-0905-preview，可换当前模型', keyHint: 'sk-...' },
+  glm: { name: 'GLM', endpoint: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4-plus', hint: '智谱开放平台，OpenAI 兼容接口', modelHint: '如 glm-4-plus，可换当前模型', keyHint: 'API Key' },
+  custom: { name: '自定义兼容接口', endpoint: '', model: '', hint: '任意 OpenAI 兼容 /chat/completions 接口', modelHint: '填写服务商提供的模型名', keyHint: 'API Key' },
+};
 
 function createStudyEngine(api) {
   const cleanWord = raw => api.study.cleanWord(raw);
@@ -99,7 +109,7 @@ function createStudyEngine(api) {
   }
 
   return {
-    settings, cache, vocab, status,
+    settings, cache, vocab, status, providers: STUDY_PROVIDERS,
     saveSettings, saveCache, saveVocab, saveStatus,
     wordStatusOf, markWord, dueItems, srsGrade, stats,
   };

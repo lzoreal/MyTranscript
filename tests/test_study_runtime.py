@@ -11,7 +11,8 @@ RUNTIME = ROOT / "apps" / "windows" / "builtin-plugins" / "study" / "runtime.js"
 CASES = r"""
 function assert(c, m) { if (!c) { console.error('FAIL: ' + m); process.exit(1); } }
 const settings = { provider: 'openai', endpoint: 'https://api.openai.com/v1', key: 'sk-test', model: 'gpt-4o-mini', target: 'zh-CN' };
-const api = { study: { engine: () => ({ settings }), host: () => host } };
+const providers = { openai: { name: 'OpenAI', endpoint: 'https://api.openai.com/v1', model: 'gpt-4o-mini' } };
+const api = { study: { engine: () => ({ settings, providers }), host: () => host } };
 const audio = {
   paused: true, currentTime: 0, played: 0,
   play() { this.paused = false; this.played++; return Promise.resolve(); },
@@ -24,17 +25,21 @@ const state = {
 };
 const calls = { seek: [], toast: [] };
 const host = {
-  state, audio, studyAutoPause: true,
-  seekTo: at => calls.seek.push(at),
-  showToast: (t, ms) => calls.toast.push(t),
-  tauriHost: () => ({ core: { invoke: async (cmd, args) => {
+  player: {
+    state, audio,
+    seekTo: at => calls.seek.push(at),
+    getAutoPause: () => true,
+  },
+  ui: { toast: (t, ms) => calls.toast.push(t) },
+  shell: { tauriHost: () => ({ core: { invoke: async (cmd, args) => {
     if (cmd === 'llm_chat') return '{"ok":true}';
     if (cmd === 'llm_models') return [{ id: 'm1' }];
     return null;
-  } } }),
+  } } }) },
 };
 const runtime = createStudyRuntime(api, host);
 
+assert(runtime.providerMeta().model === 'gpt-4o-mini', '服务商表来自 engine');
 assert(runtime.cueBounds(state.cues[0]).start === 1.7, 'cue 起点要加 offset');
 assert(runtime.cueBounds(state.cues[0]).end === 3.3, 'cue 终点要加 offset');
 assert(runtime.currentCue().ci === 0 && runtime.currentCue().cue.text === 'hello world', '当前句取 activeCue');
@@ -54,6 +59,34 @@ audio.paused = false; audio.currentTime = 3.25;
 runtime.resetAutoPause();
 runtime.audioTick();
 assert(audio.paused, '自动暂停要在句末停住');
+
+// 15 秒兜底必须跟着本次等待；一次等待成功后不能清掉下一次的 timer。
+{
+  const real = { setTimeout: global.setTimeout, clearTimeout: global.clearTimeout, setInterval: global.setInterval, clearInterval: global.clearInterval };
+  let nextId = 100;
+  const timeouts = [], intervals = [], cleared = new Set();
+  global.setTimeout = fn => { const id = nextId++; timeouts.push({ id, fn }); return id; };
+  global.clearTimeout = id => { cleared.add(id); };
+  global.setInterval = fn => { const id = nextId++; intervals.push({ id, fn }); return id; };
+  global.clearInterval = id => { cleared.add(id); };
+  state.cues = [];
+  let fired = 0;
+  runtime.withCues(() => { fired++; });
+  assert(intervals.length === 1 && timeouts.length === 1, '等待字幕时挂 interval + timeout');
+  state.cues.push({ start: 1, end: 3, text: 'hello world' });
+  intervals[0].fn();
+  assert(fired === 1, '字幕到达后执行等待回调');
+  assert(cleared.has(timeouts[0].id), '等待成功后要撤销本次兜底 timeout');
+  state.cues = [];
+  runtime.withCues(() => { fired++; });
+  assert(intervals.length === 2 && timeouts.length === 2, '第二次等待重新挂 timer');
+  state.cues.push({ start: 1, end: 3, text: 'hello world' });
+  intervals[1].fn();
+  assert(fired === 2, '第二次等待也要执行');
+  assert(cleared.has(timeouts[1].id), '第二次等待成功也要撤销自己的 timeout');
+  global.setTimeout = real.setTimeout; global.clearTimeout = real.clearTimeout;
+  global.setInterval = real.setInterval; global.clearInterval = real.clearInterval;
+}
 
 (async () => {
   const out = await runtime.chat('sys', 'user');

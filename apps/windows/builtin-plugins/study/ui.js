@@ -4,7 +4,7 @@ function createStudyUi(api, host) {
   const $ = id => document.getElementById(id);
   const studyEngine = () => api.study.engine();
   const studyRuntime = () => api.study.runtime();
-  host.setView('card');
+  host.player.setView('card');
   let studyView = 'card';
   let studyRenderedVocab = [];
   let studyTermData = new Map(), studyTermPinned = false, studyTermFocusKeys = new Set();
@@ -12,18 +12,29 @@ function createStudyUi(api, host) {
   let studyReviewRevealed = false, studyHideZh = false;
   let studyExercise = null, studyVocabContext = null, studyVocabContextMode = null;
   let pendingStudyEpisode = '';
+  let uiAbort = null;
+  let studyTermTipsBound = false;
+  function beginUiBindings() {
+    if (uiAbort) { try { uiAbort.abort(); } catch (e) {} }
+    uiAbort = new AbortController();
+    studyTermTipsBound = false;
+  }
+  function uiListen(target, type, fn, opts) {
+    if (!target) return;
+    if (!uiAbort) uiAbort = new AbortController();
+    const options = Object.assign({}, opts || {});
+    if (!options.signal) options.signal = uiAbort.signal;
+    target.addEventListener(type, fn, options);
+  }
+  function disposeStudyUI() {
+    try { closeStudySheet(); } catch (e) {}
+    pendingStudyEpisode = '';
+    if (uiAbort) { try { uiAbort.abort(); } catch (e) {} uiAbort = null; }
+    studyTermTipsBound = false;
+  }
 /* ================== AI 学英语 ================== */
 const STUDY_KEY = 'myt-study', STUDY_CACHE_KEY = 'myt-study-cache', STUDY_VOCAB_KEY = 'myt-study-vocab', STUDY_STATUS_KEY = 'myt-study-status';
 const STUDY_SUMMARY_CHUNKS = 3;
-const STUDY_PROVIDERS = {
-  openai: { name: 'OpenAI', endpoint: 'https://api.openai.com/v1', model: 'gpt-4o-mini', hint: 'OpenAI 官方或任意 OpenAI 兼容接口', modelHint: '建议用支持中文的通用模型，如 gpt-4o-mini', keyHint: 'sk-...' },
-  claude: { name: 'Claude', endpoint: 'https://api.anthropic.com/v1/messages', model: 'claude-3-5-sonnet-latest', hint: 'Anthropic Messages API，Key 以 sk-ant- 开头', modelHint: '如 claude-3-5-sonnet-latest，可手动换成当前可用模型', keyHint: 'sk-ant-...' },
-  gemini: { name: 'Gemini', endpoint: 'https://generativelanguage.googleapis.com/v1beta', model: 'gemini-2.5-flash', hint: 'Google Generative Language API，填 AI Studio 的 API Key', modelHint: '如 gemini-2.5-flash，可手动换模型', keyHint: 'AIza...' },
-  deepseek: { name: 'DeepSeek', endpoint: 'https://api.deepseek.com/v1', model: 'deepseek-chat', hint: 'OpenAI 兼容接口，适合长文总结', modelHint: '如 deepseek-chat', keyHint: 'sk-...' },
-  kimi: { name: 'Kimi', endpoint: 'https://api.moonshot.cn/v1', model: 'kimi-k2-0905-preview', hint: 'Moonshot 开放平台，OpenAI 兼容接口', modelHint: '如 kimi-k2-0905-preview，可换当前模型', keyHint: 'sk-...' },
-  glm: { name: 'GLM', endpoint: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4-plus', hint: '智谱开放平台，OpenAI 兼容接口', modelHint: '如 glm-4-plus，可换当前模型', keyHint: 'API Key' },
-  custom: { name: '自定义兼容接口', endpoint: '', model: '', hint: '任意 OpenAI 兼容 /chat/completions 接口', modelHint: '填写服务商提供的模型名', keyHint: 'API Key' }
-};
 const STUDY_DEFAULTS = { provider: 'openai', endpoint: 'https://api.openai.com/v1', key: '', model: 'gpt-4o-mini', target: 'zh-CN' };
 const engine = api.study.engine();
 if (!engine) throw new Error('学习引擎未注册，先 registerEngine');
@@ -60,18 +71,18 @@ function saveStudyStatus() {
 function studyWordStatusOf(raw) {
   const engine = studyEngine();
   if (engine && typeof engine.wordStatusOf === 'function') return engine.wordStatusOf(raw);
-  const k = host.cleanWord(raw);
+  const k = host.ui.cleanWord(raw);
   return k ? (studyStatus[k] || '') : '';
 }
 function studyMarkWord(raw, status) {
   const engine = studyEngine();
   if (engine && typeof engine.markWord === 'function') engine.markWord(raw, status);
   else {
-    const k = host.cleanWord(raw);
+    const k = host.ui.cleanWord(raw);
     if (!k) return;
     if (status) studyStatus[k] = status; else delete studyStatus[k];
     saveStudyStatus();
-    const item = studyVocab.find(v => host.cleanWord(v.word) === k);
+    const item = studyVocab.find(v => host.ui.cleanWord(v.word) === k);
     if (item) {
       item.status = status || 'learning';
       saveStudyVocab();
@@ -82,7 +93,7 @@ function studyMarkWord(raw, status) {
 }
 function wordStatusHTML(word) {
   const status = studyWordStatusOf(word);
-  const inVocab = studyVocab.some(v => host.cleanWord(v.word) === host.cleanWord(word));
+  const inVocab = studyVocab.some(v => host.ui.cleanWord(v.word) === host.ui.cleanWord(word));
   return '<div class="word-status">' +
     [['learning', '学习中'], ['known', '已掌握'], ['ignored', '忽略']].map(([key, label]) =>
       '<button data-word-status="' + key + '" aria-pressed="' + String(status === key) + '">' + label + '</button>').join('') +
@@ -103,7 +114,7 @@ function bindWordStatusButtons(word) {
   });
   const add = row.querySelector('[data-word-add]');
   if (add) add.onclick = () => {
-    studyAddVocab({ word, phonetic: $('wordPhon')?.textContent || '', meaning: host.wordCurrentMeaning() || '', example: '', exampleZh: '' }, studyCurrentCue()?.cue || null);
+    studyAddVocab({ word, phonetic: $('wordPhon')?.textContent || '', meaning: host.support.wordCurrentMeaning() || '', example: '', exampleZh: '' }, studyCurrentCue()?.cue || null);
     row.outerHTML = wordStatusHTML(word);
     bindWordStatusButtons(word);
   };
@@ -111,7 +122,7 @@ function bindWordStatusButtons(word) {
 function studyTranscriptMarkData() {
   const map = new Map();
   const add = item => {
-    const key = host.cleanWord(item?.word || '');
+    const key = host.ui.cleanWord(item?.word || '');
     if (key && !map.has(key)) map.set(key, item);
   };
   studyVocab.forEach(add);
@@ -120,7 +131,7 @@ function studyTranscriptMarkData() {
     const cached = studyCache[studyCurrentKey(cur)];
     if (cached && cached.data && Array.isArray(cached.data.vocabulary)) cached.data.vocabulary.forEach(add);
   }
-  const epId = host.state.current?.id;
+  const epId = host.player.state.current?.id;
   if (epId) {
     const cached = studyCache['ep:' + epId];
     if (cached && cached.data && Array.isArray(cached.data.vocabulary)) cached.data.vocabulary.forEach(add);
@@ -130,17 +141,17 @@ function studyTranscriptMarkData() {
   return map;
 }
 function studyApplyWordMarks() {
-  if (!host.studyPluginOn()) return;
-  if (!Array.isArray(host.state.nodes)) return;
+  if (!host.catalog.studyPluginOn()) return;
+  if (!Array.isArray(host.player.state.nodes)) return;
   studyTranscriptTermData = studyTranscriptMarkData();
   const phraseItem = key => {
     const item = studyTranscriptTermData.get(key);
     return item && /\s/.test(String(item.word || '').trim()) ? item : null;
   };
-  host.state.nodes.forEach(n => {
+  host.player.state.nodes.forEach(n => {
     if (!n || !n.words) return;
     n.words.forEach(w => {
-      const key = host.cleanWord(w.textContent || '');
+      const key = host.ui.cleanWord(w.textContent || '');
       const st = studyWordStatusOf(w.textContent || '');
       w.classList.remove('study-learning', 'study-known', 'study-ignored', 'vocab-mark');
       delete w.dataset.term;
@@ -155,7 +166,7 @@ function studyApplyWordMarks() {
       let joined = '';
       for (let len = 1; len <= 4 && i + len <= words.length; len++) {
         joined += (len > 1 ? ' ' : '') + (words[i + len - 1].textContent || '');
-        const key = host.cleanWord(joined);
+        const key = host.ui.cleanWord(joined);
         const item = phraseItem(key);
         if (!item) continue;
         for (let j = i; j < i + len; j++) {
@@ -227,9 +238,9 @@ function studyStats() {
 }
 function studyCoverage() {
   const seen = new Set(), known = new Set();
-  (host.state.cues || []).forEach(cue => {
+  (host.player.state.cues || []).forEach(cue => {
     (cue.words || []).forEach(w => {
-      const k = host.cleanWord(w.t);
+      const k = host.ui.cleanWord(w.t);
       if (!k) return;
       seen.add(k);
       if (studyWordStatusOf(k) === 'known') known.add(k);
@@ -239,7 +250,7 @@ function studyCoverage() {
 }
 function studyCueContext(text, fallbackCue) {
   const t = String(text || '').trim().toLowerCase();
-  const cues = host.state.cues || [];
+  const cues = host.player.state.cues || [];
   let cue = fallbackCue || null;
   if (!cue && t) {
     cue = cues.find(c => String(c.text || '').trim().toLowerCase() === t) ||
@@ -251,10 +262,10 @@ function studyCueContext(text, fallbackCue) {
     end: Number(cue.end),
     speechStart: Number(Number.isFinite(Number(cue.speechStart)) ? cue.speechStart : cue.start),
     speechEnd: Number(Number.isFinite(Number(cue.speechEnd)) ? cue.speechEnd : cue.end),
-    episodeId: host.state.current ? host.state.current.id : '',
-    showSlug: host.state.show ? host.state.show.slug : '',
-    showName: host.state.show ? (host.state.show.name || '') : '',
-    episodeTitle: host.state.current ? (host.state.current.title || '') : '',
+    episodeId: host.player.state.current ? host.player.state.current.id : '',
+    showSlug: host.player.state.show ? host.player.state.show.slug : '',
+    showName: host.player.state.show ? (host.player.state.show.name || '') : '',
+    episodeTitle: host.player.state.current ? (host.player.state.current.title || '') : '',
   };
 }
 function studyCueBounds(cue) { const r = studyRuntime(); return r ? r.cueBounds(cue) : { start: Number(cue.start), end: Number(cue.end) }; }
@@ -268,7 +279,7 @@ function studyCsvCell(value) {
   return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 function studyExportCsv() {
-  if (!studyVocab.length) { host.showToast('生词本还是空的。', 2400); return; }
+  if (!studyVocab.length) { host.ui.toast('生词本还是空的。', 2400); return; }
   const head = ['word', 'phonetic', 'meaning', 'example', 'exampleZh', 'source', 'status', 'due', 'interval', 'ease', 'reps', 'lapses', 'speechStart', 'speechEnd', 'episodeId', 'rootBreakdown', 'rootMeaning', 'sameRootWords', 'memoryHook'];
   const rows = studyVocab.map(v => [
     v.word, v.phonetic, v.meaning, v.example, v.exampleZh, v.source, v.status,
@@ -281,15 +292,20 @@ function studyExportCsv() {
   a.download = 'myt-study-vocab-' + new Date().toISOString().slice(0, 10) + '.csv';
   document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  host.showToast('已导出生词本 CSV。', 2400);
+  host.ui.toast('已导出生词本 CSV。', 2400);
 }
 /* 阶段三：AI 请求、provider 解析和播放循环都归插件 runtime.js；
    宿主只保留同签名包装，供渲染与桌面补丁调用。 */
 function studyLangName() { const r = studyRuntime(); return r ? r.langName() : 'Simplified Chinese'; }
 function studyHash(text) { const r = studyRuntime(); return r ? r.hash(text) : String(text || '').length.toString(36); }
-function studyProviderMeta() { const r = studyRuntime(); return r ? r.providerMeta() : (STUDY_PROVIDERS[STUDY.provider] || STUDY_PROVIDERS.openai); }
+function studyProviderMeta() {
+  const r = studyRuntime();
+  if (r) return r.providerMeta();
+  const list = (studyEngine() && studyEngine().providers) || {};
+  return list[STUDY.provider] || list.openai || {};
+}
 function studyConfig() { const r = studyRuntime(); return r ? r.config() : { engine: STUDY.provider || 'openai', endpoint: STUDY.endpoint, key: STUDY.key, model: STUDY.model, target: STUDY.target }; }
-function studyNative() { const r = studyRuntime(); return r ? r.native() : !!(host.tauriHost() && host.tauriHost().core); }
+function studyNative() { const r = studyRuntime(); return r ? r.native() : !!(host.shell.tauriHost() && host.shell.tauriHost().core); }
 function studyReady() { const r = studyRuntime(); return r ? r.ready() : false; }
 async function studyChat(system, user) {
   const r = studyRuntime();
@@ -301,12 +317,12 @@ function studyCurrentCue() { const r = studyRuntime(); return r ? r.currentCue()
 function studyWithCues(fn) { const r = studyRuntime(); if (r) r.withCues(fn); }
 function studyCurrentKey(cur) { const r = studyRuntime(); return r ? r.currentKey(cur) : 'none'; }
 function studySourceLabel() { const r = studyRuntime(); return r ? r.sourceLabel() : ''; }
-function studyEmpty(text) { return '<div class="study-empty">' + host.esc(text) + '</div>'; }
+function studyEmpty(text) { return '<div class="study-empty">' + host.ui.esc(text) + '</div>'; }
 function studyLoading(text) {
-  return '<div class="study-loading"><span class="loader"><span class="bars"><i></i><i></i><i></i></span></span><span>' + host.esc(text) + '</span></div>';
+  return '<div class="study-loading"><span class="loader"><span class="bars"><i></i><i></i><i></i></span></span><span>' + host.ui.esc(text) + '</span></div>';
 }
 function studyLines(value) {
-  return String(value || '').split(/\n+/).filter(Boolean).map(line => '<p>' + host.esc(line) + '</p>').join('');
+  return String(value || '').split(/\n+/).filter(Boolean).map(line => '<p>' + host.ui.esc(line) + '</p>').join('');
 }
 function studySameRootList(item) {
   const arr = Array.isArray(item?.sameRootWords) ? item.sameRootWords : [];
@@ -323,11 +339,11 @@ function studyRootHTML(item) {
   const hook = String(item.memoryHook || '').trim();
   if (!breakdown && !meaning && !roots.length && !hook) return '';
   let html = '<div class="study-root">';
-  if (breakdown) html += '<div class="study-root-line"><span class="study-root-tag">词根</span><b>' + host.esc(breakdown) + '</b></div>';
-  if (meaning) html += '<div class="study-root-line"><span class="study-root-tag">字面</span><span>' + host.esc(meaning) + '</span></div>';
+  if (breakdown) html += '<div class="study-root-line"><span class="study-root-tag">词根</span><b>' + host.ui.esc(breakdown) + '</b></div>';
+  if (meaning) html += '<div class="study-root-line"><span class="study-root-tag">字面</span><span>' + host.ui.esc(meaning) + '</span></div>';
   if (roots.length) html += '<div class="study-root-line"><span class="study-root-tag">同根</span><span>' +
-    roots.map(x => host.esc(x.word) + (x.meaning ? '（' + host.esc(x.meaning) + '）' : '')).join(' · ') + '</span></div>';
-  if (hook) html += '<div class="study-root-line"><span class="study-root-tag">记忆</span><span>' + host.esc(hook) + '</span></div>';
+    roots.map(x => host.ui.esc(x.word) + (x.meaning ? '（' + host.ui.esc(x.meaning) + '）' : '')).join(' · ') + '</span></div>';
+  if (hook) html += '<div class="study-root-line"><span class="study-root-tag">记忆</span><span>' + host.ui.esc(hook) + '</span></div>';
   return html + '</div>';
 }
 function studySameRootText(item) {
@@ -345,37 +361,37 @@ function studyTermChipHTML(word) {
   const raw = String(word || '').trim();
   const key = raw.toLowerCase();
   const item = studyTermData.get(key);
-  if (!item) return host.esc(raw);
+  if (!item) return host.ui.esc(raw);
   const label = raw + (item.meaning ? '：' + String(item.meaning) : '');
-  return '<span class="study-term" data-term="' + host.esc(key) + '" tabindex="0" aria-label="' + host.esc(label) + '">' + host.esc(raw) + '</span>';
+  return '<span class="study-term" data-term="' + host.ui.esc(key) + '" tabindex="0" aria-label="' + host.ui.esc(label) + '">' + host.ui.esc(raw) + '</span>';
 }
 function studyAnnotateText(value) {
   const raw = String(value == null ? '' : value);
   if (!raw) return '';
-  if (!studyTermData.size) return host.esc(raw);
+  if (!studyTermData.size) return host.ui.esc(raw);
   const terms = [...studyTermData.keys()].filter(Boolean).sort((a, b) => b.length - a.length);
-  if (!terms.length) return host.esc(raw);
+  if (!terms.length) return host.ui.esc(raw);
   let matcher;
   try {
     matcher = new RegExp('(?<![A-Za-z])(' + terms.map(studyRegexEscape).join('|') + ')(?![A-Za-z])', 'gi');
   } catch (e) {
-    return host.esc(raw);
+    return host.ui.esc(raw);
   }
   let html = '', last = 0;
   raw.replace(matcher, (match, word, offset) => {
     const key = String(match).toLowerCase();
     const item = studyTermData.get(key);
     if (!item) return match;
-    html += host.esc(raw.slice(last, offset));
+    html += host.ui.esc(raw.slice(last, offset));
     const focus = !studyTermFocusKeys.has(key);
     if (focus) studyTermFocusKeys.add(key);
     const label = String(item.word || match) + (item.meaning ? '：' + String(item.meaning) : '');
-    html += '<span class="study-term" data-term="' + host.esc(key) + '"' +
-      (focus ? ' tabindex="0"' : '') + ' aria-label="' + host.esc(label) + '">' + host.esc(match) + '</span>';
+    html += '<span class="study-term" data-term="' + host.ui.esc(key) + '"' +
+      (focus ? ' tabindex="0"' : '') + ' aria-label="' + host.ui.esc(label) + '">' + host.ui.esc(match) + '</span>';
     last = offset + String(match).length;
     return match;
   });
-  return html + host.esc(raw.slice(last));
+  return html + host.ui.esc(raw.slice(last));
 }
 function studyAnnotatedLines(value) {
   return String(value || '').split(/\n+/).filter(Boolean).map(line => '<p>' + studyAnnotateText(line) + '</p>').join('');
@@ -395,16 +411,16 @@ function studyTermTipElement() {
 function studyTermTipHTML(item) {
   if (!item) return '';
   const word = String(item.word || '').trim();
-  return '<div class="tt-head"><b>' + host.esc(word) + '</b>' +
-    (item.phonetic ? '<em>' + host.esc(item.phonetic) + '</em>' : '') + '</div>' +
-    '<div class="tt-meaning">' + host.esc(item.meaning || '暂无释义') + '</div>' +
-    (item.example ? '<div class="tt-example"><b>例</b> ' + host.esc(item.example) +
-      (item.exampleZh ? '<br>' + host.esc(item.exampleZh) : '') + '</div>' : '') +
+  return '<div class="tt-head"><b>' + host.ui.esc(word) + '</b>' +
+    (item.phonetic ? '<em>' + host.ui.esc(item.phonetic) + '</em>' : '') + '</div>' +
+    '<div class="tt-meaning">' + host.ui.esc(item.meaning || '暂无释义') + '</div>' +
+    (item.example ? '<div class="tt-example"><b>例</b> ' + host.ui.esc(item.example) +
+      (item.exampleZh ? '<br>' + host.ui.esc(item.exampleZh) : '') + '</div>' : '') +
     studyRootHTML(item);
 }
 function studyShowTermTip(term, itemOverride) {
   if (!term) return;
-  const key = term.dataset.term || host.cleanWord(term.textContent || '');
+  const key = term.dataset.term || host.ui.cleanWord(term.textContent || '');
   const item = itemOverride || studyTermData.get(key) || studyTranscriptTermData.get(key);
   if (!item) return;
   const tip = studyTermTipElement();
@@ -439,35 +455,35 @@ function studyHoverTerm(target) {
 }
 function studyTermItemOf(term) {
   if (!term) return null;
-  const key = term.dataset.term || host.cleanWord(term.textContent || '');
+  const key = term.dataset.term || host.ui.cleanWord(term.textContent || '');
   return studyTermData.get(key) || studyTranscriptTermData.get(key);
 }
 function bindStudyTermTips() {
-  if (app.studyTermTipsBound) return;
-  app.studyTermTipsBound = true;
-  document.addEventListener('mouseover', event => {
+  if (studyTermTipsBound) return;
+  studyTermTipsBound = true;
+  uiListen(document, 'mouseover', event => {
     const term = studyHoverTerm(event.target);
     const item = studyTermItemOf(term);
     if (!term || !item || term.contains(event.relatedTarget)) return;
     term.classList.add('on');
     studyShowTermTip(term, item);
   });
-  document.addEventListener('mouseout', event => {
+  uiListen(document, 'mouseout', event => {
     const term = studyHoverTerm(event.target);
     if (!term || term.contains(event.relatedTarget) || studyTermPinned) return;
     term.classList.remove('on');
     studyHideTermTip();
   });
-  document.addEventListener('focusin', event => {
+  uiListen(document, 'focusin', event => {
     const term = studyHoverTerm(event.target);
     const item = studyTermItemOf(term);
     if (term && item) { term.classList.add('on'); studyShowTermTip(term, item); }
   });
-  document.addEventListener('focusout', event => {
+  uiListen(document, 'focusout', event => {
     if (studyTermPinned) return;
     if (studyHoverTerm(event.target)) studyHideTermTip();
   });
-  document.addEventListener('click', event => {
+  uiListen(document, 'click', event => {
     const term = event.target.closest && event.target.closest('.study-term');
     if (term) {
       event.preventDefault();
@@ -484,22 +500,22 @@ function bindStudyTermTips() {
       studyTermPinned = false;
       studyHideTermTip();
     }
-  }, true);
-  document.addEventListener('scroll', () => {
+  }, { capture: true });
+  uiListen(document, 'scroll', () => {
     studyTermPinned = false;
     studyHideTermTip();
-  }, true);
+  }, { capture: true });
 }
 function studyVocabCards(items, addable) {
   studyRenderedVocab = addable ? (items || []) : [];
   return (items || []).map((v, i) => {
     const word = String(v.word || '').trim();
     if (!word) return '';
-    const inVocab = studyVocab.some(x => host.cleanWord(x.word) === host.cleanWord(word));
+    const inVocab = studyVocab.some(x => host.ui.cleanWord(x.word) === host.ui.cleanWord(word));
     return '<div class="study-vocab"><strong>' + studyTermChipHTML(word) + '</strong>' +
-      (v.phonetic ? '<em>' + host.esc(v.phonetic) + '</em>' : '') +
-      '<small>' + host.esc(v.meaning || '') + '</small>' +
-      (v.example ? '<small><b>例：</b>' + host.esc(v.example) + (v.exampleZh ? '<br>' + host.esc(v.exampleZh) : '') + '</small>' : '') +
+      (v.phonetic ? '<em>' + host.ui.esc(v.phonetic) + '</em>' : '') +
+      '<small>' + host.ui.esc(v.meaning || '') + '</small>' +
+      (v.example ? '<small><b>例：</b>' + host.ui.esc(v.example) + (v.exampleZh ? '<br>' + host.ui.esc(v.exampleZh) : '') + '</small>' : '') +
       studyRootHTML(v) +
       (addable ? (inVocab ? '<span class="study-badge">已在生词本</span>' :
         '<button class="btn ghost small vocab-add" data-study-add="' + i + '">＋ 生词本（含原句音频）</button>') : '') +
@@ -509,7 +525,7 @@ function studyVocabCards(items, addable) {
 function studyCardHTML(data) {
   if (!data) return '';
   studySetVocabulary(data.vocabulary);
-  if (data.raw) return '<div class="study-section"><h4>模型原文</h4><p>' + host.esc(data.raw).replace(/\n/g, '<br>') + '</p></div>';
+  if (data.raw) return '<div class="study-section"><h4>模型原文</h4><p>' + host.ui.esc(data.raw).replace(/\n/g, '<br>') + '</p></div>';
   let html = '';
   if (data.translation) html += '<div class="study-section"><h4>参考译文</h4>' + studyAnnotatedLines(data.translation) + '</div>';
   if (data.literal && data.literal !== data.translation) html += '<div class="study-section"><h4>直译</h4>' + studyAnnotatedLines(data.literal) + '</div>';
@@ -517,7 +533,7 @@ function studyCardHTML(data) {
   if (data.paraphrase) html += '<div class="study-section"><h4>换一种说法</h4>' + studyAnnotatedLines(data.paraphrase) + '</div>';
   if (Array.isArray(data.grammar) && data.grammar.length) {
     html += '<div class="study-section"><h4>语法点</h4>' + data.grammar.map(g =>
-      '<p><b>' + host.esc(g.point || '') + '</b>　' + studyAnnotateText(g.detail || '') + '</p>').join('') + '</div>';
+      '<p><b>' + host.ui.esc(g.point || '') + '</b>　' + studyAnnotateText(g.detail || '') + '</p>').join('') + '</div>';
   }
   if (Array.isArray(data.vocabulary) && data.vocabulary.length) {
     html += '<div class="study-section"><h4>词汇与表达</h4>' + studyVocabCards(data.vocabulary, true) + '</div>';
@@ -543,20 +559,20 @@ function studyTopicHTML(data) {
     const title = String(topic.title || topic.topic || '').trim();
     const start = studyClockSeconds(topic.start ?? topic.time ?? topic.timestamp);
     if (!title && !Number.isFinite(start)) return '';
-    const when = Number.isFinite(start) ? host.fmt(start) : '';
+    const when = Number.isFinite(start) ? host.ui.fmt(start) : '';
     return '<div class="study-topic">' +
-      (when ? '<button class="btn ghost small" data-study-act="topic" data-study-t="' + Math.round(start) + '">▶ ' + host.esc(when) + '</button>' : '') +
+      (when ? '<button class="btn ghost small" data-study-act="topic" data-study-t="' + Math.round(start) + '">▶ ' + host.ui.esc(when) + '</button>' : '') +
       '<div><strong>' + studyAnnotateText(title || '未命名主题') + '</strong>' +
       (topic.summary ? '<p>' + studyAnnotateText(topic.summary) + '</p>' : '') + '</div></div>';
   }).join('') + '</div>';
 }
 function studyAdHTML(data) {
-  const ads = host.studyAdRangesFromData(data);
+  const ads = host.support.adRangesFromData(data);
   if (!ads.length) return '';
   return '<div class="study-section"><h4>广告点</h4>' + ads.map(ad => {
     return '<div class="study-topic study-ad">' +
       '<button class="btn ghost small" data-study-act="ad" data-study-t="' + Math.round(ad.end) + '">跳过</button>' +
-      '<div><strong>' + host.esc(ad.label || '广告') + '</strong><p>' + host.esc(host.fmt(ad.start)) + ' – ' + host.esc(host.fmt(ad.end)) + '</p></div></div>';
+      '<div><strong>' + host.ui.esc(ad.label || '广告') + '</strong><p>' + host.ui.esc(host.ui.fmt(ad.start)) + ' – ' + host.ui.esc(host.ui.fmt(ad.end)) + '</p></div></div>';
   }).join('') + '</div>';
 }
 function studyEpisodeHTML(data) {
@@ -570,7 +586,7 @@ function studyEpisodeHTML(data) {
   }
   if (Array.isArray(data.hardSentences) && data.hardSentences.length) {
     html += '<div class="study-section"><h4>难句</h4>' + data.hardSentences.map(x =>
-      '<div class="study-vocab"><strong>' + studyAnnotateText(x.en || '') + '</strong><small>' + host.esc(x.zh || '') +
+      '<div class="study-vocab"><strong>' + studyAnnotateText(x.en || '') + '</strong><small>' + host.ui.esc(x.zh || '') +
       (x.why ? '<br><b>难点：</b>' + studyAnnotateText(x.why) : '') + '</small></div>').join('') + '</div>';
   }
   if (Array.isArray(data.questions) && data.questions.length) {
@@ -582,7 +598,8 @@ function studyEpisodeHTML(data) {
   return api.study.runHook('episodeHtml', html, data);
 }
 function applyStudyProvider(id, fillDefaults) {
-  const meta = STUDY_PROVIDERS[id];
+  const list = (studyEngine() && studyEngine().providers) || {};
+  const meta = list[id];
   if (!meta) return;
   STUDY.provider = id;
   if (fillDefaults) {
@@ -629,7 +646,7 @@ function syncStudySettings() {
 }
 function setStudyView(view) {
   studyView = view;
-  host.setView(view);
+  host.player.setView(view);
   studyTermPinned = false;
   studyHideTermTip();
   if (view === 'review') studyReviewRevealed = false;
@@ -643,12 +660,12 @@ function setStudyView(view) {
   else studyRenderVocab();
 }
 function openStudySheet(view) {
-  if (!host.subtitlePluginOn()) { host.showToast('字幕插件未启用，AI 学英语不可用。', 'warn'); return; }
-  if (!host.studyPluginOn()) { host.showToast('学英语插件未启用。', 'warn'); return; }
-  if (!host.moduleOn('study')) return;
+  if (!host.catalog.subtitlePluginOn()) { host.ui.toast('字幕插件未启用，AI 学英语不可用。', 'warn'); return; }
+  if (!host.catalog.studyPluginOn()) { host.ui.toast('学英语插件未启用。', 'warn'); return; }
+  if (!host.catalog.moduleOn('study')) return;
   const sheet = $('studySheet');
   if (!sheet) return;
-  host.closeDockSheet(false);
+  host.ui.closeDockSheet(false);
   sheet.hidden = false;
   sheet.classList.add('on');
   $('studyBtn')?.classList.add('on');
@@ -670,7 +687,7 @@ function closeStudySheet() {
 function studyRenderNow() {
   const cur = studyCurrentCue();
   const now = $('studyNow');
-  if (now) now.textContent = cur ? host.fmt(cur.cue.start + host.state.offset) + ' · ' + String(cur.cue.text || '').slice(0, 34) : '—';
+  if (now) now.textContent = cur ? host.ui.fmt(cur.cue.start + host.player.state.offset) + ' · ' + String(cur.cue.text || '').slice(0, 34) : '—';
   studyUpdateDueBadge();
 }
 function studyRenderCurrent() {
@@ -679,19 +696,19 @@ function studyRenderCurrent() {
   const cur = studyCurrentCue();
   studyRenderNow();
   if (!cur) {
-    body.innerHTML = studyEmpty(host.state.current ? '字幕加载中…' : '这一集没有可用的文字稿。');
-    if (host.state.current) studyWithCues(() => { if (studyView === 'card') studyRenderCurrent(); });
+    body.innerHTML = studyEmpty(host.player.state.current ? '字幕加载中…' : '这一集没有可用的文字稿。');
+    if (host.player.state.current) studyWithCues(() => { if (studyView === 'card') studyRenderCurrent(); });
     return;
   }
   const key = studyCurrentKey(cur);
   const cached = studyCache[key];
   studyVocabContext = cur.cue; studyVocabContextMode = 'card';
-  let html = '<p class="study-cue">' + host.esc(cur.cue.text || '') + '</p>';
-  if (cur.cue.zh && !studyHideZh) html += '<p class="study-empty">' + host.esc(cur.cue.zh) + '</p>';
+  let html = '<p class="study-cue">' + host.ui.esc(cur.cue.text || '') + '</p>';
+  if (cur.cue.zh && !studyHideZh) html += '<p class="study-empty">' + host.ui.esc(cur.cue.zh) + '</p>';
   html += '<div class="study-actions">' +
     '<button class="btn ghost small" data-study-act="playCue">▶ 听本句</button>' +
     '<button class="btn ghost small" data-study-act="loopCue">循环 3 次</button>' +
-    '<button class="study-toggle" data-study-act="autoPause" aria-pressed="' + String(host.getAutoPause()) + '">自动暂停</button>' +
+    '<button class="study-toggle" data-study-act="autoPause" aria-pressed="' + String(host.player.getAutoPause()) + '">自动暂停</button>' +
     '<button class="study-toggle" data-study-act="hideZh" aria-pressed="' + String(studyHideZh) + '">隐藏译文</button>' +
     '</div>';
   html += '<div class="study-actions"><button class="btn primary small" data-study-act="current">' +
@@ -706,13 +723,13 @@ function studyRenderEpisode() {
   const body = $('studyBody');
   if (!body) return;
   api.study.runHook('beforeEpisode');
-  if (!host.state.current) { body.innerHTML = studyEmpty('先选择一集。'); return; }
+  if (!host.player.state.current) { body.innerHTML = studyEmpty('先选择一集。'); return; }
   studyVocabContext = null; studyVocabContextMode = 'episode';
-  const key = 'ep:' + host.state.current.id;
+  const key = 'ep:' + host.player.state.current.id;
   const cached = studyCache[key];
   const chapters = studyChapterEntry();
   const quotes = studyQuoteEntry();
-  let html = '<p class="study-empty">' + host.esc(host.state.current.title || '当前单集') + '</p>';
+  let html = '<p class="study-empty">' + host.ui.esc(host.player.state.current.title || '当前单集') + '</p>';
   html += '<div class="study-actions"><button class="btn primary small" data-study-act="episode">' +
     (cached ? '重新总结整集' : '总结整集') + '</button>' +
     '<button class="btn ghost small" data-study-act="chapters">' + (chapters ? '重新生成章节' : '生成章节') + '</button>' +
@@ -721,7 +738,7 @@ function studyRenderEpisode() {
     '<span class="study-badge">' + (cached ? '已缓存' : '按段分块请求') + '</span></div>';
   html += studyChaptersHTML(chapters && chapters.data);
   if (cached && cached.data) {
-    host.studyApplyAiAdRanges(cached.data, host.state.current.id);
+    host.support.applyAiAdRanges(cached.data, host.player.state.current.id);
     html += studyEpisodeHTML(cached.data);
     if (cached.data.version !== 3) html += '<p class="study-empty">旧版缓存没有广告点，点「重新总结整集」生成。</p>';
   } else {
@@ -753,12 +770,12 @@ function studyRenderVocab() {
     studyVocab.map((v, i) => {
       const status = v.status === 'known' ? '已掌握' : v.status === 'ignored' ? '已忽略' : '学习中';
       return '<div class="study-vocab"><strong>' + studyTermChipHTML(v.word) + '</strong>' +
-        (v.phonetic ? '<em>' + host.esc(v.phonetic) + '</em>' : '') +
+        (v.phonetic ? '<em>' + host.ui.esc(v.phonetic) + '</em>' : '') +
         '<span class="study-badge">' + status + '</span>' +
-        '<small>' + host.esc(v.meaning || '') + '</small>' +
-        (v.example ? '<small><b>例：</b>' + host.esc(v.example) + (v.exampleZh ? '<br>' + host.esc(v.exampleZh) : '') + '</small>' : '') +
+        '<small>' + host.ui.esc(v.meaning || '') + '</small>' +
+        (v.example ? '<small><b>例：</b>' + host.ui.esc(v.example) + (v.exampleZh ? '<br>' + host.ui.esc(v.exampleZh) : '') + '</small>' : '') +
         studyRootHTML(v) +
-        (v.source ? '<small>' + host.esc(v.source) + '</small>' : '') +
+        (v.source ? '<small>' + host.ui.esc(v.source) + '</small>' : '') +
         '<small>' + (v.due ? '下次复习：' + studyDueLabel(v.due) : '未排期') + ' · 复习 ' + (v.reps || 0) + ' 次</small>' +
         '<div class="study-actions">' +
         (Number.isFinite(Number(v.start)) ? '<button class="btn ghost small" data-study-play-vocab="' + i + '">▶ 原句</button>' : '') +
@@ -808,23 +825,23 @@ function studyRenderReview() {
     const next = studyVocab.filter(v => v.status !== 'known' && v.status !== 'ignored' && v.due)
       .sort((a, b) => Number(a.due) - Number(b.due))[0];
     body.innerHTML = head + '<div class="study-section"><h4>今天清空了</h4><p>' +
-      (next ? '下一次复习：' + studyDueLabel(next.due) + '（' + host.esc(next.word) + '）' : '还没有排期的词条。') +
+      (next ? '下一次复习：' + studyDueLabel(next.due) + '（' + host.ui.esc(next.word) + '）' : '还没有排期的词条。') +
       '</p></div>';
     return;
   }
   const v = due[0];
   const source = [v.source, v.example ? '原句：' + v.example : ''].filter(Boolean).join('\n');
-  let html = head + '<div class="study-review-word">' + host.esc(v.word) + '</div>' +
-    (v.phonetic ? '<div class="study-review-meta">' + host.esc(v.phonetic) + '</div>' : '') +
+  let html = head + '<div class="study-review-word">' + host.ui.esc(v.word) + '</div>' +
+    (v.phonetic ? '<div class="study-review-meta">' + host.ui.esc(v.phonetic) + '</div>' : '') +
     '<div class="study-actions">' +
     (Number.isFinite(Number(v.start)) ? '<button class="btn ghost small" data-study-act="playReview">▶ 听原句</button>' : '') +
     '<button class="btn primary small" data-study-act="reveal">显示答案</button></div>';
   if (studyReviewRevealed) {
-    html += '<div class="study-answer"><strong>' + host.esc(v.meaning || '（没有释义）') + '</strong>' +
-      (v.example ? '<div style="margin-top:6px">' + host.esc(v.example) + '</div>' : '') +
-      (v.exampleZh ? '<div class="study-empty">' + host.esc(v.exampleZh) + '</div>' : '') +
+    html += '<div class="study-answer"><strong>' + host.ui.esc(v.meaning || '（没有释义）') + '</strong>' +
+      (v.example ? '<div style="margin-top:6px">' + host.ui.esc(v.example) + '</div>' : '') +
+      (v.exampleZh ? '<div class="study-empty">' + host.ui.esc(v.exampleZh) + '</div>' : '') +
       studyRootHTML(v) +
-      (v.source ? '<div class="study-review-meta" style="margin-top:6px">' + host.esc(v.source) + '</div>' : '') + '</div>' +
+      (v.source ? '<div class="study-review-meta" style="margin-top:6px">' + host.ui.esc(v.source) + '</div>' : '') + '</div>' +
       '<div class="study-grade">' +
       '<button data-study-grade="0">忘记</button><button data-study-grade="1">模糊</button>' +
       '<button data-study-grade="2">记得</button><button data-study-grade="3">很简单</button></div>' +
@@ -858,9 +875,9 @@ function studyRenderPractice() {
   const cur = studyCurrentCue();
   studyRenderNow();
   if (!cur) {
-    body.innerHTML = studyEmpty(host.state.current ? '字幕加载中…' : '这一集没有可用的文字稿。');
+    body.innerHTML = studyEmpty(host.player.state.current ? '字幕加载中…' : '这一集没有可用的文字稿。');
     api.study.runHook('practice', body);
-    if (host.state.current) studyWithCues(() => { if (studyView === 'practice') studyRenderPractice(); });
+    if (host.player.state.current) studyWithCues(() => { if (studyView === 'practice') studyRenderPractice(); });
     return;
   }
   if (!studyExercise || studyExercise.key !== studyCurrentKey(cur)) {
@@ -877,18 +894,18 @@ function studyRenderPractice() {
     '<button class="btn ghost small" data-study-act="playEx">▶ 听本句</button>' +
     '<button class="btn ghost small" data-study-act="nextEx">换一句</button></div>';
   if (ex.type === 'cloze') {
-    html += '<p class="study-cue">' + host.esc(ex.sentence) + '</p>';
+    html += '<p class="study-cue">' + host.ui.esc(ex.sentence) + '</p>';
   } else {
     html += '<p class="study-empty">听原句，然后写下你听到的完整句子。可以重复听。</p>';
   }
   html += '<input class="study-input" id="studyPracticeInput" autocomplete="off" spellcheck="false" placeholder="' +
-    (ex.type === 'cloze' ? '填入被挖掉的词' : '写下你听到的句子') + '" value="' + host.esc(ex.input || '') + '">';
+    (ex.type === 'cloze' ? '填入被挖掉的词' : '写下你听到的句子') + '" value="' + host.ui.esc(ex.input || '') + '">';
   html += '<div class="study-actions"><button class="btn primary small" data-study-act="checkEx">检查答案</button>' +
     '<button class="btn ghost small" data-study-act="showEx">显示答案</button></div>';
   if (ex.checked) {
     html += '<div class="study-answer"><div class="' + (ex.correct ? 'study-ok' : 'study-bad') + '">' +
       (ex.correct ? '✓ 正确' : (ex.type === 'dictation' ? '正确率约 ' + ex.pct + '%' : '再试一次')) + '</div>' +
-      '<div style="margin-top:6px">答案：' + host.esc(ex.answer) + '</div></div>';
+      '<div style="margin-top:6px">答案：' + host.ui.esc(ex.answer) + '</div></div>';
   }
   body.innerHTML = html;
   const input = $('studyPracticeInput');
@@ -910,18 +927,18 @@ function studyCheckExercise(showOnly) {
     if (ex.type === 'cloze') ex.answer = ex.target;
     studyExercise = ex;
     const body = $('studyBody');
-    if (body) body.innerHTML = '<div class="study-section"><h4>答案</h4><p>' + host.esc(ex.answer) + '</p>' +
+    if (body) body.innerHTML = '<div class="study-section"><h4>答案</h4><p>' + host.ui.esc(ex.answer) + '</p>' +
       '<button class="btn ghost small" data-study-act="backEx">继续练习</button></div>';
     bindStudyActButtons();
     return;
   }
   if (ex.type === 'cloze') {
-    ex.correct = host.studyNormText(ex.input).replace(/\s+/g, '') === host.studyNormText(ex.target).replace(/\s+/g, '');
+    ex.correct = host.support.normText(ex.input).replace(/\s+/g, '') === host.support.normText(ex.target).replace(/\s+/g, '');
     ex.pct = ex.correct ? 100 : 0;
     if (!ex.correct) studyMarkWord(ex.target, 'learning');
   } else {
-    const a = host.studyNormText(ex.input).split(' ').filter(Boolean);
-    const b = host.studyNormText(ex.answer).split(' ').filter(Boolean);
+    const a = host.support.normText(ex.input).split(' ').filter(Boolean);
+    const b = host.support.normText(ex.answer).split(' ').filter(Boolean);
     const hit = a.filter((w, i) => w === b[i]).length;
     ex.pct = b.length ? Math.round(hit / b.length * 100) : 0;
     ex.correct = ex.pct >= 90;
@@ -946,7 +963,7 @@ function studyAddVocab(item, cueOverride) {
   const word = String(item.word || '').trim();
   if (!word) return;
   if (studyVocab.some(v => String(v.word || '').toLowerCase() === word.toLowerCase())) {
-    host.showToast('生词本里已经有「' + word + '」了。', 2500);
+    host.ui.toast('生词本里已经有「' + word + '」了。', 2500);
     return;
   }
   const fallback = cueOverride || (studyVocabContextMode === 'card' ? studyVocabContext : null);
@@ -964,7 +981,7 @@ function studyAddVocab(item, cueOverride) {
   studyMarkWord(word, 'learning');
   saveStudyVocab();
   studyUpdateDueBadge();
-  host.showToast('已加入生词本：' + word + '（已排入复习）', 3000);
+  host.ui.toast('已加入生词本：' + word + '（已排入复习）', 3000);
 }
 async function studyAnalyzeCurrent() {
   const cur = studyCurrentCue();
@@ -973,8 +990,8 @@ async function studyAnalyzeCurrent() {
   const key = studyCurrentKey(cur);
   if (!studyReady()) { body.innerHTML = studyEmpty('请先在「设置 → AI 学英语」填写 API Key 和模型。'); return; }
   body.innerHTML = studyLoading('正在分析当前句…');
-  const prev = host.state.cues[cur.ci - 1]?.text || '';
-  const next = host.state.cues[cur.ci + 1]?.text || '';
+  const prev = host.player.state.cues[cur.ci - 1]?.text || '';
+  const next = host.player.state.cues[cur.ci + 1]?.text || '';
   const system = 'You are an English-learning coach for Chinese learners. Explain the target sentence accurately and ' +
     'concisely in ' + studyLangName() + '. Return ONLY a JSON object, no markdown fences, with keys: ' +
     'translation (string), literal (string, word-for-word if useful), explanation (string), ' +
@@ -984,7 +1001,7 @@ async function studyAnalyzeCurrent() {
     'sameRootWords = array of up to 2 real English words {word, meaning} sharing the same root; memoryHook = one short Chinese memory sentence. ' +
     'Never invent roots or etymology; leave these fields empty when unsure. Keep vocabulary to at most 6 useful items. ' +
     'Do not invent facts about the episode.';
-  const user = JSON.stringify({ target: cur.cue.text, previous: prev, next, show: host.state.show?.name || '', episode: host.state.current?.title || '' });
+  const user = JSON.stringify({ target: cur.cue.text, previous: prev, next, show: host.player.state.show?.name || '', episode: host.player.state.current?.title || '' });
   try {
     const out = await studyChat(system, user);
     const data = studyParseJson(out);
@@ -992,18 +1009,18 @@ async function studyAnalyzeCurrent() {
     saveStudyCache();
     studyRenderCurrent();
   } catch (err) {
-    body.innerHTML = '<div class="study-section"><h4>分析失败</h4><p>' + host.esc(err.message || err) + '</p>' +
+    body.innerHTML = '<div class="study-section"><h4>分析失败</h4><p>' + host.ui.esc(err.message || err) + '</p>' +
       '<button class="btn ghost small" data-study-act="current">重试</button></div>';
     bindStudyActButtons();
   }
 }
 async function studyAnalyzeEpisode() {
   const body = $('studyBody');
-  if (!host.state.current) return;
+  if (!host.player.state.current) return;
   if (!studyReady()) { body.innerHTML = studyEmpty('请先在「设置 → AI 学英语」填写 API Key 和模型。'); return; }
-  const cues = host.state.cues || [];
+  const cues = host.player.state.cues || [];
   if (!cues.length) { body.innerHTML = studyEmpty('这一集没有文字稿，无法分析整集。'); return; }
-  const lines = cues.map(cue => '[' + host.fmt(cue.start + host.state.offset) + '] ' + (cue.text || ''));
+  const lines = cues.map(cue => '[' + host.ui.fmt(cue.start + host.player.state.offset) + '] ' + (cue.text || ''));
   if (!lines.length) { body.innerHTML = studyEmpty('没有可分析的文字稿。'); return; }
   const partCount = Math.min(STUDY_SUMMARY_CHUNKS, lines.length);
   const perPart = Math.ceil(lines.length / partCount);
@@ -1030,8 +1047,8 @@ async function studyAnalyzeEpisode() {
     'Never invent roots or etymology; leave those fields empty when unsure. ' +
     'Write a faithful content summary; keyPoints should be substantive claims, examples or takeaways, not lesson meta. ' +
     'Keep vocabulary to at most 8 items.';
-  const epKey = 'ep:' + host.state.current.id;
-  const epId = host.state.current.id;
+  const epKey = 'ep:' + host.player.state.current.id;
+  const epId = host.player.state.current.id;
   const partialKey = epKey + ':partial';
   const sig = [STUDY.provider, STUDY.endpoint, STUDY.model, STUDY.target, 'ads-v1'].join('|');
   const merged = { summary: [], topics: [], ads: [], keyPoints: [], vocabulary: [], hardSentences: [], questions: [], chunks: totalChunks };
@@ -1045,7 +1062,7 @@ async function studyAnalyzeEpisode() {
       const data = saved.data || {};
       if (Array.isArray(data.summary)) merged.summary = data.summary.map(x => String(x));
       if (Array.isArray(data.topics)) merged.topics = data.topics.map(t => Object.assign({}, t));
-      if (Array.isArray(data.ads)) merged.ads = host.sanitizeAdRanges(data.ads, 'ai');
+      if (Array.isArray(data.ads)) merged.ads = host.support.sanitizeAdRanges(data.ads, 'ai');
       if (Array.isArray(data.keyPoints)) merged.keyPoints = data.keyPoints.slice();
       if (Array.isArray(data.vocabulary)) merged.vocabulary = data.vocabulary.map(v => Object.assign({}, v));
       if (Array.isArray(data.hardSentences)) merged.hardSentences = data.hardSentences.map(x => Object.assign({}, x));
@@ -1087,7 +1104,7 @@ async function studyAnalyzeEpisode() {
         }
       });
       (Array.isArray(part.ads) ? part.ads : []).forEach(rawAd => {
-        const ad = host.sanitizeAdRanges([rawAd], 'ai')[0];
+        const ad = host.support.sanitizeAdRanges([rawAd], 'ai')[0];
         if (!ad) return;
         const k = Math.round(ad.start) + '|' + Math.round(ad.end);
         if (!seenAd.has(k)) {
@@ -1132,20 +1149,20 @@ async function studyAnalyzeEpisode() {
     merged.topics.sort((a, b) => a.start - b.start);
     merged.topics = merged.topics.slice(0, 24);
     merged.ads.sort((a, b) => a.start - b.start);
-    merged.ads = host.sanitizeAdRanges(host.mergeAdRanges([merged.ads]), 'ai').slice(0, 24);
+    merged.ads = host.support.sanitizeAdRanges(host.mergeAdRanges([merged.ads]), 'ai').slice(0, 24);
     merged.vocabulary = merged.vocabulary.slice(0, 30);
     merged.hardSentences = merged.hardSentences.slice(0, 20);
     studyCache[epKey] = { at: Date.now(), data: merged };
     delete studyCache[partialKey];
     saveStudyCache();
-    host.studyApplyAiAdRanges(merged, epId);
+    host.support.applyAiAdRanges(merged, epId);
     studyRenderEpisode();
   } catch (err) {
     const failed = Math.min(completed + 1, totalChunks);
     const kept = completed ? '已保留前 ' + completed + ' / ' + totalChunks + ' 块。' : '';
     body.innerHTML = '<div class="study-section"><h4>分析失败</h4><p>第 ' + failed + ' / ' + totalChunks + ' 块失败。' + kept +
       (completed < totalChunks ? ' 点「继续剩余块」只重试第 ' + (completed + 1) + ' 块。' : '') +
-      '</p><p class="smalltext">' + host.esc(err.message || err) + '</p><div class="study-actions">' +
+      '</p><p class="smalltext">' + host.ui.esc(err.message || err) + '</p><div class="study-actions">' +
       '<button class="btn ghost small" data-study-act="episode">' + (completed ? '继续剩余块' : '重试') + '</button>' +
       (completed ? '<button class="btn ghost small" data-study-act="episodeFresh">从头开始</button>' : '') +
       '</div></div>';
@@ -1153,27 +1170,27 @@ async function studyAnalyzeEpisode() {
   }
 }
 function studyRestartEpisodeSummary() {
-  if (!host.state.current) return;
-  delete studyCache['ep:' + host.state.current.id + ':partial'];
+  if (!host.player.state.current) return;
+  delete studyCache['ep:' + host.player.state.current.id + ':partial'];
   saveStudyCache();
   studyAnalyzeEpisode();
 }
 function studyEpisodeText(data) {
   if (!data) return '';
-  const title = host.state.current?.title || '当前单集';
+  const title = host.player.state.current?.title || '当前单集';
   const lines = ['# ' + title, '', '## 内容摘要', String(data.summary || '').trim()].filter(Boolean);
-  const ads = host.studyAdRangesFromData(data);
+  const ads = host.support.adRangesFromData(data);
   if (ads.length) {
     lines.push('', '## 广告点');
     ads.forEach(ad => {
-      lines.push('- ' + host.fmt(ad.start) + '–' + host.fmt(ad.end) + ' ' + String(ad.label || '广告').trim());
+      lines.push('- ' + host.ui.fmt(ad.start) + '–' + host.ui.fmt(ad.end) + ' ' + String(ad.label || '广告').trim());
     });
   }
   if (Array.isArray(data.topics) && data.topics.length) {
     lines.push('', '## 主题时间戳');
     data.topics.forEach(topic => {
       const start = studyClockSeconds(topic.start);
-      const when = Number.isFinite(start) ? host.fmt(start) : '';
+      const when = Number.isFinite(start) ? host.ui.fmt(start) : '';
       const summary = String(topic.summary || '').trim();
       lines.push('- ' + (when ? '[' + when + '] ' : '') + String(topic.title || '').trim() + (summary ? ' — ' + summary : ''));
     });
@@ -1196,7 +1213,7 @@ let studyAskStore = (() => {
 let studyAskBusy = false;
 
 function studyCueStamp(cue) {
-  return host.fmt(Number(cue && cue.start || 0) + Number(host.state.offset || 0));
+  return host.ui.fmt(Number(cue && cue.start || 0) + Number(host.player.state.offset || 0));
 }
 function studyAskThread(epId) {
   if (!studyAskStore[epId] || typeof studyAskStore[epId] !== 'object') studyAskStore[epId] = { at: 0, messages: [] };
@@ -1217,7 +1234,7 @@ function saveStudyAsk() {
 }
 /* 整集太长时按关键词挑最相关的段落，避免把几万字全塞进请求 */
 function studyAskContext(question) {
-  const cues = host.state.cues || [];
+  const cues = host.player.state.cues || [];
   const lineOf = (cue, index) => '#' + index + ' [' + studyCueStamp(cue) + '] ' + String(cue.text || '');
   const totalChars = cues.reduce((sum, cue) => sum + String(cue.text || '').length, 0);
   if (totalChars <= 12000 || cues.length <= 360) {
@@ -1257,7 +1274,7 @@ function studyAskContext(question) {
   };
 }
 function studyAskTimeCue(text) {
-  const cues = host.state.cues || [];
+  const cues = host.player.state.cues || [];
   const match = /(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?/.exec(String(text || ''));
   if (!match) return -1;
   const seconds = Number(match[1]) * 60 + Number(match[2]);
@@ -1270,7 +1287,7 @@ function studyAskTimeCue(text) {
 }
 /* 只接受真实存在的行号；模型编的、越界的、重复的全部丢掉 */
 function studyAskCites(raw) {
-  const cues = host.state.cues || [];
+  const cues = host.player.state.cues || [];
   const out = [];
   const add = index => {
     if (Number.isInteger(index) && index >= 0 && index < cues.length && !out.includes(index)) out.push(index);
@@ -1309,15 +1326,15 @@ function studyAskSuggestions() {
 }
 function studyAskMsgHTML(message) {
   if (!message || !message.role) return '';
-  if (message.role === 'user') return '<div class="study-ask-msg user">' + host.esc(message.text) + '</div>';
+  if (message.role === 'user') return '<div class="study-ask-msg user">' + host.ui.esc(message.text) + '</div>';
   const chips = (Array.isArray(message.cites) ? message.cites : []).map(index => {
-    const cue = (host.state.cues || [])[index];
+    const cue = (host.player.state.cues || [])[index];
     if (!cue) return '';
     return '<button class="btn ghost small" data-study-act="askCite" data-cue="' + index + '">▶ ' +
-      host.esc(studyCueStamp(cue)) + '</button>';
+      host.ui.esc(studyCueStamp(cue)) + '</button>';
   }).join('');
   return '<div class="study-ask-msg bot' + (message.error ? ' bad' : '') + '">' +
-    (message.error ? '<p>' + host.esc(message.text) + '</p>' : studyAnnotatedLines(message.text || '')) +
+    (message.error ? '<p>' + host.ui.esc(message.text) + '</p>' : studyAnnotatedLines(message.text || '')) +
     (chips ? '<div class="ask-src">' + chips + '</div>' : '') +
     '</div>';
 }
@@ -1326,14 +1343,14 @@ function studyRenderAsk(busy) {
   if (!body) return;
   studyRenderNow();
   studyVocabContext = null; studyVocabContextMode = null;
-  const epId = host.state.current ? host.state.current.id : '';
+  const epId = host.player.state.current ? host.player.state.current.id : '';
   if (!epId) { body.innerHTML = studyEmpty('先选择一集。'); return; }
   const thread = studyAskThread(epId);
   let html = '<p class="study-empty">问这一集的内容。答案只依据本集文字稿，引用按钮直接跳到原句；文字稿里没有的内容它会直说不知道。</p>';
   if (!thread.messages.length) {
     html += '<div class="study-actions">' + studyAskSuggestions().map(question =>
-      '<button class="btn ghost small" data-study-act="askAsk" data-study-q="' + host.esc(question) + '">' +
-      host.esc(question.length > 20 ? question.slice(0, 20) + '…' : question) + '</button>').join('') + '</div>';
+      '<button class="btn ghost small" data-study-act="askAsk" data-study-q="' + host.ui.esc(question) + '">' +
+      host.ui.esc(question.length > 20 ? question.slice(0, 20) + '…' : question) + '</button>').join('') + '</div>';
   }
   html += '<div class="study-ask-log">' + thread.messages.map(studyAskMsgHTML).join('') + '</div>';
   if (busy || studyAskBusy) html += studyLoading('正在读文字稿并回答…');
@@ -1356,9 +1373,9 @@ function bindStudyAskForm() {
 }
 async function studyAsk(question) {
   const body = $('studyBody');
-  const epId = host.state.current ? host.state.current.id : '';
+  const epId = host.player.state.current ? host.player.state.current.id : '';
   if (!epId) return;
-  if (!(host.state.cues || []).length) { if (body) body.innerHTML = studyEmpty('这一集没有文字稿，无法问答。'); return; }
+  if (!(host.player.state.cues || []).length) { if (body) body.innerHTML = studyEmpty('这一集没有文字稿，无法问答。'); return; }
   if (!studyReady()) { if (body) body.innerHTML = studyEmpty('请先在「设置 → AI 学英语」填写 API Key 和模型。'); return; }
   const text = String(question || '').trim();
   if (!text || studyAskBusy) return;
@@ -1385,8 +1402,8 @@ async function studyAsk(question) {
       'If the transcript does not contain the answer, say so plainly in ' + studyLangName() + ' and return "cites": []. ' +
       'Be direct and specific; at most 200 words unless the user asks for detail. Do not add a bibliography.';
     const user = JSON.stringify({
-      show: host.state.show ? host.state.show.name : '',
-      episode: host.state.current ? host.state.current.title : '',
+      show: host.player.state.show ? host.player.state.show.name : '',
+      episode: host.player.state.current ? host.player.state.current.title : '',
       question: text,
       transcript: context.text,
       full_transcript: context.full,
@@ -1409,7 +1426,7 @@ async function studyAsk(question) {
 }
 /* ---- 自动章节：模型只给行号，时间由 ASR cue 决定 ---- */
 function studyChapterEntry() {
-  const epId = host.state.current ? host.state.current.id : '';
+  const epId = host.player.state.current ? host.player.state.current.id : '';
   const entry = epId ? studyCache['ch:' + epId] : null;
   return entry && entry.data && Array.isArray(entry.data.chapters) ? entry : null;
 }
@@ -1419,15 +1436,15 @@ function studyChaptersHTML(data) {
   const rows = chapters.map((chapter, index) => {
     if (!chapter || typeof chapter !== 'object') return '';
     const ci = Number(chapter.ci);
-    const cues = host.state.cues || [];
+    const cues = host.player.state.cues || [];
     const cue = Number.isInteger(ci) && ci >= 0 && ci < cues.length ? cues[ci] : null;
     const start = cue ? Number(cue.start) : Number(chapter.start);
     const title = String(chapter.title || '').trim();
     if (!title && !Number.isFinite(start)) return '';
-    const when = Number.isFinite(start) ? host.fmt(start + (Number(host.state.offset) || 0)) : '';
+    const when = Number.isFinite(start) ? host.ui.fmt(start + (Number(host.player.state.offset) || 0)) : '';
     return '<div class="study-topic study-chapter">' +
       (Number.isFinite(start)
-        ? '<button class="btn ghost small" data-study-act="topic" data-study-t="' + Math.round(start) + '">▶ ' + host.esc(when) + '</button>'
+        ? '<button class="btn ghost small" data-study-act="topic" data-study-t="' + Math.round(start) + '">▶ ' + host.ui.esc(when) + '</button>'
         : '<span class="study-chapter-no">' + (index + 1) + '</span>') +
       '<div><strong>' + studyAnnotateText(title || '未命名章节') + '</strong>' +
       (chapter.summary ? '<p>' + studyAnnotateText(chapter.summary) + '</p>' : '') + '</div></div>';
@@ -1437,11 +1454,11 @@ function studyChaptersHTML(data) {
 }
 async function studyAnalyzeChapters() {
   const body = $('studyBody');
-  if (!host.state.current) return;
-  const epId = host.state.current.id;
-  const cues = host.state.cues || [];
-  if (!cues.length) { host.showToast('这一集没有文字稿，无法生成章节。', 5000); return; }
-  if (!studyReady()) { host.showToast('请先在「设置 → AI 学英语」填写 API Key 和模型。', 6000); return; }
+  if (!host.player.state.current) return;
+  const epId = host.player.state.current.id;
+  const cues = host.player.state.cues || [];
+  if (!cues.length) { host.ui.toast('这一集没有文字稿，无法生成章节。', 5000); return; }
+  if (!studyReady()) { host.ui.toast('请先在「设置 → AI 学英语」填写 API Key 和模型。', 6000); return; }
   const sig = [STUDY.provider, STUDY.endpoint, STUDY.model, STUDY.target, cues.length, 'chapter-v1'].join('|');
   const key = 'ch:' + epId;
   const lines = cues.map((cue, index) => '#' + index + ' [' + studyCueStamp(cue) + '] ' + String(cue.text || ''));
@@ -1482,33 +1499,33 @@ async function studyAnalyzeChapters() {
     studyCache[key] = { at: Date.now(), sig, data: { version: 1, chapters } };
     saveStudyCache();
     if (studyView === 'episode') studyRenderEpisode();
-    host.showToast('已生成 ' + chapters.length + ' 个章节。', 3000);
+    host.ui.toast('已生成 ' + chapters.length + ' 个章节。', 3000);
   } catch (err) {
     if (studyView === 'episode') studyRenderEpisode();
-    host.showToast('章节生成失败：' + String(err && err.message ? err.message : err), 7000);
+    host.ui.toast('章节生成失败：' + String(err && err.message ? err.message : err), 7000);
   }
 }
 /* ---- 金句卡片：挑句子用行号，卡片在本地画，不依赖模型出图 ---- */
 function studyQuoteEntry() {
-  const epId = host.state.current ? host.state.current.id : '';
+  const epId = host.player.state.current ? host.player.state.current.id : '';
   const entry = epId ? studyCache['q:' + epId] : null;
   return entry && entry.data && Array.isArray(entry.data.quotes) ? entry : null;
 }
 function studyQuotesHTML(data) {
   const quotes = Array.isArray(data && data.quotes) ? data.quotes : [];
   if (!quotes.length) return '';
-  const cues = host.state.cues || [];
+  const cues = host.player.state.cues || [];
   const rows = quotes.map(quote => {
     if (!quote || typeof quote !== 'object') return '';
     const ci = Number(quote.ci);
     if (!Number.isInteger(ci) || ci < 0 || ci >= cues.length) return '';
     const cue = cues[ci];
     return '<div class="study-quote">' +
-      '<p class="study-quote-en">' + host.esc(cue.text || '') + '</p>' +
-      (cue.zh ? '<p class="study-quote-zh">' + host.esc(cue.zh) + '</p>' : '') +
+      '<p class="study-quote-en">' + host.ui.esc(cue.text || '') + '</p>' +
+      (cue.zh ? '<p class="study-quote-zh">' + host.ui.esc(cue.zh) + '</p>' : '') +
       (quote.reason ? '<small>' + studyAnnotateText(quote.reason) + '</small>' : '') +
       '<div class="study-actions">' +
-      '<button class="btn ghost small" data-study-act="topic" data-study-t="' + Math.round(Number(cue.start) || 0) + '">▶ ' + host.esc(studyCueStamp(cue)) + '</button>' +
+      '<button class="btn ghost small" data-study-act="topic" data-study-t="' + Math.round(Number(cue.start) || 0) + '">▶ ' + host.ui.esc(studyCueStamp(cue)) + '</button>' +
       '<button class="btn ghost small" data-study-act="quoteCard" data-cue="' + ci + '">生成卡片</button>' +
       '</div></div>';
   }).join('');
@@ -1517,11 +1534,11 @@ function studyQuotesHTML(data) {
 }
 async function studyAnalyzeQuotes() {
   const body = $('studyBody');
-  if (!host.state.current) return;
-  const epId = host.state.current.id;
-  const cues = host.state.cues || [];
-  if (!cues.length) { host.showToast('这一集没有文字稿。', 5000); return; }
-  if (!studyReady()) { host.showToast('请先在「设置 → AI 学英语」填写 API Key 和模型。', 6000); return; }
+  if (!host.player.state.current) return;
+  const epId = host.player.state.current.id;
+  const cues = host.player.state.cues || [];
+  if (!cues.length) { host.ui.toast('这一集没有文字稿。', 5000); return; }
+  if (!studyReady()) { host.ui.toast('请先在「设置 → AI 学英语」填写 API Key 和模型。', 6000); return; }
   const sig = [STUDY.provider, STUDY.endpoint, STUDY.model, STUDY.target, cues.length, 'quote-v1'].join('|');
   const key = 'q:' + epId;
   const lines = cues.map((cue, index) => '#' + index + ' [' + studyCueStamp(cue) + '] ' + String(cue.text || ''));
@@ -1560,10 +1577,10 @@ async function studyAnalyzeQuotes() {
     studyCache[key] = { at: Date.now(), sig, data: { version: 1, quotes } };
     saveStudyCache();
     if (studyView === 'episode') studyRenderEpisode();
-    host.showToast('已挑出 ' + quotes.length + ' 句金句。', 3000);
+    host.ui.toast('已挑出 ' + quotes.length + ' 句金句。', 3000);
   } catch (err) {
     if (studyView === 'episode') studyRenderEpisode();
-    host.showToast('金句生成失败：' + String(err && err.message ? err.message : err), 7000);
+    host.ui.toast('金句生成失败：' + String(err && err.message ? err.message : err), 7000);
   }
 }
 function studyWrapCanvasText(ctx, text, max, maxLines) {
@@ -1606,15 +1623,15 @@ function studyCloseQuoteCard() {
   }
 }
 function studyOpenQuoteCard(rawCue) {
-  if (!host.studyPluginOn()) return;
+  if (!host.catalog.studyPluginOn()) return;
   const ci = Number(rawCue);
-  const cue = (host.state.cues || [])[ci];
-  if (!cue) { host.showToast('这一句不在当前文字稿里。', 4000); return; }
+  const cue = (host.player.state.cues || [])[ci];
+  if (!cue) { host.ui.toast('这一句不在当前文字稿里。', 4000); return; }
   const W = 1080, H = 1350;
   const canvas = document.createElement('canvas');
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext('2d');
-  if (!ctx) { host.showToast('卡片生成失败。', 4000); return; }
+  if (!ctx) { host.ui.toast('卡片生成失败。', 4000); return; }
   const bg = ctx.createLinearGradient(0, 0, W, H);
   bg.addColorStop(0, '#15181f');
   bg.addColorStop(0.55, '#0e1116');
@@ -1642,20 +1659,20 @@ function studyOpenQuoteCard(rawCue) {
   ctx.fillStyle = '#d6dbe4';
   ctx.font = '400 28px "Noto Sans SC","Microsoft YaHei",system-ui,sans-serif';
   let ty = H - 140;
-  studyWrapCanvasText(ctx, host.state.current ? host.state.current.title : '', 900, 2)
+  studyWrapCanvasText(ctx, host.player.state.current ? host.player.state.current.title : '', 900, 2)
     .forEach(line => { ctx.fillText(line, 84, ty); ty += 38; });
   ctx.fillStyle = '#7d8b9d';
   ctx.font = '400 24px "Noto Sans SC",system-ui,sans-serif';
-  ctx.fillText((host.state.show ? host.state.show.name : 'MyTranscript').slice(0, 34), 84, H - 62);
+  ctx.fillText((host.player.state.show ? host.player.state.show.name : 'MyTranscript').slice(0, 34), 84, H - 62);
   canvas.toBlob(blob => {
-    if (!blob) { host.showToast('卡片生成失败。', 4000); return; }
+    if (!blob) { host.ui.toast('卡片生成失败。', 4000); return; }
     studyCloseQuoteCard();
     studyQuoteUrl = URL.createObjectURL(blob);
     const wrap = document.createElement('div');
     wrap.className = 'quote-card-wrap';
     wrap.id = 'quoteCardWrap';
     wrap.innerHTML = '<div class="quote-card" role="dialog" aria-label="金句卡片">' +
-      '<header><span>分享</span><b>' + host.esc(studyCueStamp(cue)) + ' · ' + host.esc((host.state.show ? host.state.show.name : '') || '') + '</b>' +
+      '<header><span>分享</span><b>' + host.ui.esc(studyCueStamp(cue)) + ' · ' + host.ui.esc((host.player.state.show ? host.player.state.show.name : '') || '') + '</b>' +
       '<button type="button" data-quote-close aria-label="关闭">✕</button></header>' +
       '<img src="' + studyQuoteUrl + '" alt="金句卡片预览">' +
       '<div class="study-actions">' +
@@ -1673,47 +1690,47 @@ function studyOpenQuoteCard(rawCue) {
       document.body.append(link);
       link.click();
       link.remove();
-      host.showToast('金句卡片已保存。', 3000);
+      host.ui.toast('金句卡片已保存。', 3000);
     };
     wrap.querySelector('[data-quote-copy]').onclick = async () => {
-      const text = [cue.text, cue.zh, '— ' + [(host.state.show ? host.state.show.name : ''), (host.state.current ? host.state.current.title : ''), studyCueStamp(cue)].filter(Boolean).join(' · ')]
+      const text = [cue.text, cue.zh, '— ' + [(host.player.state.show ? host.player.state.show.name : ''), (host.player.state.current ? host.player.state.current.title : ''), studyCueStamp(cue)].filter(Boolean).join(' · ')]
         .filter(Boolean).join('\n');
-      if (await host.copyPlain(text)) host.showToast('已复制卡片文字。', 3000);
-      else host.showToast('复制失败，请手动选择文本。', 4000);
+      if (await host.ui.copyPlain(text)) host.ui.toast('已复制卡片文字。', 3000);
+      else host.ui.toast('复制失败，请手动选择文本。', 4000);
     };
     studyQuoteEsc = event => { if (event.key === 'Escape') studyCloseQuoteCard(); };
     document.addEventListener('keydown', studyQuoteEsc);
   }, 'image/png');
 }
 async function studyCopyEpisode() {
-  const key = host.state.current ? 'ep:' + host.state.current.id : '';
+  const key = host.player.state.current ? 'ep:' + host.player.state.current.id : '';
   const data = key ? studyCache[key]?.data : null;
-  if (!data) { host.showToast('还没有整集总结。', 3000); return; }
+  if (!data) { host.ui.toast('还没有整集总结。', 3000); return; }
   const text = studyEpisodeText(data);
-  if (!text) { host.showToast('总结为空。', 3000); return; }
-  if (await host.copyPlain(text)) host.showToast('已复制整集总结。', 3000);
-  else host.showToast('复制失败，请手动选择文本。', 4000);
+  if (!text) { host.ui.toast('总结为空。', 3000); return; }
+  if (await host.ui.copyPlain(text)) host.ui.toast('已复制整集总结。', 3000);
+  else host.ui.toast('复制失败，请手动选择文本。', 4000);
 }
 function studyOpenEpisodeSummary(key, epId) {
-  if (!host.studyPluginOn()) { host.showToast('学英语插件未启用。', 'warn'); return; }
-  const show = host.showByKey(key);
-  const ep = show ? host.episodesOf(show).find(item => item.id === epId) : null;
-  if (!show || !ep) { host.showToast('找不到这一集。', 5000); return; }
-  if (!host.moduleOn('study')) { host.showToast('AI 学英语模块已关闭。', 5000); return; }
-  if (!ep.transcript?.url) { host.showToast('这一集没有文字稿，无法总结。', 5000); return; }
+  if (!host.catalog.studyPluginOn()) { host.ui.toast('学英语插件未启用。', 'warn'); return; }
+  const show = host.catalog.showByKey(key);
+  const ep = show ? host.catalog.episodesOf(show).find(item => item.id === epId) : null;
+  if (!show || !ep) { host.ui.toast('找不到这一集。', 5000); return; }
+  if (!host.catalog.moduleOn('study')) { host.ui.toast('AI 学英语模块已关闭。', 5000); return; }
+  if (!ep.transcript?.url) { host.ui.toast('这一集没有文字稿，无法总结。', 5000); return; }
   if (!studyReady()) {
-    host.showToast('请先在「设置 → AI 学英语」填写 API Key 和模型。', 8000);
-    host.navigate('settings');
+    host.ui.toast('请先在「设置 → AI 学英语」填写 API Key 和模型。', 8000);
+    host.ui.navigate('settings');
     return;
   }
   pendingStudyEpisode = epId;
-  app.autoplay = false;
-  host.navigate('player', [key, epId]);
+  host.player.setAutoplay(false);
+  host.ui.navigate('player', [key, epId]);
   waitStudyEpisodeSummary(epId, 0);
 }
 function waitStudyEpisodeSummary(epId, tries) {
   if (pendingStudyEpisode !== epId) return;
-  if (host.state.current?.id === epId && (host.state.cues || []).length) {
+  if (host.player.state.current?.id === epId && (host.player.state.cues || []).length) {
     pendingStudyEpisode = '';
     openStudySheet('episode');
     if (studyCache['ep:' + epId]?.data?.version !== 3) studyAnalyzeEpisode();
@@ -1721,7 +1738,7 @@ function waitStudyEpisodeSummary(epId, tries) {
   }
   if (tries < 80) { setTimeout(() => waitStudyEpisodeSummary(epId, tries + 1), 250); return; }
   pendingStudyEpisode = '';
-  host.showToast('文字稿还没准备好，请打开播放页后再试。', 6000);
+  host.ui.toast('文字稿还没准备好，请打开播放页后再试。', 6000);
 }
 function bindStudyActButtons() {
   document.querySelectorAll('[data-study-act]').forEach(btn => {
@@ -1733,11 +1750,11 @@ function bindStudyActButtons() {
       else if (act === 'copyEpisode') studyCopyEpisode();
       else if (act === 'ad' || act === 'topic') {
         const t = Number(btn.dataset.studyT);
-        if (Number.isFinite(t) && t >= 0) host.seekTo(t);
+        if (Number.isFinite(t) && t >= 0) host.player.seekTo(t);
       }
       else if (act === 'playCue') { const cur = studyCurrentCue(); if (cur) studyPlayCue(cur.cue, 1); }
       else if (act === 'loopCue') { const cur = studyCurrentCue(); if (cur) studyPlayCue(cur.cue, 3); }
-      else if (act === 'autoPause') { host.setAutoPause(!host.getAutoPause()); const r = studyRuntime(); if (r && r.resetAutoPause) r.resetAutoPause(); studyRenderCurrent(); }
+      else if (act === 'autoPause') { host.player.setAutoPause(!host.player.getAutoPause()); const r = studyRuntime(); if (r && r.resetAutoPause) r.resetAutoPause(); studyRenderCurrent(); }
       else if (act === 'hideZh') { studyHideZh = !studyHideZh; studyRenderCurrent(); }
       else if (act === 'playReview') {
         const due = studyDueItems();
@@ -1749,9 +1766,9 @@ function bindStudyActButtons() {
         if (studyExercise) studyPlayCue(studyExercise.cue, 1);
       } else if (act === 'nextEx') {
         const cur = studyCurrentCue();
-        if (cur && host.state.cues[cur.ci + 1]) {
+        if (cur && host.player.state.cues[cur.ci + 1]) {
           studyExercise = null;
-          host.seekTo(host.state.cues[cur.ci + 1].start + host.state.offset);
+          host.player.seekTo(host.player.state.cues[cur.ci + 1].start + host.player.state.offset);
           setTimeout(() => studyRenderPractice(), 80);
         }
       } else if (act === 'checkEx') studyCheckExercise(false);
@@ -1765,8 +1782,8 @@ function bindStudyActButtons() {
         if (input) studyAsk(input.value);
       } else if (act === 'askAsk') studyAsk(btn.dataset.studyQ || '');
       else if (act === 'askCite') {
-        const cue = (host.state.cues || [])[Number(btn.dataset.cue)];
-        if (cue) host.seekTo(Number(cue.start) || 0);
+        const cue = (host.player.state.cues || [])[Number(btn.dataset.cue)];
+        if (cue) host.player.seekTo(Number(cue.start) || 0);
       }
     };
   });
@@ -1842,8 +1859,8 @@ function studyRenderModelList(models) {
     const id = String(item.id);
     const name = String(item.name || id);
     const selected = id === String(STUDY.model || '');
-    return '<button type="button" class="study-model-item" role="option" data-model="' + host.esc(id) + '" aria-selected="' + (selected ? 'true' : 'false') + '">' +
-      '<span>' + host.esc(name) + '</span>' + (name === id ? '' : '<span class="id">' + host.esc(id) + '</span>') + '</button>';
+    return '<button type="button" class="study-model-item" role="option" data-model="' + host.ui.esc(id) + '" aria-selected="' + (selected ? 'true' : 'false') + '">' +
+      '<span>' + host.ui.esc(name) + '</span>' + (name === id ? '' : '<span class="id">' + host.ui.esc(id) + '</span>') + '</button>';
   }).join('');
   if (!models.length) {
     list.innerHTML = '<div class="study-model-empty">没有可用模型，可直接手动填写模型名。</div>';
@@ -1866,7 +1883,7 @@ async function studyFetchModels() {
   }
   studyModelStatus('正在获取模型列表…');
   try {
-    const tauri = host.tauriHost();
+    const tauri = host.shell.tauriHost();
     const list = await tauri.core.invoke('llm_models', { config: studyConfig() });
     const models = (Array.isArray(list) ? list : []).filter(item => item && String(item.id || '').trim());
     if (!models.length) { studyModelStatus('厂商没有返回可用模型，可手动填写模型名', '#c96363'); return; }
@@ -1881,16 +1898,69 @@ async function studyFetchModels() {
     studyModelStatus(String(err.message || err), '#c96363');
   }
 }
+function bindTranslateUI() {
+  const on = $('trOn');
+  if (on) uiListen(on, 'click', () => {
+    host.translate.TR.on = !host.translate.TR.on;
+    host.translate.save();
+    // 开自动翻译时如果正文只显示英文，顺手切到双语，否则译完也看不见。
+    if (host.translate.TR.on && host.translate.reader.lang === 'en') {
+      host.translate.reader.lang = 'both';
+      host.translate.applyReader();
+      host.translate.rebuildCues();
+    }
+    host.translate.sync();
+    host.translate.status(host.translate.TR.on
+      ? (host.translate.ready() ? '已开启，播放时自动翻译' : '还缺 API Key')
+      : '未开启', host.translate.TR.on && !host.translate.ready());
+    if (host.translate.TR.on && host.player.state.cues.length && host.player.state.activeCue >= 0) {
+      host.translate.primeCues(host.player.state.activeCue);
+    }
+  });
+  const engine = $('trEngine');
+  if (engine) uiListen(engine, 'change', () => {
+    host.translate.TR.engine = engine.value;
+    host.translate.save();
+    host.translate.sync();
+  });
+  const target = $('trTarget');
+  if (target) uiListen(target, 'change', () => {
+    host.translate.TR.target = target.value;
+    host.translate.TR_CACHE.clear();
+    host.translate.save();
+  });
+  [['trEndpoint', 'endpoint'], ['trKey', 'key'], ['trRegion', 'region'], ['trModel', 'model']].forEach(([id, field]) => {
+    const el = $(id);
+    if (!el) return;
+    uiListen(el, 'input', () => { host.translate.TR[field] = el.value; host.translate.save(); });
+    uiListen(el, 'change', () => host.translate.sync());
+  });
+  const test = $('trTest');
+  if (test) uiListen(test, 'click', async () => {
+    if (!host.translate.native()) { host.translate.status('自动翻译需要在桌面版使用', true); return; }
+    test.disabled = true;
+    host.translate.status('测试中…', false);
+    try {
+      const [out] = await host.translate.batch(['Hello, this is a translation test.']);
+      host.translate.status('译文：' + (out || ''), false);
+    } catch (err) {
+      host.translate.noteError(err);
+    } finally {
+      test.disabled = false;
+    }
+  });
+}
 function bindStudyUI() {
-  $('studyBtn').onclick = e => { e.stopPropagation(); openStudySheet(); };
-  $('studyClose').onclick = closeStudySheet;
+  beginUiBindings();
+  uiListen($('studyBtn'), 'click', e => { e.stopPropagation(); openStudySheet(); });
+  uiListen($('studyClose'), 'click', closeStudySheet);
   document.querySelectorAll('[data-study-view]').forEach(btn => {
-    btn.onclick = () => setStudyView(btn.dataset.studyView);
+    uiListen(btn, 'click', () => setStudyView(btn.dataset.studyView));
   });
   // 页签按 ARIA tabs 的惯例支持左右方向键与 Home/End，省得一个个 Tab 过去。
   const studyTabBar = $('studySheet')?.querySelector('.study-tabs');
   if (studyTabBar) {
-    studyTabBar.addEventListener('keydown', ev => {
+    uiListen(studyTabBar, 'keydown', ev => {
       if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(ev.key)) return;
       const btns = [...studyTabBar.querySelectorAll('[data-study-view]')];
       const i = btns.indexOf(document.activeElement);
@@ -1904,11 +1974,11 @@ function bindStudyUI() {
     });
   }
   const provider = $('studyProvider');
-  if (provider) provider.addEventListener('change', () => applyStudyProvider(provider.value, true));
+  if (provider) uiListen(provider, 'change', () => applyStudyProvider(provider.value, true));
   const fields = [['studyEndpoint', 'endpoint'], ['studyKey', 'key'], ['studyModel', 'model'], ['studyTarget', 'target']];
   fields.forEach(([id, key]) => {
     const el = $(id); if (!el) return;
-    el.addEventListener('change', () => {
+    uiListen(el, 'change', () => {
       STUDY[key] = el.value;
       if (key === 'endpoint') {
         studyClearModels();
@@ -1919,41 +1989,38 @@ function bindStudyUI() {
     });
   });
   const modelSearch = $('studyModelSearch');
-  if (modelSearch) modelSearch.addEventListener('input', studyFilterModels);
-  const modelClose = $('studyModelClose');
-  if (modelClose) modelClose.onclick = () => { const picker = $('studyModelPicker'); if (picker) picker.hidden = true; };
+  if (modelSearch) uiListen(modelSearch, 'input', studyFilterModels);
+  uiListen($('studyModelClose'), 'click', () => { const picker = $('studyModelPicker'); if (picker) picker.hidden = true; });
   const modelList = $('studyModelList');
-  if (modelList) modelList.addEventListener('click', e => {
+  if (modelList) uiListen(modelList, 'click', e => {
     const btn = e.target.closest('.study-model-item');
     if (btn) studyPickModel(btn.dataset.model || '');
   });
   const modelInput = $('studyModel');
-  if (modelInput) modelInput.addEventListener('focus', () => {
+  if (modelInput) uiListen(modelInput, 'focus', () => {
     const list = $('studyModelList');
     if (list && list.querySelectorAll('.study-model-item').length) studyOpenModels();
   });
-  $('studyModelFetch').onclick = studyFetchModels;
-  $('studyTestBtn').onclick = studyTestConnection;
-  $('studyClearCache').onclick = () => {
+  uiListen($('studyModelFetch'), 'click', studyFetchModels);
+  uiListen($('studyTestBtn'), 'click', studyTestConnection);
+  uiListen($('studyClearCache'), 'click', () => {
     Object.keys(studyCache).forEach(k => delete studyCache[k]); saveStudyCache();
-    host.showToast('已清空 AI 学习缓存。', 3000);
+    host.ui.toast('已清空 AI 学习缓存。', 3000);
     if ($('studySheet').classList.contains('on')) setStudyView(studyView);
-  };
-  $('studySheet').addEventListener('click', e => e.stopPropagation());
-  if (!window.__studyAudioBound) {
-    window.__studyAudioBound = true;
-    host.audio.addEventListener('timeupdate', studyAudioTick);
-    host.audio.addEventListener('play', () => {
-      const r = studyRuntime(); if (r && r.notePlaybackStart) r.notePlaybackStart();
-    });
-    host.audio.addEventListener('ended', () => {
-      const r = studyRuntime(); if (r && r.notePlaybackEnded) r.notePlaybackEnded();
-    });
-  }
+  });
+  uiListen($('studySheet'), 'click', e => e.stopPropagation());
+  uiListen(host.player.audio, 'timeupdate', studyAudioTick);
+  uiListen(host.player.audio, 'play', () => {
+    const r = studyRuntime(); if (r && r.notePlaybackStart) r.notePlaybackStart();
+  });
+  uiListen(host.player.audio, 'ended', () => {
+    const r = studyRuntime(); if (r && r.notePlaybackEnded) r.notePlaybackEnded();
+  });
   studyUpdateDueBadge();
   bindStudyActButtons();
   bindStudyTermTips();
+  bindTranslateUI();
 }
 
-  return {applyStudyProvider,bindStudyUI,bindWordStatusButtons,closeStudySheet,openStudySheet,setStudyView,studyAddVocab,studyAnalyzeCurrent,studyAnalyzeEpisode,studyApplyWordMarks,studyAsk,studyChat,studyCheckExercise,studyClearModels,studyConfig,studyCueBounds,studyCurrentCue,studyCurrentKey,studyDueItems,studyEpisodeHTML,studyExportCsv,studyFetchModels,studyHash,studyLangName,studyMarkWord,studyModelStatus,studyNative,studyOpenEpisodeSummary,studyOpenModels,studyParseJson,studyPickModel,studyPlayCue,studyPlayItem,studyPlayRange,studyProviderMeta,studyReady,studyRenderCurrent,studyRenderEpisode,studyRenderModelList,studyRenderNow,studyRenderPractice,studyRenderReview,studyRenderVocab,studySourceLabel,studyStartExercise,studyStats,studyTestConnection,studyUpdateDueBadge,studyWithCues,syncStudySettings,wordStatusHTML};
+  return {applyStudyProvider,bindStudyUI,bindWordStatusButtons,closeStudySheet,disposeStudyUI,openStudySheet,setStudyView,studyAddVocab,studyAnalyzeCurrent,studyAnalyzeEpisode,studyApplyWordMarks,studyAsk,studyChat,studyCheckExercise,studyClearModels,studyConfig,studyCueBounds,studyCurrentCue,studyCurrentKey,studyDueItems,studyEpisodeHTML,studyExportCsv,studyFetchModels,studyHash,studyLangName,studyMarkWord,studyModelStatus,studyNative,studyOpenEpisodeSummary,studyOpenModels,studyParseJson,studyPickModel,studyPlayCue,studyPlayItem,studyPlayRange,studyProviderMeta,studyReady,studyRenderCurrent,studyRenderEpisode,studyRenderModelList,studyRenderNow,studyRenderPractice,studyRenderReview,studyRenderVocab,studySourceLabel,studyStartExercise,studyStats,studyTestConnection,studyUpdateDueBadge,studyWithCues,syncStudySettings,wordStatusHTML};
 }

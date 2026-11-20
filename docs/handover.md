@@ -112,7 +112,7 @@ src/player-js/               播放器脚本分片（00…10，按文件名顺�
   05-transport-transcript-nav.js    transport、进度/音量、文字稿交互、章节、点词、播放列表、离线下载、模型管理
   06-catalog-feeds-search.js        目录与本地状态、feed 缓存、OPML、封面、在线搜索
   07-routes-pages.js                路由、页面片段、首页/库/发现/搜索/节目/收件箱/设置
-  08-study-ai.js                    自动翻译、AI 学英语（含 window.__xai 挂接）
+  08-study-ai.js                    学英语薄包装 + 设置页辅助（window.__xai 挂接）
   09-player-integration.js          播放器与页面集成入口
   10-desktop-bridge-tail.js         桌面壳桥（MediaSession/托盘/迷你窗）与主 IIFE 收尾
 ```
@@ -1315,17 +1315,22 @@ P2：
   只接引用（`applyStudyEngine`），没有插件时用本地回退；停用/软重载时引擎槽清空。
   另外 `runtime.js`（阶段三）接管 AI provider 解析、`llm_chat`、JSON 解析、cue 定位、音频循环与
   自动暂停：`api.study.registerRuntime(createStudyRuntime(api, api.study.host()))`，宿主只留
-  `studyChat` / `studyPlayRange` 等转发包装；`api.study.host()` 提供 state/audio 活引用与
-  seekTo/showToast/tauriHost。
+  `studyChat` / `studyPlayRange` 等转发包装；服务商表只在 `engine.providers` 维护一份，
+  `runtime` / `ui` 都从引擎读。`api.study.host()` 已从 35 个平铺键收成 `player` / `ui` /
+  `catalog` / `translate` / `support` / `shell` 六组。
 - 渲染层在插件 `ui.js`（阶段二）：`createStudyUi(api, host)` 接管学习面板、复习、词卡、整集总结、
-  AI 设置、模型选择和练习；`main.js` 里 `api.study.registerUi(...)`。宿主 `08-study-ai.js` 只留
-  同名转发包装。`10-desktop-bridge-tail.js` 不再覆盖 `studyRender*`，改为注册
-  `beforeEpisode` / `episode` / `practice` / `vocab` / `episodeHtml` hook，由插件在对应视图里调用
-  `api.study.runHook(...)`；前情回顾、跨集时间线、缓存徽标、盲听/多空/慢速入口仍由 10 提供。
+  AI 设置、模型选择、练习和翻译设置绑定；`main.js` 里 `api.study.registerUi(...)`。宿主 `08-study-ai.js`
+  只留同名转发包装，`10-desktop-bridge-tail.js` 不再调用 `bindTranslateUI()`；自动翻译的 `TR` 配置与
+  请求仍由 `07-routes-pages.js` 持有，插件通过 `host.translate` 读写。`10` 不再覆盖 `studyRender*`，
+  改为注册 `beforeEpisode` / `episode` / `practice` / `vocab` / `episodeHtml` hook，由插件在对应视图里
+  调用 `api.study.runHook(...)`；前情回顾、跨集时间线、缓存徽标、盲听/多空/慢速入口仍由 10 提供。
 - 实测：默认两插件同时启用时，字幕插件页显示字幕正常；停用 `study` 并刷新后
   字幕仍有 240 句，`#studyBtn` 与学习设置页隐藏，词卡不弹出；重新启用后恢复。阶段二已经
   重建 exe，并用 `MYT_EVAL` 探针验证：学习面板/复习/生词本/整集摘要/学习服务设置均可渲染且无
-  未捕获异常；仍需用户手动点一遍确认后再提交。
+  未捕获异常。随后补了 UI 生命周期：`disposeStudyUI` 用 `AbortController` 撤销面板/音频监听，
+  `registerStudyUi` 绑定失败先回滚再抛错；`app.autoplay` 改走 `host.player.setAutoplay`，词卡提示
+  标记收进插件闭包；`withCues` 的成功路径会撤销本次 15 秒兜底 timeout，避免旧 timer 清掉下一次等待。
+  停用/重启探针已验证面板关闭再打开正常；用户随后要求提交并推送本轮修复。
 
 
 

@@ -212,8 +212,9 @@ registerCoreProvider / coreProvider / releaseCoreProviders`，插件侧入口
 - 插件增加 `runtime.js`：AI provider 配置解析、`llm_chat` 调用、JSON 解析、cue 定位等待、
   音频循环与自动暂停状态都在插件里；
 - 宿主 `08-study-ai.js` 只留同名包装（`studyChat` / `studyCueBounds` / `studyPlayRange` …），
-  内部转发到 `api.study.runtime()`；`api.study.host()` 提供 `state`/`audio`/`studyAutoPause`
-  活引用、`seekTo`/`showToast`/`tauriHost`；
+  内部转发到 `api.study.runtime()`；`api.study.host()` 的 `player` 组提供 `state`/`audio` 活引用、
+  `getAutoPause`/`setAutoPause`、`seekTo`/`setAutoplay`，`ui` 组提供 `toast`/`navigate`，`shell` 组提供
+  `tauriHost`；
 - 注册走 `api.study.registerRuntime(impl)`，owner 唯一、停用/软重载自动清空；
 - 单测 `tests/test_study_runtime.py` 覆盖 offset 后的句界、循环重播/用完后暂停、句末自动暂停、
   provider 配置与 `llm_chat`、JSON 围栏解析；
@@ -225,10 +226,11 @@ registerCoreProvider / coreProvider / releaseCoreProviders`，插件侧入口
   'episode' / 'practice' / 'vocab' / 'episodeHtml')`，由插件渲染完对应视图后调用
   `api.study.runHook(...)`；磁盘缓存徽标、前情回顾、跨集时间线、盲听/多空/慢速入口和学习计划仍由 10 提供；
 - 插件增加 `ui.js`（`createStudyUi(api, host)`），整段接管 `08-study-ai.js` 的学习面板、复习、词卡、
-  整集总结、AI 设置、模型选择、练习和翻译设置入口；
-- 宿主 `08-study-ai.js` 重写成薄包装，只做转发与回退；`04` 增加 `STUDY_UI` 槽、
-  `registerStudyUi` / `studyUi()`，并扩展 `studyHostBridge()` 提供 `state` / `audio` / `reader` /
-  `TR` / `TR_CACHE` 活引用、`seekTo` / `showToast` / `navigate` / `setView` / 自动暂停读写等原语；
+  整集总结、AI 设置、模型选择、练习和翻译设置绑定；服务商表只在 `engine.providers` 维护一份；
+- 宿主 `08-study-ai.js` 重写成薄包装，只做转发与回退；`10` 不再调用 `bindTranslateUI()`，自动翻译的
+  `TR`/`tr*` 仍由 `07` 持有，插件通过 `host.translate` 读写；
+- `04` 增加 `STUDY_UI` 槽、`registerStudyUi` / `studyUi()`，`studyHostBridge()` 从 35 个平铺键收成
+  `player` / `ui` / `catalog` / `translate` / `support` / `shell` 六组；
 - `plugin.json` 的 `scripts` 增加 `ui.js`，Rust seed 列表同步；`main.js` 在 engine/runtime 之后
   调用 `registerUi(createStudyUi(api, study.host()))`；
 - 静态测试已覆盖：`tests/test_player.py` 的渲染断言改为 `player_page() + study_ui()` 合并检查；
@@ -241,7 +243,20 @@ registerCoreProvider / coreProvider / releaseCoreProviders`，插件侧入口
 - 打开真实播放页的缓存集后，整集页显示「本地缓存 / 内容摘要」与缓存正文，前情/时间线 hook 未报错；
 - 学习中心「学习服务设置」能打开设置页，服务商、API Key、模型、讲解语言字段齐全。
 
-**待用户实测确认后提交**。
+生命周期修复（2026-11-20）：
+
+- 插件 `ui.js` 增加 `beginUiBindings` / `uiListen` / `disposeStudyUI`：面板、页签、表单、音频监听
+  统一挂到一个 `AbortController` 上，停用时一次撤销；停用同时关闭面板、终止待打开的整集等待；
+- `registerStudyUi` 改为绑定成功后才提交槽位；绑定失败先 `disposeStudyUI` 再抛出，不留下半初始化实现；
+  同一 owner 替换实现时先撤销旧实现；
+- 学习界面不再裸用 `app`：`app.autoplay` 改走 `host.player.setAutoplay(false)`，词卡提示的
+  绑定标记收成插件闭包变量，避免命中 `<div id="app">` 的命名全局；
+- 新增 `tests/test_study_ui_lifecycle.py`：覆盖注册/停用、绑定失败回滚、owner 独占、重复注册，
+  以及插件源码不得再出现裸 `app.` / `window.__studyAudioBound`；
+- 实机探针：打开学习面板 → `stop('study')` 后面板关闭、`body.dataset.studyPlugin` 消失 →
+  `start('study')` 后再次打开正常，无未捕获异常。
+
+自动探针验收仍不代表用户手动确认；阶段二已随 `29e2a279` 提交，本轮生命周期修复待用户实测后提交。
 
 ## 8. 测试
 

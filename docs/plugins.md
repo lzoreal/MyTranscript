@@ -149,22 +149,24 @@ MyTPlugins.register('hello-world', {
 | `api.study.engine()` | 取当前学习引擎；没有插件时返回 `null` |
 | `api.study.registerRuntime(impl)` | 注册学习运行时（AI 请求、cue 定位、音频循环/自动暂停） |
 | `api.study.runtime()` | 取当前学习运行时；没有插件时返回 `null` |
-| `api.study.registerUi(impl)` | 注册学习渲染实现（面板/复习/词卡/总结/设置），同一时间只允许一个插件 |
+| `api.study.registerUi(impl)` | 注册学习渲染实现（面板/复习/词卡/总结/设置），同一时间只允许一个插件；成功绑定后提交槽位，失败先 dispose 再抛出，停用时调用 `disposeStudyUI` |
 | `api.study.ui()` | 取当前学习渲染实现；没有插件时返回 `null` |
 | `api.study.runHook(name, ...args)` | 调用桌面补丁注册的 hook（`beforeEpisode` / `episode` / `practice` / `vocab` / `episodeHtml`） |
-| `api.study.host()` | 学习实现需要的宿主原语：`state` / `audio` / `reader` / `TR` / `TR_CACHE` 活引用，`seekTo` / `showToast` / `navigate` / `setView` / `closeDockSheet`、广告区间归一与 `copyPlain`、自动暂停读写等 |
+| `api.study.host()` | 学习实现需要的宿主原语，按 `player` / `ui` / `catalog` / `translate` / `support` / `shell` 六组组织；`player` 提供 state/audio 活引用与 seek、自动暂停、自动播放，`translate` 提供 TR/TR_CACHE/reader 活引用和保存、测试、补句等原语 |
 | `api.storage.get(key, fallback)` / `set` / `remove` | 插件命名空间下的 localStorage，键前缀 `myt-plugin:<id>:` |
 
 `registerEngine` 的 `impl` 需要提供这四个活对象：`settings`（AI 服务配置）、`cache`（句子/整集缓存）、
 `vocab`（生词本）、`status`（词状态表），以及 `saveSettings` / `saveCache` / `saveVocab` / `saveStatus`、
-`wordStatusOf` / `markWord` / `dueItems` / `srsGrade` / `stats`。宿主接管这些引用后，设置页、词状态高亮、
-到期徽标和复习按钮都直接读写插件持有的对象；插件停用时回退到宿主本地实现。
+`wordStatusOf` / `markWord` / `dueItems` / `srsGrade` / `stats`；`providers` 是唯一的 AI 服务商表
+（名称、默认地址、默认模型、提示文案），运行时和渲染层都从这里读，不再各存一份。宿主接管这些引用后，
+设置页、词状态高亮、到期徽标和复习按钮都直接读写插件持有的对象；插件停用时回退到宿主本地实现。
 
 `registerRuntime` 的 `impl` 需要提供 `chat` / `parseJson` / `config` / `ready` / `native`、
 `currentCue` / `withCues` / `currentKey` / `sourceLabel`、`cueBounds` / `playRange` / `playCue` /
 `playItem` / `audioTick` / `stopAudio`，以及 `notePlaybackStart` / `notePlaybackEnded` / `resetAutoPause`。
 宿主的 `08-study-ai.js` 只保留同名转发包装；AI 请求、cue 定位、循环播放和自动暂停都在 `runtime.js`。
-`registerUi` / `ui()` 与 `registerRuntime` 并列，学习面板的 DOM 渲染在 `ui.js`。
+`registerUi` / `ui()` 与 `registerRuntime` 并列，学习面板的 DOM 渲染和翻译设置绑定都在 `ui.js`；
+自动翻译的 `TR` 配置与请求仍由 `07-routes-pages.js` 持有，插件通过 `host.translate` 读写。
 | `api.el(id)` | `document.getElementById` |
 
 插件仍与宿主同处一个 DOM 环境：`window`、`document`、`localStorage` 都可用（`fetch` 这类网络入口受 `net` 权限约束，见「权限与限制」）。

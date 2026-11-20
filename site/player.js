@@ -4256,14 +4256,35 @@ function runStudyUiHook(name, ...args) {
   const fn = STUDY_UI_HOOKS.get(String(name));
   return fn ? fn(...args) : args[0];
 }
+function disposeStudyUi(impl) {
+  if (!impl || typeof impl.disposeStudyUI !== 'function') return;
+  try { impl.disposeStudyUI(); } catch (err) { console.warn('[study ui dispose]', err); }
+}
 function registerStudyUi(pluginId, impl) {
   const owner = String(pluginId || '');
   if (STUDY_UI_OWNER && STUDY_UI_OWNER !== owner) throw new Error('学习界面已由插件 ' + STUDY_UI_OWNER + ' 注册');
-  STUDY_UI = impl || null;
+  const next = impl || null;
+  if (STUDY_UI && STUDY_UI_OWNER === owner && STUDY_UI !== next) {
+    disposeStudyUi(STUDY_UI);
+    STUDY_UI = null;
+    STUDY_UI_OWNER = '';
+  }
+  if (next && typeof next.bindStudyUI === 'function') {
+    try {
+      next.bindStudyUI();
+    } catch (err) {
+      // 绑定失败不能留下一个半初始化的界面实现；按停用同路径撤销已挂的监听。
+      disposeStudyUi(next);
+      STUDY_UI = null;
+      STUDY_UI_OWNER = '';
+      throw err;
+    }
+  }
+  STUDY_UI = next;
   STUDY_UI_OWNER = owner;
-  if (STUDY_UI && typeof STUDY_UI.bindStudyUI === 'function') STUDY_UI.bindStudyUI();
   trackPlugin(owner, () => {
     if (STUDY_UI_OWNER !== owner) return;
+    disposeStudyUi(STUDY_UI);
     STUDY_UI = null;
     STUDY_UI_OWNER = '';
   });
@@ -4289,40 +4310,57 @@ function registerStudyRuntime(pluginId, impl) {
 function studyRuntime() { return STUDY_RUNTIME; }
 function studyHostBridge() {
   return {
-    get state() { return state; },
-    get audio() { return audio; },
-    get reader() { return reader; },
-    get TR() { return TR; },
-    get TR_CACHE() { return TR_CACHE; },
-    get studyAutoPause() { return studyAutoPause; },
-    getAutoPause: () => studyAutoPause,
-    setAutoPause: value => { studyAutoPause = !!value; },
-    setView: value => { studyView = String(value || 'card'); },
-    wordCurrentMeaning: () => wordCurrentMeaning,
-    cleanWord: raw => cleanWord(raw),
-    esc: text => esc(text),
-    fmt: value => fmt(value),
-    seekTo: at => seekTo(at),
-    showToast: (text, ms) => showToast(text, ms),
-    navigate: (page, args, params) => navigate(page, args, params),
-    moduleOn: name => moduleOn(name),
-    showByKey: key => showByKey(key),
-    episodesOf: show => episodesOf(show),
-    rebuildCues: () => rebuildCues(),
-    applyReader: () => applyReader(),
-    applySidebarCustomization: () => applySidebarCustomization(),
-    syncTranslateSettings: () => syncTranslateSettings(),
-    studyPluginOn: () => studyPluginOn(),
-    subtitlePluginOn: () => subtitlePluginOn(),
-    tauriHost: () => tauriHost(),
-    openSettingsPane: pane => openSettingsPane(pane),
-    closeDockSheet: (restore = true) => closeDockSheet(restore),
-    sanitizeAdRanges: (ranges, fallbackSource) => sanitizeAdRanges(ranges, fallbackSource),
-    mergeAdRanges: lists => mergeAdRanges(lists),
-    studyAdRangesFromData: data => studyAdRangesFromData(data),
-    studyApplyAiAdRanges: (data, epId) => studyApplyAiAdRanges(data, epId),
-    studyNormText: text => studyNormText(text),
-    copyPlain: text => copyPlain(text),
+    player: {
+      get state() { return state; },
+      get audio() { return audio; },
+      seekTo: at => seekTo(at),
+      getAutoPause: () => studyAutoPause,
+      setAutoPause: value => { studyAutoPause = !!value; },
+      setView: value => { studyView = String(value || 'card'); },
+      setAutoplay: value => { app.autoplay = !!value; },
+    },
+    ui: {
+      toast: (text, ms) => showToast(text, ms),
+      navigate: (page, args, params) => navigate(page, args, params),
+      openSettingsPane: pane => openSettingsPane(pane),
+      closeDockSheet: (restore = true) => closeDockSheet(restore),
+      applySidebarCustomization: () => applySidebarCustomization(),
+      esc: text => esc(text),
+      fmt: value => fmt(value),
+      cleanWord: raw => cleanWord(raw),
+      copyPlain: text => copyPlain(text),
+    },
+    catalog: {
+      showByKey: key => showByKey(key),
+      episodesOf: show => episodesOf(show),
+      moduleOn: name => moduleOn(name),
+      studyPluginOn: () => studyPluginOn(),
+      subtitlePluginOn: () => subtitlePluginOn(),
+    },
+    translate: {
+      get TR() { return TR; },
+      get TR_CACHE() { return TR_CACHE; },
+      get reader() { return reader; },
+      save: () => trSave(),
+      status: (text, bad) => trStatus(text, bad),
+      ready: () => trReady(),
+      native: () => trNative(),
+      primeCues: ci => trPrimeCues(ci),
+      batch: texts => trBatch(texts),
+      noteError: err => trNoteError(err),
+      sync: () => syncTranslateSettings(),
+      rebuildCues: () => rebuildCues(),
+      applyReader: () => applyReader(),
+    },
+    support: {
+      wordCurrentMeaning: () => wordCurrentMeaning,
+      sanitizeAdRanges: (ranges, fallbackSource) => sanitizeAdRanges(ranges, fallbackSource),
+      mergeAdRanges: lists => mergeAdRanges(lists),
+      adRangesFromData: data => studyAdRangesFromData(data),
+      applyAiAdRanges: (data, epId) => studyApplyAiAdRanges(data, epId),
+      normText: text => studyNormText(text),
+    },
+    shell: { tauriHost: () => tauriHost() },
   };
 }
 function registerStudyEngine(pluginId, impl) {
@@ -8610,7 +8648,7 @@ function syncTranslateSettings() {
   else if (!trReady()) trStatus('还缺 API Key', true);
 }
 
-/* layer: view —— 自动翻译与 AI 学英语
+/* layer: view —— AI 学英语的宿主薄包装
    阶段二后，学习面板/复习/词卡/整集总结/AI 设置的实现都在内置 study 插件的 ui.js；
    本片只保留宿主包装、数据引用与桌面补丁需要的纯函数。跨层调用仍走 kernel / host()。 */
 const STUDY_KEY = 'myt-study', STUDY_CACHE_KEY = 'myt-study-cache', STUDY_VOCAB_KEY = 'myt-study-vocab', STUDY_STATUS_KEY = 'myt-study-status';
@@ -8742,41 +8780,6 @@ function studyPlayCue(cue, loops = 1) { const r = studyRuntime(); if (r) r.playC
 function studyPlayItem(item) { const r = studyRuntime(); if (r) r.playItem(item); }
 function studyAudioTick() { const r = studyRuntime(); if (r) r.audioTick(); }
 
-function bindTranslateUI() {
-  const on = $('trOn');
-  if (on) on.onclick = () => {
-    TR.on = !TR.on;
-    trSave();
-    // 开自动翻译时如果正文只显示英文，顺手切到双语，否则译完也看不见。
-    if (TR.on && reader.lang === 'en') { reader.lang = 'both'; applyReader(); rebuildCues(); }
-    syncTranslateSettings();
-    trStatus(TR.on ? (trReady() ? '已开启，播放时自动翻译' : '还缺 API Key') : '未开启', TR.on && !trReady());
-    if (TR.on && state.cues.length && state.activeCue >= 0) trPrimeCues(state.activeCue);
-  };
-  const engine = $('trEngine');
-  if (engine) engine.onchange = () => { TR.engine = engine.value; trSave(); syncTranslateSettings(); };
-  const target = $('trTarget');
-  if (target) target.onchange = () => { TR.target = target.value; TR_CACHE.clear(); trSave(); };
-  [['trEndpoint', 'endpoint'], ['trKey', 'key'], ['trRegion', 'region'], ['trModel', 'model']].forEach(([id, field]) => {
-    const el = $(id);
-    if (el) el.oninput = () => { TR[field] = el.value; trSave(); };
-    if (el) el.onchange = () => syncTranslateSettings();
-  });
-  const test = $('trTest');
-  if (test) test.onclick = async () => {
-    if (!trNative()) { trStatus('自动翻译需要在桌面版使用', true); return; }
-    test.disabled = true;
-    trStatus('测试中…', false);
-    try {
-      const [out] = await trBatch(['Hello, this is a translation test.']);
-      trStatus('译文：' + (out || ''), false);
-    } catch (err) {
-      trNoteError(err);
-    } finally {
-      test.disabled = false;
-    }
-  };
-}
 function syncThemeSwatches() {
   const current = document.documentElement.dataset.theme;
   themeBtns().forEach(button => button.setAttribute('aria-checked', String(button.dataset.theme === current)));
@@ -10063,7 +10066,6 @@ function bindShell() {
 };
   $('setRemember').onclick = () => { prefs.remember = prefs.remember === false; savePrefs(); $('setRemember').setAttribute('aria-checked', String(prefs.remember !== false)); };
   $('setLang').onchange = event => { reader.lang = event.target.value; applyReader(); rebuildCues(); };
-  bindTranslateUI();
   $('setLiveLead').onchange = event => {
     prefs.liveLead = Math.max(0, Math.min(600, Number(event.target.value) || 0));
     savePrefs();

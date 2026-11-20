@@ -915,7 +915,6 @@ function bindShell() {
 };
   $('setRemember').onclick = () => { prefs.remember = prefs.remember === false; savePrefs(); $('setRemember').setAttribute('aria-checked', String(prefs.remember !== false)); };
   $('setLang').onchange = event => { reader.lang = event.target.value; applyReader(); rebuildCues(); };
-  bindTranslateUI();
   $('setLiveLead').onchange = event => {
     prefs.liveLead = Math.max(0, Math.min(600, Number(event.target.value) || 0));
     savePrefs();

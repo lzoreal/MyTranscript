@@ -26,6 +26,7 @@ const api = { study: { cleanWord: raw => String(raw || '').toLowerCase().replace
 const engine = createStudyEngine(api);
 
 assert(engine.vocab.length === 2, '老生词本要读进引擎');
+assert(engine.providers.openai.model === 'gpt-4o-mini' && engine.providers.custom.name, '服务商表由引擎单独维护');
 assert(engine.vocab[1].ease === 2.5 && engine.vocab[1].due > 0, '缺失 SRS 字段要补齐');
 assert(engine.wordStatusOf('BETA!') === 'known', '词状态按 cleanWord 归一');
 assert(engine.dueItems().some(v => v.word === 'Alpha'), '到期词应进入复习队列');

@@ -187,10 +187,12 @@ assert.strictEqual(merged[0].end, 90);
 
     def test_ai_provider_picker_and_native_adapters(self):
         page = player_page() + study_ui()
+        engine_src = (BUILTIN / "study" / "engine.js").read_text(encoding="utf-8")
         self.assertIn('id="studyProvider"', page)
         for provider in ("openai", "claude", "gemini", "deepseek", "kimi", "glm", "custom"):
             self.assertIn(f'value="{provider}"', page)
-        self.assertIn("STUDY_PROVIDERS", page)
+        self.assertIn("STUDY_PROVIDERS", engine_src)
+        self.assertNotIn("const STUDY_PROVIDERS", study_ui())
         self.assertIn("engine: STUDY.provider", page)
         self.assertIn("studyModelFetch", page)
         self.assertIn("studyModelList", page)
@@ -244,7 +246,11 @@ const state = { cues: [
   { start: 61, text: 'second' },
   { start: 185, text: 'third' },
 ] };
-const host = { state };
+const host = {
+  player: { state },
+  ui: { toast() {} },
+  shell: { tauriHost: () => null },
+};
 %s
 assert.deepStrictEqual(studyAskCites([2, 99, '1', { cue: 0 }]), [2, 1, 0]);
 assert.deepStrictEqual(studyAskCites(['#0', 'garbage', [], null, 0]), [0]);

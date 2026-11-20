@@ -1,4 +1,4 @@
-/* layer: view —— 自动翻译与 AI 学英语
+/* layer: view —— AI 学英语的宿主薄包装
    阶段二后，学习面板/复习/词卡/整集总结/AI 设置的实现都在内置 study 插件的 ui.js；
    本片只保留宿主包装、数据引用与桌面补丁需要的纯函数。跨层调用仍走 kernel / host()。 */
 const STUDY_KEY = 'myt-study', STUDY_CACHE_KEY = 'myt-study-cache', STUDY_VOCAB_KEY = 'myt-study-vocab', STUDY_STATUS_KEY = 'myt-study-status';
@@ -130,41 +130,6 @@ function studyPlayCue(cue, loops = 1) { const r = studyRuntime(); if (r) r.playC
 function studyPlayItem(item) { const r = studyRuntime(); if (r) r.playItem(item); }
 function studyAudioTick() { const r = studyRuntime(); if (r) r.audioTick(); }
 
-function bindTranslateUI() {
-  const on = $('trOn');
-  if (on) on.onclick = () => {
-    TR.on = !TR.on;
-    trSave();
-    // 开自动翻译时如果正文只显示英文，顺手切到双语，否则译完也看不见。
-    if (TR.on && reader.lang === 'en') { reader.lang = 'both'; applyReader(); rebuildCues(); }
-    syncTranslateSettings();
-    trStatus(TR.on ? (trReady() ? '已开启，播放时自动翻译' : '还缺 API Key') : '未开启', TR.on && !trReady());
-    if (TR.on && state.cues.length && state.activeCue >= 0) trPrimeCues(state.activeCue);
-  };
-  const engine = $('trEngine');
-  if (engine) engine.onchange = () => { TR.engine = engine.value; trSave(); syncTranslateSettings(); };
-  const target = $('trTarget');
-  if (target) target.onchange = () => { TR.target = target.value; TR_CACHE.clear(); trSave(); };
-  [['trEndpoint', 'endpoint'], ['trKey', 'key'], ['trRegion', 'region'], ['trModel', 'model']].forEach(([id, field]) => {
-    const el = $(id);
-    if (el) el.oninput = () => { TR[field] = el.value; trSave(); };
-    if (el) el.onchange = () => syncTranslateSettings();
-  });
-  const test = $('trTest');
-  if (test) test.onclick = async () => {
-    if (!trNative()) { trStatus('自动翻译需要在桌面版使用', true); return; }
-    test.disabled = true;
-    trStatus('测试中…', false);
-    try {
-      const [out] = await trBatch(['Hello, this is a translation test.']);
-      trStatus('译文：' + (out || ''), false);
-    } catch (err) {
-      trNoteError(err);
-    } finally {
-      test.disabled = false;
-    }
-  };
-}
 function syncThemeSwatches() {
   const current = document.documentElement.dataset.theme;
   themeBtns().forEach(button => button.setAttribute('aria-checked', String(button.dataset.theme === current)));
