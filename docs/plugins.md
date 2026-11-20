@@ -1,6 +1,6 @@
 # 插件接口
 
-桌面壳从 2026-11-20 起扫描本机插件目录。插件拥有**完整页面与网络权限**（和主页面同一个 JS 环境），所以只装自己信得过的代码。
+桌面壳从 2026-11-20 起扫描本机插件目录。插件默认拥有**完整页面、网络与桌面桥权限**（和主页面同一个 JS 环境），清单里写 `permissions` 可以按能力收窄；只装自己信得过的代码。
 
 ## 目录
 
@@ -140,7 +140,7 @@ MyTPlugins.register('hello-world', {
 | `api.storage.get(key, fallback)` / `set` / `remove` | 插件命名空间下的 localStorage，键前缀 `myt-plugin:<id>:` |
 | `api.el(id)` | `document.getElementById` |
 
-插件也可以直接使用 `window`、`document`、`fetch`、`localStorage`，不受限制。
+插件仍与宿主同处一个 DOM 环境：`window`、`document`、`localStorage` 都可用（`fetch` 这类网络入口受 `net` 权限约束，见「权限与限制」）。
 
 ## 核心能力接缝
 
@@ -175,6 +175,25 @@ MyTPlugins.register('hello-world', {
 - 设置页的插件行会显示授权状态，并提供「撤销授权」，撤销后下次加载重新询问；内置 `subtitles` / `study` 不询问（`plugin.json` 打 `builtin` 标记）；
 - `tauri.conf.json` 已启用 CSP（2026-11-20）：`script-src` 只放行自身、`blob:`、cdn.jsdelivr 与 wasm；`style-src` 允许内联（插件 CSS）；`img/media/connect` 放行 https + asset 协议 + 本机 http。授权层是产品级门禁，CSP 是第二道门，两者都不替代签名；
 - 插件脚本以 `blob:` URL 注入（Tauri 的 CSP 会注入 nonce，使 `'unsafe-inline'` 对内联块失效），样式仍用内联 `<style>`；新增外部域名要在 `script-src` / `connect-src` 里显式登记。
+- 桌面 IPC 收口：宿主把 `__TAURI__.core.invoke` 与 `__TAURI_INTERNALS__.invoke` 包了一层守卫（`installIpcGuard`）。紧邻调用帧是 `blob:` 时直接抛「插件不能直接调用桌面命令」，插件必须走 `api.*`（由宿主代发）。栈帧判断是尽力而为的门槛，不是沙箱。
+- `withGlobalTauri` 必须保持 `true`：mini 播放器、字幕浮层、取词窗都直接用 `window.__TAURI__`；因此 IPC 只能靠上面的守卫收，不能靠关全局对象。
 - 依赖环、重复 ID、无效清单这类配置错误会在插件行里显示错误，不会静默半加载（`tests/test_plugin_host.py` 锁定依赖解析与能力占用规则）。
 - 示例插件通过 `MyTPlugins._error` 由壳记录错误，设置页会显示在插件行下面。
 - 字幕功能已由内置 `subtitles` 插件接管，学英语由 `study` 插件接管；首页、播客库、下载管理等其他内置功能仍留在主程序，尚未插件化。
+
+## 签名密钥轮换
+
+`plugins.rs` 的 `PLUGIN_PUBKEYS` 是**数组**，验签时任一公钥通过即放行。轮换按“先进后出”做，任意时刻插件都还能验：
+
+1. 把新公钥追加到 `PLUGIN_PUBKEYS`（旧钥留在数组里），编译并发布这一版；
+2. 确认用户都升到带新钥的版本后，用 `scripts/sign_plugin.py`（读 `~/.config/myt/plugin-signing.json` 里的新私钥）重签所有自签插件，再分发；
+3. 至少留一个发布周期，之后才从数组里删旧公钥并发布。
+
+私钥不进仓库、不进安装包；`MYT_PLUGIN_SIGNING_KEY` 可指到另一份密钥文件。`tests/test_sign_plugin.py` 与 `plugins.rs` 单测用同一条常量向量（`f7ab…48e3`）锁住两端摘要算法，轮换后仍应保持通过。
+
+## 脚本构建与模块
+
+- 宿主脚本现在是 **ES module**：`site/player.js` 首行 `import { MYTK } from './player-kernel.js'`，`site/player.html` 用 `<script type="module">` 加载；
+- `site/player-kernel.js` 由 `src/player-js/00-kernel.js` 单独生成（`export const MYTK`），其余 01–10 分片按文件名顺序拼进 `player.js` 的同一个模块作用域；
+- 两个文件都是构建产物，不许手改：`python scripts/build_player_js.py`，一致性校验用 `--check`（`tests/test_player_build.py` 锁定 import 头、kernel 导出与页面 `type="module"`）。
+

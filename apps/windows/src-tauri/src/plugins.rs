@@ -10,7 +10,11 @@ use crate::AppState;
 
 /// 插件签名公钥（Ed25519）。私钥只在发布流程里使用，不进仓库、不进安装包；
 /// 源码里的公钥就是「谁能给插件签名」的唯一凭据。换钥等于让所有旧签名失效。
-const PLUGIN_PUBKEY_HEX: &str = "18f069b154b7261b16d76858ecda75f48904f268f9f9984aa49624d6312b49bd";
+/// 轮换流程见 docs/plugins.md：新钥先加进这个数组，重签插件，旧钥保留一轮再删。
+const PLUGIN_PUBKEYS: [&str; 2] = [
+    "18f069b154b7261b16d76858ecda75f48904f268f9f9984aa49624d6312b49bd",
+    "baa2a15a052526023e3edecc464fdc1c4e46e4d395c40d96b5d7cbce9d6d6585",
+];
 
 pub fn plugins_root() -> Result<std::path::PathBuf, String> {
     let program_data = std::env::var("ProgramData")
@@ -101,13 +105,16 @@ fn plugin_digest(id: &str, version: &str, files: &[(String, String)]) -> String 
 }
 
 /// 只验签，不产生签名：公钥写死在二进制里，私钥由发布者保管。
+/// 支持多把公钥：轮换期新旧签名都能过，旧钥移除后旧签名立即失效。
 fn verify_plugin_signature(digest: &str, sig_hex: &str) -> bool {
-    let Some(pubkey) = hex_decode(PLUGIN_PUBKEY_HEX) else { return false };
-    let Ok(pubkey) = <[u8; 32]>::try_from(pubkey.as_slice()) else { return false };
-    let Ok(key) = VerifyingKey::from_bytes(&pubkey) else { return false };
     let Some(sig_bytes) = hex_decode(sig_hex) else { return false };
     let Ok(sig) = <[u8; 64]>::try_from(sig_bytes.as_slice()) else { return false };
-    key.verify(digest.as_bytes(), &Signature::from_bytes(&sig)).is_ok()
+    PLUGIN_PUBKEYS.iter().any(|pubkey_hex| {
+        let Some(pubkey) = hex_decode(pubkey_hex) else { return false };
+        let Ok(pubkey) = <[u8; 32]>::try_from(pubkey.as_slice()) else { return false };
+        let Ok(key) = VerifyingKey::from_bytes(&pubkey) else { return false };
+        key.verify(digest.as_bytes(), &Signature::from_bytes(&sig)).is_ok()
+    })
 }
 
 fn read_fingerprints(path: &std::path::Path) -> HashMap<String, String> {
@@ -718,6 +725,17 @@ mod tests {
         let tampered = plugin_digest("demo", "1.0", &vec![("main.js".to_string(), "x\n".to_string())]);
         assert!(!verify_plugin_signature(&tampered, sig), "内容变了签名必须失效");
         assert!(!verify_plugin_signature(&digest, &sig[..126]), "截断的签名不算合法");
+    }
+
+    #[test]
+    fn second_rotation_key_is_accepted() {
+        // 同一份摘要，用轮换期第二把私钥签的签名也要认；换钥不立刻踢掉旧签名。
+        let digest = "f7ab0c366b9eceb7c56c1b08c6430baf194eabd884f51ac158167f17e4a248e3";
+        let sig = "31f8f4d87bbba532a5b58989beb879904222cb2706fcc95bab6a1faace843e7b\
+c9a46615cfa862d9b59eeadb11b3885507e4b2ffd16576e60488e7e6bccdf30b";
+        assert!(verify_plugin_signature(digest, sig), "第二把公钥签的签名应通过");
+        let other = "00".repeat(64);
+        assert!(!verify_plugin_signature(digest, &other), "不在公钥列表里的签名必须拒绝");
     }
 
     #[test]

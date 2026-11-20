@@ -94,7 +94,8 @@ site/
   index.html                 根索引（Crawl 生成）
   podcasts.html              节目索引（Crawl 生成）
   player.html                多节目播放器 + 站点外壳的标记（静态；读 shows.json / catalog.json + 各节目 feed）
-  player.js                  播放器全部脚本的成品（由 src/player-js/*.js 拼接，勿手改）
+  player.js                  播放器主体脚本成品（ES module，由 src/player-js/01…10 拼接，勿手改）
+  player-kernel.js           纯函数 kernel 成品（ES module，导出 MYTK；由 00-kernel.js 生成，勿手改）
   player.css                 播放器全部样式（外置，player.html 用 <link> 引入）
   shows.json                 播放器节目清单（新增节目时同步更新；无 feed 的节目 feed 为 null）
   catalog.json               首屏轻量目录（build_catalog.py 生成：封面、简介、最近 20 集）
@@ -103,8 +104,8 @@ site/
     index.html
 
 src/player-js/               播放器脚本分片（00…10，按文件名顺序拼接，内容顺序与原脚本一致）
-  00-kernel.js                      纯函数层（时间格式化、HTML 转义、括号判定、loader），挂 `MYTK`
-  01-theme-reader-shell.js          主题、阅读器、导入、壁纸（主 IIFE 开头，用同名解构接回 kernel）
+  00-kernel.js                      纯函数层（时间格式化、HTML 转义、括号判定、loader），单独产出 player-kernel.js 并 `export const MYTK`
+  01-theme-reader-shell.js          主题、阅读器、导入、壁纸（主模块开头；`const {…} = MYTK` 接回 kernel）
   02-live-caption-wasm.js           实时逐词字幕 + Moonshine/sherpa WASM 引擎
   03-native-asr-service-worker.js   Tauri 原生推理（sherpa C API）、跨域隔离 Service Worker
   04-local-audio-plugin-host.js     本地预转写、精听、插件宿主（能力图/生命周期）
@@ -116,11 +117,11 @@ src/player-js/               播放器脚本分片（00…10，按文件名顺�
   10-desktop-bridge-tail.js         桌面壳桥（MediaSession/托盘/迷你窗）与主 IIFE 收尾
 ```
 
-改分片后必须重建成品，否则站点加载的还是旧脚本：
+改分片后必须重建成品，否则站点加载的还是旧脚本（`player.html` 用 `<script type="module">` 加载）：
 
 ```bash
-python scripts/build_player_js.py          # 拼接 src/player-js/*.js → site/player.js
-python scripts/build_player_js.py --check  # 只校验是否同步（tests/test_player_build.py 用）
+python scripts/build_player_js.py          # 分片 → site/player.js（主体）+ site/player-kernel.js（kernel）
+python scripts/build_player_js.py --check  # 只校验两个产物是否与分片同步（tests/test_player_build.py 用）
 ```
 
 

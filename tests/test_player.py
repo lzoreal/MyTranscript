@@ -59,7 +59,7 @@ def player_page():
         )
     if js_path.is_file():
         page = page.replace(
-            '<script src="player.js"></script>',
+            '<script type="module" src="player.js"></script>',
             "<script>\n" + js_path.read_text(encoding="utf-8") + "</script>",
         )
     return page

@@ -199,6 +199,36 @@ function syncLiveLeadSelect() {
 // 别的壳（比如安卓 WebView）可以在页面脚本之前自己挂 window.MyTranscriptHost。
 // 唯一的平台检测点：其余分片只问「有没有桌面宿主」，不再直接摸 window.__TAURI__。
 function tauriHost() { return window.__TAURI__ || null; }
+/* IPC 收口：插件脚本从 blob: URL 注入，宿主脚本从 player.js 来。
+   把 invoke 包一层，调用栈里只要出现 blob: 帧就拒绝——插件拿不到任意桌面命令，
+   只能走宿主给的 api。注意这是栈检查（同一 JS 环境下的尽力而为），不是权限沙箱。 */
+function pluginFrameInStack(stack) {
+  const lines = String(stack || '').split('\n');
+  // 只看紧邻 guard 的那一帧：宿主自己调的放行，blob: 里的插件代码直接拒绝。
+  const caller = lines.find(line => /\bat\b/.test(line) && !/mytIpcGuard/.test(line));
+  return Boolean(caller) && /blob:/.test(caller);
+}
+function mytIpcGuard(original) {
+  const guarded = function (cmd, args) {
+    if (pluginFrameInStack(new Error().stack)) {
+      throw new Error('插件不能直接调用桌面命令：' + cmd);
+    }
+    return original(cmd, args);
+  };
+  guarded.__mytGuard = true;
+  return guarded;
+}
+function installIpcGuard(T) {
+  if (!T) return;
+  if (T.core && typeof T.core.invoke === 'function' && !T.core.invoke.__mytGuard) {
+    try { T.core.invoke = mytIpcGuard(T.core.invoke.bind(T.core)); } catch (e) {}
+  }
+  const internals = window.__TAURI_INTERNALS__;
+  if (internals && typeof internals.invoke === 'function' && !internals.invoke.__mytGuard) {
+    try { internals.invoke = mytIpcGuard(internals.invoke.bind(internals)); } catch (e) {}
+  }
+}
+installIpcGuard(tauriHost());
 const LIVE_HOST = (() => {
   if (window.MyTranscriptHost) return window.MyTranscriptHost;
   const T = tauriHost();

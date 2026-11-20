@@ -1,31 +1,4 @@
-/* layer: kernel —— 纯函数，不读 DOM、不碰 state。
-   拼接后先于主 IIFE 执行；主脚本用同名解构接回，调用点不用改。 */
-const MYTK = (() => {
-  const fmt = s => { s = Math.max(0, Number(s) || 0); const h = Math.floor(s/3600), m = Math.floor(s%3600/60), x = Math.floor(s%60);
-    return h ? `${h}:${String(m).padStart(2,'0')}:${String(x).padStart(2,'0')}` : `${String(m).padStart(2,'0')}:${String(x).padStart(2,'0')}`; };
-  const isBracket = t => /^\s*\[.*\]\s*[.!?]?\s*$/.test(t);
-  const esc = t => String(t).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-  const loaderHTML = text => '<div class="loader"><span class="bars"><i></i><i></i><i></i></span><span>' + esc(text) + '</span></div>';
-  function findNorm(s) { return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim(); }
-  function epKey(showKey, epId) { return String(showKey || '') + ':' + String(epId || ''); }
-function studyRegexEscape(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-function studyNormText(text) {
-  return String(text || '').toLowerCase().replace(/[^a-z0-9'’\s]/g, ' ').replace(/\s+/g, ' ').trim();
-}
-function emptyLine(text, action) {
-  return '<div class="empty-line">' + esc(text) + (action ? '<div style="margin-top:10px">' + action + '</div>' : '') + '</div>';
-}
-function statHTML(label, value, note) {
-  return '<div class="stat"><label>' + esc(label) + '</label><strong>' + esc(value) + '</strong><em>' + esc(note || '') + '</em></div>';
-}
-function pluginPageKey(pluginId, pageId) { return String(pluginId) + ':' + String(pageId); }
-function isJsonTranscript(transcript) {
-  return !!transcript && (transcript.type === 'application/json' || /\.json(?:$|\?)/i.test(transcript.url || ''));
-}
-  return { fmt, isBracket, esc, loaderHTML, findNorm, epKey, studyRegexEscape, studyNormText, emptyLine, statHTML, pluginPageKey, isJsonTranscript };
-})();
+import { MYTK } from './player-kernel.js';
 /* layer: view —— 主题、阅读器、导入、壁纸；IIFE 入口与 kernel 解构
    本片只做该层的事，跨层调用走 kernel / host() / setState。 */
 (() => {
@@ -1473,6 +1446,36 @@ function syncLiveLeadSelect() {
 // 别的壳（比如安卓 WebView）可以在页面脚本之前自己挂 window.MyTranscriptHost。
 // 唯一的平台检测点：其余分片只问「有没有桌面宿主」，不再直接摸 window.__TAURI__。
 function tauriHost() { return window.__TAURI__ || null; }
+/* IPC 收口：插件脚本从 blob: URL 注入，宿主脚本从 player.js 来。
+   把 invoke 包一层，调用栈里只要出现 blob: 帧就拒绝——插件拿不到任意桌面命令，
+   只能走宿主给的 api。注意这是栈检查（同一 JS 环境下的尽力而为），不是权限沙箱。 */
+function pluginFrameInStack(stack) {
+  const lines = String(stack || '').split('\n');
+  // 只看紧邻 guard 的那一帧：宿主自己调的放行，blob: 里的插件代码直接拒绝。
+  const caller = lines.find(line => /\bat\b/.test(line) && !/mytIpcGuard/.test(line));
+  return Boolean(caller) && /blob:/.test(caller);
+}
+function mytIpcGuard(original) {
+  const guarded = function (cmd, args) {
+    if (pluginFrameInStack(new Error().stack)) {
+      throw new Error('插件不能直接调用桌面命令：' + cmd);
+    }
+    return original(cmd, args);
+  };
+  guarded.__mytGuard = true;
+  return guarded;
+}
+function installIpcGuard(T) {
+  if (!T) return;
+  if (T.core && typeof T.core.invoke === 'function' && !T.core.invoke.__mytGuard) {
+    try { T.core.invoke = mytIpcGuard(T.core.invoke.bind(T.core)); } catch (e) {}
+  }
+  const internals = window.__TAURI_INTERNALS__;
+  if (internals && typeof internals.invoke === 'function' && !internals.invoke.__mytGuard) {
+    try { internals.invoke = mytIpcGuard(internals.invoke.bind(internals)); } catch (e) {}
+  }
+}
+installIpcGuard(tauriHost());
 const LIVE_HOST = (() => {
   if (window.MyTranscriptHost) return window.MyTranscriptHost;
   const T = tauriHost();
