@@ -1,3 +1,10 @@
+import { $, audio, prefs, state } from './00-runtime.js';
+import { esc, fmt, invalidateWordPanelKey, reader, seekTo, showToast, splitLabel, wallpaperRefresh } from './01-theme-reader-shell.js';
+import { selectEpisode } from './03-native-asr-service-worker.js';
+import { smallArtwork, subtitlePluginOn } from './04-local-audio-plugin-host.js';
+import { BOOKMARK_KEY, PAGE_NAMES, app, episodesOf, formatDate, isPlayed, writeJSON } from './05-transport-transcript-nav.js';
+import { coverGrad, initialsOf } from './06-catalog-feeds-search.js';
+import { registerLayer } from './00-layers.js';
 /* layer: view —— 播放器集成
    本片只做该层的事，跨层调用走 kernel / host() / setState。 */
 /* ---------- player integration ---------- */
@@ -134,7 +141,7 @@ function syncReaderTop() {
   if (back) back.title = '返回' + (PAGE_NAMES[app.lastPage] || '首页');
   renderReaderRails();
   syncRailButtons();
-  if (state.wallpaper) { wpLastKey = ''; wallpaperRefresh(); }
+  if (state.wallpaper) { invalidateWordPanelKey(); wallpaperRefresh(); }
 }
 function syncBookmarkBtn() {
   const button = $('readerBookmarkBtn');
@@ -300,4 +307,5 @@ function syncMini() {
   $('miniNext').disabled = index < 0 || index >= list.length - 1;
   syncMiniCaption();
 }
-
+export { MINI_CAPTION_KEY, bindLedgerUI, currentPlaylist, miniCaptionExpanded, miniCaptionIdx, miniCaptionKey, miniCaptionMarkup, miniCaptionPref, miniCoverKey, miniPctBucket, miniPlayOn, miniTimeText, nextTarget, railCoverHTML, renderReaderRails, setNavCollapsed, setRailOpen, stepEpisode, stepTarget, syncBookmarkBtn, syncMini, syncMiniCaption, syncRailButtons, syncReaderTop, toggleBookmarkCue, toggleMiniCaption };
+registerLayer('09-player-integration', { MINI_CAPTION_KEY, bindLedgerUI, currentPlaylist, miniCaptionExpanded, miniCaptionIdx, miniCaptionKey, miniCaptionMarkup, miniCaptionPref, miniCoverKey, miniPctBucket, miniPlayOn, miniTimeText, nextTarget, railCoverHTML, renderReaderRails, setNavCollapsed, setRailOpen, stepEpisode, stepTarget, syncBookmarkBtn, syncMini, syncMiniCaption, syncRailButtons, syncReaderTop, toggleBookmarkCue, toggleMiniCaption });

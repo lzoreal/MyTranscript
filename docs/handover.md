@@ -94,8 +94,8 @@ site/
   index.html                 根索引（Crawl 生成）
   podcasts.html              节目索引（Crawl 生成）
   player.html                多节目播放器 + 站点外壳的标记（静态；读 shows.json / catalog.json + 各节目 feed）
-  player.js                  播放器主体脚本成品（ES module，由 src/player-js/01…10 拼接，勿手改）
-  player-kernel.js           纯函数 kernel 成品（ES module，导出 MYTK；由 00-kernel.js 生成，勿手改）
+  player.js                  播放器入口成品（只有 `import './player/player.js';`，勿手改）
+  player/                    播放器模块成品（00-kernel / 00-runtime / 01…10 / player.js，逐文件复制，勿手改）
   player.css                 播放器全部样式（外置，player.html 用 <link> 引入）
   shows.json                 播放器节目清单（新增节目时同步更新；无 feed 的节目 feed 为 null）
   catalog.json               首屏轻量目录（build_catalog.py 生成：封面、简介、最近 20 集）
@@ -103,25 +103,30 @@ site/
     feed.xml                 ← 唯一的字幕 Feed（feed-zh.xml 已下线）
     index.html
 
-src/player-js/               播放器脚本分片（00…10，按文件名顺序拼接，内容顺序与原脚本一致）
-  00-kernel.js                      纯函数层（时间格式化、HTML 转义、括号判定、loader），单独产出 player-kernel.js 并 `export const MYTK`
-  01-theme-reader-shell.js          主题、阅读器、导入、壁纸（主模块开头；`const {…} = MYTK` 接回 kernel）
-  02-live-caption-wasm.js           实时逐词字幕 + Moonshine/sherpa WASM 引擎
-  03-native-asr-service-worker.js   Tauri 原生推理（sherpa C API）、跨域隔离 Service Worker
-  04-local-audio-plugin-host.js     本地预转写、精听、插件宿主（能力图/生命周期）
+src/player-js/               播放器 ES module 源码（入口 player.js 显式 import 00–10，不再按顺序拼接）
+  00-kernel.js                      纯函数层（时间格式化、HTML 转义、括号判定、loader），`export const MYTK`
+  00-runtime.js                     共享单例（$ / audio / state / LIVE / prefs / tauriHost），不 import 功能模块
+  00-layers.js                      运行时就绪注册表：`registerLayer` / `lazyFn` / `layerObject` / `layerValue`
+                                    后序模块未注册时调用先排队，注册后补执行；用于消除静态 import 环
+  player.js                         模块入口：只导入全部分片并启动 `initPlayer()` 与 `initXai()`
+  01-theme-reader-shell.js          主题、阅读器、导入、壁纸；显式 `import { MYTK }`
+  02-live-caption-wasm.js           实时逐词字幕 + Moonshine/sherpa WASM 引擎；共享 LIVE/tauriHost 从 runtime 导入
+  03-native-asr-service-worker.js   Tauri 原生推理（sherpa C API）、跨域隔离 Service Worker；实时按钮改由字幕插件绑定
+  04-local-audio-plugin-host.js     本地预转写、精听、插件宿主（能力图/生命周期）；`api.subtitles` 暴露 liveEngine / registerLive / captions
   05-transport-transcript-nav.js    transport、进度/音量、文字稿交互、章节、点词、播放列表、离线下载、模型管理
   06-catalog-feeds-search.js        目录与本地状态、feed 缓存、OPML、封面、在线搜索
   07-routes-pages.js                路由、页面片段、首页/库/发现/搜索/节目/收件箱/设置
   08-study-ai.js                    学英语薄包装 + 设置页辅助（window.__xai 挂接）
   09-player-integration.js          播放器与页面集成入口
-  10-desktop-bridge-tail.js         桌面壳桥（MediaSession/托盘/迷你窗）与主 IIFE 收尾
+  10-desktop-bridge-tail.js         桌面壳桥（MediaSession/托盘/迷你窗）；XAI 入口收成 `initXai()`，由 player.js 启动
 ```
 
 改分片后必须重建成品，否则站点加载的还是旧脚本（`player.html` 用 `<script type="module">` 加载）：
 
 ```bash
-python scripts/build_player_js.py          # 分片 → site/player.js（主体）+ site/player-kernel.js（kernel）
-python scripts/build_player_js.py --check  # 只校验两个产物是否与分片同步（tests/test_player_build.py 用）
+python scripts/build_player_js.py          # 逐份复制 00–10 到 site/player/，入口 site/player.js 只写一行 import
+python scripts/build_player_js.py --check  # 逐文件校验成品是否与源码同步（tests/test_player_build.py 用）
+python scripts/check_layers.py             # 入口只能 import+启动、所有模块从 player.js 可达；发现循环 import 直接失败
 ```
 
 
@@ -573,7 +578,7 @@ translate / align 两条已在 2026-11-14 删除。
 - 播放优先：音频缓冲（`buffered` 里包含播放头那一段的剩余秒数）低于 2.5 秒时，本轮不取新窗口，状态条写「等待播放缓冲…」。源站只有一两百 KB/s，抢带宽会让播放卡；阈值也不能太大（6 秒在弱网下等于一直让路，识别几乎不长行，看起来就是「不可用」）。首枪探测失败会自动重试 4 次（同一 URL 重试通常就通）。
 - pump 的重启不能被「正在跑」挡住：重建经常是在一次 pump 内部同步触发的，此时 `pumping` 仍是 true，若 `liveStartPump()` 因此提前 return，就再也没人调度下一轮，表现为「状态条停在实时识别中、一行都不出」。在飞的旧泵靠 `pumpGen` 代际号判断自己过期，不会重复喂音频。
 - 状态条文案每轮都更新（`liveUpdateMeter`）：一句都没识别出来时也要显示「正在取音频…」或「音频片段取不到，正在重试（第 N 次）」，否则取字节失败会被完全静默掉（之前出现过 24 秒无输出、界面却停在“实时识别中”）。
-- `site/live-sw.js` 是同源 Service Worker，只给 `mode==='navigate'` 的同源文档响应补 `COOP: same-origin` + `COEP: credentialless`。Moonshine 默认构建是多线程 WASM，`SharedArrayBuffer` 只在跨域隔离页面可用，而 GitHub Pages 不能自定义响应头，所以靠 SW 补；用 `credentialless` 而不是 `require-corp`，避免挡掉没有 CORP 的封面图。首次点「实时识别」会提示刷新一次，此时把意图写进 `sessionStorage['myt-live-auto']`，刷新回来后自动接着开（不用再点）。
+- `site/live-sw.js` 是同源 Service Worker，只给 `mode==='navigate'` 的同源文档响应补 `COOP: same-origin` + `COEP: credentialless`。Moonshine 默认构建是多线程 WASM，`SharedArrayBuffer` 只在跨域隔离页面可用，而 GitHub Pages 不能自定义响应头，所以靠 SW 补；用 `credentialless` 而不是 `require-corp`，避免挡掉没有 CORP 的封面图。首次点「实时识别」会提示刷新一次，此时把意图写进 `sessionStorage['myt-live-auto']`，刷新回来后由字幕插件的 `live.js` 自动接着开（宿主不再自己轮询）。
 - 词级时间戳依赖 `decoder_kv_with_attention.ort`，而目录加载 `Transcriber.load` 的清单里没有这个文件：必须 `JSON.parse(wasm.sttDependencies('en','2',false))`（ABI 返回 JSON 字符串，不是对象）拿到 `base_url`，自己补上 attention 解码器的 URL 再走 `Transcriber.loadFromUrls`。只设 `word_timestamps:'true'` 不给文件，只会得到没有 `words` 的句子（已实测）。
 - 首轮要下载约 40 MB 模型（进浏览器 Cache Storage），之后秒开；`updateInterval` 用 0.5 s。本机用 `python -m http.server 8765 --directory site`（不设任何响应头）即可验证全链路，因为隔离头来自 SW。
 - 已知约束：只支持 CBR MP3（m4a/aac、VBR MP3 会明确报错）；直播/边录边播的流不在支持范围。停止实时识别、退出页面、刷新都会让正文回到原本的 VTT / 词级 JSON 渲染，原文字稿不受影响（实测 288 句 / 3881 词原样恢复，播放不中断）。
@@ -1241,39 +1246,125 @@ P2：
 
 ## 桌面壳：自定义主题（2026-11-20）
 
-设置 → 外观与主题底部新增「自定义主题」，用 CSS / HTML 在现有九套主题之上做覆盖：
+设置 → 外观与主题底部新增「自定义主题」，用 CSS / HTML 在现有内置配色之上做覆盖：
 
-- 配置存 `localStorage['myt-theme-custom']`：`{css, html, enabled, updatedAt}`。
+- 配置存 `localStorage['myt-theme-custom']`：`{css, html, enabled, updatedAt, presets[], activeId}`。
+  旧的 `{css, html, enabled}` 读入时自动补 `presets: []`，不丢已有内容。
+- 主题网格里可以存多张自定义卡：填好 CSS/HTML 和名称后点末尾「＋ 存为自定义主题」，
+  卡片记一份快照（`id / name / css / html / createdAt`），点卡即应用，右上角 ✕ 删除；
+  正在使用某张卡时点「保存并应用」，编辑器里的改动会写回那张卡。
+  卡片预览只读 `--bg / --accent / --accent2` 三个变量，值不合法就回退默认色。
+- 停用自定义主题时卡片保留但不高亮；`ctState` 显示「已启用 · 卡片名 · 时间」。
 - CSS 写进 head 末尾的 `<style id="ctStyle">`，所以能覆盖任意主题变量和选择器；
   `:root{--accent:…;--bg:…}` 就会全站生效。停用只把 `enabled` 置 false，内容保留，改坏了能一键恢复。
 - HTML 是静态区块，插到首页顶部 `#customHomeMount`，适合做横幅/公告；不是整页替换。
 - HTML 经过 `sanitizeCustomHtml()`：移除 `script/iframe/object/embed/link/meta/base/form`
   和所有 `on*` 内联事件、`javascript:` 链接，再由模板写入，不执行脚本。
 - 提供「插入模板 / 复制配置（JSON）/ 恢复默认」；导出的本机数据 JSON 里也带 `customTheme`。
+- 「导入主题」读 `.json`（`{name, css, html}`，也接受裸 `.css`），导入后直接存一张卡并应用、
+  名称回填到卡片名；入口是 `#ctImport` + 隐藏的 `#ctImportFile`，解析逻辑在 `importCustomTheme()`。
 - 启动时 `applyCustomTheme()` 在任何页面渲染前执行，刷新后仍然生效。
 - 实测：`:root{--accent:#ff0055}` 应用后变量立刻变、刷新仍在；带 `onclick` 和 `<script>` 的
   HTML 落库后只剩 `<div class="my-banner">自定义横幅</div>`，两个脚本标记都没有执行；停用后变量回到主题值。
+- 卡片实测（2026-11-20 浏览器）：存「测试夜读」后卡片出现、`--bg` 立刻变、刷新仍在；再存「测试晨光」
+  只高亮新卡；点旧卡切回并回填编辑器；删第二张后第一张仍生效；停用后卡片不高亮、变量回主题值。
+- 液态玻璃主题（`themes/liquid-glass.json`，源样式 `themes/liquid-glass.css`）：只靠 CSS，没有 JS 依赖。
+  选择器统一写 `html[data-theme]`，与内置 `html[data-theme="ledger"] …` 同权重、靠层叠顺序压过去；
+  全屏光斑用 `body::before` / `body::after` 两个伪元素（自定义主题不能插 DOM），
+  重排浮岛侧栏、药丸顶栏、玻璃便当首页、悬浮迷你播放条。导入实测（2026-11-21 浏览器）：
+  导入后生成「液态玻璃」卡片、`--bg=#060a13`、`ctStyle` 长度 22494；1440 宽复核侧栏 262×872、便当 1112 宽。
+  之后补了「统计与年度回顾」专属版式：`#page-stats` 页头、`#statsCards` 发光数字、`stat-bar` 玻璃行、
+  `stats-year-head` 年度封面，均在 `themes/liquid-glass.css` 第 10 节，≤900 宽有回退。
+- 同批主题包（同为 `html[data-theme]` 前缀、纯 CSS、可导入）：
+  `neubrutalism`（新粗野主义，3px 黑边 + 硬投影 + 撞色）、
+  `minimal-maxi`（极简放大，超大标题/数字 + 发丝线 + 信号红）、
+  `dopamine`（多巴胺糖果，奶油底 + 大圆角 + 彩色投影）、
+  `cyber`（赛博渐变，近黑底 + 霓虹 + 切角 + 扫描线）、
+  `glass2`（玻璃拟态 2.0，浅色分层薄玻璃 + 细噪点 + 白边结构线）。
+  第二批：`frutiger-aero`（2000 年代高光泽胶质 + 水泡 + 蓝天草地）、
+  `soft-touch`（软胶按钮 + 果冻回弹 + 柔和噪声）、
+  `naive-craft`（纸面 + 蜡笔色 + 歪斜边框 + 波浪下划线 + 卡片轻微旋转）、
+  `riso-print`（纸纹 + 套印错位 + 网点 + 铅字压痕）、
+  `mono-tech`（等宽 + 单色高对比 + 0 圆角 + 高密度信息面板）、
+  `surveillance`（去饱和灰绿 + 扫描线 + 暗角 + REC 标记）、
+  `y3k`（铬金属渐变 + 宇宙霓虹 + 舷窗面板）。
+  三套布局方向分别落在：`minimal-maxi`（大字排版）、`naive-craft`（手绘 + 几何拼贴）、
+  `mono-tech` / `surveillance`（高密度面板，小字号 + 细分割线）。
+  每套都有 `.css` 源与同名 `.json` 包；`tests/test_custom_themes.py` 会校验全部包的 format/name/选择器/不夹带标签。
+- 播放条定位不再依赖 body 状态：桌面宽度下统一 `left:50% + translate:-50% 0`、`width:min(880px,100vw-40px)`，
+  避免字幕页等“侧栏已收起但状态标记没变”的页面把条子推出右边缘。
+- 两条底栏是不同元素，别混：首页/设置显示的是 `.mini-player`（原生 `left:258px + right:20px`，≤1180 用 220，
+  ≤900 用 10/10 + `bottom:64px`，`body.nav-collapsed` 贴左 20），字幕/播放页才是 `.dock`
+  （`body:not(.player-open)` 时 `display:none`）。主题必须显式写住 `.mini-player` 的 `left/right`，
+  写成 `left:auto` 会把整条缩成内容宽度。
+- `.dock`：默认态 `left:50% + translate:-50%`、`width:min(1040px,100%-40px)`；
+  `body.player-open` 停靠态改成 `left:0/right:0 + margin:0 auto`、`max-width:min(880px,100vw-40px)`，
+  避免内置的 `left:0/width:100%` 满宽贴底。
+- 十三套主题都补了壁纸模式（`.wallpaper` / `.wp-*` 全屏字幕层）样式：各自给出背景、遮罩渐变、
+  kicker/标题字体与颜色、当前句左侧色条、逐词高亮下划线、中文行、控制按钮外观，
+  暗色套用霓虹/扫描线，浅色套用纸面/低饱和；`.wp-bg` 滤镜按主题分别调（灰度/去饱和/暖化）。
+- 自定义主题与内置配色互斥：用户主动点色板/明暗切换时 `setTheme` 先停用自定义主题（清 `ctStyle`、摘
+  `custom-theme-on`、重绘卡片并 toast），点主题卡再启用；否则注入样式永远压过内置配色，看起来“切换无效”。
+- 内置色板只剩四套：`midnight` 午夜蓝 / `paper` 纸张 / `prototype` 原型 / `ledger` 编辑部。
+  档案 `brass`、墨绿 `forest`、酒红 `oxblood`、青瓷 `celadon`、雾白 `mist` 已从色板撤掉（`player.html`
+  两处色板 DOM + `05` 的 `THEME_NAMES` + `07` 设置页网格三处同源）；老存档由 `01` 的
+  `REMOVED_THEME_FALLBACK` 迁到最近的现存色板（brass/forest/oxblood→midnight，celadon→ledger，mist→paper）。
+  三处必须同时改，漏一处设置页就会重新长出旧色板。
+- 七套视觉主题改成了**随包**（`themes/<slug>.json` → `site/themes-defaults.js` 的 `window.MYT_THEME_DEFAULTS`）：
+  液态玻璃、玻璃拟态 2.0、极简放大、技术单色、新粗野主义、复古印刷、监控美学，首次启动自动种成自定义主题卡
+  并启用第一套；种卡是**每次启动补齐缺卡**（幂等），`localStorage['myt-theme-packs-seeded']` 只用来判断
+  “是不是第一次”——第一次才顺手把液态玻璃设为当前，之后只补卡、不抢用户已选的主题。
+  改主题请改 `themes/` 的源文件后重新生成 `site/themes-defaults.js`，不要手改这个生成文件。
+  随包卡带 `builtin: true`（老数据按 `ct-pack-` 前缀识别），是**默认主题**：卡片右上角只显示不可点的「默认」标，
+  没有删除按钮，`removeCustomThemePreset` 也直接拒删；`ctReset`（恢复默认）只清用户自己存的卡和 CSS/HTML，
+  七套随包主题保留。所以“恢复默认”不等于“清空自定义主题网格”。
+- 启动顺序坑：`applyCustomTheme()` 原先在 01 的顶层直接跑，此时 05 还没 `registerLayer`，
+  `lazyFn` 版 `readJSON` 会返回 `undefined`，被 normalize 成“没有配置”——结果自定义主题重启后永远不生效。
+  现在改成 `queueMicrotask(bootCustomTheme)`（种包 + 应用）压到微任务，等 registry 齐了再读。
+  以后任何「启动就要读别的层的 localStorage」的代码都别写在各层顶层。
 
 ## 桌面壳：插件接口与字幕插件（2026-11-20）
 
-插件运行时与现有页面并行；用户手册见 [plugins.md](plugins.md)。字幕功能已收编为一个内置插件 `subtitles`。
+插件运行时与现有页面并行；用户手册见 [plugins.md](plugins.md)。当前实现是“默认无插件、用户手动导入”，并已切到宿主 v2 的声明式契约：见 [host-v2.md](host-v2.md)，决策记录在 [docs/adr](adr/)。
 
 - 插件目录 `C:\ProgramData\MyTranscript\plugins\<id>\`：
-  `plugin.json`（id/name/version/description/author/main/style/enabled）+ `main.js` + 可选 `style.css`。
+  `plugin.json`（id/name/version/description/author/apiVersion/contributions/requires/permissions/main/style/scripts）+ `main.js` + 可选 `style.css`。
   启用状态单独写 `plugins/enabled.json`，不改用户清单；`enabled` 只是首次默认。
 - Rust 命令：`plugin_list`（扫描目录并把启用插件的 JS/CSS 源码一起返回）、
-  `plugin_set_enabled`、`plugin_open_dir`、`plugin_example`（生成 hello-world 示例，已存在时不覆盖）。
+  `plugin_set_enabled`、`plugin_import`（只复制清单声明的入口/脚本/样式，导入后写为停用）、
+  `plugin_open_dir`、`plugin_example`（生成 hello-world 示例，已存在时不覆盖）。
 - 前端启动时 `loadPlugins()` 在 `bindShell()` / `applyRoute()` 之前跑：注入 `<style data-plugin-css>`、
   用 `<script>` 执行 `main.js`（外层包 try/catch），再调 `MyTPlugins.start(id)`。
-  插件用 `MyTPlugins.register(id,{setup(api)})` 注册；页面走 `api.page()`，
+  插件用 `MyTPlugins.define(id,{contributions})` 声明式注册，旧插件仍可用 `register(id,{setup(api)})`；
+  v2 贡献点由 `HOST_V2.register` 接管，原生页面桥到 `renderV2Page`，自定义页面走 `api.page()`，
   路由 `#/plugin/<pluginId>/<pageId>`，侧栏单独一个「插件」分组（`#pluginNav`）。
 - API：`toast / navigate / openEpisode / page / on / command / cues / player{state,play,pause,toggle,seek,seekBy,setRate} / subtitles / storage / el`。
   事件：`player:open/play/pause/ended/time`（time 约 1 秒一次）、`player:cue`、`route:change`。
+- 宿主 v2：`startV2Plugin` 用 `validateLegacyManifest` 归一化清单，再 `HOST_V2.register`；`pages` 里带
+  `native: true` 的贡献项桥到原生 `page-<id>`，`renderPage` 前置 `renderV2Page`，`applyRoute` 进播放器前
+  `destroyV2Page`。`providers/commands/requires` 同步桥接；`stopPlugin` / `abortPluginStart` 调 v2 的
+  `__dispose`。过渡期原生页插件通过 `ctx.ui`（纯展示原语）+ `ctx.catalog / progress / downloads /
+  settings` 四个按域服务复用宿主数据，`ctx.ui` 不再混放状态和写操作。
+- 同一 `page` 槽位只能有一个插件注册；字幕用 `page:center`，学习改用独立 `page:study`，避免互斥。
+- 槽位与设置分区：页面锚点写成 `data-plugin-slot="<11 个固定槽位名>"`，`renderPage` / 单集异步渲染后
+  调 `applySlotMounts()` 扫描挂载；设置页切分区时 `applySettingsPanes(pane)` 渲染该 pane 的贡献。
+  每个贡献一个独立包装元素，插件用 `mount / unmount / render` 自己填；抛错只回收那一格并记错误。
+  `stopPlugin` / `abortPluginStart` / 软重载先 `releaseSurfaces(id)`，锚点回空态；页面重绘留下的死锚点
+  由 `pruneDetachedSurfaces()` 顺手摘掉。`menus / themes / importers / searchSources` 的 DOM 适配在
+  `src/player-js/host/ui-adapters.js`。
+- 2026-11-21（2.2）：`ctx` 改为按贡献类型装配（`host/context.js`），菜单/搜索源/导入器不再拿到
+  `subtitles / study / storage` 这些大组；`2.0/2.1` 清单继续走 2.1 的完整档案，收窄只对 `2.2` 生效。
+  每类 payload 有独立版本（`ctx.payloadVersion`，槽位锚点可写 `data-slot-payload-version`）。
+- 2026-11-21（2.2）：每次贡献调用带 `AbortSignal`（`ctx.signal`）。停用插件、启动失败、页面销毁、
+  槽位/设置卸载、新搜索都会 abort；`faults.js` 把取消归为 `AbortError`（`code: plugin_aborted`），
+  不写插件诊断，超时仍算故障。搜索代次与取消共用同一个 `AbortController`（`host/requests.js`）。
+- 2.2 的验证入口：`node scripts/check_plugin_manifest.mjs <插件目录>`（`--set` 集合、`--legacy` 旧清单）；
+  示例插件 `examples/plugins/search-echo/`；测试宿主 `tests/host/test-host.mjs` 同时模拟 ctx 与取消。
 
 ### 内置 `subtitles` 插件
 
-- 源码在 `apps/windows/builtin-plugins/subtitles/`，Rust 启动时铺到
-  `C:\ProgramData\MyTranscript\plugins\subtitles\`；已存在的文件不覆盖。
+- 源码在 `apps/windows/builtin-plugins/subtitles/`，是仓库随附的可选手动导入包；应用启动不铺到
+  `C:\ProgramData\MyTranscript\plugins\subtitles\`，也不默认启用。导入后与第三方插件一样首次启用需授权。
 - `main.js` 调用 `api.subtitles.claim()` 后才算接管。主程序 `subtitlePluginOn()`
   只看这个 claim 结果：没有插件时播放器不下载文字稿，`selectEpisode` / `renderCues` /
   `applyEpisodeData` 都直接返回，`body.subs-off` 隐藏阅读区、阅读栏、迷你字幕、壁纸、
@@ -1292,16 +1383,31 @@ P2：
   通过 `api.host.registerKernel('transcript', …)` 注册。主程序只保留
   `cuesFromJson / parseVttSmart / parseZhVTT / vttFromSidecar / mergeCues / renderCues`
   桥接，并把 `state / box / reader` 作为适配器交给插件。
-  实时 ASR、全局字幕采集仍是宿主服务，后续继续迁移。
+- 实时 ASR 与桌面全局字幕的**生命周期已迁入插件**：`subtitles/live.js` 绑定播放器
+  `#liveBtn / #liveStopBtn` 并作为唯一 owner 通过 `api.subtitles.registerLive()` 注册；
+  宿主 `03` 只保留引擎适配器（`liveEnable / liveDisable / liveFollowCurrentEpisode`），
+  由 `api.subtitles.liveEngine` 暴露给插件。没有插件时实时按钮不再有宿主处理器。
+- 桌面字幕同理：`subtitles/captions.js` 拥有会话开关/状态/应用选择/显示选项，
+  宿主只把 Rust 命令包成 `api.subtitles.captions`（`captions_start[_process] /
+  captions_stop / captions_active / captions_list_sessions / captions_open_picker /
+  captions_set_*`）。WASAPI 采集、浮窗、识别进程仍在 Rust，不可能搬进 WebView。
+- 实测（2026-11-20，debug exe）：字幕中心页显示「开始桌面字幕 / 选择应用」，
+  点开后状态变「桌面字幕：采集中」，再点停止无报错；打开单集后点实时识别，
+  `aria-pressed=true`、状态行「实时识别中 · 已识别 1 句 · 已提前 8 秒」，
+  再点停止回到 `aria-pressed=false`。
+- 回归（2026-11-20）：没有字幕插件时保持原生播放器。列表/单集页点播放后
+  **留在原页**，`defaultPlayEpisode` 只加载该集并在迷你播放器起播，不跳全屏
+  播放页；不加载字幕，也不提示启用插件。全屏播放页仍可直接打开，阅读区显示
+  「音频播放模式」，不会空白。
 - 实测：插件启用时打开 how-we-made-your-mother 单集，240 句正常显示；插件页显示
   「908 句 · 9555 个词级时间点」，双语按钮切换后 239 条中文行出现；停用并刷新后
   `body` 变 `subs-off`，`#transcript` 句数为 0，阅读区/阅读栏/字幕工具全部隐藏，
   音频和集标题仍在；重新启用刷新后恢复 240 句。
 
-### 内置 `study` 插件
+### 可选 `study` 插件
 
-- 源码 `apps/windows/builtin-plugins/study/`，第一次启动铺到
-  `C:\ProgramData\MyTranscript\plugins\study\`，已有文件不覆盖；默认启用。
+- 源码 `apps/windows/builtin-plugins/study/` 是可选手动导入包；应用不再自动铺到
+  `C:\ProgramData\MyTranscript\plugins\study\`，也不会默认启用。设置 → 插件导入后默认停用。
 - 插件调用 `api.study.claim()`；`studyPluginOn()` 同时要求 `subtitles` 已 claim，
   因为学习卡、整集总结、词卡都依赖 cue。
 - 停用后 `body.study-off` 隐藏 `#studyBtn`、`#studySheet`、`#wordPanel`、
@@ -1331,6 +1437,13 @@ P2：
   `registerStudyUi` 绑定失败先回滚再抛错；`app.autoplay` 改走 `host.player.setAutoplay`，词卡提示
   标记收进插件闭包；`withCues` 的成功路径会撤销本次 15 秒兜底 timeout，避免旧 timer 清掉下一次等待。
   停用/重启探针已验证面板关闭再打开正常；用户随后要求提交并推送本轮修复。
+- 2026-11-20 播放回归修复：阶段三搬走循环/自动暂停/练习上下文后，宿主 `01` 的 seek 与
+  `03` 的切集仍在直写 `studyLoop` / `studyAutoPauseDone` / `studyExercise` /
+  `studyVocabContext`，严格模式抛 `ReferenceError`，audio 在拿到 `src` 前中断。现在
+  `runtime.js` 的 `resetPlayback()` / `resetAutoPause()` 与 `ui.js` 的 `resetStudyContext()`
+  统一清状态，宿主只经 `08` 的三个转发包装调用；`tests/test_study_ui_lifecycle.py`
+  禁止宿主再裸写这些名字，`tests/test_study_runtime.py` 锁定 `resetPlayback` 取消循环且不误暂停。
+  该修复随 `40926646` 提交并推送；实机已验证从 45:40 播到 48:36，切集与拖动不再报错。
 
 
 

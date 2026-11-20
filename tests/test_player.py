@@ -53,19 +53,33 @@ def study_ui():
 
 
 def player_page():
-    """把拆出去的外链样式与脚本内联回文档，还原成单文件形态再做文本断言。"""
+    """把外链样式与模块图内联回文档，还原成可做文本断言的单文件形态。"""
     page = (SITE / "player.html").read_text(encoding="utf-8")
     css_path = SITE / "player.css"
-    js_path = SITE / "player.js"
     if css_path.is_file():
         page = page.replace(
             '<link rel="stylesheet" href="player.css">',
             "<style>\n" + css_path.read_text(encoding="utf-8") + "</style>",
         )
-    if js_path.is_file():
+    js_dir = SITE / "player"
+    if js_dir.is_dir():
+        chunks = []
+        for module in sorted(js_dir.glob("*.js")):
+            if module.name == "player.js":
+                continue
+            lines = []
+            for line in module.read_text(encoding="utf-8").splitlines():
+                if line.startswith("import "):
+                    continue
+                if line.startswith("export {") and line.endswith("};"):
+                    continue
+                if line.startswith("export const "):
+                    line = line[len("export "):]
+                lines.append(line)
+            chunks.append("\n".join(lines))
         page = page.replace(
             '<script type="module" src="player.js"></script>',
-            "<script>\n" + js_path.read_text(encoding="utf-8") + "</script>",
+            "<script>\n" + "\n".join(chunks) + "</script>",
         )
     return page
 
@@ -1284,8 +1298,12 @@ class PlayerStudyShortcutTests(unittest.TestCase):
 
     def test_extension_module_shares_main_iife_scope(self):
         """扩展模块必须写在主 IIFE 内：另起 <script> 拿不到 state / studyRender* 等私有绑定，
-        包装会静默失效（缓存徽标、前情回顾、练习扩展按钮曾经整块消失）。"""
-        self.assertEqual(self.html.count("<script"), 1)
+        包装会静默失效（缓存徽标、前情回顾、练习扩展按钮曾经整块消失）。
+        唯一允许的第二个 <script> 是纯数据文件 themes-defaults.js（只挂 window.MYT_THEME_DEFAULTS）。"""
+        scripts = re.findall(r"<script[^>]*>", self.html)
+        self.assertEqual(len(scripts), 2)
+        self.assertEqual([s for s in scripts if 'type="module"' in s], [s for s in scripts if "player.js" in s])
+        self.assertIn('src="themes-defaults.js"', scripts[0])
         self.assertNotIn("</script>\n<script", self.html)
         self.assertIn("window.__xai", self.html)
 

@@ -60,6 +60,15 @@ runtime.resetAutoPause();
 runtime.audioTick();
 assert(audio.paused, '自动暂停要在句末停住');
 
+runtime.playRange(10, 12, 3);
+runtime.resetPlayback();
+state.cues = []; state.activeCue = -1;
+audio.currentTime = 11.95;
+runtime.audioTick();
+assert(audio.currentTime === 11.95 && !audio.paused, 'resetPlayback 要取消循环，不能把播放拖回起点或暂停');
+state.cues = [{ start: 1, end: 3, speechStart: 1.2, speechEnd: 2.8, text: 'hello world' }];
+state.activeCue = 0;
+
 // 15 秒兜底必须跟着本次等待；一次等待成功后不能清掉下一次的 timer。
 {
   const real = { setTimeout: global.setTimeout, clearTimeout: global.clearTimeout, setInterval: global.setInterval, clearInterval: global.clearInterval };

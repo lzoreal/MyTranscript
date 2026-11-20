@@ -1,3 +1,105 @@
+import { $, LIVE, audio, box, host, listBox, prefs, setState, state, tauriHost } from './00-runtime.js';
+import { applyCustomTheme, applyReader, cuesFromJson, directAudioUrl, emptyLine, esc, fmt, getJson, loaderHTML, parseFeed, pluginPageKey, readCustomTheme, reader, rebuildCues, renderCustomThemeGrid, saveProgress, seekTo, showToast, statHTML, status, studyNormText, syncCustomThemeEditor, syncJumpPill, writeCustomTheme } from './01-theme-reader-shell.js';
+import { CORE_PROVIDER_NAMES, coreProvider, coreProviderOwner, defineCoreProvider, registerCoreProvider, releaseCoreProviders, syncLiveLeadSelect } from './02-live-caption-wasm.js';
+import { applyEpisodeData, liveDisable, liveEnable, mergeAdRanges, sanitizeAdRanges, selectEpisode, studyAdRangesFromData, studyApplyAiAdRanges } from './03-native-asr-service-worker.js';
+
+
+
+
+import { apiCompatible, HOST_API_VERSION, satisfies } from './host/contract.js';
+import { createContributionRegistry } from './host/registry.js';
+import { validateLegacyManifest } from './host/legacy.js';
+import { DEFAULT_PLUGIN_TIMEOUT_MS, createPluginDiagnostics, createPluginFaultBoundary, describePluginError, runPluginTask } from './host/faults.js';
+import { isAbortError } from './host/faults.js';
+import { createContributionContext } from './host/context.js';
+import { createPluginExtensionAdapters } from './host/ui-adapters.js';
+import { motionFlip } from './11-motion.js';
+import { createRequestGate } from './host/requests.js';
+import { createGuardedView } from './host/views.js';
+import { layerObject, layerValue, lazyFn, registerLayer } from './00-layers.js';
+const absoluteFeed = lazyFn('05-transport-transcript-nav', 'absoluteFeed');
+const applyModules = lazyFn('05-transport-transcript-nav', 'applyModules');
+const applySidebarCustomization = lazyFn('05-transport-transcript-nav', 'applySidebarCustomization');
+const asrModelName = lazyFn('05-transport-transcript-nav', 'asrModelName');
+const bindModuleSwitches = lazyFn('05-transport-transcript-nav', 'bindModuleSwitches');
+const catalogLatest = lazyFn('05-transport-transcript-nav', 'catalogLatest');
+const cleanFeedTitle = lazyFn('05-transport-transcript-nav', 'cleanFeedTitle');
+const cleanWord = lazyFn('05-transport-transcript-nav', 'cleanWord');
+const closeDockSheet = lazyFn('05-transport-transcript-nav', 'closeDockSheet');
+const closeWordPanel = lazyFn('05-transport-transcript-nav', 'closeWordPanel');
+const copyPlain = lazyFn('05-transport-transcript-nav', 'copyPlain');
+const downloadInfo = lazyFn('05-transport-transcript-nav', 'downloadInfo');
+const downloadsHTML = lazyFn('05-transport-transcript-nav', 'downloadsHTML');
+const episodesOf = lazyFn('05-transport-transcript-nav', 'episodesOf');
+const fmtBytes = lazyFn('05-transport-transcript-nav', 'fmtBytes');
+const inboxCount = lazyFn('05-transport-transcript-nav', 'inboxCount');
+const isSubscribed = lazyFn('05-transport-transcript-nav', 'isSubscribed');
+const localAsrModelId = lazyFn('05-transport-transcript-nav', 'localAsrModelId');
+const moduleOn = lazyFn('05-transport-transcript-nav', 'moduleOn');
+const navigate = lazyFn('05-transport-transcript-nav', 'navigate');
+const offlineEntries = lazyFn('05-transport-transcript-nav', 'offlineEntries');
+const offlineKeyFor = lazyFn('05-transport-transcript-nav', 'offlineKeyFor');
+const parseRoute = lazyFn('05-transport-transcript-nav', 'parseRoute');
+const readAllProgress = lazyFn('05-transport-transcript-nav', 'readAllProgress');
+const readJSON = lazyFn('05-transport-transcript-nav', 'readJSON');
+const refreshShows = lazyFn('05-transport-transcript-nav', 'refreshShows');
+const seekBy = lazyFn('05-transport-transcript-nav', 'seekBy');
+const showByKey = lazyFn('05-transport-transcript-nav', 'showByKey');
+const syncDockBadge = lazyFn('05-transport-transcript-nav', 'syncDockBadge');
+const syncDockSleep = lazyFn('05-transport-transcript-nav', 'syncDockSleep');
+const syncRateSeg = lazyFn('05-transport-transcript-nav', 'syncRateSeg');
+const writeJSON = lazyFn('05-transport-transcript-nav', 'writeJSON');
+const coverHTML = lazyFn('06-catalog-feeds-search', 'coverHTML');
+const ensureShowFeed = lazyFn('06-catalog-feeds-search', 'ensureShowFeed');
+const exportSubtitle = lazyFn('06-catalog-feeds-search', 'exportSubtitle');
+const fetchFeedText = lazyFn('06-catalog-feeds-search', 'fetchFeedText');
+const hasFreshFeed = lazyFn('06-catalog-feeds-search', 'hasFreshFeed');
+const loadCatalog = lazyFn('06-catalog-feeds-search', 'loadCatalog');
+const loadLocalState = lazyFn('06-catalog-feeds-search', 'loadLocalState');
+const memoryFeed = lazyFn('06-catalog-feeds-search', 'memoryFeed');
+const mergeCatalog = lazyFn('06-catalog-feeds-search', 'mergeCatalog');
+const rememberFeed = lazyFn('06-catalog-feeds-search', 'rememberFeed');
+const TR = lazyFn('07-routes-pages', 'TR');
+const applyRoute = lazyFn('07-routes-pages', 'applyRoute');
+const episodeRowHTML = lazyFn('07-routes-pages', 'episodeRowHTML');
+const podCardHTML = lazyFn('07-routes-pages', 'podCardHTML');
+const renderPage = lazyFn('07-routes-pages', 'renderPage');
+const syncTranslateSettings = lazyFn('07-routes-pages', 'syncTranslateSettings');
+const trBatch = lazyFn('07-routes-pages', 'trBatch');
+const trNative = lazyFn('07-routes-pages', 'trNative');
+const trNoteError = lazyFn('07-routes-pages', 'trNoteError');
+const trPrimeCues = lazyFn('07-routes-pages', 'trPrimeCues');
+const trReady = lazyFn('07-routes-pages', 'trReady');
+const trSave = lazyFn('07-routes-pages', 'trSave');
+const trStatus = lazyFn('07-routes-pages', 'trStatus');
+const applyStudyEngine = lazyFn('08-study-ai', 'applyStudyEngine');
+const applyStudyRuntime = lazyFn('08-study-ai', 'applyStudyRuntime');
+const bindStudyUI = lazyFn('08-study-ai', 'bindStudyUI');
+const closeStudySheet = lazyFn('08-study-ai', 'closeStudySheet');
+const openSettingsPane = lazyFn('08-study-ai', 'openSettingsPane');
+const openStudySheet = lazyFn('08-study-ai', 'openStudySheet');
+const LOCAL_KEY = () => layerValue('05-transport-transcript-nav', 'LOCAL_KEY');
+const wordCurrentMeaning = () => layerValue('05-transport-transcript-nav', 'wordCurrentMeaning');
+const studyAutoPause = () => layerValue('08-study-ai', 'studyAutoPause');
+const studyView = () => layerValue('08-study-ai', 'studyView');
+const studyVocab = () => layerValue('08-study-ai', 'studyVocab');
+const setStudyAutoPause = lazyFn('08-study-ai', 'setStudyAutoPause');
+const setStudyView = lazyFn('08-study-ai', 'setStudyView');
+const studyDueItems = lazyFn('08-study-ai', 'studyDueItems');
+const studyOpenEpisodeSummary = lazyFn('08-study-ai', 'studyOpenEpisodeSummary');
+const syncStudySettings = lazyFn('08-study-ai', 'syncStudySettings');
+const syncThemeSwatches = lazyFn('08-study-ai', 'syncThemeSwatches');
+const bindLedgerUI = lazyFn('09-player-integration', 'bindLedgerUI');
+const syncMiniCaption = lazyFn('09-player-integration', 'syncMiniCaption');
+const syncReaderTop = lazyFn('09-player-integration', 'syncReaderTop');
+const bindShell = lazyFn('10-desktop-bridge-tail', 'bindShell');
+const playEpisode = lazyFn('10-desktop-bridge-tail', 'playEpisode');
+const startAutoRefresh = lazyFn('10-desktop-bridge-tail', 'startAutoRefresh');
+const THEME_NAMES = layerObject('05-transport-transcript-nav', 'THEME_NAMES');
+const app = layerObject('05-transport-transcript-nav', 'app');
+const TR_CACHE = layerObject('07-routes-pages', 'TR_CACHE');
+const STUDY = layerObject('08-study-ai', 'STUDY');
+const studyCache = layerObject('08-study-ai', 'studyCache');
 /* layer: bridge —— 本地音频插件宿主与预转写
    本片只做该层的事，跨层调用走 kernel / host() / setState。 */
 /* ---------- 本地无稿音频：整集预转写 ---------- */
@@ -12,7 +114,7 @@ function applyLocalDoc(item, doc) {
   item.transcript = { type: 'application/json', url: 'local-asr', local: true };
   try {
     const idx = app.local.findIndex(ep => ep.localPath === item.localPath);
-    if (idx >= 0) { app.local[idx].transcript = item.transcript; writeJSON(LOCAL_KEY, app.local); }
+    if (idx >= 0) { app.local[idx].transcript = item.transcript; writeJSON(LOCAL_KEY(), app.local); }
   } catch (e) {}
   const words = state.cues.reduce((n, c) => n + c.words.length, 0);
   const who = doc && doc.model ? '（' + asrModelName(doc.model) + '）' : '';
@@ -219,6 +321,8 @@ function smallArtwork(url) {  try {
   return '';
 }
 function renderList(filter = '') {
+  /* 过滤/排序只做位置过渡；首次渲染与后台刷新不触发，因为没有可比对的旧位置。 */
+  motionFlip(listBox, '.ep', () => {
   const q = filter.trim().toLowerCase();
   const items = state.episodes.filter(e => !q || String(e.num).includes(q) || (e.title || '').toLowerCase().includes(q));
   listBox.innerHTML = '';
@@ -244,6 +348,7 @@ function renderList(filter = '') {
     el.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); selectEpisode(e); } });
     listBox.append(el);
   }
+  });
 }
 
 async function loadShow(slug, episodeId) {
@@ -371,10 +476,12 @@ function trackPlugin(id, fn) {
 function runPluginCleanup(id) {
   const set = PLUGIN_CLEANUP.get(String(id));
   if (!set) return;
-  [...set].reverse().forEach(fn => { try { fn(); } catch (err) { console.warn('[plugin cleanup]', err); } });
+  [...set].reverse().forEach(fn => { PLUGIN_FAULTS.invoke(String(id), 'cleanup', fn); });
   set.clear();
 }
 let pluginApiReady = false;
+const PLUGIN_DIAGNOSTICS = createPluginDiagnostics({ limit: 20 });
+const PLUGIN_FAULTS = createPluginFaultBoundary({ reportError: pluginReportError });
 
 /* 插件宿主：能力图 + 依赖解析 + 内核注册 + 生命周期。字幕/学习等功能不再由主程序写死开关，
    而是插件通过 claim(capability) 登记，主程序只按能力是否被接管来装配界面。 */
@@ -401,11 +508,21 @@ const PluginHost = {
     if (stack.has(key)) return false;
     const path = new Set(stack);
     path.add(key);
-    return (Array.isArray(plugin.requires) ? plugin.requires : [])
-      .every(req => PluginHost.available(req, list, new Set(path)));
+    const requires = Array.isArray(plugin.requires)
+      ? plugin.requires.map(req => [req, '*'])
+      : Object.entries(plugin.requires && typeof plugin.requires === 'object' ? plugin.requires : {});
+    return requires.every(([req, range]) => {
+      const dep = (list || []).find(p => p && p.id === String(req));
+      if (!dep) return false;
+      if (!PluginHost.available(req, list, new Set(path))) return false;
+      return !dep.version || satisfies(dep.version, String(range || '*'));
+    });
   },
   missingRequires(plugin, list) {
-    return (Array.isArray(plugin?.requires) ? plugin.requires : []).filter(req => !PluginHost.available(req, list));
+    const requires = Array.isArray(plugin?.requires)
+      ? plugin.requires
+      : Object.keys(plugin?.requires && typeof plugin.requires === 'object' ? plugin.requires : {});
+    return requires.filter(req => !PluginHost.available(req, list));
   },
   status(id) {
     const plugin = (app.plugins || []).find(p => p.id === id);
@@ -451,6 +568,312 @@ function definitionStarted(id) {
   return !!(PLUGIN_REGISTRY.get(String(id) || '')?.__started);
 }
 
+/* ---------- 宿主 v2：声明式贡献点 ---------- */
+const HOST_V2 = createContributionRegistry();
+const HOST_V2_PAGES = new Map();
+let HOST_V2_PAGE_ACTIVE = null;
+/* 官方功能域插件暂时复用宿主的 UI 视图助手；这些是只读视图服务，不是内核表。
+   ctx.ui 只保留纯展示原语，状态与动作按域拆到 catalog / progress / downloads / settings。
+   真正的窄运行时 API 由 ctx.player / ctx.events / ctx.storage / ctx.navigate 提供。 */
+function v2UiKit() {
+  return Object.freeze({
+    $, esc, fmt, emptyLine, statHTML, coverHTML, episodeRowHTML, podCardHTML,
+  });
+}
+function v2CatalogKit() {
+  return Object.freeze({
+    subs: () => app.subs,
+    show: key => showByKey(String(key)),
+    episodes: show => episodesOf(show),
+    builtinShows: () => app.builtinShows,
+    bookmarks: () => app.bookmarks,
+    latest: show => catalogLatest(show),
+    isSubscribed: key => isSubscribed(key),
+    absoluteFeed: feed => absoluteFeed(feed),
+  });
+}
+function v2ProgressKit() {
+  return Object.freeze({ all: () => readAllProgress() });
+}
+function v2DownloadsKit() {
+  return Object.freeze({
+    entries: () => offlineEntries(),
+    html: (entries, query) => downloadsHTML(entries, query),
+    info: rec => downloadInfo(rec),
+    fmtBytes: n => fmtBytes(n),
+  });
+}
+function v2SettingsKit() {
+  return Object.freeze({
+    prefs, reader,
+    moduleOn: name => moduleOn(name),
+    auto: () => app.auto,
+    cont: () => app.cont,
+    themeNames: () => THEME_NAMES,
+    inboxCount: () => inboxCount(),
+    syncCustomThemeEditor, refreshPluginSettings, syncRateSeg, syncDockBadge,
+    syncDockSleep, syncStudySettings, syncThemeSwatches, syncTranslateSettings,
+    syncLiveLeadSelect,
+  });
+}
+/* 插件调用可以被真取消：每个作用域一个 AbortController，按插件记账。
+   停用、切集、新搜索、页面销毁、槽位卸载都会 abort，底层 fetch/等待循环能停就停。 */
+const PLUGIN_ABORTS = new Map();   // pluginId -> Set<scope>
+function pluginAbortScope(pluginId, label, externalSignal = null) {
+  const key = String(pluginId || '');
+  const controller = typeof AbortController === 'function' ? new AbortController() : null;
+  const scope = {
+    label: String(label || ''),
+    aborted: false,
+    signal: controller ? controller.signal : null,
+    abort() {
+      if (scope.aborted) return false;
+      scope.aborted = true;
+      if (controller) { try { controller.abort(); } catch (e) {} }
+      const set = PLUGIN_ABORTS.get(key);
+      if (set) set.delete(scope);
+      return true;
+    },
+    release() {
+      const set = PLUGIN_ABORTS.get(key);
+      if (set) set.delete(scope);
+    },
+  };
+  if (!PLUGIN_ABORTS.has(key)) PLUGIN_ABORTS.set(key, new Set());
+  PLUGIN_ABORTS.get(key).add(scope);
+  if (externalSignal) {
+    if (externalSignal.aborted) scope.abort();
+    else if (typeof externalSignal.addEventListener === 'function') {
+      externalSignal.addEventListener('abort', () => scope.abort(), { once: true });
+    }
+  }
+  return scope;
+}
+function abortPluginScopes(pluginId) {
+  const key = String(pluginId || '');
+  const set = PLUGIN_ABORTS.get(key);
+  if (!set) return 0;
+  const scopes = [...set];
+  scopes.forEach(scope => scope.abort());
+  PLUGIN_ABORTS.delete(key);
+  return scopes.length;
+}
+const V2_KIT_FACTORIES = {
+  ui: v2UiKit,
+  catalog: v2CatalogKit,
+  progress: v2ProgressKit,
+  downloads: v2DownloadsKit,
+  settings: v2SettingsKit,
+};
+function v2CapabilityFacade(id) {
+  return name => Object.freeze({
+    owner: () => PluginHost.owner(String(name)),
+    active: () => PluginHost.owner(String(name)) === id,
+  });
+}
+function pluginDeclaredApiVersion(id) {
+  const source = pluginManifestFor(id);
+  // 缺省按 2.0：没写 apiVersion 的旧插件不能因为宿主升级就突然拿到窄上下文。
+  return (source && source.apiVersion) || '2.0';
+}
+/* 2.2 起按贡献类型只挂需要的组；2.0/2.1 插件走 context.js 里的完整兼容档案。 */
+function v2Context(pluginId, type, options = {}) {
+  const id = String(pluginId || '');
+  const contributionType = String(type || 'pages');
+  const apiVersion = options.apiVersion || pluginDeclaredApiVersion(id);
+  return createContributionContext({
+    type: contributionType,
+    id,
+    apiVersion,
+    api: pluginApiFor(id),
+    kits: V2_KIT_FACTORIES,
+    capability: v2CapabilityFacade(id),
+    signal: options.signal || null,
+    payloadVersion: options.payloadVersion,
+  });
+}
+function destroyV2Page() {
+  if (!HOST_V2_PAGE_ACTIVE) return;
+  const rec = HOST_V2_PAGE_ACTIVE;
+  HOST_V2_PAGE_ACTIVE = null;
+  if (typeof rec.destroy === 'function') {
+    guardedPluginCall(rec.pluginId, 'page:destroy', () => rec.destroy());
+  }
+  if (rec.scope) rec.scope.abort();
+  rec.scope = null;
+}
+function renderV2Page(page) {
+  const rec = HOST_V2_PAGES.get(String(page));
+  if (!rec) return false;
+  if (HOST_V2_PAGE_ACTIVE && HOST_V2_PAGE_ACTIVE !== rec) destroyV2Page();
+  HOST_V2_PAGE_ACTIVE = rec;
+  const el = document.getElementById('page-' + page) || document.body;
+  if (rec.scope) rec.scope.abort();
+  rec.scope = pluginAbortScope(rec.pluginId, 'page:' + page);
+  try {
+    const result = rec.render(el, v2Context(rec.pluginId, 'pages', { signal: rec.scope.signal }));
+    watchPluginPromise(rec.pluginId, 'page:' + page, result, () => {
+      if (el) el.innerHTML = '<div class="empty">插件页面出错，已隔离该插件。</div>';
+    });
+    return true;
+  } catch (err) {
+    pluginReportError(rec.pluginId, err, 'page:' + page);
+    return false;
+  }
+}
+
+/* ---------- 贡献点落地：槽位与设置分区 ----------
+   宿主只给锚点元素，插件在 mount(el, ctx, payload) / render(el, ctx) 里自己填。
+   页面用 data-plugin-slot="<固定槽位名>" 标锚点，渲染后扫描挂载；
+   插件停用、失败或重新加载时按 pluginId 回收，锚点回到空态。 */
+const SURFACE_OWNERS = new Map();   // pluginId -> Set<entry>
+const SURFACE_ANCHORS = new Map();  // 锚点元素 -> Set<entry>
+
+function detachSurface(entry) {
+  const owners = SURFACE_OWNERS.get(entry.pluginId);
+  if (owners) owners.delete(entry);
+  const anchors = SURFACE_ANCHORS.get(entry.anchor);
+  if (anchors) anchors.delete(entry);
+  if (entry.impl && typeof entry.impl.unmount === 'function') {
+    try {
+      // 卸载本身要能跑完：给它一份不带取消信号的上下文，清理完再 abort 在途工作。
+      const result = entry.impl.unmount(entry.node, v2Context(entry.pluginId, entry.type || 'slots'));
+      watchPluginPromise(entry.pluginId, 'surface:unmount', result);
+    } catch (err) {
+      pluginReportError(entry.pluginId, err, 'surface:unmount');
+    }
+  }
+  if (entry.scope) entry.scope.abort();
+  entry.scope = null;
+  if (entry.node && entry.node.parentNode) entry.node.remove();
+}
+
+function attachSurface(entry, type, draw, contextOptions = {}) {
+  if (!SURFACE_OWNERS.has(entry.pluginId)) SURFACE_OWNERS.set(entry.pluginId, new Set());
+  SURFACE_OWNERS.get(entry.pluginId).add(entry);
+  if (!SURFACE_ANCHORS.has(entry.anchor)) SURFACE_ANCHORS.set(entry.anchor, new Set());
+  SURFACE_ANCHORS.get(entry.anchor).add(entry);
+  entry.type = type;
+  entry.scope = pluginAbortScope(entry.pluginId, 'surface:' + type + ':' + (entry.node?.dataset?.slot || ''));
+  try {
+    const result = draw(v2Context(entry.pluginId, type, { signal: entry.scope.signal, ...contextOptions }));
+    watchPluginPromise(entry.pluginId, 'surface:mount', result, () => detachSurface(entry));
+    return true;
+  } catch (err) {
+    pluginReportError(entry.pluginId, err, 'surface:mount');
+    detachSurface(entry);
+    return false;
+  }
+}
+
+function releaseSurfaces(pluginId) {
+  const owners = SURFACE_OWNERS.get(String(pluginId));
+  if (!owners) return 0;
+  let count = 0;
+  [...owners].forEach(entry => { detachSurface(entry); count++; });
+  SURFACE_OWNERS.delete(String(pluginId));
+  return count;
+}
+
+function clearSurfaces() {
+  let count = 0;
+  [...SURFACE_OWNERS.values()].forEach(set => {
+    [...set].forEach(entry => { detachSurface(entry); count++; });
+  });
+  SURFACE_OWNERS.clear();
+  SURFACE_ANCHORS.clear();
+  document.querySelectorAll('[data-plugin-slot], [data-plugin-settings]').forEach(el => {
+    delete el.dataset.slotReady;
+    delete el.dataset.paneReady;
+  });
+  return count;
+}
+
+function slotPayload(anchor) {
+  const raw = anchor.dataset.slotPayload;
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch (err) { return null; }
+}
+/* 锚点可以声明自己这份 payload 的版本；没写按 1 处理，插件在 ctx.payloadVersion 里读到。 */
+function slotPayloadVersion(anchor) {
+  const raw = Number(anchor.dataset.slotPayloadVersion);
+  return Number.isFinite(raw) && raw > 0 ? raw : 1;
+}
+
+/* 页面整块重绘后旧锚点会脱离文档；顺手摘掉挂在死锚点上的贡献，避免泄漏。 */
+function pruneDetachedSurfaces() {
+  [...SURFACE_OWNERS.values()].forEach(set => {
+    [...set].forEach(entry => {
+      if (entry.anchor && entry.anchor.isConnected === false) detachSurface(entry);
+    });
+  });
+}
+
+function applySlotMounts(root = document) {
+  pruneDetachedSurfaces();
+  const scope = root && typeof root.querySelectorAll === 'function' ? root : document;
+  let count = 0;
+  scope.querySelectorAll('[data-plugin-slot]').forEach(anchor => {
+    const name = String(anchor.dataset.pluginSlot || '');
+    if (!name || anchor.dataset.slotReady === '1') return;
+    anchor.dataset.slotReady = '1';
+    const payload = slotPayload(anchor);
+    const payloadVersion = slotPayloadVersion(anchor);
+    HOST_V2.slot(name, payload).forEach(rec => {
+      const impl = rec.impl || {};
+      if (typeof impl.mount !== 'function') return;
+      const node = document.createElement('div');
+      node.className = 'plugin-slot-item';
+      node.dataset.pluginId = rec.pluginId;
+      node.dataset.slot = name;
+      anchor.append(node);
+      const entry = { pluginId: rec.pluginId, impl, anchor, node };
+      if (attachSurface(entry, 'slots', ctx => impl.mount(node, ctx, payload), { payloadVersion })) count++;
+    });
+  });
+  applyPluginExtensions();
+  return count;
+}
+
+function applySettingsPanes(pane) {
+  const name = String(pane || '');
+  const paneEl = name ? document.getElementById('pane-' + name) : null;
+  if (!paneEl) return 0;
+  let anchor = paneEl.querySelector('[data-plugin-settings="' + name + '"]');
+  if (!anchor) {
+    anchor = document.createElement('div');
+    anchor.className = 'plugin-settings';
+    anchor.dataset.pluginSettings = name;
+    paneEl.append(anchor);
+    delete anchor.dataset.paneReady;
+  }
+  if (anchor.dataset.paneReady === '1') return 0;
+  anchor.dataset.paneReady = '1';
+  let count = 0;
+  HOST_V2.settings(name).forEach(rec => {
+    const impl = rec.impl || {};
+    if (typeof impl.render !== 'function') return;
+    const node = document.createElement('div');
+    node.className = 'plugin-settings-pane';
+    node.dataset.pluginId = rec.pluginId;
+    anchor.append(node);
+    const entry = { pluginId: rec.pluginId, impl, anchor, node };
+    if (attachSurface(entry, 'settings', ctx => impl.render(node, ctx))) count++;
+  });
+  applyPluginExtensions();
+  return count;
+}
+
+/* 插件装卸或重载后重算所有已挂载的贡献；设置页只重算当前激活分区。 */
+function refreshSurfaces() {
+  clearSurfaces();
+  applySlotMounts(document);
+  const active = document.querySelector('#settingsMenu button.active');
+  if (active) applySettingsPanes(active.dataset.pane);
+  applyPluginExtensions();
+}
+
+
 /* 字幕功能由插件接管：插件调用 api.subtitles.claim() 后才点亮字幕链路。
    没有插件时主程序只保留音频、节目信息和播放控制，不下载文字稿。 */
 function subtitlePluginOn() { return PluginHost.can('subtitles'); }
@@ -494,11 +917,23 @@ function applyStudyAvailability() {
   const word = $('wordPanel');
   if (word && word.classList.contains('on')) closeWordPanel();
 }
-function pluginReportError(id, err) {
-  const msg = err && (err.stack || err.message) ? (err.stack || err.message) : String(err);
+function pluginReportError(id, err, scope = 'runtime') {
+  const msg = describePluginError(err);
+  PLUGIN_DIAGNOSTICS.report(id, scope, err);
   app.pluginErrors = app.pluginErrors || new Map();
   app.pluginErrors.set(id, msg);
-  console.warn('[plugin ' + id + ']', err);
+  console.warn('[plugin ' + id + '][' + scope + ']', err);
+}
+function pluginDiagnosticsText(id) {
+  return PLUGIN_DIAGNOSTICS.text(id);
+}
+/* 插件事件、渲染和命令都可能返回 Promise；同步异常仍当场处理，
+   异步拒绝和超时统一记到诊断，回调负责把当前界面退回安全态。 */
+function watchPluginPromise(id, scope, value, onError) {
+  return PLUGIN_FAULTS.watch(id, scope, value, onError);
+}
+function guardedPluginCall(id, scope, fn) {
+  return PLUGIN_FAULTS.invoke(id, scope, fn);
 }
 function registerPluginPage(pluginId, pageId, opts) {
   if (!pluginId || !pageId) throw new Error('页面需要 pluginId 和 pageId');
@@ -530,6 +965,66 @@ function renderPluginNav() {
   nav.style.display = has ? '' : 'none';
   if (label) { label.hidden = !has; label.style.display = has ? '' : 'none'; }
 }
+
+/* ---------- 四类聚合贡献点：菜单、导入器、搜索源、主题 ----------
+   DOM 适配已经在 host/ui-adapters.js；这里只提供 port：
+   注册表查询、调用分发、搜索代次、主题前置动作。宿主体不再认识具体 DOM 结构。 */
+const PLUGIN_SEARCH_GATE = createRequestGate();
+
+function contributionRecord(type, pluginId, id) {
+  return HOST_V2.list(type).find(rec => rec.pluginId === String(pluginId) && rec.id === String(id)) || null;
+}
+function contributionButton(type, rec, label, extra = '') {
+  return '<button class="btn ghost small" data-plugin-contribution="' + esc(type) +
+    '" data-plugin-owner="' + esc(rec.pluginId) + '" data-plugin-id="' + esc(rec.id) + '"' + extra + '>' +
+    esc(label) + '</button>';
+}
+function pluginRecordLabel(rec) {
+  return String(rec?.entry?.title || rec?.entry?.label || rec?.impl?.name || rec?.impl?.label || rec?.id || '');
+}
+function disableCustomThemeForPlugin() {
+  const cfg = readCustomTheme();
+  if (!cfg.enabled) return;
+  const next = { ...cfg, enabled: false, updatedAt: Date.now() };
+  writeCustomTheme(next);
+  applyCustomTheme(next);
+  renderCustomThemeGrid();
+}
+const PLUGIN_EXTENSIONS = createPluginExtensionAdapters({
+  document,
+  $, esc, loaderHTML, showToast,
+  registry: HOST_V2,
+  contributionRecord, contributionButton, recordLabel: pluginRecordLabel,
+  runContribution: (owner, type, id, method, args, options) =>
+    runPluginContribution(owner, type, id, method, args, options),
+  searchGate: PLUGIN_SEARCH_GATE,
+  storage: localStorage,
+  notify: (message, type) => showToast(message, type),
+  preparePluginTheme: disableCustomThemeForPlugin,
+});
+PLUGIN_EXTENSIONS.bindEvents();
+async function runPluginContribution(pluginId, type, id, method, args = [], options = {}) {
+  const rec = contributionRecord(type, pluginId, id);
+  const fn = rec?.impl?.[method];
+  if (typeof fn !== 'function') throw new Error(type + ':' + id + ' 没有 ' + method + ' 实现');
+  const scope = pluginAbortScope(rec.pluginId, type + ':' + id + ':' + method, options.signal || null);
+  try {
+    return await PLUGIN_FAULTS.run(rec.pluginId, type + ':' + id,
+      signal => fn(v2Context(rec.pluginId, type, { signal }), ...args),
+      { signal: scope.signal });
+  } finally { scope.release(); }
+}
+/* 兼容旧调用点：这些名字仍由宿主导出，实际实现都在 adapter 里。 */
+function renderPluginMenu() { return PLUGIN_EXTENSIONS.renderMenu(); }
+function renderPluginImporters() { return PLUGIN_EXTENSIONS.renderImporters(); }
+function renderPluginSearchSources() { return PLUGIN_EXTENSIONS.renderSearchSources(); }
+function renderPluginThemes() { return PLUGIN_EXTENSIONS.renderThemes(); }
+function applyPluginExtensions() { return PLUGIN_EXTENSIONS.applyAll(); }
+function applyPluginTheme(pluginId, id, silent = false) {
+  const rec = contributionRecord('themes', pluginId, id);
+  return rec ? PLUGIN_EXTENSIONS.applyTheme(rec, silent) : false;
+}
+function clearPluginTheme() { return PLUGIN_EXTENSIONS.clearTheme(); }
 function addPluginListener(pluginId, event, fn) {
   if (typeof fn !== 'function') throw new Error('事件回调必须是函数');
   if (!PLUGIN_HOOKS.has(event)) PLUGIN_HOOKS.set(event, new Set());
@@ -543,8 +1038,10 @@ function emitPlugin(event, payload) {
   const set = PLUGIN_HOOKS.get(event);
   if (!set || !set.size) return;
   set.forEach(rec => {
-    try { rec.fn(payload); }
-    catch (err) { pluginReportError(rec.pluginId, err); }
+    try {
+      const result = rec.fn(payload);
+      watchPluginPromise(rec.pluginId, 'event:' + event, result);
+    } catch (err) { pluginReportError(rec.pluginId, err, 'event:' + event); }
   });
 }
 function pluginPlayerState() {
@@ -561,11 +1058,12 @@ function pluginPlayerState() {
     cueIndex: state.activeCue,
   };
 }
-const PLUGIN_API_VERSION = '2.0';
-/* 兼容只谈主版本：插件写 2.x 都认，3.x 直接拒绝；空值视为不声明，按当前版本跑。 */
-function pluginApiCompatible(version) {
+const PLUGIN_API_VERSION = HOST_API_VERSION;
+function assertPluginApi(version) {
   const want = String(version || '');
-  return !want || want.split('.')[0] === PLUGIN_API_VERSION.split('.')[0];
+  if (!apiCompatible(want, PLUGIN_API_VERSION)) {
+    throw new Error('插件要求 API ' + want + '，宿主只支持 ' + PLUGIN_API_VERSION);
+  }
 }
 let pluginHostFacadeCache = null;
 /* 对外只给能力查询与内核注册，不把 PluginHost 的内部表（kernels / 能力映射）交出去。
@@ -607,23 +1105,43 @@ function releasePluginCapabilities(id) {
 }
 function stopPlugin(id) {
   const key = String(id);
+  // 先叫停在途任务，再回收注册物：插件停用后不该还有请求在后台跑。
+  abortPluginScopes(key);
+  const activeSearch = PLUGIN_SEARCH_GATE.snapshot().key;
+  if (activeSearch && activeSearch.startsWith(key + ':')) PLUGIN_SEARCH_GATE.invalidate(activeSearch);
   const def = PLUGIN_REGISTRY.get(key);
   if (def && typeof def.__dispose === 'function') {
-    try { def.__dispose(); } catch (err) { pluginReportError(key, err); }
+    const dispose = def.__dispose;
     def.__dispose = null;
+    guardedPluginCall(key, 'dispose', dispose);
   }
   runPluginCleanup(key);
   releasePluginCapabilities(key);
+  releaseSurfaces(key);
   PLUGIN_GRANTS.delete(key);
   if (def) def.__started = false;
 }
 /* setup 中途失败：已注册的页面/事件/CSS/能力必须按停用同样的路径回收。 */
 function abortPluginStart(id, definition) {
   const key = String(id);
+  abortPluginScopes(key);
+  if (definition && typeof definition.__dispose === 'function') {
+    const dispose = definition.__dispose;
+    definition.__dispose = null;
+    guardedPluginCall(key, 'dispose', dispose);
+  }
   runPluginCleanup(key);
   releasePluginCapabilities(key);
+  releaseSurfaces(key);
   PLUGIN_GRANTS.delete(key);
   if (definition) { definition.__started = false; definition.__dispose = null; }
+}
+function captionInvoke(command, args) {
+  const T = tauriHost();
+  if (!T || !T.core || typeof T.core.invoke !== 'function') {
+    return Promise.reject(new Error('当前壳没有桌面字幕能力'));
+  }
+  return T.core.invoke(command, args || {});
 }
 function pluginApiFor(id) {
   const storagePrefix = 'myt-plugin:' + id + ':';
@@ -699,9 +1217,30 @@ function pluginApiFor(id) {
         setTimeout(() => openSettingsPane('reader'), 0);
       },
       toggleLive: async () => {
-        if (LIVE.on) liveDisable('已停止实时识别。');
-        else await liveEnable();
-        return !!LIVE.on;
+        const live = subtitleLive();
+        if (live && typeof live.toggle === 'function') return await live.toggle();
+        return false;
+      },
+      liveEngine: {
+        enable: () => liveEnable(),
+        disable: hint => liveDisable(hint),
+        follow: resume => liveFollowCurrentEpisode(resume),
+        status: () => ({ on: !!LIVE.on, busy: !!LIVE.busy, mode: LIVE.mode }),
+      },
+      registerLive: impl => registerSubtitleLive(id, impl),
+      live: () => subtitleLive(),
+      captions: {
+        available: () => !!(tauriHost() && tauriHost().core && typeof tauriHost().core.invoke === 'function'),
+        start: pid => captionInvoke(pid ? 'captions_start_process' : 'captions_start', pid ? { pid } : {}),
+        stop: () => captionInvoke('captions_stop', {}),
+        active: () => captionInvoke('captions_active', {}),
+        list: () => captionInvoke('captions_list_sessions', {}),
+        picker: () => captionInvoke('captions_open_picker', {}),
+        setLookup: on => captionInvoke('captions_set_lookup', { on: !!on }),
+        setZh: on => captionInvoke('captions_set_zh', { on: !!on }),
+        setCommit: on => captionInvoke('captions_set_commit', { on: !!on }),
+        setDrag: on => captionInvoke('captions_set_drag', { on: !!on }),
+        setOpacity: alpha => captionInvoke('captions_set_opacity', { alpha: Number(alpha) || 0.9 }),
       },
       clipNow: span => clipNow(Number(span) || 15),
       exportSubtitle: kind => exportSubtitle(kind || 'txt'),
@@ -721,12 +1260,12 @@ function pluginApiFor(id) {
       status: () => ({
         owner: app.studyOwner,
         subtitles: subtitlePluginOn(),
-        vocab: studyVocab.length,
+        vocab: studyVocab().length,
         due: studyDueItems().length,
         cache: Object.keys(studyCache).length,
         provider: STUDY.provider,
         configured: !!(STUDY.key && STUDY.model),
-        view: studyView,
+        view: studyView(),
         episode: pluginPlayerState(),
       }),
       open: view => openStudySheet(view),
@@ -749,6 +1288,31 @@ function pluginApiFor(id) {
 let STUDY_ENGINE = null;
 let STUDY_ENGINE_OWNER = '';
 let STUDY_RUNTIME = null;
+let SUBTITLE_LIVE = null;
+let SUBTITLE_LIVE_OWNER = '';
+function registerSubtitleLive(pluginId, impl) {
+  const owner = String(pluginId || '');
+  if (SUBTITLE_LIVE_OWNER && SUBTITLE_LIVE_OWNER !== owner) {
+    throw new Error('实时字幕控制器已由插件 ' + SUBTITLE_LIVE_OWNER + ' 注册');
+  }
+  const next = impl || null;
+  if (SUBTITLE_LIVE && SUBTITLE_LIVE_OWNER === owner && SUBTITLE_LIVE !== next) {
+    try { if (typeof SUBTITLE_LIVE.dispose === 'function') SUBTITLE_LIVE.dispose(); } catch (e) {}
+    SUBTITLE_LIVE = null;
+    SUBTITLE_LIVE_OWNER = '';
+  }
+  SUBTITLE_LIVE = next;
+  SUBTITLE_LIVE_OWNER = owner;
+  trackPlugin(owner, () => {
+    if (SUBTITLE_LIVE_OWNER !== owner) return;
+    try { if (typeof SUBTITLE_LIVE.dispose === 'function') SUBTITLE_LIVE.dispose(); } catch (e) {}
+    SUBTITLE_LIVE = null;
+    SUBTITLE_LIVE_OWNER = '';
+  });
+  return true;
+}
+function subtitleLive() { return SUBTITLE_LIVE; }
+
 let STUDY_RUNTIME_OWNER = '';
 let STUDY_UI = null;
 let STUDY_UI_OWNER = '';
@@ -814,15 +1378,43 @@ function registerStudyRuntime(pluginId, impl) {
   return true;
 }
 function studyRuntime() { return STUDY_RUNTIME; }
+const STUDY_STATE_VIEW = createGuardedView(() => state, {
+  read: ['current', 'show', 'cues', 'nodes', 'activeCue', 'offset'],
+  label: '播放器状态',
+});
+const STUDY_AUDIO_VIEW = createGuardedView(() => audio, {
+  read: ['paused', 'currentTime', 'duration', 'playbackRate', 'play', 'pause', 'addEventListener', 'removeEventListener'],
+  write: ['currentTime', 'playbackRate', 'volume', 'muted'],
+  label: '播放器音频',
+});
+const STUDY_TR_VIEW = createGuardedView(() => TR, {
+  read: ['on', 'engine', 'target', 'endpoint', 'key', 'region', 'model'],
+  write: ['on', 'engine', 'target', 'endpoint', 'key', 'region', 'model'],
+  label: '翻译设置',
+});
+const STUDY_TR_CACHE_VIEW = createGuardedView(() => TR_CACHE, {
+  read: ['clear', 'size'],
+  label: '翻译缓存',
+});
+const STUDY_READER_VIEW = createGuardedView(() => reader, {
+  read: ['lang'],
+  write: ['lang'],
+  label: '阅读设置',
+});
+function studyStateView() { return STUDY_STATE_VIEW; }
+function studyAudioView() { return STUDY_AUDIO_VIEW; }
+function studyTranslateView() { return STUDY_TR_VIEW; }
+function studyTranslateCacheView() { return STUDY_TR_CACHE_VIEW; }
+function studyReaderView() { return STUDY_READER_VIEW; }
 function studyHostBridge() {
   return {
     player: {
-      get state() { return state; },
-      get audio() { return audio; },
+      get state() { return studyStateView(); },
+      get audio() { return studyAudioView(); },
       seekTo: at => seekTo(at),
-      getAutoPause: () => studyAutoPause,
-      setAutoPause: value => { studyAutoPause = !!value; },
-      setView: value => { studyView = String(value || 'card'); },
+      getAutoPause: () => studyAutoPause(),
+      setAutoPause: setStudyAutoPause,
+      setView: setStudyView,
       setAutoplay: value => { app.autoplay = !!value; },
     },
     ui: {
@@ -844,9 +1436,9 @@ function studyHostBridge() {
       subtitlePluginOn: () => subtitlePluginOn(),
     },
     translate: {
-      get TR() { return TR; },
-      get TR_CACHE() { return TR_CACHE; },
-      get reader() { return reader; },
+      get TR() { return studyTranslateView(); },
+      get TR_CACHE() { return studyTranslateCacheView(); },
+      get reader() { return studyReaderView(); },
       save: () => trSave(),
       status: (text, bad) => trStatus(text, bad),
       ready: () => trReady(),
@@ -859,7 +1451,7 @@ function studyHostBridge() {
       applyReader: () => applyReader(),
     },
     support: {
-      wordCurrentMeaning: () => wordCurrentMeaning,
+      wordCurrentMeaning: () => wordCurrentMeaning(),
       sanitizeAdRanges: (ranges, fallbackSource) => sanitizeAdRanges(ranges, fallbackSource),
       mergeAdRanges: lists => mergeAdRanges(lists),
       adRangesFromData: data => studyAdRangesFromData(data),
@@ -886,6 +1478,85 @@ function registerStudyEngine(pluginId, impl) {
   return true;
 }
 function studyEngine() { return STUDY_ENGINE; }
+
+/* v2 插件的启动：清单贡献点先过注册表，再把页面/能力/provider/命令桥到现有 UI。
+   这只是把旧的 UI 入口接到新契约，插件仍然拿窄上下文，不直接摸宿主内部表。 */
+function pluginManifestFor(id) {
+  return (app.plugins || []).find(plugin => plugin && plugin.id === String(id)) || null;
+}
+async function startV2Plugin(id, definition) {
+  const source = pluginManifestFor(id);
+  if (!source) throw new Error('找不到插件清单：' + id);
+  const report = validateLegacyManifest(source);
+  if (!report.ok) throw new Error('插件清单校验失败：' + report.errors.map(item => item.message).join('；'));
+  const manifest = report.manifest;
+  const registered = HOST_V2.register(id, manifest, definition.contributions);
+  if (!registered.ok) throw new Error(registered.errors.join('；'));
+  definition.__dispose = () => { HOST_V2.unregister(id); };
+  const pages = manifest.contributions.pages || [];
+  pages.forEach(page => {
+    const impl = definition.contributions['page:' + page.id];
+    if (!impl || typeof impl.render !== 'function') return;
+    const native = Boolean(document.getElementById('page-' + page.id));
+    if (native) {
+      const rec = {
+        pluginId: id, id: page.id, render: impl.render,
+        destroy: typeof impl.destroy === 'function' ? impl.destroy : null,
+      };
+      HOST_V2_PAGES.set(page.id, rec);
+      trackPlugin(id, () => {
+        if (HOST_V2_PAGES.get(page.id) !== rec) return;
+        HOST_V2_PAGES.delete(page.id);
+        if (HOST_V2_PAGE_ACTIVE === rec) HOST_V2_PAGE_ACTIVE = null;
+      });
+    } else {
+      let pageScope = null;
+      registerPluginPage(id, page.id, {
+        title: page.title || page.id,
+        subtitle: page.subtitle || '',
+        render: el => {
+          if (pageScope) pageScope.abort();
+          pageScope = pluginAbortScope(id, 'page:' + page.id);
+          return impl.render(el, v2Context(id, 'pages', { signal: pageScope.signal }));
+        },
+        destroy: () => {
+          if (pageScope) { pageScope.abort(); pageScope = null; }
+          if (typeof impl.destroy === 'function') return impl.destroy();
+          return undefined;
+        },
+      });
+    }
+  });
+  for (const cap of (manifest.contributions.capabilities || [])) {
+    PluginHost.claim(id, cap.id);
+    const impl = definition.contributions['capability:' + cap.id];
+    if (impl && typeof impl.claim === 'function') {
+      const scope = pluginAbortScope(id, 'capability:' + cap.id);
+      try {
+        const cleanup = await runPluginTask(signal => impl.claim(v2Context(id, 'capabilities', { signal })), {
+          timeoutMs: DEFAULT_PLUGIN_TIMEOUT_MS,
+          label: '插件 ' + id + ' 接管能力 ' + cap.id,
+          signal: scope.signal,
+        });
+        if (typeof cleanup === 'function') trackPlugin(id, cleanup);
+      } finally { scope.release(); }
+    }
+  }
+  (manifest.contributions.providers || []).forEach(provider => {
+    const impl = definition.contributions['provider:' + provider.id];
+    if (!impl) return;
+    registerCoreProvider(id, provider.id, impl);
+    trackPlugin(id, () => releaseCoreProviders(id));
+  });
+  (manifest.contributions.commands || []).forEach(command => {
+    const impl = definition.contributions['command:' + command.id];
+    if (!impl || typeof impl.run !== 'function') return;
+    const key = id + ':' + command.id;
+    PLUGIN_COMMANDS.set(key, impl.run);
+    trackPlugin(id, () => PLUGIN_COMMANDS.delete(key));
+  });
+}
+
 function ensurePluginApi() {
   if (pluginApiReady) return;
   pluginApiReady = true;
@@ -897,33 +1568,53 @@ function ensurePluginApi() {
       if (!id || !definition || typeof definition.setup !== 'function') {
         throw new Error('MyTPlugins.register 需要 id 和 setup(api)');
       }
-      const want = definition.apiVersion ? String(definition.apiVersion) : '';
-      if (!pluginApiCompatible(want)) {
-        throw new Error('插件要求 API ' + want + '，宿主只支持 ' + PLUGIN_API_VERSION);
-      }
+      assertPluginApi(definition.apiVersion);
       PLUGIN_REGISTRY.set(String(id), definition);
     },
-    start(id) {
+    define(id, definition) {
+      if (!id || !definition || !definition.contributions || typeof definition.contributions !== 'object') {
+        throw new Error('MyTPlugins.define 需要 id 和 contributions');
+      }
+      assertPluginApi(definition.apiVersion);
+      PLUGIN_REGISTRY.set(String(id), { ...definition, __v2: true });
+    },
+    async start(id) {
       const key = String(id);
       const definition = PLUGIN_REGISTRY.get(key);
-      if (!definition) throw new Error('插件没有调用 MyTPlugins.register(' + id + ')');
+      if (!definition) throw new Error('插件没有调用 MyTPlugins.register/define(' + id + ')');
       if (definition.__started) return;
       definition.__started = true;
+      const startScope = pluginAbortScope(key, 'setup');
       try {
-        const ret = definition.setup(pluginApiFor(key));
-        if (typeof ret === 'function') definition.__dispose = ret;
+        if (definition.__v2) await startV2Plugin(key, definition);
+        else {
+          const ret = await runPluginTask(() => definition.setup(pluginApiFor(key)), {
+            timeoutMs: DEFAULT_PLUGIN_TIMEOUT_MS,
+            label: '插件 ' + key + ' 初始化',
+            signal: startScope.signal,
+          });
+          if (typeof ret === 'function') definition.__dispose = ret;
+        }
       } catch (err) {
         // 初始化失败要和停用一样清理，否则已注册的页面/事件/能力会留在宿主里。
         abortPluginStart(key, definition);
         throw err;
-      }
+      } finally { startScope.release(); }
     },
     stop(id) { stopPlugin(id); },
-    _error(id, err) { pluginReportError(id, err); },
+    _error(id, err) { pluginReportError(id, err, 'load'); },
     runCommand(pluginId, name) {
       const fn = PLUGIN_COMMANDS.get(String(pluginId) + ':' + String(name));
-      if (typeof fn === 'function') return fn();
-      return undefined;
+      if (typeof fn !== 'function') return Promise.resolve(undefined);
+      const scope = pluginAbortScope(pluginId, 'command:' + name);
+      return runPluginTask(signal => fn(v2Context(pluginId, 'commands', { signal })), {
+        timeoutMs: DEFAULT_PLUGIN_TIMEOUT_MS,
+        label: '插件 ' + pluginId + ' 命令 ' + name,
+        signal: scope.signal,
+      }).catch(err => {
+        if (!isAbortError(err)) pluginReportError(pluginId, err, 'command:' + name);
+        return undefined;
+      }).finally(() => scope.release());
     },
   };
 }
@@ -1122,6 +1813,14 @@ async function loadPlugins() {
     if (!id) continue;
     if (seenIds.has(id)) { pluginReportError(id, '插件 id 重复，只加载第一个：' + id); continue; }
     seenIds.add(id);
+    // 旧清单先过 v2 契约的兼容校验：id、路径、权限、依赖字段不合法就拒绝。
+    // 注意这里不替换 plugin.requires，旧宿主仍按数组做可用性判断。
+    const manifestReport = validateLegacyManifest(plugin);
+    if (!manifestReport.ok) {
+      pluginReportError(id, '插件清单校验失败：' +
+        manifestReport.errors.map(item => item.message).join('；'));
+      continue;
+    }
     if (plugin.signature === 'bad') {
       pluginReportError(id, '签名校验失败：文件与 plugin.json 里的 signature 不符，已拒绝加载');
       continue;
@@ -1152,8 +1851,8 @@ async function loadPlugins() {
       }
     }
     PLUGIN_GRANTS.set(id, pluginPermissions(plugin));
-    if (plugin.apiVersion && !pluginApiCompatible(plugin.apiVersion)) {
-      pluginReportError(id, '插件要求 API ' + plugin.apiVersion + '，宿主只支持 ' + PLUGIN_API_VERSION);
+    if (!apiCompatible(plugin.apiVersion, PLUGIN_API_VERSION)) {
+      pluginReportError(id, '插件要求 API ' + plugin.apiVersion + '，宿主只支持 ' + PLUGIN_API_VERSION, 'manifest');
       continue;
     }
     const missing = PluginHost.missingRequires(plugin, app.plugins);
@@ -1200,16 +1899,18 @@ async function loadPlugins() {
       script.remove();
     }
     try {
-      window.MyTPlugins.start(id);
+      await window.MyTPlugins.start(id);
       app.pluginStartedIds = app.pluginStartedIds || [];
       app.pluginStartedIds.push(id);
     }
-    catch (err) { pluginReportError(id, err); }
+    catch (err) { pluginReportError(id, err, 'start'); }
   }
+  refreshSurfaces();
 }
 /* 软重载：按插件回收注册物后重新加载，不刷新整页。 */
 async function reloadPlugins() {
   (app.pluginStartedIds || []).forEach(id => stopPlugin(id));
+  (app.plugins || []).forEach(plugin => PLUGIN_DIAGNOSTICS.clear(plugin.id));
   app.pluginStartedIds = [];
   app.pluginErrors = new Map();
   await loadPlugins();
@@ -1224,8 +1925,9 @@ function renderPluginPage(pluginId, pageId) {
     body.innerHTML = '<div class="empty">插件页面不存在：' + esc(pluginId + '/' + pageId) + '</div>';
     return;
   }
-  if (app.pluginPageActive && app.pluginPageActive !== def && typeof app.pluginPageActive.destroy === 'function') {
-    try { app.pluginPageActive.destroy(); } catch (err) { pluginReportError(app.pluginPageActive.pluginId, err); }
+  const previousPage = app.pluginPageActive;
+  if (previousPage && previousPage !== def && typeof previousPage.destroy === 'function') {
+    guardedPluginCall(previousPage.pluginId, 'page:destroy', () => previousPage.destroy());
   }
   app.pluginPageActive = def;
   $('pluginPageTitle').textContent = def.title;
@@ -1237,9 +1939,11 @@ function renderPluginPage(pluginId, pageId) {
   if (def.render) {
     try {
       const ret = def.render(body, pluginApiFor(def.pluginId));
-      if (ret && typeof ret.catch === 'function') ret.catch(err => pluginReportError(def.pluginId, err));
+      watchPluginPromise(def.pluginId, 'page:' + def.pageId, ret, err => {
+        body.innerHTML = '<div class="empty">插件页面出错：' + esc(err.message || err) + '</div>';
+      });
     } catch (err) {
-      pluginReportError(def.pluginId, err);
+      pluginReportError(def.pluginId, err, 'page:' + def.pageId);
       body.innerHTML = '<div class="empty">插件页面出错：' + esc(err.message || err) + '</div>';
     }
   }
@@ -1258,7 +1962,7 @@ async function refreshPluginSettings() {
     const list = await host().pluginList();
     app.plugins = Array.isArray(list) ? list : [];
     if (!app.plugins.length) {
-      box.innerHTML = emptyLine('还没有插件。点「生成示例插件」，或把插件目录放进 plugins 文件夹。');
+      box.innerHTML = emptyLine('还没有插件。点「导入插件」选择插件文件夹，或把插件目录放进 plugins 文件夹。');
       if (status) status.textContent = '插件目录：C:\\ProgramData\\MyTranscript\\plugins';
       return;
     }
@@ -1282,6 +1986,12 @@ async function refreshPluginSettings() {
         : '<button data-plugin-revoke="' + esc(plugin.id) +
           '" style="margin-left:8px;border:0;background:none;padding:0;cursor:pointer;' +
           'font:11px/1 var(--sans);color:var(--muted);text-decoration:underline">撤销授权</button>';
+      const failure = err || (PLUGIN_DIAGNOSTICS.get(plugin.id).length ? app.pluginErrors.get(plugin.id) : '');
+      const recovery = failure
+        ? '<div style="margin-top:6px;display:flex;gap:8px"><button class="btn ghost small" data-plugin-retry="' +
+          esc(plugin.id) + '">重试加载</button><button class="btn ghost small" data-plugin-diagnostics="' +
+          esc(plugin.id) + '">复制诊断</button></div>'
+        : '';
       return '<div class="ep-row"><div class="ep-body"><span class="ep-title">' + esc(plugin.name || plugin.id) +
         ' <span class="pill dim">' + esc(plugin.id) + '</span></span><span class="ep-sub">' +
         esc([plugin.version ? 'v' + plugin.version : '', plugin.author, plugin.description].filter(Boolean).join(' · ') || '无描述') +
@@ -1290,7 +2000,8 @@ async function refreshPluginSettings() {
         (changedNote ? ' <span style="color:#e08a7a">' + esc(changedNote) + '</span>' : '') +
         (permNote ? '<br><span class="pill dim">' + esc(permNote) + '</span>' : '') +
         (dep ? '<br><span style="color:#e08a7a">' + esc(dep) + '</span>' : '') +
-        (err && !dep ? '<br><span style="color:#e08a7a">' + esc(err) + '</span>' : '') + '</span></div>' +
+        (err && !dep ? '<br><span style="color:#e08a7a">' + esc(err) + '</span>' : '') +
+        recovery + '</span></div>' +
         '<button class="switch" role="switch" aria-checked="' + (plugin.enabled ? 'true' : 'false') +
         '" data-plugin-toggle="' + esc(plugin.id) + '" title="' + (plugin.enabled ? '停用' : '启用') + '"></button></div>';
     }).join('');
@@ -1352,4 +2063,7 @@ function refreshCatalogPages() {
   }
   if (['home', 'discover', 'library'].includes(route.page)) renderPage(route.page, route);
 }
-
+export { CATALOG_TIMEOUT, HOST_V2, HOST_V2_PAGES, PLUGIN_API_VERSION, PLUGIN_CLEANUP, PLUGIN_COMMANDS, PLUGIN_CONSENT_PREFIX, PLUGIN_GRANTS, PLUGIN_HASH_PREFIX, PLUGIN_HOOKS, PLUGIN_PAGES, PLUGIN_PERMISSIONS, PLUGIN_PERMISSION_ALL, PLUGIN_PERMS_KEY_PREFIX, PLUGIN_REGISTRY, PluginHost, SHELL_TIMEOUT, STUDY_ENGINE, STUDY_ENGINE_OWNER, STUDY_RUNTIME, STUDY_RUNTIME_OWNER, STUDY_UI, STUDY_UI_HOOKS, STUDY_UI_OWNER, abortPluginStart, addPluginListener, applyCspNonce, applyLocalDoc, applyStudyAvailability, applySubtitleAvailability, askPluginConsent, clearPluginConsent, clipListen, clipNow, clipPanelHost, clipRun, clipTargetInfo, cspNonceValue, cuesSnapshot, definitionStarted, destroyV2Page, disposeStudyUi, emitPlugin, ensurePluginApi, guardedEventsourceFor, guardedFetchFor, guardedSocketFor, guardedXhrFor, initPlayer, loadPlugins, loadShow, localAsrAvailable, openLocalTranscript, apiCompatible, pluginApiFor, pluginApiReady, pluginConsentChanged, pluginConsentState, pluginHostFacade, pluginHostFacadeCache, pluginManifestFor, pluginPermissionChanged, pluginPermissionLabels, pluginPermissionSignature, pluginPermissions, pluginPinnedHash, pluginPlayerState, pluginReportError, pluginRequire, pluginUrlIsLocal, refreshCatalogPages, refreshPluginSettings, registerPluginPage, registerStudyEngine, registerStudyRuntime, registerStudyUi, registerStudyUiHook, releasePluginCapabilities, reloadPlugins, renderList, renderPluginNav, renderPluginPage, renderV2Page, runPluginCleanup, runStudyUiHook, setPluginConsent, setPluginPermissionSignature, setPluginPinnedHash, smallArtwork, startLocalTranscribe, startV2Plugin, stopPlugin, studyEngine, studyHostBridge, studyPluginOn, studyRuntime, studyUi, subtitlePluginOn, syncStudySettingsVisibility, syncSubtitleSettingsVisibility, trackPlugin, v2UiKit };
+registerLayer('04-local-audio-plugin-host', { CATALOG_TIMEOUT, HOST_V2, HOST_V2_PAGES, PLUGIN_API_VERSION, PLUGIN_CLEANUP, PLUGIN_COMMANDS, PLUGIN_CONSENT_PREFIX, PLUGIN_GRANTS, PLUGIN_HASH_PREFIX, PLUGIN_HOOKS, PLUGIN_PAGES, PLUGIN_PERMISSIONS, PLUGIN_PERMISSION_ALL, PLUGIN_PERMS_KEY_PREFIX, PLUGIN_REGISTRY, PluginHost, SHELL_TIMEOUT, STUDY_ENGINE, STUDY_ENGINE_OWNER, STUDY_RUNTIME, STUDY_RUNTIME_OWNER, STUDY_UI, STUDY_UI_HOOKS, STUDY_UI_OWNER, abortPluginStart, addPluginListener, applyCspNonce, applyLocalDoc, applySettingsPanes, applySlotMounts, applyStudyAvailability, applySubtitleAvailability, askPluginConsent, clearPluginConsent, clipListen, clipNow, clipPanelHost, clipRun, clipTargetInfo, cspNonceValue, cuesSnapshot, definitionStarted, destroyV2Page, disposeStudyUi, emitPlugin, ensurePluginApi, guardedEventsourceFor, guardedFetchFor, guardedSocketFor, guardedXhrFor, initPlayer, loadPlugins, loadShow, localAsrAvailable, openLocalTranscript, apiCompatible, pluginApiFor, pluginApiReady, pluginConsentChanged, pluginConsentState, pluginHostFacade, pluginHostFacadeCache, pluginManifestFor, pluginPermissionChanged, pluginPermissionLabels, pluginPermissionSignature, pluginPermissions, pluginPinnedHash, pluginPlayerState, pluginReportError, pluginRequire, pluginUrlIsLocal, refreshCatalogPages, refreshPluginSettings, refreshSurfaces, registerPluginPage, registerStudyEngine, registerStudyRuntime, registerStudyUi, registerStudyUiHook, releasePluginCapabilities, releaseSurfaces, reloadPlugins, renderList, renderPluginNav, renderPluginPage, renderV2Page, runPluginCleanup, runStudyUiHook, setPluginConsent, setPluginPermissionSignature, setPluginPinnedHash, smallArtwork, startLocalTranscribe, startV2Plugin, stopPlugin, studyEngine, studyHostBridge, studyPluginOn, studyRuntime, studyUi, subtitlePluginOn, syncStudySettingsVisibility, syncSubtitleSettingsVisibility, trackPlugin, v2UiKit });
+export { applySettingsPanes, applySlotMounts, refreshSurfaces, releaseSurfaces };
+export { PLUGIN_DIAGNOSTICS, applyPluginExtensions, clearPluginTheme, pluginDiagnosticsText, renderPluginImporters, renderPluginMenu, renderPluginSearchSources, renderPluginThemes, runPluginContribution, studyAudioView, studyStateView, studyTranslateCacheView, studyTranslateView };

@@ -1,3 +1,10 @@
+import { $, prefs } from './00-runtime.js';
+import { esc, showToast, themeBtns } from './01-theme-reader-shell.js';
+import { applySettingsPanes, studyEngine, studyPluginOn, studyRuntime, studyUi, subtitlePluginOn } from './04-local-audio-plugin-host.js';
+import { SIDEBAR_META, applySidebarCustomization, normalizeSidebarPrefs, refreshAsrModels, renderLocalAsrModelHint, sidebarOrder } from './05-transport-transcript-nav.js';
+
+import { lazyFn, registerLayer } from './00-layers.js';
+const savePrefs = lazyFn('10-desktop-bridge-tail', 'savePrefs');
 /* layer: view —— AI 学英语的宿主薄包装
    阶段二后，学习面板/复习/词卡/整集总结/AI 设置的实现都在内置 study 插件的 ui.js；
    本片只保留宿主包装、数据引用与桌面补丁需要的纯函数。跨层调用仍走 kernel / host()。 */
@@ -6,6 +13,8 @@ let STUDY = { provider: 'openai', endpoint: 'https://api.openai.com/v1', key: ''
 let studyCache = {}, studyVocab = [], studyStatus = {};
 let studyView = 'card';
 let studyAutoPause = false;
+function setStudyAutoPause(value) { studyAutoPause = !!value; }
+function setStudyView(value) { studyView = String(value || 'card'); }
 
 function applyStudyEngine(engine) {
   if (engine) {
@@ -197,5 +206,7 @@ function openSettingsPane(pane) {
   document.querySelectorAll('.settings-pane').forEach(el => el.classList.toggle('active', el.id === 'pane-' + pane));
   if (pane === 'sidebar') renderSidebarSettings();
   if (pane === 'models') { refreshAsrModels(); renderLocalAsrModelHint(); }
+  applySettingsPanes(pane);
 }
-
+export { STUDY, STUDY_CACHE_KEY, STUDY_KEY, STUDY_STATUS_KEY, STUDY_VOCAB_KEY, applyStudyEngine, applyStudyProvider, applyStudyRuntime, bindStudyUI, bindWordStatusButtons, closeStudySheet, moveSidebarRoute, openSettingsPane, openStudySheet, renderSidebarSettings, resetSidebarSettings, saveStudy, saveStudyCache, saveStudyStatus, saveStudyVocab, setStudyAutoPause, setStudyView, studyAddVocab, studyAnalyzeCurrent, studyAnalyzeEpisode, studyApplyWordMarks, studyAsk, studyAudioTick, studyAutoPause, studyCache, studyChat, studyCheckExercise, studyClearModels, studyClockSeconds, studyConfig, studyCueBounds, studyCurrentCue, studyCurrentKey, studyDueItems, studyEpisodeHTML, studyExportCsv, studyFetchModels, studyHash, studyLangName, studyMarkWord, studyModelStatus, studyNative, studyOpenEpisodeSummary, studyParseJson, studyPickModel, studyPlayCue, studyPlayItem, studyPlayRange, studyProviderMeta, studyReady, studyRenderCurrent, studyRenderEpisode, studyRenderModelList, studyRenderNow, studyRenderPractice, studyRenderReview, studyRenderVocab, studyResetAutoPause, studyResetContext, studyResetPlayback, studySourceLabel, studyStartExercise, studyStats, studyStatus, studyStopAudio, studyTestConnection, studyUiCall, studyUpdateDueBadge, studyView, studyVocab, studyWithCues, syncStudySettings, syncThemeSwatches, toggleSidebarRoute, wordStatusHTML };
+registerLayer('08-study-ai', { STUDY, STUDY_CACHE_KEY, STUDY_KEY, STUDY_STATUS_KEY, STUDY_VOCAB_KEY, applyStudyEngine, applyStudyProvider, applyStudyRuntime, bindStudyUI, bindWordStatusButtons, closeStudySheet, moveSidebarRoute, openSettingsPane, openStudySheet, renderSidebarSettings, resetSidebarSettings, saveStudy, saveStudyCache, saveStudyStatus, saveStudyVocab, setStudyAutoPause, setStudyView, studyAddVocab, studyAnalyzeCurrent, studyAnalyzeEpisode, studyApplyWordMarks, studyAsk, studyAudioTick, studyAutoPause, studyCache, studyChat, studyCheckExercise, studyClearModels, studyClockSeconds, studyConfig, studyCueBounds, studyCurrentCue, studyCurrentKey, studyDueItems, studyEpisodeHTML, studyExportCsv, studyFetchModels, studyHash, studyLangName, studyMarkWord, studyModelStatus, studyNative, studyOpenEpisodeSummary, studyParseJson, studyPickModel, studyPlayCue, studyPlayItem, studyPlayRange, studyProviderMeta, studyReady, studyRenderCurrent, studyRenderEpisode, studyRenderModelList, studyRenderNow, studyRenderPractice, studyRenderReview, studyRenderVocab, studyResetAutoPause, studyResetContext, studyResetPlayback, studySourceLabel, studyStartExercise, studyStats, studyStatus, studyStopAudio, studyTestConnection, studyUiCall, studyUpdateDueBadge, studyView, studyVocab, studyWithCues, syncStudySettings, syncThemeSwatches, toggleSidebarRoute, wordStatusHTML });

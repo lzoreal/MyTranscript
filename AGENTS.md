@@ -56,6 +56,9 @@ python scripts/check_layers.py
 
 # 播放器脚本分片在 src/player-js/，改完重建成品；测试会校验同步
 python scripts/build_player_js.py
+
+# 插件清单校验（单插件 / --set 集合 / --legacy 旧清单 / --json）
+node scripts/check_plugin_manifest.mjs apps/windows/builtin-plugins/study
 ```
 
 本地跑真实转写要用 Python 3.10（3.14 上装不了 faster-whisper）：
@@ -74,7 +77,7 @@ WHISPER_MODEL="D:/tmp/tmlt-align/ct2-turbo" \
 | `data/**`（双语词级 JSON + 分片 state）、`json/<slug>/**`（**都在 `data` 分支**） | Transcript Pipeline（`transcripts.yml`） | ✅ |
 | `feed.xml`、`index.html`、`progress.json`（main） | Transcript Pipeline（`transcripts.yml` 的 publish） | ✅ |
 | 站点发布 | Deploy（main 上 `site/**` 变更触发，只读最新 main） | — |
-| `site/player.js`（由 `src/player-js/*.js` 拼接生成的成品） | 本地 `scripts/build_player_js.py` | 手改会被下次重建覆盖 |
+| `site/player.js`（入口，只 import `./player/player.js`）、`site/player/**`（由 `src/player-js/*.js` 逐文件复制的模块成品） | 本地 `scripts/build_player_js.py` | 手改会被下次重建覆盖 |
 
 ## 已知坑（都踩过）
 

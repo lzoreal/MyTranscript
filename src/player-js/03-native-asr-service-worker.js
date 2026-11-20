@@ -1,3 +1,40 @@
+import { $, ASR_MODEL_DEFAULT, LIVE, LIVE_RATE, audio, box, host, listBox, prefs, setState, state, tauriHost } from './00-runtime.js';
+import { closeDrawer, cuesFromJson, deriveTimingsUrl, deriveZhUrl, esc, fmt, getJson, getText, isJsonTranscript, liveFollow, loaderHTML, mergeCues, paint, parseVttSmart, parseZhVTT, preferredAudioUrl, progressKey, readProgress, reader, renderCues, resetImportUI, resetWordPanelForEpisode, saveProgress, seekTo, showToast, sitePath, status, syncJumpPill, updateTimeScale, vttFromSidecar, wallpaperRefresh } from './01-theme-reader-shell.js';
+import { LIVE_ENGINE_KIND, clearLiveBarTimer, liveEmitTokens, liveLoadEngine, liveMediaOf, liveMseBegin, liveMseCapable, liveMseReanchor, liveMseStop, livePlayhead, liveProbeAudio, liveRetry, liveSetText, liveSherpaStream, liveStartPump, liveStopPump, liveUpdateMeter, liveWaitAudioReady } from './02-live-caption-wasm.js';
+
+
+
+
+
+import { layerObject, lazyFn, registerLayer } from './00-layers.js';
+const openLocalTranscript = lazyFn('04-local-audio-plugin-host', 'openLocalTranscript');
+const subtitlePluginOn = lazyFn('04-local-audio-plugin-host', 'subtitlePluginOn');
+const applyLoudness = lazyFn('05-transport-transcript-nav', 'applyLoudness');
+const ensureAudioGraph = lazyFn('05-transport-transcript-nav', 'ensureAudioGraph');
+const indexCurrentEpisode = lazyFn('05-transport-transcript-nav', 'indexCurrentEpisode');
+const loadChapters = lazyFn('05-transport-transcript-nav', 'loadChapters');
+const moduleOn = lazyFn('05-transport-transcript-nav', 'moduleOn');
+const offlineKeyFor = lazyFn('05-transport-transcript-nav', 'offlineKeyFor');
+const readTranscriptDoc = lazyFn('05-transport-transcript-nav', 'readTranscriptDoc');
+const refreshOffline = lazyFn('05-transport-transcript-nav', 'refreshOffline');
+const routeHash = lazyFn('05-transport-transcript-nav', 'routeHash');
+const saveOfflineTranscript = lazyFn('05-transport-transcript-nav', 'saveOfflineTranscript');
+const setAlignMode = lazyFn('05-transport-transcript-nav', 'setAlignMode');
+const showPrefFor = lazyFn('05-transport-transcript-nav', 'showPrefFor');
+const syncChapterNow = lazyFn('05-transport-transcript-nav', 'syncChapterNow');
+const syncDockBadge = lazyFn('05-transport-transcript-nav', 'syncDockBadge');
+const trNoteError = lazyFn('07-routes-pages', 'trNoteError');
+const trReady = lazyFn('07-routes-pages', 'trReady');
+const trText = lazyFn('07-routes-pages', 'trText');
+const updateDocumentTitle = lazyFn('07-routes-pages', 'updateDocumentTitle');
+const studyClockSeconds = lazyFn('08-study-ai', 'studyClockSeconds');
+const studyResetContext = lazyFn('08-study-ai', 'studyResetContext');
+const studyResetPlayback = lazyFn('08-study-ai', 'studyResetPlayback');
+const syncBookmarkBtn = lazyFn('09-player-integration', 'syncBookmarkBtn');
+const syncMini = lazyFn('09-player-integration', 'syncMini');
+const syncReaderTop = lazyFn('09-player-integration', 'syncReaderTop');
+const app = layerObject('05-transport-transcript-nav', 'app');
+const studyCache = layerObject('08-study-ai', 'studyCache');
 /* layer: bridge —— Tauri 原生 ASR、跨域隔离 SW、离线跳过
    本片只做该层的事，跨层调用走 kernel / host() / setState。 */
 /* ---------- 原生推理（Tauri 壳）：sherpa-onnx 的 Windows DLL ----------
@@ -378,7 +415,7 @@ function liveDisable(hint) {
   document.body.classList.remove('live-on');
   $('liveBtn').setAttribute('aria-pressed', 'false');
   $('liveBtn').classList.remove('on');
-  if (liveBarHideTimer) { clearTimeout(liveBarHideTimer); liveBarHideTimer = 0; }
+  clearLiveBarTimer();
   $('liveBar').hidden = true;
   $('liveMeter').style.width = '0%';
   if (state.base) renderCues();
@@ -423,8 +460,7 @@ async function liveEnable() {
         LIVE.mode = 'needReload';
         $('liveStopBtn').textContent = iso === 'reload' ? '刷新页面' : '关闭';
         if (iso === 'reload') {
-          // 记住这次意图，刷新回来自动接着开，不用再点一次。
-          try { sessionStorage.setItem('myt-live-auto', '1'); } catch (e) {}
+          // 刷新后是否续开由字幕插件决定：它会在 enable() 返回 needReload 时记下意图。
           liveSetText('需要刷新一次以启用跨域隔离，刷新后会自动继续', 'busy');
         } else {
           liveSetText('这个浏览器不支持 Service Worker，实时识别不可用', 'err');
@@ -565,11 +601,6 @@ async function liveFollowCurrentEpisode(resumePlay) {
   }
 }
 
-$('liveBtn').onclick = () => { if (LIVE.on) liveDisable('已停止实时识别，正文回到原文字稿。'); else liveEnable(); };
-$('liveStopBtn').onclick = () => {
-  if (LIVE.mode === 'needReload') { location.reload(); return; }
-  liveDisable('已停止实时识别，正文回到原文字稿。');
-};
 audio.addEventListener('seeked', () => {
   if (!LIVE.on) return;
   const head = audio.currentTime || 0;
@@ -694,26 +725,7 @@ audio.addEventListener('ended', () => {
 })();
 
 // 刷新回来接着开：第一次启用要先装 Service Worker 再刷新，不该让用户再点一次。
-// ?live=1 是给桌面壳联调用的：开局就播、直接开实时识别，省掉手动点两下。
-(function liveAutoResume() {
-  let flag = '';
-  try { flag = sessionStorage.getItem('myt-live-auto') || ''; } catch (e) {}
-  const forced = /[?&]live=1/.test(location.search);
-  if (!flag && !forced) return;
-  let tries = 0;
-  const attempt = () => {
-    tries += 1;
-    // 非强开路径仍然要求跨域隔离（Moonshine 的多线程 WASM 需要它）。
-    if ((!forced && !self.crossOriginIsolated) || !document.body.classList.contains('player-open') || !state.current) {
-      if (tries < 60) setTimeout(attempt, 250);
-      return;
-    }
-    try { sessionStorage.removeItem('myt-live-auto'); } catch (e) {}
-    liveEnable();
-    if (audio.paused) audio.play().catch(() => {});
-  };
-  setTimeout(attempt, 600);
-})();
+// 自动开实时识别（?live=1 / 刷新后续开）现在由字幕插件负责；宿主只保留引擎原语。
 
 function applyEpisodeData(vtt, sidecar, zhVtt) {
   if (!subtitlePluginOn()) return;
@@ -978,16 +990,18 @@ function selectEpisode(item, keepDrawer = false) {
   box.innerHTML = '<div class="empty">' + loaderHTML('正在加载字幕…') + '</div>';
   setState('cues', []); setState('nodes', []); setState('activeCue', -1); setState('vtt', null); setState('sidecar', null); setState('zhVtt', null);
   setState('base', null); setState('experiment', null); resetImportUI();
-  if (state.wallpaper) { wpEpId = String(state.current && state.current.id || ''); wpCueIndex = 0; wpPrevIndex = -1; wpLastKey = ''; wallpaperRefresh(); }
+  if (state.wallpaper) { resetWordPanelForEpisode(state.current && state.current.id); wallpaperRefresh(); }
   syncJumpPill();
   syncMini();
   syncBookmarkBtn();
   if (!keepDrawer) closeDrawer();
   const seq = ++state.transcriptSeq;
   if (!subtitlePluginOn()) {
-    // 字幕插件未接管：不下载、不解析、不渲染任何文字稿，只保留音频。
-    box.innerHTML = '';
+    // 没有字幕插件时保持最原生状态：只播放音频，不加载/解析/渲染任何文字稿。
+    // 阅读区给一句中性说明，避免空白页，也不引导用户去装插件。
+    box.innerHTML = '<div class="empty">音频播放模式<br><span style="font-size:12px">本集只播放音频，未加载字幕。</span></div>';
     setState('cues', []); setState('nodes', []); setState('activeCue', -1); setState('vtt', null); setState('sidecar', null); setState('zhVtt', null); setState('base', null);
+    status('音频播放模式。');
     syncJumpPill(); syncMini(); syncBookmarkBtn();
     return;
   }
@@ -1056,4 +1070,5 @@ function selectEpisode(item, keepDrawer = false) {
       (reader.lang !== 'en' && !zhVtt ? ' 该集暂无中文，已显示英文。' : ''), 'good');
   }).catch(err => { if (seq === state.transcriptSeq) transcriptFailure(err); });
 }
-
+export { AD_RE, applyEpisodeData, buildSkipPlan, detectAdRanges, findSkipRange, liveAdvance, liveClearRows, liveCloseStream, liveConcatFloat, liveDisable, liveEnable, liveEnsureIsolation, liveFollowCurrentEpisode, liveNativeLoad, liveNativeStream, liveRebuildStream, liveRenderLine, liveRowZh, liveTranslateRow, liveTrimRowsAfter, liveWordTimes, loadSkipPlan, localAudioOn, mergeAdRanges, nearestCueIndex, sanitizeAdRanges, selectEpisode, skipEligible, skipUrlOf, skipWanted, studyAdRangesFromData, studyApplyAiAdRanges, studyApplyCachedAdRanges, transcriptFailure };
+registerLayer('03-native-asr-service-worker', { AD_RE, applyEpisodeData, buildSkipPlan, detectAdRanges, findSkipRange, liveAdvance, liveClearRows, liveCloseStream, liveConcatFloat, liveDisable, liveEnable, liveEnsureIsolation, liveFollowCurrentEpisode, liveNativeLoad, liveNativeStream, liveRebuildStream, liveRenderLine, liveRowZh, liveTranslateRow, liveTrimRowsAfter, liveWordTimes, loadSkipPlan, localAudioOn, mergeAdRanges, nearestCueIndex, sanitizeAdRanges, selectEpisode, skipEligible, skipUrlOf, skipWanted, studyAdRangesFromData, studyApplyAiAdRanges, studyApplyCachedAdRanges, transcriptFailure });

@@ -1209,10 +1209,7 @@ fn main() {
             if punct.join("model.int8.onnx").exists() || punct.join("model.onnx").exists() {
                 std::env::set_var("MYT_PUNCT", &punct);
             }
-            // 内置插件：首次运行铺到插件目录，默认启用；停用后对应功能整体下线。
-            if let Err(e) = plugins::ensure_builtin_plugins() {
-                eprintln!("内置插件初始化失败：{e}");
-            }
+            // 本机默认不带插件：插件目录保持原样，由用户在设置里手动导入。
             if let Err(e) = build_tray(app.handle()) {
                 eprintln!("托盘创建失败：{e}");
             }
@@ -1272,6 +1269,7 @@ fn main() {
             plugins::plugin_list,
             plugins::plugin_set_enabled,
             plugins::plugin_open_dir,
+            plugins::plugin_import,
             plugins::plugin_example,
             models::asr_prepare,
             models::asr_models,

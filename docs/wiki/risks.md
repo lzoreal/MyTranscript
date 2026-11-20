@@ -6,8 +6,10 @@
 `function xxx(...) {` 一起删掉。`node --check` 能第一时间发现（`Unexpected token 'function'`），
 但测试套件不会。
 
-规避：搬函数时按精确首行定位，删除只删块本身；改完先跑 `node --check site/player.js`，
-再跑测试。
+规避：搬函数时按精确首行定位，删除只删块本身；改完先逐文件跑 `node --check site/player/*.js`，
+再跑测试。**不要把 `node --check` 的结果接进 `*> $null` 这类管道**：2026-11-20 就是这么漏掉
+`applySettingsPanes` 少一层括号的语法错误，浏览器报 `Unexpected identifier 'count'`、整页不启动，
+测试却全绿。
 
 ## 2. 测试按文本切片，函数搬家会切断切片
 

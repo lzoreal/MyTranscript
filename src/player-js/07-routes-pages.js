@@ -1,3 +1,23 @@
+import { $, box, host, prefs, setState, state, tauriHost } from './00-runtime.js';
+import { emptyLine, esc, fmt, isBracket, isJsonTranscript, loaderHTML, pluginPageKey, reader, seekTo, showToast, statHTML, syncCustomThemeEditor } from './01-theme-reader-shell.js';
+import { syncLiveLeadSelect } from './02-live-caption-wasm.js';
+import { selectEpisode } from './03-native-asr-service-worker.js';
+import { PLUGIN_PAGES, applySlotMounts, destroyV2Page, emitPlugin, loadShow, pluginPlayerState, pluginReportError, refreshPluginSettings, renderPluginPage, renderV2Page } from './04-local-audio-plugin-host.js';
+import { LOCAL_KEY, PAGE_NAMES, QUEUE_KEY, THEME_NAMES, absoluteFeed, app, catalogLatest, epStatusBadges, episodeFilterMatch, episodesOf, firstShowKey, fmtBytes, fmtDuration, formatDate, hash32, hostOf, idxGetAll, inboxCount, isFavorite, isPlayed, isSubscribed, moduleOn, navigate, offlineKeyFor, parseRoute, plainText, readAllProgress, refreshShows, renderAfterStateChange, renderDownloads, renderOfflineList, renderPlaylists, returnToCue, routeHash, routeModuleAllows, showByKey, showPrefFor, syncDockBadge, syncDockSleep, syncIndexCount, syncRateSeg, writeJSON } from './05-transport-transcript-nav.js';
+import { coverHTML, ensureShowFeed, episodeCover, hasFreshFeed, memoryFeed, renderOnlineResults } from './06-catalog-feeds-search.js';
+import { motionFlip } from './11-motion.js';
+
+
+
+import { lazyFn, registerLayer } from './00-layers.js';
+const syncStudySettings = lazyFn('08-study-ai', 'syncStudySettings');
+const syncThemeSwatches = lazyFn('08-study-ai', 'syncThemeSwatches');
+const syncBookmarkBtn = lazyFn('09-player-integration', 'syncBookmarkBtn');
+const syncMini = lazyFn('09-player-integration', 'syncMini');
+const syncMiniCaption = lazyFn('09-player-integration', 'syncMiniCaption');
+const syncReaderTop = lazyFn('09-player-integration', 'syncReaderTop');
+const closeThemePop = lazyFn('10-desktop-bridge-tail', 'closeThemePop');
+const syncAutoNextSwitch = lazyFn('10-desktop-bridge-tail', 'syncAutoNextSwitch');
 /* layer: view —— 路由与页面渲染（renderPage 派发）
    本片只做该层的事，跨层调用走 kernel / host() / setState。 */
 /* ---------- routing ---------- */
@@ -45,11 +65,10 @@ function applyRoute() {
   if (crumb) crumb.textContent = PAGE_NAMES[route.page] || '首页';
   updateDocumentTitle();
   closeThemePop();
-  if (isPlayer) { openPlayerRoute(route); return; }
+  if (isPlayer) { destroyV2Page(); openPlayerRoute(route); return; }
   if (!PAGE_NAMES[route.page]) { navigate('home'); return; }
   app.lastPage = route.page;
-  renderPage(route.page, route);
-  emitPlugin('route:change', { page: route.page, args: route.args });
+  renderPage(route.page, route);  emitPlugin('route:change', { page: route.page, args: route.args });
   updateDocumentTitle();
   syncMini();
 }
@@ -88,6 +107,11 @@ function renderPage(page, route) {
     if (page !== 'home') navigate('home');
     return;
   }
+  if (renderV2Page(page)) {
+    enhanceClickableRows();
+    applySlotMounts(document);
+    return;
+  }
   if (page === 'home') renderHome();
   else if (page === 'library') renderLibrary();
   else if (page === 'local') renderLocal();
@@ -108,6 +132,7 @@ function renderPage(page, route) {
   else if (page === 'settings') renderSettings();
   else if (page === 'plugin') renderPluginPage(route.args[0] || '', route.args[1] || '');
   enhanceClickableRows();
+  applySlotMounts(document);
 }
 
 /* ---------- shared page fragments ---------- */
@@ -342,6 +367,7 @@ function renderDiscover() {
 
 /* ---------- search ---------- */
 let searchTab = 'all';
+function setSearchTab(value) { searchTab = String(value || 'all'); }
 function searchIndex() {
   const shows = app.subs.map(s => showByKey(s.key)).filter(Boolean);
   const subscribed = new Set(shows.map(show => show.slug));
@@ -411,7 +437,9 @@ async function renderSearch(query) {
           esc(cue.text || '') + '</span>' + (cue.zh ? '<span class="ep-sub">' + esc(cue.zh) + '</span>' : '') + '</div></div>').join('');
     }
   }
-  $('searchResults').innerHTML = html || emptyLine('没有找到匹配结果，试试其他关键词。');
+  motionFlip($('searchResults'), '.ep-row', () => {
+    $('searchResults').innerHTML = html || emptyLine('没有找到匹配结果，试试其他关键词。');
+  });
   enhanceClickableRows();
 }
 
@@ -592,9 +620,12 @@ async function renderEpisode(key, epId) {
     '<button class="btn ghost" data-offline-episode data-key="' + esc(show.slug) + '" data-ep="' + esc(ep.id) + '" title="整集下载会同时保存文字稿">' +
     offlineAction + '</button>' +
     '<button class="btn ghost" data-copy-link data-key="' + esc(show.slug) + '" data-ep="' + esc(ep.id) + '">复制链接</button>' +
-    '</div></div></div><div class="card card-pad" style="margin-top:16px"><h3 class="section-title">简介</h3><p class="smalltext" style="margin:0">' +
+    '</div><span class="plugin-slot" data-plugin-slot="episode.header.actions"></span></div></div>' +
+    '<div class="plugin-slot" data-plugin-slot="episode.body.before"></div>' +
+    '<div class="card card-pad" style="margin-top:16px"><h3 class="section-title">简介</h3><p class="smalltext" style="margin:0">' +
     esc(desc || '该 feed 没有提供单集简介。') + '</p></div>';
   enhanceClickableRows();
+  applySlotMounts(view);
 }
 
 /* ---------- inbox / favorites / queue / history ---------- */
@@ -1000,4 +1031,5 @@ function syncTranslateSettings() {
   else if (!TR.on) trStatus('未开启', false);
   else if (!trReady()) trStatus('还缺 API Key', true);
 }
-
+export { CATEGORY_LABELS, LISTEN_APPEARANCE, LISTEN_CONTINUE, TR, TR_CACHE, TR_DEFAULTS, TR_KEY, addToQueue, applyRoute, categoryLabel, coverageHTML, enhanceClickableRows, episodeRowHTML, filterCatalogShows, fmtHours, idxSearch, importLocalFolder, inboxEpisode, openPlayerRoute, podCardHTML, primaryCategory, renderAutoSettings, renderBookmarks, renderDiscover, renderEcho, renderEpisode, renderFavorites, renderHistory, renderHome, renderInbox, renderLibrary, renderListenGroup, renderListening, renderLocal, renderNotes, renderPage, renderPodcast, renderQueue, renderSearch, renderSettings, renderStats, renderVideo, saveQueue, searchIndex, searchTab, setSearchTab, showCategories, showCategoryText, showLanguageLabel, syncDiscoverControls, syncTranslateSettings, trBatch, trConfig, trLastErrorAt, trNative, trNoteError, trPrimeCues, trReady, trSave, trStatus, trText, transcriptCoverage, updateDocumentTitle };
+registerLayer('07-routes-pages', { CATEGORY_LABELS, LISTEN_APPEARANCE, LISTEN_CONTINUE, TR, TR_CACHE, TR_DEFAULTS, TR_KEY, addToQueue, applyRoute, categoryLabel, coverageHTML, enhanceClickableRows, episodeRowHTML, filterCatalogShows, fmtHours, idxSearch, importLocalFolder, inboxEpisode, openPlayerRoute, podCardHTML, primaryCategory, renderAutoSettings, renderBookmarks, renderDiscover, renderEcho, renderEpisode, renderFavorites, renderHistory, renderHome, renderInbox, renderLibrary, renderListenGroup, renderListening, renderLocal, renderNotes, renderPage, renderPodcast, renderQueue, renderSearch, renderSettings, renderStats, renderVideo, saveQueue, searchIndex, searchTab, setSearchTab, showCategories, showCategoryText, showLanguageLabel, syncDiscoverControls, syncTranslateSettings, trBatch, trConfig, trLastErrorAt, trNative, trNoteError, trPrimeCues, trReady, trSave, trStatus, trText, transcriptCoverage, updateDocumentTitle });

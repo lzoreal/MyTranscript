@@ -1,6 +1,6 @@
 /* layer: kernel —— 纯函数，不读 DOM、不碰 state。
    拼接后先于主 IIFE 执行；主脚本用同名解构接回，调用点不用改。 */
-const MYTK = (() => {
+export const MYTK = (() => {
   const fmt = s => { s = Math.max(0, Number(s) || 0); const h = Math.floor(s/3600), m = Math.floor(s%3600/60), x = Math.floor(s%60);
     return h ? `${h}:${String(m).padStart(2,'0')}:${String(x).padStart(2,'0')}` : `${String(m).padStart(2,'0')}:${String(x).padStart(2,'0')}`; };
   const isBracket = t => /^\s*\[.*\]\s*[.!?]?\s*$/.test(t);

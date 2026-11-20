@@ -1,3 +1,12 @@
+import { $, ASR_MODEL_DEFAULT, LIVE_LEAD_DEFAULT, prefs, replacePrefs, setState, state } from './00-runtime.js';
+import { esc, fmt, getJson, loaderHTML, parseFeed, showToast } from './01-theme-reader-shell.js';
+import { CATALOG_TIMEOUT, smallArtwork, subtitlePluginOn } from './04-local-audio-plugin-host.js';
+import { AUTO_DEFAULTS, AUTO_KEY, BOOKMARK_KEY, FAV_KEY, INBOX_KEY, LOCAL_KEY, NOTE_KEY, PLAYED_KEY, PLAYLIST_KEY, PREFS_KEY, QUEUE_KEY, SEEN_KEY, SHOWPREFS_KEY, SUBS_KEY, absoluteFeed, absoluteUrl, app, applyVolume, cleanFeedTitle, findBuiltinByFeed, hash32, hostOf, navigate, normalizeFeedUrl, normalizeSidebarPrefs, plainText, readJSON, saveSubs, showByKey, syncDockSleep } from './05-transport-transcript-nav.js';
+
+import { lazyFn, registerLayer } from './00-layers.js';
+const addFeedFromUrl = lazyFn('10-desktop-bridge-tail', 'addFeedFromUrl');
+const openModal = lazyFn('10-desktop-bridge-tail', 'openModal');
+const startSleepTimer = lazyFn('10-desktop-bridge-tail', 'startSleepTimer');
 /* layer: bridge —— 目录/feed 缓存、OPML、在线搜索
    本片只做该层的事，跨层调用走 kernel / host() / setState。 */
 /* ---------- catalog + local state ---------- */
@@ -63,7 +72,7 @@ function loadLocalState() {
   app.seen = readJSON(SEEN_KEY, {}) || {};
   app.showPrefs = readJSON(SHOWPREFS_KEY, {}) || {};
   app.local = readJSON(LOCAL_KEY, []) || [];
-  prefs = Object.assign({ speed: 1, autoNext: false, remember: true, liveLead: LIVE_LEAD_DEFAULT, liveMse: false, volume: 1, muted: false, asrModel: ASR_MODEL_DEFAULT }, readJSON(PREFS_KEY, {}) || {});
+  replacePrefs(Object.assign({ speed: 1, autoNext: false, remember: true, liveLead: LIVE_LEAD_DEFAULT, liveMse: false, volume: 1, muted: false, asrModel: ASR_MODEL_DEFAULT }, readJSON(PREFS_KEY, {}) || {}));
   prefs.modules = Object.assign({
     discover: true, search: true, local: true, inbox: true, queue: true, history: true,
     stats: true, favorites: true, bookmarks: true, notes: true, listening: true,
@@ -723,4 +732,5 @@ function subscribeFromOnline(feedUrl) {
   if (subscribed) { navigate('podcast', [subscribed.slug]); return; }
   addFeedFromUrl(feedUrl);
 }
-
+export { COVER_GRADS, FEED_CACHE_TTL, ONLINE_PAGE, PODCAST_INDEX, appleSearchUrl, buildOpml, catalogFields, checkSubscriptions, copyText, coverGrad, coverHTML, decodeXml, downloadFile, ensureShowFeed, episodeCover, exportOpml, exportSubtitle, feedCacheFresh, feedCacheGet, feedCachePut, feedDb, feedDbPromise, feedKey, fetchFeedText, fetchJson, findBuiltinForTitle, hasFreshFeed, initialsOf, loadCatalog, loadLocalState, mapAppleResults, mapPodcastIndexResults, memoryFeed, mergeCatalog, mergeSearchMeta, mergeSearchResults, onlineDetailHTML, onlinePreviewSeq, onlineRowHTML, openOnlineDetail, openOnlinePreview, parseOpml, podcastIndexAuth, podcastIndexSearchUrl, rememberFeed, renderOnlineResults, runOnlineSearch, searchApple, searchPodcastIndex, searchTitleKey, sha1Hex, shareCurrentCue, stamp, subscribeFromOnline, subscribedShowForFeed };
+registerLayer('06-catalog-feeds-search', { COVER_GRADS, FEED_CACHE_TTL, ONLINE_PAGE, PODCAST_INDEX, appleSearchUrl, buildOpml, catalogFields, checkSubscriptions, copyText, coverGrad, coverHTML, decodeXml, downloadFile, ensureShowFeed, episodeCover, exportOpml, exportSubtitle, feedCacheFresh, feedCacheGet, feedCachePut, feedDb, feedDbPromise, feedKey, fetchFeedText, fetchJson, findBuiltinForTitle, hasFreshFeed, initialsOf, loadCatalog, loadLocalState, mapAppleResults, mapPodcastIndexResults, memoryFeed, mergeCatalog, mergeSearchMeta, mergeSearchResults, onlineDetailHTML, onlinePreviewSeq, onlineRowHTML, openOnlineDetail, openOnlinePreview, parseOpml, podcastIndexAuth, podcastIndexSearchUrl, rememberFeed, renderOnlineResults, runOnlineSearch, searchApple, searchPodcastIndex, searchTitleKey, sha1Hex, shareCurrentCue, stamp, subscribeFromOnline, subscribedShowForFeed });

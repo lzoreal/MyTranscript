@@ -1,5 +1,14 @@
-/* layer: bridge —— 实时字幕桥、tauriHost()/host() 唯一平台入口
+import { $, LIVE, LIVE_BUDGET_MS, LIVE_FETCH, LIVE_LEAD_DEFAULT, LIVE_RATE, LIVE_SLICE, LIVE_TR_BATCH, audio, host, prefs, state, tauriHost } from './00-runtime.js';
+
+import { lazyFn, registerLayer } from './00-layers.js';
+const liveClearRows = lazyFn('03-native-asr-service-worker', 'liveClearRows');
+const liveDisable = lazyFn('03-native-asr-service-worker', 'liveDisable');
+const liveNativeLoad = lazyFn('03-native-asr-service-worker', 'liveNativeLoad');
+const liveRebuildStream = lazyFn('03-native-asr-service-worker', 'liveRebuildStream');
+const liveRenderLine = lazyFn('03-native-asr-service-worker', 'liveRenderLine');
+/* layer: bridge —— 实时字幕桥、平台宿主入口
    本片只做该层的事，跨层调用走 kernel / host() / setState。 */
+
 /* ---------- 实时逐词字幕（实验功能，默认关闭） ----------
    链路：音频 URL（需 CORS）→ 拉取整个音频文件 → 扫 MP3 帧建「字节↔时间」索引
     → 按「播放位置 + 提前量」解码出 16 kHz 单声道 PCM 喂给 Moonshine 流式识别
@@ -7,7 +16,6 @@
    用解码而不是 Web Audio 采集，是因为采集只能拿到「已经播出去」的音频，永远
    落后于播放头；要提前 s 秒生成，必须自己把还没播到的音频解出来。关闭后正文
    立刻回到原本的 VTT / 词级 JSON 渲染，原有播放、重试、跳转逻辑不受影响。 */
-const LIVE_RATE = 16000;
 const LIVE_ENGINE = 'https://cdn.jsdelivr.net/npm/@moonshine-ai/moonshine-wasm@0.1.6/dist/index.js';
 /* 识别引擎接缝：适配器只暴露 { load() → engine }，engine 形状由 liveStartStream 约定
    （addAudio / transcribe / stop / close）。换引擎时只加一个适配器，不动调用方。 */
@@ -98,26 +106,6 @@ const SHERPA_FILES = {
 // AntennaPod 在 en-20M 上实测中位 400 ms，这里照抄同一个常数。
 const SHERPA_LAG = 0.4;
 const SHERPA_CACHE = 'myt-sherpa-model';
-const LIVE_LEAD_DEFAULT = 60;   // 默认提前 60 秒（用户最初要的 1 分钟）。单流接管后识别侧能稳定跑在
-                                // 播放前面 60 秒（实测 59~60 秒连续 60 秒不抖），所以不再需要为了
-                                // “堆不满”把它压到 15 秒；想要低延迟的读者可以在设置里选 15 秒。
-const LIVE_FETCH = 10;          // 每次按 Range 取多少秒的音频字节。取小单次快但弱网下请求次数太多、
-                                // 一轮赶不上播放；取 10 秒把请求数砍掉四成，decodeAudioData 在后台线程解码，峰值可接受。
-const LIVE_BUDGET_MS = 220;     // 每轮最多让识别占用多久，避免卡住界面/播放。实测单次 transcribe
-                                // 就要 100~120 ms，140 ms 预算下一轮基本只能跑一次识别（喂 0.5~1 秒），
-                                // 吞吐被卡在 2.4~4 倍实时；放到 220 ms 一轮能喂两批。
-const LIVE_SLICE = LIVE_RATE / 2;  // 每次喂进去多少 PCM：片越小，单次识别越短（主线程不卡）
-const LIVE_TR_BATCH = LIVE_RATE * 2;  // 攒够多少 PCM 才跑一次识别：transcribe 有固定开销（实测 1 秒批
-                                   // 100~120 ms），2 秒批一次把调用次数砍半、单次仍只涨到 ~200 ms，
-                                   // 识别侧实时因子从 2.4~4 倍推到 8 倍上下。
-const LIVE = {
-  on: false, busy: false,
-  engine: null, stream: null, session: 0,
-  ctx: null, audioUrl: '', cbr: null, fail: 0,  anchorMedia: 0, next: 0, fed: 0, lastTr: 0, pcm: null, pumpTimer: 0, pumpGen: 0, pumping: false, text: '',
-  rows: new Map(), order: [], progressText: '', mode: 'idle', activeRow: '', cursor: 0,
-  mse: null, bytePos: 0, byteSec: 0,
-  prefetchWin: null, prefetching: false, prefetchQ: [], prefetchFrom: 0,
-};
 
 function liveMediaTime() {
   return (audio.currentTime || 0) + (state.timeScale - 1) * state.seekRaw;
@@ -127,6 +115,9 @@ function liveMediaOf(sec) {
   return LIVE.anchorMedia + Number(sec || 0);
 }
 let liveBarHideTimer = 0;
+function clearLiveBarTimer() {
+  if (liveBarHideTimer) { clearTimeout(liveBarHideTimer); liveBarHideTimer = 0; }
+}
 function liveSetText(text, cls) {
   $('liveText').textContent = text;
   const bar = $('liveBar');
@@ -208,7 +199,6 @@ function syncLiveLeadSelect() {
 // Tauri 壳提供 tauriHost()，这里就地包出一个同形状的宿主对象；
 // 别的壳（比如安卓 WebView）可以在页面脚本之前自己挂 window.MyTranscriptHost。
 // 唯一的平台检测点：其余分片只问「有没有桌面宿主」，不再直接摸 window.__TAURI__。
-function tauriHost() { return window.__TAURI__ || null; }
 /* IPC 收口：插件脚本从 blob: URL 注入，宿主脚本从 player.js 来。
    把 invoke 包一层，调用栈里只要出现 blob: 帧就拒绝——插件拿不到任意桌面命令，
    只能走宿主给的 api。注意这是栈检查（同一 JS 环境下的尽力而为），不是权限沙箱。 */
@@ -239,47 +229,6 @@ function installIpcGuard(T) {
   }
 }
 installIpcGuard(tauriHost());
-const LIVE_HOST = (() => {
-  if (window.MyTranscriptHost) return window.MyTranscriptHost;
-  const T = tauriHost();
-  if (!T || !T.core || typeof T.core.invoke !== 'function') return null;
-  const call = (cmd, args) => T.core.invoke(cmd, args || {});
-  return {
-    kind: 'tauri',
-    // 原生发 Range 请求，返回 ArrayBuffer（Tauri 的 ipc::Response 直接给字节）。
-    fetchRange: (url, from, to) => call('read_range', { url, from, to }),
-    // 原生识别：prepare 落盘模型（首次会下载），open 建一路流。
-    asrPrepare: model => call('asr_prepare', { model: model || 'en-mini' }),
-    asrModels: () => call('asr_models', {}),
-    asrRemove: model => call('asr_remove', { model }),
-    asrImport: path => call('asr_import', { path }),
-    asrCancel: model => call('asr_cancel', { model }),
-    asrOpenDir: model => call('asr_open_dir', { model }),
-    asrOpen: (modelDir, threads) => call('asr_open', { modelDir, threads }),
-    asrFeed: (id, samples, sampleRate) => call('asr_feed', { id, samples, sampleRate }),
-    asrResult: id => call('asr_result', { id }),
-    asrReset: id => call('asr_reset', { id }),
-    asrClose: id => call('asr_close', { id }),
-    // 小文件文本（章节 JSON、词典释义）
-    httpText: url => call('http_text', { url }),
-    // 离线：整集落盘、列目录、删除；本地文件通过 asset: 协议取用
-    offlineSave: (url, key) => call('offline_save', { url, key }),
-    offlineTranscriptSave: (url, key) => call('offline_save_transcript', { url, key }),
-    offlineTranscriptLoad: key => call('offline_transcript_load', { key }),
-    offlineSkipSave: (url, key) => call('offline_save_skip', { url, key }),
-    offlineSkipLoad: key => call('offline_skip_load', { key }),
-    offlineList: () => call('offline_list', {}),
-    offlineRemove: key => call('offline_remove', { key }),
-    pluginList: () => call('plugin_list', {}),
-    pluginSetEnabled: (id, enabled) => call('plugin_set_enabled', { id, enabled }),
-    pluginOpenDir: () => call('plugin_open_dir', {}),
-    pluginExample: () => call('plugin_example', {}),
-    notify: (title, body) => call('notify', { title, body }),
-    asset: p => (T.core.convertFileSrc ? T.core.convertFileSrc(p) : p),
-  };
-})();
-// 唯一宿主句柄：其余代码只经 host() 读取，不再直接引用 LIVE_HOST。
-function host() { return LIVE_HOST; }
 
 function liveHostFetch(url, from, to) {
   if (!host() || typeof host().fetchRange !== 'function') {
@@ -1185,4 +1134,5 @@ function liveSherpaStream(session, anchor) {
     },
   };
 }
-
+export { CORE_PROVIDER_DEFAULTS, CORE_PROVIDER_NAMES, CORE_PROVIDER_STACKS, LIVE_ARCH, LIVE_ENGINE, LIVE_ENGINE_ARG, LIVE_ENGINE_KIND, MP3_BR_V1L3, MP3_BR_V2L3, MP3_SR_V1, MP3_SR_V2, SHERPA_BASE, SHERPA_CACHE, SHERPA_CDN, SHERPA_FILES, SHERPA_LAG, TRANSCRIBER_ADAPTERS, clearLiveBarTimer, coreProvider, coreProviderLayer, coreProviderOwner, defineCoreProvider, installIpcGuard, liveAudioDuration, liveBarHideTimer, liveBufferAhead, liveDecodeAudio, liveEmitTokens, liveFetchRange, liveFetchWindow, liveFetchWindowMse, liveGetBytes, liveHostFetch, liveHttpGet, liveLeadSec, liveLoadEngine, liveLoadScript, liveMediaOf, liveMediaTime, liveMoonshineLoad, liveMp3Frame, liveMseAnchor, liveMseBegin, liveMseCapable, liveMseKick, liveMsePush, liveMseReanchor, liveMseStop, liveMseTrim, livePlayhead, livePrefetchLoop, liveProbeAudio, liveProbeScan, liveProgressText, livePumpOnce, liveRetry, liveSetText, liveSherpaBytes, liveSherpaLoad, liveSherpaStream, liveSherpaWords, liveStartPump, liveStopPump, liveUpdateMeter, liveWaitAudioReady, mytIpcGuard, pluginFrameInStack, registerCoreProvider, registerTranscriber, releaseCoreProviders, syncLiveLeadSelect, transcriberFor };
+registerLayer('02-live-caption-wasm', { CORE_PROVIDER_DEFAULTS, CORE_PROVIDER_NAMES, CORE_PROVIDER_STACKS, LIVE_ARCH, LIVE_ENGINE, LIVE_ENGINE_ARG, LIVE_ENGINE_KIND, MP3_BR_V1L3, MP3_BR_V2L3, MP3_SR_V1, MP3_SR_V2, SHERPA_BASE, SHERPA_CACHE, SHERPA_CDN, SHERPA_FILES, SHERPA_LAG, TRANSCRIBER_ADAPTERS, clearLiveBarTimer, coreProvider, coreProviderLayer, coreProviderOwner, defineCoreProvider, installIpcGuard, liveAudioDuration, liveBarHideTimer, liveBufferAhead, liveDecodeAudio, liveEmitTokens, liveFetchRange, liveFetchWindow, liveFetchWindowMse, liveGetBytes, liveHostFetch, liveHttpGet, liveLeadSec, liveLoadEngine, liveLoadScript, liveMediaOf, liveMediaTime, liveMoonshineLoad, liveMp3Frame, liveMseAnchor, liveMseBegin, liveMseCapable, liveMseKick, liveMsePush, liveMseReanchor, liveMseStop, liveMseTrim, livePlayhead, livePrefetchLoop, liveProbeAudio, liveProbeScan, liveProgressText, livePumpOnce, liveRetry, liveSetText, liveSherpaBytes, liveSherpaLoad, liveSherpaStream, liveSherpaWords, liveStartPump, liveStopPump, liveUpdateMeter, liveWaitAudioReady, mytIpcGuard, pluginFrameInStack, registerCoreProvider, registerTranscriber, releaseCoreProviders, syncLiveLeadSelect, transcriberFor });

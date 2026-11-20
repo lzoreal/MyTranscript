@@ -1,4 +1,4 @@
-//! 本地插件目录管理：扫描、开关、示例插件、内置插件铺设。
+//! 本地插件目录管理：扫描、开关、示例插件、导入。应用不预装、不自动铺设任何插件。
 //! 纯文件系统逻辑，命令层只做参数校验与窗口联动。
 
 use std::collections::HashMap;
@@ -52,16 +52,6 @@ fn safe_plugin_file(name: &str) -> bool {
         && !name.contains('\\')
         && name != "."
         && name != ".."
-}
-
-/// 内置插件用的 FNV-1a（64 位），只求跨版本稳定，不做安全哈希。
-fn content_fingerprint(bytes: &[u8]) -> String {
-    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for byte in bytes {
-        hash ^= u64::from(*byte);
-        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
-    }
-    format!("{hash:016x}")
 }
 
 fn hex_encode(bytes: &[u8]) -> String {
@@ -127,90 +117,74 @@ fn verify_plugin_signature(digest: &str, sig_hex: &str) -> bool {
     })
 }
 
-fn read_fingerprints(path: &std::path::Path) -> HashMap<String, String> {
-    std::fs::read_to_string(path)
-        .ok()
-        .and_then(|text| serde_json::from_str::<HashMap<String, String>>(&text).ok())
-        .unwrap_or_default()
-}
-
-/// 内置插件的升级规则：用户没改过的文件跟随应用版本更新；改过的原样保留。
-/// 每个文件上次「随应用铺下去」的指纹记在 `.builtin.json`；对不上就认为是用户改的。
-fn seed_into(root: &std::path::Path, name: &str, files: &[(&str, &str)]) -> Result<(), String> {
-    let dir = root.join(name);
-    std::fs::create_dir_all(&dir).map_err(|e| format!("创建内置插件 {name} 失败：{e}"))?;
-    let marker = dir.join(".builtin.json");
-    let mut recorded = read_fingerprints(&marker);
-    let mut changed = false;
-    for (file, content) in files {
-        let path = dir.join(file);
-        let shipped = content_fingerprint(content.as_bytes());
-        let existing = std::fs::read(&path).ok().map(|bytes| content_fingerprint(&bytes));
-        match existing {
-            None => {
-                std::fs::write(&path, content)
-                    .map_err(|e| format!("写入内置插件 {name}/{file} 失败：{e}"))?;
-                recorded.insert((*file).to_string(), shipped);
-                changed = true;
+/// 导入一个手动选择的插件目录：只复制清单声明会执行的入口、脚本和样式，
+/// 不复制目录里的其他文件；导入后默认停用，等用户自己启用并授权。
+fn import_plugin_into(root: &std::path::Path, src: &std::path::Path) -> Result<String, String> {
+    let manifest_text = std::fs::read_to_string(src.join("plugin.json"))
+        .map_err(|e| format!("读取 plugin.json 失败：{e}"))?;
+    let manifest: serde_json::Value = serde_json::from_str(&manifest_text)
+        .map_err(|e| format!("plugin.json 不是合法 JSON：{e}"))?;
+    let id = manifest
+        .get("id")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            src.file_name()
+                .map(|name| name.to_string_lossy().to_string())
+                .unwrap_or_default()
+        });
+    if !safe_plugin_id(&id) {
+        return Err(format!("非法的插件 id：{id}"));
+    }
+    let dest = root.join(&id);
+    if dest.exists() {
+        return Err(format!("插件 {id} 已存在；先移除旧目录再导入"));
+    }
+    let main_name = manifest.get("main").and_then(|v| v.as_str()).unwrap_or("main.js");
+    if !safe_plugin_file(main_name) {
+        return Err(format!("非法的 main：{main_name}"));
+    }
+    let style_name = manifest.get("style").and_then(|v| v.as_str()).unwrap_or("style.css");
+    if !safe_plugin_file(style_name) {
+        return Err(format!("非法的 style：{style_name}"));
+    }
+    let mut files: Vec<String> = vec!["plugin.json".to_string(), main_name.to_string()];
+    if src.join(style_name).is_file() {
+        files.push(style_name.to_string());
+    }
+    if let Some(items) = manifest.get("scripts").and_then(|v| v.as_array()) {
+        for item in items.iter().filter_map(|v| v.as_str()) {
+            if !safe_plugin_file(item) {
+                return Err(format!("非法的 script：{item}"));
             }
-            Some(current) => {
-                match recorded.get(*file) {
-                    // 首次接管老安装：把当前内容当基线，这一轮不动手改文件。
-                    None => {
-                        recorded.insert((*file).to_string(), current);
-                        changed = true;
-                    }
-                    // 文件还是上次铺下的样子 → 跟随升级。
-                    Some(known) if *known == current => {
-                        if shipped != current {
-                            std::fs::write(&path, content)
-                                .map_err(|e| format!("更新内置插件 {name}/{file} 失败：{e}"))?;
-                            recorded.insert((*file).to_string(), shipped);
-                            changed = true;
-                        }
-                    }
-                    // 用户改过：保留，且不更新基线，之后的升级也一样跳过。
-                    Some(_) => {}
-                }
+            if !files.iter().any(|name| name == item) {
+                files.push(item.to_string());
             }
         }
     }
-    if changed {
-        let text = serde_json::to_string_pretty(&recorded)
-            .map_err(|e| format!("序列化内置插件基线失败：{e}"))?;
-        std::fs::write(&marker, text).map_err(|e| format!("写内置插件基线失败：{e}"))?;
+    for name in &files {
+        if !src.join(name).is_file() {
+            return Err(format!("插件缺少文件：{name}"));
+        }
     }
-    Ok(())
-}
-
-/// 随应用发布的插件。首次铺一份；之后按 `.builtin.json` 基线决定是否跟随升级。
-fn seed_builtin_plugin(name: &str, files: &[(&str, &str)]) -> Result<(), String> {
-    seed_into(&plugins_root()?, name, files)
-}
-
-pub fn ensure_builtin_plugins() -> Result<(), String> {
-    seed_builtin_plugin(
-        "subtitles",
-        &[
-            ("plugin.json", include_str!("../../builtin-plugins/subtitles/plugin.json")),
-            ("kernel.js", include_str!("../../builtin-plugins/subtitles/kernel.js")),
-            ("view.js", include_str!("../../builtin-plugins/subtitles/view.js")),
-            ("main.js", include_str!("../../builtin-plugins/subtitles/main.js")),
-            ("style.css", include_str!("../../builtin-plugins/subtitles/style.css")),
-        ],
-    )?;
-    seed_builtin_plugin(
-        "study",
-        &[
-            ("plugin.json", include_str!("../../builtin-plugins/study/plugin.json")),
-            ("engine.js", include_str!("../../builtin-plugins/study/engine.js")),
-            ("runtime.js", include_str!("../../builtin-plugins/study/runtime.js")),
-            ("ui.js", include_str!("../../builtin-plugins/study/ui.js")),
-            ("main.js", include_str!("../../builtin-plugins/study/main.js")),
-            ("style.css", include_str!("../../builtin-plugins/study/style.css")),
-        ],
-    )?;
-    Ok(())
+    std::fs::create_dir_all(&dest).map_err(|e| format!("创建插件目录失败：{e}"))?;
+    for name in &files {
+        let from = src.join(name);
+        let to = dest.join(name);
+        if let Err(e) = std::fs::copy(&from, &to) {
+            let _ = std::fs::remove_dir_all(&dest);
+            return Err(format!("复制 {name} 失败：{e}"));
+        }
+    }
+    let mut enabled = read_plugin_enabled(root);
+    enabled.insert(id.clone(), false);
+    if let Err(e) = write_plugin_enabled(root, &enabled) {
+        let _ = std::fs::remove_dir_all(&dest);
+        return Err(e);
+    }
+    Ok(id)
 }
 
 
@@ -368,7 +342,7 @@ fn plugin_view(dir_name: &str, dir: &std::path::Path, enabled_map: &HashMap<Stri
                 css = std::fs::read_to_string(dir.join(css_name)).unwrap_or_default();
             }
         }
-        let builtin = matches!(id.as_str(), "subtitles" | "study");
+        let builtin = false;
         let version = manifest.get("version").and_then(|v| v.as_str()).unwrap_or("").to_string();
         // 摘要覆盖真正会被执行的脚本与样式；单个文件读不到就不进摘要（读取失败另有 error 提示）。
         let mut digest_files: Vec<(String, String)> = Vec::new();
@@ -428,7 +402,9 @@ fn plugin_view(dir_name: &str, dir: &std::path::Path, enabled_map: &HashMap<Stri
             "description": manifest.get("description").and_then(|v| v.as_str()).unwrap_or(""),
             "author": manifest.get("author").and_then(|v| v.as_str()).unwrap_or(""),
             "enabled": enabled,
+            "apiVersion": manifest.get("apiVersion").cloned().unwrap_or(serde_json::Value::Null),
             "requires": manifest.get("requires").cloned().unwrap_or_else(|| serde_json::json!([])),
+            "contributions": manifest.get("contributions").cloned().unwrap_or_else(|| serde_json::json!({})),
             "scripts": script_names,
             "dir": dir.to_string_lossy(),
             "main": main_name,
@@ -483,6 +459,12 @@ pub fn plugin_set_enabled(app: tauri::AppHandle, id: String, enabled: bool) -> R
         }
     }
     Ok(())
+}
+
+#[tauri::command]
+pub fn plugin_import(path: String) -> Result<String, String> {
+    let src = std::path::PathBuf::from(path.trim());
+    import_plugin_into(&plugins_root()?, &src)
 }
 
 #[tauri::command]
@@ -667,64 +649,53 @@ mod tests {
     }
 
     #[test]
-    fn builtin_flag_covers_subtitles_and_study() {
+    fn plugin_view_marks_nothing_builtin() {
         for id in ["subtitles", "study"] {
             let dir = tmp(&format!("builtin-{id}"));
             put(&dir, "plugin.json", &format!(r#"{{"id":"{id}"}}"#));
             let v = plugin_view(id, &dir, &HashMap::new());
-            assert_eq!(v.get("builtin").and_then(|x| x.as_bool()), Some(true), "{id}");
+            assert_eq!(v.get("builtin").and_then(|x| x.as_bool()), Some(false), "{id}");
             let _ = std::fs::remove_dir_all(&dir);
         }
-        let dir = tmp("builtin-other");
-        put(&dir, "plugin.json", r#"{"id":"demo"}"#);
-        let v = plugin_view("demo", &dir, &HashMap::new());
-        assert_eq!(v.get("builtin").and_then(|x| x.as_bool()), Some(false));
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
-    fn seed_writes_files_on_first_install() {
-        let root = tmp("seed-first");
-        seed_into(&root, "demo", &[("main.js", "v1")]).expect("首次铺设");
-        assert_eq!(std::fs::read_to_string(root.join("demo/main.js")).unwrap(), "v1");
+    fn import_copies_only_declared_files_and_disables() {
+        let root = tmp("import-root");
+        let src = tmp("import-src");
+        put(
+            &src,
+            "plugin.json",
+            r#"{"id":"demo","main":"entry.js","style":"theme.css","scripts":["a.js"]}"#,
+        );
+        put(&src, "entry.js", "// main");
+        put(&src, "a.js", "// script");
+        put(&src, "theme.css", "body{}");
+        put(&src, "secret.txt", "do not copy");
+        let id = import_plugin_into(&root, &src).expect("导入");
+        assert_eq!(id, "demo");
+        assert!(root.join("demo/entry.js").is_file());
+        assert!(root.join("demo/a.js").is_file());
+        assert!(root.join("demo/theme.css").is_file());
+        assert!(!root.join("demo/secret.txt").exists(), "只复制清单声明的文件");
+        let enabled = read_plugin_enabled(&root);
+        assert_eq!(enabled.get("demo"), Some(&false), "导入后默认停用");
         let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&src);
     }
 
     #[test]
-    fn seed_updates_unmodified_file_on_upgrade() {
-        let root = tmp("seed-upgrade");
-        seed_into(&root, "demo", &[("main.js", "v1")]).unwrap();
-        seed_into(&root, "demo", &[("main.js", "v2")]).unwrap();
-        assert_eq!(std::fs::read_to_string(root.join("demo/main.js")).unwrap(), "v2");
+    fn import_refuses_existing_or_unsafe_plugins() {
+        let root = tmp("import-dup-root");
+        let src = tmp("import-dup-src");
+        put(&src, "plugin.json", r#"{"id":"demo","main":"main.js"}"#);
+        put(&src, "main.js", "// main");
+        import_plugin_into(&root, &src).expect("首次导入");
+        assert!(import_plugin_into(&root, &src).is_err(), "重复导入应报错");
+        put(&src, "plugin.json", r#"{"id":"../escape","main":"main.js"}"#);
+        assert!(import_plugin_into(&root, &src).is_err(), "非法 id 应报错");
         let _ = std::fs::remove_dir_all(&root);
-    }
-
-    #[test]
-    fn seed_keeps_user_modified_file() {
-        let root = tmp("seed-modified");
-        seed_into(&root, "demo", &[("main.js", "v1")]).unwrap();
-        put(&root.join("demo"), "main.js", "user edit");
-        seed_into(&root, "demo", &[("main.js", "v2")]).unwrap();
-        assert_eq!(std::fs::read_to_string(root.join("demo/main.js")).unwrap(), "user edit");
-        // 再升一次也不该覆盖用户版本
-        seed_into(&root, "demo", &[("main.js", "v3")]).unwrap();
-        assert_eq!(std::fs::read_to_string(root.join("demo/main.js")).unwrap(), "user edit");
-        let _ = std::fs::remove_dir_all(&root);
-    }
-
-    #[test]
-    fn seed_records_baseline_for_legacy_install() {
-        let root = tmp("seed-legacy");
-        // 模拟老版本：文件已存在但还没有 .builtin.json
-        let dir = root.join("demo");
-        std::fs::create_dir_all(&dir).unwrap();
-        put(&dir, "main.js", "old shipped");
-        seed_into(&root, "demo", &[("main.js", "new shipped")]).unwrap();
-        assert_eq!(std::fs::read_to_string(dir.join("main.js")).unwrap(), "old shipped");
-        // 基线已记成旧内容，再升一次就能平滑更新
-        seed_into(&root, "demo", &[("main.js", "newer shipped")]).unwrap();
-        assert_eq!(std::fs::read_to_string(dir.join("main.js")).unwrap(), "newer shipped");
-        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&src);
     }
 
     const DEMO_META: &str =
@@ -818,6 +789,29 @@ c9a46615cfa862d9b59eeadb11b3885507e4b2ffd16576e60488e7e6bccdf30b";
         put(&dir, "main.js", "// noop");
         let v = plugin_view("demo", &dir, &HashMap::new());
         assert!(v.get("permissions").map(|x| x.is_null()).unwrap_or(false), "没声明要回传 null，前端按老行为处理");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn view_exposes_v2_manifest_fields() {
+        let dir = tmp("v2-fields");
+        put(&dir, "plugin.json", r#"{"id":"demo","apiVersion":"2.1","contributions":{"pages":[{"id":"home"}]}}"#);
+        put(&dir, "main.js", "// noop");
+        let v = plugin_view("demo", &dir, &HashMap::new());
+        assert_eq!(str_field(&v, "apiVersion"), "2.1");
+        assert_eq!(
+            v.get("contributions").and_then(|x| x.get("pages")).and_then(|x| x.as_array()).map(|x| x.len()),
+            Some(1),
+            "贡献点要透传给前端：{v}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let dir = tmp("v2-fields-missing");
+        put(&dir, "plugin.json", r#"{"id":"demo"}"#);
+        put(&dir, "main.js", "// noop");
+        let v = plugin_view("demo", &dir, &HashMap::new());
+        assert!(v.get("apiVersion").map(|x| x.is_null()).unwrap_or(false), "旧清单 apiVersion 应为 null");
+        assert!(v.get("contributions").map(|x| x.is_object()).unwrap_or(false), "旧清单 contributions 应为空对象");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

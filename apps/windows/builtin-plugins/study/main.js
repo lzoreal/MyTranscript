@@ -1,29 +1,38 @@
 // 学英语插件：句子卡、整集总结、复习、练习、生词本和词卡都归它。
 // 字幕插件关闭时没有 cue，学习插件即使启用也保持不可用。
-MyTPlugins.register('study', {
-  setup(api) {
-    const study = api.study;
-    if (!study || typeof study.claim !== 'function') {
-      console.warn('[study] 当前壳没有学习宿主 API，插件不生效');
-      return;
-    }
-    study.claim();
-    if (typeof study.registerEngine === 'function' && typeof createStudyEngine === 'function') {
-      study.registerEngine(createStudyEngine(api));
-    }
-    if (typeof study.registerRuntime === 'function' && typeof createStudyRuntime === 'function') {
-      study.registerRuntime(createStudyRuntime(api, study.host()));
-    }
-    if (typeof study.registerUi === 'function' && typeof createStudyUi === 'function') {
-      study.registerUi(createStudyUi(api, study.host()));
-    }
-    document.body.classList.add('study-plugin-on');
-    let cleanup = null;
-
-    api.page('center', {
-      title: '学习中心',
-      subtitle: '学英语插件 · 句子卡、整集总结与生词本',
-      render(el) {
+MyTPlugins.define('study', {
+  contributions: {
+    'capability:study': {
+      claim(ctx) {
+        const api = ctx.api;
+        const study = api.study;
+        if (!study || typeof study.claim !== 'function') {
+          console.warn('[study] 当前壳没有学习宿主 API，插件不生效');
+          return;
+        }
+        study.claim();
+        if (typeof study.registerEngine === 'function' && typeof createStudyEngine === 'function') {
+          study.registerEngine(createStudyEngine(api));
+        }
+        if (typeof study.registerRuntime === 'function' && typeof createStudyRuntime === 'function') {
+          study.registerRuntime(createStudyRuntime(api, study.host()));
+        }
+        if (typeof study.registerUi === 'function' && typeof createStudyUi === 'function') {
+          study.registerUi(createStudyUi(api, study.host()));
+        }
+        document.body.classList.add('study-plugin-on');
+      },
+    },
+    'page:study': {
+      _cleanup: null,
+      render(el, ctx) {
+        const page = this;
+        const api = ctx.api;
+        const study = api.study;
+        if (!study) {
+          el.innerHTML = '<div class="empty">学习宿主 API 不可用。</div>';
+          return;
+        }
         const unsubs = [];
         let destroyed = false;
         const draw = () => {
@@ -71,15 +80,15 @@ MyTPlugins.register('study', {
         ['player:open', 'player:play', 'player:pause', 'route:change'].forEach(name => {
           unsubs.push(api.on(name, () => { if (el.isConnected) draw(); }));
         });
-        cleanup = () => {
+        page._cleanup = () => {
           destroyed = true;
           unsubs.forEach(fn => { try { fn(); } catch (e) {} });
         };
       },
       destroy() {
-        if (cleanup) cleanup();
-        cleanup = null;
+        if (this._cleanup) this._cleanup();
+        this._cleanup = null;
       },
-    });
+    },
   },
 });

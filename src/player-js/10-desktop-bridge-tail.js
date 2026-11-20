@@ -1,3 +1,15 @@
+import { $, LIVE, audio, host, prefs, replacePrefs, setState, state, tauriHost } from './00-runtime.js';
+import { PROGRESS_KEY, applyCustomTheme, applyReader, closeOverlays, epKey, esc, fmt, getJson, invalidateProgressCache, isJsonTranscript, openDetails, paint, parseFeed, rawSeek, readCustomTheme, reader, rebuildCues, seekTo, setImmersive, showToast, studyNormText, syncCustomThemeEditor, writeCustomTheme, writeProgressAll } from './01-theme-reader-shell.js';
+import { coreProvider, defineCoreProvider, liveMseStop, liveUpdateMeter } from './02-live-caption-wasm.js';
+import { selectEpisode } from './03-native-asr-service-worker.js';
+import { clearPluginConsent, clipNow, emitPlugin, loadShow, pluginDiagnosticsText, pluginPlayerState, refreshPluginSettings, registerStudyUiHook, reloadPlugins, smallArtwork, startLocalTranscribe, subtitlePluginOn } from './04-local-audio-plugin-host.js';
+import { BOOKMARK_KEY, LOCAL_KEY, NOTE_KEY, PREFS_KEY, absoluteUrl, addInboxItem, addToPlaylistDialog, app, applyLoudness, applyRate, applyVolume, cancelAsrModel, catalogLatest, cleanFeedTitle, cleanWord, closeDockSheet, closeWordPanel, dockSheet, downloadEpisode, ensureAudioGraph, episodesOf, extSlug, findBuiltinByFeed, fmtBytes, formatDate, hash32, hostOf, idxClear, importAsrModel, inboxRemove, indexAllShows, indexCurrentShow, installAsrModel, isFavorite, isPlayed, isSubscribed, navigate, normalizeFeedUrl, offlineEntries, offlineKeyFor, offlineLabel, openAsrDir, paintAsrSoon, pickAsrModel, playOffline, playPlaylist, readAllProgress, refreshAsrModels, refreshOffline, refreshShows, removeAsrModel, removeOffline, removePlaylist, renderAfterStateChange, renderDownloads, renderOfflineList, resolveOfflineRef, routeHash, saveFavorites, saveInbox, savePlayed, saveSeen, saveShowPrefs, saveSubs, seekChapter, setPlayed, setShowPref, showByKey, showPrefFor, subscribeRecord, subscribeShow, syncDockSleep, syncIndexCount, toggleChapterSheet, toggleFavorite, unsubscribeKey, wordCurrentMeaning, writeJSON } from './05-transport-transcript-nav.js';
+import { ONLINE_PAGE, checkSubscriptions, copyText, coverHTML, downloadFile, ensureShowFeed, exportOpml, exportSubtitle, feedCachePut, fetchFeedText, hasFreshFeed, loadLocalState, openOnlineDetail, parseOpml, rememberFeed, renderOnlineResults, runOnlineSearch, subscribeFromOnline } from './06-catalog-feeds-search.js';
+import { LISTEN_APPEARANCE, LISTEN_CONTINUE, addToQueue, applyRoute, importLocalFolder, openPlayerRoute, renderAutoSettings, renderBookmarks, renderDiscover, renderEcho, renderHistory, renderHome, renderInbox, renderLibrary, renderListening, renderLocal, renderNotes, renderPodcast, renderQueue, renderSearch, saveQueue, searchTab, setSearchTab } from './07-routes-pages.js';
+import { openSettingsPane, renderSidebarSettings, resetSidebarSettings, saveStudyCache, studyAddVocab, studyCache, studyChat, studyClockSeconds, studyCueBounds, studyCurrentCue, studyDueItems, studyExportCsv, studyLangName, studyMarkWord, studyOpenEpisodeSummary, studyParseJson, studyPlayRange, studyReady, studyRenderEpisode, studyRenderPractice, studyStats, studyView, studyVocab, syncThemeSwatches } from './08-study-ai.js';
+import { currentPlaylist, nextTarget, stepEpisode, syncBookmarkBtn, syncMini, toggleBookmarkCue, toggleMiniCaption } from './09-player-integration.js';
+import { registerLayer } from './00-layers.js';
+import { motionCancel, motionEnter, motionLeave } from './11-motion.js';
 /* layer: bridge —— MediaSession、托盘、迷你窗、IIFE 收尾
    本片只做该层的事，跨层调用走 kernel / host() / setState。 */
 /* 桌面壳桥：系统媒体控件（MediaSession）、托盘菜单、独立迷你窗。
@@ -244,8 +256,36 @@ function openModal(html) {
     modal.setAttribute('aria-label', '对话框');
   }
   if (!modal.open) modal.showModal();
+  motionCancel(modal);
 }
-function closeModal() { const modal = $('modal'); if (modal.open) modal.close(); }
+function closeModal() {
+  const modal = $('modal');
+  if (!modal || !modal.open) return Promise.resolve();
+  /* 原生 dialog 关闭会立刻离开顶层，先播完淡出再 close；重开时 token 失效，不再关闭。 */
+  const token = (modal.__motionToken = (modal.__motionToken || 0) + 1);
+  modal.classList.add('anim-leaving');
+  return new Promise(resolve => {
+    let timer = 0;
+    const done = () => {
+      if (timer) clearTimeout(timer);
+      modal.removeEventListener('transitionend', onEnd);
+      if (modal.__motionToken !== token) { resolve(); return; }
+      modal.classList.remove('anim-leaving');
+      if (modal.open) modal.close();
+      resolve();
+    };
+    const onEnd = event => {
+      if (event.target === modal && event.propertyName === 'opacity') done();
+    };
+    if (typeof window !== 'undefined' && window.matchMedia
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      done();
+      return;
+    }
+    modal.addEventListener('transitionend', onEnd);
+    timer = setTimeout(done, 260);
+  });
+}
 function openBuiltinImport() {
   const available = app.builtinShows.filter(show => show.feed && !isSubscribed(show.slug));
   if (!available.length) {
@@ -543,6 +583,19 @@ function defaultPlayEpisode(key, epId, time) {
   if (!key || !epId) return;
   app.autoplay = true;
   if (Number(time) > 0) { app.pendingSeek = Number(time); app.pendingSeekEp = epId; }
+  // 没有字幕插件时保持最原生的列表/单集页：点播放只在原地开始音频，
+  // 由迷你播放器接管控制，不强制跳进全屏播放页。
+  if (!subtitlePluginOn()) {
+    const show = showByKey(key);
+    if (!show) { app.autoplay = false; return; }
+    if (state.show?.slug === show.slug && state.current?.id === epId && (audio.currentSrc || audio.getAttribute('src'))) {
+      if (Number(time) > 0) seekTo(Number(time));
+      audio.play().catch(() => {});
+      return;
+    }
+    loadShow(show.slug, epId).catch(() => { app.autoplay = false; });
+    return;
+  }
   if (document.body.classList.contains('player-open')) {
     const wanted = routeHash('player', [key, epId], Number(time) > 0 ? { t: Number(time) } : {});
     if (location.hash !== wanted) history.replaceState(null, '', wanted);
@@ -551,7 +604,7 @@ function defaultPlayEpisode(key, epId, time) {
     navigate('player', [key, epId], Number(time) > 0 ? { t: Number(time) } : {});
   }
 }
-function closeThemePop() { $('themePop')?.classList.remove('on'); }
+function closeThemePop() { const pop = $('themePop'); if (pop) motionLeave(pop); }
 function bindShell() {
   if (app.initialized) return;
   app.initialized = true;
@@ -825,9 +878,9 @@ function bindShell() {
 
   $('themeTopBtn').onclick = event => {
     event.stopPropagation();
-    const opening = !$('themePop').classList.contains('on');
-    $('themePop').classList.toggle('on', opening);
-    if (opening) $('themePop').querySelector('.swatch')?.focus();
+    const pop = $('themePop');
+    if (pop.classList.contains('on')) { motionLeave(pop); return; }
+    motionEnter(pop).then(() => pop.querySelector('.swatch')?.focus());
   };
   document.addEventListener('click', event => {
     if (!event.target.closest('#themePop') && !event.target.closest('#themeTopBtn')) closeThemePop();
@@ -844,7 +897,7 @@ function bindShell() {
   $('searchInput').addEventListener('keydown', event => { if (event.key === 'Enter') runSearch(event.target.value); });
   document.querySelectorAll('[data-search-tab]').forEach(button => {
     button.onclick = () => {
-      searchTab = button.dataset.searchTab;
+      setSearchTab(button.dataset.searchTab);
       document.querySelectorAll('[data-search-tab]').forEach(tab => tab.classList.toggle('active', tab === button));
       renderSearch($('searchInput').value);
     };
@@ -1026,6 +1079,18 @@ function bindShell() {
     else localStorage.removeItem('myt-cors-proxy');
     showToast(value ? '已保存 CORS 代理。' : '已清除 CORS 代理。');
   };
+  if ($('pluginImport')) $('pluginImport').onclick = async () => {
+    try {
+      const picked = await tauriHost().core.invoke('plugin:dialog|open', {
+        options: { directory: true, multiple: false, title: '选择插件文件夹（含 plugin.json）' }
+      });
+      const dir = Array.isArray(picked) ? picked[0] : picked;
+      if (!dir) return;
+      const id = await host().pluginImport(dir);
+      showToast('已导入插件 ' + id + '，默认停用；启用并授权后点「重新加载」生效。', 7000);
+      await refreshPluginSettings();
+    } catch (err) { showToast('导入失败：' + ((err && err.message) || err), 6000); }
+  };
   if ($('pluginOpenDir')) $('pluginOpenDir').onclick = async () => {
     try { await host().pluginOpenDir(); }
     catch (err) { showToast('打开失败：' + ((err && err.message) || err), 5000); }
@@ -1054,6 +1119,28 @@ function bindShell() {
     navigate('plugin', [raw.slice(0, at), raw.slice(at + 1)]);
   });
   document.addEventListener('click', async event => {
+    const retry = event.target.closest('[data-plugin-retry]');
+    if (retry) {
+      retry.disabled = true;
+      try {
+        await reloadPlugins();
+        showToast('已重新加载插件。', 4000);
+      } catch (err) {
+        showToast('重试失败：' + ((err && err.message) || err), 5000);
+      } finally { retry.disabled = false; }
+      return;
+    }
+    const diagnostics = event.target.closest('[data-plugin-diagnostics]');
+    if (diagnostics) {
+      const text = pluginDiagnosticsText(diagnostics.dataset.pluginDiagnostics) || '没有诊断记录。';
+      try {
+        await navigator.clipboard.writeText(text);
+        showToast('诊断信息已复制。', 3000);
+      } catch (err) {
+        showToast('复制失败：' + ((err && err.message) || err), 5000);
+      }
+      return;
+    }
     const revoke = event.target.closest('[data-plugin-revoke]');
     if (revoke) {
       clearPluginConsent(revoke.dataset.pluginRevoke);
@@ -1114,7 +1201,7 @@ function bindShell() {
       app.inbox = mergeBy(app.inbox, data.inbox, item => item.key);
       app.auto = Object.assign({}, app.auto, data.auto || {});
       app.showPrefs = Object.assign({}, app.showPrefs, data.showPrefs || {});
-      if (data.prefs && typeof data.prefs === 'object') prefs = Object.assign({}, prefs, data.prefs);
+      if (data.prefs && typeof data.prefs === 'object') replacePrefs(Object.assign({}, prefs, data.prefs));
       if (data.customTheme && typeof data.customTheme === 'object') {
         const cfg = {
           css: String(data.customTheme.css || ''),
@@ -1154,7 +1241,7 @@ function bindShell() {
     location.reload();
   };
   $('queueClearBtn').onclick = () => { if (app.queue.length && confirm('清空播放队列？')) { app.queue = []; saveQueue(); renderQueue(); } };
-  $('historyClearBtn').onclick = () => { if (confirm('清除全部收听历史？')) { localStorage.removeItem(PROGRESS_KEY); progressAllCache = null; renderHistory(); showToast('已清除收听历史。'); } };
+  $('historyClearBtn').onclick = () => { if (confirm('清除全部收听历史？')) { localStorage.removeItem(PROGRESS_KEY); invalidateProgressCache(); renderHistory(); showToast('已清除收听历史。'); } };
   $('noteSave').onclick = () => {
     const title = $('noteTitle').value.trim();
     const body = $('noteBody').value.trim();
@@ -1307,7 +1394,6 @@ function bindShell() {
   syncThemeSwatches();
 }
 
-initPlayer();
 /* ============================================================
    扩展模块（2026-11 功能批次）
    1) 磁盘缓存：整集分析优先读预生成结果（data 分支 <stem>.ai.json）
@@ -1317,7 +1403,7 @@ initPlayer();
    5) 学习计划：今日计划 + Anki 导出
    6) 跨集主题时间线：按关键字串起已缓存单集的主题
    ============================================================ */
-(function () {
+function initXai() {
   'use strict';
 
   var XAI_VERSION = 3;
@@ -2008,7 +2094,7 @@ initPlayer();
     wordCues: wordCues, attachWord: attachWordExtra,
     openDrill: openDrill, timelineSearch: timelineSearch, planStats: planStats
   };
-})();
+}
 /* 左右两栏底边对齐浮动 dock 顶边：dock 高度随内容变化，用实测值而不是固定值 */
 (function(){
   var root=document.documentElement, dock=document.querySelector('.dock');
@@ -2023,4 +2109,6 @@ initPlayer();
   window.addEventListener('resize',sync);
   if(window.ResizeObserver){ new ResizeObserver(sync).observe(dock); }
 })();
-})();
+export { addFeedFromPaste, addFeedFromUrl, applyAppearance, autoCleanup, autoDelay, autoDownloadNew, bindShell, closeModal, closeThemePop, defaultPlayEpisode, defaultPlayNextAuto, deleteOfflineQuiet, desktopNotify, importOpmlText, lazyLoadExternal, openAddFeed, openBuiltinImport, openModal, playEpisode, playNextAuto, queueHasEpisode, refreshSubscriptions, savePrefs, saveSleep, setAppearance, setContinueMode, setSleep, startAutoRefresh, startSleepTimer, syncAutoNextSwitch };
+export { initXai };
+registerLayer('10-desktop-bridge-tail', { addFeedFromPaste, addFeedFromUrl, applyAppearance, autoCleanup, autoDelay, autoDownloadNew, bindShell, closeModal, closeThemePop, defaultPlayEpisode, defaultPlayNextAuto, deleteOfflineQuiet, desktopNotify, importOpmlText, lazyLoadExternal, openAddFeed, openBuiltinImport, openModal, playEpisode, playNextAuto, queueHasEpisode, refreshSubscriptions, savePrefs, saveSleep, setAppearance, setContinueMode, setSleep, startAutoRefresh, startSleepTimer, syncAutoNextSwitch });

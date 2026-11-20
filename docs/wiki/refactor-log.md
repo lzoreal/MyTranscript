@@ -45,3 +45,18 @@
    桌面壳 12.3 s 重建后实测：首页进度 22:10 恢复、播放页字幕滚动与播放正常、发现页 14/14、
    返回首页迷你播放条继续走。
 11. **L1 补齐完成**（未提交）：11 个分片首行统一加 `/* layer: … */`（kernel / view / bridge），`scripts/player_js_deps.py` 重新生成 `docs/player-js-dependency-map.md`：11 分片 / 768 顶层声明 / 375 跨片引用；spec 状态改为 L0–L4 全部完成。
+12. **模块图替换拼接**（未提交）：`player.js` 成为显式入口，`00-runtime` / `00-layers` 收敛单例与运行时就绪注册表，01–10 改成带 import/export 的独立模块；`site/player.js` 只剩一行 import，`site/player-kernel.js` 删除，`build_player_js.py` 改为逐文件复制。实测启动无 boot error、23 集可开、单集起播、907 段 / 9,555 个词级时间点正常。
+13. **宿主 v2 贡献点落地**（未提交）：`data-plugin-slot` 锚点覆盖全部 11 个固定槽位，`applySlotMounts` 在渲染后装配，`applySettingsPanes` 按设置分区渲染；新增 `releaseSurfaces` / `pruneDetachedSurfaces`，停用、启动失败、软重载与页面重绘都能回收。`tests/host-contract.test.mjs` 增加挂载顺序、payload、异常隔离、停用回收与 API 快照断言；`tests/test_plugin_host.py` 锁定锚点表与固定槽位表一一对应。
+    - 冒烟（2026-11-20，本地 8808 + 无插件）：console 无 error，首页 4 张卡片，9 个锚点全部 `slotReady=1`，设置页可切到插件分区且空分区不占位，单集页 2 个动态锚点挂载成功。
+    - 过程事故：`applySettingsPanes` 的 `attachSurface(...)` 少一层括号，浏览器报 `Unexpected identifier 'count'`、整页不启动；`node --check` 被 PowerShell 的 `*> $null` 吞掉退出码没发现，改成逐文件显式检查后修好。教训：语法检查不能靠管道吞错误。
+14. **2.2：窄上下文 / 取消 / UI 适配独立**（未提交）：`HOST_API_VERSION` 升到 `2.2`；
+    `host/contract.js` 增加 `CONTEXT_PROFILES` / `SCOPED_API_FIELDS` / `PAYLOAD_VERSIONS`，
+    `host/context.js` 按贡献类型装配 `ctx` 并投影 `api`；`2.1` 清单继续走完整档案。
+    `host/faults.js` 的 `runPluginTask` 接 `signal`，`host/requests.js` 每次 `begin()` 换 `AbortController`；
+    `04` 用 `PLUGIN_ABORTS` 记账，停用/启动失败/页面销毁/槽位卸载/新搜索都会 abort。
+    菜单、导入器、搜索源、主题的 DOM 搬到 `host/ui-adapters.js`，`04` 只留实例与 port。
+    新增 `scripts/check_plugin_manifest.mjs`、`examples/plugins/search-echo/`、`tests/host-context.test.mjs`、
+    `tests/host-aborts.test.mjs`；测试宿主升级为同时模拟 `ctx` 与取消。
+    - 验证：39 个 `tests/test_*.py` 全绿；`check_layers.py` 14 分片 868 声明 / 413 跨片引用；
+      `build_player_js.py --check` 一致。真机点击验收仍待做。
+

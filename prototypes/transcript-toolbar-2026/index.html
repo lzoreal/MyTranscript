@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MyTranscript · 字幕页工具栏原型</title>
+<style>
+/* ============================================================
+   MyTranscript · transcript toolbar prototype
+   三套字幕页控制层级，用 ?variant=A / B / C 切换。
+   目标：主界面只露高频操作，其余按需出现。
+   ============================================================ */
+*{box-sizing:border-box}
+:root{
+  --bg:#f7f2e6;--paper:#fffaf0;--ink:#211d16;--muted:#6c6252;--dim:#8e8272;
+  --line:#ded3bf;--line2:#eee5d4;--accent:#a24f2a;--accent-soft:#f1dfd2;
+  --nav:#26221b;--navmuted:#bdb2a2;--green:#4f7660;
+  --serif:"Iowan Old Style","Palatino Linotype",Georgia,"Songti SC","Noto Serif SC",serif;
+  --sans:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  --mono:"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+  --ease:cubic-bezier(.22,.9,.25,1);
+}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden}
+button,input{font:inherit}
+button{cursor:pointer}
+button:active{filter:brightness(.94)}
+::selection{background:color-mix(in srgb,var(--accent) 24%,transparent)}
+.app{height:100%;min-height:0}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.icon{display:inline-grid;place-items:center;flex:0 0 auto}
+.icon svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.ghost{border:0;background:transparent;color:var(--muted);padding:7px 9px;border-radius:8px}
+.ghost:hover{color:var(--ink);background:color-mix(in srgb,var(--ink) 6%,transparent)}
+.ghost.dark{color:var(--navmuted)}
+.ghost.dark:hover{color:#fff;background:rgba(255,255,255,.08)}
+.ptype{font:700 9px/1.35 var(--mono);letter-spacing:.16em;color:var(--accent);text-transform:uppercase}
+.cover{width:42px;height:42px;flex:0 0 42px;border-radius:7px;background:
+  linear-gradient(145deg,#c16b43,#7d3522);display:grid;place-items:center;color:#fff8ee;
+  font:700 12px/1 var(--serif);letter-spacing:.04em;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)}
+.cover.big{width:52px;height:52px;flex-basis:52px}
+.title-copy{min-width:0}
+.title-copy strong{display:block;font-size:14px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.title-copy span{display:block;margin-top:3px;font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ---------- transcript ---------- */
+.lines{max-width:760px;margin:0 auto}
+.line{display:grid;grid-template-columns:46px minmax(0,1fr);gap:15px;padding:13px 0;border-bottom:1px solid color-mix(in srgb,var(--line) 72%,transparent);cursor:pointer;transition:background .18s,box-shadow .18s}
+.line:hover{background:color-mix(in srgb,var(--accent) 4%,transparent)}
+.line time{font:9.5px/1.4 var(--mono);color:var(--dim);padding-top:6px;letter-spacing:.03em}
+.line .en{margin:0;font-family:var(--serif);font-size:16.5px;line-height:1.64;font-weight:500;letter-spacing:-.005em}
+.line .zh{margin:4px 0 0;font-size:10.5px;line-height:1.62;color:var(--muted)}
+.line .w{display:inline}
+.line .w.cur{color:var(--accent);font-weight:700;-webkit-text-stroke:.2px currentColor}
+.line .w.vocab{text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;text-decoration-color:color-mix(in srgb,var(--accent) 70%,transparent)}
+.line.on{position:relative;padding:16px 18px 16px 18px;margin:2px -18px;border:0;border-radius:7px;background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent)}
+.line.on time{padding-top:8px;color:var(--accent)}
+.line.on .en{font-size:21px;line-height:1.55}
+.line.on .zh{font-size:11px;color:color-mix(in srgb,var(--ink) 64%,transparent)}
+
+/* ---------- overlays / sheets ---------- */
+.layer{position:fixed;inset:0;z-index:80;background:rgba(24,21,16,.26);display:flex;align-items:flex-end;justify-content:center;padding:20px 20px 18px;backdrop-filter:blur(3px)}
+.sheet{width:min(760px,calc(100vw - 32px));max-height:min(76vh,640px);overflow:auto;background:var(--paper);border:1px solid var(--line);border-radius:18px;box-shadow:0 28px 70px -24px rgba(40,30,18,.45)}
+.sheet-head{display:flex;align-items:center;gap:12px;padding:17px 20px 14px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--paper);z-index:1}
+.sheet-head h3{margin:0;font:400 22px/1.2 var(--serif);letter-spacing:-.4px}
+.sheet-head p{margin:3px 0 0;font-size:10px;color:var(--muted)}
+.sheet-head .spacer{flex:1}
+.sheet-body{padding:16px 20px 20px;display:grid;grid-template-columns:1fr 1fr;gap:18px 26px}
+.sheet-group h4{margin:0 0 8px;font:700 8.5px/1.4 var(--mono);letter-spacing:.14em;color:var(--accent)}
+.sheet-grid{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:7px;padding:8px 10px;font-size:10.5px;line-height:1.2}
+.chip:hover{color:var(--ink);border-color:color-mix(in srgb,var(--accent) 40%,var(--line));background:color-mix(in srgb,var(--accent) 6%,transparent)}
+.chip.on{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 48%,var(--line));background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.chip.primary{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.close{width:30px;height:30px;border:1px solid var(--line);border-radius:50%;background:transparent;color:var(--muted)}
+.close:hover{color:var(--ink);background:var(--bg)}
+
+/* ---------- A · Quiet Reader ---------- */
+.a-shell{height:100%;display:flex;flex-direction:column;background:var(--bg)}
+.a-top{height:62px;flex:0 0 62px;display:grid;grid-template-columns:120px minmax(0,1fr) 120px;align-items:center;padding:0 clamp(18px,4vw,48px);border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--bg) 88%,var(--paper))}
+.a-top .a-title{text-align:center;font:400 15px/1.25 var(--serif);letter-spacing:-.01em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.a-top .a-title em{font-style:normal;color:var(--accent);font-size:9px;font-family:var(--mono);letter-spacing:.12em;margin-left:8px}
+.a-top .a-right{justify-self:end}
+.a-main{flex:1;min-height:0;overflow:auto;padding:36px clamp(24px,7vw,98px) 155px}
+.a-article{max-width:760px;margin:0 auto}
+.a-kicker{margin-bottom:9px}
+.a-article h1{margin:0;font:400 clamp(32px,4.4vw,44px)/1.08 var(--serif);letter-spacing:-1.2px}
+.a-meta{margin:12px 0 26px;padding-bottom:16px;border-bottom:2px solid var(--ink);font-size:10px;color:var(--muted);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.a-meta b{color:var(--accent);font-weight:600}
+.edge-tab{position:fixed;top:50%;z-index:20;translate:0 -50%;border:1px solid var(--line);background:color-mix(in srgb,var(--bg) 86%,transparent);color:var(--muted);writing-mode:vertical-rl;padding:12px 7px;font:9px/1 var(--mono);letter-spacing:.14em;border-radius:7px;backdrop-filter:blur(12px)}
+.edge-tab:hover{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
+.edge-tab.left{left:9px}
+.edge-tab.right{right:9px}
+.a-dock{position:fixed;left:0;right:0;bottom:0;z-index:30;padding:9px clamp(18px,4vw,54px) 14px;background:color-mix(in srgb,var(--paper) 94%,transparent);border-top:1px solid var(--line);box-shadow:0 -20px 45px -32px rgba(45,34,20,.32);backdrop-filter:blur(18px)}
+.a-progress{display:grid;grid-template-columns:43px minmax(0,1fr) 43px;gap:9px;align-items:center;font:9px/1 var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.bar{height:4px;border-radius:9px;background:var(--line);overflow:hidden;position:relative}
+.bar i{display:block;height:100%;width:88%;background:var(--accent);border-radius:9px}
+.a-row{display:flex;align-items:center;gap:16px;margin-top:10px}
+.a-row .title-copy{flex:1}
+.a-transport{display:flex;align-items:center;gap:7px}
+.a-btn{height:33px;min-width:33px;border:1px solid var(--line);border-radius:50%;background:transparent;color:var(--muted);display:grid;place-items:center;padding:0 8px;font-size:10px;font-variant-numeric:tabular-nums}
+.a-btn:hover{color:var(--ink);border-color:var(--line);background:color-mix(in srgb,var(--accent) 5%,transparent)}
+.a-btn.wide{border-radius:999px;padding:0 10px;font:10px/1 var(--mono)}
+.a-btn.play{width:42px;height:42px;border:0;background:var(--ink);color:var(--paper);font-size:15px}
+.a-btn.play:hover{background:var(--accent);color:#fff}
+.a-btn.more{border-radius:50%;width:36px;height:36px;border-color:var(--line)}
+.a-row .title-copy strong{font-size:13px}
+.a-row .title-copy span{font-size:9.5px}
+.a-sheet-note{font-size:10px;color:var(--muted);line-height:1.65;margin:2px 0 0}
+.drawer{position:fixed;top:0;bottom:0;z-index:95;width:min(300px,84vw);background:var(--paper);border-color:var(--line);padding:64px 20px 24px;overflow:auto;box-shadow:0 22px 60px -26px rgba(35,25,15,.35)}
+.drawer.left{left:0;border-right:1px solid var(--line)}
+.drawer.right{right:0;border-left:1px solid var(--line)}
+.drawer h3{margin:0 0 12px;font:400 24px/1.15 var(--serif)}
+.drawer .drawer-close{position:absolute;right:16px;top:16px}
+.ep{display:flex;gap:11px;padding:10px 0;border-top:1px solid var(--line);cursor:pointer}
+.ep:hover{color:var(--accent)}
+.ep .num{width:20px;flex:0 0 20px;font:9px/1.4 var(--mono);color:var(--dim)}
+.ep strong{display:block;font-size:11px;line-height:1.35}
+.ep span{display:block;font-size:9px;color:var(--muted);margin-top:2px}
+.ep.on strong{color:var(--accent)}
+.note{margin:13px 0;padding:12px 0;border-top:1px solid var(--line);font-size:10px;line-height:1.7;color:var(--muted)}
+.note b{display:block;font-size:11px;color:var(--ink);margin-bottom:4px}
+
+/* ---------- B · Split Deck ---------- */
+.b-shell{height:100%;display:flex;flex-direction:column;background:var(--bg)}
+.b-top{height:58px;flex:0 0 58px;display:flex;align-items:center;gap:18px;padding:0 26px;border-bottom:1px solid var(--line);background:var(--paper)}
+.b-top .brand{font:700 12px/1 var(--sans);letter-spacing:-.2px;color:var(--ink);white-space:nowrap}
+.b-top .brand i{font-style:normal;color:var(--accent)}
+.b-top .b-title{min-width:0;flex:1;font:400 14px/1.2 var(--serif);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.b-top .b-title span{font:9px/1.2 var(--mono);letter-spacing:.1em;color:var(--muted);margin-left:8px}
+.b-body{flex:1;min-height:0;display:grid;grid-template-columns:194px minmax(0,1fr) 236px}
+.b-rail{min-height:0;overflow:auto;background:color-mix(in srgb,var(--paper) 56%,transparent)}
+.b-rail.left{border-right:1px solid var(--line);padding:26px 17px 20px}
+.b-rail.right{border-left:1px solid var(--line);padding:26px 18px 20px}
+.b-rail h2{margin:0 0 14px;font:400 25px/1.15 var(--serif);letter-spacing:-.6px}
+.b-rail .ptype{margin-bottom:7px}
+.b-article{min-width:0;overflow:auto;padding:31px 38px 165px}
+.b-article .head{max-width:700px;margin:0 auto}
+.b-article .head h1{margin:8px 0 9px;font:400 37px/1.08 var(--serif);letter-spacing:-1.1px}
+.b-article .head .byline{padding-bottom:15px;border-bottom:2px solid var(--ink);font-size:10px;color:var(--muted)}
+.b-article .lines{max-width:700px;margin:10px auto 0}
+.b-deck{flex:0 0 auto;background:color-mix(in srgb,var(--paper) 96%,transparent);border-top:1px solid var(--line);padding:9px 26px 14px;box-shadow:0 -20px 42px -34px rgba(45,34,20,.3)}
+.b-progress{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;gap:10px;align-items:center;font:9px/1 var(--mono);color:var(--muted)}
+.b-row{display:flex;align-items:center;gap:18px;margin-top:9px}
+.b-row .now{display:flex;gap:10px;align-items:center;min-width:0;flex:1}
+.b-group{display:flex;align-items:center;gap:4px;padding-left:14px;border-left:1px solid var(--line2)}
+.b-group .lab{font:700 7.5px/1 var(--mono);letter-spacing:.13em;color:var(--dim);margin-right:3px}
+.b-group .tbtn{height:30px;min-width:30px;padding:0 8px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--muted);font-size:10px}
+.b-group .tbtn:hover{color:var(--ink);background:color-mix(in srgb,var(--accent) 5%,transparent)}
+.b-group .tbtn.on{color:var(--accent);background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 28%,var(--line))}
+.b-group .tbtn.play{background:var(--ink);color:var(--paper);border-color:var(--ink);width:38px;height:38px;border-radius:50%}
+.b-group .tbtn.play:hover{background:var(--accent)}
+.b-row>.more{height:36px;width:36px;border-radius:50%;border:1px solid var(--line);background:transparent;color:var(--muted)}
+.b-row>.more:hover{color:var(--accent);border-color:var(--accent)}
+.b-tray{position:fixed;right:30px;bottom:116px;z-index:95;width:min(420px,calc(100vw - 30px));background:var(--paper);border:1px solid var(--line);border-radius:14px;box-shadow:0 24px 60px -28px rgba(40,30,18,.45);padding:15px 17px}
+.b-tray .tray-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.b-tray h4{margin:0;font:400 18px/1.2 var(--serif)}
+.b-tray .tray-grid{display:flex;flex-wrap:wrap;gap:6px}
+
+/* ---------- C · Focus Margin ---------- */
+.c-shell{height:100%;display:grid;grid-template-columns:minmax(0,1fr) 66px;grid-template-rows:58px minmax(0,1fr) 26px;background:var(--bg)}
+.c-top{grid-column:1/3;display:flex;align-items:center;gap:14px;padding:0 clamp(18px,4vw,52px);border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--bg) 90%,var(--paper))}
+.c-top .c-title{font:400 14px/1.2 var(--serif);min-width:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c-top .c-title em{font-style:normal;font:9px/1.2 var(--mono);letter-spacing:.1em;color:var(--accent);margin-left:8px}
+.c-main{grid-column:1;grid-row:2;overflow:auto;padding:36px clamp(24px,8vw,128px) 50px}
+.c-article{max-width:720px;margin:0 auto}
+.c-article .kicker{margin-bottom:8px}
+.c-article h1{margin:0 0 10px;font:400 clamp(32px,4.2vw,43px)/1.08 var(--serif);letter-spacing:-1.2px}
+.c-article .byline{padding-bottom:14px;border-bottom:1px solid var(--line);font-size:10px;color:var(--muted)}
+.c-article .lines{margin-top:12px}
+.c-margin{grid-column:2;grid-row:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;border-left:1px solid var(--line2);padding:10px 8px}
+.c-play{width:48px;height:48px;border:0;border-radius:50%;background:var(--ink);color:var(--paper);display:grid;place-items:center}
+.c-play:hover{background:var(--accent)}
+.c-mini{width:34px;height:34px;border:1px solid var(--line);border-radius:50%;background:transparent;color:var(--muted);display:grid;place-items:center;font:9px/1 var(--mono)}
+.c-mini:hover,.c-mini.on{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 50%,var(--line))}
+.c-progress{grid-column:1/3;grid-row:3;display:grid;grid-template-columns:46px minmax(0,1fr) 46px;gap:10px;align-items:center;padding:0 clamp(18px,4vw,52px);border-top:1px solid var(--line);background:var(--paper);font:8.5px/1 var(--mono);color:var(--muted)}
+.c-progress .bar{height:2px;background:var(--line2)}
+.c-progress .bar i{background:var(--accent)}
+.palette-layer{position:fixed;inset:0;z-index:85;background:rgba(30,25,18,.28);display:flex;align-items:flex-start;justify-content:center;padding:min(12vh,110px) 18px 20px;backdrop-filter:blur(4px)}
+.palette{width:min(640px,calc(100vw - 32px));max-height:min(72vh,620px);display:flex;flex-direction:column;background:var(--paper);border:1px solid var(--line);border-radius:18px;box-shadow:0 28px 80px -28px rgba(35,25,15,.5);overflow:hidden}
+.palette-head{padding:16px 18px 12px;border-bottom:1px solid var(--line)}
+.palette-head .kicker{font:700 8.5px/1.3 var(--mono);letter-spacing:.14em;color:var(--accent);margin-bottom:7px}
+.palette-search{width:100%;border:0;background:transparent;color:var(--ink);font:400 24px/1.2 var(--serif);outline:none;padding:0}
+.palette-search::placeholder{color:var(--dim)}
+.palette-list{overflow:auto;padding:8px 10px 14px}
+.palette-group{padding:8px 4px 4px}
+.palette-group h4{margin:0 6px 3px;font:700 8px/1.3 var(--mono);letter-spacing:.14em;color:var(--dim)}
+.cmd{display:flex;align-items:center;gap:12px;width:100%;border:0;background:transparent;color:var(--ink);text-align:left;padding:10px 10px;border-radius:8px}
+.cmd:hover,.cmd:focus-visible{background:var(--accent-soft);outline:none}
+.cmd .cico{width:20px;height:20px;display:grid;place-items:center;color:var(--accent)}
+.cmd .cico svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.cmd b{font-size:11.5px;font-weight:600}
+.cmd small{display:block;margin-top:2px;font-size:9.5px;color:var(--muted)}
+.cmd .key{margin-left:auto;font:8.5px/1 var(--mono);color:var(--dim);border:1px solid var(--line);padding:4px 5px;border-radius:4px}
+.palette-foot{padding:10px 18px;border-top:1px solid var(--line);font-size:9px;color:var(--muted);display:flex;gap:14px}
+
+/* ---------- switcher / toast ---------- */
+.proto-switch{position:fixed;left:50%;translate:-50% 0;bottom:18px;z-index:200;display:flex;align-items:center;gap:7px;background:#17140f;color:#f5eadb;border:1px solid rgba(255,255,255,.12);border-radius:999px;padding:5px 6px 5px 7px;box-shadow:0 12px 30px -12px rgba(0,0,0,.65);font:9px/1 var(--mono);letter-spacing:.04em}
+body[data-variant="A"] .proto-switch{bottom:126px}
+body[data-variant="B"] .proto-switch{bottom:132px}
+body[data-variant="C"] .proto-switch{bottom:46px}
+body[data-overlay="1"] .proto-switch{opacity:0;pointer-events:none}
+.proto-switch button{width:25px;height:25px;border:0;border-radius:50%;background:transparent;color:#f5eadb;display:grid;place-items:center;font-size:12px}
+.proto-switch button:hover{background:rgba(255,255,255,.1)}
+.proto-switch .label{min-width:128px;text-align:center;white-space:nowrap}
+.proto-switch .label b{color:#ffc39e;font-weight:600}
+.toast{position:fixed;left:50%;bottom:74px;translate:-50% 8px;z-index:210;background:#17140f;color:#f5eadb;border-radius:999px;padding:8px 14px;font-size:10px;opacity:0;pointer-events:none;transition:.2s var(--ease)}
+.toast.on{opacity:1;translate:-50% 0}
+@media(max-width:900px){
+  .b-body{grid-template-columns:150px minmax(0,1fr) 170px}
+  .sheet-body{grid-template-columns:1fr}
+  .a-row .title-copy{display:none}
+}
+@media(max-width:680px){
+  .b-body{grid-template-columns:1fr}
+  .b-rail{display:none}
+  .b-row{flex-wrap:wrap;gap:8px}
+  .b-row .now{display:none}
+  .b-group{padding-left:0;border-left:0;gap:2px}
+  .b-group .lab{display:none}
+  .b-group .tbtn{min-width:28px;padding:0 6px}
+  .b-row>.more{margin-left:auto}
+  .c-shell{grid-template-columns:minmax(0,1fr) 54px}
+  .a-top{grid-template-columns:80px minmax(0,1fr) 80px}
+  .a-row .cover{display:none}
+  .edge-tab{display:none}
+  .proto-switch .label{min-width:108px}
+}
+</style>
+</head>
+<body>
+<div id="app" class="app"></div>
+<div class="proto-switch" aria-label="原型切换">
+  <button data-act="switch" data-v="prev" aria-label="上一个原型">‹</button>
+  <span class="label" id="protoLabel"><b>A</b> · Quiet Reader</span>
+  <button data-act="switch" data-v="next" aria-label="下一个原型">›</button>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script>
+const ICON = {
+  back:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>',
+  more:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg>',
+  play:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.2c0-.9 1-1.4 1.7-.9l9 6.1c.7.5.7 1.5 0 2l-9 6.1c-.7.5-1.7 0-1.7-.9V5.2z"/></svg>',
+  pause:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="5" width="3.5" height="14" rx="1"/><rect x="14" y="5" width="3.5" height="14" rx="1"/></svg>',
+  prev:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5v14M18 6l-8 6 8 6z"/></svg>',
+  next:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 5v14M6 6l8 6-8 6z"/></svg>',
+  notes:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5zM8 8h8M8 12h8M8 16h5"/></svg>',
+  study:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM8 9h8M8 13h5"/></svg>',
+  float:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="11" rx="1"/><path d="M8 19h8"/></svg>',
+  sleep:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.2A8.4 8.4 0 0 1 8.8 4a8.4 8.4 0 1 0 11.2 11.2z"/></svg>',
+  bookmark:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v16l-6-4-6 4z"/></svg>',
+  info:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 11v5M12 8h.01"/></svg>',
+  share:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="18" cy="18" r="2"/><path d="M8 11l8-4M8 13l8 4"/></svg>',
+  speed:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15a8 8 0 1 1 16 0M12 12l4-4"/></svg>',
+  text:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M5 12h14M5 18h9"/></svg>',
+  check:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l4 4 10-10"/></svg>'
+};
+
+const EPISODES = [
+  'S4E1 · The First Room','S4E2 · A Very Good Bad Idea','S4E3 · The Long Table',
+  'S4E4 · Small Repairs','S4E5 · What We Kept','S4E6 · Happily Ever After…'
+];
+
+const LINES = [
+  {t:'41:58',en:'And then the waiter asked if we wanted to start with something to share.',zh:'然后服务员问我们要不要先点些东西一起分享。',curWord:8,vocab:['share']},
+  {t:'42:31',en:'I remember thinking, this is going to be a very long conversation.',zh:'我记得当时想：这会是一场很长的对话。',curWord:6,vocab:['conversation']},
+  {t:'42:54',en:'Not because it was difficult, but because it was easy to keep going.',zh:'不是因为难，而是因为很容易一直说下去。',curWord:5,vocab:[]},
+  {t:'43:18',en:'There was something about the way she listened that made me want to say more.',zh:'她听我说话的方式，让我想说更多。',curWord:5,vocab:['listened']},
+  {t:'43:46',en:'We stayed until the lights came up and the staff started stacking chairs.',zh:'我们一直待到灯亮起来，店员开始叠椅子。',curWord:7,vocab:['staff']},
+  {t:'44:12',en:'I don’t think either of us wanted to be the first one to leave.',zh:'我觉得我们俩都不想先走。',curWord:9,vocab:[]},
+  {t:'44:40',en:'So we ordered one more thing we did not need.',zh:'于是我们又点了一份根本不需要的东西。',curWord:7,vocab:['ordered']},
+  {t:'45:03',en:'And that is how a simple dinner became the whole evening.',zh:'一顿简单的晚饭就这样变成了整个晚上。',curWord:6,vocab:['evening']}
+];
+
+const state = {
+  variant: 'A', active: 3, playing: true, speed: '1.0×', speedIndex: 0,
+  zh: true, mode: '逐词', sheet: false, railL: false, railR: false, palette: false,
+  toastTimer: null
+};
+const SPEEDS = ['1.0×','1.25×','1.5×','2.0×'];
+const VNAMES = {A:'Quiet Reader',B:'Split Deck',C:'Focus Margin'};
+const ORDER = ['A','B','C'];
+
+function ico(name){ return `<span class="icon">${ICON[name]||ICON.more}</span>`; }
+function lineHTML(l,i){
+  const words = l.en.split(' ').map((w,j) => {
+    const base = w.replace(/[^A-Za-z'’-]/g,'').toLowerCase();
+    const cls = `w${i === state.active && j === l.curWord ? ' cur' : ''}${l.vocab.includes(base) ? ' vocab' : ''}`;
+    return `<span class="${cls}">${w}</span>`;
+  }).join(' ');
+  return `<article class="line${i === state.active ? ' on' : ''}" data-act="cue" data-i="${i}">
+    <time>${l.t}</time>
+    <div><p class="en">${words}</p>${state.zh ? `<p class="zh">${l.zh}</p>` : ''}</div>
+  </article>`;
+}
+function linesHTML(){ return `<div class="lines">${LINES.map(lineHTML).join('')}</div>`; }
+function epListHTML(){
+  return EPISODES.map((x,i)=>`<div class="ep${i === 5 ? ' on' : ''}" data-act="cue-ep" data-i="${i}">
+    <span class="num">${String(i+1).padStart(2,'0')}</span>
+    <div><strong>${x}</strong><span>${i===5?'正在播放 · 44:12':'已听完'}</span></div>
+  </div>`).join('');
+}
+function currentInfo(){
+  return `${state.playing ? '正在播放' : '已暂停'} · ${state.speed} · ${state.mode}${state.zh?' · 双语':''}`;
+}
+function sheetHTML(title, note){
+  const g = (label, items) => `<section class="sheet-group"><h4>${label}</h4><div class="sheet-grid">${items.map(([text,act,cls,msg])=>`<button class="chip ${cls||''}" data-act="${act||'toast'}" data-msg="${msg||text}">${text}</button>`).join('')}</div></section>`;
+  return `<div class="layer" data-act="close-sheet">
+    <div class="sheet" role="dialog" aria-modal="true" aria-label="${title}">
+      <div class="sheet-head">
+        <div><h3>${title}</h3><p>${note}</p></div><div class="spacer"></div>
+        <button class="close" data-act="close-sheet" aria-label="关闭">✕</button>
+      </div>
+      <div class="sheet-body">
+        ${g('阅读方式',[['逐词高亮', 'mode', 'on','逐词/逐句'],['双语字幕','zh','on','双语开关'],['字号','toast','','字号'],['沉浸模式','toast','','沉浸模式']])}
+        ${g('学习与收藏',[['AI 学英语','toast','primary','AI 学英语'],['收藏当前句','toast','','收藏当前句'],['分享当前句','toast','','分享当前句']])}
+        ${g('播放',[['上一集','prev','','上一集'],['下一集','next','','下一集'],['睡眠定时','toast','','睡眠定时'],['播放速度','speed','','播放速度']])}
+        ${g('窗口',[['悬浮窗文字稿','toast','','悬浮窗文字稿'],['单集信息','toast','','单集信息'],['章节列表','toast','','章节列表'],['复制文字稿','toast','','复制文字稿']])}
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ================= A · Quiet Reader ================= */
+function viewA(){
+  return `<div class="a-shell">
+    <header class="a-top">
+      <div><button class="ghost" data-act="toast" data-msg="返回主页">← 主页</button></div>
+      <div class="a-title">What We Kept <em>TRANSCRIPT</em></div>
+      <div class="a-right"><button class="ghost" data-act="open-sheet" aria-label="全部控制">⋯</button></div>
+    </header>
+    <main class="a-main">
+      <article class="a-article">
+        <div class="ptype a-kicker">HOW WE MADE YOUR MOTHER · S4E6</div>
+        <h1>What We Kept</h1>
+        <div class="a-meta"><b>${currentInfo()}</b><span>44:12 / 50:35</span><span>逐词双语</span><span>词级时间戳</span></div>
+        ${linesHTML()}
+      </article>
+    </main>
+    <button class="edge-tab left" data-act="rail" data-rail="l">剧集</button>
+    <button class="edge-tab right" data-act="rail" data-rail="r">笔记</button>
+    <footer class="a-dock">
+      <div class="a-progress"><span>44:12</span><div class="bar"><i></i></div><span>50:35</span></div>
+      <div class="a-row">
+        <div class="cover">S4</div>
+        <div class="title-copy"><strong>What We Kept</strong><span>HOW WE MADE YOUR MOTHER · S4E6</span></div>
+        <div class="a-transport">
+          <button class="a-btn wide" data-act="seek" data-d="-15">−15</button>
+          <button class="a-btn play" data-act="play" aria-label="${state.playing?'暂停':'播放'}">${state.playing?ico('pause'):ico('play')}</button>
+          <button class="a-btn wide" data-act="seek" data-d="30">+30</button>
+          <button class="a-btn wide" data-act="speed">${state.speed}</button>
+        </div>
+        <button class="a-btn more" data-act="open-sheet" aria-label="全部控制">${ico('more')}</button>
+      </div>
+    </footer>
+    ${state.railL ? `<div class="layer" data-act="close-rail"></div><aside class="drawer left"><button class="close drawer-close" data-act="close-rail">✕</button><div class="ptype">SERIES</div><h3>Season 4</h3>${epListHTML()}</aside>` : ''}
+    ${state.railR ? `<div class="layer" data-act="close-rail"></div><aside class="drawer right"><button class="close drawer-close" data-act="close-rail">✕</button><div class="ptype">MARGIN NOTES</div><h3>本集</h3><div class="note"><b>词根</b>decision ← de- + caedere（切开）。在 43:18 的句子里，它和“一起做决定”正好对应。</div><div class="note"><b>笔记</b>“选桌子”不是道具，是关系的第一次协商。可以回听 42:05–42:21。</div><div class="note"><b>接下来</b>Office Ladies · The One With the Morning After<br>1:08:12</div></aside>` : ''}
+    ${state.sheet ? sheetHTML('全部控制','主界面只保留播放与速度；其余按需出现。') : ''}
+  </div>`;
+}
+
+/* ================= B · Split Deck ================= */
+function viewB(){
+  return `<div class="b-shell">
+    <header class="b-top">
+      <button class="ghost" data-act="toast" data-msg="返回主页">←</button>
+      <div class="brand">MyTranscript <i>/</i></div>
+      <div class="b-title">What We Kept <span>TRANSCRIPT · S4E6</span></div>
+      <button class="ghost" data-act="open-sheet" aria-label="全部控制">${ico('more')}</button>
+    </header>
+    <div class="b-body">
+      <aside class="b-rail left"><div class="ptype">HOW WE MADE YOUR MOTHER</div><h2>Season 4</h2>${epListHTML()}</aside>
+      <main class="b-article">
+        <div class="head">
+          <div class="ptype">TRANSCRIPT · BILINGUAL</div>
+          <h1>What We Kept</h1>
+          <div class="byline">HOW WE MADE YOUR MOTHER · S4E6 · 44:12 / 50:35 · ${state.mode}${state.zh?' · 双语':''}</div>
+          ${linesHTML()}
+        </div>
+      </main>
+      <aside class="b-rail right"><div class="ptype">MARGIN NOTES</div><h2>本集</h2>
+        <div class="note"><b>现在</b>${currentInfo()}<br>44:12 / 50:35</div>
+        <div class="note"><b>词根</b>listen ← Old English hlysnan。划线词可悬停查看释义。</div>
+        <div class="note"><b>笔记</b>这一段的重点不是“吃饭”，是两个人如何延长一次告别。</div>
+        <div class="note"><b>接下来</b>Office Ladies · The One With the Morning After<br>1:08:12</div>
+      </aside>
+    </div>
+    <footer class="b-deck">
+      <div class="b-progress"><span>44:12</span><div class="bar"><i></i></div><span>50:35</span></div>
+      <div class="b-row">
+        <div class="now"><div class="cover">S4</div><div class="title-copy"><strong>What We Kept</strong><span>HOW WE MADE YOUR MOTHER · S4E6</span></div></div>
+        <div class="b-group"><span class="lab">PLAY</span>
+          <button class="tbtn" data-act="prev" aria-label="上一集">${ico('prev')}</button>
+          <button class="tbtn" data-act="seek" data-d="-15">−15</button>
+          <button class="tbtn play" data-act="play" aria-label="${state.playing?'暂停':'播放'}">${state.playing?ico('pause'):ico('play')}</button>
+          <button class="tbtn" data-act="seek" data-d="30">+30</button>
+          <button class="tbtn" data-act="next" aria-label="下一集">${ico('next')}</button>
+        </div>
+        <div class="b-group"><span class="lab">READ</span>
+          <button class="tbtn${state.mode==='逐词'?' on':''}" data-act="mode">逐词</button>
+          <button class="tbtn" data-act="speed">${state.speed}</button>
+          <button class="tbtn${state.zh?' on':''}" data-act="zh">双语</button>
+        </div>
+        <button class="more" data-act="open-sheet" aria-label="播放工具">${ico('more')}</button>
+      </div>
+    </footer>
+    ${state.sheet ? `<div class="layer" data-act="close-sheet"></div><div class="b-tray" role="dialog" aria-modal="true">
+      <div class="tray-head"><div><div class="ptype">TOOLS</div><h4>按需出现</h4></div><button class="close" data-act="close-sheet">✕</button></div>
+      <div class="tray-grid">
+        <button class="chip" data-act="toast" data-msg="AI 学英语">${ico('study')} AI 学英语</button>
+        <button class="chip" data-act="toast" data-msg="悬浮窗文字稿">${ico('float')} 悬浮窗</button>
+        <button class="chip" data-act="toast" data-msg="单集信息">${ico('info')} 单集信息</button>
+        <button class="chip" data-act="toast" data-msg="收藏当前句">${ico('bookmark')} 收藏句子</button>
+        <button class="chip" data-act="toast" data-msg="睡眠定时">${ico('sleep')} 睡眠定时</button>
+        <button class="chip" data-act="toast" data-msg="沉浸模式">${ico('text')} 沉浸</button>
+        <button class="chip" data-act="toast" data-msg="分享当前句">${ico('share')} 分享</button>
+        <button class="chip" data-act="toast" data-msg="字号与行距">${ico('text')} 字号</button>
+      </div>
+    </div>`:''}
+  </div>`;
+}
+
+/* ================= C · Focus Margin ================= */
+function commandGroups(){
+  const cmds = [
+    ['阅读','逐词 / 逐句','切换高亮粒度','mode',state.mode],
+    ['阅读','双语字幕','显示或隐藏中文','zh',state.zh?'开':'关'],
+    ['阅读','字号与行距','文字稿阅读设置','toast',null],
+    ['学习','AI 学英语','分析当前句或整集','toast',null],
+    ['学习','收藏当前句','加入本集笔记','toast',null],
+    ['窗口','悬浮窗文字稿','在其他应用上方显示','toast',null],
+    ['播放','上一集 / 下一集','切换队列','prev',null],
+    ['播放','睡眠定时','30 / 60 分钟或本集结束','toast',null],
+    ['播放','播放速度','当前 '+state.speed,'speed',null],
+    ['更多','单集信息与章节','封面、简介、章节','toast',null],
+    ['更多','分享当前句','复制带时间戳的句子','toast',null],
+    ['更多','复制整集文字稿','导出当前文字稿','toast',null]
+  ];
+  return cmds.map(([group,label,desc,act,val],idx)=>{
+    const key = ['⌘K','⏎','⌥','⌘',''][idx%5] || '⏎';
+    return `${idx===0?`<div class="palette-group"><h4>${group}</h4>`:''}${idx>0&&cmds[idx-1][0]!==group?`</div><div class="palette-group"><h4>${group}</h4>`:''}
+      <button class="cmd" data-act="${act}" data-msg="${desc}" data-search="${(label+' '+desc+' '+group).toLowerCase()}">
+        <span class="cico">${act==='mode'?ico('text'):act==='zh'?ico('check'):act==='speed'?ico('speed'):act==='prev'?ico('prev'):ico('more')}</span>
+        <span><b>${label}${val?` · ${val}`:''}</b><small>${desc}</small></span><span class="key">${key}</span>
+      </button>${group==='更多'&&idx===cmds.length-1?'</div>':''}`;
+  }).join('');
+}
+function viewC(){
+  return `<div class="c-shell">
+    <header class="c-top">
+      <button class="ghost" data-act="toast" data-msg="返回主页">←</button>
+      <div class="c-title">What We Kept <em>TRANSCRIPT</em></div>
+      <button class="ghost" data-act="open-palette" aria-label="命令面板">⌘</button>
+    </header>
+    <main class="c-main">
+      <article class="c-article">
+        <div class="ptype kicker">HOW WE MADE YOUR MOTHER · S4E6</div>
+        <h1>What We Kept</h1>
+        <div class="byline">44:12 / 50:35 · ${currentInfo()} · 点击任意句跳转</div>
+        ${linesHTML()}
+      </article>
+    </main>
+    <aside class="c-margin" aria-label="快捷控制">
+      <button class="c-play" data-act="play" aria-label="${state.playing?'暂停':'播放'}">${state.playing?ico('pause'):ico('play')}</button>
+      <button class="c-mini" data-act="speed" aria-label="播放速度">${state.speed}</button>
+      <button class="c-mini" data-act="toast" data-msg="AI 学英语" aria-label="AI 学英语">${ico('study')}</button>
+      <button class="c-mini${state.zh?' on':''}" data-act="zh" aria-label="双语字幕">${ico('text')}</button>
+      <button class="c-mini" data-act="open-palette" aria-label="全部命令">${ico('more')}</button>
+    </aside>
+    <div class="c-progress"><span>44:12</span><div class="bar"><i></i></div><span>50:35</span></div>
+    ${state.palette ? `<div class="palette-layer" data-act="close-palette">
+      <div class="palette" role="dialog" aria-modal="true" aria-label="命令面板">
+        <div class="palette-head"><div class="kicker">COMMANDS · ESC 关闭</div><input class="palette-search" id="paletteSearch" placeholder="搜索：字幕、AI、跳转…" autofocus></div>
+        <div class="palette-list" id="paletteList">${commandGroups()}</div>
+        <div class="palette-foot"><span>↑↓ 移动</span><span>Enter 执行</span><span>只在需要时打开</span></div>
+      </div>
+    </div>` : ''}
+  </div>`;
+}
+
+const VIEWS = {A:viewA,B:viewB,C:viewC};
+
+function updateLabel(){
+  const el = document.getElementById('protoLabel');
+  if (el) el.innerHTML = `<b>${state.variant}</b> · ${VNAMES[state.variant]}`;
+}
+function syncURL(){
+  const q = new URLSearchParams({variant: state.variant, page:'transcript'});
+  history.replaceState(null,'',location.pathname+'?'+q.toString());
+}
+function render(){
+  document.body.dataset.variant = state.variant;
+  document.body.dataset.overlay = (state.sheet || state.palette || state.railL || state.railR) ? '1' : '0';
+  document.getElementById('app').innerHTML = VIEWS[state.variant]();
+  updateLabel();
+  bindPaletteSearch();
+}
+function toast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('on');
+  clearTimeout(state.toastTimer);
+  state.toastTimer = setTimeout(()=>el.classList.remove('on'), 1800);
+}
+function cycleSpeed(){
+  state.speedIndex = (state.speedIndex + 1) % SPEEDS.length;
+  state.speed = SPEEDS[state.speedIndex];
+  render(); toast('播放速度：'+state.speed);
+}
+function move(delta){
+  state.active = Math.max(0, Math.min(LINES.length - 1, state.active + delta));
+  render();
+}
+function switchVariant(dir){
+  const i = ORDER.indexOf(state.variant);
+  state.variant = dir === 'prev' ? ORDER[(i - 1 + ORDER.length) % ORDER.length] : ORDER[(i + 1) % ORDER.length];
+  state.sheet = false; state.palette = false; state.railL = false; state.railR = false;
+  syncURL(); render();
+}
+function bindPaletteSearch(){
+  const input = document.getElementById('paletteSearch');
+  if (!input) return;
+  input.addEventListener('input', () => {
+    const q = input.value.trim().toLowerCase();
+    document.querySelectorAll('#paletteList .cmd').forEach(btn => {
+      btn.style.display = !q || btn.dataset.search.includes(q) ? '' : 'none';
+    });
+  });
+  input.focus();
+}
+document.addEventListener('click', e => {
+  const el = e.target.closest && e.target.closest('[data-act]');
+  if (!el) return;
+  const act = el.dataset.act;
+  if (act === 'switch') { switchVariant(el.dataset.v); return; }
+  if (act === 'play') { state.playing = !state.playing; render(); return; }
+  if (act === 'speed') { cycleSpeed(); return; }
+  if (act === 'mode') { state.mode = state.mode === '逐词' ? '逐句' : '逐词'; render(); toast('高亮模式：'+state.mode); return; }
+  if (act === 'zh') { state.zh = !state.zh; render(); return; }
+  if (act === 'prev') { move(-1); return; }
+  if (act === 'next') { move(1); return; }
+  if (act === 'seek') { toast((el.dataset.d>0?'前进 ':'后退 ') + Math.abs(el.dataset.d) + ' 秒'); return; }
+  if (act === 'cue' || act === 'cue-ep') { const i = Number(el.dataset.i); state.active = act === 'cue' ? i : Math.min(i, LINES.length-1); render(); return; }
+  if (act === 'open-sheet') { state.sheet = true; render(); return; }
+  if (act === 'close-sheet') { state.sheet = false; render(); return; }
+  if (act === 'open-palette') { state.palette = true; render(); return; }
+  if (act === 'close-palette') { state.palette = false; render(); return; }
+  if (act === 'rail') { if (el.dataset.rail === 'l') state.railL = !state.railL; else state.railR = !state.railR; render(); return; }
+  if (act === 'close-rail') { state.railL = false; state.railR = false; render(); return; }
+  if (act === 'toast') { state.sheet = false; state.palette = false; toast(el.dataset.msg || '已执行'); render(); return; }
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (state.sheet || state.palette || state.railL || state.railR) { state.sheet=false; state.palette=false; state.railL=false; state.railR=false; render(); return; }
+  }
+  const tag = (e.target && e.target.tagName) || '';
+  if (/INPUT|TEXTAREA/.test(tag) || (e.target && e.target.isContentEditable)) return;
+  if (e.key === 'ArrowLeft') switchVariant('prev');
+  if (e.key === 'ArrowRight') switchVariant('next');
+});
+(function init(){
+  const q = new URLSearchParams(location.search);
+  const v = (q.get('variant') || 'A').toUpperCase();
+  state.variant = ORDER.includes(v) ? v : 'A';
+  syncURL(); render();
+})();
+</script>
+</body>
+</html>

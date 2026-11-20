@@ -20,6 +20,10 @@
 | 12 | 学习数据与 SRS 迁到 study 插件（阶段一） | 已完成 |
 | 13 | 学习 AI 请求/播放控制迁到 study 插件（阶段三） | 已完成 |
 | 14 | 学习渲染迁到 study 插件（阶段二） | 代码完成，待实机验收 |
+| 15 | 2.2：按贡献类型收窄 ctx + payload 独立版本 | 代码完成，待实机验收 |
+| 16 | 2.2：AbortSignal 真取消 | 代码完成，待实机验收 |
+| 17 | 2.2：菜单/搜索/主题适配抽到独立 adapter | 代码完成，待实机验收 |
+| 18 | 清单校验 CLI + 模拟宿主 + 示例插件 | 已完成 |
 
 ## 1. 依赖与宿主测试
 
@@ -184,8 +188,12 @@ registerCoreProvider / coreProvider / releaseCoreProviders`，插件侧入口
 - `--check` 同时校验两个产物；`tests/test_player_build.py` 断言 import 头、kernel 导出、结尾收口，
   `tests/test_player.py` 断言页面用 `type="module"` 加载；
 - 已实测：重建 exe 后首页、播放页字幕/播放、设置页均正常。
-- 这一步只把“整包 + kernel”变成模块，01–10 仍共享同一模块作用域；再往下拆成每片独立模块
-  需要把跨片引用全部改成显式 import/export，尚未做。
+- 2026-11-20 完成第二步：`src/player-js/player.js` 成为显式入口，`00-runtime.js` 收敛共享单例，
+  01–10 全部改成带 import/export 的独立模块；`build_player_js.py` 改为逐文件复制到 `site/player/`，
+  `site/player.js` 只保留一行 `import './player/player.js';`，旧 `site/player-kernel.js` 删除。
+  跨片赋值改成 setter（`resetWordPanelForEpisode / replacePrefs / setSearchTab / setStudyAutoPause` 等），
+  `10` 的 XAI 改成 `initXai()` 由入口启动，避免模块循环 TDZ。实测启动无 boot error、23 集可打开、
+  单集可起播、907 段 / 9,555 个词级时间点正常加载。
 
 ## 7. 学习实现迁往插件（阶段一）
 
@@ -256,9 +264,79 @@ registerCoreProvider / coreProvider / releaseCoreProviders`，插件侧入口
 - 实机探针：打开学习面板 → `stop('study')` 后面板关闭、`body.dataset.studyPlugin` 消失 →
   `start('study')` 后再次打开正常，无未捕获异常。
 
-自动探针验收仍不代表用户手动确认；阶段二已随 `29e2a279` 提交，本轮生命周期修复待用户实测后提交。
+播放复位接缝（2026-11-20）：
+
+- 阶段二/三把循环、自动暂停、练习与生词上下文搬进插件后，宿主 `01` / `03` 仍在直写
+  `studyLoop` / `studyAutoPauseDone` / `studyExercise` / `studyVocabContext`；严格模式下切集
+  直接抛 `ReferenceError`，audio 还没拿到 `src` 就中断；
+- 插件 `runtime.js` 提供 `resetPlayback()`（清 loop + autoPauseDone）与原有 `resetAutoPause()`；
+  `ui.js` 提供 `resetStudyContext()`（清练习/生词上下文）；宿主 `08` 只加三个转发包装
+  `studyResetPlayback` / `studyResetAutoPause` / `studyResetContext`；
+- `01` 的 seek 与 cue 切换、`03` 的切集统一调用这些包装，任何宿主文件不再拥有或写入插件状态；
+- 回归锁：`tests/test_study_ui_lifecycle.py` 扫描宿主源码禁止裸写五个旧名字；
+  `tests/test_study_runtime.py` 验证 `resetPlayback` 确实取消循环且不误暂停。
+
+阶段二已随 `29e2a279`、生命周期与播放复位已随 `40926646` 提交并推送；自动探针只作辅助，
+最终以用户实际点击播放/切集为准。
+
+## 9. 2.2：窄上下文、真取消、UI 适配独立
+
+来自外部审视的四条优先项，按“先锁行为，再扩生态”的顺序做；不引入 Worker/iframe 隔离。
+
+### 9.1 按贡献类型收窄 ctx + payload 版本
+
+- `host/contract.js` 增加 `CONTEXT_PROFILES` / `SCOPED_API_FIELDS` / `PAYLOAD_VERSIONS` /
+  `PAYLOAD_KINDS`；`HOST_API_VERSION` 升到 `2.2`；
+- `host/context.js` 的 `createContributionContext()` 只挂该类型档案里的组，`api` 也按白名单投影：
+  菜单、搜索源、导入器不再拿到 `subtitles` / `study` / `storage`；
+- `ctx.payloadVersion` 与 `ctx.contextVersion` 对插件可见；槽位锚点可写 `data-slot-payload-version`，
+  搜索结果可用 `{ version, items }`，字符串 / 节点 / 数组继续接受；
+- **兼容层**：`apiVersion` 低于 2.2（含缺省）继续返回 2.1 的完整上下文，六个官方包与旧第三方插件零改动；
+- 测试：`tests/host-context.test.mjs`（python 入口 `tests/test_host_context.py`）覆盖每类档案、api 投影、
+  旧版完整档案与示例插件；`tests/host-contract.test.mjs` 增加“每种类型都有档案 / 每种 payload 都有版本”。
+
+### 9.2 AbortSignal 真取消
+
+- `host/faults.js`：`runPluginTask(task, { signal })` 把信号交给任务，abort 到达立刻结算，
+  返回 `AbortError`（`code: plugin_aborted`）；`createPluginFaultBoundary.run` 对取消不写诊断；
+- `host/requests.js`：每次 `begin()` 换一个 `AbortController` 并 abort 上一轮，`signal()` 交给搜索源，
+  `invalidate()` 同时清代次与信号；
+- `04` 增加 `PLUGIN_ABORTS` 与 `pluginAbortScope()`：贡献调用、页面渲染、槽位/设置挂载、命令执行、
+  setup 各有作用域；`stopPlugin` / `abortPluginStart` 先 abort 再回收，页面销毁与槽位卸载也会 abort；
+- `ctx.signal` 是插件唯一入口；不检查信号的插件仍会跑完，但结果会被代次/取消丢弃；
+- 测试：`tests/host-aborts.test.mjs`（python 入口 `tests/test_host_aborts.py`）覆盖新请求 abort 旧请求、
+  任务收到同一信号、已中止信号不执行、取消不写诊断、超时仍报错。
+
+### 9.3 UI 适配独立
+
+- 新增 `host/ui-adapters.js`：菜单、导入器、搜索源、主题的渲染、点击分发、主题样式注入与回收全在这里；
+  宿主只传 port（`registry` / `contributionRecord` / `runContribution` / `searchGate` / `storage` /
+  `preparePluginTheme` / `notify`）；
+- `04` 只留 `PLUGIN_EXTENSIONS` 实例、一次性 `bindEvents()` 与兼容旧调用点的薄包装；
+- 静态测试锁定：`themeGrid` / `pluginMenuPop` 不再出现在 04，搜索的 `signal` 必须传进 adapter 调用。
+
+### 9.4 校验器、模拟宿主、示例插件
+
+- `scripts/check_plugin_manifest.mjs`：单插件、`--set` 集合（依赖顺序）、`--legacy`、`--json`；
+- `tests/host/test-host.mjs` 升级为模拟宿主：按类型构造 `ctx`、每个挂载点一个 `AbortController`，
+  停用/卸载会 abort；
+- `examples/plugins/search-echo`：`apiVersion 2.2`，菜单 / 搜索源 / 槽位 / 主题各一个，
+  用 `ctx.signal` 与 `{ version, items }`；契约测试要求清单、实现键、测试宿主装配三者一致。
+
+### 9.5 仍未做
+
+- 隔离：插件仍在同一 JS 环境，权限与取消都是 API 层约束；要跑不可信第三方再上 Worker/iframe + RPC。
+- 2.2 的实际点击验收：需要装 `search-echo` 看菜单/搜索/槽位/主题，再停用一次确认取消不弹错误。
 
 ## 8. 测试
+
+- 槽位/设置贡献点已在真实宿主落地（2026-11-20）：11 个固定槽位各有一个 `data-plugin-slot` 锚点，
+  渲染后 `applySlotMounts` 装配，设置页按 pane 渲染；`releaseSurfaces` 在停用、启动失败与软重载时
+  先回收这些界面物，页面重绘留下的死锚点由 `pruneDetachedSurfaces` 摘掉。
+  `tests/host-contract.test.mjs` 增加槽位挂载顺序、payload、异常隔离、停用回收、设置 pane 过滤，
+  以及 2.1 公共 API 快照；`tests/test_plugin_host.py` 锁定锚点表 = 固定槽位表。
+- 冒烟（本地 8808，无插件）：console 无 error，首页 4 张卡片，9 个静态锚点 `slotReady=1`，
+  设置页插件分区为空且不占位，单集页 2 个动态锚点（`episode.header.actions` / `episode.body.before`）挂载成功。
 
 - `tests/test_plugin_host.py` 八组：依赖/能力规则（含内核归属回收）、API 主版本兼容、生命周期回收
   （逆序、幂等、抛错不中断、`dispose` 只跑一次、setup 失败清理）、授权三态、核心 Provider 栈、

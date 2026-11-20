@@ -1,5 +1,41 @@
+import { $, ASR_MODEL_DEFAULT, LIVE, audio, box, host, prefs, setState, state, tauriHost } from './00-runtime.js';
+import { alignZhLines, applyReader, clearProgress, closeDetails, closeDrawer, closeOverlays, closeTypeSheet, cuesFromJson, directAudioUrl, emptyLine, epKey, esc, findNorm, fmt, getJson, isJsonTranscript, onAudioError, openDetails, openDrawer, paint, parseFeed, progressAll, rawSeek, reader, rebuildCues, rememberOverlayTrigger, renderCueWindow, renderCues, restoreOverlayFocus, saveProgress, scrollCue, seekTo, setImmersive, setWallpaper, showToast, status, stopScroll, syncJumpPill, syncWallpaperPlay, toggleWallpaperPlay, transcriptMirror, updateTimeScale } from './01-theme-reader-shell.js';
+import { coreProvider, defineCoreProvider } from './02-live-caption-wasm.js';
+import { findSkipRange, liveDisable, skipUrlOf } from './03-native-asr-service-worker.js';
+import { loadShow, renderList, studyPluginOn, subtitlePluginOn } from './04-local-audio-plugin-host.js';
+import { motionEnter, motionLeave } from './11-motion.js';
+
+
+
+
+import { layerValue, lazyFn, registerLayer } from './00-layers.js';
+const feedKey = lazyFn('06-catalog-feeds-search', 'feedKey');
+const fetchFeedText = lazyFn('06-catalog-feeds-search', 'fetchFeedText');
+const memoryFeed = lazyFn('06-catalog-feeds-search', 'memoryFeed');
+const rememberFeed = lazyFn('06-catalog-feeds-search', 'rememberFeed');
+const TR = lazyFn('07-routes-pages', 'TR');
+const renderPage = lazyFn('07-routes-pages', 'renderPage');
+const renderSearch = lazyFn('07-routes-pages', 'renderSearch');
+const saveQueue = lazyFn('07-routes-pages', 'saveQueue');
+const syncTranslateSettings = lazyFn('07-routes-pages', 'syncTranslateSettings');
+const trSave = lazyFn('07-routes-pages', 'trSave');
+const bindWordStatusButtons = lazyFn('08-study-ai', 'bindWordStatusButtons');
+const closeStudySheet = lazyFn('08-study-ai', 'closeStudySheet');
+const openStudySheet = lazyFn('08-study-ai', 'openStudySheet');
+const wordStatusHTML = lazyFn('08-study-ai', 'wordStatusHTML');
+const stepEpisode = lazyFn('09-player-integration', 'stepEpisode');
+const syncMini = lazyFn('09-player-integration', 'syncMini');
+const autoCleanup = lazyFn('10-desktop-bridge-tail', 'autoCleanup');
+const closeModal = lazyFn('10-desktop-bridge-tail', 'closeModal');
+const desktopNotify = lazyFn('10-desktop-bridge-tail', 'desktopNotify');
+const openModal = lazyFn('10-desktop-bridge-tail', 'openModal');
+const playEpisode = lazyFn('10-desktop-bridge-tail', 'playEpisode');
+const playNextAuto = lazyFn('10-desktop-bridge-tail', 'playNextAuto');
+const savePrefs = lazyFn('10-desktop-bridge-tail', 'savePrefs');
+const setSleep = lazyFn('10-desktop-bridge-tail', 'setSleep');
 /* layer: view —— transport、进度、文字稿交互、章节、离线与模型管理
    本片只做该层的事，跨层调用走 kernel / host() / setState。 */
+
 /* transport */
 $('play').onclick = () => {
   if (!state.current) { openDrawer(); return; }
@@ -606,19 +642,19 @@ function runFind(query) {
 function openFind() {
   if (!subtitlePluginOn()) { showToast('字幕插件未启用，本集搜索不可用。', 'warn'); return; }
   if (!state.cues.length) { showToast('这集还没有文字稿。'); return; }
-  findBar.hidden = false; findBar.classList.add('on');
+  motionEnter(findBar);
   findInput.value = '';
   clearFindMarks();
   findInput.focus();
 }
 function closeFind() {
-  findBar.classList.remove('on'); findBar.hidden = true;
+  motionLeave(findBar);
   clearFindMarks();
   try { getSelection().removeAllRanges(); } catch (e) {}
 }
 
 function hideSelTools() {
-  selTools.classList.remove('on'); selTools.hidden = true;
+  motionLeave(selTools);
   selCueIdx = -1; selText = '';
 }
 
@@ -702,8 +738,8 @@ document.addEventListener('mouseup', e => {
     const rect = range ? range.getBoundingClientRect() : null;
     if (!rect || (!rect.width && !rect.height)) { hideSelTools(); return; }
     selCueIdx = hit.ci; selText = hit.text;
-    selTools.hidden = false; selTools.classList.add('on');
     placeSelTools(rect);
+    motionEnter(selTools);
   }, 0);
 }, true);
 
@@ -1608,8 +1644,6 @@ const app = {
   auto: { ...AUTO_DEFAULTS }, favorites: new Set(), played: {}, inbox: [], seen: {}, showPrefs: {},
   downloading: new Set(), transcriptDownloads: new Set(), autoTimer: 0, refreshBusy: false, epFilter: 'all', local: [],
 };
-const ASR_MODEL_DEFAULT = 'en-mini';
-let prefs = { speed: 1, autoNext: false, remember: true, liveLead: LIVE_LEAD_DEFAULT, liveMse: false, volume: 1, volumeCap: 1, muted: false, asrModel: ASR_MODEL_DEFAULT, queueOrder: 'sequential', skipAds: false, skipLevel: 2, skipSilence: false, loudness: false, skipChapterAds: false, modules: { discover: true, search: true, local: true, inbox: true, queue: true, history: true, stats: true, favorites: true, bookmarks: true, notes: true, listening: true, video: true, transcript: true, liveAsr: true, translate: true, floatWindow: true, chapters: true, offline: true, exportShare: true, study: true } };
 const PAGE_NAMES = {
   home: '首页', library: '播客库', local: '本地文件', downloads: '下载管理', video: '视频播放', discover: '发现', search: '搜索', podcast: '节目详情',
   episode: '单集详情', player: '播放器', inbox: '收件箱', queue: '播放队列', history: '收听历史',
@@ -1622,9 +1656,10 @@ const SIDEBAR_META = {
   inbox: ['◫', '收件箱'], queue: ['☷', '播放队列'], history: ['◷', '收听历史'], stats: ['▥', '统计与回顾'],
   favorites: ['★', '收藏'], bookmarks: ['☆', '书签'], notes: ['▤', '笔记'], listening: ['♫', '收听模式'], settings: ['⚙', '设置'],
 };
+/* 内置色板只剩四个：档案/墨绿/酒红/青瓷/雾白已撤掉（老存档由 01 的 REMOVED_THEME_FALLBACK 迁走），
+   视觉主题改成随包的七套自定义主题卡，不再占内置色板位。 */
 const THEME_NAMES = {
-  brass: '档案', midnight: '午夜蓝', forest: '墨绿', oxblood: '酒红',
-  celadon: '青瓷', paper: '纸张', mist: '雾白', prototype: '原型', ledger: '编辑部',
+  midnight: '午夜蓝', paper: '纸张', prototype: '原型', ledger: '编辑部',
 };
 
 function readJSON(key, fallback) {
@@ -1739,7 +1774,7 @@ async function indexAllShows() {
   if (status) status.textContent = '索引完成：' + ok + ' / ' + total + ' 集';
   showToast('全部索引完成：' + ok + ' / ' + total + ' 集。', 8000);
   syncIndexCount();
-  if (searchTab === 'library') renderSearch($('searchInput')?.value || '');
+  if (layerValue('07-routes-pages', 'searchTab') === 'library') renderSearch($('searchInput')?.value || '');
 }
 async function indexCurrentShow() {
   const show = state.show;
@@ -1760,7 +1795,7 @@ async function indexCurrentShow() {
   }
   showToast('索引完成：' + ok + ' / ' + episodes.length + ' 集。', 6000);
   syncIndexCount();
-  if (searchTab === 'library') renderSearch($('searchInput')?.value || '');
+  if (layerValue('07-routes-pages', 'searchTab') === 'library') renderSearch($('searchInput')?.value || '');
 }
 function syncIndexCount() {
   idxCount().then(count => { const el = $('idxCount'); if (el) el.textContent = String(count); });
@@ -2069,4 +2104,5 @@ function renderAfterStateChange() {
   renderPage(r.page, r);
   syncMini();
 }
-
+export { AUTO_DEFAULTS, AUTO_KEY, BOOKMARK_KEY, DL_META_KEY, DOCK_RATES, FAV_KEY, IDLE_TICK_MS, IDX_DB, IDX_STORE, INBOX_KEY, LOCAL_KEY, MODULE_ROUTES, NOTE_KEY, PAGE_NAMES, PLAYED_KEY, PLAYLIST_KEY, PLAY_TICK_MS, PREFS_KEY, QUEUE_KEY, SEEN_KEY, SHOWPREFS_KEY, SIDEBAR_BOTTOM, SIDEBAR_META, SIDEBAR_TOP, SUBS_KEY, THEME_NAMES, absoluteFeed, absoluteUrl, addInboxItem, addToPlaylist, addToPlaylistDialog, alignToCue, app, applyLoudness, applyModules, applyRate, applySidebarCustomization, applySkipRules, applyVolume, asrModelName, bindModuleSwitches, buffering, canAnalyseAudio, cancelAsrModel, cardFor, cardLink, catalogLatest, clampFrame, cleanFeedTitle, cleanWord, cleanWordCache, clearFindMarks, closeDockSheet, closeFind, closeWordPanel, copyPlain, defaultDownloadEpisode, defaultPlaylist, desiredPlayTick, dockSheet, dockToolsBtn, downloadEpisode, downloadInfo, downloadMetaStore, downloadsHTML, endFrameDrag, endSeekPreview, ensureAudioGraph, epStatusBadges, episodeFilterMatch, episodeRef, episodesOf, extSlug, externalShow, fetchTextAny, findAt, findBar, findBuiltinByFeed, findCount, findHits, findInput, findPlaylist, firstShowKey, fmtBytes, fmtDuration, formatDate, frameDrag, frameEl, frameMoved, framePos, hash32, hideSelTools, hostOf, idxClear, idxCount, idxDb, idxDbPromise, idxGet, idxGetAll, idxPut, importAsrModel, inboxCount, inboxRemove, indexAllShows, indexCurrentEpisode, indexCurrentShow, indexEpisode, installAsrModel, isFavorite, isPlayed, isSubscribed, jumpCue, loadChapters, localAsrModelId, localShowRecord, lookupWord, markCurrentPlayed, modeSegEl, moduleOn, navigate, normalizeFeedUrl, normalizeSidebarPrefs, offlineEntries, offlineKeyFor, offlineKeyOf, offlineLabel, onFrameMove, openAsrDir, openDockSheet, openFind, paintAsrSoon, parseRoute, pickAsrModel, pickedCue, pillRAF, placeFrame, placeSelTools, plainText, playOffline, playPlaylist, playTick, playTickMs, queueJumpPill, rateSegEl, readAllProgress, readJSON, readTranscriptDoc, refreshAsrModels, refreshOffline, refreshShows, rememberDownloadMeta, removalLeavesCurrentShow, removeAsrModel, removeOffline, removePlaylist, renderAfterStateChange, renderAsrModels, renderChapters, renderDownloads, renderLocalAsrModelHint, renderOfflineList, renderPlaylists, resolveOfflineRef, returnToCue, routeHash, routeModuleAllows, runFind, saveFavorites, saveInbox, saveOfflineTranscript, savePlayed, savePlaylists, saveSeen, saveShowPrefs, saveSubs, seekBy, seekChapter, seekDur, seekPreviewAt, seekTip, selCueIdx, selText, selTools, setAlignMode, setBuffering, setNodeVisible, setPlayed, setReadMode, setShowPref, showByKey, showFindAt, showForOfflineKey, showPrefFor, sidebarOrder, skipSilenceTick, sleepSegEl, startPlayTick, stopPlayTick, subscribeRecord, subscribeShow, syncChapterNow, syncDockBadge, syncDockLang, syncDockSleep, syncIndexCount, syncRateSeg, syncShowSelect, syncVolUI, toggleAlignMode, toggleChapterSheet, toggleFavorite, toggleMute, toggleStudySheet, trackEl, unsubscribeKey, webAudioGraph, whenIdle, wordCache, wordCurrent, wordCurrentMeaning, wordSeq, writeJSON };
+registerLayer('05-transport-transcript-nav', { AUTO_DEFAULTS, AUTO_KEY, BOOKMARK_KEY, DL_META_KEY, DOCK_RATES, FAV_KEY, IDLE_TICK_MS, IDX_DB, IDX_STORE, INBOX_KEY, LOCAL_KEY, MODULE_ROUTES, NOTE_KEY, PAGE_NAMES, PLAYED_KEY, PLAYLIST_KEY, PLAY_TICK_MS, PREFS_KEY, QUEUE_KEY, SEEN_KEY, SHOWPREFS_KEY, SIDEBAR_BOTTOM, SIDEBAR_META, SIDEBAR_TOP, SUBS_KEY, THEME_NAMES, absoluteFeed, absoluteUrl, addInboxItem, addToPlaylist, addToPlaylistDialog, alignToCue, app, applyLoudness, applyModules, applyRate, applySidebarCustomization, applySkipRules, applyVolume, asrModelName, bindModuleSwitches, buffering, canAnalyseAudio, cancelAsrModel, cardFor, cardLink, catalogLatest, clampFrame, cleanFeedTitle, cleanWord, cleanWordCache, clearFindMarks, closeDockSheet, closeFind, closeWordPanel, copyPlain, defaultDownloadEpisode, defaultPlaylist, desiredPlayTick, dockSheet, dockToolsBtn, downloadEpisode, downloadInfo, downloadMetaStore, downloadsHTML, endFrameDrag, endSeekPreview, ensureAudioGraph, epStatusBadges, episodeFilterMatch, episodeRef, episodesOf, extSlug, externalShow, fetchTextAny, findAt, findBar, findBuiltinByFeed, findCount, findHits, findInput, findPlaylist, firstShowKey, fmtBytes, fmtDuration, formatDate, frameDrag, frameEl, frameMoved, framePos, hash32, hideSelTools, hostOf, idxClear, idxCount, idxDb, idxDbPromise, idxGet, idxGetAll, idxPut, importAsrModel, inboxCount, inboxRemove, indexAllShows, indexCurrentEpisode, indexCurrentShow, indexEpisode, installAsrModel, isFavorite, isPlayed, isSubscribed, jumpCue, loadChapters, localAsrModelId, localShowRecord, lookupWord, markCurrentPlayed, modeSegEl, moduleOn, navigate, normalizeFeedUrl, normalizeSidebarPrefs, offlineEntries, offlineKeyFor, offlineKeyOf, offlineLabel, onFrameMove, openAsrDir, openDockSheet, openFind, paintAsrSoon, parseRoute, pickAsrModel, pickedCue, pillRAF, placeFrame, placeSelTools, plainText, playOffline, playPlaylist, playTick, playTickMs, queueJumpPill, rateSegEl, readAllProgress, readJSON, readTranscriptDoc, refreshAsrModels, refreshOffline, refreshShows, rememberDownloadMeta, removalLeavesCurrentShow, removeAsrModel, removeOffline, removePlaylist, renderAfterStateChange, renderAsrModels, renderChapters, renderDownloads, renderLocalAsrModelHint, renderOfflineList, renderPlaylists, resolveOfflineRef, returnToCue, routeHash, routeModuleAllows, runFind, saveFavorites, saveInbox, saveOfflineTranscript, savePlayed, savePlaylists, saveSeen, saveShowPrefs, saveSubs, seekBy, seekChapter, seekDur, seekPreviewAt, seekTip, selCueIdx, selText, selTools, setAlignMode, setBuffering, setNodeVisible, setPlayed, setReadMode, setShowPref, showByKey, showFindAt, showForOfflineKey, showPrefFor, sidebarOrder, skipSilenceTick, sleepSegEl, startPlayTick, stopPlayTick, subscribeRecord, subscribeShow, syncChapterNow, syncDockBadge, syncDockLang, syncDockSleep, syncIndexCount, syncRateSeg, syncShowSelect, syncVolUI, toggleAlignMode, toggleChapterSheet, toggleFavorite, toggleMute, toggleStudySheet, trackEl, unsubscribeKey, webAudioGraph, whenIdle, wordCache, wordCurrent, wordCurrentMeaning, wordSeq, writeJSON });
