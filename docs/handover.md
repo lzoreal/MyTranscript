@@ -1053,6 +1053,8 @@ P2：
   站外 feed 里 enclosure/media 类型或后缀命中的单集也会拿到 `videoUrl`，单集页多一个「▶ 视频」按钮。
 - 视频页现在按集记住位置（`myt-video-progress:<epId>`），重开从上次位置继续；如果这一集已经
   加载过文字稿，播放时会在画面上叠一句当前字幕（`#videoCues`），本地视频本来就没有文字稿，所以不显示。
+  站外视频集另有「边看边转写」：画面走同源代理、音频进 AudioWorklet 喂本机模型，字幕实时叠在画面上，
+  细节见下文「视频边看边转写」。
   主播放键「▶ 播放单集」仍然走音频链路（`defaultPlayEpisode` 不检查 `videoUrl`），要看画面必须点
   「▶ 视频」。
 
@@ -1097,6 +1099,87 @@ img/href）与 `alternates`（`podcast:alternateEnclosure` + `podcast:source@uri
 下载侧接了这个能力：视频集整集下载前会弹一次确认（「常见几百 MB」），下载页里视频行带
 「视频」徽标和「只取音频轨」按钮（`downloads` 插件 `decorateVideoRows` → `media_extract_audio`），
 输出落在 `clips/`，原视频不动。
+
+## 视频边看边转写（2026-11-21）
+
+站外视频集（如 Talking Cars）的 mp4 没有 CORS 头，`<video>` 直连时拿不到干净音频，
+所以画面改走本进程的同源代理，音频再从元素旁路进 AudioWorklet，喂本机 sherpa 流式识别：
+
+- Rust `media_proxy.rs` 注册自定义协议 `mytmedia`，地址形如
+  `http://mytmedia.localhost/?u=<percent-encoded 远端 url>`；GET/HEAD/OPTIONS，
+  Range 单次最多 8MB，回 206 + `Content-Range` + `Accept-Ranges` + `Access-Control-Allow-Origin: *`；
+  URL 的 sha256 前 16 字节 hex 当缓存名，落 `<应用数据>/media-cache/<key>.mp4.bin`（命中缓存就直发切片）。
+  libsyn 的 HEAD 不给长度，`probe()` 先 HEAD，拿不到再 `Range: bytes=0-0` 从 `Content-Range` 反推总长。
+- 前端 `mytMediaUrl()` 生成代理地址，`renderVideo()` 的优先级是 本地 asset > 代理 > 直连；
+  `error` 时如果正在用代理会自动切回直连并提示「这一集没有字幕」。
+- `site/asr-worklet.js` 把任意采样率降到 16k（`ratio = round(sampleRate/16000)`），攒 1024 个样本
+  发一批，支持 `{type:'mute'}` 静音；AudioContext **必须在真实点击的激活窗口里建**（`kickVideoAudio`
+  挂在 `pointerdown`），否则 Chromium 给的是 suspended ctx，接上 MediaElementSource 后元素会卡在 waiting。
+- 音频旁路优先用 `video.captureStream()` + `createMediaStreamSource`（只旁听，不动输出通路，播不卡），
+  拿不到流才退回 `createMediaElementSource` + `connect(ctx.destination)`。
+- 时间轴按「**这一批开始喂时的 currentTime**」做锚点（`VIDEO_ASR.seg.base`），不累加喂入秒数，
+  暂停/缓冲都不会把时间轴拖歪；`play` 取消静音、`pause` 静音，倍速 >1.01 直接停喂并提示「回到 1× 自动继续」；
+  `seeking` 会 `asrReset` 重锚。
+- 叠层只显示最近约 10 秒的窗口（`videoLiveText`），否则在线模型一整段越积越长会糊住画面。
+- 视频页的状态行显示的是「播到」播放器时间（`currentTime`），不再显示累计喂入秒数。
+- 站外视频集只在内存里记着会丢，`myt-video-ep` 落一份持久记录，重开/刷新还能直接回到这一集。
+
+真机实测（Talking Cars · 2026 LA Auto Show，debug 壳）：代理命中后画面正常播放；1× 下字幕逐句滚动、
+状态行与播放器时间一致；暂停后画面与时间停住、字幕停在上一句；拖进度条落到 4:02 后重锚继续识别；
+切 1.5× 立刻提示「倍速播放时暂停转写」，回 1× 自动接上；重开应用回到 6:25 续播。
+
+### 宿主旁路解码（2026-11-21 追加，网页只管画面）
+
+网页抽流那条路依赖 `captureStream`，Chromium 上不稳（有时拿不到流、倍速还得停喂）。
+因此改成：**画面仍旧交给网页 `<video>`，音频由 Rust 侧自己解**——`video_asr.rs` 直接读缓存文件里的 mp4
+音轨，解成 PCM 喂本机 sherpa，与播放进度解耦，于是「先转完再边播边对时间」就成立了。
+
+- 命令：`video_asr_start(url, model_dir, threads)` / `video_asr_poll(sid, since)` /
+  `video_asr_cancel` / `video_asr_close`。前端 `LIVE_HOST` 里同名四个，`VASR` 对象持有会话与词表；
+  `play` 事件**优先**走宿主（成功就 `videoAsrMute(true)` 关掉元素声音通路），失败才回退网页抽流；
+  `stage==='error'` 时自动回退网页抽流并在状态行说明。
+- `prepare_file`：复用代理已下载的前缀（复制成 `<key>.mp4.asr.bin`，两种读互不打扰）、
+  `meta_for` 拿总长、再抢最后 8MB（`fetch_tail`）。mp4 的 `moov` 在尾部时，symphonia 的 probe 会 seek 到
+  `total-64KB`，没有这段尾巴会当场卡住；`GrowingFile` 读到未下载位置就等 30ms（上限 180s），
+  末尾那段直接由 tail 缓冲供给。
+- **`Seek` 只记逻辑位置**，真正的等待交给 `read`：早先版本在 `SeekFrom::Current` 重试时反复位移，
+  把自己挪到几十 GB，然后一直等下载追上来。
+- **音轨按「能建解码器」判定**，不要求 `sample_rate`/`channels` 齐全：书里这类 mp4 的
+  `get_codecs().make()` 才拿得到真实参数（实测 `audio track id=1 rate=48000`）；
+  原来按字段筛会误报「这个视频没有可解码的音轨」。
+- 解码：多声道平均 downmix + 线性插值到 16k（跨 packet 留缓冲），每满 1 秒（16000 样本）喂一次
+  `Asr::feed`，随后 `result()` 解出 `tokens/timestamps`。
+- 时间戳：sherpa 的 `timestamps` 是**相对当前段**的，模型内部断段后从 0 重算；`decode_into` 里
+  维护 `seg_base`（当前段绝对起点）、`last_first`、`committed`（已固化段）与 `seg_abs`，
+  首词时间回退 0.02s 以上即视为断段 → 固化上一段、`seg_base = fed - first`；
+  `drain()` 收尾同样处理。不做这一步，前面的词会被当成后面的位置，同一句话在 2:00 与 10:00 各出现一次。
+- 排查日志 `videoasr.log` 只在 `MYT_ASR_DEBUG=1` 下写（`dlog`），平时不刷盘。
+- 缓存文件：`media-cache/<key>.mp4.bin`（代理用）、`<key>.mp4.asr.bin`（旁路解码用）、
+  `<key>.mp4.json`（总长等元信息）。`.asr.bin` 目前不随会话结束删除。
+
+真机实测（同一集，20:58–21:08）：解码 30:52 的音频约 2.5 分钟墙钟，远快于播放；
+状态行从「下载 100%」切到「完成 30:52」；词表 11034 个 token、时间单调、跨 15s–1845s，
+8 词重复只在 15 处且都是口语里真重复的短语；暂停在 2:00 / 拖到 10:00 / 20:00 三处叠层文本各不相同，
+随播放推进逐句替换。`MYT_ASR_DEBUG` 日志里 `segment reset at {sec}s` 可用于确认断段是否真的发生
+（这一集全程没有触发，说明模型给的是全局时间；保留该守卫是为了长视频/别的模型）。
+
+### 离开视频页（2026-11-21 追加）
+
+原来从视频页点「← 返回」或走侧栏回主页，画面看不见了、声音还在放，而且**没有任何入口能回到视频页**。
+现在两件事一起补：
+
+- `applyRouteNow` 里记着 `app.lastPage`：从 `video` 切去别的页面就调 `leaveVideoPage()`——
+  `video.pause()` + `stopVideoAsr()`（内含 `sideReset()`），进度已由 `timeupdate` 每 2 秒写进
+  `myt-video-progress:<id>`，回来自动「从 hh:mm 继续」。
+- 首页「继续收听」里补一张视频卡（`data-video-resume`，显示「看到 m:ss / 总长」+ 进度条），
+  点整张卡或其 ▶ 都回视频页。**首页现在由内置插件 `home` 渲染**（`page:home` 贡献点，`renderHome`
+  根本不会被调用），所以卡不能塞在 `renderHome` 里：`renderPage` 走 `renderV2Page` 的分支里，
+  home 页会再调一次 `appendHomeVideoCard()`（并补一个 `setTimeout(...,0)` 兜住异步渲染），
+  只往 `#homeContinue` 末尾插一张、已存在就跳过。`renderHome` 那条老路径也保留同样的卡。
+- 点击入口登记在 `10-desktop-bridge-tail.js` 的委托选择器里（`[data-video-resume]` → `navigate('video')`）。
+
+真机实测（21:46）：视频播到 11:37 → 回主页，视频 `paused=true`、旁路 `stage` 清空、首页出现
+「2026 LA Auto Show · 看到 11:37 / 30:53」卡片；点卡片回到 `/video` 并「从 11:37 继续」。
 
 ## 大模型问答（2026-11-21）
 
@@ -1380,6 +1463,17 @@ model / endpoint 存在 study 引擎设置里，宿主读 `studyEngine().setting
   `lazyFn` 版 `readJSON` 会返回 `undefined`，被 normalize 成“没有配置”——结果自定义主题重启后永远不生效。
   现在改成 `queueMicrotask(bootCustomTheme)`（种包 + 应用）压到微任务，等 registry 齐了再读。
   以后任何「启动就要读别的层的 localStorage」的代码都别写在各层顶层。
+- 首帧闪主题：原因是**主题全在模块里才套**——
+  `player.html` 只有 `<link rel="stylesheet" href="player.css">`（`:root` 是 midnight 的默认色），
+  `data-theme` 与自定义主题的 `#ctStyle` 都要等 `01` 的微任务跑完才落地，于是第一帧先把默认深色画出来、
+  再“啪”地换成液态玻璃。修法是 `player.html` 的 `<head>` 里加一段**内联同步脚本**（在 CSS 之后、body 之前）：
+  读 `myt-theme`（含 `REMOVED_THEME_FALLBACK` 与 `prototype → ledger` 的一次性迁移判断）写 `data-theme`，
+  再读 `myt-theme-custom`，`enabled` 且 `css` 是字符串就把 CSS 塞进一个 `id="ctStyle"` 的 `<style>`。
+  `applyCustomTheme()` 会按 id 找到同一个元素改写内容，所以这段是幂等的。
+  以后动主题键名/默认值，`player.html` 这段和 `01` 要一起改（两处同源）。
+  实测：`<head>` 子元素顺序为 `… link | script | style#ctStyle | style …`，说明 `ctStyle` 由内联脚本创建、
+  早于模块；重启后第一帧就是液态玻璃。
+
 - 七套默认主题 2026-11-21 统一做了一轮可访问性收尾，只加 CSS、不动各自骨架：
   时码/时长加 `font-variant-numeric: tabular-nums`（12:04 与 1:02:04 冒号能竖着对齐）、
   大标题/副标题 `text-wrap: balance` 防孤字、`::selection` 跟 `--accent` 走（`color-mix` 26%）、
@@ -1517,3 +1611,107 @@ model / endpoint 存在 study 引擎设置里，宿主读 `studyEngine().setting
 
 
 
+
+## 界面控件尺寸统一（2026-11-22）
+
+盘点方法：DevTools 控制台逐路由采集「可见元素的计算样式 + 包围盒」，按 className 跨页聚合
+（必须用 `getClientRects().length` 过滤隐藏 DOM，页面里藏着大量 `btn ghost small` 隐藏按钮，不过滤会得到 h0/w0 噪声）。
+采集到一处根因 + 若干逐页覆盖叠加。
+
+- **根因：`.btn` 没有自己的行高**。`player.css` 的 `.btn` 只写 `padding:9px 14px` + `font-size:12px`，
+  没写 `line-height`/`height`，高度继承所在容器的行高 → 实测同一个 `.btn` 在收听模式是 41px、
+  播客库/发现/历史 38px、笔记/设置 37px；`.btn.small` 出现 29/30/33 三档。
+  修法：`:root` 定义 `--ctl-h:34px` / `--ctl-h-sm:30px` / `--row-h:40px` / `--stat-pad:16px` /
+  `--stat-radius:20px`，`.btn` `.btn.small` `.chip` 统一成 `height:var(...)` + `padding:0 X` + `line-height:1`
+  （`box-sizing:border-box` 是全局的，固定高度不会再被 padding 撑开）。以后新控件只从这几个变量取尺寸。
+- `.chip` 从 32 拉到 34，与 `.btn` 同高：发现页工具条里右侧「搜索」是 `.chip`、左边是 `.btn`，原先差 6px；
+  收听模式「睡眠定时」六个 pill（`#sleepOptions` 里全是 `.chip`）也跟着齐了。
+- `.stat` 收敛成**两档**：常规档走 `--stat-pad:16px` / `--stat-radius:20px`（首页、收听历史共用）；
+  统计页的 30px 数字卡是唯一的大号档，在 `themes/liquid-glass.css` 里用
+  `html[data-theme] #page-stats { --stat-pad:22px 24px; --stat-radius:24px }` 显式写一档。
+  同时删掉 `html[data-theme] .ledger-home #homeStats .stat` 里的 `padding:18px 18px 16px`、
+  `.ledger-home #homeStats .stat` 的 `18px 16px` 与 `:first-child{padding-left:0}`——原来首页 112px、
+  历史 104px、统计 126px 三套 padding/圆角就是这么叠出来的。`.dstats .stat` 收窄成详情抽屉专用，
+  它原来会被卡片版 `padding:15px` 蹭到。
+- `.ep-row` 统一 `padding:12px 0` + `min-height:64px`；`.builtin-pick-list .ep-row` 的 `9px 2px`、
+  `.ledger-rows .ep-row` 的 `15px 0` 都改成 12（横向留给所在容器，首页两列用 10px）。
+- `.nav button` 与 `.settings-menu button` 共用 `--row-h:40px`：同一左栏两列列表原来 41 / 38，
+  每项差 3px。字号收到 12 / 12.5。主题里 `.nav button` 的 `padding:9px 11px` 改成 `0 11px`（固定高度下纵向 padding 无意义）。
+- `.textbtn` 一份基底（11.5px / `5px 8px` / `line-height:1.35`）；`.tshead .textbtn`、`.import-actions .textbtn`
+  两个紧凑覆盖统一到 `4px 7px / 11px`（原来一个 `4px 6px`、一个 `5px 7px`），手机端 `11px / 5px 6px`。
+- `.mini-btn` 补 `padding:0` + `line-height:1` + `flex:0 0 auto`：28×28 的方格按钮被容器 padding 串过，
+  图标在方框里不居中。
+- `.section-title` / `.ledger-section` 的 `align-items` 由 `center` / `flex-end` 改 `baseline`：
+  右侧提示原来比标题中心低 6px（首页「继续收听 / 最近更新 / 书架」、收听模式「界面 / 播完之后」都偏）。
+- 首页「继续收听」：视频续播卡插进来时按「有没有音频卡」改写 `#continueHint`——只有视频卡显示
+  「上次看到这里」，两张卡并存才回到中性的「上次停在这里」，别再让标题和卡片里的「看到 11:37」互相打脸。
+- 主题侧原则：`themes/<slug>.css` 只写颜色/圆角/**不写尺寸**；改完必须同步 `themes/<slug>.json` 的 `css`
+  字段并重新生成 `site/themes-defaults.js`（`tests/test_custom_themes` 会逐字比对 site 版与 themes 版）。
+  **坑**：运行中的自定义主题读的是 `localStorage['myt-theme-custom'].cfg.css` 这份拷贝，只改源文件界面不会变；
+  验证前在 DevTools 里 `c.cfg.css = window.MYT_THEME_DEFAULTS[0].css; localStorage.setItem(...)` 再 `location.reload()`。
+- 测试：`site/player.html` 里的首帧主题预热 `<script>` 补了 `data-theme-prewarm` 标记，
+  `tests/test_player.py` 的「只能有两个 `<script>`」断言从 2 改成 3（允许这一个 inline 预热脚本，
+  仍然禁止其它会掉出主 IIFE 作用域的脚本）。上一轮加预热脚本时这条断言其实是红的，本轮一并修掉。
+
+- 2026-11-22 插件面板「白底浅字」修复：单集详情页上的「本集摘录 / 广告区间 / 本集问答」
+  三张卡在深色主题里是纯白底 + 浅灰字，几乎读不出来。根因不在插件，在宿主：
+  这些插件写的是 `background: var(--card, #fff)` 和 `color: var(--fg, #111)`，但宿主
+  **从来没定义过 `--card` / `--fg`**，于是回退成白底黑字配色里的白色，文字却继承了页面的浅色。
+  修法两层：`player.css` 的 `:root` 里用转发别名补齐 `--card:var(--panel)`、
+  `--card2:var(--panel2)`、`--fg:var(--ink)`（用 `var()` 转发而不是写死颜色，换主题自动跟着走）；
+  随仓库的四个插件包（distill / adscan / ask / podcast20）同时把 `var(--card, #fff)` 改成
+  `var(--panel, #fff)`、圆角改 `var(--shell-radius, 12px)`、内边距 14/16，避免再依赖这个别名。
+- 注意：`apps/windows/builtin-plugins/` 只是**可选手动导入包**，用户机器上真正跑的是
+  `C:\ProgramData\MyTranscript\plugins\<id>\style.css` 那份拷贝，改仓库源码不会影响已安装的插件。
+  所以这类「插件颜色跟主题走」的问题必须靠宿主补 token 解决，而不是靠改插件包——本轮就是靠 `--card` 别名生效的。
+
+### 第二轮：把「尺寸不齐」的全量扫描做完（2026-11-22）
+
+- 方法：不用肉眼找。解析 `player.css` 得到全部规则（区分「无条件定义」与「媒体查询变体」），
+  按「末级选择器 + 属性」聚合同一控件的 `height/padding/font-size/line-height/border-radius/gap`，
+  列出同属性出现多值的地方；再单独扫「所有 `var(--x)` 引用 vs 全仓 `--x:` 定义」，找引用了却没定义的变量。
+- 又抓到两个「引用了没定义」的真 bug：
+  1. `--motion-press` 只被 `.btn:active` / `.anim-press:active` 引用，**全仓没有任何定义，也没写 fallback**，
+     `scale:var(--motion-press)` 在计算期整条作废 → 所有按压缩放一直是死的。已补 `--motion-press:.97`。
+  2. `--dock` 被队列/工具/下载三个浮层写成 `var(--dock,120px)`，同样没人赋值，等于硬编码。
+     改为 `--dock:calc(var(--bottom) - 16px)`（当前仍是 120，视觉不变），以后动 `--bottom` 浮层自动跟。
+- 上一轮给 `.btn` 定死 `height:var(--ctl-h)` 带来的**四处回退**：侧栏自定义操作（3px7/10px）、
+  学习面板动作（6px10/11px）、问答出处 chip（4px8）、提问框提交（8px12）这些「局部缩水」的 `.btn`
+  被拉成 34 高却仍用小字号。补第三档 `--ctl-h-xs:26px`，按「卡内小件 26 / 次要 30 / 主 34」归位，
+  字号统一 11 / 11.5。`.ep-filter-row button`（单集筛选药丸）也从约 25 收到 26 并与 `.chip` 同一套。
+- 仍未动、已确认存在的 6 类：局部按钮族 6 档高度（24/26/30/32/34/40）+ 16 种 padding + 6 种字号 + 8 种圆角；
+  `.online-chips button` 10px 字/约 22px 高；svg 图标 13–17 五档（`.mini-step` 17 与 `.epstep` 14 是同一对 ± 控件）；
+  正文层 p 10.5/11/11.5/12、b 13/17/18/20、small 行高 1.55/1.6；输入域 padding 7 种 / radius 0·7·9 / textarea 46·96·110；
+  卡头 header 的 align-items 三种混用。等用户定范围再动。
+- 校验：`test_player` 71 OK，`cargo build` Finished，重启后首页正常。
+
+### 全量收敛（用户「全改」，2026-11-22 续）
+
+- `player.css` 一次改 41 条规则，全部走断言脚本（每条必须唯一命中）落盘，避免手改串行：
+  - 新增 token：`--ctl-r:8px`（小方控件圆角）、`--icon-sm:14px` / `--icon-lg:16px`（图标两档）、
+    `--fs-2:11.5px` / `--fs-num:20px`（说明文字 / 数字强调）、`--input-pad:9px 11px` /
+    `--input-r:9px` / `--textarea-h:96px`（表单域三件套）。
+  - 小按钮全部收进 `--ctl-h-xs`(26)：`.find-bar`、`.win-ctl`、`.seg`、`.dsseg`、`.langseg`、`.sel-tools`、
+    `.online-chips`、`.study-tabs`、`.study-grade`、`.word-status`、`.cue-clip-foot`、`.ep-filter-row`；
+    `.hero-search` 32 → `--ctl-h`(34)；`.plugin-menu-pop` 菜单项改成 34 高的 flex 行。
+  - 抽屉/卡头的 × 按钮统一 24×24 方框 + 字形居中（`.study-sheet` / `.quote-card` / `.word-panel` 三处）。
+  - 卡头统一 `align-items:center` + `gap:8px` + `padding:11px 14px`（原来 center/baseline/flex-start 三种混用）。
+  - 图标：15/13/17 那些一律 14，`.dstile` 升 16，`.wpbtn` 的 `flex-basis` 一起跟 token。
+  - 表单域：`.setting-row` / `.study-model-bar` / `.modal-row` / `.note-form` / 学习提问框统一 padding 与圆角，
+    textarea `min-height` 收成 `--textarea-h`(96)；学习提问框保留 46（聊天输入框，本来就是矮的）。
+  - 文字：`.setting-row p` 10.5 / `.note-item p` 11 都提到 `--fs-2`；`.hero-note b` 18 与 `.stat b` 20 统一 `--fs-num`；
+    `small` 行高统一 1.6。
+- **单集详情三张插件卡宽度不一致**（新发现，同属「白底面板」那类宿主 token/slot 问题）：
+  本集问答只占内容宽（到 745），摘录/简介整宽（到 1140）。根因是 `.plugin-slot{display:flex;flex-wrap:wrap}`，
+  面板会被内容宽度收缩；五个面板类插件全挂在 `episode.body.before` 这个贡献点上。修法是宿主针对该点特判
+  `display:flex;flex-direction:column;align-items:stretch`，子项 `width:100%`——运行期即生效，不用重装插件。
+- 实机确认（重建重启后）：单集详情三张卡 **深色面板 + 文字可读**、宽度一致；单集筛选药丸 26 高；
+  8 个动作按钮同高同圆角；搜索页下划线 tab / 索引按钮 / 播客库头部按钮 / 设置页行高都正常。
+- 仍留一处：单集头卡 9 个按钮在窄窗口会把「片段」挤到第二行独占（8+1）。要么收窄内边距硬塞进一行，
+  要么把「整集下载 / 复制链接」收进「⋯」菜单，等用户选。
+
+- 单集头卡「片段」孤行已修（根因不是宽度不够，是结构）：插件贡献点 `episode.header.actions` 原先写在
+  `.detail-actions` **外面**，作为块级 `.plugin-slot` 必然另起一行。现在把该 slot 移进 `.detail-actions`，
+  并给 `.detail-actions .plugin-slot{display:contents}`，让插件按钮直接成为这一行的 flex item，
+  和宿主按钮共用同一个 gap 与换行；实测 9 个按钮（含「片段」）同处一行、同高。
+  涉及 `src/player-js/07-routes-pages.js`（已 `build_player_js.py` 重建）与 `site/player.css`。
