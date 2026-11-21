@@ -8,6 +8,27 @@
 <link rel="preconnect" href="https://stitcher.simplecastaudio.com">
 <meta name="theme-color" content="#0a0e15">
   <link rel="stylesheet" href="player.css">
+<script data-theme-prewarm>
+/* 主题预热：主题选择都存在 localStorage，等 01 模块加载完再套，第一帧会先把默认主题画出来（看起来像「闪一下」）。
+   这里在首次绘制前就把 data-theme 和自定义主题（液态玻璃这类卡片）的 CSS 挂上，后面 01 里再套一次是幂等的。 */
+(function () {
+  try {
+    var FALLBACK = { brass: 'midnight', forest: 'midnight', oxblood: 'midnight', celadon: 'ledger', mist: 'paper' };
+    var saved = localStorage.getItem('myt-theme');
+    if (saved && FALLBACK[saved]) saved = FALLBACK[saved];
+    if (!localStorage.getItem('myt-ui-ledger') && (!saved || saved === 'prototype')) saved = 'ledger';
+    document.documentElement.dataset.theme = saved || 'ledger';
+    var raw = localStorage.getItem('myt-theme-custom');
+    if (!raw) return;
+    var cfg = JSON.parse(raw);
+    if (!cfg || !cfg.enabled || typeof cfg.css !== 'string') return;
+    var style = document.createElement('style');
+    style.id = 'ctStyle';
+    style.textContent = cfg.css;
+    (document.head || document.documentElement).appendChild(style);
+  } catch (e) {}
+})();
+</script>
 </head>
 <body>
 <button class="skip-link" id="skipLink" type="button">跳到主要内容</button>
@@ -112,7 +133,8 @@
       <section class="page" id="page-video">
         <div class="page-head"><div><div class="eyebrow">VIDEO EPISODE</div><h1>视频播放</h1><div class="subtitle" id="videoSub">本地视频单集</div></div><button class="btn ghost" id="videoBack">← 返回</button></div>
         <div class="card card-pad" style="padding:0;overflow:hidden;background:#000"><div class="video-frame"><video id="localVideo" controls playsinline preload="metadata" style="width:100%;max-height:70vh;display:block;background:#000"></video><div class="video-cues" id="videoCues" hidden></div></div></div>
-        <div class="smalltext" style="margin-top:10px">视频只在本机播放；播过这一集的文字稿时会叠一句当前字幕，关掉再打开也能从上次的位置继续。</div>
+        <div class="video-asr" id="videoAsrStatus" hidden></div>
+        <div class="smalltext" style="margin-top:10px">画面走本进程的同源代理，边看边用本机模型转写：字幕晚一两句出现，拖动后从新位置重来；倍速播放会暂停转写。关掉再打开也能从上次的位置继续。</div>
       </section>
 
       <section class="page" id="page-discover">

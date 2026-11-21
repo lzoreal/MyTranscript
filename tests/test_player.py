@@ -1299,11 +1299,15 @@ class PlayerStudyShortcutTests(unittest.TestCase):
     def test_extension_module_shares_main_iife_scope(self):
         """扩展模块必须写在主 IIFE 内：另起 <script> 拿不到 state / studyRender* 等私有绑定，
         包装会静默失效（缓存徽标、前情回顾、练习扩展按钮曾经整块消失）。
-        唯一允许的第二个 <script> 是纯数据文件 themes-defaults.js（只挂 window.MYT_THEME_DEFAULTS）。"""
+        唯一允许的 inline <script> 是 data-theme-prewarm（首帧主题预热，只在 <head> 里读
+        localStorage 并挂 <style id="ctStyle">，不碰任何模块私有变量）；其余两个是
+        themes-defaults.js（纯数据）与 player.js（module）。"""
         scripts = re.findall(r"<script[^>]*>", self.html)
-        self.assertEqual(len(scripts), 2)
+        self.assertEqual(len(scripts), 3)
+        self.assertEqual(len([s for s in scripts if "data-theme-prewarm" in s]), 1,
+                         "首帧主题预热脚本缺 data-theme-prewarm 标记，或出现了第二个 inline 脚本")
         self.assertEqual([s for s in scripts if 'type="module"' in s], [s for s in scripts if "player.js" in s])
-        self.assertIn('src="themes-defaults.js"', scripts[0])
+        self.assertIn('src="themes-defaults.js"', scripts[1])
         self.assertNotIn("</script>\n<script", self.html)
         self.assertIn("window.__xai", self.html)
 
