@@ -1279,6 +1279,55 @@ function podloveChapters(item) {
   return out.sort((a, b) => a.start - b.start);
 }
 
+/* ---------- Podcasting 2.0：嘉宾（podcast:person）与替代音源（podcast:alternateEnclosure）
+   这两块只做「读出来给界面用」，不参与选源播放：换源要动播放内核，留给后续。 */
+function cxChildNodes(item) {
+  return [...item.childNodes].filter(n => n.nodeType === 1);
+}
+function nodeLocalName(node) {
+  const name = String(node.localName || node.tagName || '');
+  return name.includes(':') ? name.split(':').pop().toLowerCase() : name.toLowerCase();
+}
+function podcastPersons(item) {
+  const out = [];
+  cxChildNodes(item).forEach(node => {
+    if (nodeLocalName(node) !== 'person') return;
+    const name = (node.getAttribute('name') || node.textContent || '').trim();
+    if (!name) return;
+    out.push({
+      name: name.slice(0, 80),
+      role: (node.getAttribute('role') || '').trim(),
+      group: (node.getAttribute('group') || '').trim(),
+      img: (node.getAttribute('img') || '').trim(),
+      href: (node.getAttribute('href') || '').trim(),
+    });
+  });
+  return out.slice(0, 12);
+}
+function podcastAlternates(item) {
+  const out = [];
+  cxChildNodes(item).forEach(node => {
+    if (nodeLocalName(node) !== 'alternateenclosure') return;
+    const sources = cxChildNodes(node)
+      .filter(n => n.nodeType === 1 && nodeLocalName(n) === 'source')
+      .map(n => (n.getAttribute('uri') || '').trim())
+      .filter(Boolean);
+    const type = (node.getAttribute('type') || '').trim();
+    const title = (node.getAttribute('title') || '').trim();
+    const bytes = Number(node.getAttribute('length') || 0) || 0;
+    sources.slice(0, 3).forEach(uri => {
+      out.push({
+        uri,
+        type,
+        title,
+        bytes,
+        // 只要声明是视频或有 video/ 类型，就标成视频源，界面上单独分组。
+        video: /^video\//i.test(type) || /\.(mp4|m4v|webm|mov|mkv)(?:$|\?)/i.test(uri),
+      });
+    });
+  });
+  return out.slice(0, 6);
+}
 function parseFeed(xml) {  const doc = new DOMParser().parseFromString(xml, 'text/xml');
   const channel = doc.querySelector('channel');
   const channelTitle = (channel?.querySelector('title')?.textContent || '').trim();
@@ -1310,6 +1359,8 @@ function parseFeed(xml) {  const doc = new DOMParser().parseFromString(xml, 'tex
       transcript,
       chaptersUrl: chapterJsonUrl(it),
       chapters: podloveChapters(it),
+      persons: podcastPersons(it),
+      alternates: podcastAlternates(it),
     };
   }).filter(e => e.title || e.url);
   episodes.sort((a, b) => (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0));

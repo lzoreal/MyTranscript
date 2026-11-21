@@ -3,7 +3,7 @@ import { alignZhLines, applyReader, clearProgress, closeDetails, closeDrawer, cl
 import { coreProvider, defineCoreProvider } from './02-live-caption-wasm.js';
 import { findSkipRange, liveDisable, skipUrlOf } from './03-native-asr-service-worker.js';
 import { loadShow, renderList, studyPluginOn, subtitlePluginOn } from './04-local-audio-plugin-host.js';
-import { motionEnter, motionLeave } from './11-motion.js';
+import { motionEnter, motionFlip, motionLeave } from './11-motion.js';
 
 
 
@@ -866,7 +866,7 @@ function cleanWord(raw) {
 }
 function closeWordPanel() {
   const panel = $('wordPanel');
-  if (panel) { panel.classList.remove('on'); panel.hidden = true; }
+  if (panel) panel.classList.remove('on');
   wordSeq += 1;
 }
 let wordSeq = 0;
@@ -997,11 +997,12 @@ function renderPlaylists() {
   const hint = $('playlistHint');
   if (!box) return;
   if (hint) hint.textContent = app.playlists.length ? app.playlists.length + ' 个列表' : '保存在本机';
+  motionFlip(box, '.qrow', () => {
   box.innerHTML = app.playlists.length
     ? app.playlists.map(p => {
       const preview = p.items.slice(0, 3).map(it => esc(it.title || it.ep)).join('<br>');
       const more = p.items.length > 3 ? '<br><span class="smalltext">…其余 ' + (p.items.length - 3) + ' 集</span>' : '';
-      return '<div class="qrow"><div class="qmain"><strong>' + esc(p.name) + '</strong>' +
+      return '<div class="qrow" data-motion-key="' + esc(p.id) + '"><div class="qmain"><strong>' + esc(p.name) + '</strong>' +
         '<span>' + p.items.length + ' 集' + (p.items[0] ? ' · 首集 ' + esc(p.items[0].title || '') : '') + '</span>' +
         (preview ? '<span class="smalltext" style="margin-top:4px">' + preview + more + '</span>' : '<span class="smalltext">还是空的：单集页点「＋ 列表」加入。</span>') +
         '</div><div style="display:flex;gap:6px">' +
@@ -1009,6 +1010,7 @@ function renderPlaylists() {
         '<button class="mini-btn" data-del-playlist="' + esc(p.id) + '">✕</button></div></div>';
     }).join('')
     : emptyLine('还没有播放列表。在单集页点「＋ 列表」建一个。', '<button class="btn ghost" data-route="library">去播客库</button>');
+  });
 }
 
 /* ================== 离线下载 ================== */
@@ -1291,6 +1293,13 @@ function downloadEpisode(show, ep, opts) { return coreProvider('downloads').save
 async function defaultDownloadEpisode(show, ep, opts = {}) {
   if (!show || !ep) return;
   const quiet = !!opts.quiet;
+  // 视频集的整集下载会把完整 mp4 落盘（Talking Cars 那种一集 300–400 MB），
+  // 静默开始会把用户的磁盘和流量当成无成本。给一次明确确认，别做成「点一下就开始」。
+  if (!quiet && ep.video) {
+    const ok = confirm('这是视频单集，整集下载会保存完整视频文件（常见几百 MB）。\n' +
+      '只想留音频？下载后在「下载管理」里点「只取音频轨」。\n\n继续下载？');
+    if (!ok) return;
+  }
   if (!host() || typeof host().offlineSave !== 'function') {
     if (!quiet) showToast('离线下载只在桌面壳里可用（网页版没有本地目录权限）。', 'warn');
     return;
@@ -1429,7 +1438,7 @@ function downloadsHTML(entries, query) {
   entries.forEach(rec => {
     const info = downloadInfo(rec);
     if (q && !(info.groupName + ' ' + info.title).toLowerCase().includes(q)) return;
-    if (!groups.has(info.groupKey)) groups.set(info.groupKey, { name: info.groupName, artwork: info.artwork, items: [] });
+    if (!groups.has(info.groupKey)) groups.set(info.groupKey, { key: info.groupKey, name: info.groupName, artwork: info.artwork, items: [] });
     groups.get(info.groupKey).items.push({ rec, info });
   });
   return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name, 'zh')).map(group => {
@@ -1444,7 +1453,7 @@ function downloadsHTML(entries, query) {
         '<button class="mini-btn" data-play-offline="' + esc(rec.key) + '">▶ 播放</button>' +
         '<button class="mini-btn" data-del-offline="' + esc(rec.key) + '">✕ 删除</button></div></div>';
     }).join('');
-    return '<div class="dl-pod"><div class="dl-pod-head">' +
+    return '<div class="dl-pod" data-motion-key="' + esc(group.key) + '"><div class="dl-pod-head">' +
       (group.artwork ? '<img class="dl-art" src="' + esc(group.artwork) + '" alt="" loading="lazy" referrerpolicy="no-referrer">' : '<div class="dl-art"></div>') +
       '<div><strong>' + esc(group.name) + '</strong><span class="dl-pod-meta">' + group.items.length + ' 集 · ' + fmtBytes(total) + '</span></div></div>' +
       '<div class="dl-rows">' + rows + '</div></div>';
@@ -1462,9 +1471,11 @@ function renderDownloads() {
     : '还没有下载到本机的单集。';
   const q = $('downloadsFilter') ? $('downloadsFilter').value : '';
   const html = entries.length ? downloadsHTML(entries, q) : '';
+  motionFlip(box, '.dl-pod', () => {
   box.innerHTML = html || (entries.length
     ? '<div class="dl-empty">没有匹配的下载。换个关键词试试。</div>'
     : emptyLine('还没有下载到本机的单集。在单集页点「⤓ 整集下载」。'));
+  });
 }
 function renderOfflineList() {
   const box = $('offlineList');
@@ -1475,6 +1486,7 @@ function renderOfflineList() {
   if (hint) hint.textContent = entries.length
     ? entries.length + ' 集 · ' + fmtBytes(totalBytes) + ' · ' + entries.filter(e => e.hasTranscript).length + ' 集含字幕'
     : '断网也能听';
+  motionFlip(box, '.qrow', () => {
   box.innerHTML = entries.length
     ? entries.map(rec => {
       const ref = resolveOfflineRef(rec.key);
@@ -1484,7 +1496,7 @@ function renderOfflineList() {
         ? '文字稿 ' + fmtBytes(Number(rec.transcriptSize) || 0)
         : (ep && isJsonTranscript(ep.transcript) ? '仅音频 · 可补字幕' : '仅音频');
       const canAddTranscript = !rec.hasTranscript && ep && isJsonTranscript(ep.transcript);
-      return '<div class="qrow"><div class="qmain"><strong>' + esc(offlineLabel(rec.key)) +
+      return '<div class="qrow" data-motion-key="' + esc(rec.key) + '"><div class="qmain"><strong>' + esc(offlineLabel(rec.key)) +
         '</strong><span>' + size + ' · ' + transcript + ' · 存在本机</span></div>' +
         '<div style="display:flex;gap:6px">' +
         (canAddTranscript ? '<button class="mini-btn" data-offline-transcript="' + esc(rec.key) + '">＋ 字幕</button>' : '') +
@@ -1492,6 +1504,7 @@ function renderOfflineList() {
         '<button class="mini-btn" data-del-offline="' + esc(rec.key) + '">✕</button></div></div>';
     }).join('')
     : emptyLine('还没有离线单集。在单集页点「⤓ 整集下载」，音频和文字稿会一起保存。');
+  });
 }
 function playOffline(key) {
   const rec = app.offline.get(key);
@@ -2083,7 +2096,7 @@ function bindModuleSwitches() {
 }
 function navigate(page, args = [], params = {}) {
   if (!routeModuleAllows(page)) page = 'home';
-  if (page !== 'player' && $('clipNowPop')) $('clipNowPop').hidden = true;
+  if (page !== 'player' && $('clipNowPop')) motionLeave($('clipNowPop'));
   location.hash = routeHash(page, args, params);
 }
 function parseRoute() {

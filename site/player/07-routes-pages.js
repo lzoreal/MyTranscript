@@ -5,7 +5,7 @@ import { selectEpisode } from './03-native-asr-service-worker.js';
 import { PLUGIN_PAGES, applySlotMounts, destroyV2Page, emitPlugin, loadShow, pluginPlayerState, pluginReportError, refreshPluginSettings, renderPluginPage, renderV2Page } from './04-local-audio-plugin-host.js';
 import { LOCAL_KEY, PAGE_NAMES, QUEUE_KEY, THEME_NAMES, absoluteFeed, app, catalogLatest, epStatusBadges, episodeFilterMatch, episodesOf, firstShowKey, fmtBytes, fmtDuration, formatDate, hash32, hostOf, idxGetAll, inboxCount, isFavorite, isPlayed, isSubscribed, moduleOn, navigate, offlineKeyFor, parseRoute, plainText, readAllProgress, refreshShows, renderAfterStateChange, renderDownloads, renderOfflineList, renderPlaylists, returnToCue, routeHash, routeModuleAllows, showByKey, showPrefFor, syncDockBadge, syncDockSleep, syncIndexCount, syncRateSeg, writeJSON } from './05-transport-transcript-nav.js';
 import { coverHTML, ensureShowFeed, episodeCover, hasFreshFeed, memoryFeed, renderOnlineResults } from './06-catalog-feeds-search.js';
-import { motionFlip } from './11-motion.js';
+import { motionFlip, motionReduced } from './11-motion.js';
 
 
 
@@ -37,8 +37,30 @@ function updateDocumentTitle() {
   }
   document.title = label ? label + ' · MyTranscript' : 'MyTranscript';
 }
+let pageExitTimer = 0;
+let pageExitToken = 0;
 function applyRoute() {
   const route = parseRoute();
+  if (route.page === 'echo') { navigate('stats'); return; }
+  pageExitToken += 1;
+  const token = pageExitToken;
+  clearTimeout(pageExitTimer);
+  document.querySelectorAll('.page.anim-page-leave').forEach(el => el.classList.remove('anim-page-leave'));
+  const current = document.querySelector('.page.active');
+  const nextId = 'page-' + route.page;
+  /* 页面退出只做一次短淡出；减少动态效果或标签页不可见时直接切换。 */
+  if (current && current.id !== nextId && !motionReduced() && !document.hidden) {
+    current.classList.add('anim-page-leave');
+    pageExitTimer = setTimeout(() => {
+      if (token !== pageExitToken) return;
+      current.classList.remove('anim-page-leave');
+      applyRouteNow(route);
+    }, 130);
+    return;
+  }
+  applyRouteNow(route);
+}
+function applyRouteNow(route) {
   app.route = route;
   if (route.page === 'echo') { navigate('stats'); return; }
   const isPlayer = route.page === 'player';
@@ -447,9 +469,11 @@ async function renderSearch(query) {
 function renderLocal() {
   const hint = $('localHint');
   if (hint) hint.textContent = app.local.length ? app.local.length + ' 个本地音频 · 只读本机文件' : '从本机文件夹导入音频；不会上传，也不占离线目录。';
-  $('localList').innerHTML = app.local.length
+  const localBox = $('localList');
+  motionFlip(localBox, '.ep-row', () => {
+  localBox.innerHTML = app.local.length
     ? '<div class="ep-filter-row"><span class="smalltext">' + app.local.length + ' 个文件</span></div>' +
-      app.local.map(ep => '<div class="ep-row" ' + (ep.kind === 'video'
+      app.local.map(ep => '<div class="ep-row" data-motion-key="' + esc(ep.id) + '" ' + (ep.kind === 'video'
         ? 'data-open-video="' + esc(ep.id) + '"'
         : 'data-play-episode data-key="local-files" data-ep="' + esc(ep.id) + '"') + '>' +
         '<span class="ep-art">' + (ep.kind === 'video' ? '▶' : esc((ep.title || '?').slice(0, 2).toUpperCase())) + '</span>' +
@@ -457,6 +481,7 @@ function renderLocal() {
         esc(ep.localPath || '') + ' · ' + fmtBytes(ep.size) + (ep.kind === 'video' ? ' · 视频' : '') + '</span></div>' +
         '<button class="mini-btn" data-del-local="' + esc(ep.id) + '" title="从列表移除">✕</button></div>').join('')
     : emptyLine('还没有本地音频。点右上角「导入文件夹」，会递归扫描 3 层内的音频文件。');
+  });
   enhanceClickableRows();
 }
 async function importLocalFolder() {
@@ -514,7 +539,59 @@ function renderVideo() {
     video.dataset.src = src;
     video.src = src;
     video.load();
+    bindVideoExtras(video, ep);
   }
+}
+/* 视频页原来只有一个裸 <video>：关掉就忘了看到哪，字幕也完全不显示。
+   这里补两件小事——按集记住播放位置、有 cue 时把当前句叠在画面上。
+   字幕只对「已经加载过文字稿的这一集」生效：本地视频本来就没有文字稿。 */
+function videoProgressKey(ep) { return 'myt-video-progress:' + String(ep && ep.id ? ep.id : ''); }
+function bindVideoExtras(video, ep) {
+  if (video.dataset.extrasBound !== '1') {
+    video.dataset.extrasBound = '1';
+    let lastSave = 0;
+    video.addEventListener('timeupdate', () => {
+      const cuesBox = $('videoCues');
+      const playing = ep || null;
+      const cues = (state.current && playing && state.current.id === playing.id) ? state.cues : [];
+      const overlay = syncVideoCues(cuesBox, cues, video.currentTime);
+      if (cuesBox) cuesBox.hidden = !overlay;
+      const now = Date.now();
+      if (playing && video.currentTime > 0 && now - lastSave > 2000) {
+        lastSave = now;
+        writeJSON(videoProgressKey(playing), {
+          t: Math.round(video.currentTime), duration: Math.round(video.duration || 0), updatedAt: now,
+        });
+      }
+    });
+    video.addEventListener('loadedmetadata', () => {
+      if (!ep) return;
+      const saved = readJSON(videoProgressKey(ep), null);
+      if (!saved || !saved.t) return;
+      const total = Number(video.duration) || 0;
+      if (total && saved.t > total - 10) return; // 快看完了就别跳回去
+      if (saved.t < 8) return;
+      video.currentTime = saved.t;
+      showToast('从 ' + fmtClock(saved.t) + ' 继续', 3000);
+    });
+  }
+}
+function syncVideoCues(box, cues, time) {
+  if (!box) return '';
+  if (!Array.isArray(cues) || !cues.length) return '';
+  let hit = null;
+  for (let i = 0; i < cues.length; i += 1) {
+    if (Number(cues[i].start) <= time + 0.05) hit = cues[i];
+    else break;
+  }
+  if (!hit || time > Number(hit.end) + 1.5) return '';
+  return String(hit.text || '');
+}
+function fmtClock(sec) {
+  const total = Math.max(0, Math.floor(Number(sec) || 0));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return m + ':' + String(s).padStart(2, '0');
 }
 function renderPodcast(key) {
 
@@ -579,6 +656,25 @@ function renderPodcast(key) {
   }
   enhanceClickableRows();
 }
+/* 单集页给插件槽位的载荷：只放「插件自己也拿不到」的字段——当前这一集的
+   id、名单、替代音源、本机路径。播放进度之类的走 api.player.state，不塞进来，
+   免得同一份数据两个真源。 */
+function epSlotPayload(show, ep, offlineRec) {
+  const payload = {
+    showKey: show.slug,
+    showName: show.name || '',
+    episodeId: ep.id,
+    title: ep.title || '',
+    duration: Number(ep.duration) || 0,
+    video: !!ep.video,
+    videoUrl: ep.videoUrl || '',
+    hasTranscript: !!ep.transcript?.url,
+    localPath: ep.localPath || (offlineRec && offlineRec.path) || '',
+    persons: (ep.persons || []).slice(0, 12),
+    alternates: (ep.alternates || []).slice(0, 6),
+  };
+  try { return esc(JSON.stringify(payload)); } catch (err) { return ''; }
+}
 async function renderEpisode(key, epId) {
   const show = showByKey(key);
   const view = $('episodeView');
@@ -620,8 +716,8 @@ async function renderEpisode(key, epId) {
     '<button class="btn ghost" data-offline-episode data-key="' + esc(show.slug) + '" data-ep="' + esc(ep.id) + '" title="整集下载会同时保存文字稿">' +
     offlineAction + '</button>' +
     '<button class="btn ghost" data-copy-link data-key="' + esc(show.slug) + '" data-ep="' + esc(ep.id) + '">复制链接</button>' +
-    '</div><span class="plugin-slot" data-plugin-slot="episode.header.actions"></span></div></div>' +
-    '<div class="plugin-slot" data-plugin-slot="episode.body.before"></div>' +
+    '</div><span class="plugin-slot" data-plugin-slot="episode.header.actions" data-slot-payload="' + epSlotPayload(show, ep, offlineRec) + '" data-slot-payload-version="1"></span></div></div>' +
+    '<div class="plugin-slot" data-plugin-slot="episode.body.before" data-slot-payload="' + epSlotPayload(show, ep, offlineRec) + '" data-slot-payload-version="1"></div>' +
     '<div class="card card-pad" style="margin-top:16px"><h3 class="section-title">简介</h3><p class="smalltext" style="margin:0">' +
     esc(desc || '该 feed 没有提供单集简介。') + '</p></div>';
   enhanceClickableRows();
@@ -639,7 +735,9 @@ function inboxEpisode(item) {
 function renderInbox() {
   const hint = $('inboxHint');
   if (hint) hint.textContent = app.inbox.length ? app.inbox.length + ' 集待处理 · 新单集先放这里' : '新单集先放这里，决定入队、收藏或标记已听。';
-  $('inboxList').innerHTML = app.inbox.length
+  const inboxBox = $('inboxList');
+  motionFlip(inboxBox, '.ep-row', () => {
+  inboxBox.innerHTML = app.inbox.length
     ? app.inbox.map(item => {
       const { show, ep } = inboxEpisode(item);
       return '<div class="ep-row" data-play-episode data-key="' + esc(show.slug) + '" data-ep="' + esc(ep.id) + '">' +
@@ -652,6 +750,7 @@ function renderInbox() {
         '<button class="mini-btn" data-inbox-remove="' + esc(item.key) + '" title="忽略">✕</button></div></div>';
     }).join('')
     : emptyLine('收件箱是空的。开启「订阅自动化」并定时刷新后，新单集会自动进来。', '<button class="btn ghost" data-route="settings">去设置</button>');
+  });
   enhanceClickableRows();
 }
 function renderFavorites() {
@@ -659,7 +758,9 @@ function renderFavorites() {
     const at = key.indexOf(':');
     return { showKey: key.slice(0, at), epId: key.slice(at + 1) };
   }).filter(item => item.showKey && item.epId);
-  $('favoriteList').innerHTML = items.length
+  const favoriteBox = $('favoriteList');
+  motionFlip(favoriteBox, '.ep-row', () => {
+  favoriteBox.innerHTML = items.length
     ? items.map(item => {
       const show = showByKey(item.showKey) || { slug: item.showKey, name: item.showKey, key: item.showKey };
       const ep = episodesOf(show).find(entry => entry.id === item.epId) || { id: item.epId, title: '单集 ' + item.epId.slice(0, 8) };
@@ -670,6 +771,7 @@ function renderFavorites() {
         '" data-ep="' + esc(ep.id) + '" title="取消收藏">★</button></div></div>';
     }).join('')
     : emptyLine('还没有收藏的单集。在单集页点「☆ 收藏」。');
+  });
   enhanceClickableRows();
 }
 function saveQueue() { writeJSON(QUEUE_KEY, app.queue); }
@@ -684,7 +786,9 @@ function addToQueue(show, ep) {
 }
 function renderQueue() {
   $('queueHint').textContent = app.queue.length ? app.queue.length + ' 集待播' : '队列是空的。';
-  $('queueList').innerHTML = app.queue.length
+  const queueBox = $('queueList');
+  motionFlip(queueBox, '.ep-row', () => {
+  queueBox.innerHTML = app.queue.length
     ? app.queue.map((item, index) => {
       const show = showByKey(item.key) || { slug: item.key, name: item.show, key: item.key };
       return '<div class="ep-row" data-play-episode data-key="' + esc(item.key) + '" data-ep="' + esc(item.ep) + '">' +
@@ -695,6 +799,7 @@ function renderQueue() {
         esc(fmtDuration(item.duration)) + '</span><button class="mini-btn" data-remove-queue="' + index + '">✕</button></div>';
     }).join('')
     : emptyLine('队列是空的。在播客或单集页点“＋ 队列”。', '<button class="btn ghost" data-route="library">去播客库</button>');
+  });
   enhanceClickableRows();
 }
 function renderHistory() {
@@ -704,7 +809,9 @@ function renderHistory() {
   $('historyStats').innerHTML = statHTML('收听记录', entries.length, '有播放位置的单集')
     + statHTML('听完', finished, '接近结尾')
     + statHTML('最近一次', entries[0]?.[1]?.at ? new Date(entries[0][1].at).toLocaleDateString('zh-CN') : '—', '');
-  $('historyList').innerHTML = entries.length
+  const historyBox = $('historyList');
+  motionFlip(historyBox, '.ep-row', () => {
+  historyBox.innerHTML = entries.length
     ? entries.map(([progressId, rec]) => {
       const key = rec.key || progressId.split(':')[0];
       const epId = progressId.slice(key.length + 1).replace(/^:/, '');
@@ -717,6 +824,7 @@ function renderHistory() {
         '<button class="mini-btn" data-resume data-key="' + esc(key) + '" data-ep="' + esc(epId) + '" data-t="' + Number(rec.t || 0) + '">▶</button></div>';
     }).join('')
     : emptyLine('还没有收听记录。');
+  });
   enhanceClickableRows();
 }
 function renderStats() {
@@ -795,13 +903,16 @@ function renderEcho() {
     : emptyLine('这一年还没有收听记录。');
 }
 function renderBookmarks() {
-  $('bookmarkList').innerHTML = app.bookmarks.length
+  const bookmarkBox = $('bookmarkList');
+  motionFlip(bookmarkBox, '.ep-row', () => {
+  bookmarkBox.innerHTML = app.bookmarks.length
     ? app.bookmarks.map(item => '<div class="ep-row" data-resume data-key="' + esc(item.key) + '" data-ep="' +
       esc(item.ep) + '" data-t="' + Number(item.t || 0) + '"><span class="ep-dur">' + fmt(item.t) + '</span>' +
       '<div class="ep-body"><span class="ep-title">“' + esc(item.en || '') + '”</span><span class="ep-sub">' +
       esc(item.show || '') + ' · ' + esc(item.title || '') + (item.zh ? ' · ' + esc(item.zh) : '') +
       '</span></div><button class="mini-btn" data-del-bookmark="' + esc(item.id) + '">✕</button></div>').join('')
     : emptyLine('还没有书签。播放时点右上角 ☆ 收藏当前句。');
+  });
   enhanceClickableRows();
 }
 function renderNotes() {
@@ -814,11 +925,14 @@ function renderNotes() {
     select.dataset.filled = String(app.subs.length);
   }
   $('noteCount').textContent = app.notes.length + ' 条';
-  $('notesList').innerHTML = app.notes.length
-    ? app.notes.map(item => '<div class="note-item"><strong>' + esc(item.title) + '</strong><p>' + esc(item.body) +
+  const notesBox = $('notesList');
+  motionFlip(notesBox, '.note-item', () => {
+  notesBox.innerHTML = app.notes.length
+    ? app.notes.map(item => '<div class="note-item" data-motion-key="' + esc(item.id) + '"><strong>' + esc(item.title) + '</strong><p>' + esc(item.body) +
       '</p><small>' + esc(item.show || '') + ' · ' + new Date(item.at).toLocaleString('zh-CN') +
       '</small><div style="margin-top:6px"><button class="mini-btn" data-del-note="' + esc(item.id) + '">✕</button></div></div>').join('')
     : emptyLine('还没有笔记。');
+  });
   enhanceClickableRows();
 }
 

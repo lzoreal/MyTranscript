@@ -647,7 +647,7 @@ function bindShell() {
     if (el.dataset.route) { navigate(el.dataset.route); return; }
     if (el.dataset.exportSub) { closeModal(); exportSubtitle(el.dataset.exportSub); return; }
     if (el.dataset.openVideo) { setState('videoId', el.dataset.openVideo); setState('videoEp', null); navigate('video'); return; }
-    if (el.dataset.openVideoEp) {
+    if (el.dataset.openVideoEp !== undefined) {
       const show = showByKey(el.dataset.key);
       const ep = episodesOf(show).find(item => item.id === el.dataset.ep);
       if (show && ep && ep.videoUrl) {

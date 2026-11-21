@@ -36,7 +36,7 @@ C:\ProgramData\MyTranscript\plugins\
 
 - `id` 只能包含字母、数字、`-`、`_`，启停状态以它为准。
 - `enabled` 只是首次发现的默认值；之后以 `enabled.json` 为准。
-- `permissions` 可选，字符串数组，声明插件要用的能力；不写（或非数组）= 老行为，全权限。写了就只放行声明项，`ui.dom` 自动附带。可用值：`ui.dom`、`net`、`player`、`storage`、`providers`、`subtitles`、`study`。缺 `net` 时插件里的 `fetch`/`XMLHttpRequest`/`WebSocket`/`EventSource` 只放行同源、`blob:`、`data:`、`asset:`；`api.player`/`api.storage`/`api.subtitles`/`api.study`/`api.openEpisode`/`api.registerProvider` 缺权限会抛错。**这是 API 层约束，不是安全边界**：插件与宿主同一 JS 环境，仍可直接用 `window.fetch` 或 `__TAURI__`。
+- `permissions` 可选，字符串数组，声明插件要用的能力；不写（或非数组）= 老行为，全权限。写了就只放行声明项，`ui.dom` 自动附带。可用值：`ui.dom`、`net`、`player`、`storage`、`providers`、`subtitles`、`study`、`media`、`llm`。缺 `net` 时插件里的 `fetch`/`XMLHttpRequest`/`WebSocket`/`EventSource` 只放行同源、`blob:`、`data:`、`asset:`；`api.player`/`api.storage`/`api.subtitles`/`api.study`/`api.media`/`api.llm`/`api.openEpisode`/`api.registerProvider` 缺权限会抛错。**这是 API 层约束，不是安全边界**：插件与宿主同一 JS 环境，仍可直接用 `window.fetch` 或 `__TAURI__`。
 - `requires` 可选，字符串数组或 `{ "subtitles": "^0.3.0" }` 对象；对象值按 semver 范围校验。依赖插件被停用或不满足版本时，本插件进入 `blocked`，不会注入 JS。
 - `apiVersion` 可选，旧清单缺省按 `2.0`；`2.x` 次版本不能高于宿主，`3.x` 直接拒绝。声明 `2.2` 才拿到按贡献类型收窄的 `ctx`
   （`ctx.signal`、`ctx.payloadVersion`），`2.0/2.1` 继续拿完整上下文。
@@ -62,6 +62,41 @@ C:\ProgramData\MyTranscript\plugins\
 | `study/` | `page:study` + `capability:study`，依赖 `subtitles ^0.3.0` | 学习中心与学英语能力 |
 
 `home/library/downloads/settings` 的页面代码通过按域拆开的只读服务复用宿主数据：`ctx.ui` 只放纯展示原语，订阅/节目数据在 `ctx.catalog`，进度在 `ctx.progress`，离线数据在 `ctx.downloads`，偏好与设置动作在 `ctx.settings`。`subtitles/study` 仍通过 `ctx.api` 使用各自的能力 API；实时识别与桌面字幕的会话生命周期都在字幕插件里。
+
+另有四个 2.2 的实验包，贴在既有槽位上、不改播放内核：
+
+| 目录 | 贡献 | 说明 |
+| --- | --- | --- |
+| `distill/` | `player.dock.actions` + `episode.body.before` + `page:distill`，依赖 `subtitles` | 随手摘录：当前句前后各一句收成卡片，可回跳、可导出 JSON；本机单集顺手裁 6 秒音频 |
+| `soundbite/` | `episode.header.actions` + `page:soundbite` | 片段收藏：把正在听的 60 秒裁成本机 WAV，记路径；远程单集只提示先下载 |
+| `podcast20/` | `episode.body.before` | 显示 `podcast:person` 嘉宾与 `podcast:alternateEnclosure` 音源，可复制直链；不接管选源 |
+| `adscan/` | `episode.body.before`，依赖 `subtitles` | 广告区间文本弱版：只认字幕里明说的赞助句式，手动跳过 + 可关的自动跳过 |
+| `ask/` | `episode.body.before`，依赖 `subtitles` | 本集问答：先本地检索原话，再把 8 段喂给模型作答，结论带 `[m:ss]` 可点跳；也支持纯检索 |
+
+## 本机媒体能力（`api.media`，仅桌面壳）
+
+插件不自己做音频解码，统一走宿主命令，输出固定是 16-bit PCM WAV，落在 `<应用数据>/clips/`：
+
+- `api.media.available()`：判断当前壳有没有这项能力（网页版返回 `false`）。
+- `api.media.probe(path)`：返回 `bytes / durationMs / sampleRate / channels / codec / hasAudio / kind`；`kind` 按扩展名区分 `video` 与 `audio`。`codec` 用解码器短名（`pcm_s16le`、`aac`），没注册的退回调试串；mp4 里的 aac 采样率/声道读自解码器，仍读不到时 `channels` 给 `0` 表示未知。纯视频文件没有音轨，`durationMs` 用视频轨的 `time_base` 兜底。
+- `api.media.cut(path, startMs, endMs)`：按毫秒裁一段，单次最长 600 秒；返回 `path / bytes / seconds`。
+- `api.media.extractAudio(path)`：整轨解码成 WAV，用来「视频只取音轨」；超过 4 小时拒绝。
+
+只吃本机路径（`api.player.state().localPath` 或单集槽位载荷的 `localPath`），不会替插件下载远程单集。对应权限 `media`，清单不声明就调用被拒。
+
+槽位里的 `api` 也带 `storage`（按插件 id 命名空间隔离）。摘录卡片、广告跳过开关、片段库都靠它落盘；少了它槽位挂载会直接抛 `Cannot read properties of undefined (reading 'get')`。
+
+## 大模型问答能力（`api.llm`，仅桌面壳）
+
+配置只有一份：**「设置 → AI 学英语」** 里的 provider / API Key / 模型 / 接口地址，存在 study 插件的引擎设置里。
+`api.llm` 只读过来复用，不另开一套配置，也不会把 Key 原文交给插件。
+
+- `api.llm.ready()`：是否可用（桌面壳 + 已填 Key 与模型 + custom 供应商已填 endpoint）。
+- `api.llm.config()`：`provider / model / endpoint / configured / keyHint`，`keyHint` 只给密钥末四位。
+- `api.llm.chat(system, user)`：单轮问答，返回纯文本。提示词由调用方给，宿主不内置任何人设。
+
+对应权限 `llm`。实测前提：study 插件要启用（否则没有配置来源），且 AI 已配置好。
+`ask` 插件是这套能力的第一个使用者：本地检索 8 段原话 → 只把这几段喂给模型 → 要求逐条标 `[m:ss]`、没有依据就说「这集里没提到」。
 
 ## 字幕插件（可选手动导入）
 
