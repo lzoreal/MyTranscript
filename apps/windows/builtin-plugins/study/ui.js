@@ -406,7 +406,7 @@ function studyTermTipElement() {
   if (!tip) {
     tip = document.createElement('div');
     tip.id = 'studyTermTip';
-    tip.className = 'study-term-tip';
+    tip.className = 'study-term-tip anim-pop';
     tip.setAttribute('role', 'tooltip');
     tip.hidden = true;
     document.body.appendChild(tip);
@@ -431,6 +431,7 @@ function studyShowTermTip(term, itemOverride) {
   const tip = studyTermTipElement();
   tip.innerHTML = studyTermTipHTML(item);
   tip.hidden = false;
+  void tip.offsetWidth;
   tip.classList.add('on');
   tip.dataset.term = key;
   tip.style.left = '0px';
@@ -450,7 +451,8 @@ function studyHideTermTip() {
   const tip = $('studyTermTip');
   if (tip) {
     tip.classList.remove('on');
-    tip.hidden = true;
+    /* 带 anim-pop 的宿主由 opacity/visibility 退场，立即 hidden 会掐掉中间态。 */
+    if (!tip.classList.contains('anim-pop')) tip.hidden = true;
   }
   document.querySelectorAll('.study-term.on,.word.vocab-mark.on').forEach(el => el.classList.remove('on'));
 }
@@ -686,7 +688,8 @@ function closeStudySheet() {
   const sheet = $('studySheet');
   if (!sheet) return;
   sheet.classList.remove('on');
-  sheet.hidden = true;
+  /* 带 anim-sheet 的宿主用 opacity/translate 退场，立即 hidden 会掐掉中间态。 */
+  if (!sheet.classList.contains('anim-sheet')) sheet.hidden = true;
   $('studyBtn')?.classList.remove('on');
 }
 function studyRenderNow() {

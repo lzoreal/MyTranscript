@@ -1050,7 +1050,65 @@ P2：
 - 跨设备同步：设置 → 数据 → 「从文件同步」导入另一台设备导出的 JSON，按 key 合并订阅、
   队列、书签、笔记、收藏、已听、收件箱、自动化与节目偏好；进度按 `at` 取新。
 - 本地视频：扫描结果按扩展名标记 `kind=video`，点条目进入「视频播放」页，用 `<video controls>` 直接播放；
-  本地视频不做文字稿/逐词高亮。
+  站外 feed 里 enclosure/media 类型或后缀命中的单集也会拿到 `videoUrl`，单集页多一个「▶ 视频」按钮。
+- 视频页现在按集记住位置（`myt-video-progress:<epId>`），重开从上次位置继续；如果这一集已经
+  加载过文字稿，播放时会在画面上叠一句当前字幕（`#videoCues`），本地视频本来就没有文字稿，所以不显示。
+  主播放键「▶ 播放单集」仍然走音频链路（`defaultPlayEpisode` 不检查 `videoUrl`），要看画面必须点
+  「▶ 视频」。
+
+## 本机媒体能力（2026-11-21）
+
+Rust 侧新增 `media.rs`，给插件提供三条命令，输出统一是 16-bit PCM WAV，写到
+`<应用数据>/clips/`（不覆盖旧文件，文件名带毫秒时间戳）：
+
+| 命令 | 入参 | 返回 |
+| --- | --- | --- |
+| `media_probe` | `path` | `bytes / durationMs / sampleRate / channels / codec / hasAudio / kind` |
+| `media_cut` | `path, startMs, endMs` | `path / bytes / seconds / durationMs` |
+| `media_extract_audio` | `path` | 同上，外带 `sourceBytes` |
+
+- 只吃本机路径，不替插件下载远程单集；`media_cut` 单次最长 600 秒，`media_extract_audio` 上限 4 小时。
+- 视频文件走 symphonia 的 isomp4 解复用，**只解音轨不解画面**：这正是「视频只取音频轨」的实现。
+- 解码按帧号裁剪（不是按秒），坏帧跳过而不是整段失败；WAV 头先写 0 再回填真实长度。
+- 插件侧对应 `api.media`（`available / probe / cut / extractAudio`），权限 `media`，网页版返回
+  `available() === false`。`api.player.state()` 补了 `localPath / kind / videoUrl` 三个字段，插件
+  才能拿到真实文件路径。
+- 视频页 07 的单集槽位现在带 `data-slot-payload`（`epSlotPayload`）：`showKey / episodeId /
+  title / video / videoUrl / localPath / persons / alternates / hasTranscript`。插件不必再自己拼
+  当前单集信息。
+
+真机实测（2026-11-21，debug 壳 + DevTools 控制台直接 invoke）：
+
+- 3 秒 44.1kHz 单声道 WAV：`media_probe` 返回 `bytes=264644, durationMs=3000, sampleRate=44100,
+  channels=1, codec=pcm_s16le, hasAudio=true, kind=audio`；`media_cut(500,1500)` 产出
+  `bytes=88200, durationMs=1000`，落在 `<应用数据>/clips/clip-<ms>.wav`，文件 88244 字节（44 字节头）。
+- mp4（aac 音轨，2.8MB/5.7 秒）：`media_probe` 给 `codec=aac, durationMs=5759, hasAudio=true,
+  kind=video`；`media_cut(1000,2000)` 得 `durationMs=1000, sampleRate=44100, channels=2`；
+  `media_extract_audio` 得 `durationMs=5759, sourceBytes=2848208`。这就是「视频只取音频轨」的真机证据。
+- 纯视频 mp4（无音轨）：`hasAudio=false, kind=video, codec=none`，`durationMs` 由视频轨
+  `time_base` 兜底得到 1000ms（原先会返回 0）。
+- 两个已知小缺口：mp4 里的 aac 有时探测不出声道，`channels` 给 `0`（截取时解码器能拿到真实声道数）；
+  `codec` 早期输出 `codectype(264)` 这种调试串，已改成注册表短名。
+
+`parseFeed` 同时补了 Podcasting 2.0 的两个字段：`persons`（`podcast:person` 的 name/role/group/
+img/href）与 `alternates`（`podcast:alternateEnclosure` + `podcast:source@uri`，标 `video` 布尔）。
+只读不切换音源：换源要重建解码与字幕时间轴，留给后续。
+
+下载侧接了这个能力：视频集整集下载前会弹一次确认（「常见几百 MB」），下载页里视频行带
+「视频」徽标和「只取音频轨」按钮（`downloads` 插件 `decorateVideoRows` → `media_extract_audio`），
+输出落在 `clips/`，原视频不动。
+
+## 大模型问答（2026-11-21）
+
+宿主新增 `api.llm`（权限 `llm`），配置**复用**「设置 → AI 学英语」那一份（provider / key /
+model / endpoint 存在 study 引擎设置里，宿主读 `studyEngine().settings`），不另开配置页、
+不把 Key 原文交给插件（`config()` 只回末四位）。
+
+- `ready()` / `config()` / `chat(system, user)` 三个方法，底层走既有 `llm_chat` 命令。
+- 前提：study 插件启用且已填 Key 与模型；否则 `ready()` 为假，插件应提示去设置页填。
+- `ask` 插件是第一个使用者，走「先检索后生成」：本地可解释打分挑 8 段原话（带下一句上下文），
+  只把这些片段拼进提示词，要求逐条标 `[m:ss]`、没依据就说「这集里没提到」；回答里的时间点
+  在 UI 上转成可点按钮，点一下就 `seek` 过去。同时还保留纯检索入口，避免为了找原话也去等模型。
 
 ## 学习侧七项扩展（2026-11-19）
 
@@ -1322,6 +1380,18 @@ P2：
   `lazyFn` 版 `readJSON` 会返回 `undefined`，被 normalize 成“没有配置”——结果自定义主题重启后永远不生效。
   现在改成 `queueMicrotask(bootCustomTheme)`（种包 + 应用）压到微任务，等 registry 齐了再读。
   以后任何「启动就要读别的层的 localStorage」的代码都别写在各层顶层。
+- 七套默认主题 2026-11-21 统一做了一轮可访问性收尾，只加 CSS、不动各自骨架：
+  时码/时长加 `font-variant-numeric: tabular-nums`（12:04 与 1:02:04 冒号能竖着对齐）、
+  大标题/副标题 `text-wrap: balance` 防孤字、`::selection` 跟 `--accent` 走（`color-mix` 26%）、
+  `:focus-visible` 的 `outline-offset` 收到 1px（基础样式本来就有 2px 描边，只是被圆角切）。
+  新增 `@media (prefers-reduced-motion: reduce)`：漂移/闪烁动画归零、悬停位移（nav 的 translateX、
+  卡片 translateY）全关，只保留颜色与描边这类状态反馈。
+  按下态分两种：玻璃拟态 2.0 / 极简放大 / 技术单色 / 监控美学 原来只有 hover，补 `:active` 下沉 1px + 压暗；
+  **新粗野主义与复古印刷本来就有自己的按下态（沿硬阴影陷 2–3px）**，所以这两套刻意不追加位移，
+  否则会叠成双重位移。玻璃拟态 2.0 额外给 `.search-global` 加了 `:focus-within` 外壳高亮。
+  对比度实测液态玻璃：`--dim #7788a8` 在玻璃面板上 5.0:1、`--muted` 8.84:1，都过 AA，所以没改色板。
+  改任何一套都要把 `themes/<slug>.json` 的 `css` 字段和 `site/themes-defaults.js` 一起重新生成
+  （测试逐字比对 site 版与 themes 版，并锁定 7 个 slug 的顺序）。
 
 ## 桌面壳：插件接口与字幕插件（2026-11-20）
 
