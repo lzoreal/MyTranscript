@@ -4,11 +4,13 @@ mod asr;
 mod captions;
 mod localasr;
 mod media;
-mod offline;
+mod media_proxy;
 mod models;
+mod offline;
 mod plugins;
 mod punct;
 mod translate;
+mod video_asr;
 mod wasapi;
 
 use std::collections::{HashMap, HashSet};
@@ -1188,6 +1190,11 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        // 视频同源代理：`http://mytmedia.localhost/?u=<远端地址>`，Range 透传 + 落盘缓存。
+        // 有了它，页面里的 <video> 与 Play 页同源，AudioWorklet 才能取到真实 PCM。
+        .register_asynchronous_uri_scheme_protocol("mytmedia", |ctx, req, responder| {
+            media_proxy::handle(ctx, req, responder)
+        })
         .setup(|app| {
             // 术语纠正表：模型词表里没有的专名会被识别成同音词，这里做识别后替换。
             if let Ok(dir) = app.path().app_data_dir() {
@@ -1316,6 +1323,10 @@ fn main() {
             media::media_probe,
             media::media_cut,
             media::media_extract_audio,
+            video_asr::video_asr_start,
+            video_asr::video_asr_poll,
+            video_asr::video_asr_cancel,
+            video_asr::video_asr_close,
             dbg_note
         ])
         .run(tauri::generate_context!())

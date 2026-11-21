@@ -642,10 +642,11 @@ function bindShell() {
   });
 
   document.addEventListener('click', event => {
-    const el = event.target.closest('[data-route],[data-open-podcast],[data-open-episode],[data-play-episode],[data-queue-episode],[data-list-episode],[data-offline-episode],[data-offline-transcript],[data-ai-episode],[data-play-playlist],[data-del-playlist],[data-play-offline],[data-del-offline],[data-chapter],[data-resume],[data-sub-toggle],[data-remove-sub],[data-copy-feed],[data-copy-link],[data-load-full],[data-remove-queue],[data-del-bookmark],[data-del-note],[data-cue-seek],[data-appearance],[data-continue],[data-sleep],[data-asr-pick],[data-asr-install],[data-asr-remove],[data-asr-cancel],[data-asr-open],[data-feed-tab],[data-close-modal],[data-action],[data-online-builtin],[data-online-open],[data-online-subscribe],[data-online-detail],[data-retry-online],[data-online-chip],[data-online-more],[data-ep-filter],[data-fav-episode],[data-played-episode],[data-inbox-remove],[data-inbox-played],[data-show-auto],[data-show-notify],[data-del-local],[data-open-video],[data-index-jump],[data-open-video-ep],[data-export-sub],[data-local-asr]');
+    const el = event.target.closest('[data-route],[data-open-podcast],[data-open-episode],[data-play-episode],[data-queue-episode],[data-list-episode],[data-offline-episode],[data-offline-transcript],[data-ai-episode],[data-play-playlist],[data-del-playlist],[data-play-offline],[data-del-offline],[data-chapter],[data-resume],[data-sub-toggle],[data-remove-sub],[data-copy-feed],[data-copy-link],[data-load-full],[data-remove-queue],[data-del-bookmark],[data-del-note],[data-cue-seek],[data-appearance],[data-continue],[data-sleep],[data-asr-pick],[data-asr-install],[data-asr-remove],[data-asr-cancel],[data-asr-open],[data-feed-tab],[data-close-modal],[data-action],[data-online-builtin],[data-online-open],[data-online-subscribe],[data-online-detail],[data-retry-online],[data-online-chip],[data-online-more],[data-ep-filter],[data-fav-episode],[data-played-episode],[data-inbox-remove],[data-inbox-played],[data-show-auto],[data-show-notify],[data-del-local],[data-open-video],[data-index-jump],[data-open-video-ep],[data-export-sub],[data-local-asr],[data-video-resume]');
     if (!el) return;
     if (el.dataset.route) { navigate(el.dataset.route); return; }
     if (el.dataset.exportSub) { closeModal(); exportSubtitle(el.dataset.exportSub); return; }
+    if (el.dataset.videoResume !== undefined) { setState('videoEp', null); navigate('video'); return; }
     if (el.dataset.openVideo) { setState('videoId', el.dataset.openVideo); setState('videoEp', null); navigate('video'); return; }
     if (el.dataset.openVideoEp !== undefined) {
       const show = showByKey(el.dataset.key);
@@ -653,6 +654,7 @@ function bindShell() {
       if (show && ep && ep.videoUrl) {
         setState('videoEp', { ...ep, showName: show.name, videoUrl: ep.videoUrl });
         setState('videoId', '');
+        writeJSON('myt-video-ep', { ...ep, showName: show.name, videoUrl: ep.videoUrl });
         navigate('video');
       }
       return;

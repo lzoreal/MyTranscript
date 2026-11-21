@@ -1,9 +1,9 @@
-import { $, box, host, prefs, setState, state, tauriHost } from './00-runtime.js';
+import { $, ASR_MODEL_DEFAULT, box, host, prefs, setState, state, tauriHost } from './00-runtime.js';
 import { emptyLine, esc, fmt, isBracket, isJsonTranscript, loaderHTML, pluginPageKey, reader, seekTo, showToast, statHTML, syncCustomThemeEditor } from './01-theme-reader-shell.js';
 import { syncLiveLeadSelect } from './02-live-caption-wasm.js';
 import { selectEpisode } from './03-native-asr-service-worker.js';
 import { PLUGIN_PAGES, applySlotMounts, destroyV2Page, emitPlugin, loadShow, pluginPlayerState, pluginReportError, refreshPluginSettings, renderPluginPage, renderV2Page } from './04-local-audio-plugin-host.js';
-import { LOCAL_KEY, PAGE_NAMES, QUEUE_KEY, THEME_NAMES, absoluteFeed, app, catalogLatest, epStatusBadges, episodeFilterMatch, episodesOf, firstShowKey, fmtBytes, fmtDuration, formatDate, hash32, hostOf, idxGetAll, inboxCount, isFavorite, isPlayed, isSubscribed, moduleOn, navigate, offlineKeyFor, parseRoute, plainText, readAllProgress, refreshShows, renderAfterStateChange, renderDownloads, renderOfflineList, renderPlaylists, returnToCue, routeHash, routeModuleAllows, showByKey, showPrefFor, syncDockBadge, syncDockSleep, syncIndexCount, syncRateSeg, writeJSON } from './05-transport-transcript-nav.js';
+import { LOCAL_KEY, PAGE_NAMES, QUEUE_KEY, THEME_NAMES, absoluteFeed, app, catalogLatest, epStatusBadges, episodeFilterMatch, episodesOf, firstShowKey, fmtBytes, fmtDuration, formatDate, hash32, hostOf, idxGetAll, inboxCount, isFavorite, isPlayed, isSubscribed, moduleOn, navigate, offlineKeyFor, parseRoute, plainText, readAllProgress, readJSON, refreshShows, renderAfterStateChange, renderDownloads, renderOfflineList, renderPlaylists, returnToCue, routeHash, routeModuleAllows, showByKey, showPrefFor, syncDockBadge, syncDockSleep, syncIndexCount, syncRateSeg, writeJSON } from './05-transport-transcript-nav.js';
 import { coverHTML, ensureShowFeed, episodeCover, hasFreshFeed, memoryFeed, renderOnlineResults } from './06-catalog-feeds-search.js';
 import { motionFlip, motionReduced } from './11-motion.js';
 
@@ -12,6 +12,7 @@ import { motionFlip, motionReduced } from './11-motion.js';
 import { lazyFn, registerLayer } from './00-layers.js';
 const syncStudySettings = lazyFn('08-study-ai', 'syncStudySettings');
 const syncThemeSwatches = lazyFn('08-study-ai', 'syncThemeSwatches');
+const asrModelName = lazyFn('05-transport-transcript-nav', 'asrModelName');
 const syncBookmarkBtn = lazyFn('09-player-integration', 'syncBookmarkBtn');
 const syncMini = lazyFn('09-player-integration', 'syncMini');
 const syncMiniCaption = lazyFn('09-player-integration', 'syncMiniCaption');
@@ -62,6 +63,8 @@ function applyRoute() {
 }
 function applyRouteNow(route) {
   app.route = route;
+  // 离开视频页就一起收：画面停、旁路转写停（进度已由 timeupdate 落盘，回来自动接上）。
+  if (app.lastPage === 'video' && route.page !== 'video') leaveVideoPage();
   if (route.page === 'echo') { navigate('stats'); return; }
   const isPlayer = route.page === 'player';
   document.body.classList.toggle('player-open', isPlayer);
@@ -132,6 +135,8 @@ function renderPage(page, route) {
   if (renderV2Page(page)) {
     enhanceClickableRows();
     applySlotMounts(document);
+    // 首页现在由 home 插件渲染，宿主只在它画完之后补一张「继续看视频」卡。
+    if (page === 'home') { appendHomeVideoCard(); setTimeout(appendHomeVideoCard, 0); }
     return;
   }
   if (page === 'home') renderHome();
@@ -266,6 +271,7 @@ function renderHome() {
   const continueEntry = entries
     .filter(([, rec]) => !rec.d || rec.t < rec.d - 30)
     .sort((a, b) => (b[1].at || 0) - (a[1].at || 0))[0];
+  const videoCard = homeVideoCard();
   if (continueEntry) {
     const [progressId, rec] = continueEntry;
     const key = rec.key || progressId.split(':')[0];
@@ -277,8 +283,11 @@ function renderHome() {
       '</strong><span>' + esc(rec.show || show.name || '') + ' · 已听 ' + fmt(rec.t) + (rec.d ? ' / ' + fmt(rec.d) : '') +
       '</span><div class="progress"><i style="width:' + pct + '%"></i></div></div>' +
       '<button class="round-play" data-resume data-key="' + esc(key) + '" data-ep="' +
-      esc(progressId.slice(key.length + 1).replace(/^:/, '')) + '" data-t="' + Number(rec.t || 0) + '">▶</button></div>';
+      esc(progressId.slice(key.length + 1).replace(/^:/, '')) + '" data-t="' + Number(rec.t || 0) + '">▶</button></div>' + videoCard;
     $('continueHint').textContent = '上次停在这里';
+  } else if (videoCard) {
+    $('homeContinue').innerHTML = videoCard;
+    $('continueHint').textContent = '上次看到这里';
   } else {
     $('homeContinue').innerHTML = emptyLine('还没有收听记录。', '<button class="btn primary" data-route="discover">去发现节目</button>');
     $('continueHint').textContent = '';
@@ -301,6 +310,38 @@ function renderHome() {
   $('homeRecommended').innerHTML = recommended.length
     ? recommended.map(podCardHTML).join('')
     : emptyLine('所有内置节目都已订阅。');
+}
+
+/* 视频看到一半回主页，原来就彻底找不回去了：这里给它留一张卡。
+   首页在插件手里（page:home），宿主只负责把这张卡追到 #homeContinue 末尾。 */
+function appendHomeVideoCard() {
+  const box = $('homeContinue');
+  if (!box || box.querySelector('[data-video-resume]')) return;
+  const card = homeVideoCard();
+  if (!card) return;
+  box.insertAdjacentHTML('beforeend', card);
+  /* 卡片自己的元信息写「看到 11:37」，节标题就别再统一写「上次停在这里」。
+     只有音频续播卡也在时，标题才回到中性的说法。 */
+  const hint = $('continueHint');
+  if (hint) hint.textContent = box.querySelectorAll('.continue:not([data-video-resume])').length
+    ? '上次停在这里' : '上次看到这里';
+}
+function homeVideoCard() {
+  const ep = readJSON('myt-video-ep', null);
+  if (!ep || !ep.id) return '';
+  const rec = readJSON(videoProgressKey(ep), null);
+  if (!rec || Number(rec.t) <= 5) return '';
+  const dur = Number(rec.duration) || 0;
+  const t = Number(rec.t) || 0;
+  if (dur && t > dur - 10) return ''; // 快看完了就别再提示
+  const pct = dur ? Math.min(100, Math.round((t / dur) * 100)) : 0;
+  const title = ep.title || ep.name || ep.showName || '继续看视频';
+  const meta = [ep.showName, '看到 ' + fmtClock(t) + (dur ? ' / ' + fmtClock(dur) : '')].filter(Boolean).join(' · ');
+  return '<div class="continue" data-video-resume>' +
+    '<div class="pod-art" aria-hidden="true">▶</div>' +
+    '<div class="continue-main"><strong>' + esc(title) + '</strong><span>' + esc(meta) +
+    '</span><div class="progress"><i style="width:' + pct + '%"></i></div></div>' +
+    '<button class="round-play" data-video-resume>▶</button></div>';
 }
 
 /* ---------- library / discover ---------- */
@@ -523,39 +564,61 @@ async function importLocalFolder() {
 function renderVideo() {
   const videos = app.local.filter(ep => ep.kind === 'video');
   const local = videos.find(item => item.id === state.videoId) || videos[0];
-  const ep = state.videoEp || local;
+  // 站外视频集只在内存里记着，刷新/重开就丢；顺手落一份，重开还能直接看。
+  const saved = state.videoEp || readJSON('myt-video-ep', null);
+  const ep = saved || local;
   const video = $('localVideo');
   if (!ep) {
     $('videoSub').textContent = '没有可播放的视频';
+    stopVideoAsr();
     video.removeAttribute('src');
     video.load();
     return;
   }
   $('videoSub').textContent = [ep.showName, ep.title || ep.name || ''].filter(Boolean).join(' · ');
+  const direct = ep.videoUrl || '';
+  const proxied = direct ? mytMediaUrl(direct) : '';
   const src = ep.localPath && host() && typeof host().asset === 'function'
     ? host().asset(ep.localPath)
-    : (ep.videoUrl || '');
+    : (proxied || direct);
   if (video.dataset.src !== src) {
+    stopVideoAsr();
     video.dataset.src = src;
+    video.dataset.direct = direct;
+    video.dataset.proxied = proxied || '';
+    // 代理地址要显式走 CORS 请求，否则 createMediaElementSource 依旧是脏流。
+    if (proxied && src === proxied) video.setAttribute('crossorigin', 'anonymous');
+    else video.removeAttribute('crossorigin');
     video.src = src;
     video.load();
     bindVideoExtras(video, ep);
   }
+}
+/* 离开视频页：画面和声音一起收，旁路转写也停。
+   以前这里什么都不做，回主页后画面看不见、声音还在放，又没有入口点回去。 */
+function leaveVideoPage() {
+  const video = $('localVideo');
+  if (video && !video.paused) video.pause();
+  stopVideoAsr();
 }
 /* 视频页原来只有一个裸 <video>：关掉就忘了看到哪，字幕也完全不显示。
    这里补两件小事——按集记住播放位置、有 cue 时把当前句叠在画面上。
    字幕只对「已经加载过文字稿的这一集」生效：本地视频本来就没有文字稿。 */
 function videoProgressKey(ep) { return 'myt-video-progress:' + String(ep && ep.id ? ep.id : ''); }
 function bindVideoExtras(video, ep) {
+  video._mytEp = ep || null;
   if (video.dataset.extrasBound !== '1') {
     video.dataset.extrasBound = '1';
     let lastSave = 0;
     video.addEventListener('timeupdate', () => {
       const cuesBox = $('videoCues');
-      const playing = ep || null;
+      const playing = video._mytEp || null;
       const cues = (state.current && playing && state.current.id === playing.id) ? state.cues : [];
-      const overlay = syncVideoCues(cuesBox, cues, video.currentTime);
-      if (cuesBox) cuesBox.hidden = !overlay;
+      const overlay = syncVideoCues(cuesBox, cues, video.currentTime) || sideCueText(video.currentTime) || videoLiveText(video.currentTime);
+      if (cuesBox) {
+        cuesBox.hidden = !overlay;
+        if (!cuesBox.hidden && cuesBox.textContent !== overlay) cuesBox.textContent = overlay;
+      }
       const now = Date.now();
       if (playing && video.currentTime > 0 && now - lastSave > 2000) {
         lastSave = now;
@@ -565,8 +628,9 @@ function bindVideoExtras(video, ep) {
       }
     });
     video.addEventListener('loadedmetadata', () => {
-      if (!ep) return;
-      const saved = readJSON(videoProgressKey(ep), null);
+      const ep2 = video._mytEp;
+      if (!ep2) return;
+      const saved = readJSON(videoProgressKey(ep2), null);
       if (!saved || !saved.t) return;
       const total = Number(video.duration) || 0;
       if (total && saved.t > total - 10) return; // 快看完了就别跳回去
@@ -574,8 +638,387 @@ function bindVideoExtras(video, ep) {
       video.currentTime = saved.t;
       showToast('从 ' + fmtClock(saved.t) + ' 继续', 3000);
     });
+    // 先把 AudioContext 在「真实点击」的激活窗口里建起来：Chromium 只认手势，
+    // 在 play 事件里现建的 ctx 会是 suspended，接到 MediaElementSource 之后
+    // video 会卡在 waiting（看得到画面、时间不往前走）。点一下视频区域就补上。
+    video.addEventListener('pointerdown', () => { kickVideoAudio(video); }, true);
+    video.addEventListener('play', () => {
+      kickVideoAudio(video);
+      // 优先让宿主自己解音轨（不跟播放抢 WebAudio）；宿主这条路不通才退回实时抽流。
+      startSideAsr(video, video._mytEp).then(ok => {
+        if (ok) { videoAsrMute(true); return; }
+        videoAsrMute(false);
+        startVideoAsr(video, video._mytEp);
+      }).catch(() => {
+        videoAsrMute(false);
+        startVideoAsr(video, video._mytEp);
+      });
+    });
+    video.addEventListener('pause', () => { videoAsrMute(true); });
+    video.addEventListener('seeking', () => { videoAsrAnchor(video); });
+    video.addEventListener('ratechange', () => {
+      // 旁路转写跟播放器时钟无关，倍速不用停；只有实时抽流这条路要停。
+      if (sideActive()) return;
+      if (Math.abs(Number(video.playbackRate) || 1) > 1.01) {
+        VIDEO_ASR.hold = true;
+        videoAsrMute(true);
+        videoAsrStatus('倍速播放时暂停转写，回到 1× 自动继续');
+      } else if (VIDEO_ASR.id) {
+        VIDEO_ASR.hold = false;
+        videoAsrMute(false);
+        videoAsrStatus(videoAsrLabel());
+      }
+    });
+    video.addEventListener('error', () => {
+      const direct = video.dataset.direct || '';
+      // 代理挂了不能连累播放：切回直连，只是没有边看边转写。
+      if (direct && video.dataset.src === video.dataset.proxied) {
+        stopVideoAsr();
+        video.removeAttribute('crossorigin');
+        video.dataset.src = direct;
+        video.src = direct;
+        video.load();
+        videoAsrStatus('代理没接上，已切回直连（这一集没有字幕）', true);
+      }
+    });
   }
 }
+/* ---------- 视频：同源代理 + 边看边转写 ----------
+   画面走 mytmedia（本进程代理，Range 透传 + 落盘缓存），音频从 MediaElementSource
+   进 AudioWorklet 降成 16k，攒约 1 秒喂一次原生 sherpa，只取增量文本。
+   字幕按「播放时刻」对齐：喂进去的采样属于刚播过的那一段，所以 cue 起点 = 起喂时的
+   currentTime + token 相对时间。 */
+const VIDEO_ASR = {
+  video: null, ep: null, graph: null, ctx: null,
+  id: 0, base: 0, fed: 0, pending: [], pendingLen: 0,
+  inflight: false, cue: null, cues: [], lastTs: -1, timer: 0, model: '', hold: false,
+};
+
+/* 用户点击（真的鼠标手势）时把 AudioContext 建起来/唤醒。
+   Chromium 的自动播放策略只认手势：suspended 的 ctx 一旦接上
+   MediaElementAudioSourceNode，媒体元素会停在 waiting，画面不动。 */
+function kickVideoAudio(video) {
+  if (VIDEO_ASR.graph && VIDEO_ASR.graph.ctx) {
+    const c = VIDEO_ASR.graph.ctx;
+    if (c.state !== 'running') { try { c.resume().catch(() => {}); } catch (e) {} }
+    return;
+  }
+  if (!VIDEO_ASR.ctx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    try { VIDEO_ASR.ctx = new AC(); } catch (e) { return; }
+  }
+  const c = VIDEO_ASR.ctx;
+  if (c.state !== 'running') { try { c.resume().catch(() => {}); } catch (e) {} }
+}
+
+function mytMediaUrl(url) {
+  if (!url || !/^https?:/i.test(url)) return '';
+  const T = tauriHost();
+  if (!T || !T.core || typeof T.core.convertFileSrc !== 'function') return '';
+  return 'http://mytmedia.localhost/?u=' + encodeURIComponent(url);
+}
+
+function videoAsrBox() { return $('videoAsrStatus'); }
+function videoAsrStatus(text, warn) {
+  const box = videoAsrBox();
+  if (!box) return;
+  if (!text) { box.hidden = true; box.textContent = ''; return; }
+  box.hidden = false;
+  box.textContent = text;
+  box.className = 'video-asr' + (warn ? ' warn' : '');
+}
+function videoAsrLabel() {
+  const name = videoAsrModelName(VIDEO_ASR.model);
+  const at = VIDEO_ASR.video ? Number(VIDEO_ASR.video.currentTime) || 0 : 0;
+  return '边看边转写 · ' + name + (at ? ' · 播到 ' + fmtClock(at) : '');
+}
+function videoAsrModelName(id) {
+  try { return asrModelName(id); } catch (e) { return id || '本机模型'; }
+}
+function videoAsrMute(on) {
+  const node = VIDEO_ASR.graph && VIDEO_ASR.graph.node;
+  if (!node) return;
+  try { node.port.postMessage({ type: 'mute', value: Boolean(on) }); } catch (e) {}
+}
+function videoAsrAnchor(video) {
+  if (!VIDEO_ASR.id) return;
+  VIDEO_ASR.base = Number(video.currentTime) || 0;
+  VIDEO_ASR.fed = 0;
+  VIDEO_ASR.seg = null;
+  VIDEO_ASR.cues = [];
+  VIDEO_ASR.lastTs = -1;
+  VIDEO_ASR.pending = [];
+  VIDEO_ASR.pendingLen = 0;
+  videoAsrMute(true);
+  try { host().asrReset(VIDEO_ASR.id); } catch (e) {}
+  setTimeout(() => videoAsrMute(false), 400);
+}
+
+async function startVideoAsr(video, ep) {
+  if (!ep || !ep.videoUrl) return;                       // 本地文件走「整集预转写」，不走这一支
+  const H = host();
+  if (!H || typeof H.asrOpen !== 'function') return;
+  if (prefs.modules && prefs.modules.liveAsr === false) return;
+  if (VIDEO_ASR.video !== video) stopVideoAsr();
+  if (VIDEO_ASR.id) return;
+  try {
+    videoAsrStatus('准备本机识别模型…');
+    const model = prefs.asrModel || ASR_MODEL_DEFAULT;
+    const dir = await H.asrPrepare(model);
+    const id = await H.asrOpen(dir, 2);
+    if (typeof id !== 'number') throw new Error('识别器创建失败');
+    let graph = VIDEO_ASR.graph;
+    if (!graph || graph.video !== video) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) throw new Error('这个壳没有 AudioContext');
+      const ctx = VIDEO_ASR.ctx || new AC();
+      VIDEO_ASR.ctx = ctx;
+      await ctx.audioWorklet.addModule('./asr-worklet.js');
+      // captureStream 只「旁听」元素的声音，不动它的输出通路，播放不会卡；
+      // 拿不到流才退回 MediaElementSource（对这种源有卡在 waiting 的风险）。
+      let srcNode = null;
+      let tapped = 'element';
+      try {
+        if (typeof video.captureStream === 'function') {
+          const stream = video.captureStream();
+          if (stream && stream.getAudioTracks().length) {
+            srcNode = ctx.createMediaStreamSource(stream);
+            tapped = 'stream';
+          }
+        }
+      } catch (e) {}
+      if (!srcNode) srcNode = ctx.createMediaElementSource(video);
+      const node = new AudioWorkletNode(ctx, 'myt-asr-tap');
+      srcNode.connect(node);
+      if (tapped === 'element') srcNode.connect(ctx.destination);   // 声音照常从扬声器出来
+      node.port.onmessage = ev => videoAsrPush(ev.data);
+      graph = { video, ctx, srcNode, node, tapped };
+    }
+    if (graph.ctx.state === 'suspended') { try { await graph.ctx.resume(); } catch (e) {} }
+    if (graph.ctx.state !== 'running') {
+      videoAsrStatus('音频通道被浏览器挡着（' + graph.ctx.state + '）：点一下画面再播', true);
+    }
+    VIDEO_ASR.graph = graph;
+    VIDEO_ASR.video = video;
+    VIDEO_ASR.ep = ep;
+    VIDEO_ASR.id = id;
+    VIDEO_ASR.model = model;
+    try { window.__mytAsr = VIDEO_ASR; } catch (e) {}
+    VIDEO_ASR.base = Number(video.currentTime) || 0;
+    VIDEO_ASR.fed = 0;
+    VIDEO_ASR.seg = null;
+    VIDEO_ASR.cues = [];
+    VIDEO_ASR.lastTs = -1;
+    VIDEO_ASR.pending = [];
+    VIDEO_ASR.pendingLen = 0;
+    videoAsrMute(false);
+    videoAsrStatus(videoAsrLabel());
+    if (!VIDEO_ASR.timer) VIDEO_ASR.timer = setInterval(flushVideoAsr, 900);
+  } catch (err) {
+    stopVideoAsr();
+    videoAsrStatus('转写没起来：' + ((err && err.message) || err), true);
+  }
+}
+
+function stopVideoAsr() {
+  if (VIDEO_ASR.timer) { clearInterval(VIDEO_ASR.timer); VIDEO_ASR.timer = 0; }
+  const id = VIDEO_ASR.id;
+  VIDEO_ASR.id = 0;
+  VIDEO_ASR.pending = [];
+  VIDEO_ASR.pendingLen = 0;
+  VIDEO_ASR.inflight = false;
+  VIDEO_ASR.seg = null;
+  VIDEO_ASR.cues = [];
+  VIDEO_ASR.lastTs = -1;
+  VIDEO_ASR.fed = 0;
+  VIDEO_ASR.ep = null;
+  if (id) { try { host().asrClose(id); } catch (e) {} }
+  sideReset();
+}
+
+function videoAsrPush(msg) {
+  if (!VIDEO_ASR.id || !msg || !msg.pcm || !msg.pcm.length) return;
+  const rate = Number(msg.rate) || 16000;
+  VIDEO_ASR.pending.push({ pcm: msg.pcm, rate });
+  VIDEO_ASR.pendingLen += msg.pcm.length;
+  if (VIDEO_ASR.pendingLen >= rate) flushVideoAsr();
+}
+
+function videoAsrBatch() {
+  const parts = VIDEO_ASR.pending;
+  if (!parts.length) return null;
+  let len = 0;
+  parts.forEach(p => { len += p.pcm.length; });
+  const out = new Float32Array(len);
+  let at = 0;
+  parts.forEach(p => { out.set(p.pcm, at); at += p.pcm.length; });
+  return { pcm: out, rate: parts[0].rate || 16000 };
+}
+
+async function flushVideoAsr() {
+  if (!VIDEO_ASR.id || VIDEO_ASR.inflight) return;
+  const batch = videoAsrBatch();
+  if (!batch || !batch.pcm.length) return;
+  VIDEO_ASR.pending = [];
+  VIDEO_ASR.pendingLen = 0;
+  const id = VIDEO_ASR.id;
+  VIDEO_ASR.inflight = true;
+  try {
+    // 时间对齐改成「这一批开始喂时的播放位置」：暂停、缓冲都不会把时间轴拖歪。
+    const t0 = VIDEO_ASR.video ? Number(VIDEO_ASR.video.currentTime) || 0 : 0;
+    await host().asrFeed(id, Array.from(batch.pcm), Math.round(batch.rate));
+    if (VIDEO_ASR.id !== id) return;
+    const json = await host().asrResult(id);
+    if (VIDEO_ASR.id !== id) return;
+    videoAsrParse(json, t0);
+    if (!VIDEO_ASR.hold) videoAsrStatus(videoAsrLabel());
+  } catch (err) {
+    if (VIDEO_ASR.id === id) videoAsrStatus('识别停了一下：' + ((err && err.message) || err), true);
+  } finally {
+    VIDEO_ASR.inflight = false;
+  }
+}
+
+function videoAsrParse(json, t0) {
+  let r = null;
+  try { r = JSON.parse(json || '{}'); } catch (e) { return; }
+  const toks = (r && r.tokens) || [];
+  const ts = (r && r.timestamps) || [];
+  if (!toks.length || !ts.length) return;
+  const startRel = Number(ts[0]) || 0;
+  if (!VIDEO_ASR.seg || startRel < VIDEO_ASR.seg.lastRel - 0.02) {
+    // 流内断句（或换集）：新段的绝对起点 = 这一批开始喂时的播放位置。
+    VIDEO_ASR.seg = { base: Number(t0) || 0, ts: [], toks: [], lastRel: -1 };
+  }
+  VIDEO_ASR.seg.lastRel = startRel;
+  VIDEO_ASR.seg.ts = ts.map(Number);
+  VIDEO_ASR.seg.toks = toks.map(String);
+}
+
+function videoLiveText(now) {
+  // 叠层只显示滚动的最近十秒：在线模型一句话可以很长，整段贴上去会糊住画面。
+  const seg = VIDEO_ASR.seg;
+  if (!seg || !seg.ts.length) return '';
+  const newest = seg.base + seg.ts[seg.ts.length - 1];
+  const from = Math.max(now - 11, newest - 9);
+  let out = '';
+  for (let i = 0; i < seg.ts.length; i += 1) {
+    if (seg.base + seg.ts[i] >= from) out += seg.toks[i];
+  }
+  out = out.replace(/\s+/g, ' ').trim();
+  return out.length > 240 ? out.slice(-240) : out;
+}
+/* ---------- 旁路转写（宿主解码） ----------
+   网页里那套 WebAudio 取 PCM 只是兜底：它受自动播放手势、倍速、缓冲影响。
+   宿主这条更干净——Rust 把 mp4 音轨逐帧解成 16k 单声道直接喂 sherpa，
+   时间戳来自容器，跟播放器时钟无关；播放暂停时它照样在后台往前跑，
+   所以字幕常常是你还没看到就已经在了。 */
+const VASR = {
+  sid: 0, since: 0, tokens: [], audio: 0, stage: '', total: 0, downloaded: 0,
+  timer: 0, video: null, ep: null, starting: false, failed: false,
+};
+try { window.__mytVasr = VASR; } catch (e) {}
+
+function sideActive() { return !!(VASR.sid && VASR.stage !== 'error' && VASR.stage !== 'cancel'); }
+
+function sideReset() {
+  if (VASR.timer) { clearInterval(VASR.timer); VASR.timer = 0; }
+  if (VASR.sid) { try { host().videoAsrCancel(VASR.sid); } catch (e) {} }
+  if (VASR.sid) { try { host().videoAsrClose(VASR.sid); } catch (e) {} }
+  VASR.sid = 0; VASR.since = 0; VASR.tokens = []; VASR.audio = 0;
+  VASR.stage = ''; VASR.total = 0; VASR.downloaded = 0;
+  VASR.video = null; VASR.ep = null; VASR.starting = false; VASR.failed = false;
+}
+
+async function startSideAsr(video, ep) {
+  if (VASR.sid) return true;
+  const H = host();
+  if (!H || typeof H.videoAsrStart !== 'function') return false;
+  if (!ep || !ep.videoUrl) return false;
+  if (VASR.starting) return true;
+  VASR.starting = true;
+  VASR.video = video;
+  VASR.ep = ep;
+  try {
+    const model = prefs.asrModel || ASR_MODEL_DEFAULT;
+    const dir = await H.asrPrepare(model);
+    if (!dir) throw new Error('模型没准备好');
+    const sid = await H.videoAsrStart(ep.videoUrl, String(dir), 2);
+    VASR.sid = Number(sid) || 0;
+    if (!VASR.sid) throw new Error('宿主没给会话号');
+    VASR.stage = 'download';
+    videoAsrStatus('旁路转写 · 准备中…');
+    VASR.timer = setInterval(() => { pollSideAsr(); }, 900);
+    return true;
+  } catch (err) {
+    VASR.failed = true;
+    videoAsrStatus('旁路转写没起来，改用实时识别：' + ((err && err.message) || err), true);
+    return false;
+  } finally {
+    VASR.starting = false;
+  }
+}
+
+async function pollSideAsr() {
+  const H = host();
+  if (!VASR.sid || !H || typeof H.videoAsrPoll !== 'function') return;
+  let r = null;
+  try { r = await H.videoAsrPoll(VASR.sid, VASR.since); } catch (e) { return; }
+  if (!r || !VASR.sid) return;
+  if (Array.isArray(r.tokens) && r.tokens.length) {
+    for (const pair of r.tokens) {
+      if (!Array.isArray(pair)) continue;
+      const at = Number(pair[0]) || 0;
+      const word = String(pair[1] || '');
+      if (word) VASR.tokens.push([at, word]);
+    }
+    VASR.since = Number(r.index) || VASR.tokens.length;
+  }
+  VASR.audio = Number(r.audioSec) || 0;
+  VASR.total = Number(r.total) || 0;
+  VASR.downloaded = Number(r.downloaded) || 0;
+  VASR.stage = String(r.stage || '');
+  const name = videoAsrModelName(prefs.asrModel || ASR_MODEL_DEFAULT);
+  if (VASR.stage === 'download') {
+    const pct = VASR.total ? Math.round((VASR.downloaded / VASR.total) * 100) : 0;
+    videoAsrStatus('旁路转写 · ' + name + ' · 下载 ' + pct + '%');
+  } else if (VASR.stage === 'decode') {
+    videoAsrStatus('旁路转写 · ' + name + ' · 已转写 ' + fmtClock(VASR.audio));
+  } else if (VASR.stage === 'done') {
+    videoAsrStatus('旁路转写 · ' + name + ' · 完成 ' + fmtClock(VASR.audio));
+    if (VASR.timer) { clearInterval(VASR.timer); VASR.timer = 0; }
+  } else if (VASR.stage === 'error') {
+    videoAsrStatus('旁路转写失败：' + (r.error || '未知原因') + '，改用实时识别', true);
+    if (VASR.timer) { clearInterval(VASR.timer); VASR.timer = 0; }
+    // 宿主这条路垮了不能连累字幕：会话号丢掉，立刻退回网页抽流那条。
+    const video = VASR.video;
+    const ep = VASR.ep;
+    VASR.sid = 0;
+    if (video) { videoAsrMute(false); startVideoAsr(video, ep); }
+  }
+}
+
+/* 按播放位置从「已经转好在手」的词里取最近 9 秒：不再有追着喂、追着认的问题。 */
+function sideCueText(now) {
+  const list = VASR.tokens;
+  if (!list.length) return '';
+  const at = Number(now) || 0;
+  let out = '';
+  let last = -1;
+  for (let i = 0; i < list.length; i += 1) {
+    const t = list[i][0];
+    if (t > at + 4) break;
+    if (t < at - 9) continue;
+    // 播放位置落在两词之间时，把更近的那个也带上，避免一开播空一行
+    if (t > at && last >= 0 && out === '') out += list[last][1];
+    out += list[i][1];
+    last = i;
+  }
+  out = out.replace(/\s+/g, ' ').trim();
+  return out.length > 260 ? out.slice(-260) : out;
+}
+
 function syncVideoCues(box, cues, time) {
   if (!box) return '';
   if (!Array.isArray(cues) || !cues.length) return '';
@@ -716,7 +1159,7 @@ async function renderEpisode(key, epId) {
     '<button class="btn ghost" data-offline-episode data-key="' + esc(show.slug) + '" data-ep="' + esc(ep.id) + '" title="整集下载会同时保存文字稿">' +
     offlineAction + '</button>' +
     '<button class="btn ghost" data-copy-link data-key="' + esc(show.slug) + '" data-ep="' + esc(ep.id) + '">复制链接</button>' +
-    '</div><span class="plugin-slot" data-plugin-slot="episode.header.actions" data-slot-payload="' + epSlotPayload(show, ep, offlineRec) + '" data-slot-payload-version="1"></span></div></div>' +
+    '<span class="plugin-slot" data-plugin-slot="episode.header.actions" data-slot-payload="' + epSlotPayload(show, ep, offlineRec) + '" data-slot-payload-version="1"></span></div></div></div>' +
     '<div class="plugin-slot" data-plugin-slot="episode.body.before" data-slot-payload="' + epSlotPayload(show, ep, offlineRec) + '" data-slot-payload-version="1"></div>' +
     '<div class="card card-pad" style="margin-top:16px"><h3 class="section-title">简介</h3><p class="smalltext" style="margin:0">' +
     esc(desc || '该 feed 没有提供单集简介。') + '</p></div>';
