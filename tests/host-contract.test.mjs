@@ -245,7 +245,9 @@ assert(JSON.stringify(FIXED_SLOTS) === JSON.stringify([
   'library.toolbar', 'downloads.empty', 'search.results.after',
 ]), '固定槽位表变了：' + FIXED_SLOTS.join(','));
 assert(JSON.stringify(KNOWN_PERMISSIONS) === JSON.stringify([
-  'ui.dom', 'net', 'player', 'storage', 'providers', 'subtitles', 'study',
+  // media 是 2.2 追加的本机媒体处理权限（探测 / 裁片段 / 只取音轨）；
+  // 加它能改这张表，但必须同时改这里的期望值，避免悄悄扩权。
+  'ui.dom', 'net', 'player', 'storage', 'providers', 'subtitles', 'study', 'media', 'llm',
 ]), '已知权限表变了：' + KNOWN_PERMISSIONS.join(','));
 
 // 9.1 2.2 的按类型档案：每种贡献都有自己的上下文组与 payload 版本
@@ -262,6 +264,10 @@ assert(contextKeysFor('slots', '2.1').length === 11, '2.1 插件走完整兼容�
 assert(contextKeysFor('searchSources', '2.1').length === 11, '2.1 搜索源同样保持完整上下文');
 assert(SCOPED_API_FIELDS.pages === null, '页面拿完整 api');
 assert(SCOPED_API_FIELDS.themes.length === 0, '主题不拿 api');
+// 槽位也要能存自己的东西（摘录卡片、广告开关、片段库都靠它），否则 api.storage 是 undefined。
+assert(SCOPED_API_FIELDS.slots.includes('storage'), '槽位必须拿到 storage');
+assert(SCOPED_API_FIELDS.slots.includes('media') && SCOPED_API_FIELDS.slots.includes('llm'),
+  '槽位必须拿到 media 与 llm');
 assert(PAYLOAD_VERSIONS.searchResult === 1, '搜索结果独立版本号');
 assert(payloadKindFor('searchSources') === 'searchResult', '搜索源的 payload 类型是 searchResult');
 

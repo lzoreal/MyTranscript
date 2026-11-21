@@ -65,6 +65,10 @@ export const KNOWN_PERMISSIONS = Object.freeze([
   'providers',
   'subtitles',
   'study',
+  // 2.2 追加：本机媒体处理（探测 / 裁片段 / 只取音轨），只走桌面壳命令，不给网页版。
+  'media',
+  // 2.2 追加：LLM 问答，复用「设置 → AI 学英语」里已填的 provider / key / model。
+  'llm',
 ]);
 
 /* 2.2 起每种贡献只拿自己需要的上下文组，插件公共 API 不再随功能堆积无限膨胀。
@@ -94,11 +98,11 @@ export const CONTEXT_PROFILES = Object.freeze({
 export const SCOPED_API_FIELDS = Object.freeze({
   pages: null,
   slots: Object.freeze(['id', 'version', 'apiVersion', 'host', 'toast', 'navigate',
-    'openEpisode', 'el', 'on', 'command', 'player', 'cues']),
+    'openEpisode', 'el', 'on', 'command', 'player', 'cues', 'storage', 'media', 'llm']),
   settings: Object.freeze(['id', 'version', 'apiVersion', 'host', 'toast', 'navigate',
-    'el', 'on', 'command', 'storage']),
+    'el', 'on', 'command', 'storage', 'media']),
   commands: Object.freeze(['id', 'version', 'apiVersion', 'host', 'toast', 'navigate',
-    'openEpisode', 'on', 'command', 'player', 'storage', 'cues']),
+    'openEpisode', 'on', 'command', 'player', 'storage', 'cues', 'media']),
   providers: Object.freeze(['id', 'version', 'apiVersion', 'host', 'toast']),
   capabilities: null,
   importers: Object.freeze(['id', 'version', 'apiVersion', 'host', 'toast', 'navigate',

@@ -13,7 +13,7 @@ import { DEFAULT_PLUGIN_TIMEOUT_MS, createPluginDiagnostics, createPluginFaultBo
 import { isAbortError } from './host/faults.js';
 import { createContributionContext } from './host/context.js';
 import { createPluginExtensionAdapters } from './host/ui-adapters.js';
-import { motionFlip } from './11-motion.js';
+import { motionEnter, motionFlip, motionLeave } from './11-motion.js';
 import { createRequestGate } from './host/requests.js';
 import { createGuardedView } from './host/views.js';
 import { layerObject, layerValue, lazyFn, registerLayer } from './00-layers.js';
@@ -294,11 +294,11 @@ function clipNow(span = 15) {
   const start = Math.max(0, end - span);
   if (end - start < 1.5) { showToast('先播放几秒，再来精听刚才这一句。', 'warn'); return; }
   const pop = $('clipNowPop');
-  pop.hidden = false;
+  motionEnter(pop);
   pop.innerHTML = '<div class="cue-clip-head"><span>精听刚才 · 最近 ' + Math.round(span) + ' 秒 · ' +
     esc(asrModelName(localAsrModelId())) + '</span><button type="button" data-clip-close title="关闭">×</button></div>' +
     '<div class="cue-clip-text loading">正在准备音频…</div>';
-  pop.querySelector('[data-clip-close]').onclick = () => { pop.hidden = true; };
+  pop.querySelector('[data-clip-close]').onclick = () => { motionLeave(pop); };
   clipRun(start, end, pop, $('clipNowBtn'), () => clipNow(span));
 }
 
@@ -1046,6 +1046,13 @@ function emitPlugin(event, payload) {
 }
 function pluginPlayerState() {
   const item = state.current;
+  let localPath = (item && item.localPath) || '';
+  try {
+    const off = app.offline && app.offline.size && state.show
+      ? app.offline.get(offlineKeyFor(state.show, item || {}))
+      : null;
+    if (!localPath && off && off.path) localPath = off.path;
+  } catch (e) {}
   return {
     showKey: state.show?.slug || '',
     showName: state.show?.name || '',
@@ -1056,6 +1063,11 @@ function pluginPlayerState() {
     paused: audio.paused,
     rate: audio.playbackRate,
     cueIndex: state.activeCue,
+    // 插件要「裁本机这一段」或「只取音轨」时，得拿到真实文件路径；
+    // 远程单集这里是空字符串，插件应提示先下载，而不是自己去拉流。
+    localPath: localPath,
+    kind: item?.video ? 'video' : 'audio',
+    videoUrl: item?.videoUrl || '',
   };
 }
 const PLUGIN_API_VERSION = HOST_API_VERSION;
@@ -1143,6 +1155,55 @@ function captionInvoke(command, args) {
   }
   return T.core.invoke(command, args || {});
 }
+/* 本机媒体处理只存在于桌面壳：网页版没有 invoke，直接拒绝而不是静默返回空数据，
+   免得插件把「失败」当成「这个文件没音轨」。 */
+function mediaInvoke(command, args) {
+  const T = tauriHost();
+  if (!T || !T.core || typeof T.core.invoke !== 'function') {
+    return Promise.reject(new Error('当前壳没有本机媒体能力（网页版不支持裁片段）'));
+  }
+  return T.core.invoke(command, args || {});
+}
+/* LLM 服务：配置只有一份，在「设置 → AI 学英语」里填（provider / key / model / endpoint），
+   存在 study 插件的引擎设置里。这里读过来复用，不另开一套配置，免得用户填两次 Key。
+   插件只拿到「够不够用 + 模型名」，拿不到 Key 原文。 */
+function llmSettings() {
+  try {
+    const engine = studyEngine();
+    return (engine && engine.settings) || null;
+  } catch (e) { return null; }
+}
+function llmReady() {
+  const s = llmSettings();
+  if (!s) return false;
+  if (!(tauriHost() && tauriHost().core)) return false;
+  return !!String(s.key || '').trim() && !!String(s.model || '').trim() &&
+    (s.provider !== 'custom' || !!String(s.endpoint || '').trim());
+}
+function llmConfigSummary() {
+  const s = llmSettings() || {};
+  return {
+    provider: s.provider || '',
+    model: s.model || '',
+    endpoint: s.endpoint || '',
+    configured: llmReady(),
+    // 只回末四位，和别处「密钥只露末4位」的口径一致。
+    keyHint: String(s.key || '').trim() ? String(s.key).slice(-4) : '',
+  };
+}
+async function llmChat(system, user) {
+  if (!llmReady()) {
+    throw new Error('还没配置 AI：先在「设置 → AI 学英语」里填 Key 与模型（问答复用同一份配置）。');
+  }
+  const s = llmSettings() || {};
+  return tauriHost().core.invoke('llm_chat', {
+    req: {
+      config: { engine: s.provider || 'openai', endpoint: s.endpoint, key: s.key, model: s.model, target: s.target },
+      system: String(system || ''),
+      user: String(user || ''),
+    },
+  });
+}
 function pluginApiFor(id) {
   const storagePrefix = 'myt-plugin:' + id + ':';
   // 每个能力组只在方法调用时校验一次，属性读取（比如 api.player.state）不受影响。
@@ -1191,6 +1252,24 @@ function pluginApiFor(id) {
       seek: seconds => seekTo(Math.max(0, Number(seconds) || 0)),
       seekBy: delta => seekBy(Number(delta) || 0),
       setRate: rate => { audio.playbackRate = Math.max(0.5, Math.min(3, Number(rate) || 1)); },
+    }),
+    /* 本机媒体：只写 clips/ 目录，不给插件任意写盘能力。
+       cut 的返回值带 path / bytes / durationMs，插件拿去做分享卡或下载提示。 */
+    media: only('media', {
+      available: () => !!(tauriHost() && tauriHost().core && typeof tauriHost().core.invoke === 'function'),
+      probe: path => mediaInvoke('media_probe', { path: String(path || '') }),
+      cut: (path, startMs, endMs) => mediaInvoke('media_cut', {
+        path: String(path || ''),
+        startMs: Math.max(0, Number(startMs) || 0),
+        endMs: Math.max(0, Number(endMs) || 0),
+      }),
+      extractAudio: path => mediaInvoke('media_extract_audio', { path: String(path || '') }),
+    }),
+    /* AI 问答：不是通用代理入口，只暴露 chat / ready / config 三件事。 */
+    llm: only('llm', {
+      ready: () => llmReady(),
+      config: () => llmConfigSummary(),
+      chat: (system, user) => llmChat(system, user),
     }),
     subtitles: only('subtitles', {
       claim: () => PluginHost.claim(id, 'subtitles'),
@@ -1631,6 +1710,8 @@ const PLUGIN_PERMISSIONS = {
   providers: '接管核心能力（目录 / 播放 / 下载 / 队列）',
   subtitles: '接管字幕功能',
   study: '接管学英语功能',
+  media: '本机媒体处理（探测 / 裁片段 / 只取音轨）',
+  llm: '调用大模型（复用 AI 学英语里已配置的 Key 与模型）',
 };
 const PLUGIN_PERMISSION_ALL = Object.keys(PLUGIN_PERMISSIONS);
 const PLUGIN_GRANTS = new Map();

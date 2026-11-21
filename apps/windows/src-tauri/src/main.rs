@@ -3,6 +3,7 @@
 mod asr;
 mod captions;
 mod localasr;
+mod media;
 mod offline;
 mod models;
 mod plugins;
@@ -1312,6 +1313,9 @@ fn main() {
             local_clip_transcribe,
             local_transcribe_stop,
             local_transcript_load,
+            media::media_probe,
+            media::media_cut,
+            media::media_extract_audio,
             dbg_note
         ])
         .run(tauri::generate_context!())
