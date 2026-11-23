@@ -66,13 +66,19 @@ MyTPlugins.define('ask', {
 
         const renderHits = (hits) => {
           if (!hits.length) {
-            results.innerHTML = '<div class="ask-muted">没有找到相关原话。换个更短的说法试试。</div>';
+            const q = String(input.value || '').trim();
+            results.innerHTML = '<div class="ask-muted">' + (hasCJK(q)
+              ? '没有找到相关原话。中文检索只覆盖带中文译文的集；也可以换英文关键词试试。'
+              : '没有找到相关原话。换个更短的说法试试。') + '</div>';
             return;
           }
+          const q = String(input.value || '').trim();
           results.innerHTML = hits.map((h, i) =>
             '<div class="ask-row" data-ask-i="' + i + '">' +
               '<span class="ask-time">' + fmtClock(h.start) + '</span>' +
-              '<span class="ask-text">' + highlight(h.text, input.value) + '</span>' +
+              '<span class="ask-text">' + highlight(h.text, q) +
+                (h.zh ? '<span class="ask-zh">' + highlight(h.zh, q) + '</span>' : '') +
+              '</span>' +
             '</div>').join('');
           results.querySelectorAll('[data-ask-i]').forEach(row => {
             row.onclick = () => {
@@ -99,8 +105,14 @@ MyTPlugins.define('ask', {
           if (!api.llm || !api.llm.ready()) {
             const cfg = api.llm && api.llm.config ? api.llm.config() : {};
             answerBox.hidden = false;
-            answerBox.innerHTML = '<div class="ask-muted">还没配置 AI。打开「设置 → AI 学英语」，填 API Key 与模型，问答和学英语共用这一份配置。' +
-              (cfg.model ? '（当前模型：' + escapeHtml(cfg.model) + '）' : '') + '</div>';
+            answerBox.innerHTML = '<div class="ask-muted">还没配置 AI。问答和「AI 学英语」共用同一份 API Key 与模型配置。' +
+              (cfg.model ? '（当前模型：' + escapeHtml(cfg.model) + '）' : '') +
+              '<div class="ask-setup"><button class="btn ghost ask-open-settings" type="button">去「AI 学英语」设置</button></div></div>';
+            const openBtn = answerBox.querySelector('.ask-open-settings');
+            if (openBtn) openBtn.onclick = () => {
+              if (api.openSettings) api.openSettings('study', { force: true });
+              else api.toast('打开「设置 → AI 学英语」填 Key。');
+            };
             return;
           }
           busy = true;
@@ -160,24 +172,55 @@ function jumpTo(api, at) {
 }
 
 /* 检索打分保持可解释：整句命中原串最高，其次命中词数，再按覆盖率。
+   中文问句先去掉疑问词和口语壳，再按停用字切；命中范围同时覆盖英文原话与 zh 译文。
    不做同义扩展、不做编辑距离——错配比漏配更伤信任。 */
+function hasCJK(text) {
+  return /[\u4e00-\u9fff]/.test(String(text || ''));
+}
+
+function queryTerms(query) {
+  const base = String(query || '').toLowerCase().trim();
+  if (!hasCJK(base)) {
+    return { phrase: base.replace(/\s+/g, ' '), terms: base.split(/[\s,，。.、;；:：!?！？]+/).filter(t => t.length > 1) };
+  }
+  const cleaned = base
+    .replace(/[\s,，。.、;；:：!?！？"'“”‘’()（）《》]/g, '')
+    .replace(/(这集|这期|本期|节目里|节目|里面|文中|播客里|播客中)/g, '')
+    .replace(/(提过|提到|说过|讲到|聊过|谈到|讲过|问一下|想问)/g, '')
+    .replace(/(是谁|是什么|为什么|怎么样|怎么|哪些|哪个|多少|是否|有没有|吗|呢|啊|呀|吧|了)/g, '');
+  const chunks = cleaned.split(/[的是在有和与及跟、]/).filter(t => t.length > 0);
+  const terms = chunks.slice();
+  // 长短语再补 2–4 字滑窗，防止「芬兰总统」这类词只出现在句子中间、
+  // 而整句切分后变成「芬兰总统」以外的东西。
+  chunks.forEach(chunk => {
+    if (chunk.length >= 4) {
+      for (let n = 2; n <= Math.min(4, chunk.length); n++) {
+        for (let i = 0; i + n <= chunk.length; i++) terms.push(chunk.slice(i, i + n));
+      }
+    }
+  });
+  return { phrase: cleaned, terms: Array.from(new Set(terms)) };
+}
+
 function search(cues, query) {
-  const q = String(query).toLowerCase();
-  const terms = q.split(/[\s,，。.、;；:：!?！？]+/).filter(t => t.length > 1);
-  const phrase = q.replace(/\s+/g, ' ').trim();
+  const info = queryTerms(query);
+  const phrase = info.phrase;
+  const terms = info.terms;
   return cues.map((cue, index) => {
     const text = String(cue.text || '');
+    const zh = String(cue.zh || '');
     const low = text.toLowerCase();
+    const lowZh = zh.toLowerCase();
     let score = 0;
-    if (phrase && low.includes(phrase)) score += 100;
+    if (phrase && (low.includes(phrase) || lowZh.includes(phrase))) score += 100;
     let matched = 0;
-    terms.forEach(t => { if (low.includes(t)) matched += 1; });
+    terms.forEach(t => { if (low.includes(t) || lowZh.includes(t)) matched += 1; });
     if (terms.length) {
       score += matched * 12;
       if (matched === terms.length) score += 12;
       score += Math.min(6, Math.floor((matched / Math.max(1, terms.length)) * 6));
     }
-    return { index, start: Number(cue.start) || 0, end: Number(cue.end) || 0, text, score };
+    return { index, start: Number(cue.start) || 0, end: Number(cue.end) || 0, text, zh, score };
   }).filter(hit => hit.score > 0)
     .sort((a, b) => b.score - a.score || a.start - b.start);
 }
@@ -216,7 +259,8 @@ function parseClock(text) {
 
 function highlight(text, query) {
   const raw = escapeHtml(text);
-  const terms = String(query).toLowerCase().split(/[\s,，。.、;；:：!?！？]+/).filter(t => t.length > 1);
+  const info = queryTerms(query);
+  const terms = info.terms.filter(t => t.length > 0);
   if (!terms.length) return raw;
   let out = raw;
   terms.forEach(term => {

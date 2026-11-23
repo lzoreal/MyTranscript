@@ -2,8 +2,8 @@ import { $, ASR_MODEL_DEFAULT, box, host, prefs, setState, state, tauriHost } fr
 import { emptyLine, esc, fmt, isBracket, isJsonTranscript, loaderHTML, pluginPageKey, reader, seekTo, showToast, statHTML, syncCustomThemeEditor } from './01-theme-reader-shell.js';
 import { syncLiveLeadSelect } from './02-live-caption-wasm.js';
 import { selectEpisode } from './03-native-asr-service-worker.js';
-import { PLUGIN_PAGES, applySlotMounts, destroyV2Page, emitPlugin, loadShow, pluginPlayerState, pluginReportError, refreshPluginSettings, renderPluginPage, renderV2Page } from './04-local-audio-plugin-host.js';
-import { LOCAL_KEY, PAGE_NAMES, QUEUE_KEY, THEME_NAMES, absoluteFeed, app, catalogLatest, epStatusBadges, episodeFilterMatch, episodesOf, firstShowKey, fmtBytes, fmtDuration, formatDate, hash32, hostOf, idxGetAll, inboxCount, isFavorite, isPlayed, isSubscribed, moduleOn, navigate, offlineKeyFor, parseRoute, plainText, readAllProgress, readJSON, refreshShows, renderAfterStateChange, renderDownloads, renderOfflineList, renderPlaylists, returnToCue, routeHash, routeModuleAllows, showByKey, showPrefFor, syncDockBadge, syncDockSleep, syncIndexCount, syncRateSeg, writeJSON } from './05-transport-transcript-nav.js';
+import { PLUGIN_PAGES, applySlotMounts, destroyV2Page, emitPlugin, loadShow, pluginPlayerState, pluginReportError, refreshPluginSettings, renderPluginPage, renderV2Page, subtitlePluginOn } from './04-local-audio-plugin-host.js';
+import { LOCAL_KEY, PAGE_NAMES, QUEUE_KEY, THEME_NAMES, absoluteFeed, app, catalogLatest, epStatusBadges, episodeFilterMatch, episodesOf, firstShowKey, fmtBytes, fmtDuration, formatDate, hash32, hostOf, idxGetAll, inboxCount, isFavorite, isPlayed, isSubscribed, moduleOn, navigate, notifyPlayTargetFailure, offlineKeyFor, parseRoute, plainText, playTarget, playTargetLabel, readAllProgress, readJSON, refreshShows, renderAfterStateChange, renderDownloads, renderOfflineList, renderPlaylists, returnToCue, routeHash, routeModuleAllows, showByKey, showPrefFor, syncDockBadge, syncDockSleep, syncIndexCount, syncRateSeg, writeJSON } from './05-transport-transcript-nav.js';
 import { coverHTML, ensureShowFeed, episodeCover, hasFreshFeed, memoryFeed, renderOnlineResults } from './06-catalog-feeds-search.js';
 import { motionFlip, motionReduced } from './11-motion.js';
 
@@ -68,6 +68,8 @@ function applyRouteNow(route) {
   if (route.page === 'echo') { navigate('stats'); return; }
   const isPlayer = route.page === 'player';
   document.body.classList.toggle('player-open', isPlayer);
+  // 首页自己的 hero 已经有搜索框，顶栏那个不再重复出现。
+  document.body.classList.toggle('on-home', route.page === 'home');
   document.querySelectorAll('.page').forEach(el => el.classList.toggle('active', el.id === 'page-' + route.page));
   document.querySelectorAll('[data-route]').forEach(el => {
     const active = el.dataset.route === route.page;
@@ -103,12 +105,30 @@ async function openPlayerRoute(route) {
   const t = Number(route.params.get('t')) || 0;
   app.pendingSeek = t > 0 ? t : 0;
   app.pendingSeekEp = t > 0 ? ep : '';
-  if (!key) { box.innerHTML = '<div class="empty">先选择一集开始收听。</div>'; return; }
+  if (!key) { showToast('先选择一集再开始收听。', 5000); box.innerHTML = '<div class="empty">先选择一集开始收听。</div>'; return; }
   const show = showByKey(key);
-  if (!show) { navigate('home'); return; }
+  if (!show) {
+    notifyPlayTargetFailure(playTarget(key, ep || 'x'));
+    navigate('home');
+    return;
+  }
+  if (ep) {
+    const target = playTarget(key, ep);
+    if (!target.ok) {
+      notifyPlayTargetFailure(target);
+      navigate(show.local ? 'local' : 'podcast', show.local ? [] : [show.slug]);
+      return;
+    }
+  }
   setState('pendingFollow', true);
   if (state.show?.slug !== show.slug || (ep && state.current?.id !== ep)) {
-    await loadShow(show.slug, ep || undefined);
+    const loaded = await loadShow(show.slug, ep || undefined, { strict: !!ep });
+    if (!loaded && ep) {
+      app.pendingSeek = 0; app.pendingSeekEp = '';
+      showToast(show.local ? '这个本地文件已经不在列表里了。' : '这一集打不开，节目源可能暂时不可用。', 7000);
+      navigate(show.local ? 'local' : 'podcast', show.local ? [] : [show.slug]);
+      return;
+    }
   } else if (!state.current) {
     const episodes = state.episodes.length ? state.episodes : episodesOf(show);
     if (episodes.length) selectEpisode(episodes[0], true);
@@ -136,7 +156,14 @@ function renderPage(page, route) {
     enhanceClickableRows();
     applySlotMounts(document);
     // 首页现在由 home 插件渲染，宿主只在它画完之后补一张「继续看视频」卡。
-    if (page === 'home') { appendHomeVideoCard(); setTimeout(appendHomeVideoCard, 0); }
+    if (page === 'home') {
+      // 首页由 home 插件渲染，但「继续收听」必须由宿主再校验一次：
+      // 插件可能来自旧安装，仍会把已删除本地文件的孤儿进度画成卡片。
+      renderHomeContinue();
+      appendHomeVideoCard();
+      renderHomeOnboard();
+      setTimeout(() => { renderHomeContinue(); appendHomeVideoCard(); renderHomeOnboard(); }, 0);
+    }
     return;
   }
   if (page === 'home') renderHome();
@@ -208,10 +235,41 @@ function transcriptCoverage(show) {
   const done = Number(show?.transcript_count) || 0;
   return total > 0 && done > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
 }
+/* 字幕是桌面插件能力。网页版没有宿主，不能沿用“100% 覆盖”的说法；
+   所有徽章、详情、单集页统一走这里，避免文案说有、点进去却没有。 */
+function subtitleCapability() {
+  try { if (subtitlePluginOn()) return 'on'; } catch (e) {}
+  return host() ? 'desktop-off' : 'web';
+}
+function subtitleCardBadge(show) {
+  const cap = subtitleCapability();
+  if (cap === 'on') return show?.transcript_count ? '双语词级文字稿' : '增强文字稿';
+  return cap === 'web' ? '网页版仅音频' : '字幕插件未启用';
+}
+function subtitleShowSuffix(show) {
+  const cap = subtitleCapability();
+  if (cap === 'on') return show?.builtin ? ' · 双语词级文字稿' : ' · 站外节目仅音频';
+  if (cap === 'web') return show?.builtin ? ' · 网页版仅音频（桌面版支持字幕）' : ' · 站外节目仅音频';
+  return ' · 字幕插件未启用，仅音频';
+}
+function subtitleKvLabel(show) {
+  const cap = subtitleCapability();
+  if (cap === 'on') return show?.builtin ? '双语词级' : '无';
+  return cap === 'web' ? '网页版仅音频' : '字幕插件未启用';
+}
+function subtitleEpisodeLabel(show, ep) {
+  const cap = subtitleCapability();
+  if (cap === 'web') return '网页版仅音频';
+  if (cap === 'desktop-off') return '字幕插件未启用';
+  if (ep?.transcript) return '含双语文字稿';
+  return show?.builtin ? '无字幕' : '仅音频';
+}
 function coverageHTML(show) {
   const total = Number(show?.episode_count) || 0;
   const done = Number(show?.transcript_count) || 0;
   if (!show?.builtin || !total || !done) return '';
+  // 网页版没有字幕插件，覆盖率数字只会制造“点了却没有”的落差。
+  if (subtitleCapability() !== 'on') return '';
   return '<span class="pill">文字稿 ' + done + '/' + total + ' 集 · ' + transcriptCoverage(show) + '%</span>';
 }
 function podCardHTML(show) {
@@ -221,11 +279,12 @@ function podCardHTML(show) {
   const desc = plainText(show.description || '');
   const latest = catalogLatest(show)[0] || null;
   const badge = show.builtin
-    ? '<span class="pill">' + (show.transcript_count ? '双语词级文字稿' : '增强文字稿') + '</span>'
+    ? '<span class="pill' + (subtitleCapability() === 'on' ? '' : ' dim') + '">' + subtitleCardBadge(show) + '</span>'
     : '<span class="pill dim">站外 · 仅音频</span>';
   const action = show.builtin
-    ? '<button class="btn small ' + (subscribed ? 'ghost' : 'primary') + '" data-sub-toggle="' + esc(show.slug) + '">' +
-      (subscribed ? '已订阅' : '订阅') + '</button>'
+    ? (subscribed
+      ? '<button class="btn small ghost" data-open-podcast="' + esc(show.slug) + '">管理中</button>'
+      : '<button class="btn small primary" data-sub-toggle="' + esc(show.slug) + '">订阅</button>')
     : '<button class="btn small ghost" data-remove-sub="' + esc(show.slug) + '">移除</button>';
   const latestLine = latest
     ? '<span class="pod-latest">最新：' + esc(latest.title || '(无标题)') +
@@ -259,6 +318,45 @@ function fmtHours(seconds) {
 }
 
 /* ---------- home ---------- */
+function renderHomeContinue() {
+  const progress = readAllProgress();
+  const entries = Object.entries(progress).filter(([, rec]) => Number(rec.t) > 5);
+  const resolved = entries.map(([progressId, rec]) => {
+    const key = rec.key || progressId.split(':')[0];
+    const epId = progressId.slice(key.length + 1).replace(/^:/, '');
+    return { progressId, rec, key, epId, target: playTarget(key, epId) };
+  });
+  const continuing = resolved.filter(({ rec }) => !rec.d || rec.t < rec.d - 30);
+  const continueEntry = continuing
+    .filter(item => item.target.ok)
+    .sort((a, b) => (b.rec.at || 0) - (a.rec.at || 0))[0];
+  const staleCount = continuing.filter(item => !item.target.ok).length;
+  const hasVideo = !!homeVideoCard();
+  if (continueEntry) {
+    const { rec, key, epId } = continueEntry;
+    const show = continueEntry.target.show;
+    const pct = rec.d ? Math.min(100, Math.round((rec.t / rec.d) * 100)) : 0;
+    $('homeContinue').innerHTML = '<div class="continue" data-resume data-key="' + esc(key) + '" data-ep="' +
+      esc(epId) + '" data-t="' + Number(rec.t || 0) + '">' +
+      coverHTML(show, 'pod-art') + '<div class="continue-main"><strong>' + esc(rec.title || show.name || '继续收听') +
+      '</strong><span>' + esc(rec.show || show.name || '') + ' · 已听 ' + fmt(rec.t) + (rec.d ? ' / ' + fmt(rec.d) : '') +
+      '</span><div class="progress"><i style="width:' + pct + '%"></i></div></div>' +
+      '<button class="round-play" data-resume data-key="' + esc(key) + '" data-ep="' +
+      esc(epId) + '" data-t="' + Number(rec.t || 0) + '">▶</button></div>';
+    $('continueHint').textContent = staleCount ? '上次停在这里 · ' + staleCount + ' 条失效记录' : '上次停在这里';
+  } else if (hasVideo) {
+    $('homeContinue').innerHTML = '';
+    $('continueHint').textContent = '上次看到这里';
+  } else if (staleCount) {
+    $('homeContinue').innerHTML = emptyLine('上次收听的内容已经失效了。',
+      '<button class="btn ghost" data-route="local">检查本地文件</button>');
+    $('continueHint').textContent = staleCount + ' 条记录已失效';
+  } else {
+    $('homeContinue').innerHTML = emptyLine('还没有收听记录。', '<button class="btn primary" data-route="discover">去发现节目</button>');
+    $('continueHint').textContent = '';
+  }
+  return { entries, staleCount };
+}
 function renderHome() {
   const subs = app.subs.map(s => showByKey(s.key)).filter(Boolean);
   $('heroSubCount').textContent = subs.length;
@@ -266,32 +364,8 @@ function renderHome() {
   if (dateEl && dateEl.textContent.trim() === '—') {
     dateEl.textContent = new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' });
   }
-  const progress = readAllProgress();
-  const entries = Object.entries(progress).filter(([, rec]) => Number(rec.t) > 5);
-  const continueEntry = entries
-    .filter(([, rec]) => !rec.d || rec.t < rec.d - 30)
-    .sort((a, b) => (b[1].at || 0) - (a[1].at || 0))[0];
-  const videoCard = homeVideoCard();
-  if (continueEntry) {
-    const [progressId, rec] = continueEntry;
-    const key = rec.key || progressId.split(':')[0];
-    const show = showByKey(key) || { slug: key, name: rec.show || key };
-    const pct = rec.d ? Math.min(100, Math.round((rec.t / rec.d) * 100)) : 0;
-    $('homeContinue').innerHTML = '<div class="continue" data-resume data-key="' + esc(key) + '" data-ep="' +
-      esc(progressId.slice(key.length + 1).replace(/^:/, '')) + '" data-t="' + Number(rec.t || 0) + '">' +
-      coverHTML(show, 'pod-art') + '<div class="continue-main"><strong>' + esc(rec.title || show.name || '继续收听') +
-      '</strong><span>' + esc(rec.show || show.name || '') + ' · 已听 ' + fmt(rec.t) + (rec.d ? ' / ' + fmt(rec.d) : '') +
-      '</span><div class="progress"><i style="width:' + pct + '%"></i></div></div>' +
-      '<button class="round-play" data-resume data-key="' + esc(key) + '" data-ep="' +
-      esc(progressId.slice(key.length + 1).replace(/^:/, '')) + '" data-t="' + Number(rec.t || 0) + '">▶</button></div>' + videoCard;
-    $('continueHint').textContent = '上次停在这里';
-  } else if (videoCard) {
-    $('homeContinue').innerHTML = videoCard;
-    $('continueHint').textContent = '上次看到这里';
-  } else {
-    $('homeContinue').innerHTML = emptyLine('还没有收听记录。', '<button class="btn primary" data-route="discover">去发现节目</button>');
-    $('continueHint').textContent = '';
-  }
+  const { entries } = renderHomeContinue();
+  appendHomeVideoCard();
   $('homeStats').innerHTML = statHTML('订阅节目', subs.length, '含内置与站外')
     + statHTML('开始收听', entries.length, '有播放位置的单集')
     + statHTML('收藏片段', app.bookmarks.length, '播放器里点 ☆');
@@ -310,6 +384,45 @@ function renderHome() {
   $('homeRecommended').innerHTML = recommended.length
     ? recommended.map(podCardHTML).join('')
     : emptyLine('所有内置节目都已订阅。');
+  renderHomeOnboard(subs, entries);
+}
+
+/* 首启三步：产品第一次打开时，首页最缺的是“下一步做什么”。
+   三步都真实可判定：订阅数、播放记录、打开过阅读器；做完或跳过就永久收起。 */
+function renderHomeOnboard(subs, entries) {
+  const host = $('homeOnboard');
+  if (!host) return;
+  if (!subs) subs = app.subs.map(s => showByKey(s.key)).filter(Boolean);
+  if (!entries) entries = Object.entries(readAllProgress()).filter(([, rec]) => Number(rec.t) > 5);
+  let done = false;
+  try { done = localStorage.getItem('myt-onboard-done') === '1'; } catch (e) {}
+  if (done) { host.hidden = true; host.innerHTML = ''; return; }
+  let openedReader = false;
+  try { openedReader = localStorage.getItem('myt-reader-opened') === '1'; } catch (e) {}
+  const steps = [
+    { ok: subs.length > 0, text: '订阅一档节目' },
+    { ok: entries.length > 0, text: '播放任意一集' },
+    { ok: openedReader, text: '打开一集文字稿' },
+  ];
+  const finished = steps.filter(step => step.ok).length;
+  if (finished >= steps.length) {
+    try { localStorage.setItem('myt-onboard-done', '1'); } catch (e) {}
+    host.hidden = true;
+    host.innerHTML = '';
+    return;
+  }
+  const route = !subs.length ? 'discover' : (!entries.length ? 'discover' : 'listening');
+  const action = route === 'discover' ? '去发现节目' : '回去继续听';
+  host.hidden = false;
+  host.innerHTML =
+    '<header><strong>三步开始用 MyTranscript</strong><span>' + finished + ' / ' + steps.length + ' 完成</span></header>' +
+    '<div class="onb-steps">' + steps.map((step, index) =>
+      '<div class="onb-step' + (step.ok ? ' done' : '') + '"><b>' + (step.ok ? '✓' : index + 1) + '</b><span>' + esc(step.text) + '</span></div>'
+    ).join('') + '</div>' +
+    '<footer><small>不用配置也能离线听；AI 功能之后在设置里再开。</small><div style="display:flex;gap:8px">' +
+      '<button class="btn ghost small" type="button" data-onboard-skip>跳过引导</button>' +
+      '<button class="btn primary small" type="button" data-route="' + route + '">' + esc(action) + '</button>' +
+    '</div></footer>';
 }
 
 /* 视频看到一半回主页，原来就彻底找不回去了：这里给它留一张卡。
@@ -323,12 +436,16 @@ function appendHomeVideoCard() {
   /* 卡片自己的元信息写「看到 11:37」，节标题就别再统一写「上次停在这里」。
      只有音频续播卡也在时，标题才回到中性的说法。 */
   const hint = $('continueHint');
-  if (hint) hint.textContent = box.querySelectorAll('.continue:not([data-video-resume])').length
-    ? '上次停在这里' : '上次看到这里';
+  if (hint && !/条失效记录/.test(hint.textContent)) {
+    hint.textContent = box.querySelectorAll('.continue:not([data-video-resume])').length
+      ? '上次停在这里' : '上次看到这里';
+  }
 }
 function homeVideoCard() {
   const ep = readJSON('myt-video-ep', null);
   if (!ep || !ep.id) return '';
+  // 本地视频已经从「本地文件」移除时，首页不要再挂一张点开必然失败的卡。
+  if (ep.localPath && !app.local.some(item => item.kind === 'video' && (item.localPath === ep.localPath || item.id === ep.id))) return '';
   const rec = readJSON(videoProgressKey(ep), null);
   if (!rec || Number(rec.t) <= 5) return '';
   const dur = Number(rec.duration) || 0;
@@ -679,6 +796,8 @@ function bindVideoExtras(video, ep) {
         video.src = direct;
         video.load();
         videoAsrStatus('代理没接上，已切回直连（这一集没有字幕）', true);
+      } else {
+        showToast(ep?.localPath ? '这个本地视频文件不见了，请重新导入。' : '视频加载失败，地址可能已经失效。', 7000);
       }
     });
   }
@@ -1040,7 +1159,7 @@ function renderPodcast(key) {
 
   const show = showByKey(key);
   const view = $('podcastView');
-  if (!show) { navigate('home'); return; }
+  if (!show) { showToast('找不到这档节目，可能已经退订。', 6000); navigate('home'); return; }
   const subscribed = isSubscribed(show.slug);
   const feed = memoryFeed(show);
   const episodes = show.local ? episodesOf(show) : (feed?.episodes || catalogLatest(show));
@@ -1059,27 +1178,27 @@ function renderPodcast(key) {
   ].map(([id, label]) => '<button data-ep-filter="' + id + '" class="' + (filter === id ? 'on' : '') + '">' + label + '</button>').join('') + '</div>';
   view.innerHTML = '<div class="page-head"><div><div class="eyebrow">' + (show.builtin ? 'BUILT-IN SHOW' : 'EXTERNAL FEED') +
     '</div><h1>' + esc(show.name) + '</h1><div class="subtitle">' + (count ? count + ' 集' : '') +
-    (show.builtin ? ' · 双语词级文字稿' : ' · 站外节目仅音频') + '</div></div><button class="btn ghost" data-route="library">← 返回播客库</button></div>' +
-    '<div class="detail-hero">' + coverHTML(show, 'pod-art') + '<div style="min-width:0;flex:1"><div class="detail-meta"><span>' +
+    subtitleShowSuffix(show) + '</div></div><button class="btn ghost" data-route="library">← 返回播客库</button></div>' +
+    '<div class="detail-hero show-hero">' + coverHTML(show, 'pod-art') + '<div style="min-width:0;flex:1"><div class="detail-meta"><span>' +
     (show.builtin ? '内置增强 Feed' : '站外订阅') + '</span><span>' + esc(show.builtin ? '本站' : hostOf(show.feed || '')) + '</span><span>' +
-    (count ? count + ' 集' : '—') + '</span></div><p>' + esc(desc || '暂无简介。') + '</p><div class="detail-actions">' +
+    (count ? count + ' 集' : '—') + '</span></div><div class="show-desc-wrap">' + '<p class="show-desc">' + esc(desc || '暂无简介。') + '</p>' + (desc && desc.length > 260 ? '<button class="textbtn show-desc-toggle" type="button">展开简介</button>' : '') + '</div><div class="detail-actions">' +
+    (episodes[0] ? '<button class="btn primary" data-play-episode data-key="' + esc(show.slug) + '" data-ep="' + esc(episodes[0].id) + '">▶ 播放最新</button>' : '') +
     (show.local
       ? '<button class="btn ghost" data-route="local">管理本地文件</button>'
       : (show.builtin
-        ? '<button class="btn ' + (subscribed ? 'ghost' : 'primary') + '" data-sub-toggle="' + esc(show.slug) + '">' + (subscribed ? '✓ 已订阅' : '订阅') + '</button>'
+        ? '<button class="btn ghost" data-sub-toggle="' + esc(show.slug) + '" title="点击退订">' + (subscribed ? '✓ 已订阅 · 退订' : '＋ 订阅') + '</button>'
         : '<button class="btn ghost" data-remove-sub="' + esc(show.slug) + '">移除订阅</button>')) +
-    (episodes[0] ? '<button class="btn ghost" data-play-episode data-key="' + esc(show.slug) + '" data-ep="' + esc(episodes[0].id) + '">▶ 播放最新</button>' : '') +
     '</div>' + (error ? '<div class="modal-note err" style="margin-top:10px">' + esc(error) + '</div>' : '') + '</div></div>' +
     '<div class="grid two" style="margin-top:16px"><div class="card card-pad"><h3 class="section-title">单集 <small>' +
     (feed ? episodes.length + ' 集' : (show.episode_count && episodes.length < show.episode_count
-      ? '最近 ' + episodes.length + ' / ' + show.episode_count + ' 集' : episodes.length + ' 集')) + '</small></h3>' + filterChips + (filtered.length
+      ? '最近 ' + episodes.length + ' / ' + show.episode_count + ' 集' : episodes.length + ' 集')) + '</small>' + loadAll + '</h3>' + filterChips + (filtered.length
       ? filtered.map(ep => episodeRowHTML(ep, show)).join('')
       : emptyLine(episodes.length ? '这个筛选下没有单集。' : (feed ? '该 feed 没有单集。' : '还没有读取单集。'))) + '</div><div class="card card-pad"><h3 class="section-title">节目资料</h3>' +
     '<div class="kv"><span>类型</span><b>' + (show.builtin ? '内置' : '站外') + '</b></div>' +
     '<div class="kv"><span>Feed</span><b>' + (show.feed ? '增强 RSS' : '—') + '</b></div>' +
-    '<div class="kv"><span>文字稿</span><b>' + (show.builtin ? '双语词级' : '无') + '</b></div>' +
+    '<div class="kv"><span>文字稿</span><b>' + subtitleKvLabel(show) + '</b></div>' +
     '<div class="kv"><span>宿主</span><b>' + esc(show.builtin ? '本站 GitHub Pages' : hostOf(show.feed || '')) + '</b></div>' +
-    '<div style="margin-top:14px;display:flex;gap:7px;flex-wrap:wrap">' + loadAll +
+    '<div style="margin-top:14px;display:flex;gap:7px;flex-wrap:wrap">' +
     (show.feed ? '<button class="btn ghost small" data-copy-feed="' + esc(feedUrl) + '">复制 Feed 地址</button>' : '') +
     '</div></div></div>' +
     '<div class="card card-pad" style="margin-top:16px"><h3 class="section-title">这档节目的设置 <small>只影响本节目</small></h3>' +
@@ -1121,7 +1240,7 @@ function epSlotPayload(show, ep, offlineRec) {
 async function renderEpisode(key, epId) {
   const show = showByKey(key);
   const view = $('episodeView');
-  if (!show) { navigate('home'); return; }
+  if (!show) { showToast('找不到这档节目，可能已经退订。', 6000); navigate('home'); return; }
   let episodes = episodesOf(show);
   let ep = episodes.find(item => item.id === epId);
   if (!ep && show.feed && !hasFreshFeed(show.slug)) {
@@ -1140,28 +1259,32 @@ async function renderEpisode(key, epId) {
   const offlineRec = app.offline ? app.offline.get(offlineKeyFor(show, ep)) : null;
   const offlineAction = !offlineRec ? '⤓ 整集下载'
     : (offlineRec.hasTranscript ? '✓ 离线+字幕' : (isJsonTranscript(ep.transcript) ? '＋ 补字幕' : '✓ 仅音频'));
-  view.innerHTML = '<div class="page-head"><div><div class="eyebrow">EPISODE</div><h1>' + esc(show.name) +
-    '</h1><div class="subtitle">' + formatDate(ep.date) + '</div></div><button class="btn ghost" data-open-podcast="' +
-    esc(show.slug) + '">← 返回节目</button></div><div class="detail-hero">' + episodeCover(ep, show) +
-    '<div style="min-width:0;flex:1"><h2>' + esc(ep.title || '(无标题)') + '</h2><div class="detail-meta">' +
-    '<span>' + esc(show.name) + '</span>' + (ep.date ? '<span>' + formatDate(ep.date) + '</span>' : '') +
-    (fmtDuration(ep.duration) ? '<span>' + esc(fmtDuration(ep.duration)) + '</span>' : '') +
-    '<span>' + (ep.transcript ? '含双语文字稿' : (show.builtin ? '无字幕' : '仅音频')) + '</span></div><div class="detail-actions">' +
-    '<button class="btn primary" data-play-episode data-key="' + esc(show.slug) + '" data-ep="' + esc(ep.id) + '">▶ 播放单集</button>' +
-    (moduleOn('study') && ep.transcript?.url ? '<button class="btn ghost" data-ai-episode data-key="' + esc(show.slug) + '" data-ep="' + esc(ep.id) + '" title="用 LLM 总结本集，并生成可跳转的主题时间戳">AI 总结</button>' : '') +
-    (ep.videoUrl ? '<button class="btn ghost" data-open-video-ep data-key="' + esc(show.slug) + '" data-ep="' + esc(ep.id) + '">▶ 视频</button>' : '') +
-    '<button class="btn ghost" data-queue-episode data-key="' + esc(show.slug) + '" data-ep="' + esc(ep.id) + '">＋ 队列</button>' +
+  const moreActions = [
+    (moduleOn('study') && subtitleCapability() === 'on' && ep.transcript?.url ? '<button class="btn ghost" data-ai-episode data-key="' + esc(show.slug) + '" data-ep="' + esc(ep.id) + '" title="用 LLM 总结本集，并生成可跳转的主题时间戳">AI 总结</button>' : ''),
+    (ep.videoUrl ? '<button class="btn ghost" data-open-video-ep data-key="' + esc(show.slug) + '" data-ep="' + esc(ep.id) + '">▶ 视频</button>' : ''),
+    '<button class="btn ghost" data-queue-episode data-key="' + esc(show.slug) + '" data-ep="' + esc(ep.id) + '">＋ 队列</button>',
     '<button class="btn ghost" data-fav-episode data-key="' + esc(show.slug) + '" data-ep="' + esc(ep.id) + '">' +
-    (isFavorite(show.slug, ep.id) ? '★ 已收藏' : '☆ 收藏') + '</button>' +
+      (isFavorite(show.slug, ep.id) ? '★ 已收藏' : '☆ 收藏') + '</button>',
     '<button class="btn ghost" data-played-episode data-key="' + esc(show.slug) + '" data-ep="' + esc(ep.id) + '">' +
-    (isPlayed(show.slug, ep.id) ? '✓ 已听' : '○ 标记已听') + '</button>' +
-    '<button class="btn ghost" data-list-episode data-key="' + esc(show.slug) + '" data-ep="' + esc(ep.id) + '">＋ 列表</button>' +
-    '<button class="btn ghost" data-offline-episode data-key="' + esc(show.slug) + '" data-ep="' + esc(ep.id) + '" title="整集下载会同时保存文字稿">' +
-    offlineAction + '</button>' +
-    '<button class="btn ghost" data-copy-link data-key="' + esc(show.slug) + '" data-ep="' + esc(ep.id) + '">复制链接</button>' +
-    '<span class="plugin-slot" data-plugin-slot="episode.header.actions" data-slot-payload="' + epSlotPayload(show, ep, offlineRec) + '" data-slot-payload-version="1"></span></div></div></div>' +
+      (isPlayed(show.slug, ep.id) ? '✓ 已听' : '○ 标记已听') + '</button>',
+    '<button class="btn ghost" data-list-episode data-key="' + esc(show.slug) + '" data-ep="' + esc(ep.id) + '">＋ 列表</button>',
+    '<button class="btn ghost" data-copy-link data-key="' + esc(show.slug) + '" data-ep="' + esc(ep.id) + '">复制链接</button>',
+  ].join('');
+  view.innerHTML = '<div class="ep-head"><button class="crumb-link" type="button" data-open-podcast="' + esc(show.slug) + '">← ' +
+    esc(show.name) + '</button><span class="ep-head-meta">' + (ep.date ? formatDate(ep.date) : '') +
+    (fmtDuration(ep.duration) ? ' · ' + esc(fmtDuration(ep.duration)) : '') + '</span></div>' +
+    '<div class="detail-hero ep-hero">' + episodeCover(ep, show) + '<div class="ep-hero-body">' +
+    '<div class="eyebrow">EPISODE</div><h1 class="ep-title">' + esc(ep.title || '(无标题)') + '</h1>' +
+    '<div class="detail-meta"><span>' + esc(show.name) + '</span><span>' + subtitleEpisodeLabel(show, ep) + '</span></div>' +
+    '<div class="detail-actions">' +
+    '<button class="btn primary" data-play-episode data-key="' + esc(show.slug) + '" data-ep="' + esc(ep.id) + '">▶ 播放单集</button>' +
+    (host() ? '<button class="btn ghost" data-offline-episode data-key="' + esc(show.slug) + '" data-ep="' + esc(ep.id) + '" title="整集下载会同时保存文字稿">' +
+      offlineAction + '</button>' : '') +
+    (moreActions ? '<details class="more-menu"><summary class="btn ghost">更多</summary><div class="more-list">' + moreActions + '</div></details>' : '') +
+    '<span class="plugin-slot" data-plugin-slot="episode.header.actions" data-slot-payload="' + epSlotPayload(show, ep, offlineRec) + '" data-slot-payload-version="1"></span>' +
+    '</div></div></div>' +
     '<div class="plugin-slot" data-plugin-slot="episode.body.before" data-slot-payload="' + epSlotPayload(show, ep, offlineRec) + '" data-slot-payload-version="1"></div>' +
-    '<div class="card card-pad" style="margin-top:16px"><h3 class="section-title">简介</h3><p class="smalltext" style="margin:0">' +
+    '<div class="card card-pad" style="margin-top:16px"><h3 class="section-title">简介</h3><p class="smalltext ep-desc">' +
     esc(desc || '该 feed 没有提供单集简介。') + '</p></div>';
   enhanceClickableRows();
   applySlotMounts(view);
@@ -1183,9 +1306,11 @@ function renderInbox() {
   inboxBox.innerHTML = app.inbox.length
     ? app.inbox.map(item => {
       const { show, ep } = inboxEpisode(item);
-      return '<div class="ep-row" data-play-episode data-key="' + esc(show.slug) + '" data-ep="' + esc(ep.id) + '">' +
+      const target = playTarget(show.slug, ep.id);
+      return '<div class="ep-row' + (target.ok ? '' : ' is-stale') + '" data-play-episode data-key="' + esc(show.slug) + '" data-ep="' + esc(ep.id) + '">' +
         episodeCover(ep, show) + '<div class="ep-body"><span class="ep-title">' + esc(item.title || ep.title || '(无标题)') +
         '</span><span class="ep-sub">' + esc(item.show || show.name || '') + (item.date ? ' · ' + formatDate(item.date) : '') +
+        (target.ok ? '' : ' · ' + playTargetLabel(target)) +
         '</span></div><div class="ep-actions">' +
         '<button class="mini-btn" data-queue-episode data-key="' + esc(show.slug) + '" data-ep="' + esc(ep.id) + '" title="加入队列">＋</button>' +
         '<button class="mini-btn" data-fav-episode data-key="' + esc(show.slug) + '" data-ep="' + esc(ep.id) + '" title="收藏">' + (isFavorite(show.slug, ep.id) ? '★' : '☆') + '</button>' +
@@ -1205,11 +1330,13 @@ function renderFavorites() {
   motionFlip(favoriteBox, '.ep-row', () => {
   favoriteBox.innerHTML = items.length
     ? items.map(item => {
-      const show = showByKey(item.showKey) || { slug: item.showKey, name: item.showKey, key: item.showKey };
+      const target = playTarget(item.showKey, item.epId);
+      const show = target.show || { slug: item.showKey, name: item.showKey, key: item.showKey };
       const ep = episodesOf(show).find(entry => entry.id === item.epId) || { id: item.epId, title: '单集 ' + item.epId.slice(0, 8) };
-      return '<div class="ep-row" data-play-episode data-key="' + esc(show.slug) + '" data-ep="' + esc(ep.id) + '">' +
+      return '<div class="ep-row' + (target.ok ? '' : ' is-stale') + '" data-play-episode data-key="' + esc(show.slug) + '" data-ep="' + esc(ep.id) + '">' +
         episodeCover(ep, show) + '<div class="ep-body"><span class="ep-title">' + esc(ep.title || '(无标题)') +
         '</span><span class="ep-sub">' + esc(show.name || '') + (ep.date ? ' · ' + formatDate(ep.date) : '') +
+        (target.ok ? '' : ' · ' + playTargetLabel(target)) +
         '</span></div><div class="ep-actions"><button class="mini-btn" data-fav-episode data-key="' + esc(show.slug) +
         '" data-ep="' + esc(ep.id) + '" title="取消收藏">★</button></div></div>';
     }).join('')
@@ -1233,12 +1360,13 @@ function renderQueue() {
   motionFlip(queueBox, '.ep-row', () => {
   queueBox.innerHTML = app.queue.length
     ? app.queue.map((item, index) => {
-      const show = showByKey(item.key) || { slug: item.key, name: item.show, key: item.key };
-      return '<div class="ep-row" data-play-episode data-key="' + esc(item.key) + '" data-ep="' + esc(item.ep) + '">' +
+      const target = playTarget(item.key, item.ep);
+      const show = target.show || { slug: item.key, name: item.show, key: item.key };
+      return '<div class="ep-row' + (target.ok ? '' : ' is-stale') + '" data-play-episode data-key="' + esc(item.key) + '" data-ep="' + esc(item.ep) + '">' +
         '<span class="ep-dur">' + String(index + 1).padStart(2, '0') + '</span>' +
         episodeCover({ id: item.ep, img: item.img }, show) + '<div class="ep-body"><span class="ep-title">' +
         esc(item.title || '(无标题)') + '</span><span class="ep-sub">' + esc(show.name || item.show || '') +
-        (item.date ? ' · ' + formatDate(item.date) : '') + '</span></div><span class="ep-dur">' +
+        (item.date ? ' · ' + formatDate(item.date) : '') + (target.ok ? '' : ' · ' + playTargetLabel(target)) + '</span></div><span class="ep-dur">' +
         esc(fmtDuration(item.duration)) + '</span><button class="mini-btn" data-remove-queue="' + index + '">✕</button></div>';
     }).join('')
     : emptyLine('队列是空的。在播客或单集页点“＋ 队列”。', '<button class="btn ghost" data-route="library">去播客库</button>');
@@ -1258,12 +1386,13 @@ function renderHistory() {
     ? entries.map(([progressId, rec]) => {
       const key = rec.key || progressId.split(':')[0];
       const epId = progressId.slice(key.length + 1).replace(/^:/, '');
-      const show = showByKey(key) || { slug: key, name: rec.show || key, key };
+      const target = playTarget(key, epId);
+      const show = target.show || { slug: key, name: rec.show || key, key };
       const pct = rec.d ? Math.min(100, Math.round((rec.t / rec.d) * 100)) : 0;
-      return '<div class="ep-row" data-resume data-key="' + esc(key) + '" data-ep="' + esc(epId) + '" data-t="' + Number(rec.t || 0) + '">' +
+      return '<div class="ep-row' + (target.ok ? '' : ' is-stale') + '" data-resume data-key="' + esc(key) + '" data-ep="' + esc(epId) + '" data-t="' + Number(rec.t || 0) + '">' +
         episodeCover({ id: epId, img: rec.img }, show) + '<div class="ep-body"><span class="ep-title">' +
         esc(rec.title || '(无标题)') + '</span><span class="ep-sub">' + esc(rec.show || show.name || '') + ' · ' +
-        fmt(rec.t) + (rec.d ? ' / ' + fmt(rec.d) : '') + '</span><div class="progress"><i style="width:' + pct + '%"></i></div></div>' +
+        fmt(rec.t) + (rec.d ? ' / ' + fmt(rec.d) : '') + (target.ok ? '' : ' · ' + playTargetLabel(target)) + '</span><div class="progress"><i style="width:' + pct + '%"></i></div></div>' +
         '<button class="mini-btn" data-resume data-key="' + esc(key) + '" data-ep="' + esc(epId) + '" data-t="' + Number(rec.t || 0) + '">▶</button></div>';
     }).join('')
     : emptyLine('还没有收听记录。');
@@ -1353,6 +1482,7 @@ function renderBookmarks() {
       esc(item.ep) + '" data-t="' + Number(item.t || 0) + '"><span class="ep-dur">' + fmt(item.t) + '</span>' +
       '<div class="ep-body"><span class="ep-title">“' + esc(item.en || '') + '”</span><span class="ep-sub">' +
       esc(item.show || '') + ' · ' + esc(item.title || '') + (item.zh ? ' · ' + esc(item.zh) : '') +
+        (playTarget(item.key, item.ep).ok ? '' : ' · ' + playTargetLabel(playTarget(item.key, item.ep))) +
       '</span></div><button class="mini-btn" data-del-bookmark="' + esc(item.id) + '">✕</button></div>').join('')
     : emptyLine('还没有书签。播放时点右上角 ☆ 收藏当前句。');
   });

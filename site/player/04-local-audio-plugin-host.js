@@ -1,5 +1,5 @@
 import { $, LIVE, audio, box, host, listBox, prefs, setState, state, tauriHost } from './00-runtime.js';
-import { applyCustomTheme, applyReader, cuesFromJson, directAudioUrl, emptyLine, esc, fmt, getJson, loaderHTML, parseFeed, pluginPageKey, readCustomTheme, reader, rebuildCues, renderCustomThemeGrid, saveProgress, seekTo, showToast, statHTML, status, studyNormText, syncCustomThemeEditor, syncJumpPill, writeCustomTheme } from './01-theme-reader-shell.js';
+import { applyCustomTheme, applyReader, closeTypeSheet, cuesFromJson, directAudioUrl, emptyLine, esc, fmt, getJson, loaderHTML, parseFeed, pluginPageKey, readCustomTheme, reader, rebuildCues, renderCustomThemeGrid, saveProgress, seekTo, showToast, statHTML, status, studyNormText, syncCustomThemeEditor, syncJumpPill, writeCustomTheme } from './01-theme-reader-shell.js';
 import { CORE_PROVIDER_NAMES, coreProvider, coreProviderOwner, defineCoreProvider, registerCoreProvider, releaseCoreProviders, syncLiveLeadSelect } from './02-live-caption-wasm.js';
 import { applyEpisodeData, liveDisable, liveEnable, mergeAdRanges, sanitizeAdRanges, selectEpisode, studyAdRangesFromData, studyApplyAiAdRanges } from './03-native-asr-service-worker.js';
 
@@ -49,6 +49,11 @@ const syncDockBadge = lazyFn('05-transport-transcript-nav', 'syncDockBadge');
 const syncDockSleep = lazyFn('05-transport-transcript-nav', 'syncDockSleep');
 const syncRateSeg = lazyFn('05-transport-transcript-nav', 'syncRateSeg');
 const writeJSON = lazyFn('05-transport-transcript-nav', 'writeJSON');
+/* 插件看到的播放接口与 UI / 系统媒体键是同一个入口（14-transport）。 */
+const transportPlay = lazyFn('14-transport', 'play');
+const transportPause = lazyFn('14-transport', 'pause');
+const transportToggle = lazyFn('14-transport', 'toggle');
+const transportRate = lazyFn('14-transport', 'rate');
 const coverHTML = lazyFn('06-catalog-feeds-search', 'coverHTML');
 const ensureShowFeed = lazyFn('06-catalog-feeds-search', 'ensureShowFeed');
 const exportSubtitle = lazyFn('06-catalog-feeds-search', 'exportSubtitle');
@@ -351,10 +356,11 @@ function renderList(filter = '') {
   });
 }
 
-async function loadShow(slug, episodeId) {
+async function loadShow(slug, episodeId, options = {}) {
+  const strict = !!options.strict;
   saveProgress(true);
-  const show = state.shows.find(s => s.slug === slug || s.key === slug) || state.shows[0];
-  if (!show) return;
+  const show = state.shows.find(s => s.slug === slug || s.key === slug);
+  if (!show) return false;
   let savedEpisode = '';
   try { savedEpisode = localStorage.getItem('myt-ep-' + show.slug) || ''; } catch (e) {}
   const catalogEps = show.builtin && !hasFreshFeed(show.slug) ? catalogLatest(show) : [];
@@ -374,9 +380,11 @@ async function loadShow(slug, episodeId) {
     setState('episodes', episodesOf(show));
     setState('current', null);
     renderList();
-    const target = state.episodes.find(ep => ep.id === wanted) || state.episodes[0];
-    if (target) selectEpisode(target, true);
-    return;
+    const target = state.episodes.find(ep => ep.id === wanted) || (!strict ? state.episodes[0] : null);
+    if (target) { selectEpisode(target, true); return true; }
+    box.innerHTML = '<div class="empty">' + (wanted ? '这个本地文件已经不在列表里了。' : '这里还没有本地文件。') + '</div>';
+    status(wanted ? '这个本地文件已经不在列表里了。' : '这里还没有本地文件。', 'warn');
+    return false;
   }
   const fastTarget = catalogEps.find(ep => ep.id === wanted);
   if (catalogEps.length && (!wanted || fastTarget)) {
@@ -404,7 +412,7 @@ async function loadShow(slug, episodeId) {
         status('完整单集列表加载失败：' + err.message + '（当前单集仍可播放）', 'warn');
       }
     });
-    return;
+    return true;
   }
   const seq = ++state.loadSeq;
   setState('show', show);
@@ -422,13 +430,13 @@ async function loadShow(slug, episodeId) {
     renderList();
     box.innerHTML = '<div class="empty">该节目暂时没有已发布的增强 Feed。</div>';
     status('该节目暂时没有已发布 Feed。', 'warn');
-    return;
+    return false;
   }
   try {
     let feed = memoryFeed(show);
     if (!feed) {
       const xml = await fetchFeedText(show.feed);
-      if (seq !== state.loadSeq) return;
+      if (seq !== state.loadSeq) return false;
       if (!xml) throw new Error('feed 加载失败');
       feed = parseFeed(xml);
       rememberFeed(show.slug, feed);
@@ -440,20 +448,24 @@ async function loadShow(slug, episodeId) {
     renderList();
     let saved = null;
     try { saved = localStorage.getItem('myt-ep-' + show.slug); } catch (e) {}
-    const first = (episodeId && state.episodes.find(e => e.id === episodeId))
-      || (saved && state.episodes.find(e => e.id === saved))
-      || state.episodes[0];
-    if (first) selectEpisode(first, true);
-    else {
-      box.innerHTML = '<div class="empty">该节目还没有剧集。</div>';
-      status('该节目还没有剧集。', 'warn');
+    const exact = episodeId ? state.episodes.find(e => e.id === episodeId) : null;
+    const first = exact || (!strict ? ((saved && state.episodes.find(e => e.id === saved)) || state.episodes[0]) : null);
+    if (first) { selectEpisode(first, true); return true; }
+    if (episodeId && strict) {
+      box.innerHTML = '<div class="empty">这一集已经不在节目源里了。</div>';
+      status('这一集已经不在节目源里了。', 'warn');
+      return false;
     }
+    box.innerHTML = '<div class="empty">该节目还没有剧集。</div>';
+    status('该节目还没有剧集。', 'warn');
+    return false;
   } catch (err) {
     if (seq !== state.loadSeq) return;
     setState('episodes', []);
     renderList();
     box.innerHTML = '<div class="empty"><b>读取 feed 失败</b>' + esc(err.message) + '</div>';
     status('读取 feed 失败：' + err.message, 'warn');
+    return false;
   }
 }
 
@@ -891,6 +903,8 @@ function applySubtitleAvailability() {
   syncSubtitleSettingsVisibility();
   if (on) return;
   if (LIVE.on) liveDisable('字幕插件未启用，实时识别已停止。');
+  const typeSheet = $('typeSheet');
+  if (typeSheet && typeSheet.classList.contains('on')) closeTypeSheet(false);
   setState('cues', []); setState('nodes', []); setState('activeCue', -1); setState('wordIdx', -1);
   setState('vtt', null); setState('sidecar', null); setState('zhVtt', null); setState('base', null);
   box.innerHTML = '';
@@ -953,13 +967,18 @@ function registerPluginPage(pluginId, pageId, opts) {
   });
   renderPluginNav();
 }
+const PLUGIN_NAV_ICONS = { subtitles: 'i-captions', soundbite: 'i-soundbite', distill: 'i-distill' };
 function renderPluginNav() {
   const nav = $('pluginNav');
   const label = $('pluginNavLabel');
   if (!nav) return;
   const pages = [...PLUGIN_PAGES.values()];
-  nav.innerHTML = pages.map(page => '<button data-plugin-page="' + esc(pluginPageKey(page.pluginId, page.pageId)) +
-    '"><span class="nav-ico">◇</span>' + esc(page.title) + '</button>').join('');
+  nav.innerHTML = pages.map(page => {
+    const icon = PLUGIN_NAV_ICONS[page.pluginId] || 'i-plugin';
+    return '<button data-plugin-page="' + esc(pluginPageKey(page.pluginId, page.pageId)) +
+      '"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#' + icon + '"/></svg>' +
+      esc(page.title) + '</button>';
+  }).join('');
   const has = pages.length > 0;
   nav.hidden = !has;
   nav.style.display = has ? '' : 'none';
@@ -1170,8 +1189,16 @@ function mediaInvoke(command, args) {
 function llmSettings() {
   try {
     const engine = studyEngine();
-    return (engine && engine.settings) || null;
-  } catch (e) { return null; }
+    if (engine && engine.settings) return engine.settings;
+  } catch (e) {}
+  // 学习插件停用时没有 engine，但「设置 → AI 学英语」里的 Key 仍然有效；
+  // 本集问答只借这份配置，不应该因为学习面板被关掉就判定未配置。
+  try {
+    const raw = localStorage.getItem('myt-study');
+    const saved = raw ? JSON.parse(raw) : null;
+    if (saved && typeof saved === 'object' && Object.keys(saved).length) return saved;
+  } catch (e) {}
+  return null;
 }
 function llmReady() {
   const s = llmSettings();
@@ -1221,6 +1248,10 @@ function pluginApiFor(id) {
     host: pluginHostFacade(id),
     toast: (message, type) => showToast(String(message || ''), type === 'warn' ? 5000 : 3000),
     navigate: (page, args = [], params = {}) => navigate(page, args, params),
+    openSettings: (pane = 'study', options = {}) => {
+      navigate('settings');
+      setTimeout(() => openSettingsPane(pane, options), 0);
+    },
     openEpisode: (showKey, episodeId) => {
       pluginRequire(id, 'player');
       return playEpisode(showKey, episodeId);
@@ -1246,12 +1277,12 @@ function pluginApiFor(id) {
     cues: () => cuesSnapshot(),
     player: only('player', {
       state: pluginPlayerState,
-      play: () => audio.play().catch(() => {}),
-      pause: () => audio.pause(),
-      toggle: () => (audio.paused ? audio.play().catch(() => {}) : audio.pause()),
+      play: () => transportPlay(),
+      pause: () => transportPause(),
+      toggle: () => transportToggle(),
       seek: seconds => seekTo(Math.max(0, Number(seconds) || 0)),
       seekBy: delta => seekBy(Number(delta) || 0),
-      setRate: rate => { audio.playbackRate = Math.max(0.5, Math.min(3, Number(rate) || 1)); },
+      setRate: rate => transportRate(rate),
     }),
     /* 本机媒体：只写 clips/ 目录，不给插件任意写盘能力。
        cut 的返回值带 path / bytes / durationMs，插件拿去做分享卡或下载提示。 */
@@ -2034,7 +2065,7 @@ async function refreshPluginSettings() {
   const status = $('pluginStatus');
   if (!box) return;
   if (!host() || typeof host().pluginList !== 'function') {
-    box.innerHTML = emptyLine('插件只在桌面版可用。');
+    box.innerHTML = emptyLine('网页版不加载本地插件；字幕、学习、问答等能力在桌面版可用。');
     if (status) status.textContent = '网页版没有本地插件目录权限。';
     return;
   }

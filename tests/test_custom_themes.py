@@ -1,6 +1,7 @@
 """自定义主题卡片：数据迁移、预览取色与页面接线。
 
-纯函数从 01 分片切出来丢给 node 跑；接线部分做静态断言，避免卡片入口被删掉。
+纯函数现在住在 13-theme（2026-11-22 从 01 搬出），切出来丢给 node 跑；
+接线部分做静态断言，避免卡片入口被删掉。
 """
 import subprocess
 import tempfile
@@ -9,9 +10,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
 SHELL = ROOT / "src" / "player-js" / "01-theme-reader-shell.js"
+THEME = ROOT / "src" / "player-js" / "13-theme.js"
 PAGE = ROOT / "site" / "player.html"
 CSS = ROOT / "site" / "player.css"
 NAV = ROOT / "src" / "player-js" / "05-transport-transcript-nav.js"
+
+
+def shell_and_theme() -> str:
+    """主题代码现在横跨 01（转发/阅读器杂项）与 13（主题本体），接线断言两片一起看。"""
+    return SHELL.read_text(encoding="utf-8") + "\n" + THEME.read_text(encoding="utf-8")
 
 
 def function_block(text: str, name: str, next_name: str) -> str:
@@ -69,7 +76,7 @@ console.log('custom themes OK');
 
 class CustomThemeTests(unittest.TestCase):
     def test_pure_helpers_migrate_and_preview(self):
-        source = SHELL.read_text(encoding="utf-8")
+        source = THEME.read_text(encoding="utf-8")
         script = "function assert(c,m){ if(!c){console.error('FAIL: '+m);process.exit(1);} }\n" + \
             function_block(source, "normalizeCustomTheme", "readCustomTheme") + "\n" + \
             function_block(source, "customPreviewColor", "customThemeActiveName") + "\n" + CASES
@@ -82,7 +89,7 @@ class CustomThemeTests(unittest.TestCase):
         self.assertIn("custom themes OK", proc.stdout)
 
     def test_cards_are_wired_into_theme_grid(self):
-        source = SHELL.read_text(encoding="utf-8")
+        source = shell_and_theme()
         page = PAGE.read_text(encoding="utf-8")
         css = CSS.read_text(encoding="utf-8")
         for fn in ("renderCustomThemeGrid", "saveCustomThemePreset", "applyCustomThemePreset", "removeCustomThemePreset"):
@@ -118,14 +125,14 @@ class CustomThemeTests(unittest.TestCase):
 
     def test_builtin_swatch_disables_custom_theme(self):
         """自定义 CSS 注在 head 末尾、与内置主题同权重，点内置色板时必须先停用它，否则切换无效。"""
-        source = SHELL.read_text(encoding="utf-8")
+        source = THEME.read_text(encoding="utf-8")
         block = source[source.index("function setTheme"):source.index("document.addEventListener('click'")]
         self.assertIn("readCustomTheme()", block, "setTheme 没有检查自定义主题是否启用")
         self.assertIn("enabled: false", block, "setTheme 没有停用自定义主题")
         self.assertIn("applyCustomTheme(next)", block, "停用后没有重新应用（清空注入样式）")
 
     def test_default_packs_and_builtin_swatches(self):
-        """七套随包主题不用手动导入；内置色板只剩午夜蓝/纸张/原型/编辑部四个。"""
+        """七套随包主题不用手动导入；内置色板为午夜蓝/纸张/原型/编辑部/苹果播客/Spotify 六个。"""
         import json
         import re
 
@@ -142,10 +149,10 @@ class CustomThemeTests(unittest.TestCase):
 
         page = PAGE.read_text(encoding="utf-8")
         ids = re.findall(r'class="swatch" data-theme="([a-z]+)"', page)
-        self.assertEqual(sorted(set(ids)), ["ledger", "midnight", "paper", "prototype"], "内置色板残留旧主题")
+        self.assertEqual(sorted(set(ids)), ["apple", "ledger", "midnight", "paper", "prototype", "spotify"], "内置色板残留旧主题")
         self.assertIn("themes-defaults.js", page, "页面没有加载随包主题清单")
 
-        source = SHELL.read_text(encoding="utf-8")
+        source = shell_and_theme()
         self.assertIn("function seedDefaultThemePacks", source, "缺少随包主题种卡函数")
         self.assertIn("queueMicrotask(bootCustomTheme)", source, "启动应用没有压到微任务，readJSON 可能还没注册")
         # 随包主题是默认主题：不可删除，恢复默认时也要保留
@@ -163,7 +170,7 @@ class CustomThemeTests(unittest.TestCase):
     def test_theme_import_is_wired_and_theme_file_valid(self):
         import json
 
-        source = SHELL.read_text(encoding="utf-8")
+        source = shell_and_theme()
         page = PAGE.read_text(encoding="utf-8")
         self.assertIn("function importCustomTheme", source, "缺少 importCustomTheme")
         self.assertIn("importCustomTheme(String(reader.result", source, "文件读完后没有接入导入")

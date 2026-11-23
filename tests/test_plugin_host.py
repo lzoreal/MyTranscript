@@ -307,8 +307,9 @@ class PluginHostTests(unittest.TestCase):
                       "停用自定义主题的实现仍应留在宿主（它读的是宿主配置）")
         self.assertIn("doc.addEventListener('myt:theme-change'", adapter,
                       "应用自定义/内置主题时必须回收插件主题")
-        shell = (ROOT / "src" / "player-js" / "01-theme-reader-shell.js").read_text(encoding="utf-8")
-        self.assertIn("new CustomEvent('myt:theme-change'", shell,
+        # 主题的应用与广播归 13-theme（C 第一刀把主题搬出 01），01 只留同名转发。
+        theme = (ROOT / "src" / "player-js" / "13-theme.js").read_text(encoding="utf-8")
+        self.assertIn("new CustomEvent('myt:theme-change'", theme,
                       "主题模块必须广播主题切换")
 
     def test_ui_adapters_own_the_dom_glue(self):

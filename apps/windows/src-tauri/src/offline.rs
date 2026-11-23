@@ -2,6 +2,7 @@
 //! 这里只碰文件系统和 http 客户端，不持有窗口状态。
 
 use std::collections::HashMap;
+use std::path::Path;
 
 use tauri::{Emitter, Manager};
 
@@ -479,13 +480,29 @@ pub async fn offline_list(app: tauri::AppHandle) -> Result<Vec<serde_json::Value
         .unwrap_or_default();
     // 先扫文字稿与跳过标签，再扫音频，这样每个音频条目都能带上 hasTranscript / hasSkip。
     let mut transcripts: HashMap<String, u64> = HashMap::new();
+    let mut local_transcripts: HashMap<String, u64> = HashMap::new();
     let mut skips: HashMap<String, u64> = HashMap::new();
     for entry in &entries {
         let name = entry.file_name();
         let name = name.to_string_lossy();
         let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
         if let Some(stem) = name.strip_suffix(TRANSCRIPT_SUFFIX) {
-            transcripts.insert(stem.to_string(), size);
+            // 整集预转写会把稿子存在音频旁边：`<key>.<mp3>.transcript.json`。
+            // 远端下载的稿子则是 `<key>.transcript.json`，两者共存，播放时要能区分：
+            // 本地稿走 local_transcript_load，远端稿走 offline_transcript_load。
+            let base = Path::new(stem);
+            let local_audio = base
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|e| AUDIO_EXTS.contains(&e.to_ascii_lowercase().as_str()))
+                .unwrap_or(false);
+            if local_audio {
+                if let Some(key) = base.file_stem().and_then(|s| s.to_str()) {
+                    local_transcripts.insert(key.to_string(), size);
+                }
+            } else {
+                transcripts.insert(stem.to_string(), size);
+            }
         } else if let Some(stem) = name.strip_suffix(SKIP_SUFFIX) {
             skips.insert(stem.to_string(), size);
         }
@@ -507,13 +524,15 @@ pub async fn offline_list(app: tauri::AppHandle) -> Result<Vec<serde_json::Value
             .unwrap_or("")
             .to_string();
         let transcript_size = transcripts.get(&key).copied().unwrap_or(0);
+        let local_transcript_size = local_transcripts.get(&key).copied().unwrap_or(0);
         let skip_size = skips.get(&key).copied().unwrap_or(0);
         out.push(serde_json::json!({
             "key": key,
             "path": path.to_string_lossy(),
             "size": size,
-            "hasTranscript": transcript_size > 0,
-            "transcriptSize": transcript_size,
+            "hasTranscript": transcript_size > 0 || local_transcript_size > 0,
+            "transcriptSize": transcript_size.max(local_transcript_size),
+            "localTranscript": local_transcript_size > 0,
             "hasSkip": skip_size > 0,
             "skipSize": skip_size,
         }));
@@ -536,6 +555,11 @@ pub async fn offline_remove(app: tauri::AppHandle, key: String) -> Result<(), St
         let path = dir.join(format!("{stem}.{ext}"));
         if path.exists() {
             std::fs::remove_file(&path).map_err(|e| format!("删除失败：{e}"))?;
+        }
+        // 下载后本机整集转写的稿子跟音频同名前缀：<stem>.<ext>.transcript.json
+        let local_transcript = dir.join(format!("{stem}.{ext}{TRANSCRIPT_SUFFIX}"));
+        if local_transcript.exists() {
+            let _ = std::fs::remove_file(&local_transcript);
         }
     }
     let transcript = dir.join(format!("{stem}{TRANSCRIPT_SUFFIX}"));

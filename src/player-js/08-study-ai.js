@@ -199,9 +199,11 @@ function resetSidebarSettings() {
   renderSidebarSettings();
   showToast('侧边栏已恢复默认。');
 }
-function openSettingsPane(pane) {
-  if (!subtitlePluginOn() && ['reader', 'study', 'models'].includes(pane)) pane = 'plugins';
-  if (!studyPluginOn() && pane === 'study') pane = 'plugins';
+function openSettingsPane(pane, options = {}) {
+  if (!options.force) {
+    if (!subtitlePluginOn() && ['reader', 'study', 'models'].includes(pane)) pane = 'plugins';
+    if (!studyPluginOn() && pane === 'study') pane = 'plugins';
+  }
   document.querySelectorAll('#settingsMenu button').forEach(button => button.classList.toggle('active', button.dataset.pane === pane));
   document.querySelectorAll('.settings-pane').forEach(el => el.classList.toggle('active', el.id === 'pane-' + pane));
   if (pane === 'sidebar') renderSidebarSettings();

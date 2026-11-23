@@ -40,8 +40,6 @@ const app = layerObject('05-transport-transcript-nav', 'app');
    本片只做该层的事，跨层调用走 kernel / host() / setState。 */
 
 const overlayTriggers = { drawer: null, details: null, typeSheet: null, dockSheet: null };
-/* 只收内置色球：弹层里还有随包的 .sw-pack（data-pack），setTheme 不该去动它们的选中态。 */
-const themeBtns = () => [...document.querySelectorAll('.swatch[data-theme]')];
 function rememberOverlayTrigger(key, overlay) {
   const active = document.activeElement;
   if (active && active !== document.body && !overlay.contains(active)) overlayTriggers[key] = active;
@@ -57,78 +55,26 @@ function setDrawerBackgroundInert(on) {
     if (element) element.inert = on;
   });
 }
-const LIGHT_THEMES = new Set(['paper', 'mist', 'prototype', 'ledger']);
-const CUSTOM_THEME_KEY = 'myt-theme-custom';
-/* 内置色板只留午夜蓝/纸张/原型/编辑部；被撤掉的五个色板把老用户的存档迁到最接近的现存色板，
-   不然启动时会因为“存档主题不在色板里”被兜底到编辑部。 */
-const REMOVED_THEME_FALLBACK = {
-  brass: 'midnight', forest: 'midnight', oxblood: 'midnight', celadon: 'ledger', mist: 'paper',
-};
-/* 随包主题只在第一次种一次；用户自己删掉的卡片不会被重新塞回来。 */
-const DEFAULT_PACKS_KEY = 'myt-theme-packs-seeded';
-let lastDark = 'midnight', lastLight = 'ledger';
-function setTheme(id, persist = true) {
-  const light = LIGHT_THEMES.has(id);
-  document.documentElement.dataset.theme = id;
-  document.documentElement.dataset.scheme = light ? 'light' : 'dark';
-  if (light) lastLight = id; else lastDark = id;
-  themeBtns().forEach(b => b.setAttribute('aria-checked', String(b.dataset.theme === id)));
-  const btn = $('themeBtn');
-  if (btn) {
-    const label = light ? '切换到深色主题' : '切换到浅色主题';
-    btn.setAttribute('aria-label', label);
-    btn.title = label;
-  }
-  const themeLabel = $('themeLabel');
-  if (themeLabel) themeLabel.textContent = light ? '浅色主题' : '深色主题';
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) {
-    const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
-    if (bg) meta.setAttribute('content', bg);
-  }
-  if (persist) {
-    try {
-      localStorage.setItem('myt-theme', id);
-      localStorage.setItem('myt-theme-dark', lastDark);
-      localStorage.setItem('myt-theme-light', lastLight);
-    } catch (e) {}
-    /* 自定义主题的样式注在 head 末尾，选择器与内置主题同权重，靠层叠顺序压过所有内置配色。
-       所以用户主动点内置色板时，必须先把自定义主题停用，否则点了看不出任何变化。 */
-    const custom = readCustomTheme();
-    if (custom.enabled) {
-      const next = { ...custom, enabled: false };
-      writeCustomTheme(next);
-      applyCustomTheme(next);
-      renderCustomThemeGrid();
-      showToast('已切到内置主题，自定义主题已停用。');
-    }
-    if (typeof CustomEvent === 'function') {
-      document.dispatchEvent(new CustomEvent('myt:theme-change', { detail: { kind: 'builtin', id } }));
-    }
-  }
-  closeThemePop();
-}
-document.addEventListener('click', e => { const b = e.target.closest('.swatch[data-theme]'); if (b) setTheme(b.dataset.theme); });
-document.addEventListener('click', e => {
-  const pack = e.target.closest('#themePop [data-pack]');
-  if (!pack) return;
-  e.preventDefault();
-  applyCustomThemePreset('ct-pack-' + pack.dataset.pack);
-  closeThemePop();
-});
-/* 每次打开弹层都重排一次：随包主题要跟着主题卡变，内置色球在自定义主题开着时不能显示选中。 */
-const themeTopButton = $('themeTopBtn');
-if (themeTopButton) {
-  themeTopButton.addEventListener('click', () => {
-    const cfg = readCustomTheme();
-    renderThemePopPacks();
-    if (cfg.enabled) document.querySelectorAll('.swatch[data-theme]').forEach(btn => btn.setAttribute('aria-checked', 'false'));
-  });
-}
-$('themeBtn').onclick = () => {
-  const light = LIGHT_THEMES.has(document.documentElement.dataset.theme);
-  setTheme(light ? lastDark : lastLight);
-};
+/* 主题的一切（应用、卡片、编辑器、随包主题种子、初始恢复）都在 13-theme；
+   这里只留同名转发，04 / 07 / 08 / 10 的 lazyFn 调用零改动。 */
+const setTheme = lazyFn('13-theme', 'setTheme');
+const applyCustomTheme = lazyFn('13-theme', 'applyCustomTheme');
+const applyCustomThemePreset = lazyFn('13-theme', 'applyCustomThemePreset');
+const renderCustomThemeGrid = lazyFn('13-theme', 'renderCustomThemeGrid');
+const syncCustomThemeEditor = lazyFn('13-theme', 'syncCustomThemeEditor');
+const bindCustomThemeEditor = lazyFn('13-theme', 'bindCustomThemeEditor');
+const seedDefaultThemePacks = lazyFn('13-theme', 'seedDefaultThemePacks');
+const importCustomTheme = lazyFn('13-theme', 'importCustomTheme');
+const saveCustomThemePreset = lazyFn('13-theme', 'saveCustomThemePreset');
+const themeBtns = lazyFn('13-theme', 'themeBtns');
+const readCustomTheme = lazyFn('13-theme', 'readCustomTheme');
+const writeCustomTheme = lazyFn('13-theme', 'writeCustomTheme');
+const normalizeCustomTheme = lazyFn('13-theme', 'normalizeCustomTheme');
+const sanitizeCustomHtml = lazyFn('13-theme', 'sanitizeCustomHtml');
+const customPreviewColor = lazyFn('13-theme', 'customPreviewColor');
+const customThemeActiveName = lazyFn('13-theme', 'customThemeActiveName');
+const newCustomPresetId = lazyFn('13-theme', 'newCustomPresetId');
+/* 导出字幕 / 分享当前句仍是本层的事：弹层与分享都走 10 / 06。 */
 $('exportSubBtn').onclick = () => {
   openModal('<div class="modal-head"><h3>导出字幕</h3><button class="mini-btn" data-close-modal>✕</button></div>' +
     '<div class="modal-note">导出当前单集的文字稿；双语会同时写入两种语言。</div>' +
@@ -137,443 +83,7 @@ $('exportSubBtn').onclick = () => {
     '<button class="btn ghost" data-close-modal>取消</button></div>');
 };
 $('shareCueBtn').onclick = shareCurrentCue;
-try {
-  lastDark = localStorage.getItem('myt-theme-dark') || lastDark;
-  lastLight = localStorage.getItem('myt-theme-light') || lastLight;
-  let savedTheme = localStorage.getItem('myt-theme');
-  if (savedTheme && REMOVED_THEME_FALLBACK[savedTheme]) {
-    savedTheme = REMOVED_THEME_FALLBACK[savedTheme];
-    localStorage.setItem('myt-theme', savedTheme);
-  }
-  /* 编辑部方向首次落地：把旧的浅紫原型一次性迁到暖纸主题，之后用户仍可自由切换。 */
-  if (!localStorage.getItem('myt-ui-ledger') && (!savedTheme || savedTheme === 'prototype')) {
-    savedTheme = 'ledger';
-    localStorage.setItem('myt-theme', 'ledger');
-  }
-  localStorage.setItem('myt-ui-ledger', '1');
-  setTheme(savedTheme && themeBtns().some(b => b.dataset.theme === savedTheme) ? savedTheme : 'ledger', false);
-} catch (e) { setTheme('ledger', false); }
 
-/* ---------- 自定义主题（CSS / HTML + 卡片） ----------
-   一套配置加多张“卡片”：每张卡片记一份 CSS/HTML 快照，点卡即应用；
-   旧数据只有 {css,html,enabled}，读入时补 presets: []，不丢已有内容。 */
-function normalizeCustomTheme(raw) {
-  const base = raw && typeof raw === 'object' ? raw : {};
-  const presets = Array.isArray(base.presets) ? base.presets
-    .filter(item => item && typeof item.id === 'string' && item.id.trim())
-    .map(item => {
-      const id = String(item.id);
-      return {
-        id,
-        name: String(item.name || '自定义主题'),
-        css: typeof item.css === 'string' ? item.css : '',
-        html: typeof item.html === 'string' ? item.html : '',
-        createdAt: Number(item.createdAt) || 0,
-        /* 随包主题（ct-pack-<slug>）是默认主题，删不掉；老数据没有这个字段，靠 id 兜底识别。 */
-        builtin: !!item.builtin || id.startsWith('ct-pack-'),
-      };
-    }) : [];
-  const activeId = presets.some(item => item.id === base.activeId) ? String(base.activeId) : '';
-  return {
-    css: typeof base.css === 'string' ? base.css : '',
-    html: typeof base.html === 'string' ? base.html : '',
-    enabled: !!base.enabled,
-    updatedAt: Number(base.updatedAt) || 0,
-    presets,
-    activeId,
-  };
-}
-function readCustomTheme() {
-  return normalizeCustomTheme(readJSON(CUSTOM_THEME_KEY, null));
-}
-function writeCustomTheme(cfg) {
-  writeJSON(CUSTOM_THEME_KEY, normalizeCustomTheme(cfg));
-}
-function sanitizeCustomHtml(text) {
-  const tpl = document.createElement('template');
-  tpl.innerHTML = String(text || '');
-  tpl.content.querySelectorAll('script,iframe,object,embed,link,meta,base,form').forEach(node => node.remove());
-  [tpl.content, ...tpl.content.querySelectorAll('*')].forEach(node => {
-    if (!node.attributes) return;
-    [...node.attributes].forEach(attr => {
-      const name = attr.name.toLowerCase();
-      if (name.startsWith('on') || ((name === 'href' || name === 'src') && /^\s*javascript:/i.test(attr.value))) {
-        node.removeAttribute(attr.name);
-      }
-    });
-  });
-  return tpl.innerHTML;
-}
-/* 卡片预览只用 CSS 里的三个变量；值做白名单过滤，避免把任意文本塞进 style。 */
-function customPreviewColor(css, name, fallback) {
-  const match = new RegExp('--' + name + '\\s*:\\s*([^;\\n}]+)', 'i').exec(String(css || ''));
-  const value = match ? match[1].trim() : '';
-  return /^[#a-zA-Z0-9(),.%\s/-]{1,40}$/.test(value) ? value : fallback;
-}
-function customThemeActiveName(cfg) {
-  const preset = cfg.presets.find(item => item.id === cfg.activeId);
-  return preset ? preset.name : '';
-}
-function newCustomPresetId() {
-  return 'ct-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-}
-/* 顶栏「切换主题」弹层里也要能看到随包主题：内置四色在前，七套主题包接在后面。
-   包色块用各自 CSS 的 --bg/--accent/--accent2 取色，点一下就直接应用那张卡。 */
-function renderThemePopPacks() {
-  const pop = $('themePop');
-  if (!pop) return;
-  pop.querySelectorAll('[data-pack]').forEach(node => node.remove());
-  const packs = readCustomTheme().presets.filter(item => item.builtin);
-  if (!packs.length) return;
-  packs.forEach(preset => {
-    const slug = preset.id.replace(/^ct-pack-/, '');
-    const bg = customPreviewColor(preset.css, 'bg', '#1b2430');
-    const accent = customPreviewColor(preset.css, 'accent', '#d7a35a');
-    const accent2 = customPreviewColor(preset.css, 'accent2', '#8fb3ff');
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'swatch sw-pack';
-    btn.dataset.pack = slug;
-    btn.setAttribute('role', 'radio');
-    btn.setAttribute('aria-checked', 'false');
-    btn.title = preset.name;
-    btn.setAttribute('aria-label', preset.name);
-    btn.style.setProperty('--sw-bg', bg);
-    btn.style.setProperty('--sw-accent', accent);
-    btn.style.setProperty('--sw-accent2', accent2);
-    pop.append(btn);
-  });
-  syncThemePopPacks();
-}
-function syncThemePopPacks(cfg = readCustomTheme()) {
-  const pack = cfg.enabled && cfg.activeId ? cfg.activeId.replace(/^ct-pack-/, '') : '';
-  document.querySelectorAll('#themePop [data-pack]').forEach(btn => {
-    btn.setAttribute('aria-checked', String(cfg.enabled && btn.dataset.pack === pack));
-  });
-}
-
-function renderCustomThemeGrid() {
-  const grid = $('themeGrid');
-  if (!grid) return;
-  grid.querySelectorAll('[data-custom-preset],[data-custom-add]').forEach(node => node.remove());
-  const cfg = readCustomTheme();
-  cfg.presets.forEach(preset => {
-    const card = document.createElement('button');
-    card.type = 'button';
-    card.className = 'theme-card custom-card';
-    card.dataset.customPreset = preset.id;
-    card.setAttribute('role', 'radio');
-    card.setAttribute('aria-checked', String(cfg.enabled && cfg.activeId === preset.id));
-    const bg = customPreviewColor(preset.css, 'bg', '#1b2430');
-    const accent = customPreviewColor(preset.css, 'accent', '#d7a35a');
-    const accent2 = customPreviewColor(preset.css, 'accent2', '#8fb3ff');
-    card.innerHTML = '<span class="sw custom-sw" style="background:' + esc(bg) + '">' +
-      '<i style="background:' + esc(accent) + '"></i><b style="background:' + esc(accent2) + '"></b></span>' +
-      '<span class="custom-card-name">' + esc(preset.name) + '</span>' +
-      (preset.builtin
-        ? ''
-        : '<span class="custom-card-del" data-custom-remove="' + esc(preset.id) + '" role="button" aria-label="删除这套主题" title="删除">✕</span>');
-    /* 默认主题没有角标也没有删除键，只在 tooltip 里说明，卡片外观和用户自己存的一模一样。 */
-    if (preset.builtin) card.dataset.customBuiltin = '1';
-    card.title = preset.builtin ? preset.name + '（默认主题）' : preset.name;
-    grid.append(card);
-  });
-  const add = document.createElement('button');
-  add.type = 'button';
-  add.className = 'theme-card custom-card custom-add';
-  add.dataset.customAdd = '1';
-  add.innerHTML = '<span class="custom-add-plus">＋</span><span>存为自定义主题</span>';
-  grid.append(add);
-}
-function saveCustomThemePreset(name) {
-  const cfg = readCustomTheme();
-  const css = $('ctCss')?.value || '';
-  const html = $('ctHtml')?.value || '';
-  if (!css.trim() && !html.trim()) {
-    showToast('先写一点 CSS 或 HTML，再存成主题卡。', 'warn');
-    return null;
-  }
-  const preset = {
-    id: newCustomPresetId(),
-    name: String(name || '').trim().slice(0, 24) || '自定义 ' + (cfg.presets.length + 1),
-    css,
-    html,
-    createdAt: Date.now(),
-  };
-  const next = { ...cfg, css, html, enabled: true, activeId: preset.id, updatedAt: Date.now(), presets: [...cfg.presets, preset] };
-  writeCustomTheme(next);
-  applyCustomTheme(next);
-  const nameInput = $('ctName');
-  if (nameInput) nameInput.value = '';
-  renderCustomThemeGrid();
-  showToast('已存为「' + preset.name + '」并应用。');
-  return preset;
-}
-function applyCustomThemePreset(id) {
-  const cfg = readCustomTheme();
-  const preset = cfg.presets.find(item => item.id === String(id));
-  if (!preset) return false;
-  const next = { ...cfg, css: preset.css, html: preset.html, enabled: true, activeId: preset.id, updatedAt: Date.now() };
-  writeCustomTheme(next);
-  applyCustomTheme(next);
-  if ($('ctCss')) $('ctCss').value = preset.css;
-  if ($('ctHtml')) $('ctHtml').value = preset.html;
-  renderCustomThemeGrid();
-  showToast('已应用「' + preset.name + '」。');
-  return true;
-}
-function removeCustomThemePreset(id) {
-  const cfg = readCustomTheme();
-  const preset = cfg.presets.find(item => item.id === String(id));
-  if (!preset) return false;
-  if (preset.builtin) {
-    showToast('「' + preset.name + '」是默认主题，不能删除。', 'warn');
-    return false;
-  }
-  if (!confirm('删除「' + preset.name + '」这张主题卡？已经应用的样式会保留在当前页面。')) return false;
-  const next = { ...cfg, presets: cfg.presets.filter(item => item.id !== preset.id) };
-  if (next.activeId === preset.id) next.activeId = '';
-  writeCustomTheme(next);
-  renderCustomThemeGrid();
-  showToast('已删除「' + preset.name + '」。');
-  return true;
-}
-function applyCustomTheme(cfg = readCustomTheme()) {
-  cfg = normalizeCustomTheme(cfg);
-  let style = $('ctStyle');
-  if (!style) {
-    style = document.createElement('style');
-    style.id = 'ctStyle';
-    document.head.append(style);
-  }
-  style.textContent = cfg.enabled ? (cfg.css || '') : '';
-  if (cfg.enabled && typeof CustomEvent === 'function') {
-    document.dispatchEvent(new CustomEvent('myt:theme-change', { detail: { kind: 'custom', id: cfg.activeId || '' } }));
-  }
-  const mount = $('customHomeMount');
-  if (mount) {
-    const html = cfg.enabled ? String(cfg.html || '').trim() : '';
-    mount.innerHTML = html ? sanitizeCustomHtml(html) : '';
-    mount.hidden = !html;
-  }
-  document.body.classList.toggle('custom-theme-on', !!cfg.enabled);
-  document.querySelectorAll('[data-custom-preset]').forEach(card => {
-    card.setAttribute('aria-checked', String(!!cfg.enabled && card.dataset.customPreset === cfg.activeId));
-  });
-  syncThemePopPacks(cfg);
-  /* 自定义主题开着的时候，内置色球不该继续显示选中，否则弹层里两个圈同时亮。 */
-  if (cfg.enabled) {
-    document.querySelectorAll('.swatch[data-theme]').forEach(btn => btn.setAttribute('aria-checked', 'false'));
-  } else if (document.documentElement.dataset.theme) {
-    setTheme(document.documentElement.dataset.theme, false);
-  }
-  const ctState = $('ctState');
-  if (ctState) {
-    const name = customThemeActiveName(cfg);
-    ctState.textContent = cfg.enabled
-      ? '已启用' + (name ? ' · ' + name : '') + (cfg.updatedAt ? ' · ' + new Date(cfg.updatedAt).toLocaleString('zh-CN', { hour12: false }) : '')
-      : '未启用';
-  }
-}
-function syncCustomThemeEditor() {
-  const cfg = readCustomTheme();
-  const css = $('ctCss'), html = $('ctHtml');
-  if (css) css.value = cfg.enabled || cfg.css ? cfg.css : (css.value || '');
-  if (html) html.value = cfg.html || '';
-  applyCustomTheme(cfg);
-  renderCustomThemeGrid();
-}
-/* 导入一份主题：接受 {name,css,html} 的 JSON，也接受直接拖一份 .css。
-   导入后立即存成网格卡片并应用，后续点卡、写回、删除都走卡片那套逻辑。 */
-function importCustomTheme(text, filename) {
-  const raw = String(text || '').trim();
-  if (!raw) return null;
-  let data = null;
-  try { data = JSON.parse(raw); } catch (e) { data = null; }
-  let css = '';
-  let html = '';
-  let name = '';
-  if (data && typeof data === 'object' && !Array.isArray(data)) {
-    if (typeof data.css === 'string') css = data.css;
-    if (typeof data.html === 'string') html = data.html;
-    if (typeof data.name === 'string') name = data.name;
-  } else {
-    css = raw;
-  }
-  if (!css.trim() && !html.trim()) {
-    showToast('这个文件里没有 CSS 或 HTML。', 'warn');
-    return null;
-  }
-  const cfg = readCustomTheme();
-  const fallback = String(filename || '').replace(/\.(json|css)$/i, '') || '导入 ' + (cfg.presets.length + 1);
-  const preset = {
-    id: newCustomPresetId(),
-    name: (name || fallback).trim().slice(0, 24) || '导入 ' + (cfg.presets.length + 1),
-    css,
-    html,
-    createdAt: Date.now(),
-  };
-  const next = { ...cfg, css, html, enabled: true, activeId: preset.id, updatedAt: Date.now(), presets: [...cfg.presets, preset] };
-  writeCustomTheme(next);
-  applyCustomTheme(next);
-  if ($('ctCss')) $('ctCss').value = css;
-  if ($('ctHtml')) $('ctHtml').value = html;
-  if ($('ctName')) $('ctName').value = '';
-  renderCustomThemeGrid();
-  showToast('已导入「' + preset.name + '」并应用。');
-  return preset;
-}
-/* 随包主题：themes-defaults.js 带来七套设计师主题（液态玻璃、玻璃拟态 2.0、极简放大、
-   技术单色、新粗野主义、复古印刷、监控美学）。随包主题是默认主题，删不掉也不该缺：
-   每次启动都补齐缺的卡（幂等），标记只用来判断“是不是第一次”——第一次才顺手启用第一套，
-   免得用户已经把别的主题设成当前时被强行切走。 */
-function seedDefaultThemePacks() {
-  const packs = Array.isArray(window.MYT_THEME_DEFAULTS) ? window.MYT_THEME_DEFAULTS : [];
-  if (!packs.length) return 0;
-  let firstTime = true;
-  try { firstTime = !localStorage.getItem(DEFAULT_PACKS_KEY); } catch (e) {}
-  const cfg = readCustomTheme();
-  const known = new Set(cfg.presets.map(item => item.id));
-  const added = [];
-  const bySlug = new Map();
-  packs.forEach(pack => {
-    const slug = String(pack && pack.slug || '').trim();
-    const css = String(pack && pack.css || '');
-    if (!slug || !css.trim()) return;
-    bySlug.set(slug, pack);
-    if (known.has('ct-pack-' + slug)) return;
-    added.push({ id: 'ct-pack-' + slug, name: String(pack.name || slug).trim().slice(0, 24), css, html: String(pack.html || ''), createdAt: Date.now(), builtin: true });
-  });
-  /* 主题包本身升级了（比如补了播放工具面板样式）：已存在的默认主题卡跟着换新 CSS，
-     不靠用户手动删卡重导。 */
-  let refreshed = 0;
-  let activeRefreshed = false;
-  cfg.presets.forEach(preset => {
-    if (!preset.builtin) return;
-    const pack = bySlug.get(preset.id.replace(/^ct-pack-/, ''));
-    if (!pack) return;
-    const css = String(pack.css || '');
-    if (!css.trim() || css === preset.css) return;
-    preset.css = css;
-    preset.html = String(pack.html || '');
-    preset.name = String(pack.name || preset.name).trim().slice(0, 24) || preset.name;
-    refreshed += 1;
-    if (preset.id === cfg.activeId) activeRefreshed = true;
-  });
-  const activePreset = cfg.presets.find(item => item.id === cfg.activeId);
-  if (!added.length && !refreshed) {
-    try { localStorage.setItem(DEFAULT_PACKS_KEY, '1'); } catch (e) {}
-    return 0;
-  }
-  const take = firstTime ? added[0] : null;
-  const next = {
-    ...cfg,
-    presets: [...cfg.presets, ...added],
-    css: take ? take.css : (activeRefreshed && activePreset ? activePreset.css : cfg.css),
-    html: take ? take.html : (activeRefreshed && activePreset ? activePreset.html : cfg.html),
-    enabled: take ? true : cfg.enabled,
-    activeId: take ? take.id : cfg.activeId,
-    updatedAt: (take || refreshed) ? Date.now() : cfg.updatedAt,
-  };
-  writeCustomTheme(next);
-  try { localStorage.setItem(DEFAULT_PACKS_KEY, '1'); } catch (e) {}
-  renderCustomThemeGrid();
-  return added.length + refreshed;
-}
-function bindCustomThemeEditor() {
-  const apply = enable => {
-    const cfg = readCustomTheme();
-    const css = $('ctCss')?.value || '';
-    const html = $('ctHtml')?.value || '';
-    const preset = cfg.presets.find(item => item.id === cfg.activeId);
-    // 正在用某张卡片时，编辑器里的改动写回那张卡，下次点卡还是这套样子。
-    if (preset) { preset.css = css; preset.html = html; }
-    const next = {
-      ...cfg,
-      css, html,
-      enabled: enable,
-      updatedAt: Date.now(),
-    };
-    writeCustomTheme(next);
-    applyCustomTheme(next);
-    renderCustomThemeGrid();
-    showToast(enable ? '自定义主题已应用。' : '已停用自定义主题，回到当前主题。');
-  };
-  if ($('ctApply')) $('ctApply').onclick = () => apply(true);
-  if ($('ctDisable')) $('ctDisable').onclick = () => apply(false);
-  const grid = $('themeGrid');
-  if (grid) {
-    grid.addEventListener('click', event => {
-      const remove = event.target.closest('[data-custom-remove]');
-      if (remove) {
-        event.preventDefault();
-        event.stopPropagation();
-        removeCustomThemePreset(remove.dataset.customRemove);
-        return;
-      }
-      const add = event.target.closest('[data-custom-add]');
-      if (add) {
-        event.preventDefault();
-        saveCustomThemePreset($('ctName')?.value || '');
-        return;
-      }
-      const card = event.target.closest('[data-custom-preset]');
-      if (card) {
-        event.preventDefault();
-        applyCustomThemePreset(card.dataset.customPreset);
-      }
-    });
-  }
-  if ($('ctTemplate')) $('ctTemplate').onclick = () => {
-    if ($('ctCss')) $('ctCss').value = ':root{\n  --accent:#d7a35a;\n  --accent2:#8fb3ff;\n  --bg:#0b1018;\n  --panel:#111927;\n  --panel2:#0f1724;\n}\n\n/* 首页横幅 */\n.my-banner{\n  padding:18px 22px;border:1px solid var(--line);border-radius:12px;\n  background:var(--panel);color:var(--ink);font:600 14px/1.7 var(--sans);\n}';
-    if ($('ctHtml')) $('ctHtml').value = '<div class="my-banner">今天想听点什么？<span style="color:var(--muted)">在下面挑一集，或从上次停下的地方继续。</span></div>';
-    showToast('模板已填入，点「保存并应用」生效。');
-  };
-  if ($('ctCopy')) $('ctCopy').onclick = () => {
-    const cfg = readCustomTheme();
-    navigator.clipboard.writeText(JSON.stringify({ css: cfg.css, html: cfg.html }, null, 2))
-      .then(() => showToast('配置已复制，可存成 .json 或发给别人。'))
-      .catch(() => showToast('复制失败。', 'warn'));
-  };
-  if ($('ctImport')) $('ctImport').onclick = () => $('ctImportFile')?.click();
-  if ($('ctImportFile')) $('ctImportFile').onchange = () => {
-    const input = $('ctImportFile');
-    const file = input?.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      importCustomTheme(String(reader.result || ''), file.name);
-      input.value = '';
-    };
-    reader.onerror = () => showToast('读文件失败。', 'warn');
-    reader.readAsText(file);
-  };
-  if ($('ctReset')) $('ctReset').onclick = () => {
-    if (!confirm('恢复默认会清空这段自定义 CSS 和 HTML，以及你自己存的主题卡（默认主题保留），继续？')) return;
-    /* 随包主题是默认主题，恢复默认只清用户自己加的东西。 */
-    const keep = readCustomTheme().presets.filter(item => item.builtin);
-    const next = { css: '', html: '', enabled: false, updatedAt: Date.now(), presets: keep, activeId: '' };
-    writeCustomTheme(next);
-    if ($('ctCss')) $('ctCss').value = '';
-    if ($('ctHtml')) $('ctHtml').value = '';
-    if ($('ctName')) $('ctName').value = '';
-    applyCustomTheme(next);
-    renderCustomThemeGrid();
-    showToast('已恢复默认主题（七套随包主题保留）。');
-  };
-}
-/* 启动时 05 里的 readJSON 可能还没注册（lazy 版会直接返回 undefined，看起来像“没有配置”），
-   所以把「种随包主题 + 应用自定义主题」压到微任务里，等各层都 registerLayer 完再读。 */
-function bootCustomTheme() {
-  seedDefaultThemePacks();
-  renderThemePopPacks();
-  applyCustomTheme();
-  /* 其它层启动时还会 setTheme 一次同步内置色球，空闲时再刷一遍，保证弹层只亮当前主题。 */
-  whenIdle(() => applyCustomTheme());
-}
-if (typeof queueMicrotask === 'function') queueMicrotask(bootCustomTheme);
-else setTimeout(bootCustomTheme, 0);
-bindCustomThemeEditor();
 
 const READER_DEFAULTS = { width: 780, scale: 100, lh: 1.78, gap: 4, ls: 0.06, pending: 42, segment: true, lang: 'en' };
 const readerFields = [
@@ -585,9 +95,17 @@ const readerFields = [
   ['pending', 'rdPending', 'outPending', v => v + '%'],
 ];
 let reader = { ...READER_DEFAULTS };
+/* 大屏默认把版心放宽：用户没动过宽度（仍是默认 780）时，1700 宽下约 1100，
+   两侧不再空出近 500px；一旦用户自己拖过滑块，就完全按用户的值。 */
+function readerWidth() {
+  const base = Number(reader.width) || READER_DEFAULTS.width;
+  if (base !== READER_DEFAULTS.width || !window.innerWidth) return base;
+  const adaptive = Math.round(window.innerWidth * 0.66);
+  return Math.max(base, Math.min(1100, adaptive));
+}
 function applyReader(persist = true) {
   const rs = document.documentElement.style;
-  rs.setProperty('--reader-w', reader.width + 'px');
+  rs.setProperty('--reader-w', readerWidth() + 'px');
   rs.setProperty('--cue-scale', String(reader.scale / 100));
   rs.setProperty('--cue-lh', String(reader.lh));
   rs.setProperty('--cue-gap', reader.gap + 'px');
@@ -609,6 +127,7 @@ function rebuildCues() {
   if (!state.vtt) return;
   setState('cues', mergeCues(state.vtt, state.sidecar, state.zhVtt));
   renderCues();
+  try { document.dispatchEvent(new Event('myt:cues-ready')); } catch (e) {}
 }
 readerFields.forEach(([k, inp]) => $(inp).addEventListener('input', e => { reader[k] = Number(e.target.value); applyReader(); }));
 $('rdSegment').onclick = () => {
@@ -635,6 +154,7 @@ try {
   }
 } catch (e) {}
 applyReader(false);
+window.addEventListener('resize', () => applyReader(false));
 
 function openTypeSheet() {
   rememberOverlayTrigger('typeSheet', $('typeSheet'));
@@ -905,7 +425,12 @@ function audioFail(code) {
 }
 async function onAudioError() {
   const item = state.current;
-  if (!item || !item.url || audio.dataset.ep !== item.id) return;
+  if (!item || audio.dataset.ep !== item.id) return;
+  if (!item.url) {
+    // 本地导入的音频没有远程 URL；文件被移动/删除时原来会静默失败。
+    showToast(item.localPath ? '这个本地音频文件不见了，请重新导入或检查磁盘上的文件。' : '这一集没有可播放的音频地址。', 7000);
+    return;
+  }
   const token = state.audioToken;
   if (state.audioRetried === 0) {
     setState('audioRetried', 1);
@@ -1373,7 +898,6 @@ function nativeWordDoc(sc) {
   return !!sc && Array.isArray(sc.segments) &&
     sc.segments.some(s => s && ('startTime' in s || 'body' in s));
 }
-function subtitleKernel() { return PluginHost.kernel('transcript'); }
 function cuesFromJson(doc) {
   const kernel = subtitleKernel();
   if (!kernel || typeof kernel.parseJson !== 'function') {
@@ -1439,13 +963,9 @@ function parseVttSmart(text) {
   return kernel && typeof kernel.parseVtt === 'function' ? kernel.parseVtt(text) : { primary: [], zh: [], hasLatin: false, hasCjk: false };
 }
 
-function mergeCues(vtt, sidecar, zhVtt) {
-  const kernel = subtitleKernel();
-  if (!kernel || typeof kernel.merge !== 'function') {
-    throw new Error('字幕内核未加载：请启用 subtitles 插件');
-  }
-  return kernel.merge(vtt, sidecar, zhVtt, { lang: reader.lang, segment: reader.segment });
-}
+/* 字幕内核的适配（subtitleKernel / subtitleViewHost / merge / renderCues / renderCueWindow /
+   alignZhLines）已搬到 12-subtitle；这里只留同名转发。
+   下一刀可以把 cuesFromJson 一起并过去，01 就只剩主题/阅读器/导入/壁纸。 */
 function splitLabel(text, words) {
   const toks = text.trim().split(/\s+/), wt = words.map(w => w.t);
   if (!wt.length) return { label: '', words };
@@ -1457,44 +977,12 @@ function splitLabel(text, words) {
   return { label: '', words, mismatch: true };
 }
 
-function subtitleViewHost() {
-  return {
-    state, box, reader,
-    pluginOn: subtitlePluginOn,
-    liveOn: () => !!LIVE.on,
-    fmt, splitLabel, isBracket,
-    localAsrAvailable, clipListen, lookupWord, alignToCue, seekTo,
-    whenIdle, studyApplyWordMarks, paint, syncMiniCaption, syncJumpPill,
-    resetFind: () => { if (window.mytFindReset) window.mytFindReset(); },
-    el: $,
-  };
-}
-function alignZhLines() {
-  const kernel = subtitleKernel();
-  if (kernel && typeof kernel.alignZhLines === 'function') kernel.alignZhLines(subtitleViewHost());
-}
-function renderCueWindow(center, force) {
-  const kernel = subtitleKernel();
-  if (kernel && typeof kernel.renderWindow === 'function') kernel.renderWindow(subtitleViewHost(), center, force);
-}
-function renderCues() {
-  if (!subtitlePluginOn()) {
-    // 原生播放器：没有字幕插件时阅读区只保留一条中性说明，不反复清空成空白，
-    // 也不提示用户去启用插件。
-    if (box.dataset.nativeAudio !== '1') {
-      box.innerHTML = '<div class="empty">音频播放模式<br><span style="font-size:12px">本集只播放音频，未加载字幕。</span></div>';
-      box.dataset.nativeAudio = '1';
-    }
-    syncMiniCaption(); return;
-  }
-  box.dataset.nativeAudio = '';
-  const kernel = subtitleKernel();
-  if (!kernel || typeof kernel.renderCues !== 'function') {
-    box.innerHTML = '<div class="empty">字幕内核未加载：请启用 subtitles 插件。</div>';
-    return;
-  }
-  kernel.renderCues(subtitleViewHost());
-}
+const subtitleKernel = lazyFn('12-subtitle', 'subtitleKernel');
+const subtitleViewHost = lazyFn('12-subtitle', 'subtitleViewHost');
+const mergeCues = lazyFn('12-subtitle', 'mergeCues');
+const renderCues = lazyFn('12-subtitle', 'renderCues');
+const renderCueWindow = lazyFn('12-subtitle', 'renderCueWindow');
+const alignZhLines = lazyFn('12-subtitle', 'alignZhLines');
 function updateTimeScale() {
   const duration = audio.duration;
   const real = state.audioSeconds;
@@ -1516,47 +1004,20 @@ function rawSeek(r) {
 }
 function seekTo(t) { if (!state.current) return; studyResetPlayback(); rawSeek(t / (state.timeScale || 1)); audio.play().catch(() => {}); paint(true); }
 
-function locateCue(t) {
-  // 正常播放时先扫当前句附近，避免每 120ms 线性扫几千句；跳转/越界时再全量扫描。
-  const cues = state.cues;
-  const hint = state.activeCue;
-  if (hint >= 0 && cues[hint]) {
-    const h = cues[hint];
-    const hs = h.speechStart + state.offset, he = h.speechEnd + state.offset;
-    if (t >= hs - 2 && t <= he + 5) {
-      let ans = -1, latestStart = -Infinity;
-      const from = Math.max(0, hint - 6), to = Math.min(cues.length, hint + 13);
-      for (let i = from; i < to; i++) {
-        const c = cues[i];
-        const start = c.speechStart + state.offset;
-        if (start <= t && start >= latestStart) { latestStart = start; ans = i; }
-      }
-      const outside = cues[to];
-      if (ans >= 0 && (!outside || outside.speechStart + state.offset > t)
-        && t <= cues[ans].speechEnd + state.offset + 0.35) return ans;
-    }
-  }
-  let ans = -1;
-  let latestStart = -Infinity;
-  for (let i = 0; i < cues.length; i++) {
-    const c = cues[i];
-    const start = c.speechStart + state.offset;
-    if (start <= t && start >= latestStart) {
-      latestStart = start;
-      ans = i;
-    }
-  }
-  if (ans < 0) return -1;
-  const c = cues[ans];
-  return t <= c.speechEnd + state.offset + 0.35 ? ans : -1;
-}
-
 function paint(force = false) {
   if (LIVE.on) { liveAdvance(); return; }
   // 驾驶模式把正文整块隐藏了，滚动和逐词上色都没有显示意义，直接不干这活。
   const carUi = document.body.classList.contains('car-mode');
+  /* 窗口不在前台（05 的 syncIdleDecor 挂的 decor-idle）：正文看不见，滚动与逐词上色
+     纯属白干——一份整集词级字幕的 class 变更+平滑滚动能占两成多单核。只保留时间/进度写入，
+     回前台时 focus 会 paint(true)，把高亮和滚动一次性追平。 */
+  const idleDecor = document.documentElement.classList.contains('decor-idle');
   if (!state.cues.length) { syncJumpPill(); return; }
-  const raw = audio.currentTime || 0;
+  const clock = audio.currentTime || 0;
+  // 音频 metadata/seek 还没到位时，先按记住的进度定位文字稿，
+  // 否则首屏总从 00:00 起渲染，用户要等 8–10 秒才看到当前句。
+  const raw = (clock < 1 && Number(state.resumeAt) > 1 &&
+    state.resumeEp === (state.current && state.current.id)) ? Number(state.resumeAt) : clock;
   // 浏览器按标称码率估算时长，seek 落点会超前，但播放时钟仍与音频 1:1；
   // 所以补偿量由最后一次 seek 的 raw 目标决定，而不是持续缩放时钟。
   const t = raw + (state.timeScale - 1) * state.seekRaw;
@@ -1588,14 +1049,14 @@ function paint(force = false) {
       // 刚进入播放器时即使暂停也要把当前句带回视野；之后仍按用户滚动和播放状态跟随。
       const follow = force || state.pendingFollow;
       setState('pendingFollow', false);
-      if (!carUi) scrollCue(n.el, follow);
+      if (!carUi && !idleDecor) scrollCue(n.el, follow);
     }
   } else if (ci >= 0 && state.pendingFollow) {
     setState('pendingFollow', false);
-    if (!carUi) scrollCue(state.nodes[ci].el, true);
+    if (!carUi && !idleDecor) scrollCue(state.nodes[ci].el, true);
   }
-  if (ci >= 0 && state.mode === 'word' && !carUi) paintWords(ci, t);
-  if (state.wallpaper) wallpaperWordPaint(t);
+  if (ci >= 0 && state.mode === 'word' && !carUi && !idleDecor) paintWords(ci, t);
+  if (state.wallpaper && !idleDecor) wallpaperWordPaint(t);
   syncChapterNow(t);
   // 拖动进度条时只显示预览（时间气泡 + 填充），播放头和高亮仍按真实时钟走，
   // 这里不能把 seek/时间回写成播放位置，否则拖动会被每一帧 paint 抢回去。
@@ -1617,7 +1078,7 @@ function paint(force = false) {
     }
   }
   // syncJumpPill 每次都要读两次 getBoundingClientRect（强制同步布局），不必每帧都算。
-  if (!carUi && (force || Date.now() - state.lastPillAt > 400)) { setState('lastPillAt', Date.now()); syncJumpPill(); }
+  if (!carUi && !idleDecor && (force || Date.now() - state.lastPillAt > 400)) { setState('lastPillAt', Date.now()); syncJumpPill(); }
 }
 
 function syncJumpPill() {
@@ -1632,75 +1093,15 @@ function syncJumpPill() {
   pill.toggleAttribute('inert', !show);
 }
 
-function paintWords(ci, t) {
-  const cue = state.cues[ci], n = state.nodes[ci];
-  if (!cue || !n || !cue.hasWords || !n.words.length) return;
-  let idx = -1;
-  for (let i = 0; i < cue.words.length; i++) { if (t >= cue.words[i].s + state.offset) idx = i; else break; }
-  const prev = n.lastIdx;
-  if (idx === prev) return;
-  // 只重设「上次的当前词」到「这次的当前词」之间那一段：正常播放每次只挪一个词，
-  // 原来每次都要遍历整句 30+ 个词并反复 add/remove class。
-  const start = prev < 0 ? 0 : Math.max(0, Math.min(prev, idx));
-  const end = Math.max(prev, idx);
-  for (let i = start; i <= end; i++) {
-    const w = n.words[i];
-    if (i === idx) { w.classList.remove('pending','past'); w.classList.add('active'); }
-    else if (i < idx) { w.classList.remove('pending','active'); w.classList.add('past'); }
-    else { w.classList.remove('active','past'); w.classList.add('pending'); }
-  }
-  n.lastIdx = idx; setState('wordIdx', idx);
-  if (idx >= 0 && n.words[idx]) scrollWord(n.words[idx]);
-}
-
-let scrollTarget = -1;
-const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-function stopScroll() { scrollTarget = -1; }
-function scrollIntoBox(el, mode) {
-  const br = box.getBoundingClientRect(), er = el.getBoundingClientRect();
-  let top = null;
-  if (mode === 'center') top = box.scrollTop + (er.top - br.top) - (box.clientHeight - er.height)/2;
-  else if (er.top < br.top + 80) top = box.scrollTop + (er.top - br.top) - 80;
-  else if (er.bottom > br.bottom - 80) top = box.scrollTop + (er.bottom - br.bottom) + 80;
-  if (top === null) return;
-  const target = Math.max(0, Math.min(top, box.scrollHeight - box.clientHeight));
-  if (target === scrollTarget) return;
-  scrollTarget = target;
-  const far = Math.abs(target - box.scrollTop) > box.clientHeight * 1.2;
-  box.scrollTo({ top: target, behavior: reduceMotion || document.hidden || far ? 'auto' : 'smooth' });
-}
-function canFollow(force) { return state.scroll !== 'off' && (force || Date.now() >= state.userScrollUntil) && (force || !audio.paused); }
-function scrollCue(el, force) {
-  if (!canFollow(force)) return;
-  const r = el.getBoundingClientRect(), br = box.getBoundingClientRect();
-  const edge = r.top < br.top + 90 || r.bottom > br.bottom - 90;
-  if (force || state.scroll === 'center' || edge) scrollIntoBox(el, state.scroll === 'center' ? 'center' : 'edge');
-}
-function scrollWord(el) {
-  if (!canFollow(false)) return;
-  if (state.scroll === 'center') {
-    // 居中档要跟着“当前词”走，而不是只在一句开始时居中；偏移小于 18% 视口就不动，避免每词抖一下。
-    const r = el.getBoundingClientRect(), br = box.getBoundingClientRect();
-    const off = Math.abs((r.top + r.height / 2) - (br.top + box.clientHeight / 2));
-    if (off > box.clientHeight * 0.18) scrollIntoBox(el, 'center');
-    return;
-  }
-  const r = el.getBoundingClientRect(), br = box.getBoundingClientRect();
-  if (r.top < br.top + 60 || r.bottom > br.bottom - 60) scrollIntoBox(el, 'edge');
-}
-// 实时模式没有原来的 scrollCue 可用（它按 VTT 的行推进，实时行不在它的窗口里），
-// 而且 scrollWord 在「居中」模式下直接 return——所以实时正文要靠这个函数自己跟：
-// 居中档要求高亮词始终落在正文框中间附近，边缘档只在快滚出去时挪一下。
-function liveFollow(el) {
-  if (!el || state.scroll === 'off') return;
-  if (Date.now() < state.userScrollUntil || audio.paused) return;
-  const br = box.getBoundingClientRect(), er = el.getBoundingClientRect();
-  if (state.scroll === 'center') {
-    const off = (er.top + er.height / 2) - (br.top + box.clientHeight / 2);
-    if (Math.abs(off) > box.clientHeight * 0.16) scrollIntoBox(el, 'center');
-    return;
-  }
-  if (er.top < br.top + 90 || er.bottom > br.bottom - 90) scrollIntoBox(el, 'edge');
-}
-export { CUSTOM_THEME_KEY, LIGHT_THEMES, PROGRESS_KEY, READER_DEFAULTS, alignZhLines, applyCustomTheme, applyExperiment, applyReader, applyVttExperiment, audioFail, bindCustomThemeEditor, canFollow, chapterJsonUrl, clearProgress, closeDetails, closeDrawer, closeOverlays, closeTypeSheet, cuesFromJson, deriveTimingsUrl, deriveZhUrl, directAudioUrl, emptyLine, epKey, episodeNumber, esc, fetchJsonTimed, findNorm, fmt, getJson, getText, hideToast, importExperimentFile, invalidateProgressCache, invalidateWordPanelKey, isBracket, isJsonTranscript, isOwnTranscript, lastDark, lastLight, liveFollow, loaderHTML, locateCue, mergeCues, nativeWordDoc, onAudioError, openDetails, openDrawer, openTypeSheet, overlayTriggers, paint, paintWords, parseFeed, parseVttSmart, parseZhVTT, pickTranscript, pluginPageKey, podloveChapters, preferredAudioUrl, progressAll, progressAllCache, progressKey, rawSeek, readCustomTheme, readProgress, reader, readerFields, rebuildCues, reduceMotion, rememberOverlayTrigger, rememberPosition, renderCueWindow, renderCues, renderCustomThemeGrid, resetImportUI, resetWordPanelForEpisode, resolveFinalAudioUrl, restoreExperiment, restoreOverlayFocus, retryCurrentAudio, sanitizeCustomHtml, saveProgress, scrollCue, scrollIntoBox, scrollTarget, scrollWord, seekTo, setDrawerBackgroundInert, setImmersive, setImportNote, setTheme, setWallpaper, showToast, sitePath, splitLabel, stampSeconds, statHTML, status, stopScroll, studyNormText, studyRegexEscape, subtitleKernel, subtitleViewHost, syncCustomThemeEditor, syncJumpPill, syncWallpaperPlay, themeBtns, toastTimer, toggleWallpaperPlay, transcriptEls, transcriptMirror, tryAudioSource, updateTimeScale, vttFromSidecar, wallpaperEnMarkup, wallpaperFullscreen, wallpaperRefresh, wallpaperText, wallpaperWordPaint, wpCueIndex, wpEpId, wpLastKey, wpPrevIndex, wpWasFullscreen, wpWordCue, wpWordIdx, wpWordSpans, writeCustomTheme, writeProgressAll };
-registerLayer('01-theme-reader-shell', { CUSTOM_THEME_KEY, LIGHT_THEMES, PROGRESS_KEY, READER_DEFAULTS, alignZhLines, applyCustomTheme, applyExperiment, applyReader, applyVttExperiment, audioFail, bindCustomThemeEditor, canFollow, chapterJsonUrl, clearProgress, closeDetails, closeDrawer, closeOverlays, closeTypeSheet, cuesFromJson, deriveTimingsUrl, deriveZhUrl, directAudioUrl, emptyLine, epKey, episodeNumber, esc, fetchJsonTimed, findNorm, fmt, getJson, getText, hideToast, importExperimentFile, invalidateProgressCache, invalidateWordPanelKey, isBracket, isJsonTranscript, isOwnTranscript, lastDark, lastLight, liveFollow, loaderHTML, locateCue, mergeCues, nativeWordDoc, onAudioError, openDetails, openDrawer, openTypeSheet, overlayTriggers, paint, paintWords, parseFeed, parseVttSmart, parseZhVTT, pickTranscript, pluginPageKey, podloveChapters, preferredAudioUrl, progressAll, progressAllCache, progressKey, rawSeek, readCustomTheme, readProgress, reader, readerFields, rebuildCues, reduceMotion, rememberOverlayTrigger, rememberPosition, renderCueWindow, renderCues, renderCustomThemeGrid, resetImportUI, resetWordPanelForEpisode, resolveFinalAudioUrl, restoreExperiment, restoreOverlayFocus, retryCurrentAudio, sanitizeCustomHtml, saveProgress, scrollCue, scrollIntoBox, scrollTarget, scrollWord, seekTo, setDrawerBackgroundInert, setImmersive, setImportNote, setTheme, setWallpaper, showToast, sitePath, splitLabel, stampSeconds, statHTML, status, stopScroll, studyNormText, studyRegexEscape, subtitleKernel, subtitleViewHost, syncCustomThemeEditor, syncJumpPill, syncWallpaperPlay, themeBtns, toastTimer, toggleWallpaperPlay, transcriptEls, transcriptMirror, tryAudioSource, updateTimeScale, vttFromSidecar, wallpaperEnMarkup, wallpaperFullscreen, wallpaperRefresh, wallpaperText, wallpaperWordPaint, wpCueIndex, wpEpId, wpLastKey, wpPrevIndex, wpWasFullscreen, wpWordCue, wpWordIdx, wpWordSpans, writeCustomTheme, writeProgressAll });
+/* 字幕的每帧路径（定位 / 逐词上色 / 跟随滚动）已搬到 12-subtitle 层。
+   这里保留同名薄转发，调用方与导出面零改动；下一步把 renderCueWindow 与 07 的 trPrimeCues 也并进去。 */
+const stopScroll = lazyFn('12-subtitle', 'stopScroll');
+const scrollIntoBox = lazyFn('12-subtitle', 'scrollIntoBox');
+const canFollow = lazyFn('12-subtitle', 'canFollow');
+const scrollCue = lazyFn('12-subtitle', 'scrollCue');
+const scrollWord = lazyFn('12-subtitle', 'scrollWord');
+const liveFollow = lazyFn('12-subtitle', 'liveFollow');
+const locateCue = lazyFn('12-subtitle', 'locateCue');
+const paintWords = lazyFn('12-subtitle', 'paintWords');
+export { PROGRESS_KEY, READER_DEFAULTS, alignZhLines, applyCustomTheme, applyExperiment, applyReader, applyVttExperiment, audioFail, bindCustomThemeEditor, canFollow, chapterJsonUrl, clearProgress, closeDetails, closeDrawer, closeOverlays, closeTypeSheet, cuesFromJson, deriveTimingsUrl, deriveZhUrl, directAudioUrl, emptyLine, epKey, episodeNumber, esc, fetchJsonTimed, findNorm, fmt, getJson, getText, hideToast, importExperimentFile, invalidateProgressCache, invalidateWordPanelKey, isBracket, isJsonTranscript, isOwnTranscript, liveFollow, loaderHTML, locateCue, mergeCues, nativeWordDoc, onAudioError, openDetails, openDrawer, openTypeSheet, overlayTriggers, paint, paintWords, parseFeed, parseVttSmart, parseZhVTT, pickTranscript, pluginPageKey, podloveChapters, preferredAudioUrl, progressAll, progressAllCache, progressKey, rawSeek, readCustomTheme, readProgress, reader, readerFields, rebuildCues, rememberOverlayTrigger, rememberPosition, renderCueWindow, renderCues, renderCustomThemeGrid, resetImportUI, resetWordPanelForEpisode, resolveFinalAudioUrl, restoreExperiment, restoreOverlayFocus, retryCurrentAudio, sanitizeCustomHtml, saveProgress, scrollCue, scrollIntoBox, scrollWord, seekTo, setDrawerBackgroundInert, setImmersive, setImportNote, setTheme, setWallpaper, showToast, sitePath, splitLabel, stampSeconds, statHTML, status, stopScroll, studyNormText, studyRegexEscape, subtitleKernel, subtitleViewHost, syncCustomThemeEditor, syncJumpPill, syncWallpaperPlay, themeBtns, toastTimer, toggleWallpaperPlay, transcriptEls, transcriptMirror, tryAudioSource, updateTimeScale, vttFromSidecar, wallpaperEnMarkup, wallpaperFullscreen, wallpaperRefresh, wallpaperText, wallpaperWordPaint, wpCueIndex, wpEpId, wpLastKey, wpPrevIndex, wpWasFullscreen, wpWordCue, wpWordIdx, wpWordSpans, writeCustomTheme, writeProgressAll };
+registerLayer('01-theme-reader-shell', { PROGRESS_KEY, READER_DEFAULTS, alignZhLines, applyCustomTheme, applyExperiment, applyReader, applyVttExperiment, audioFail, bindCustomThemeEditor, canFollow, chapterJsonUrl, clearProgress, closeDetails, closeDrawer, closeOverlays, closeTypeSheet, cuesFromJson, deriveTimingsUrl, deriveZhUrl, directAudioUrl, emptyLine, epKey, episodeNumber, esc, fetchJsonTimed, findNorm, fmt, getJson, getText, hideToast, importExperimentFile, invalidateProgressCache, invalidateWordPanelKey, isBracket, isJsonTranscript, isOwnTranscript, liveFollow, loaderHTML, locateCue, mergeCues, nativeWordDoc, onAudioError, openDetails, openDrawer, openTypeSheet, overlayTriggers, paint, paintWords, parseFeed, parseVttSmart, parseZhVTT, pickTranscript, pluginPageKey, podloveChapters, preferredAudioUrl, progressAll, progressAllCache, progressKey, rawSeek, readCustomTheme, readProgress, reader, readerFields, rebuildCues, rememberOverlayTrigger, rememberPosition, renderCueWindow, renderCues, renderCustomThemeGrid, resetImportUI, resetWordPanelForEpisode, resolveFinalAudioUrl, restoreExperiment, restoreOverlayFocus, retryCurrentAudio, sanitizeCustomHtml, saveProgress, scrollCue, scrollIntoBox, scrollWord, seekTo, setDrawerBackgroundInert, setImmersive, setImportNote, setTheme, setWallpaper, showToast, sitePath, splitLabel, stampSeconds, statHTML, status, stopScroll, studyNormText, studyRegexEscape, subtitleKernel, subtitleViewHost, syncCustomThemeEditor, syncJumpPill, syncWallpaperPlay, themeBtns, toastTimer, toggleWallpaperPlay, transcriptEls, transcriptMirror, tryAudioSource, updateTimeScale, vttFromSidecar, wallpaperEnMarkup, wallpaperFullscreen, wallpaperRefresh, wallpaperText, wallpaperWordPaint, wpCueIndex, wpEpId, wpLastKey, wpPrevIndex, wpWasFullscreen, wpWordCue, wpWordIdx, wpWordSpans, writeCustomTheme, writeProgressAll });

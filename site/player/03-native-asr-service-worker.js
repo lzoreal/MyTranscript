@@ -95,7 +95,10 @@ function liveNativeStream(session, anchor) {
       if (closed) return;
       closed = true;
       buf = null;
-      try { host().asrClose(id); } catch (e) {}
+      // 原生识别器是 LIVE.engine 共享的（整页只开一个），重建一段流只该「重置」它，
+      // 绝不能 asrClose：关掉之后所有后续 asrFeed 都会回「识别器已关闭」，实时识别从此
+      // 永远空白（实测跳一次进度、换一次集就会中招，跟音频格式无关，MP3 也一样）。
+      try { host().asrReset(id); } catch (e) {}
     },
   };
 }
@@ -106,6 +109,13 @@ function liveConcatFloat(a, b) {
   out.set(b, a.length);
   return out;
 }
+
+// 宿主侧识别器一整页只会开一个，页面真要关掉时才释放它。
+window.addEventListener('beforeunload', () => {
+  if (LIVE.engine && LIVE.engine.kind === 'native') {
+    try { host().asrClose(LIVE.engine.id); } catch (e) {}
+  }
+});
 
 
 
@@ -174,7 +184,7 @@ function liveRebuildStream() {
   LIVE.prefetchFrom = LIVE.next;
   LIVE.prefetchWin = null;
   // 单流模式的字节游标要跟着新锚点走，否则 append 的时间轴会和播放头错开。
-  if (LIVE.mse && LIVE.cbr) {
+  if (LIVE.mse && LIVE.cbr && LIVE.cbr.kind === 'mp3') {
     LIVE.byteSec = LIVE.next;
     LIVE.bytePos = LIVE.cbr.origin + Math.round(LIVE.cbr.bps * LIVE.next);
   }
@@ -495,7 +505,7 @@ async function liveEnable() {
     $('liveBtn').classList.add('on');
     syncDockBadge();
     // 单流播放：模型就绪后才接管播放，免得下模型失败时把用户的播放也搭进去。
-    if (prefs.liveMse && liveMseCapable() && LIVE.cbr) {
+    if (prefs.liveMse && LIVE.cbr && liveMseCapable()) {
       const wasPlaying = !audio.paused;   // 接管过程中会先暂停，这个状态要在这里先记住
       try {
         await liveMseBegin();
@@ -568,7 +578,7 @@ async function liveFollowCurrentEpisode(resumePlay) {
     liveRebuildStream();
     // 换集后自动重新接管：单流在 loadEpisode 里已经停掉（播放还给原生），这里等新一集
     // 拿到元数据再接管一次，用户不用手动开关「实时识别」。
-    if (prefs.liveMse && liveMseCapable()) {
+    if (prefs.liveMse && LIVE.cbr && liveMseCapable()) {
       const wasPlaying = !!resumePlay || !audio.paused || app.autoplay;
       try {
         const ready = await liveWaitAudioReady(15000);
@@ -679,6 +689,8 @@ audio.addEventListener('ended', () => {
   };
   markDrag(document.querySelector('.topbar'));
   markDrag(document.querySelector('.brand'));
+  // 播放页自己的 58px 顶栏也要能拖；按钮/窗口控件在 markDrag 里已经排除。
+  markDrag(document.getElementById('readerTop') || document.querySelector('.reader-top-actions'));
 
   // 播放页是全屏阅读器，顶部那圈浮层是 pointer-events:none，拖不动。
   // 不铺透明拖拽带了（它会盖住顶部 38px 的控件和字幕首行）；直接把阅读区容器本身
@@ -687,14 +699,40 @@ audio.addEventListener('ended', () => {
     if (el) el.setAttribute('data-tauri-drag-region', '');
   });
 
+  // 播放页保持原样：正文优先选字/点句跳转，只有顶栏和两侧空白能拖窗口。
+  // 其它页面（首页/播客库/设置等）没有“选一段字幕”的需求，整页按住拖都能移动窗口；
+  // 用移动阈值区分点击和拖动，避免把卡片、按钮的点击吞掉。
+  let pageDrag = null;
+  const noDragTarget = (el) => el && el.closest &&
+    el.closest('button,input,textarea,select,a,summary,[contenteditable="true"],[role="button"],[data-no-drag]');
+  document.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || document.body.classList.contains('player-open')) return;
+    if (noDragTarget(e.target)) return;
+    pageDrag = { x: e.clientX, y: e.clientY, id: e.pointerId };
+  }, true);
+  document.addEventListener('pointermove', (e) => {
+    if (!pageDrag || e.pointerId !== pageDrag.id) return;
+    const dx = e.clientX - pageDrag.x;
+    const dy = e.clientY - pageDrag.y;
+    if (Math.hypot(dx, dy) < 8) return;
+    pageDrag = null;
+    try { window.getSelection()?.removeAllRanges(); } catch (err) {}
+    e.preventDefault();
+    try { win.startDragging(); } catch (err) {}
+  }, { capture: true, passive: false });
+  const endPageDrag = () => { pageDrag = null; };
+  document.addEventListener('pointerup', endPageDrag, true);
+  document.addEventListener('pointercancel', endPageDrag, true);
+
   const makeCtl = () => {
     const box = document.createElement('div');
     box.className = 'win-ctl';
+    const svg = (id) => '<svg class="wc-ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#' + id + '"/></svg>';
     box.innerHTML =
-      '<button type="button" data-win="mini" title="迷你窗" aria-label="迷你窗">⧉</button>' +
-      '<button type="button" data-win="min" title="收进托盘" aria-label="收进托盘">－</button>' +
-      '<button type="button" data-win="max" title="最大化" aria-label="最大化">▢</button>' +
-      '<button type="button" data-win="close" title="关闭" aria-label="关闭">✕</button>';
+      '<button type="button" data-win="mini" title="迷你窗" aria-label="迷你窗">' + svg('i-win-mini') + '</button>' +
+      '<button type="button" data-win="min" title="收进托盘" aria-label="收进托盘">' + svg('i-win-min') + '</button>' +
+      '<button type="button" data-win="max" title="最大化" aria-label="最大化">' + svg('i-win-max') + '</button>' +
+      '<button type="button" data-win="close" title="关闭" aria-label="关闭">' + svg('i-close') + '</button>';
     box.addEventListener('click', async (e) => {
       const btn = e.target.closest('[data-win]');
       if (!btn) return;
@@ -711,7 +749,7 @@ audio.addEventListener('ended', () => {
       if (k === 'max') {
         try {
           const maxed = await win.isMaximized();
-          btn.textContent = maxed ? '❐' : '▢';
+          btn.innerHTML = svg(maxed ? 'i-win-restore' : 'i-win-max');
           btn.title = maxed ? '还原' : '最大化';
         } catch (err) {}
       }
@@ -914,6 +952,15 @@ function selectEpisode(item, keepDrawer = false) {
   saveProgress(true);
   setAlignMode(false);
   setState('current', item);
+  // 下载后整集转写会落一份 localasr 稿在音频旁边；重新进应用后靠离线记录把它接回来，
+  // 否则只有本次运行能读、重启就丢稿。
+  try {
+    const rec = app.offline && app.offline.get(offlineKeyFor(state.show, item));
+    if (rec && rec.localTranscript && rec.path) {
+      item.localPath = rec.path;
+      item.transcript = { type: 'application/json', url: 'local-asr', local: true };
+    }
+  } catch (e) {}
   studyResetPlayback(); studyResetContext();
   item.showKey = state.show.slug;
   if (document.body.classList.contains('player-open')) {
@@ -998,8 +1045,12 @@ function selectEpisode(item, keepDrawer = false) {
   const seq = ++state.transcriptSeq;
   if (!subtitlePluginOn()) {
     // 没有字幕插件时保持最原生状态：只播放音频，不加载/解析/渲染任何文字稿。
-    // 阅读区给一句中性说明，避免空白页，也不引导用户去装插件。
-    box.innerHTML = '<div class="empty">音频播放模式<br><span style="font-size:12px">本集只播放音频，未加载字幕。</span></div>';
+    // 网页版要把能力边界说清楚，别让用户以为“字幕坏了”；桌面版指向插件设置。
+    const hint = host()
+      ? '字幕插件未启用。到「设置 → 插件」启用 subtitles 后再打开本集。'
+      : '网页版仅播放音频；双语词级字幕在桌面版可用。';
+    box.innerHTML = '<div class="empty">音频播放模式<br><span style="font-size:12px">' + hint + '</span></div>';
+    box.dataset.nativeAudio = '1';
     setState('cues', []); setState('nodes', []); setState('activeCue', -1); setState('vtt', null); setState('sidecar', null); setState('zhVtt', null); setState('base', null);
     status('音频播放模式。');
     syncJumpPill(); syncMini(); syncBookmarkBtn();

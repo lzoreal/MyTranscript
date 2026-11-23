@@ -28,6 +28,11 @@ function splitBilingual(text) {
   }
   return { en: raw.slice(0, cut).trim(), zh: raw.slice(cut + 1).trim() };
 }
+/* 词级 JSON 的 segments 是「英文 + 译文」同段导出的，中文和英文天然一一对应。
+   旧版曾用时长短/汉字数做相关，猜「译文整体落后几句」；这个启发式会被一句长停顿
+   误导，一旦锁到负偏移就永不回退，把本来对齐的译文整体左移（SmartLess 13:19 就是
+   这样错的）。中文时间戳本来就跟着同段英文，merge() 会按时间窗口配对，所以这里
+   不再做任何猜测，原样交给 merge()。 */
 function parseJson(doc) {
   const sentences = Array.isArray(doc.sentences) ? doc.sentences.map(s => ({
     startTime: s.start, endTime: s.end,
@@ -304,18 +309,28 @@ function smoothCompressedWords(words) {
 function merge(vtt, sidecar, zhVtt, options = {}) {
   const segs = Array.isArray(sidecar?.segments) ? sidecar.segments : [];
   const native = sidecar?.native === true;
-  const aligned = segs.length === vtt.length;
+  // 长度相等也可能是两条流各自漂移；先按时间抽查，抽不上再退回逐条匹配。
+  const aligned = segs.length === vtt.length && vtt.every((c, i) =>
+    Math.abs((Number(segs[i]?.start) || 0) / 1000 - c.start) < 1.5);
   const zh = Array.isArray(zhVtt) ? zhVtt : [];
-  const nearestZh = start => {
+  // 中文永远按时间找，不再“长度相等就按下标取”。
+  // 规则：译文起点必须落在本句起点前 0.8s ~ 本句结束+0.25s 的窗口里；
+  // 找不到就宁可留空，也不把上一句/下一句的译文贴过来。
+  const zhForCue = cue => {
+    const start = Number(cue.start) || 0;
+    const end = Number.isFinite(cue.end) ? cue.end : start + 2;
+    const lo = start - 0.8, hi = end + 0.25;
     let best = null, gap = Infinity;
-    for (const z of zh) { const d = Math.abs(z.start - start); if (d < gap) { gap = d; best = z; } }
-    return gap <= 1.5 ? best : null;
+    for (const z of zh) {
+      const zs = Number(z.start);
+      if (!Number.isFinite(zs) || zs < lo || zs > hi) continue;
+      const d = Math.abs(zs - start);
+      if (d < gap) { gap = d; best = z; }
+    }
+    return best;
   };
-  // 长度不一致时才按时间兜底：取最近的一条，不能取"1 秒内第一个"——
-  // 连续句间隔常小于 1 秒，取第一个会把上一句的中文套到下一句。
-  const zhAligned = zh.length === vtt.length ? zh : vtt.map(c => nearestZh(c.start));
   let cues = vtt.map((c, i) => {
-    const s = aligned ? segs[i] : (segs[i] && Math.abs((segs[i].start || 0) / 1000 - c.start) < 1 ? segs[i] : null);
+    const s = aligned ? segs[i] : (segs[i] && Math.abs((Number(segs[i].start) || 0) / 1000 - c.start) < 1 ? segs[i] : null);
     const words = (s?.words || []).map(([t, st, dur]) => ({ t, s: st / 1000, e: (st + Math.max(0, dur)) / 1000 }));
     if (!native) smoothCompressedWords(words);
     for (let k = 0; k < words.length; k++) {
@@ -327,7 +342,7 @@ function merge(vtt, sidecar, zhVtt, options = {}) {
     const start = s && Number.isFinite(s.start) ? s.start / 1000 : c.start;
     const end = s && s.end != null ? s.end / 1000 : null;
     return { i, start, end, speaker: s?.speaker || c.speaker || '',
-             text: c.text || s?.text || '', zh: zhAligned[i]?.text || '',
+             text: c.text || s?.text || '', zh: (zhForCue({ start, end }) || {}).text || '',
              words, native, fromJson: !!s, hasWords: words.length > 0 };
   });
   let lang = options.lang || 'en';

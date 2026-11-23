@@ -2,7 +2,7 @@ import { $, audio, prefs, state } from './00-runtime.js';
 import { esc, fmt, invalidateWordPanelKey, reader, seekTo, showToast, splitLabel, wallpaperRefresh } from './01-theme-reader-shell.js';
 import { selectEpisode } from './03-native-asr-service-worker.js';
 import { smallArtwork, subtitlePluginOn } from './04-local-audio-plugin-host.js';
-import { BOOKMARK_KEY, PAGE_NAMES, app, episodesOf, formatDate, isPlayed, writeJSON } from './05-transport-transcript-nav.js';
+import { BOOKMARK_KEY, NOTE_KEY, PAGE_NAMES, app, episodesOf, formatDate, isPlayed, writeJSON } from './05-transport-transcript-nav.js';
 import { coverGrad, initialsOf } from './06-catalog-feeds-search.js';
 import { registerLayer } from './00-layers.js';
 /* layer: view —— 播放器集成
@@ -92,6 +92,17 @@ function renderReaderRails() {
     '<div class="rail-label"><span>本集笔记</span><span>' + cNotes.length + '</span></div>' + notesHTML;
 }
 
+function setMobileMore(open) {
+  document.body.classList.toggle('mobile-more', !!open);
+  const scrim = $('mobileScrim');
+  if (scrim) scrim.hidden = !open;
+  const btn = $('mobileMoreBtn');
+  if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+function mobileNarrow() {
+  return typeof matchMedia === 'function' && matchMedia('(max-width: 900px)').matches;
+}
+
 function bindLedgerUI() {
   if (app.ledgerBound) return;
   app.ledgerBound = true;
@@ -100,10 +111,75 @@ function bindLedgerUI() {
   ['series', 'notes'].forEach(name => {
     let saved = null;
     try { saved = localStorage.getItem('myt-rail-' + name); } catch (e) {}
-    setRailOpen(name, saved === null ? wide : saved === '1', false);
+    // 窄窗侧栏是覆盖式抽屉，两栏同时开会把正文全盖住；窄窗一律先收起。
+    setRailOpen(name, wide && (saved === null ? true : saved === '1'), false);
+  });
+  let wasNarrow = window.innerWidth <= 860;
+  window.addEventListener('resize', () => {
+    const narrow = window.innerWidth <= 860;
+    if (narrow && !wasNarrow) ['series', 'notes'].forEach(name => setRailOpen(name, false, false));
+    wasNarrow = narrow;
   });
   const navBtn = $('sidebarToggle');
-  if (navBtn) navBtn.onclick = () => setNavCollapsed(!document.body.classList.contains('nav-collapsed'));
+  if (navBtn) navBtn.onclick = () => {
+    // 窄窗里侧栏按布局隐藏，左上角按钮改成“打开页面导航”，
+    // 否则设置/下载/笔记这些页只能靠猜路由。
+    if (mobileNarrow()) { setMobileMore(!document.body.classList.contains('mobile-more')); return; }
+    setNavCollapsed(!document.body.classList.contains('nav-collapsed'));
+  };
+  const moreBtn = $('mobileMoreBtn');
+  if (moreBtn) moreBtn.onclick = () => setMobileMore(!document.body.classList.contains('mobile-more'));
+  const intensiveBar = $('intensiveBar');
+  if (intensiveBar) {
+    const intensiveShow = $('intensiveShowBtn');
+    if (intensiveShow) intensiveShow.addEventListener('click', toggleIntensiveCollapsed);
+    intensiveBar.addEventListener('click', event => {
+      const step = event.target.closest('[data-intensive]');
+      if (step) { runIntensiveStep(Number(step.dataset.intensive)); return; }
+      if (event.target.closest('#intensiveReset')) { resetIntensive(); return; }
+      if (event.target.closest('#intensiveCollapse')) { toggleIntensiveCollapsed(); return; }
+      if (event.target.closest('#intensiveNoteSave')) { saveIntensiveNote(); }
+    });
+    document.addEventListener('myt:cues-ready', renderIntensive);
+    /* 正常播放时字幕是在 syncReaderTop 之后才画出来的；等 DOM 真出现句子再把四步条亮出来。 */
+    const transcript = $('transcript');
+    if (transcript) {
+      let timer = 0;
+      new MutationObserver(() => {
+        clearTimeout(timer);
+        timer = setTimeout(() => { if (state.current && state.cues.length) renderIntensive(); }, 80);
+      }).observe(transcript, { childList: true, subtree: true });
+    }
+  }
+  // 节目页「展开简介」与单集页「更多」菜单：都是轻量内联交互，挂在文档上即可，
+  // 页面重渲染后不用重新绑定。
+  document.addEventListener('click', event => {
+    const toggle = event.target.closest('.show-desc-toggle');
+    if (toggle) {
+      const wrap = toggle.closest('.show-desc-wrap');
+      const open = wrap.classList.toggle('open');
+      toggle.textContent = open ? '收起简介' : '展开简介';
+      return;
+    }
+    if (!event.target.closest('.more-menu')) {
+      document.querySelectorAll('.more-menu[open]').forEach(node => node.removeAttribute('open'));
+    } else if (event.target.closest('.more-list')) {
+      const menu = event.target.closest('.more-menu');
+      if (menu) menu.removeAttribute('open');
+    }
+  });
+  const moreClose = $('mobileMoreClose');
+  if (moreClose) moreClose.onclick = () => setMobileMore(false);
+  const scrim = $('mobileScrim');
+  if (scrim) scrim.onclick = () => setMobileMore(false);
+  if (window.addEventListener) {
+    window.addEventListener('resize', () => { if (!mobileNarrow()) setMobileMore(false); });
+    // 侧栏抽屉里的路由点击后自动收起，不把遮罩留在页面上。
+    document.addEventListener('click', event => {
+      if (!document.body.classList.contains('mobile-more')) return;
+      if (event.target.closest('#sideNav [data-route],#sideNav2 [data-route],.sidebar-add')) setMobileMore(false);
+    }, true);
+  }
   const seriesBtn = $('seriesRailBtn');
   if (seriesBtn) seriesBtn.onclick = () => setRailOpen('series', !document.body.classList.contains('reader-series-open'));
   const notesBtn = $('notesRailBtn');
@@ -121,7 +197,7 @@ function bindLedgerUI() {
     }
     const action = event.target.closest('[data-rail-action]');
     if (action) {
-      const ids = { study: 'studyBtn', bookmark: 'readerBookmarkBtn', chapter: 'chapterBtn', info: 'readerInfoBtn' };
+      const ids = { study: 'studyBtn', bookmark: 'readerBookmarkBtn', chapter: 'chapterBtn', info: 'detailsBtn' };
       const target = $(ids[action.dataset.railAction]);
       if (target) target.click();
       return;
@@ -134,7 +210,168 @@ function bindLedgerUI() {
   });
   renderReaderRails();
 }
+/* ---------- 精听四步 ----------
+   盲听 → 看稿 → 跟读 → 复述。状态按“节目+单集”存在本机，
+   换集、重启都接得上；复述可以直接落成这集的笔记。 */
+const INTENSIVE_KEY = 'myt-intensive-v1';
+const INTENSIVE_COLLAPSE_KEY = 'myt-intensive-collapsed';
+const INTENSIVE_HINTS = [
+  '先不看文字，听 30 秒抓大意。文字会被模糊，但不锁滚动。',
+  '恢复文字：对着当前句看一遍生词和连读。',
+  '当前句连播 3 遍，跟着音频开口。',
+  '合上文字，用一句话复述；写下来就存进本集笔记。',
+];
+let intensiveLoopStop = null;
+function intensiveId() {
+  return state.show && state.current ? state.show.slug + '|' + state.current.id : '';
+}
+function intensiveSteps() {
+  let all = {};
+  try { all = JSON.parse(localStorage.getItem(INTENSIVE_KEY) || '{}') || {}; } catch (e) {}
+  const saved = all[intensiveId()];
+  return Array.isArray(saved) && saved.length === 4 ? saved.map(Boolean) : [false, false, false, false];
+}
+function saveIntensiveSteps(steps) {
+  const id = intensiveId();
+  if (!id) return;
+  let all = {};
+  try { all = JSON.parse(localStorage.getItem(INTENSIVE_KEY) || '{}') || {}; } catch (e) {}
+  all[id] = steps;
+  try { localStorage.setItem(INTENSIVE_KEY, JSON.stringify(all)); } catch (e) {}
+}
+function intensiveCollapsed() {
+  try { return localStorage.getItem(INTENSIVE_COLLAPSE_KEY) === '1'; } catch (e) { return false; }
+}
+function toggleIntensiveCollapsed() {
+  const next = !intensiveCollapsed();
+  try { localStorage.setItem(INTENSIVE_COLLAPSE_KEY, next ? '1' : '0'); } catch (e) {}
+  renderIntensive();
+  document.dispatchEvent(new CustomEvent('myt:intensive-toggle', { detail: { collapsed: next } }));
+}
+function stopIntensiveLoop() {
+  if (intensiveLoopStop) { audio.removeEventListener('timeupdate', intensiveLoopStop); intensiveLoopStop = null; }
+}
+function renderIntensive() {
+  const bar = $('intensiveBar');
+  if (!bar) return;
+  if (!state.show || !state.current || !state.cues.length) {
+    bar.hidden = true;
+    bar.classList.remove('collapsed');
+    document.body.classList.remove('intensive-on', 'intensive-collapsed');
+    document.documentElement.style.setProperty('--intensive-h', '0px');
+    const showBtn = $('intensiveShowBtn');
+    if (showBtn) { showBtn.hidden = true; showBtn.setAttribute('aria-expanded', 'false'); }
+    return;
+  }
+  const collapsed = intensiveCollapsed();
+  bar.hidden = collapsed;
+  document.body.classList.add('intensive-on');
+  bar.classList.toggle('collapsed', collapsed);
+  document.body.classList.toggle('intensive-collapsed', collapsed);
+  const collapseBtn = $('intensiveCollapse');
+  if (collapseBtn) {
+    collapseBtn.textContent = collapsed ? '展开' : '收起';
+    collapseBtn.setAttribute('aria-expanded', String(!collapsed));
+    collapseBtn.title = collapsed ? '展开精听栏' : '收起精听栏';
+  }
+  const showBtn = $('intensiveShowBtn');
+  if (showBtn) {
+    showBtn.hidden = !collapsed;
+    showBtn.setAttribute('aria-expanded', String(!collapsed));
+    showBtn.title = '展开精听四步';
+  }
+  const steps = intensiveSteps();
+  bar.querySelectorAll('[data-intensive]').forEach(button => {
+    const i = Number(button.dataset.intensive) - 1;
+    button.classList.toggle('done', !!steps[i]);
+  });
+  const next = steps.findIndex(step => !step);
+  bar.querySelectorAll('[data-intensive]').forEach(button => {
+    button.classList.toggle('active', Number(button.dataset.intensive) - 1 === next);
+  });
+  const prog = $('intensiveProg'); if (prog) prog.textContent = steps.filter(Boolean).length + '/4';
+  const hint = $('intensiveHint');
+  if (hint) hint.textContent = next >= 0 ? INTENSIVE_HINTS[next] : '这集四步都走完了。可以重来，或去下一集。';
+  const noteWrap = $('intensiveNoteWrap');
+  if (noteWrap) noteWrap.hidden = !steps[3];
+  /* 顶栏是 fixed 的 58px；精听条本身也要有自己的高度，正文 padding 才能让出这块。
+     收起时整条不占位，高度记 0，正文直接上移。 */
+  document.documentElement.style.setProperty('--intensive-h', collapsed ? '0px' : bar.offsetHeight + 'px');
+}
+function markIntensive(step) {
+  const steps = intensiveSteps();
+  steps[step - 1] = true;
+  saveIntensiveSteps(steps);
+  renderIntensive();
+}
+function resetIntensive() {
+  stopIntensiveLoop();
+  document.body.classList.remove('intensive-blind');
+  saveIntensiveSteps([false, false, false, false]);
+  const note = $('intensiveNote'); if (note) note.value = '';
+  renderIntensive();
+  showToast('这集的精听进度已清空。');
+}
+function repeatCurrentCue(loops = 3) {
+  stopIntensiveLoop();
+  const cue = state.cues[state.activeCue >= 0 ? state.activeCue : 0];
+  if (!cue) { showToast('当前还没有可跟读的句子。', 'warn'); return; }
+  const start = Number(cue.start) || 0;
+  const end = Math.min(Number(cue.end) || start + 10, start + 15);
+  let left = loops;
+  const onTime = () => {
+    if (left <= 0 || audio.currentTime < end - 0.03) return;
+    left--;
+    /* 暂停瞬间还会再来一两帧 timeupdate，先摘监听，否则一次 end 会被扣成好几遍。 */
+    audio.removeEventListener('timeupdate', onTime);
+    audio.pause();
+    if (left <= 0) { intensiveLoopStop = null; return; }
+    setTimeout(() => {
+      if (!state.current) { intensiveLoopStop = null; return; }
+      audio.addEventListener('timeupdate', onTime);
+      seekTo(start);
+    }, 400);
+  };
+  intensiveLoopStop = onTime;
+  audio.addEventListener('timeupdate', onTime);
+  seekTo(start);
+  showToast('连播 ' + loops + ' 遍当前句，跟着读。');
+}
+function runIntensiveStep(step) {
+  if (!state.current || !state.show) { showToast('先播放一集。', 'warn'); return; }
+  if (step === 1) {
+    document.body.classList.add('intensive-blind');
+  } else if (step === 2) {
+    document.body.classList.remove('intensive-blind');
+    const node = state.nodes[state.activeCue];
+    if (node && node.el && node.el.scrollIntoView) node.el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  } else if (step === 3) {
+    repeatCurrentCue(3);
+  } else if (step === 4) {
+    document.body.classList.remove('intensive-blind');
+    const noteWrap = $('intensiveNoteWrap');
+    if (noteWrap) { noteWrap.hidden = false; $('intensiveNote')?.focus(); }
+  }
+  markIntensive(step);
+}
+function saveIntensiveNote() {
+  const input = $('intensiveNote');
+  const body = String(input?.value || '').trim();
+  if (!state.show || !state.current) return;
+  if (!body) { showToast('先写一句复述再保存。', 'warn'); input?.focus(); return; }
+  const cue = state.cues[state.activeCue] || state.cues[0];
+  const time = Math.round((cue ? cue.start : audio.currentTime || 0) + (state.offset || 0));
+  app.notes.unshift({
+    key: state.show.slug, ep: state.current.id, title: '精听复述', body,
+    t: time, at: Date.now(),
+  });
+  writeJSON(NOTE_KEY, app.notes);
+  showToast('复述已存进本集笔记。');
+  renderReaderRails();
+}
 function syncReaderTop() {
+  if (state.current) { try { localStorage.setItem('myt-reader-opened', '1'); } catch (e) {} }
+  renderIntensive();
   const pill = $('readerShowPill');
   if (pill) pill.textContent = state.show ? 'NOW PLAYING · ' + String(state.show.name || '').toUpperCase() : 'NOW PLAYING';
   const back = $('readerBack');

@@ -7,6 +7,7 @@ function createStudyUi(api, host) {
   host.player.setView('card');
   let studyView = 'card';
   let studyRenderedVocab = [];
+  let studyRenderedPhrases = [];
   let studyTermData = new Map(), studyTermPinned = false, studyTermFocusKeys = new Set();
   let studyTranscriptTermData = new Map();
   let studyReviewRevealed = false, studyHideZh = false;
@@ -127,21 +128,22 @@ function bindWordStatusButtons(word) {
 function studyTranscriptMarkData() {
   const map = new Map();
   const add = item => {
-    const key = host.ui.cleanWord(item?.word || '');
-    if (key && !map.has(key)) map.set(key, item);
+    const term = item?.word || item?.phrase || '';
+    const key = host.ui.cleanWord(term);
+    if (key && !map.has(key)) map.set(key, Object.assign({}, item, { word: term }));
   };
   studyVocab.forEach(add);
+  const addFrom = data => {
+    if (!data) return;
+    if (Array.isArray(data.vocabulary)) data.vocabulary.forEach(add);
+    if (Array.isArray(data.phrases)) data.phrases.forEach(add);
+  };
   const cur = studyCurrentCue();
-  if (cur) {
-    const cached = studyCache[studyCurrentKey(cur)];
-    if (cached && cached.data && Array.isArray(cached.data.vocabulary)) cached.data.vocabulary.forEach(add);
-  }
+  if (cur) addFrom(studyCache[studyCurrentKey(cur)]?.data);
   const epId = host.player.state.current?.id;
   if (epId) {
-    const cached = studyCache['ep:' + epId];
-    if (cached && cached.data && Array.isArray(cached.data.vocabulary)) cached.data.vocabulary.forEach(add);
-    const partial = studyCache['ep:' + epId + ':partial'];
-    if (partial && partial.data && Array.isArray(partial.data.vocabulary)) partial.data.vocabulary.forEach(add);
+    addFrom(studyCache['ep:' + epId]?.data);
+    addFrom(studyCache['ep:' + epId + ':partial']?.data);
   }
   return map;
 }
@@ -151,32 +153,41 @@ function studyApplyWordMarks() {
   studyTranscriptTermData = studyTranscriptMarkData();
   const phraseItem = key => {
     const item = studyTranscriptTermData.get(key);
-    return item && /\s/.test(String(item.word || '').trim()) ? item : null;
+    return item && /\s/.test(String(item.word || item.phrase || '').trim()) ? item : null;
   };
+  const kindClass = item => studyKindClass(item?.kind);
   host.player.state.nodes.forEach(n => {
     if (!n || !n.words) return;
     n.words.forEach(w => {
       const key = host.ui.cleanWord(w.textContent || '');
       const st = studyWordStatusOf(w.textContent || '');
-      w.classList.remove('study-learning', 'study-known', 'study-ignored', 'vocab-mark');
+      w.classList.remove('study-learning', 'study-known', 'study-ignored', 'vocab-mark', 'study-kind-slang', 'study-kind-idiom', 'study-kind-phrasal', 'study-kind-collocation', 'study-kind-phrase');
       delete w.dataset.term;
+      delete w.dataset.termKind;
       if (st) w.classList.add('study-' + st);
       if (key && studyTranscriptTermData.has(key)) {
+        const item = studyTranscriptTermData.get(key);
+        const kc = kindClass(item);
         w.classList.add('vocab-mark');
+        if (kc) w.classList.add(kc);
         w.dataset.term = key;
+        if (item?.kind) w.dataset.termKind = String(item.kind);
       }
     });
     const words = n.words;
     for (let i = 0; i < words.length; i++) {
       let joined = '';
-      for (let len = 1; len <= 4 && i + len <= words.length; len++) {
+      for (let len = 1; len <= 6 && i + len <= words.length; len++) {
         joined += (len > 1 ? ' ' : '') + (words[i + len - 1].textContent || '');
         const key = host.ui.cleanWord(joined);
         const item = phraseItem(key);
         if (!item) continue;
+        const kc = kindClass(item);
         for (let j = i; j < i + len; j++) {
           words[j].classList.add('vocab-mark');
+          if (kc) words[j].classList.add(kc);
           words[j].dataset.term = key;
+          if (item.kind) words[j].dataset.termKind = String(item.kind);
         }
       }
     }
@@ -354,13 +365,43 @@ function studyRootHTML(item) {
 function studySameRootText(item) {
   return studySameRootList(item).map(x => x.word + (x.meaning ? '=' + x.meaning : '')).join(' | ');
 }
-function studySetVocabulary(vocab) {
+function studySetVocabulary(vocab, phrases) {
   studyTermData = new Map();
-  (Array.isArray(vocab) ? vocab : []).forEach(item => {
-    const key = String(item?.word || '').trim().toLowerCase();
-    if (key && !studyTermData.has(key)) studyTermData.set(key, item);
-  });
+  const add = item => {
+    const raw = String(item?.word || item?.phrase || '').trim();
+    const key = raw.toLowerCase();
+    if (key && !studyTermData.has(key)) {
+      studyTermData.set(key, Object.assign({}, item, { word: raw }));
+    }
+  };
+  (Array.isArray(vocab) ? vocab : []).forEach(add);
+  (Array.isArray(phrases) ? phrases : []).forEach(add);
   studyTermFocusKeys = new Set();
+}
+function studyKindKey(kind) {
+  const k = String(kind || '').trim().toLowerCase().replace(/[\s_]+/g, '-');
+  if (k === '俚语') return 'slang';
+  if (k === '习语' || k === '成语') return 'idiom';
+  if (k === '动词短语' || k === '短语动词') return 'phrasal-verb';
+  if (k === '固定搭配' || k === '搭配') return 'collocation';
+  return k;
+}
+function studyKindLabel(kind) {
+  return {
+    slang: '俚语',
+    idiom: '习语',
+    'phrasal-verb': '动词短语',
+    collocation: '固定搭配',
+    phrase: '短语',
+  }[studyKindKey(kind)] || '表达';
+}
+function studyKindClass(kind) {
+  const k = studyKindKey(kind);
+  if (k === 'slang') return 'study-kind-slang';
+  if (k === 'idiom') return 'study-kind-idiom';
+  if (k === 'phrasal-verb') return 'study-kind-phrasal';
+  if (k === 'collocation') return 'study-kind-collocation';
+  return k ? 'study-kind-phrase' : '';
 }
 function studyTermChipHTML(word) {
   const raw = String(word || '').trim();
@@ -417,7 +458,9 @@ function studyTermTipHTML(item) {
   if (!item) return '';
   const word = String(item.word || '').trim();
   return '<div class="tt-head"><b>' + host.ui.esc(word) + '</b>' +
-    (item.phonetic ? '<em>' + host.ui.esc(item.phonetic) + '</em>' : '') + '</div>' +
+    (item.phonetic ? '<em>' + host.ui.esc(item.phonetic) + '</em>' : '') +
+    (item.kind ? '<span class="study-kind ' + studyKindClass(item.kind) + '">' + host.ui.esc(studyKindLabel(item.kind)) + '</span>' : '') +
+    '</div>' +
     '<div class="tt-meaning">' + host.ui.esc(item.meaning || '暂无释义') + '</div>' +
     (item.example ? '<div class="tt-example"><b>例</b> ' + host.ui.esc(item.example) +
       (item.exampleZh ? '<br>' + host.ui.esc(item.exampleZh) : '') + '</div>' : '') +
@@ -529,9 +572,26 @@ function studyVocabCards(items, addable) {
       '</div>';
   }).join('');
 }
+function studyPhraseCards(items) {
+  studyRenderedPhrases = Array.isArray(items) ? items : [];
+  return studyRenderedPhrases.map((p, i) => {
+    const phrase = String(p.phrase || p.word || '').trim();
+    if (!phrase) return '';
+    const inVocab = studyVocab.some(x => host.ui.cleanWord(x.word) === host.ui.cleanWord(phrase));
+    return '<div class="study-vocab study-expression">' +
+      '<div class="study-expression-head"><strong>' + studyTermChipHTML(phrase) + '</strong>' +
+      (p.kind ? '<span class="study-kind ' + studyKindClass(p.kind) + '">' + host.ui.esc(studyKindLabel(p.kind)) + '</span>' : '') +
+      '</div>' +
+      '<small>' + host.ui.esc(p.meaning || '') + '</small>' +
+      (p.example ? '<small><b>例：</b>' + host.ui.esc(p.example) + (p.exampleZh ? '<br>' + host.ui.esc(p.exampleZh) : '') + '</small>' : '') +
+      (inVocab ? '<span class="study-badge">已在生词本</span>' :
+        '<button class="btn ghost small vocab-add" data-study-phrase-add="' + i + '">＋ 收入复习</button>') +
+      '</div>';
+  }).join('');
+}
 function studyCardHTML(data) {
   if (!data) return '';
-  studySetVocabulary(data.vocabulary);
+  studySetVocabulary(data.vocabulary, data.phrases);
   if (data.raw) return '<div class="study-section"><h4>模型原文</h4><p>' + host.ui.esc(data.raw).replace(/\n/g, '<br>') + '</p></div>';
   let html = '';
   if (data.translation) html += '<div class="study-section"><h4>参考译文</h4>' + studyAnnotatedLines(data.translation) + '</div>';
@@ -544,6 +604,9 @@ function studyCardHTML(data) {
   }
   if (Array.isArray(data.vocabulary) && data.vocabulary.length) {
     html += '<div class="study-section"><h4>词汇与表达</h4>' + studyVocabCards(data.vocabulary, true) + '</div>';
+  }
+  if (Array.isArray(data.phrases) && data.phrases.length) {
+    html += '<div class="study-section"><h4>俚语与固定搭配</h4>' + studyPhraseCards(data.phrases) + '</div>';
   }
   return html;
 }
@@ -584,7 +647,7 @@ function studyAdHTML(data) {
 }
 function studyEpisodeHTML(data) {
   if (!data) return '';
-  studySetVocabulary(data.vocabulary);
+  studySetVocabulary(data.vocabulary, data.phrases);
   let html = '<div class="study-section"><h4>内容摘要</h4>' + studyAnnotatedLines(data.summary || '') + '</div>';
   html += studyAdHTML(data);
   html += studyTopicHTML(data);
@@ -601,6 +664,9 @@ function studyEpisodeHTML(data) {
   }
   if (Array.isArray(data.vocabulary) && data.vocabulary.length) {
     html += '<div class="study-section"><h4>词汇与表达</h4>' + studyVocabCards(data.vocabulary, true) + '</div>';
+  }
+  if (Array.isArray(data.phrases) && data.phrases.length) {
+    html += '<div class="study-section"><h4>俚语与固定搭配</h4>' + studyPhraseCards(data.phrases) + '</div>';
   }
   return api.study.runHook('episodeHtml', html, data);
 }
@@ -722,7 +788,10 @@ function studyRenderCurrent() {
   html += '<div class="study-actions"><button class="btn primary small" data-study-act="current">' +
     (cached ? '重新分析当前句' : '分析当前句') + '</button>' +
     '<span class="study-badge">' + (cached ? '已缓存' : '按需调用') + '</span></div>';
-  if (cached && cached.data) html += studyCardHTML(cached.data);
+  if (cached && cached.data) {
+    if (!Array.isArray(cached.data.phrases)) html += '<p class="study-empty">这版缓存没有俚语与固定搭配，点「重新分析当前句」生成。</p>';
+    html += studyCardHTML(cached.data);
+  }
   body.innerHTML = html;
   bindStudyActButtons();
   studyApplyWordMarks();
@@ -748,7 +817,7 @@ function studyRenderEpisode() {
   if (cached && cached.data) {
     host.support.applyAiAdRanges(cached.data, host.player.state.current.id);
     html += studyEpisodeHTML(cached.data);
-    if (cached.data.version !== 3) html += '<p class="study-empty">旧版缓存没有广告点，点「重新总结整集」生成。</p>';
+    if (cached.data.version !== 4) html += '<p class="study-empty">旧版缓存没有俚语与固定搭配，点「重新总结整集」生成。</p>';
   } else {
     html += '<p class="study-empty">整集会按文字稿分成 3 块分析；每块单独请求，并生成主题时间戳。中途失败只重试失败的块。章节和金句都按文字稿行号映射时间，不会让模型自己编时间戳。</p>';
   }
@@ -966,6 +1035,17 @@ function bindStudyVocabButtons() {
       btn.disabled = true;
     };
   });
+  document.querySelectorAll('[data-study-phrase-add]').forEach(btn => {
+    btn.onclick = () => {
+      const i = Number(btn.dataset.studyPhraseAdd);
+      const item = studyRenderedPhrases[i];
+      if (!item) return;
+      const cue = studyVocabContextMode === 'card' ? (studyCurrentCue()?.cue || null) : null;
+      studyAddVocab(Object.assign({}, item, { word: String(item.phrase || item.word || '').trim() }), cue);
+      btn.textContent = '✓ 已收入复习';
+      btn.disabled = true;
+    };
+  });
 }
 function studyAddVocab(item, cueOverride) {
   const word = String(item.word || '').trim();
@@ -1004,9 +1084,14 @@ async function studyAnalyzeCurrent() {
     'concisely in ' + studyLangName() + '. Return ONLY a JSON object, no markdown fences, with keys: ' +
     'translation (string), literal (string, word-for-word if useful), explanation (string), ' +
     'grammar (array of {point, detail}), vocabulary (array of {word, phonetic, meaning, example, exampleZh, rootBreakdown, rootMeaning, sameRootWords, memoryHook}), ' +
+    'phrases (array of {phrase, kind, meaning, example, exampleZh}), ' +
     'paraphrase (string). For vocabulary, add root analysis only when the word is morphologically transparent: ' +
     'rootBreakdown = prefix + root + suffix with hyphens and Chinese gloss; rootMeaning = literal meaning; ' +
     'sameRootWords = array of up to 2 real English words {word, meaning} sharing the same root; memoryHook = one short Chinese memory sentence. ' +
+    'For phrases: identify the slang, idioms, phrasal verbs and fixed collocations that actually appear in the target sentence. ' +
+    'kind must be exactly one of "slang", "idiom", "phrasal verb", "collocation"; phrase must be copied verbatim from the target; ' +
+    'meaning and exampleZh must be in ' + studyLangName() + '; give a natural example that uses the phrase. ' +
+    'Do not list single words that are already in vocabulary; at most 3 phrases. ' +
     'Never invent roots or etymology; leave these fields empty when unsure. Keep vocabulary to at most 6 useful items. ' +
     'Do not invent facts about the episode.';
   const user = JSON.stringify({ target: cur.cue.text, previous: prev, next, show: host.player.state.show?.name || '', episode: host.player.state.current?.title || '' });
@@ -1043,6 +1128,7 @@ async function studyAnalyzeEpisode() {
     'Return ONLY a JSON object, no markdown fences, with keys: summary (string in ' + studyLangName() + '), ' +
     'topics (array of {title, start, end, summary}), ads (array of {start, end, label}), keyPoints (array of strings), ' +
     'vocabulary (array of {word, phonetic, meaning, example, exampleZh, rootBreakdown, rootMeaning, sameRootWords, memoryHook}), ' +
+    'phrases (array of {phrase, kind, meaning, example, exampleZh}), ' +
     'hardSentences (array of {en, zh, why}), questions (array of strings). ' +
     'For topics: title and summary must be in ' + studyLangName() + '; start/end must be copied from the [mm:ss] timestamps ' +
     'in the transcript, in "mm:ss" format; create 2-8 chronological topics covering the chunk, with no overlap. ' +
@@ -1053,15 +1139,18 @@ async function studyAnalyzeEpisode() {
     'For vocabulary root fields: use rootBreakdown (prefix + root + suffix with hyphens and Chinese gloss), rootMeaning (literal meaning), ' +
     'sameRootWords (up to 2 real English words {word, meaning} sharing the root), memoryHook (one short Chinese memory sentence). ' +
     'Never invent roots or etymology; leave those fields empty when unsure. ' +
+    'For phrases: identify slang, idioms, phrasal verbs and fixed collocations that actually appear in this transcript chunk. ' +
+    'kind must be exactly one of "slang", "idiom", "phrasal verb", "collocation"; phrase must be copied verbatim from the chunk; ' +
+    'meaning and exampleZh must be in ' + studyLangName() + '; do not duplicate single words already in vocabulary; at most 6 phrases. ' +
     'Write a faithful content summary; keyPoints should be substantive claims, examples or takeaways, not lesson meta. ' +
     'Keep vocabulary to at most 8 items.';
   const epKey = 'ep:' + host.player.state.current.id;
   const epId = host.player.state.current.id;
   const partialKey = epKey + ':partial';
-  const sig = [STUDY.provider, STUDY.endpoint, STUDY.model, STUDY.target, 'ads-v1'].join('|');
-  const merged = { summary: [], topics: [], ads: [], keyPoints: [], vocabulary: [], hardSentences: [], questions: [], chunks: totalChunks };
+  const sig = [STUDY.provider, STUDY.endpoint, STUDY.model, STUDY.target, 'ads-v1', 'phrases-v1'].join('|');
+  const merged = { summary: [], topics: [], ads: [], keyPoints: [], vocabulary: [], phrases: [], hardSentences: [], questions: [], chunks: totalChunks };
   let resume = 0;
-  if (studyCache[epKey] && studyCache[epKey].data && studyCache[epKey].data.version === 3) {
+  if (studyCache[epKey] && studyCache[epKey].data && studyCache[epKey].data.version === 4) {
     // 已完整的结果：用户点「重新总结」就是从零开始。
     delete studyCache[partialKey];
   } else {
@@ -1073,6 +1162,7 @@ async function studyAnalyzeEpisode() {
       if (Array.isArray(data.ads)) merged.ads = host.support.sanitizeAdRanges(data.ads, 'ai');
       if (Array.isArray(data.keyPoints)) merged.keyPoints = data.keyPoints.slice();
       if (Array.isArray(data.vocabulary)) merged.vocabulary = data.vocabulary.map(v => Object.assign({}, v));
+      if (Array.isArray(data.phrases)) merged.phrases = data.phrases.map(v => Object.assign({}, v));
       if (Array.isArray(data.hardSentences)) merged.hardSentences = data.hardSentences.map(x => Object.assign({}, x));
       if (Array.isArray(data.questions)) merged.questions = data.questions.slice();
       resume = Math.min(Number(saved.done) || 0, totalChunks);
@@ -1081,6 +1171,7 @@ async function studyAnalyzeEpisode() {
     }
   }
   const seenVocab = new Set(merged.vocabulary.map(v => String(v.word || '').trim().toLowerCase()).filter(Boolean));
+  const seenPhrase = new Set(merged.phrases.map(v => String(v.phrase || v.word || '').trim().toLowerCase()).filter(Boolean));
   const seenHard = new Set(merged.hardSentences.map(x => String(x.en || '').trim().toLowerCase()).filter(Boolean));
   const seenPoint = new Set(merged.keyPoints.concat(merged.questions).map(x => String(x || '').trim()).filter(Boolean));
   const seenTopic = new Set(merged.topics.map(t => String(t.title || '').toLowerCase() + '|' + Math.round(Number(t.start) || 0)));
@@ -1128,6 +1219,11 @@ async function studyAnalyzeEpisode() {
         const w = String(v.word || '').trim().toLowerCase();
         if (w && !seenVocab.has(w)) { seenVocab.add(w); merged.vocabulary.push(v); }
       });
+      (Array.isArray(part.phrases) ? part.phrases : []).forEach(v => {
+        const p = String(v.phrase || v.word || '').trim();
+        const k = p.toLowerCase();
+        if (p && !seenPhrase.has(k)) { seenPhrase.add(k); merged.phrases.push(Object.assign({}, v, { phrase: p })); }
+      });
       (Array.isArray(part.hardSentences) ? part.hardSentences : []).forEach(x => {
         const k = String(x.en || '').trim().toLowerCase();
         if (k && !seenHard.has(k)) { seenHard.add(k); merged.hardSentences.push(x); }
@@ -1145,6 +1241,7 @@ async function studyAnalyzeEpisode() {
           ads: merged.ads.map(ad => Object.assign({}, ad)),
           keyPoints: merged.keyPoints.slice(),
           vocabulary: merged.vocabulary.map(v => Object.assign({}, v)),
+          phrases: merged.phrases.map(v => Object.assign({}, v)),
           hardSentences: merged.hardSentences.map(x => Object.assign({}, x)),
           questions: merged.questions.slice(),
         },
@@ -1153,12 +1250,13 @@ async function studyAnalyzeEpisode() {
       studyApplyWordMarks();
     }
     merged.summary = merged.summary.join('\n\n');
-    merged.version = 3;
+    merged.version = 4;
     merged.topics.sort((a, b) => a.start - b.start);
     merged.topics = merged.topics.slice(0, 24);
     merged.ads.sort((a, b) => a.start - b.start);
     merged.ads = host.support.sanitizeAdRanges(host.mergeAdRanges([merged.ads]), 'ai').slice(0, 24);
     merged.vocabulary = merged.vocabulary.slice(0, 30);
+    merged.phrases = merged.phrases.slice(0, 30);
     merged.hardSentences = merged.hardSentences.slice(0, 20);
     studyCache[epKey] = { at: Date.now(), data: merged };
     delete studyCache[partialKey];

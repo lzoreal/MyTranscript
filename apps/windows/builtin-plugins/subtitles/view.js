@@ -23,6 +23,9 @@ function subtitleCueNode(host, cue, ci) {
   if (state.current && host.localAsrAvailable()) {
     const clip = document.createElement('button');
     clip.type = 'button'; clip.className = 'cue-clip-btn'; clip.textContent = '精听';
+    // 这句话的按钮只在 hover/聚焦这一句时可见，默认不参与 Tab 顺序；
+    // 否则键盘要空过 200 多个看不见的按钮。工具条里的「精听刚才」是键盘入口。
+    clip.tabIndex = -1;
     clip.title = '用当前模型单独重转这句；在线单集首次会先缓存音频';
     clip.addEventListener('click', e => {
       e.stopPropagation();
@@ -96,6 +99,17 @@ function subtitleRenderWindow(host, center, force) {
   subtitleAlignZhLines(host);
   host.whenIdle(() => host.studyApplyWordMarks(), 900);
 }
+function subtitleResumeCenter(state) {
+  const t = Number(state.resumeAt);
+  if (!(t > 1) || !state.cues.length || state.resumeEp !== (state.current && state.current.id)) return 0;
+  let lo = 0, hi = state.cues.length - 1, best = 0;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if ((Number(state.cues[mid].start) || 0) <= t) { best = mid; lo = mid + 1; }
+    else hi = mid - 1;
+  }
+  return best;
+}
 function subtitleRenderCues(host) {
   const { state } = host;
   if (!host.pluginOn()) { host.box.innerHTML = ''; host.syncMiniCaption(); return; }
@@ -104,7 +118,7 @@ function subtitleRenderCues(host) {
   state.windowStart = -1; state.windowEnd = 0;
   host.resetFind();
   if (!state.cues.length) { host.box.innerHTML = '<div class="empty">没有可显示的逐字稿。</div>'; host.syncJumpPill(); return; }
-  subtitleRenderWindow(host, 0, true);
+  subtitleRenderWindow(host, subtitleResumeCenter(state), true);
   let wordCount = 0, fallback = 0;
   state.cues.forEach(cue => {
     if (state.mode === 'word' && cue.hasWords) wordCount += (cue.words || []).length;

@@ -13,6 +13,10 @@ import './08-study-ai.js';
 import './09-player-integration.js';
 import './10-desktop-bridge-tail.js';
 import './11-motion.js';
+import './12-subtitle.js';
+import './13-theme.js';
+import './14-transport.js';
+import './15-store.js';
 import { initPlayer } from './04-local-audio-plugin-host.js';
 import { initXai } from './10-desktop-bridge-tail.js';
 

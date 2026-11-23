@@ -567,7 +567,7 @@ translate / align 两条已在 2026-11-14 删除。
 - 链路：`fetch(音频 URL, {headers:{Range}})` 按时间窗抓字节（需 CORS）→ 按 CBR 码率把 `播放位置 + 提前量` 换算成字节偏移，前后留余量 → 扫 MP3 帧重同步到帧边界 → 走帧到目标时长（防止服务端忽略 Range 解出整集）→ `AudioContext({sampleRate:16000})` 解成 16 kHz 单声道 PCM → `Moonshine tiny-streaming`（`@moonshine-ai/moonshine-wasm@0.1.6`，jsDelivr 动态 import）→ 正文逐词行渲染。**`<audio>` 完全不动**：不改 `crossOrigin`、不建 `createMediaElementSource`，所以失败模式只是「拿不到字节」，不会把音频图锁死或变哑。
 - 为什么不用 `MediaElementAudioSource` 采集：采集拿到的永远是「已经播出去」的音频，比播放头晚，不可能「提前 s 秒」生成。要提前，必须自己解还没播到的音频。
 - 为什么不是整文件下载：megaphone 顺序下载实测只有 150~240 KB/s，45 MB 的整集约 3~5 分钟；而且播放器常从记住的位置（如 918 秒）直接开播，顺序下载完全服务不了那个位置。Range 窗口方案在 918 秒处开启 4 秒内就出词级行。
-- 格式探针：先用 Range 取 0~128 KB，跳过 ID3v2（读 size 字段）找首帧，再走 256 帧确认码率/采样率恒定，得到 `{origin, bps = br/8, sr, spf}` 的 CBR 描述。VBR 与非 MP3 直接给明确错误（「这个音频是可变码率 MP3，暂时不支持提前生成」/「这个音频不是 MP3，暂时只支持 MP3 的提前生成」），不再兜底整集下载。
+- 格式探针：先用 Range 取 0~128 KB，跳过 ID3v2（读 size 字段）找首帧，再走 256 帧确认码率/采样率恒定，得到 `{origin, bps = br/8, sr, spf}` 的 CBR 描述。VBR 与非 MP3 直接给明确错误（「这个音频是可变码率 MP3，暂时不支持提前生成」/「这集不是 MP3（别的封装），实时识别只支持 MP3」），不再兜底整集下载。
 - 「提前量」是设置页「实时字幕提前量」（`prefs.liveLead`，默认 60 秒，可选 0/15/30/60/120/300，0 表示只跟随播放）。pump 每 160 ms 把音频喂到 `min(总时长, 播放位置 + 提前量)`，每轮 70 ms CPU 预算、每次按 Range 取 10 秒窗口。解码窗口按帧对齐会多带一两秒，喂之前要截到 `本轮起点 + 需要多少秒`，否则提前量会系统性偏大（实测 15 秒档偏移到 17~18 秒）。
 - **取回来的 PCM 必须缓存跨轮复用**（`LIVE.pcm = {start, data}`）：早期每轮都重新取 30 秒字节 + `decodeAudioData` 整段，却只喂得进 1~2 秒、其余丢弃，一轮实测 1.5~3.6 秒，界面和播放一起卡，`next` 永远追不上播放头。现在按 0.5 秒一片喂、片间 `await setTimeout(0)` 让出事件循环，**一轮只跑一次 `transcribe()`**（它要按积压音频整跑一遍模型，积压多少秒就慢多少：12 秒积压一次 500 ms 以上），喂到窗口尾才置空重取。
 - 高亮抖动的两个坑：①流式文本每 0.5 秒重发一次同一句，早先每次 `replaceChildren` 整行重建会抹掉 `.word.active` 并连续重排，现在词数与各词起点不变时只改 span 文本；②行起点比它的首词早零点几秒、以及刚建出来还没带词的行会让 `.word.active` 空一帧（看起来像高亮消失再跳回来），所以无词行要回退到最近一条真的有词的行，行首之前先压住第一个词。取时一律用 `audio.currentTime`，`liveMediaTime()` 带倍速估算项，和音频时间轴对不上。
@@ -582,6 +582,31 @@ translate / align 两条已在 2026-11-14 删除。
 - 词级时间戳依赖 `decoder_kv_with_attention.ort`，而目录加载 `Transcriber.load` 的清单里没有这个文件：必须 `JSON.parse(wasm.sttDependencies('en','2',false))`（ABI 返回 JSON 字符串，不是对象）拿到 `base_url`，自己补上 attention 解码器的 URL 再走 `Transcriber.loadFromUrls`。只设 `word_timestamps:'true'` 不给文件，只会得到没有 `words` 的句子（已实测）。
 - 首轮要下载约 40 MB 模型（进浏览器 Cache Storage），之后秒开；`updateInterval` 用 0.5 s。本机用 `python -m http.server 8765 --directory site`（不设任何响应头）即可验证全链路，因为隔离头来自 SW。
 - 已知约束：只支持 CBR MP3（m4a/aac、VBR MP3 会明确报错）；直播/边录边播的流不在支持范围。停止实时识别、退出页面、刷新都会让正文回到原本的 VTT / 词级 JSON 渲染，原文字稿不受影响（实测 288 句 / 3881 词原样恢复，播放不中断）。
+
+**非 MP3 源别再重试（2026-11-22 修）**：像 Talking Cars 这种「视频播客」的 enclosure 是
+`video/mp4`（实测 `ftyp mp42`、364 MB、30:52，Range 请求本身正常，但 128 KB 要 2.6 秒、
+2 MB 15.5 秒、8 MB 45.4 秒）。旧逻辑只认 MP3 帧，128 KB 里找不到就按 128 KB → 2 MB → 8 MB
+放大，而 `liveRetry` 又把「不是 MP3」当成网络抖动重试 4 轮——一轮一分多钟，界面上就是
+「取音频数据失败，正在重试（第 4 次）」转好几分钟。现在：
+
+- `liveContainerKind(head)` 在第一个窗口里先认容器（`ftyp/moov/mdat/free/styp…`、`RIFF`、
+  `OggS`、`fLaC`、`ADIF`），命中就抛带 `err.fatal` 的错误，一次 128 KB 就下结论；
+- `liveRetry` 对 `err.fatal` / `err.cors` 一律不重试；
+- 只有头部是 ID3、却还没找到首帧的（大封面那类）才继续放大窗口。
+
+实机：同一集点「实时识别」，3 秒后状态条写「实时识别不可用：这集是 MP4 视频（AAC 音轨），
+实时识别只支持 MP3」，不再空转。MP4/AAC 的整集转写本来有宿主旁路（`video_asr_*`，symphonia
+解 AAC），但它要顺序下载整个文件，这集 364 MB 在 ~180 KB/s 上得半小时，所以播放页不自动切过去。
+
+**实时状态条的进度线换行铺满（2026-11-22 修）**：`.livebar` 原先是单行 flex，52 px 的
+「已提前多少」进度线夹在正文和「停止」之间；文案一长就只剩省略号加一截细线，阅读上像句子
+末尾的破折号，文案每秒变化时它也左右跳。现在改成三列 grid：第一行 `dot / 文案 / 停止`，
+进度线 `grid-area:2/1/3/4` 独占第二行、横贯整条胶囊（圆角 999 → 12px）；报错态（`.livebar.err`）
+不显示进度线，只留一行提示。上边距同时从 `top:54px` 挪到 `84px`：播放页顶栏（`#readerTop`）
+在 `body.player-open` 下是一条 58 px 高的实心条，54 px 的胶囊上沿正好压在它的下边框上，只剩
+负 4 px；别的布局顶栏是浮在 15 px 处的圆药丸（底边约 48 px），也只剩 6 px。现在两种布局下分
+别留 26 px 和 36 px（实测 `bar.y=84`, `readerTop.bottom=58` → 26 px），内边距也从 `6/8` 加到
+`7/10`、行距 7 → 8，进度线距胶囊底边留 11 px。
 
 ### 播放页单流播放（MSE 接管播放器生命周期，2026-11-17）
 
@@ -882,6 +907,13 @@ WebView + 同一套 C API 的 JNI 包）。
   + `#volOut` 百分比。音量存在 `prefs.volume`（0–1）、静音存 `prefs.muted`，随
   `myt-prefs` 一起落盘；启动时 `applyVolume(false)` 恢复。键盘 `M` 切换静音（静音且音量
   为 0 时恢复 0.5）。静音状态也会进底栏「⋯」的徽标。
+- **液态玻璃主题下的音量条画歪了（2026-11-22 修）**：主题自绘 6px 轨道 + 14px 拇指，
+  却没关原生外观，Chromium 把自己那套凹槽叠在自绘轨道上——100% 时轨道右端留一截灰底、
+  拇指掉到轨道下方。两个根因：`.dsrange` 只画伪元素仍留着 `appearance:auto`；轨道加了
+  `margin-top`（WebKit 按轨道盒摆拇指，轨道一偏移拇指跟着走）。现在 `appearance:none`、
+  轨道不给 margin、拇指 `margin-top:-4px` 对齐轨道中心；填充改用脚本本来就在写的
+  `--vol-fill`（0% 长度为 0、100% 铺满），并补了 `::-moz-range-*` 三条正常回退。
+  验证：CDP 注入同一份 CSS 后 0% / 50% / 100% 三态截图无灰底、无亮片、拇指居中。
 - **上一集 / 下一集**：`stepEpisode(±1)` 早就存在，但只绑了迷你窗按钮、媒体键和托盘菜单，
   播放页没有入口。现在面板里给「上一集 / 下一集」两个按钮，和迷你窗同一套口径（走
   `currentPlaylist()` → `stepTarget()` → `selectEpisode()`，在播就接着播）；键盘 `N` 下一集、
@@ -1715,3 +1747,254 @@ model / endpoint 存在 study 引擎设置里，宿主读 `studyEngine().setting
   并给 `.detail-actions .plugin-slot{display:contents}`，让插件按钮直接成为这一行的 flex item，
   和宿主按钮共用同一个 gap 与换行；实测 9 个按钮（含「片段」）同处一行、同高。
   涉及 `src/player-js/07-routes-pages.js`（已 `build_player_js.py` 重建）与 `site/player.css`。
+
+## 十二、性能：主题光斑层与「每帧变化」的代价（2026-11-22 实测）
+
+**测法**（可复用）：`Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe'"` 里按
+`CommandLine -like '*com.myt.transcript.desktop*'` 过滤出本应用的 7 个渲染进程，取两次
+`TotalProcessorTime` 差值，10s 一组、三组取中位数。**先 `Stop-Process mytranscript-desktop` 保证单实例**，
+否则多个实例同时被计入。窗口启动到出现约 315ms，启动不是瓶颈。
+
+**结论（唯一真凶）**：`themes/liquid-glass.css` 里 `body::before` 那块常驻光斑层，只要「每帧有变化」，
+上面一层层 `backdrop-filter` 面板就得逐帧重采背景：
+
+| 变体 | 空闲（首页/暂停） |
+| --- | --- |
+| 原版：`inset:-25vw` + `blur(64px)` + 26s transform 缩放呼吸 | **32.7% 单核** |
+| 只缩小面积/半径：`inset:-12vw` + `blur(28px)`，动画保留 | 33.3%（**白改，几乎无收益**） |
+| 呼吸改成纯 opacity 动画（合成器友好） | 33.3%（同样无效：背景一变就要重采样） |
+| 去掉 `body::after` 噪声混合层再播 opacity 呼吸 | 42.5%（更糟，噪声不是原因） |
+| **彻底去掉动画，只留静态光斑**（现版 `inset:-6vw` + `blur(40px)`） | **2.5% 单核** |
+
+所以「模糊半径 × 面积」不是重点，**对模糊层做任何逐帧动画才是**；想加回呼吸，必须先放弃
+`backdrop-filter`，二者不能共存。字体/长稿 DOM 不是问题：整集 1300 行词级字幕静止时只占 1.4%。
+
+**仍待处理**：播放中（收听窗口，词级高亮 + 平滑跟随滚动）实测中位数 46.6% 单核。
+候选：`scrollIntoBox` 的 `behavior:'smooth'` 长列表滚动、每词 class 变更导致行内重排、
+以及该窗口叠在 backdrop-filter 面板上的滚动合成。未动。
+
+**播放态 46% 的追查结果（2026-11-22，逐假设 A/B，2026-11-22 补记）**：先做了可红跑的探针
+（启动 → 抬前台 → 点「继续收听」卡片的播放键 → 等 18s → 3×8s 取中位数，>25% 判 RED），
+基线稳定复现 **44.5%~45.9%**；然后逐个变量单独改、单跑对比：
+
+| 变体（只改一处） | 播放态单核 |
+| --- | --- |
+| 基线（120ms 节拍 + 玻璃 + 平滑滚动 + 逐词绘制） | **44.5%~45.9%** |
+| `html{--lg-glass:0}`（关掉全部玻璃重采样） | 37.7% |
+| `scrollIntoBox` 强制 `behavior:'auto'`（去平滑滚动） | 40.4% |
+| `paintWords` 直接 return（不逐词上色，连带不跟随） | 36.9% |
+| `PLAY_TICK_MS` 120 → 1000（节拍降 8 倍） | 29.5% |
+| 全站 `*{animation:none}`（停所有 CSS 动画） | 50.2%（反而更高，属噪声，动画不是原因） |
+| 空闲（暂停）对照 | 1.2%~2.5% |
+
+**拆分结论**：这部分开销**全在 webview**——同一窗口里 webview 占 3625ms/8s，Rust 主进程只有
+15~47ms/8s。所以不是 `media_proxy`、不是 Rust 侧解码/转发。
+
+**综合判断**：没有单一热点。玻璃重采样、平滑滚动、逐词重排、节拍频率各占一小块（≈5~8 点），
+节拍降 8 倍也只回收 15 点，剩下的 ~29% 在「1fps 节拍 + 玻璃照旧」时依然存在，属
+「大窗口 + 多层 backdrop-filter + 任何小改动都触发整层重绘」的合成成本，尚未定位到具体一条。
+**探针噪声 ±8 点左右**（同一配置不同次跑 36.9~50.2 都出现过），所以任何「改了一点点」的结论
+至少要 5 组样本取中位数才可信；单次 GREEN 不可信。
+
+**探针的两个坑（`%TEMP%\perf_play.ps1`）**，都是踩过的假绿来源：
+
+1. **必须校验「真的在播放」**：点播放键有时落空（前台窗口不是本应用 / 卡片没点到），
+   此时 CPU 只有 1%，会被误判成 GREEN。脚本已加前置采样：<600ms/4s 就再点一次收听窗口里的
+   播放键，仍不行直接 `exit 2` 报「没能进入播放态」，不参与判定。
+2. **后台任务的终端窗口会抢点击**：脚本从后台任务里拉起应用时，控制台窗口标题会变成 exe 路径，
+   而且常常盖在应用上方，屏幕坐标点击就落在那块黑窗口上（还会顺手打开资源管理器）。
+   脚本里 `HideConsoleNoise()`（EnumWindows 找 WindowsTerminal/pwsh/conhost/cmd 的可见窗口再
+   `ShowWindow(6)`）先清场，再 `SetForegroundWindow` 应用。
+   另外任务管理器如果开着「始终置顶」，`ShowWindow` 关不掉，只能结束进程——本轮就是因此
+   `Stop-Process -Name Taskmgr` 的。
+
+### 第二轮：打开 CDP 看真实调用栈（2026-11-22）
+
+上面那套「改代码→重编译→整机 CPU」的办法信噪比不够（同一配置 8s 窗口能漂 36.9~57.2），
+所以换了个能直接看分项的手段——**给 WebView2 开远程调试**：
+
+```powershell
+$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS="--remote-debugging-port=9222"
+Start-Process "<exe>"
+# 然后 GET http://127.0.0.1:9222/json/list 取 webSocketDebuggerUrl，用 websocket-client 发 CDP
+```
+
+`Runtime.evaluate` 里点 `.continue .round-play` 就能可靠开播（比屏幕坐标稳，还能顺便断言
+`audio.paused === false`）。可用的三件事：
+
+- `Performance.getMetrics` 取窗口前后的差值 → 主线程各项耗时；
+- `Profiler.start/stop`（`setSamplingInterval: 200`）→ JS 采样热点；
+- 按 `--type=gpu-process` / `--type=renderer` 分别取 `cpu_times()` → 看清钱花在哪个进程。
+
+**结果（8s 窗口，正在播放）**：主线程几乎闲着——`TaskDuration` 0.47s（5.8% 墙钟）、
+`ScriptDuration` 0.04s（0.5%）、`LayoutDuration` 0.01s、`RecalcStyleDuration` 0.08s；
+采样热点里 7.6s/8s 是 `(idle)`，最贵的真实函数只有 2.3ms。**进程拆分**：
+`gpu-process` 35~40%、`renderer` 15~25%、Rust 主进程 0.2%。
+
+⇒ **播放态的开销不在 JS/样式/布局，而在 GPU 进程的光栅化与合成**，也就是「模糊面板 +
+滚动正文」这套合成路径。这解释了之前为什么关节拍、关逐词、关平滑滚动都只能挪几个点。
+
+**但所有 CSS 侧的「关模糊」实验都没能给出可复现收益**，因此一个都没上线（已全部回退）：
+
+| 做法（运行中注入，CDP 驱动） | GPU% | 渲染% |
+| --- | --- | --- |
+| 基线（浮条 + 主题玻璃都在） | 37.7 | 24.8 |
+| 只关压在正文上的浮条模糊 | 28.5 | 15.6 |
+| 全站 `--lg-glass:0` | 18.6 | 21.9 |
+| 同一配置换个时间窗重测 | 13.0 | 6.4 |
+
+同一配置能在 13%~50% 之间漂；再用 A/B 交替（浮条 blur=1 / =0 各两轮、同一时间窗）测，
+反而出现「关掉模糊更高」（35.0 vs 45.6）。**结论：8s 均值这类口径对这条链路不可靠**，
+绝对不能说「关浮条模糊省 18 点」。要下结论得抓 compositor 逐帧细分（CDP `Tracing` 域），
+或换成「用户可选的降玻璃开关」，而不是标成性能修复。
+
+**本轮留下的判断**（供以后接手）：
+
+- 空闲/失焦两条已经实测锁死（2.3%、-81%），可以放心；
+- 播放态是 GPU 合成成本，改 CSS 猜不动，别再重复「关某个 blur 试试」这类实验；
+- 真要动，先做 `Tracing.start`（categories: `devtools.timeline,cc,viz,gpu`）看每帧
+  `RasterTask` / `DrawFrame` 的时间和触发源，再决定改哪条。
+
+探针脚本（临时，非交付物）：`%TEMP%\perf_play.ps1`（整机 CPU，带播放态前置校验）、
+`cdp_probe.py`（指标 + JS 采样热点）、`cdp_bisect.py` / `cdp_bisect2.py`（运行中逐项开关）、
+`cdp_ab.py`（同窗口 A/B 交替）。
+
+**播层层结构变动（2026-11-22，与性能无关，但改代码前必须知道）**：
+`src/player-js/12-subtitle.js` 拥有字幕的每帧路径与内核适配（`locateCue / paintWords / scrollCue /
+scrollWord / scrollIntoBox / canFollow / liveFollow / stopScroll` + `reduceMotion / scrollTarget`
++ `subtitleKernel / subtitleViewHost / readerNow / mergeCues / renderCues / renderCueWindow /
+alignZhLines`），`01-theme-reader-shell.js` 只保留 `lazyFn('12-subtitle', ...)` 同名转发，
+外部调用方零改动；`src/player-js/13-theme.js` 拥有失焦降级判据（`isDegraded / sync` + 三个事件监听）**和整套主题**
+（自定义主题的数据层 `CUSTOM_THEME_KEY / normalizeCustomTheme / readCustomTheme / writeCustomTheme /
+sanitizeCustomHtml / customPreviewColor / customThemeActiveName / newCustomPresetId`，以及应用与渲染
+`setTheme / applyCustomTheme / applyCustomThemePreset / renderCustomThemeGrid / syncCustomThemeEditor /
+bindCustomThemeEditor / seedDefaultThemePacks / importCustomTheme / saveCustomThemePreset / themeBtns`
+与常量 `LIGHT_THEMES / REMOVED_THEME_FALLBACK / DEFAULT_PACKS_KEY / lastDark / lastLight`，
+还有初始主题恢复与老主题迁移、`queueMicrotask(bootCustomTheme)`）。
+`04`、`07`、`08`、`10` 仍走 `01` 的同名转发，最终落到 13；`05-transport-transcript-nav.js` 里已无
+`syncIdleDecor`。要改"高亮/跟随/滚动"去 12，要改"主题怎么存怎么写怎么应用"去 13，
+要改"什么时候降级"也去 13，别再回 01/05 找（01 只剩转发 + 阅读器/导入/壁纸）。
+导出字幕、分享当前句、overlay 焦点辅助仍在 01。
+`src/player-js/14-transport.js` 是播放的单一入口（`play / pause / toggle / rate / now / on`）：
+底栏播放键、倍速、插件 `player.*`、系统媒体键 / 托盘 / 迷你窗 / 睡眠定时都走它；
+要改"怎么放、放失败怎么提示、倍速上限"去 14，别在各层各写一遍 `audio.play().catch()`。
+仍直连 `audio` 的只剩 05 的 `seekChapter / playOffline`（自己设 src 后起播）和
+02 / 03 的接管恢复路径。
+`src/player-js/15-store.js` 是 localStorage **JSON** 的唯一读写口（`readJSON / writeJSON /
+removeKey / listKeys / migrateKey`）；05 的 `readJSON / writeJSON` 只是转发，13 直接指向 15。
+单值键（`myt-theme*`、`myt-reader`、`myt-scroll`、`myt-mode` 等，共 60 余处）仍直接
+`localStorage.getItem/setItem`，尚未收口。
+注意 Tauri 的 `site/` 是编译期打进 exe 的：只跑 `build_player_js.py` 不 `cargo build`，
+实机跑的还是旧 JS；反过来，改 JS 时若机械按行号切块，容易把隔壁的 handler 卷进新模块
+（本轮就因此让 13 顶层抛错、`registerLayer` 没跑，表现为"主题能点但启动初始态不对"）。
+设计与剩余切片见 `docs/design-review.md`。
+
+
+
+**改主题的固定步骤**（缺一步不生效）：改 `themes/<slug>.css` → `sync_themes.py` 回写
+`themes/<slug>.json` 的 `css` 字段并重生成 `site/themes-defaults.js` → `cargo build`
+（资源编译期内嵌；只改 CSS 不一定触发 relink，必要时 touch `apps/windows/src-tauri/build.rs`）
+→ 重启。启动时 `seedDefaultThemePacks()` 会把内置包新 CSS 刷进已存在的默认卡。
+
+**失焦/最小化降级（2026-11-22 落地）**：`05-transport-transcript-nav.js` 的 `syncIdleDecor()`
+在 `blur/focus/visibilitychange` 时给 `<html>` 挂/摘 `.decor-idle`（判 `document.hidden || !hasFocus`）。
+两处消费：
+
+- 主题侧（`themes/liquid-glass.css`）：`.decor-idle` 下 `body::before/after` 不画、所有元素
+  `backdrop-filter:none!important`（面板底色保留，不采样背景）。
+- 宿主侧（`site/player.css`）：`.decor-idle` 下 `.livebar .dot`、`.eq`、`.wp-bg`、
+  `.wp-shade::after` 的动画暂停。
+- 逻辑侧（`01-theme-reader-shell.js` 的 `paint()`）：`decor-idle` 时跳过 `scrollCue`、
+  `paintWords`、`wallpaperWordPaint`、`syncJumpPill`——正文看不见，滚动和逐词上色纯属白干；
+  回到前台 `focus` 会 `paint(true)` 一次性追平（实测高亮与滚动能正确跳到当前位置）。
+
+实测（收听窗口播放第一集，词级高亮 + 跟随滚动）：前台 51.4% → 失焦 9.7%（-81%），
+恢复前台后回到 60%+ 且画面正常追平。空闲（暂停）状态下前台/失焦都是 1% 左右，说明这层
+降级只对「播放中还在动」的场景有意义。`tests/test_player.py` 里原来钉死
+`if (state.wallpaper) wallpaperWordPaint(t);` 的断言已同步改成带 `!idleDecor` 的新形态。
+
+**回前台的过渡（2026-11-22 追加）**：降级不再用 `backdrop-filter:none!important` 硬切，改成
+一个注册过的自定义属性 `--lg-glass`（`@property syntax:'<number>'`, inherits:true，定义在
+`site/player.css` 末段）：面板里所有 `blur(Npx)` 都写成 `blur(calc(Npx * var(--lg-glass)))`，
+光斑的 `filter:blur()` 与 `opacity` 也乘它。`html.decor-idle{--lg-glass:0}`，回前台过渡
+280ms（失焦方向 180ms，更干脆），毛玻璃是「长出来」的而不是闪一下；`prefers-reduced-motion`
+下过渡关掉。实测前台空闲仍 2.3%（与之前 2.5% 同级，说明变量写法没有额外开销）。
+注意：改这两个文件里的 blur 半径必须保持 `calc(Npx * var(--lg-glass, 1))` 的写法，
+写死像素会让该面板在失焦时不降级、回前台时硬闪。
+
+**AAC 音轨的视频集也能实时识别了（2026-11-22 落地）**
+
+以前 `liveProbeAudio` 认出 `ftyp` 就抛 fatal（「实时识别只支持 MP3」）。现在 MP4/M4A 走
+另一条路：**读 moov 的样本表，按 chunk 分段取音轨字节，用 WebCodecs 解成 16 kHz PCM**，不转码、
+不下整集。实测数据与解析方法见 `docs/spike-aac-live.md`（那集 364 MB / 31 分钟，
+取前 60 秒音频 = 144 次 range / 0.94 MB，字节放大 1.00×：一字节视频都不读）。
+
+- `liveProbeAudio` 返回带 `kind` 的描述符：`mp3`（老路径，`origin/bps/spf`）或
+  `mp4`（`sr/ch/asc/n/offs/sizes/times`）。
+- 解析在 `02` 的 `liveParseMoov`：`stsd→mp4a→esds` 取 AudioSpecificConfig（WebCodecs 的
+  `description`），`stts` 算每个样本的起始秒，`stsc`+`stco/co64`+`stsz` 算样本偏移。
+  只支持 `mp4a`；AAC 类型必须是 LC（本集 ASC `0x1190` → AAC-LC 48 kHz 立体声）。
+- 取字节在 `liveFetchWindowMp4`：把窗口内的样本按「地址连续」合成若干段 range（同一 chunk
+  里的样本本来就连着，实测 60 秒 = 144 次请求），`liveFetchRuns` 固定 **4 路并发**
+  （实测 4 路最快：中位 227 ms；8 路反而涨到 644 ms）。返回长度必须等于请求长度，
+  服务端忽略 Range 时直接判这一轮失败，绝不拿整段文件的头几帧去解码。
+- 解码在 `liveDecodeMp4Window`：裸 AAC 没有 ADTS 头，逐样本 `EncodedAudioChunk` 喂
+  `AudioDecoder({codec:'mp4a.40.2', description: ASC})`，输出按 planars 下混成单声道，
+  再按 48k→16k 重采样（整数比走块平均）。
+- 单流播放（`liveMse*`）已经扩到 AAC：fMP4+MSE 只播音轨，与识别共用同一份字节，
+  流量从 24.5 MB/分钟降到 1.52 MB/分钟（见下一节）。
+
+**三个踩过的坑（都在这一轮实测里撞上）**
+
+1. `moov` 常常比首个探测窗口（128 KB）大（本集 1.02 MB）。`liveBoxAt` 原来遇到
+   `pos+size > end` 直接返回 null，`liveBoxes` 随即 break，结果误判成「索引在文件尾部」。
+   现在越界的 box 返回 `truncated: true` 记录并停止扫描，调用方按它自己的 `size` 再取一次。
+2. 宿主 `read_range` 以前每次调用都 `reqwest::Client::builder()` 新建客户端，连接池跟着重建，
+   每个 Range 都要重做 TLS 握手：实测 10 秒窗口的音频要 15.5 s（0.7× 实时，永远追不上）。
+   改成全局 `OnceLock<reqwest::Client>` 复用后，同一个窗口 4.7~5.2 s（约 2× 实时），
+   持续播 90 秒时「已提前」稳定在 40~59 秒。**别把这个客户端改回按调用新建。**
+3. `liveNativeStream.close()` 原来调 `asrClose(id)`，可识别器是 `LIVE.engine` 整页共享的：
+   一次重建流（跳转/换集）之后所有 `asrFeed` 都回「识别器已关闭」，实时识别从此永久空白。
+   现在 `close()` 只 `asrReset`，真正释放挪到 `beforeunload`。这个坑与音频格式无关，MP3 同样会中招。
+
+排障入口：`window.__live`（只在播放页有）。`__live.probe()` 重跑一次格式探测、`__live.win(t, 秒)`
+直接取并解一个窗口（返回 `{pcm, start}`）、`__live.aidx(t)` 给 t 对应的样本序号。
+AAC 那集排查「取到了但没出句子」就是靠这三个把「解码」和「识别器生命周期」分开验证的。
+
+**视频集「只播音轨」的播放：fMP4 + MSE（2026-11-22 落地）**
+
+原生 `<audio>` 指着整段 MP4 时，浏览器会把视频帧一起下下来（实测 24.5 MB/分钟，
+音轨只占 6~8%）。现在实时识别开启后，`liveMseBegin` 会让 AAC 集也走单流：
+
+- **init segment 是「移植」原片 moov**，不是手搓字段（`liveAacInitSegment`）：
+  从探测时留下的 `desc.moovRaw` 里把音频轨的 `tkhd/mdhd/hdlr/smhd/dinf/stsd`
+  原字节搬过来，只做三处改造 —— `stbl` 的样本表清空、`moov` 末尾加 `mvex/trex`、
+  `mvhd/tkhd/mdhd` 的 duration 归零。手搓的 `esds/stsd` 被 Chromium 的 MSE 解析器拒过一次，
+  原字节搬运能保证编码配置和「能正常播放的那份」完全一致。
+- **只保留 `hdlr=soun` 的那条轨**。原片是视频+音频两条 trak，init 里塞一条 avc1 的轨会被
+  解析器直接拒掉（mime 只声明音频，track 类型对不上）。
+- **track id 必须取音频轨的 `tkhd.track_ID`**（本集是 2，视频轨是 1）。`trex` 和每个
+  `tfhd` 都用它，否则分片指向不存在的轨。
+- **每个窗口按 100 个样本切成小分片再 append**（`liveAacSplit`）。实测同一个 10 秒窗口
+  （610 个样本 / 200 KB）整段 `appendBuffer`，`sb.buffered` 只长出 2 秒；切成 7 片
+  （每片约 35 KB）后 12 片连续 append 落满 13 秒。分片头每个约 `16 + 8×样本数` 字节，可忽略。
+- **`tfdt` 用 version 0（32 位）**：1853 秒 × 48000 ≈ 8900 万，32 位够；version 1 要 64 位，
+  写短了整段 moof 会被丢掉。
+- 播放侧失败一律退回原生：`liveMseBegin` 抛错 → `liveMseStop` + toast「单流播放启动失败，
+  已退回普通播放」，识别不受影响。`prefs.liveMse` 默认 true（老配置靠 `myt-liveMseOn`
+  标记做一次性迁移，用户手动关掉就不再被打开）。
+- **从片尾往回拖会永久卡 `seeking`（已修）**：播到结尾时 `sb.buffered` 已经被清空，
+  `LIVE.next` 却还停在片尾；旧的重锚判断要求 `b.buffered.length > 0`，于是永远等不到
+  「播放头跑出区间」那一刻 —— 元素一直 `seeking`、识别也不出句（实测卡在 300 秒不动）。
+  现在缓冲为空时也判一次：播放头离 `m.base` 超过 5 秒就按新位置重锚，实测 4~6 秒内
+  恢复播放与出句（跨 >120 秒会清行重新识别，这是既有策略）。
+
+实测（Talking Cars (Video) #2026·2，MSE 接管后连续播 60 秒）：媒体字节 **1.52 MB**
+（≈26 KB/s），同期播了 53.9 秒，`buffered` 一路长到 60 秒外，识别 12 行、提前 36 秒、0 失败。
+跳转（+150 秒）会走 `liveMseReanchor` 整条重建，重建后 `buffered` 落在新位置、识别继续出句。
+MP3 集（how-we-made-your-mother）回归正常：MSE 接管、10 秒/10 秒地长缓冲、提前 59 秒。
+
+排障补充：`__live.init()` 给当前 init segment 字节，`__live.samples(t, 秒)` 取一个窗口的
+`{i0,i1,flat,marks}`，`__live.frag(s)` / `__live.fragParts(s, 每片样本数)` 看分片字节；
+`LIVE.net` 记着实时识别一共取了多少字节/多少次请求，`LIVE.mseWhy` 记最近一次 `liveMseStop`
+的原因（`detach` = 页面把 src 换回原始地址）。

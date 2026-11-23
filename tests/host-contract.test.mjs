@@ -268,6 +268,8 @@ assert(SCOPED_API_FIELDS.themes.length === 0, '主题不拿 api');
 assert(SCOPED_API_FIELDS.slots.includes('storage'), '槽位必须拿到 storage');
 assert(SCOPED_API_FIELDS.slots.includes('media') && SCOPED_API_FIELDS.slots.includes('llm'),
   '槽位必须拿到 media 与 llm');
+// 「本集问答」这类槽位在未配置 AI 时要把用户送到设置页，投影里不能把 openSettings 过滤掉。
+assert(SCOPED_API_FIELDS.slots.includes('openSettings'), '槽位必须拿到 openSettings');
 assert(PAYLOAD_VERSIONS.searchResult === 1, '搜索结果独立版本号');
 assert(payloadKindFor('searchSources') === 'searchResult', '搜索源的 payload 类型是 searchResult');
 

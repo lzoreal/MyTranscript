@@ -1,15 +1,20 @@
 import { $, ASR_MODEL_DEFAULT, LIVE, audio, box, host, prefs, setState, state, tauriHost } from './00-runtime.js';
-import { alignZhLines, applyReader, clearProgress, closeDetails, closeDrawer, closeOverlays, closeTypeSheet, cuesFromJson, directAudioUrl, emptyLine, epKey, esc, findNorm, fmt, getJson, isJsonTranscript, onAudioError, openDetails, openDrawer, paint, parseFeed, progressAll, rawSeek, reader, rebuildCues, rememberOverlayTrigger, renderCueWindow, renderCues, restoreOverlayFocus, saveProgress, scrollCue, seekTo, setImmersive, setWallpaper, showToast, status, stopScroll, syncJumpPill, syncWallpaperPlay, toggleWallpaperPlay, transcriptMirror, updateTimeScale } from './01-theme-reader-shell.js';
+import { alignZhLines, applyReader, clearProgress, closeDetails, closeDrawer, closeOverlays, closeTypeSheet, cuesFromJson, directAudioUrl, emptyLine, epKey, esc, findNorm, fmt, getJson, isJsonTranscript, onAudioError, openDetails, openDrawer, paint, parseFeed, progressAll, rawSeek, reader, rebuildCues, rememberOverlayTrigger, renderCueWindow, renderCues, restoreOverlayFocus, saveProgress, scrollCue, seekTo, setImmersive, setWallpaper, showToast, status, stopScroll, syncJumpPill, syncWallpaperPlay, toggleWallpaperPlay, transcriptMirror, updateTimeScale, writeProgressAll } from './01-theme-reader-shell.js';
 import { coreProvider, defineCoreProvider } from './02-live-caption-wasm.js';
 import { findSkipRange, liveDisable, skipUrlOf } from './03-native-asr-service-worker.js';
 import { loadShow, renderList, studyPluginOn, subtitlePluginOn } from './04-local-audio-plugin-host.js';
 import { motionEnter, motionFlip, motionLeave } from './11-motion.js';
+import { pause as transportPause, rate as transportRate, toggle as transportToggle } from './14-transport.js';
 
 
 
 
 import { layerValue, lazyFn, registerLayer } from './00-layers.js';
 const feedKey = lazyFn('06-catalog-feeds-search', 'feedKey');
+/* localStorage 的 JSON 读写已搬到 15-store；这里留同名转发，其它层的 lazyFn 调用零改动。 */
+const readJSON = lazyFn('15-store', 'readJSON');
+const writeJSON = lazyFn('15-store', 'writeJSON');
+
 const fetchFeedText = lazyFn('06-catalog-feeds-search', 'fetchFeedText');
 const memoryFeed = lazyFn('06-catalog-feeds-search', 'memoryFeed');
 const rememberFeed = lazyFn('06-catalog-feeds-search', 'rememberFeed');
@@ -39,10 +44,7 @@ const setSleep = lazyFn('10-desktop-bridge-tail', 'setSleep');
 /* transport */
 $('play').onclick = () => {
   if (!state.current) { openDrawer(); return; }
-  if (!audio.getAttribute('src')) { status('该集没有音频地址。', 'warn'); showToast('该集没有音频地址。'); return; }
-  audio.paused
-    ? audio.play().catch(e => { status('播放失败：' + e.message, 'warn'); showToast('播放失败：' + e.message); })
-    : audio.pause();
+  transportToggle();
 };
 audio.addEventListener('play', () => { $('play').classList.add('playing'); $('play').setAttribute('aria-label','暂停'); document.body.classList.add('playing'); syncWallpaperPlay(); });
 audio.addEventListener('pause', () => { $('play').classList.remove('playing'); $('play').setAttribute('aria-label','播放'); document.body.classList.remove('playing'); saveProgress(true); syncWallpaperPlay(); });
@@ -150,7 +152,7 @@ function applySkipRules() {
   if (Number(pref.skipOutro) > 0 && dur > 0 && !state.outroSkipped && dur - now <= Number(pref.skipOutro)) {
     setState('outroSkipped', true);
     if (app.cont !== 'single') playNextAuto(app.cont === 'radio');
-    else audio.pause();
+    else transportPause();
   }
 }
 $('back').onclick = () => seekBy(-15);
@@ -233,7 +235,7 @@ $('dockRateBtn').onclick = () => {
 };
 function applyRate(rate, persist = true) {
   const r = Number(rate) || 1;
-  audio.playbackRate = r;
+  transportRate(r);
   prefs.speed = r;
   if (persist) savePrefs();
   syncRateSeg();
@@ -290,7 +292,14 @@ function syncVolUI() {
   const muted = !!prefs.muted;
   const vol = Number.isFinite(prefs.volume) ? prefs.volume : 1;
   const pct = Math.round(vol * 100);
-  $('volRange').value = String(muted ? 0 : pct);
+  const range = $('volRange');
+  range.value = String(muted ? 0 : pct);
+  /* 液态玻璃那类主题用的是自绘轨道（静态渐变），光靠拇指位置看不出音量；
+     把百分比也写进变量：--vol-fill 是带单位的 0%–100%，主题直接拿它当填充长度
+     （0% 长度为 0，100% 正好铺满整条轨道）。--vol-p 是无单位比例，留给以后
+     需要按「(轨宽-拇指宽)×比例」算长度的主题，两者都由这里维护。 */
+  range.style.setProperty('--vol-fill', (muted ? 0 : pct) + '%');
+  range.style.setProperty('--vol-p', String((muted ? 0 : pct) / 100));
   $('volOut').textContent = muted ? '静音' : pct + '%';
   $('muteBtn').setAttribute('aria-pressed', String(muted));
   $('muteBtn').setAttribute('aria-label', muted ? '取消静音' : '静音');
@@ -516,6 +525,11 @@ $('scrim').onclick = closeOverlays;
 $('detailsBtn').onclick = (e) => { e.stopPropagation(); $('details').classList.contains('on') ? closeDetails() : openDetails(); };
 $('openDetailsText').onclick = openDetails;
 $('cover').onclick = openDetails;
+// dock 上的章节条是链接样式，点它开章节面板；它嵌在「点开单集信息」的标题块里，得拦冒泡。
+$('chapterChip')?.addEventListener('click', e => {
+  e.stopPropagation();
+  if (moduleOn('chapters')) toggleChapterSheet(true);
+});
 $('detailsClose').onclick = closeDetails;
 $('immersiveBtn').onclick = () => setImmersive(!state.immersive);
 $('wallpaperBtn').onclick = () => { closeDockSheet(false); setWallpaper(true); };
@@ -801,7 +815,7 @@ function renderChapters() {
   if (!sheet || !list) return;
   if (!state.chapters.length) {
     list.innerHTML = '<div class="chapter-empty">该集没有章节信息。<br>带章节的节目会从 feed 自动读取。</div>';
-    if (now) now.textContent = '—';
+    if (now) now.textContent = '无章节';
     if (chip) { chip.hidden = true; chip.textContent = ''; }
     return;
   }
@@ -948,13 +962,18 @@ function addToPlaylist(show, ep, listId) {
 }
 function playPlaylist(id) {
   const p = findPlaylist(id);
-  if (!p || !p.items.length) return;
+  if (!p) { showToast('找不到这个播放列表。', 5000); return; }
+  if (!p.items.length) { showToast('这个播放列表是空的。', 5000); return; }
+  const playable = p.items.filter(item => playTarget(item.key, item.ep).ok);
+  if (!playable.length) { showToast('播放列表里的单集都已经失效了。', 7000); return; }
   // 队列里已经有东西时别静默替换：用户可能刚攒了一队通勤要听的。
   if (app.queue.length && !confirm('播放列表「' + p.name + '」会替换当前播放队列（' + app.queue.length + ' 集），继续？')) return;
-  app.queue = p.items.map(it => Object.assign({}, it, { at: Date.now() }));
+  app.queue = playable.map(it => Object.assign({}, it, { at: Date.now() }));
   saveQueue();
-  const first = p.items[0];
-  showToast('播放列表「' + p.name + '」开始播放，共 ' + p.items.length + ' 集。');
+  const first = playable[0];
+  const skipped = p.items.length - playable.length;
+  showToast('播放列表「' + p.name + '」开始播放，共 ' + playable.length + ' 集。' +
+    (skipped ? '已跳过 ' + skipped + ' 个失效条目。' : ''));
   playEpisode(first.key, first.ep);
 }
 function removePlaylist(id) {
@@ -1054,6 +1073,17 @@ async function readTranscriptDoc(show, ep) {
   if (!transcript || !transcript.url) return { doc: null, local: false };
   const key = offlineKeyFor(show, ep);
   const rec = app.offline ? app.offline.get(key) : null;
+  /* 下载后整集转写的本地稿没有远端 URL，只能按音频旁边的 .transcript.json 读。 */
+  if (transcript.local) {
+    const path = ep.localPath || rec?.path || '';
+    const core = tauriHost()?.core;
+    if (path && core && typeof core.invoke === 'function') {
+      try {
+        const raw = await core.invoke('local_transcript_load', { path });
+        if (raw) return { doc: JSON.parse(raw), local: true };
+      } catch (e) {}
+    }
+  }
   if (rec && rec.hasTranscript && host() && typeof host().offlineTranscriptLoad === 'function' && isJsonTranscript(transcript)) {
     try {
       const text = await host().offlineTranscriptLoad(key);
@@ -1314,6 +1344,9 @@ async function defaultDownloadEpisode(show, ep, opts = {}) {
   const transcriptable = isJsonTranscript(ep.transcript);
   if (!quiet) showToast(existing ? '正在补下文字稿「' + (ep.title || ep.id) + '」…' : '开始下载「' + (ep.title || ep.id) + '」…');
   app.downloading.add(key);
+  app.downloadErrors.delete(key);
+  app.downloadProgress.set(key, { key, pct: -1, got: 0, total: 0, at: Date.now() });
+  renderDownloads();
   let transcriptErr = '';
   try {
     let audioPath = existing && existing.path ? existing.path : '';
@@ -1329,6 +1362,13 @@ async function defaultDownloadEpisode(show, ep, opts = {}) {
         hasTranscript = false;
         transcriptErr = (err && err.message) ? err.message : String(err);
       }
+    } else if (!quiet && !hasTranscript) {
+      // 没有现成文字稿的整集：下载完再问一次要不要本机转写。
+      // 不在订阅时静默排队——转写吃 CPU、也可能花几十分钟，必须让用户当场决定。
+      const modelName = asrModelName(localAsrModelId());
+      const want = confirm('音频已下载到本机。\n\n这一集没有现成文字稿，要用本机模型「' + modelName +
+        '」整集转写吗？\n\n转写只在本机跑，不联网；完成后打开这一集就能逐词跟读。耗时大致是音频时长的 0.5–1 倍。\n\n选「取消」就只保留音频，之后仍可在这一集里随时预转写。');
+      if (want) hasTranscript = await transcribeDownloadedEpisode(show, ep, audioPath, key);
     }
     app.offline.set(key, Object.assign({}, app.offline.get(key) || {}, { key, path: audioPath, hasTranscript }));
     await refreshOffline();
@@ -1341,11 +1381,78 @@ async function defaultDownloadEpisode(show, ep, opts = {}) {
       renderAfterStateChange();
     }
   } catch (err) {
-    if (!quiet) showToast('下载失败：' + (err && err.message ? err.message : err), 'warn');
+    const msg = err && err.message ? err.message : String(err);
+    app.downloadErrors.set(key, msg);
+    app.downloadProgress.delete(key);
+    renderDownloads();
+    if (!quiet) showToast('下载失败：' + msg, 'warn');
     else desktopNotify('下载失败', (show.name || '') + ' · ' + (ep.title || ep.id));
   } finally {
     app.downloading.delete(key);
+    app.downloadProgress.delete(key);
+    renderDownloads();
   }
+}
+/* 下载后的整集转写：复用 Rust 的 localasr 批处理（稿子写在音频旁边），
+   完成后把离线记录标成 localTranscript，选集时直接走本地稿。 */
+async function transcribeDownloadedEpisode(show, ep, audioPath, key) {
+  if (!tauriHost() || !tauriHost().core || typeof tauriHost().core.invoke !== 'function') {
+    showToast('整集转写只在桌面版可用。', 'warn');
+    return false;
+  }
+  const model = localAsrModelId();
+  try {
+    await tauriHost().core.invoke('local_transcribe_start', { path: audioPath, model });
+  } catch (err) {
+    const msg = err && err.message ? err.message : String(err);
+    showToast('转写启动失败：' + msg + (String(msg).includes('还没下载') ? '（去「设置 → 模型管理」下载后再试）' : ''), 9000);
+    return false;
+  }
+  showToast('已开始整集转写，可以继续听别的；完成后会提示。', 6000);
+  return await new Promise(resolve => {
+    let lastPct = -10;
+    const timer = setInterval(async () => {
+      let st;
+      try { st = await tauriHost().core.invoke('local_transcribe_status', {}); } catch (e) { return; }
+      if (st.running) {
+        const pct = Math.max(0, Math.min(99, Math.round(Number(st.pct) || 0)));
+        app.downloadProgress.set(key, { key, pct, phase: 'asr', got: 0, total: 0, at: Date.now() });
+        renderDownloads();
+        if (pct - lastPct >= 10) { lastPct = pct; showToast('整集转写 ' + pct + '%…', 3500); }
+        return;
+      }
+      clearInterval(timer);
+      app.downloadProgress.delete(key);
+      renderDownloads();
+      if (st.error) {
+        app.downloadErrors.set(key, '转写失败：' + st.error);
+        renderDownloads();
+        showToast('转写失败：' + st.error, 9000);
+        resolve(false);
+        return;
+      }
+      try {
+        const raw = await tauriHost().core.invoke('local_transcript_load', { path: audioPath });
+        JSON.parse(raw);
+      } catch (e) {
+        showToast('转写完成但读取失败：' + ((e && e.message) || e), 9000);
+        resolve(false);
+        return;
+      }
+      const prev = app.offline.get(key) || {};
+      app.offline.set(key, Object.assign({}, prev, {
+        key, path: audioPath, hasTranscript: true, localTranscript: true,
+        transcriptSize: Number(prev.transcriptSize) || 0,
+      }));
+      ep.localPath = audioPath;
+      ep.transcript = { type: 'application/json', url: 'local-asr', local: true };
+      await refreshOffline();
+      renderAfterStateChange();
+      renderDownloads();
+      showToast('音频与转写都已就绪，这一集可以离线逐词跟读了。', 6000);
+      resolve(true);
+    }, 1200);
+  });
 }
 async function removeOffline(key) {
   if (!host() || typeof host().offlineRemove !== 'function') return;
@@ -1432,6 +1539,41 @@ function downloadInfo(rec) {
     ep: ref?.ep || null,
   };
 }
+function activeDownloadsHTML(query) {
+  const q = String(query || '').trim().toLowerCase();
+  const active = [...(app.downloadProgress ? app.downloadProgress.values() : [])];
+  const errors = [...(app.downloadErrors ? app.downloadErrors.entries() : [])];
+  const visible = (key) => {
+    if (!q) return true;
+    const info = downloadInfo({ key });
+    return (info.groupName + ' ' + info.title).toLowerCase().includes(q);
+  };
+  const rows = [];
+  active.forEach(p => {
+    if (!visible(p.key)) return;
+    const info = downloadInfo({ key: p.key });
+    const pct = Number(p.pct);
+    const hasPct = pct >= 0;
+    const asr = p.phase === 'asr';
+    const size = asr ? '' : (hasPct ? fmtBytes(Number(p.got) || 0) + ' / ' + fmtBytes(Number(p.total) || 0) : '准备中');
+    const label = asr ? '转写中 ' + Math.max(0, Math.min(99, pct)) + '%' : (hasPct ? '下载中 ' + pct + '% · ' : '正在准备 · ') + size;
+    rows.push('<div class="qrow dl-active-row" data-motion-key="' + esc('dl:' + p.key) + '">' +
+      '<div class="qmain"><strong>' + esc(info.groupName) + ' · ' + esc(info.title) + '</strong><span>' +
+      esc(label) + '</span>' +
+      '<div class="progress dl-progress"><i style="width:' + (hasPct ? Math.max(0, Math.min(100, pct)) : 0) + '%"></i></div></div>' +
+      '<div class="dl-row-actions"><span class="dl-state">' + (asr ? '转写中' : '下载中') + '</span></div></div>');
+  });
+  errors.forEach(([key, msg]) => {
+    if (!visible(key)) return;
+    const info = downloadInfo({ key });
+    rows.push('<div class="qrow dl-error-row" data-motion-key="' + esc('dlerr:' + key) + '">' +
+      '<div class="qmain"><strong>' + esc(info.groupName) + ' · ' + esc(info.title) + '</strong><span>' +
+      esc(String(msg || '下载失败')) + '</span></div>' +
+      '<div class="dl-row-actions"><span class="dl-state warn">失败</span>' +
+      '<button class="mini-btn" data-retry-offline="' + esc(key) + '">↻ 重试</button></div></div>');
+  });
+  return rows.join('');
+}
 function downloadsHTML(entries, query) {
   const q = String(query || '').trim().toLowerCase();
   const groups = new Map();
@@ -1465,16 +1607,23 @@ function renderDownloads() {
   const entries = offlineEntries();
   const totalBytes = entries.reduce((n, e) => n + (Number(e.size) || 0) + (Number(e.transcriptSize) || 0), 0);
   const groups = new Set(entries.map(rec => downloadInfo(rec).groupKey)).size;
+  const active = app.downloadProgress ? app.downloadProgress.size : 0;
+  const errors = app.downloadErrors ? app.downloadErrors.size : 0;
   const hint = $('downloadsHint');
-  if (hint) hint.textContent = entries.length
-    ? entries.length + ' 集 · ' + groups + ' 个节目 · 共 ' + fmtBytes(totalBytes)
-    : '还没有下载到本机的单集。';
+  if (hint) {
+    const parts = [];
+    if (entries.length) parts.push(entries.length + ' 集 · ' + groups + ' 个节目 · 共 ' + fmtBytes(totalBytes));
+    if (active) parts.push(active + ' 个下载中');
+    if (errors) parts.push(errors + ' 个失败');
+    hint.textContent = parts.length ? parts.join(' · ') : '还没有下载到本机的单集。';
+  }
   const q = $('downloadsFilter') ? $('downloadsFilter').value : '';
+  const activeHTML = activeDownloadsHTML(q);
   const html = entries.length ? downloadsHTML(entries, q) : '';
   motionFlip(box, '.dl-pod', () => {
-  box.innerHTML = html || (entries.length
+  box.innerHTML = activeHTML + (html || (entries.length
     ? '<div class="dl-empty">没有匹配的下载。换个关键词试试。</div>'
-    : emptyLine('还没有下载到本机的单集。在单集页点「⤓ 整集下载」。'));
+    : (active || errors ? '' : emptyLine('还没有下载到本机的单集。在单集页点「⤓ 整集下载」。'))));
   });
 }
 function renderOfflineList() {
@@ -1623,6 +1772,9 @@ function startPlayTick(force = false) {
   }, ms);
 }
 function stopPlayTick() { if (playTick) { clearInterval(playTick); playTick = 0; playTickMs = 0; } }
+/* 装饰层降级（窗口不在前台时给 <html> 挂 .decor-idle）已搬到 13-theme：
+   判据、事件监听、类名都在那里，这里不再自己维护；消费方（01 的 paint() 与主题 CSS）不变。
+   原因见 docs/handover.md「十二、性能」。 */
 audio.addEventListener('play', () => { startPlayTick(); paint(true); });
 audio.addEventListener('pause', () => { stopPlayTick(); paint(true); });
 audio.addEventListener('ended', () => { stopPlayTick(); paint(true); });
@@ -1655,7 +1807,7 @@ const app = {
   online: { query: '', loading: false, results: [], sources: [], piError: '', error: '', seq: 0, cache: new Map(), visible: 20 },
   asrModels: [], asrBusy: new Map(), asrModelsErr: '', chaptersCache: new Map(),
   auto: { ...AUTO_DEFAULTS }, favorites: new Set(), played: {}, inbox: [], seen: {}, showPrefs: {},
-  downloading: new Set(), transcriptDownloads: new Set(), autoTimer: 0, refreshBusy: false, epFilter: 'all', local: [],
+  downloading: new Set(), transcriptDownloads: new Set(), downloadProgress: new Map(), downloadErrors: new Map(), autoTimer: 0, refreshBusy: false, epFilter: 'all', local: [],
 };
 const PAGE_NAMES = {
   home: '首页', library: '播客库', local: '本地文件', downloads: '下载管理', video: '视频播放', discover: '发现', search: '搜索', podcast: '节目详情',
@@ -1669,19 +1821,12 @@ const SIDEBAR_META = {
   inbox: ['◫', '收件箱'], queue: ['☷', '播放队列'], history: ['◷', '收听历史'], stats: ['▥', '统计与回顾'],
   favorites: ['★', '收藏'], bookmarks: ['☆', '书签'], notes: ['▤', '笔记'], listening: ['♫', '收听模式'], settings: ['⚙', '设置'],
 };
-/* 内置色板只剩四个：档案/墨绿/酒红/青瓷/雾白已撤掉（老存档由 01 的 REMOVED_THEME_FALLBACK 迁走），
-   视觉主题改成随包的七套自定义主题卡，不再占内置色板位。 */
+/* 内置色板：午夜蓝/纸张/原型/编辑部/苹果播客/Spotify。档案/墨绿/酒红/青瓷/雾白已撤掉（老存档由 01 的 REMOVED_THEME_FALLBACK 迁走），
+   视觉主题另有随包的七套自定义主题卡，不占内置色板位。 */
 const THEME_NAMES = {
-  midnight: '午夜蓝', paper: '纸张', prototype: '原型', ledger: '编辑部',
+  midnight: '午夜蓝', paper: '纸张', prototype: '原型', ledger: '编辑部', apple: '苹果播客', spotify: 'Spotify',
 };
 
-function readJSON(key, fallback) {
-  try { const value = JSON.parse(localStorage.getItem(key) || 'null'); return value == null ? fallback : value; }
-  catch (e) { return fallback; }
-}
-function writeJSON(key, value) {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
-}
 function whenIdle(fn, timeout = 1200) {
   if ('requestIdleCallback' in window) return requestIdleCallback(fn, { timeout });
   return setTimeout(fn, 0);
@@ -1811,7 +1956,21 @@ async function indexCurrentShow() {
   if (layerValue('07-routes-pages', 'searchTab') === 'library') renderSearch($('searchInput')?.value || '');
 }
 function syncIndexCount() {
-  idxCount().then(count => { const el = $('idxCount'); if (el) el.textContent = String(count); });
+  idxCount().then(count => {
+    const el = $('idxCount'); if (el) el.textContent = String(count);
+    const cov = $('idxCoverage');
+    if (!cov) return;
+    /* 覆盖率只统计“已加载 feed 里带文字稿的集”，没加载过 feed 就诚实说算不了，
+       不要拿订阅节目数硬编一个百分比。 */
+    let total = 0;
+    for (const show of (state.shows || [])) {
+      if (!show.feed && !show.builtin) continue;
+      total += (memoryFeed(show)?.episodes || []).filter(ep => ep.transcript?.url).length;
+    }
+    if (!total) { cov.textContent = '订阅并加载 feed 后显示覆盖率'; return; }
+    const pct = Math.min(100, Math.round((count / total) * 100));
+    cov.textContent = '覆盖 ' + Math.min(count, total) + ' / ' + total + ' 集 · ' + pct + '%';
+  });
 }
 function hash32(text) {
   let h = 2166136261;
@@ -1914,6 +2073,90 @@ function episodesOf(show) {
   return catalogLatest(show).map(ep => ({ ...ep, showKey: show.slug }));
 }
 function readAllProgress() { return progressAll(); }
+/* 播放目标解析：所有“点了没反应”的入口先过这一层。
+   本地文件没有 feed，删掉后 showByKey 会返回空；站外节目退订或单集被 feed 移除也会留下孤儿记录。
+   注意站外节目在 feed 未加载前只能确认到“节目存在”，具体单集交给 loadShow(strict) 再校验。 */
+function playTarget(key, epId) {
+  if (!key || !epId) return { ok: false, reason: 'no-id' };
+  const show = showByKey(key);
+  if (!show) {
+    if (key === 'local-files') return { ok: false, reason: 'local-removed' };
+    if (isSubscribed(key)) return { ok: false, reason: 'show-unavailable' };
+    return { ok: false, reason: 'show-removed' };
+  }
+  const episodes = episodesOf(show);
+  const ep = episodes.find(item => item.id === epId) || null;
+  if (show.local && !ep) return { ok: false, reason: 'local-removed' };
+  // 只有完整 feed 已经在内存里时才敢判定“单集被删”；catalogLatest 只是最近一截，
+  // 拿它做存在性判断会把老单集误杀。
+  if (!show.local) {
+    const full = memoryFeed(show);
+    if (full?.episodes?.length && !full.episodes.some(item => item.id === epId)) {
+      return { ok: false, reason: 'episode-missing' };
+    }
+  }
+  return { ok: true, show, ep };
+}
+function playTargetLabel(target) {
+  switch (target?.reason) {
+    case 'local-removed': return '文件已移除';
+    case 'show-removed': return '节目已退订';
+    case 'show-unavailable': return '节目暂不可用';
+    case 'episode-missing': return '单集已失效';
+    default: return '记录已损坏';
+  }
+}
+function playTargetText(target) {
+  switch (target?.reason) {
+    case 'local-removed': return '这个本地文件已经不在「本地文件」列表里了。重新导入后再试。';
+    case 'show-removed': return '这档节目已经不在订阅中，无法继续播放。';
+    case 'show-unavailable': return '节目数据还没准备好，请稍后再试。';
+    case 'episode-missing': return '这一集已经不在节目源里了，请到节目页重新选择。';
+    default: return '这条记录缺少节目信息，无法播放。';
+  }
+}
+function notifyPlayTargetFailure(target) { showToast(playTargetText(target), 7000); }
+function purgeLocalReferences(ids) {
+  const wanted = ids == null ? null : new Set(Array.from(ids).map(String));
+  const match = id => !wanted || wanted.has(String(id));
+  const counts = { progress: 0, queue: 0, playlists: 0, favorites: 0, played: 0, inbox: 0 };
+  const all = progressAll();
+  for (const key of Object.keys(all)) {
+    if (!key.startsWith('local-files:')) continue;
+    if (!match(key.slice('local-files:'.length))) continue;
+    delete all[key]; counts.progress++;
+  }
+  if (counts.progress) writeProgressAll(all);
+  const beforeQueue = app.queue.length;
+  app.queue = app.queue.filter(item => !(item.key === 'local-files' && match(item.ep)));
+  counts.queue = beforeQueue - app.queue.length;
+  if (counts.queue) writeJSON(QUEUE_KEY, app.queue);
+  for (const playlist of app.playlists || []) {
+    const before = playlist.items.length;
+    playlist.items = playlist.items.filter(item => !(item.key === 'local-files' && match(item.ep)));
+    counts.playlists += before - playlist.items.length;
+  }
+  if (counts.playlists) savePlaylists();
+  if (app.favorites) {
+    for (const key of [...app.favorites]) {
+      if (!key.startsWith('local-files:')) continue;
+      if (!match(key.slice('local-files:'.length))) continue;
+      app.favorites.delete(key); counts.favorites++;
+    }
+    if (counts.favorites) saveFavorites();
+  }
+  for (const key of Object.keys(app.played || {})) {
+    if (!key.startsWith('local-files:')) continue;
+    if (!match(key.slice('local-files:'.length))) continue;
+    delete app.played[key]; counts.played++;
+  }
+  if (counts.played) savePlayed();
+  const beforeInbox = app.inbox.length;
+  app.inbox = app.inbox.filter(item => !(item.showKey === 'local-files' && match(item.ep)));
+  counts.inbox = beforeInbox - app.inbox.length;
+  if (counts.inbox) saveInbox();
+  return counts;
+}
 /* ---------- 收藏 / 已听 / 收件箱 / 订阅自动化 ---------- */
 function saveFavorites() { writeJSON(FAV_KEY, [...app.favorites]); }
 function savePlayed() { writeJSON(PLAYED_KEY, app.played); }
@@ -2117,5 +2360,5 @@ function renderAfterStateChange() {
   renderPage(r.page, r);
   syncMini();
 }
-export { AUTO_DEFAULTS, AUTO_KEY, BOOKMARK_KEY, DL_META_KEY, DOCK_RATES, FAV_KEY, IDLE_TICK_MS, IDX_DB, IDX_STORE, INBOX_KEY, LOCAL_KEY, MODULE_ROUTES, NOTE_KEY, PAGE_NAMES, PLAYED_KEY, PLAYLIST_KEY, PLAY_TICK_MS, PREFS_KEY, QUEUE_KEY, SEEN_KEY, SHOWPREFS_KEY, SIDEBAR_BOTTOM, SIDEBAR_META, SIDEBAR_TOP, SUBS_KEY, THEME_NAMES, absoluteFeed, absoluteUrl, addInboxItem, addToPlaylist, addToPlaylistDialog, alignToCue, app, applyLoudness, applyModules, applyRate, applySidebarCustomization, applySkipRules, applyVolume, asrModelName, bindModuleSwitches, buffering, canAnalyseAudio, cancelAsrModel, cardFor, cardLink, catalogLatest, clampFrame, cleanFeedTitle, cleanWord, cleanWordCache, clearFindMarks, closeDockSheet, closeFind, closeWordPanel, copyPlain, defaultDownloadEpisode, defaultPlaylist, desiredPlayTick, dockSheet, dockToolsBtn, downloadEpisode, downloadInfo, downloadMetaStore, downloadsHTML, endFrameDrag, endSeekPreview, ensureAudioGraph, epStatusBadges, episodeFilterMatch, episodeRef, episodesOf, extSlug, externalShow, fetchTextAny, findAt, findBar, findBuiltinByFeed, findCount, findHits, findInput, findPlaylist, firstShowKey, fmtBytes, fmtDuration, formatDate, frameDrag, frameEl, frameMoved, framePos, hash32, hideSelTools, hostOf, idxClear, idxCount, idxDb, idxDbPromise, idxGet, idxGetAll, idxPut, importAsrModel, inboxCount, inboxRemove, indexAllShows, indexCurrentEpisode, indexCurrentShow, indexEpisode, installAsrModel, isFavorite, isPlayed, isSubscribed, jumpCue, loadChapters, localAsrModelId, localShowRecord, lookupWord, markCurrentPlayed, modeSegEl, moduleOn, navigate, normalizeFeedUrl, normalizeSidebarPrefs, offlineEntries, offlineKeyFor, offlineKeyOf, offlineLabel, onFrameMove, openAsrDir, openDockSheet, openFind, paintAsrSoon, parseRoute, pickAsrModel, pickedCue, pillRAF, placeFrame, placeSelTools, plainText, playOffline, playPlaylist, playTick, playTickMs, queueJumpPill, rateSegEl, readAllProgress, readJSON, readTranscriptDoc, refreshAsrModels, refreshOffline, refreshShows, rememberDownloadMeta, removalLeavesCurrentShow, removeAsrModel, removeOffline, removePlaylist, renderAfterStateChange, renderAsrModels, renderChapters, renderDownloads, renderLocalAsrModelHint, renderOfflineList, renderPlaylists, resolveOfflineRef, returnToCue, routeHash, routeModuleAllows, runFind, saveFavorites, saveInbox, saveOfflineTranscript, savePlayed, savePlaylists, saveSeen, saveShowPrefs, saveSubs, seekBy, seekChapter, seekDur, seekPreviewAt, seekTip, selCueIdx, selText, selTools, setAlignMode, setBuffering, setNodeVisible, setPlayed, setReadMode, setShowPref, showByKey, showFindAt, showForOfflineKey, showPrefFor, sidebarOrder, skipSilenceTick, sleepSegEl, startPlayTick, stopPlayTick, subscribeRecord, subscribeShow, syncChapterNow, syncDockBadge, syncDockLang, syncDockSleep, syncIndexCount, syncRateSeg, syncShowSelect, syncVolUI, toggleAlignMode, toggleChapterSheet, toggleFavorite, toggleMute, toggleStudySheet, trackEl, unsubscribeKey, webAudioGraph, whenIdle, wordCache, wordCurrent, wordCurrentMeaning, wordSeq, writeJSON };
-registerLayer('05-transport-transcript-nav', { AUTO_DEFAULTS, AUTO_KEY, BOOKMARK_KEY, DL_META_KEY, DOCK_RATES, FAV_KEY, IDLE_TICK_MS, IDX_DB, IDX_STORE, INBOX_KEY, LOCAL_KEY, MODULE_ROUTES, NOTE_KEY, PAGE_NAMES, PLAYED_KEY, PLAYLIST_KEY, PLAY_TICK_MS, PREFS_KEY, QUEUE_KEY, SEEN_KEY, SHOWPREFS_KEY, SIDEBAR_BOTTOM, SIDEBAR_META, SIDEBAR_TOP, SUBS_KEY, THEME_NAMES, absoluteFeed, absoluteUrl, addInboxItem, addToPlaylist, addToPlaylistDialog, alignToCue, app, applyLoudness, applyModules, applyRate, applySidebarCustomization, applySkipRules, applyVolume, asrModelName, bindModuleSwitches, buffering, canAnalyseAudio, cancelAsrModel, cardFor, cardLink, catalogLatest, clampFrame, cleanFeedTitle, cleanWord, cleanWordCache, clearFindMarks, closeDockSheet, closeFind, closeWordPanel, copyPlain, defaultDownloadEpisode, defaultPlaylist, desiredPlayTick, dockSheet, dockToolsBtn, downloadEpisode, downloadInfo, downloadMetaStore, downloadsHTML, endFrameDrag, endSeekPreview, ensureAudioGraph, epStatusBadges, episodeFilterMatch, episodeRef, episodesOf, extSlug, externalShow, fetchTextAny, findAt, findBar, findBuiltinByFeed, findCount, findHits, findInput, findPlaylist, firstShowKey, fmtBytes, fmtDuration, formatDate, frameDrag, frameEl, frameMoved, framePos, hash32, hideSelTools, hostOf, idxClear, idxCount, idxDb, idxDbPromise, idxGet, idxGetAll, idxPut, importAsrModel, inboxCount, inboxRemove, indexAllShows, indexCurrentEpisode, indexCurrentShow, indexEpisode, installAsrModel, isFavorite, isPlayed, isSubscribed, jumpCue, loadChapters, localAsrModelId, localShowRecord, lookupWord, markCurrentPlayed, modeSegEl, moduleOn, navigate, normalizeFeedUrl, normalizeSidebarPrefs, offlineEntries, offlineKeyFor, offlineKeyOf, offlineLabel, onFrameMove, openAsrDir, openDockSheet, openFind, paintAsrSoon, parseRoute, pickAsrModel, pickedCue, pillRAF, placeFrame, placeSelTools, plainText, playOffline, playPlaylist, playTick, playTickMs, queueJumpPill, rateSegEl, readAllProgress, readJSON, readTranscriptDoc, refreshAsrModels, refreshOffline, refreshShows, rememberDownloadMeta, removalLeavesCurrentShow, removeAsrModel, removeOffline, removePlaylist, renderAfterStateChange, renderAsrModels, renderChapters, renderDownloads, renderLocalAsrModelHint, renderOfflineList, renderPlaylists, resolveOfflineRef, returnToCue, routeHash, routeModuleAllows, runFind, saveFavorites, saveInbox, saveOfflineTranscript, savePlayed, savePlaylists, saveSeen, saveShowPrefs, saveSubs, seekBy, seekChapter, seekDur, seekPreviewAt, seekTip, selCueIdx, selText, selTools, setAlignMode, setBuffering, setNodeVisible, setPlayed, setReadMode, setShowPref, showByKey, showFindAt, showForOfflineKey, showPrefFor, sidebarOrder, skipSilenceTick, sleepSegEl, startPlayTick, stopPlayTick, subscribeRecord, subscribeShow, syncChapterNow, syncDockBadge, syncDockLang, syncDockSleep, syncIndexCount, syncRateSeg, syncShowSelect, syncVolUI, toggleAlignMode, toggleChapterSheet, toggleFavorite, toggleMute, toggleStudySheet, trackEl, unsubscribeKey, webAudioGraph, whenIdle, wordCache, wordCurrent, wordCurrentMeaning, wordSeq, writeJSON });
+export { AUTO_DEFAULTS, AUTO_KEY, BOOKMARK_KEY, DL_META_KEY, DOCK_RATES, FAV_KEY, IDLE_TICK_MS, IDX_DB, IDX_STORE, INBOX_KEY, LOCAL_KEY, MODULE_ROUTES, NOTE_KEY, PAGE_NAMES, PLAYED_KEY, PLAYLIST_KEY, PLAY_TICK_MS, PREFS_KEY, QUEUE_KEY, SEEN_KEY, SHOWPREFS_KEY, SIDEBAR_BOTTOM, SIDEBAR_META, SIDEBAR_TOP, SUBS_KEY, THEME_NAMES, absoluteFeed, absoluteUrl, addInboxItem, addToPlaylist, addToPlaylistDialog, alignToCue, app, applyLoudness, applyModules, applyRate, applySidebarCustomization, applySkipRules, applyVolume, asrModelName, bindModuleSwitches, buffering, canAnalyseAudio, cancelAsrModel, cardFor, cardLink, catalogLatest, clampFrame, cleanFeedTitle, cleanWord, cleanWordCache, clearFindMarks, closeDockSheet, closeFind, closeWordPanel, copyPlain, defaultDownloadEpisode, defaultPlaylist, desiredPlayTick, dockSheet, dockToolsBtn, downloadEpisode, downloadInfo, downloadMetaStore, downloadsHTML, endFrameDrag, endSeekPreview, ensureAudioGraph, epStatusBadges, episodeFilterMatch, episodeRef, episodesOf, extSlug, externalShow, fetchTextAny, findAt, findBar, findBuiltinByFeed, findCount, findHits, findInput, findPlaylist, firstShowKey, fmtBytes, fmtDuration, formatDate, frameDrag, frameEl, frameMoved, framePos, hash32, hideSelTools, hostOf, idxClear, idxCount, idxDb, idxDbPromise, idxGet, idxGetAll, idxPut, importAsrModel, inboxCount, inboxRemove, indexAllShows, indexCurrentEpisode, indexCurrentShow, indexEpisode, installAsrModel, isFavorite, isPlayed, isSubscribed, jumpCue, loadChapters, localAsrModelId, localShowRecord, lookupWord, markCurrentPlayed, modeSegEl, moduleOn, navigate, normalizeFeedUrl, normalizeSidebarPrefs, offlineEntries, offlineKeyFor, offlineKeyOf, offlineLabel, onFrameMove, openAsrDir, openDockSheet, openFind, paintAsrSoon, parseRoute, pickAsrModel, pickedCue, pillRAF, placeFrame, placeSelTools, plainText, playOffline, playPlaylist, playTarget, playTargetLabel, playTargetText, notifyPlayTargetFailure, purgeLocalReferences, playTick, playTickMs, queueJumpPill, rateSegEl, readAllProgress, readJSON, readTranscriptDoc, refreshAsrModels, refreshOffline, refreshShows, rememberDownloadMeta, removalLeavesCurrentShow, removeAsrModel, removeOffline, removePlaylist, renderAfterStateChange, renderAsrModels, renderChapters, renderDownloads, renderLocalAsrModelHint, renderOfflineList, renderPlaylists, resolveOfflineRef, returnToCue, routeHash, routeModuleAllows, runFind, saveFavorites, saveInbox, saveOfflineTranscript, savePlayed, savePlaylists, saveSeen, saveShowPrefs, saveSubs, seekBy, seekChapter, seekDur, seekPreviewAt, seekTip, selCueIdx, selText, selTools, setAlignMode, setBuffering, setNodeVisible, setPlayed, setReadMode, setShowPref, showByKey, showFindAt, showForOfflineKey, showPrefFor, sidebarOrder, skipSilenceTick, sleepSegEl, startPlayTick, stopPlayTick, subscribeRecord, subscribeShow, syncChapterNow, syncDockBadge, syncDockLang, syncDockSleep, syncIndexCount, syncRateSeg, syncShowSelect, syncVolUI, toggleAlignMode, toggleChapterSheet, toggleFavorite, toggleMute, toggleStudySheet, trackEl, unsubscribeKey, webAudioGraph, whenIdle, wordCache, wordCurrent, wordCurrentMeaning, wordSeq, writeJSON };
+registerLayer('05-transport-transcript-nav', { AUTO_DEFAULTS, AUTO_KEY, BOOKMARK_KEY, DL_META_KEY, DOCK_RATES, FAV_KEY, IDLE_TICK_MS, IDX_DB, IDX_STORE, INBOX_KEY, LOCAL_KEY, MODULE_ROUTES, NOTE_KEY, PAGE_NAMES, PLAYED_KEY, PLAYLIST_KEY, PLAY_TICK_MS, PREFS_KEY, QUEUE_KEY, SEEN_KEY, SHOWPREFS_KEY, SIDEBAR_BOTTOM, SIDEBAR_META, SIDEBAR_TOP, SUBS_KEY, THEME_NAMES, absoluteFeed, absoluteUrl, addInboxItem, addToPlaylist, addToPlaylistDialog, alignToCue, app, applyLoudness, applyModules, applyRate, applySidebarCustomization, applySkipRules, applyVolume, asrModelName, bindModuleSwitches, buffering, canAnalyseAudio, cancelAsrModel, cardFor, cardLink, catalogLatest, clampFrame, cleanFeedTitle, cleanWord, cleanWordCache, clearFindMarks, closeDockSheet, closeFind, closeWordPanel, copyPlain, defaultDownloadEpisode, defaultPlaylist, desiredPlayTick, dockSheet, dockToolsBtn, downloadEpisode, downloadInfo, downloadMetaStore, downloadsHTML, endFrameDrag, endSeekPreview, ensureAudioGraph, epStatusBadges, episodeFilterMatch, episodeRef, episodesOf, extSlug, externalShow, fetchTextAny, findAt, findBar, findBuiltinByFeed, findCount, findHits, findInput, findPlaylist, firstShowKey, fmtBytes, fmtDuration, formatDate, frameDrag, frameEl, frameMoved, framePos, hash32, hideSelTools, hostOf, idxClear, idxCount, idxDb, idxDbPromise, idxGet, idxGetAll, idxPut, importAsrModel, inboxCount, inboxRemove, indexAllShows, indexCurrentEpisode, indexCurrentShow, indexEpisode, installAsrModel, isFavorite, isPlayed, isSubscribed, jumpCue, loadChapters, localAsrModelId, localShowRecord, lookupWord, markCurrentPlayed, modeSegEl, moduleOn, navigate, normalizeFeedUrl, normalizeSidebarPrefs, offlineEntries, offlineKeyFor, offlineKeyOf, offlineLabel, onFrameMove, openAsrDir, openDockSheet, openFind, paintAsrSoon, parseRoute, pickAsrModel, pickedCue, pillRAF, placeFrame, placeSelTools, plainText, playOffline, playPlaylist, playTarget, playTargetLabel, playTargetText, notifyPlayTargetFailure, purgeLocalReferences, playTick, playTickMs, queueJumpPill, rateSegEl, readAllProgress, readJSON, readTranscriptDoc, refreshAsrModels, refreshOffline, refreshShows, rememberDownloadMeta, removalLeavesCurrentShow, removeAsrModel, removeOffline, removePlaylist, renderAfterStateChange, renderAsrModels, renderChapters, renderDownloads, renderLocalAsrModelHint, renderOfflineList, renderPlaylists, resolveOfflineRef, returnToCue, routeHash, routeModuleAllows, runFind, saveFavorites, saveInbox, saveOfflineTranscript, savePlayed, savePlaylists, saveSeen, saveShowPrefs, saveSubs, seekBy, seekChapter, seekDur, seekPreviewAt, seekTip, selCueIdx, selText, selTools, setAlignMode, setBuffering, setNodeVisible, setPlayed, setReadMode, setShowPref, showByKey, showFindAt, showForOfflineKey, showPrefFor, sidebarOrder, skipSilenceTick, sleepSegEl, startPlayTick, stopPlayTick, subscribeRecord, subscribeShow, syncChapterNow, syncDockBadge, syncDockLang, syncDockSleep, syncIndexCount, syncRateSeg, syncShowSelect, syncVolUI, toggleAlignMode, toggleChapterSheet, toggleFavorite, toggleMute, toggleStudySheet, trackEl, unsubscribeKey, webAudioGraph, whenIdle, wordCache, wordCurrent, wordCurrentMeaning, wordSeq, writeJSON });

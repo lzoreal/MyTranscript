@@ -168,7 +168,7 @@ class PlayerStudySummaryTests(unittest.TestCase):
         self.assertIn('data-study-act="ad"', page)
         self.assertIn("studyApplyCachedAdRanges", page)
         self.assertIn("setState('adRanges', mergeAdRanges(", page)
-        self.assertIn("merged.version = 3", page)
+        self.assertIn("merged.version = 4", page)
         self.assertIn('data-study-act="topic"', page)
         self.assertIn("studyCopyEpisode", page)
 
@@ -337,6 +337,91 @@ assert.deepStrictEqual(starts(fastRepaired), [0, 0.6, 1.2, 2],
         source = "global.window = global;\n" + (self.HARNESS % kernel)
         with tempfile.TemporaryDirectory() as temp_dir:
             script = Path(temp_dir) / "player_word_timing.js"
+            script.write_text(source, encoding="utf-8")
+            proc = subprocess.run(
+                [node, str(script)], capture_output=True, text=True, encoding="utf-8"
+            )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+
+class PlayerBilingualAlignmentTests(unittest.TestCase):
+    """中英长度相同也不能按下标配对；中文必须落在本句的时间窗口里。"""
+
+    HARNESS = """
+const assert = require('assert');
+%s
+const opts = { lang: 'both', segment: false };
+const vtt = [
+  { start: 0, end: 2, text: 'Hear me out.', speaker: '' },
+  { start: 2, end: 4, text: 'Okay.', speaker: '' },
+  { start: 4, end: 6, text: \"1974, Kekkonen's wife passes away.\", speaker: '' },
+];
+// 故意打乱顺序：旧实现按长度相等直接取下标，会把 1974 的中文贴到 Okay 上。
+const zh = [
+  { start: 0, end: 2, text: '听我说完。' },
+  { start: 4, end: 6, text: '1974 年，凯科宁的妻子去世。' },
+  { start: 1.9, end: 4, text: '好。' },
+];
+const cues = merge(vtt, null, zh, opts);
+assert.strictEqual(cues[0].zh, '听我说完。');
+assert.strictEqual(cues[1].zh, '好。', 'Okay 必须拿 1.9s 的译文，不能按下标取到 1974');
+assert.strictEqual(cues[2].zh, '1974 年，凯科宁的妻子去世。');
+
+const far = [{ start: 11, end: 13, text: '这是另一句。' }];
+const lonely = merge(vtt, null, far, opts);
+assert.strictEqual(lonely[1].zh, '', '窗口外的译文宁可留空，也不能硬贴');
+"""
+
+    def test_zh_alignment_uses_time_not_index(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node 不在 PATH，跳过播放器逻辑测试")
+        kernel = (BUILTIN / "subtitles" / "kernel.js").read_text(encoding="utf-8")
+        source = "global.window = global;\n" + (self.HARNESS % kernel)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            script = Path(temp_dir) / "player_zh_alignment.js"
+            script.write_text(source, encoding="utf-8")
+            proc = subprocess.run(
+                [node, str(script)], capture_output=True, text=True, encoding="utf-8"
+            )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+    HARNESS_SHIFTED = """
+const assert = require('assert');
+__KERNEL__
+// 词级 JSON 的每个 segment 自带同段译文，必须原样按索引配对。
+// 旧版用「时长 vs 汉字数」猜偏移，会把本来对齐的译文整体左移。
+const N = 40, step = 2;
+const durs = Array.from({ length: N }, (_, i) => [1.2, 4.8, 2.2, 3.7, 1.6][i % 5]);
+const zhText = i => '译'.repeat(Math.round(durs[i] * 4)) + '第' + i + '句';
+const segs = [];
+let t = 0;
+for (let i = 0; i < N; i++) {
+  const d = durs[i];
+  segs.push({
+    start: Math.round(t * 1000), end: Math.round((t + d) * 1000),
+    body: 'English line ' + i + '.\\n' + zhText(i),
+    words: [['English', 0, 200], ['line', 200, 200]],
+  });
+  t += d;
+}
+const doc = { audio_seconds: t, segments: segs };
+const parsed = parseJson(doc);
+const cues = merge(parsed.vtt, parsed.sidecar, parsed.zhVtt, { lang: 'both', segment: false });
+assert.ok(cues.length >= N, '每个 segment 都要出 cue');
+for (let i = 3; i < N; i++) {
+  assert.strictEqual(cues[i].zh, zhText(i), '第 ' + i + ' 句必须拿到同段中文');
+}
+"""
+
+    def test_parse_json_keeps_same_segment_zh(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node 不在 PATH，跳过播放器逻辑测试")
+        kernel = (BUILTIN / "subtitles" / "kernel.js").read_text(encoding="utf-8")
+        source = "global.window = global;\n" + self.HARNESS_SHIFTED.replace("__KERNEL__", kernel)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            script = Path(temp_dir) / "player_zh_shift.js"
             script.write_text(source, encoding="utf-8")
             proc = subprocess.run(
                 [node, str(script)], capture_output=True, text=True, encoding="utf-8"
@@ -709,7 +794,8 @@ class PlayerTranscriptToolbarTests(unittest.TestCase):
         self.assertIn("windowSize = 7", page)
         self.assertIn("wp-word", page)
         self.assertIn("wallpaperWordPaint", page)
-        self.assertIn("if (state.wallpaper) wallpaperWordPaint(t);", page)
+        # 壁纸模式逐词上色：窗口不在前台（decor-idle）时跳过，看不见就别画。
+        self.assertIn("if (state.wallpaper && !idleDecor) wallpaperWordPaint(t);", page)
         self.assertIn("if (state.wallpaper) wallpaperRefresh();", page)
         self.assertIn("if (state.wallpaper) { setWallpaper(false); return; }", page)
 
@@ -718,7 +804,7 @@ class PlayerStudyTermTooltipTests(unittest.TestCase):
     def test_generated_summary_terms_have_hover_definitions(self):
         page = player_page() + study_ui()
         self.assertIn("function studyAnnotateText", page)
-        self.assertIn("studySetVocabulary(data.vocabulary)", page)
+        self.assertIn("studySetVocabulary(data.vocabulary, data.phrases)", page)
         self.assertIn("studyAnnotatedLines(data.summary", page)
         self.assertIn('class="study-term" data-term=', page)
         self.assertIn("bindStudyTermTips();", page)
@@ -731,7 +817,19 @@ class PlayerStudyTermTooltipTests(unittest.TestCase):
         self.assertIn(".word.vocab-mark{", page)
         self.assertIn("studySetVocabulary(studyVocab)", page)
         self.assertIn("studyTermChipHTML(v.word)", page)
-        self.assertIn("for (let len = 1; len <= 4", page)
+        self.assertIn("for (let len = 1; len <= 6", page)
+
+    def test_slang_and_fixed_phrases_are_annotated_and_addable(self):
+        page = player_page() + study_ui()
+        self.assertGreaterEqual(page.count("phrases (array of {phrase, kind"), 2, "当前句和整集提示词都要请求 phrases")
+        self.assertIn("function studyPhraseCards", page)
+        self.assertIn("俚语与固定搭配", page)
+        self.assertIn("data-study-phrase-add", page)
+        self.assertIn("studySetVocabulary(data.vocabulary, data.phrases)", page)
+        self.assertIn("study-kind-slang", page)
+        self.assertIn("data.phrases.forEach(add)", page)
+        self.assertIn("'phrases-v1'", page)
+        self.assertIn("merged.version = 4", page)
 
 
 class PlayerPrototypeThemeTests(unittest.TestCase):
@@ -739,14 +837,96 @@ class PlayerPrototypeThemeTests(unittest.TestCase):
         page = player_page()
         self.assertIn('[data-theme="prototype"]{', page)
         self.assertIn("prototype: '原型'", page)
-        self.assertIn("LIGHT_THEMES = new Set(['paper', 'mist', 'prototype', 'ledger'])", page)
+        self.assertIn("LIGHT_THEMES = new Set(['paper', 'mist', 'prototype', 'ledger', 'apple'])", page)
         self.assertIn('data-theme="prototype"', page)
         self.assertIn('[data-theme="ledger"]{', page)
         self.assertIn("ledger: '编辑部'", page)
+        self.assertIn('[data-theme="apple"]{', page)
+        self.assertIn("apple: '苹果播客'", page)
+        self.assertIn('[data-theme="spotify"]{', page)
+        self.assertIn("spotify: 'Spotify'", page)
+
+
+class PlayerHomeSectionTests(unittest.TestCase):
+    def test_recommendation_section_is_named_for_podcasts(self):
+        page = player_page()
+        self.assertIn('<h3>推荐播客</h3>', page)
+        self.assertNotIn('<h3>书架</h3>', page)
+
+
+class PlayerPluginNavIconTests(unittest.TestCase):
+    def test_plugin_pages_use_designed_sprite_icons(self):
+        page = player_page()
+        self.assertIn("const PLUGIN_NAV_ICONS", page)
+        self.assertIn("subtitles: 'i-captions'", page)
+        self.assertIn("soundbite: 'i-soundbite'", page)
+        self.assertIn("distill: 'i-distill'", page)
+        self.assertIn("PLUGIN_NAV_ICONS[page.pluginId] || 'i-plugin'", page)
+        self.assertNotIn('<span class="nav-ico">◇</span>', page)
+        for icon in ("i-plugin", "i-captions", "i-soundbite", "i-distill"):
+            self.assertIn('<symbol id="' + icon + '"', page)
+
+
+class PlayerStalePlayTargetTests(unittest.TestCase):
+    HARNESS = """
+const assert = require('assert');
+const app = { subs: [], local: [] };
+const state = { shows: [] };
+const showByKey = key => state.shows.find(show => show.slug === key || show.key === key) || null;
+const isSubscribed = key => app.subs.some(sub => sub.key === key);
+const episodesOf = show => show.local ? app.local.map(ep => ({ ...ep, showKey: show.slug })) : (show.eps || []);
+const memoryFeed = show => show.fullFeed || null;
+%s
+assert.strictEqual(playTarget('local-files', 'gone').reason, 'local-removed');
+app.subs = [{ key: 'ext-x' }];
+assert.strictEqual(playTarget('ext-x', 'e1').reason, 'show-unavailable');
+assert.strictEqual(playTarget('missing', 'e1').reason, 'show-removed');
+app.subs = [];
+state.shows = [{ slug: 'local-files', local: true }];
+app.local = [];
+assert.strictEqual(playTarget('local-files', 'gone').reason, 'local-removed');
+app.local = [{ id: 'live' }];
+assert.strictEqual(playTarget('local-files', 'live').ok, true);
+state.shows = [{ slug: 'ext', eps: [{ id: 'e1' }] }];
+assert.strictEqual(playTarget('ext', 'e2').ok, true, 'feed 未加载时不能误杀老单集');
+state.shows = [{ slug: 'ext', eps: [{ id: 'e1' }], fullFeed: { episodes: [{ id: 'e1' }] } }];
+assert.strictEqual(playTarget('ext', 'e2').reason, 'episode-missing');
+assert.strictEqual(playTarget('ext', 'e1').ok, true);
+"""
+
+    def test_play_target_rejects_orphans_with_reasons(self):
+        page = player_page()
+        source = page[page.index("function playTarget("):page.index("function playTargetLabel")]
+        proc = run_node(self, "play_target.js", self.HARNESS % source)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+    def test_home_skips_stale_continue_and_labels_failures(self):
+        page = player_page()
+        self.assertIn("const continuing = resolved.filter", page)
+        self.assertIn(".filter(item => item.target.ok)", page)
+        self.assertIn("上次收听的内容已经失效了", page)
+        self.assertIn("playTargetLabel(target)", page)
+        self.assertIn("renderHomeContinue();", page)
+        self.assertIn("appendHomeVideoCard();", page)
+
+    def test_local_removal_purges_related_references(self):
+        page = player_page()
+        self.assertIn("purgeLocalReferences([id])", page)
+        self.assertIn("clearProgress", page)
+        self.assertIn("counts.queue = beforeQueue - app.queue.length", page)
+        self.assertIn("counts.favorites++", page)
+        self.assertIn("这个本地音频文件不见了", page)
+
+    def test_strict_load_show_does_not_play_a_different_episode(self):
+        page = player_page()
+        self.assertIn("async function loadShow(slug, episodeId, options = {})", page)
+        self.assertIn("const strict = !!options.strict", page)
+        self.assertIn("这一集已经不在节目源里了", page)
+        self.assertIn("loadShow(show.slug, epId, { strict: true })", page)
 
 
 class PlayerThemeContrastTests(unittest.TestCase):
-    THEMES = ["brass", "midnight", "forest", "oxblood", "celadon", "paper", "mist", "prototype", "ledger"]
+    THEMES = ["brass", "midnight", "forest", "oxblood", "celadon", "paper", "mist", "prototype", "ledger", "apple", "spotify"]
 
     def _block(self, page, name):
         if name == "brass":
@@ -1058,6 +1238,8 @@ assert.deepStrictEqual(ids(filterCatalogShows(shows, { transcripts: true })), ['
 class PlayerTranscriptCoverageTests(unittest.TestCase):
     HARNESS = """
 const assert = require('assert');
+function host() { return null; }
+function subtitlePluginOn() { return true; }
 __SLICE__
 assert.strictEqual(transcriptCoverage({ episode_count: 0, transcript_count: 0 }), 0);
 assert.strictEqual(transcriptCoverage({ episode_count: 3038, transcript_count: 1519 }), 50);
@@ -1084,6 +1266,29 @@ class PlayerCardSemanticsTests(unittest.TestCase):
         self.assertIn("coverageHTML(show)", card)
         self.assertIn("pod-latest", card)
         self.assertIn("showCategoryText(show)", card)
+        # 已订阅的内置节目要进节目页管理，不再让「已订阅」按钮一键执行退订。
+        self.assertIn('data-open-podcast="', card)
+        self.assertIn("管理中", card)
+        self.assertIn('data-sub-toggle="', card)
+
+    def test_unsubscribe_always_asks_for_confirmation(self):
+        page = player_page()
+        self.assertEqual(page.count("if (!confirm('取消订阅「"), 2, "退订入口（内置 / 站外）都要先确认")
+        self.assertIn("已下载的单集、笔记与收听进度不会删除", page)
+
+
+class PlayerDownloadTranscriptTests(unittest.TestCase):
+    def test_download_asks_before_transcribing(self):
+        page = player_page()
+        # 转写不再跟着订阅静默排队；下载完成后用 confirm 让用户当场决定。
+        self.assertIn("要用本机模型「", page)
+        self.assertIn("transcribeDownloadedEpisode", page)
+        self.assertIn("localTranscript", page)
+
+    def test_local_transcript_is_reattached_on_select(self):
+        page = player_page()
+        self.assertIn("rec.localTranscript && rec.path", page)
+        self.assertIn("url: 'local-asr'", page)
 
 
 class AsrModelManagerTests(unittest.TestCase):
@@ -1310,6 +1515,154 @@ class PlayerStudyShortcutTests(unittest.TestCase):
         self.assertIn('src="themes-defaults.js"', scripts[1])
         self.assertNotIn("</script>\n<script", self.html)
         self.assertIn("window.__xai", self.html)
+
+
+class PlayerSeamTests(unittest.TestCase):
+    """深模块化后的 seam 契约：字幕的每帧路径在 12-subtitle，降级判据在 13-theme。
+
+    这两处是 2026-11-22 从 01 / 05 里搬出来的。测试钉住的是「谁拥有这段行为」，
+    不是实现细节——所以只断言定义位置、转发形式与入口 import。
+    """
+
+    def setUp(self):
+        self.parts = ROOT / "src" / "player-js"
+        self.subtitle = (self.parts / "12-subtitle.js").read_text(encoding="utf-8")
+        self.theme = (self.parts / "13-theme.js").read_text(encoding="utf-8")
+        self.view = (self.parts / "01-theme-reader-shell.js").read_text(encoding="utf-8")
+        self.transport = (self.parts / "05-transport-transcript-nav.js").read_text(encoding="utf-8")
+        self.sw = (self.parts / "03-native-asr-service-worker.js").read_text(encoding="utf-8")
+        self.entry = (self.parts / "player.js").read_text(encoding="utf-8")
+
+    def test_subtitle_owns_the_frame_path(self):
+        """定位 / 逐词上色 / 跟随滚动只在 12-subtitle 里有实现。"""
+        for name in ("locateCue", "paintWords", "scrollCue", "scrollWord", "scrollIntoBox", "canFollow", "liveFollow"):
+            self.assertIn(f"function {name}(", self.subtitle, f"12-subtitle 缺少 {name}")
+            self.assertNotIn(f"function {name}(", self.view, f"{name} 还留在 01 里，等于有两份实现")
+
+    def test_view_layer_only_forwards(self):
+        """01 保留同名薄转发，05 之类的外部调用方零改动。"""
+        for name in ("locateCue", "paintWords", "scrollCue", "stopScroll"):
+            self.assertIn(f"lazyFn('12-subtitle', '{name}')", self.view)
+
+    def test_theme_owns_the_degrade_judgement(self):
+        """降级判据与事件监听只在 13-theme；05 不再自己挂类。"""
+        self.assertIn("function isDegraded(", self.theme)
+        self.assertIn("classList.toggle('decor-idle'", self.theme)
+        self.assertNotIn("function syncIdleDecor(", self.transport)
+        self.assertNotIn("classList.toggle('decor-idle'", self.transport)
+        for event in ("visibilitychange", "'blur'", "'focus'"):
+            self.assertIn(event, self.theme, f"13-theme 没有监听 {event}")
+
+    def test_theme_owns_the_custom_theme_schema(self):
+        """自定义主题的读写只在 13-theme；01 只留转发（04、10 通过它写配置）。"""
+        for name in ("normalizeCustomTheme", "readCustomTheme", "writeCustomTheme", "sanitizeCustomHtml"):
+            self.assertIn(f"function {name}(", self.theme, f"13-theme 缺少 {name}")
+            self.assertNotIn(f"function {name}(", self.view, f"{name} 还留在 01 里，等于有两份实现")
+        self.assertIn("myt-theme-custom", self.theme)
+        self.assertNotIn("myt-theme-custom", self.view)
+        for name in ("readCustomTheme", "writeCustomTheme", "sanitizeCustomHtml"):
+            self.assertIn(f"lazyFn('13-theme', '{name}')", self.view)
+
+    def test_subtitle_owns_the_kernel_adapter(self):
+        """字幕内核适配（merge / 渲染 / 窗口）也已搬到 12-subtitle。"""
+        for name in ("subtitleKernel", "subtitleViewHost", "mergeCues", "renderCues", "renderCueWindow", "alignZhLines"):
+            self.assertIn(f"function {name}(", self.subtitle, f"12-subtitle 缺少 {name}")
+            self.assertNotIn(f"function {name}(", self.view, f"{name} 还留在 01 里，等于有两份实现")
+
+    def test_theme_owns_the_application_path(self):
+        """主题的应用、卡片、编辑器、随包种子、初始恢复全在 13；01 只转发。"""
+        for name in ("setTheme", "applyCustomTheme", "renderCustomThemeGrid", "seedDefaultThemePacks",
+                     "bindCustomThemeEditor", "importCustomTheme"):
+            self.assertIn(f"function {name}(", self.theme, f"13-theme 缺少 {name}")
+            self.assertNotIn(f"function {name}(", self.view, f"{name} 还留在 01 里，等于有两份实现")
+        self.assertIn("queueMicrotask(bootCustomTheme)", self.theme)
+        self.assertNotIn("queueMicrotask(bootCustomTheme)", self.view)
+        for name in ("setTheme", "applyCustomTheme", "renderCustomThemeGrid", "themeBtns"):
+            self.assertIn(f"lazyFn('13-theme', '{name}')", self.view)
+
+    def test_transport_is_the_only_play_owner(self):
+        """播放/暂停/倍速的单一入口是 14-transport：UI、插件、系统媒体键都走它。"""
+        transport = (self.parts / "14-transport.js").read_text(encoding="utf-8")
+        plugin = (self.parts / "04-local-audio-plugin-host.js").read_text(encoding="utf-8")
+        for name in ("play", "pause", "toggle", "rate", "now", "on"):
+            self.assertIn(f"function {name}(", transport, f"14-transport 缺少 {name}")
+        self.assertIn("registerLayer('14-transport'", transport)
+        self.assertIn("import './14-transport.js';", self.entry)
+        # 插件接口与 UI 播放键都不能再自己直接操作 audio
+        self.assertNotIn("audio.play().catch", plugin)
+        self.assertNotIn("audio.paused ? audio.play", plugin)
+        self.assertEqual(plugin.count("audio.playbackRate"), 1, "插件侧只该保留状态快照读取")
+        self.assertIn("transportToggle()", self.transport)
+        self.assertIn("transportRate(r)", self.transport)
+
+    def test_store_owns_the_storage_primitives(self):
+        """localStorage 的 JSON 读写只在 15-store；05 只转发。"""
+        store = (self.parts / "15-store.js").read_text(encoding="utf-8")
+        for name in ("readJSON", "writeJSON", "removeKey", "listKeys", "migrateKey"):
+            self.assertIn(f"function {name}(", store, f"15-store 缺少 {name}")
+        self.assertIn("registerLayer('15-store'", store)
+        self.assertIn("import './15-store.js';", self.entry)
+        self.assertNotIn("function readJSON(", self.transport, "05 还留着自己那份 readJSON")
+        self.assertIn("lazyFn('15-store', 'readJSON')", self.transport)
+        self.assertIn("lazyFn('15-store', 'readJSON')", self.theme)
+
+    def test_entry_imports_the_new_layers(self):
+        self.assertIn("import './12-subtitle.js';", self.entry)
+        self.assertIn("import './13-theme.js';", self.entry)
+
+    def test_built_artifacts_carry_the_new_layers(self):
+        """site/player 是构建产物，缺了就会在运行时 404。"""
+        built = ROOT / "site" / "player"
+        self.assertTrue((built / "12-subtitle.js").is_file())
+        self.assertTrue((built / "13-theme.js").is_file())
+
+    def test_onboarding_coverage_and_intensive(self):
+        """首启三步、搜索覆盖率、精听四步三个入口都要有真实挂载点。"""
+        html = (ROOT / "site" / "player.html").read_text(encoding="utf-8")
+        pages = (self.parts / "07-routes-pages.js").read_text(encoding="utf-8")
+        integration = (self.parts / "09-player-integration.js").read_text(encoding="utf-8")
+        css = (ROOT / "site" / "player.css").read_text(encoding="utf-8")
+        self.assertIn('id="homeOnboard"', html)
+        self.assertIn('id="idxCoverage"', html)
+        self.assertIn('id="intensiveBar"', html)
+        self.assertIn("renderHomeOnboard(subs, entries)", pages)
+        # 首页由 home 插件渲染时也必须补上引导，不能只走 renderHome 分支。
+        self.assertIn("renderHomeOnboard();", pages)
+        self.assertIn("myt-onboard-done", pages)
+        self.assertIn("订阅并加载 feed 后显示覆盖率", self.transport)
+        self.assertIn("INTENSIVE_KEY", integration)
+        self.assertIn("repeatCurrentCue(3)", integration)
+        self.assertIn("myt:cues-ready", integration)
+        self.assertIn("body.intensive-blind #transcript .cue", css)
+        # 精听条必须落在 58px 阅读顶栏下面；复述输入随步骤隐藏，不能一直占位。
+        self.assertIn("body.player-open .intensive{margin-top:58px}", css)
+        self.assertIn("body.intensive-on .transcript", css)
+        self.assertIn(".intensive-note[hidden]{display:none}", css)
+        self.assertIn("document.body.classList.add('intensive-on')", integration)
+        # 精听栏可以收起；收起后整条消失，不占顶部横条，只在顶栏留一个“精听”入口。
+        self.assertIn('id="intensiveCollapse"', html)
+        self.assertIn('id="intensiveShowBtn"', html)
+        self.assertIn("INTENSIVE_COLLAPSE_KEY", integration)
+        self.assertIn("body.intensive-collapsed #intensiveBar{display:none}", css)
+        self.assertIn("collapsed ? '0px' : bar.offsetHeight", integration)
+        # 窄窗两侧栏是覆盖式抽屉，不能同时打开把正文全盖住。
+        self.assertIn("setRailOpen(name, wide &&", integration)
+        self.assertIn("window.innerWidth <= 860", integration)
+        # 大屏默认把版心放宽，避免两侧大片空白；用户手调宽度后不再自适应。
+        self.assertIn("function readerWidth()", self.view)
+        self.assertIn("Math.min(1100, adaptive)", self.view)
+        self.assertIn("@media(min-width:1500px)", css)
+        # 进度条视觉仍细，但点击/拖动热区必须够大。
+        self.assertIn(".track{position:relative;height:36px", css)
+        self.assertIn(".track input{position:absolute;inset:0;width:100%;height:100%", css)
+        # 窄窗迷你播放器/字幕条要有实底，主内容底部留白足够。
+        self.assertIn("background:var(--bg)!important", css)
+        self.assertIn("padding-bottom:190px!important", css)
+        # 播放页保留选字；其它页面整页拖动窗口，点击仍要能用。
+        self.assertIn("document.body.classList.contains('player-open')", self.sw)
+        self.assertIn("win.startDragging()", self.sw)
+        self.assertIn("Math.hypot(dx, dy) < 8", self.sw)
+        self.assertIn("document.getElementById('readerTop')", self.sw)
 
 
 if __name__ == "__main__":

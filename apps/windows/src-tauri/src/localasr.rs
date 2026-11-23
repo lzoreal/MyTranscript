@@ -20,6 +20,7 @@ use symphonia::core::probe::Hint;
 use tauri::{AppHandle, Emitter};
 
 use crate::asr::Asr;
+use crate::punct::Punct;
 
 #[derive(Clone, Default)]
 struct JobState {
@@ -283,7 +284,7 @@ fn run(app: &AppHandle, audio_path: &str, model_dir: &str) -> Result<(Value, f64
     if std::env::var("MT_TRACE").is_ok() {
         let _ = std::fs::write("C:\\tmp\\localasr-raw.json", raw.as_bytes());
     }
-    let doc = build_doc(&raw)?;
+    let doc = build_doc(&raw, punct_model().as_ref())?;
     let secs = doc
         .get("audio_seconds")
         .and_then(Value::as_f64)
@@ -316,7 +317,170 @@ struct Word {
     end: f64,
 }
 
-fn build_doc(raw: &str) -> Result<Value, String> {
+/* 标点模型和 ASR 模型分开装：有 punct-en 就用它补逗号/句号，没有就退回
+   停顿切句。模型只负责插标点，不改词，所以能把标点原样贴回词级时间轴。 */
+fn punct_model() -> Option<Punct> {
+    let dir = if let Ok(dir) = std::env::var("MYT_PUNCT") {
+        PathBuf::from(dir)
+    } else {
+        let program_data = std::env::var("ProgramData").ok()?;
+        PathBuf::from(program_data)
+            .join("MyTranscript")
+            .join("models")
+            .join("punct-en")
+            .join("sherpa-onnx-online-punct-en-2024-08-06")
+    };
+    if !dir.is_dir() {
+        return None;
+    }
+    Punct::new(&dir.to_string_lossy())
+}
+
+fn normalize_punct_text(text: &str) -> String {
+    let mut out = String::new();
+    let mut pending_space = false;
+    for ch in text.replace(['\u{2018}', '\u{2019}'], "'").chars() {
+        if ch.is_whitespace() {
+            pending_space = !out.is_empty();
+            continue;
+        }
+        if matches!(ch, ',' | '.' | '!' | '?' | ';' | ':') {
+            while out.ends_with(' ') {
+                out.pop();
+            }
+            out.push(ch);
+            pending_space = false;
+            continue;
+        }
+        if pending_space {
+            out.push(' ');
+            pending_space = false;
+        }
+        out.push(ch);
+    }
+    out.trim().to_string()
+}
+
+fn upper_first_alpha(text: &str) -> String {
+    let mut out = text.to_string();
+    if let Some((at, ch)) = text.char_indices().find(|(_, c)| c.is_ascii_alphabetic()) {
+        out.replace_range(at..at + 1, &ch.to_ascii_uppercase().to_string());
+    }
+    out
+}
+
+fn ends_sentence(text: &str) -> bool {
+    text.trim_end_matches(['"', '\'', ')', '”'])
+        .ends_with(['.', '!', '?'])
+}
+
+fn fix_word_case(text: &str) -> String {
+    let letters: Vec<char> = text.chars().filter(|c| c.is_ascii_alphabetic()).collect();
+    let mut out = if letters.len() > 1 && letters.iter().all(|c| c.is_ascii_uppercase()) {
+        text.to_lowercase()
+    } else {
+        text.to_string()
+    };
+    // 英文里的 I 永远大写：ASR 常吐 I'M / I'VE，统一小写后会变成句中的 i'm。
+    let bare = out.trim_matches(['"', '\'', '(', '[']).to_string();
+    if bare == "i" || bare.starts_with("i'") {
+        if let Some(at) = out.find('i') {
+            out.replace_range(at..at + 1, "I");
+        }
+    }
+    out
+}
+
+fn base_word(text: &str) -> String {
+    text.trim_end_matches([',', '.', '!', '?', ';', ':', '"', '\''])
+        .to_ascii_lowercase()
+}
+
+fn strip_tail(text: &mut String, marks: &[char]) {
+    while marks.iter().any(|mark| text.ends_with(*mark)) {
+        text.pop();
+    }
+}
+
+fn is_stop_end(word: &str) -> bool {
+    matches!(
+        word,
+        "a" | "an" | "the" | "and" | "or" | "but" | "to" | "of" | "in" | "on" | "at"
+            | "for" | "with" | "from" | "by" | "as" | "that" | "which" | "who" | "whether"
+            | "if" | "because" | "like" | "than" | "is" | "are" | "was" | "were" | "be"
+            | "been" | "being" | "will" | "would" | "can" | "could" | "should" | "might"
+            | "must" | "have" | "has" | "had" | "do" | "does" | "did" | "not"
+    )
+}
+
+fn is_connector_start(word: &str) -> bool {
+    matches!(
+        word,
+        "and" | "or" | "but" | "to" | "of" | "in" | "on" | "at" | "for" | "with" | "from"
+            | "by" | "as" | "that" | "which" | "who" | "whether" | "if" | "because" | "than"
+    )
+}
+
+fn is_transitive_verb(word: &str) -> bool {
+    matches!(
+        word,
+        "fund" | "make" | "get" | "put" | "take" | "give" | "have" | "do" | "see"
+            | "know" | "think" | "want" | "need" | "try" | "use" | "find" | "keep"
+            | "let" | "bring" | "buy" | "build" | "call" | "change" | "leave" | "move"
+            | "play" | "run" | "say" | "show" | "start" | "work"
+    )
+}
+
+fn is_article(word: &str) -> bool {
+    matches!(word, "a" | "an" | "the")
+}
+
+/* 标点模型偶尔在冠词、介词后硬断句，会得到「fund. A big trip」这种碎片。
+   这里只做低风险修补：虚词后不落句号，后一个词是连接词时也不落句号。 */
+fn repair_punctuation(tokens: &mut [String]) {
+    for i in 0..tokens.len() {
+        let base = base_word(&tokens[i]);
+        if ends_sentence(&tokens[i]) && is_stop_end(&base) {
+            strip_tail(&mut tokens[i], &['.', '!', '?']);
+            tokens[i].push(',');
+        } else if i + 1 < tokens.len() && ends_sentence(&tokens[i]) {
+            let next = base_word(&tokens[i + 1]);
+            // 及物动词后面直接跟冠词，多半是「fund. A big trip」这种误断。
+            if is_connector_start(&next) || (is_article(&next) && is_transitive_verb(&base)) {
+                strip_tail(&mut tokens[i], &['.', '!', '?']);
+                tokens[i].push(',');
+            }
+        }
+        // 冠词后面跟逗号也是碎片："A, big trip"。
+        if is_article(&base) {
+            strip_tail(&mut tokens[i], &[',', ';', ':']);
+        }
+    }
+}
+
+fn lower_first_alpha(text: &str) -> String {
+    let mut out = text.to_string();
+    if let Some((at, ch)) = text.char_indices().find(|(_, c)| c.is_ascii_alphabetic()) {
+        out.replace_range(at..at + 1, &ch.to_ascii_lowercase().to_string());
+    }
+    out
+}
+
+fn polish_tokens(tokens: &mut [String]) {
+    let mut capitalize = true;
+    for token in tokens.iter_mut() {
+        if token.is_empty() {
+            continue;
+        }
+        *token = fix_word_case(token);
+        *token = if capitalize { upper_first_alpha(token) } else { lower_first_alpha(token) };
+        // 句首大写会把 I'M 变 I'm，句中又会把 I'm 变 i'm；最后再兜一次 I 的规则。
+        *token = fix_word_case(token);
+        capitalize = ends_sentence(token);
+    }
+}
+
+fn build_doc(raw: &str, punct: Option<&Punct>) -> Result<Value, String> {
     let v: Value = serde_json::from_str(raw).map_err(|e| format!("识别结果解析失败：{e}"))?;
     let tokens = v
         .get("tokens")
@@ -365,40 +529,108 @@ fn build_doc(raw: &str) -> Result<Value, String> {
     // ASR 输出基本是大写；转成正常大小写，句首再大写。
     // 注意缩写里有撇号（IT'S / DON'T），只看字母是否全大写，别被标点骗过去。
     for w in &mut words {
-        let letters: Vec<char> = w.text.chars().filter(|c| c.is_ascii_alphabetic()).collect();
-        if letters.len() > 1 && letters.iter().all(|c| c.is_ascii_uppercase()) {
-            w.text = w.text.to_lowercase();
-        }
-        // 英文里的 I 永远大写：ASR 常吐 I'M / I'VE，统一小写后会变成句中的 i'm。
-        if w.text == "i" || w.text.starts_with("i'") {
-            w.text.replace_range(0..1, "I");
-        }
+        w.text = fix_word_case(&w.text);
     }
 
-    let mut segments: Vec<Value> = Vec::new();
+    /* 先按自然停顿切成 10 秒内的粗块，再交给标点模型补 , . ? !；
+       最后按句末标点重新断句。这样一段不会再从 0.3 秒横跨到 12.5 秒。 */
+    let mut chunks: Vec<(usize, usize)> = Vec::new();
     let mut start_idx = 0usize;
     for i in 1..=words.len() {
         let cut = i == words.len()
-            || words[i].start - words[i - 1].end > 1.2
-            || words[i].start - words[start_idx].start > 12.0
-            || i - start_idx >= 40;
+            || words[i].start - words[i - 1].end > 0.85
+            || words[i].start - words[start_idx].start > 10.0
+            || i - start_idx >= 30;
+        if cut {
+            chunks.push((start_idx, i));
+            start_idx = i;
+        }
+    }
+
+    let mut marked: Vec<(String, usize)> = Vec::new();
+    for (from, to) in chunks {
+        let chunk = &words[from..to];
+        let raw_text = chunk.iter().map(|w| w.text.as_str()).collect::<Vec<_>>().join(" ");
+        let mut tokens: Vec<String> = chunk.iter().map(|w| w.text.clone()).collect();
+        if let Some(p) = punct {
+            let marked_text = normalize_punct_text(&p.add(&raw_text));
+            let parts: Vec<String> = marked_text.split_whitespace().map(str::to_string).collect();
+            // 标点模型只插符号；词数对不上说明它改写了文本，宁可退回落稿也不要错位。
+            if parts.len() == tokens.len() {
+                tokens = parts;
+            }
+        }
+        for token in tokens.iter_mut() {
+            *token = fix_word_case(token);
+        }
+        // 先不修补，等所有粗块拼起来再统一修，才能看到跨块的下一词。
+        for (k, token) in tokens.into_iter().enumerate() {
+            marked.push((token, from + k));
+        }
+    }
+
+    let mut tokens: Vec<String> = marked.iter().map(|(t, _)| t.clone()).collect();
+    repair_punctuation(&mut tokens);
+
+    let mut segments: Vec<Value> = Vec::new();
+    let mut seg_start = 0usize;
+    for j in 1..=tokens.len() {
+        let cur_word = &words[marked[j - 1].1];
+        let span = cur_word.end - words[marked[seg_start].1].start;
+        let count = j - seg_start;
+        let sentence_end = ends_sentence(&tokens[j - 1]);
+        let clause_end = tokens[j - 1].ends_with([',', ';', ':']);
+        // 跨粗块的强停顿：除非上一词是逗号（句子还没说完），否则在这里断开。
+        let gap = if j < tokens.len() {
+            words[marked[j].1].start - cur_word.end
+        } else {
+            0.0
+        };
+        let hard = span > 11.0 || count >= 38;
+        let cut = j == tokens.len()
+            || sentence_end
+            || (gap > 0.85 && !clause_end)
+            || (clause_end && (span > 7.0 || count >= 24))
+            || hard;
         if !cut {
             continue;
         }
-        let chunk = &words[start_idx..i];
-        let start = chunk.first().map(|w| w.start).unwrap_or(0.0);
-        let end = chunk.last().map(|w| w.end).unwrap_or(start + 1.0);
-        let mut text = chunk
+        // 硬切后只剩一两个词会变成「Ledger.」这种孤零零的尾段；如果下一句马上结束，
+        // 就把它并进本段，宁可多零点几秒也不要留一个单词的碎段。
+        if hard && !sentence_end && j < tokens.len() {
+            let look = (j + 3).min(tokens.len());
+            if tokens[j..look].iter().any(|t| ends_sentence(t)) {
+                continue;
+            }
+            if tokens.len() - j <= 2 {
+                continue;
+            }
+        }
+        let mut piece = tokens[seg_start..j].to_vec();
+        if !ends_sentence(piece.last().map(String::as_str).unwrap_or("")) {
+            if piece.len() == 1 && piece[0].is_empty() {
+                continue;
+            }
+            if let Some(last) = piece.last_mut() {
+                // 模型没给句末标点时：自然停顿补句号，硬切补省略号表示被截断。
+                if sentence_end || j == tokens.len() || gap > 0.85 {
+                    last.push('.');
+                } else {
+                    last.push('…');
+                }
+            }
+        }
+        polish_tokens(&mut piece);
+        let start = words[marked[seg_start].1].start;
+        let end = cur_word.end;
+        let text = piece.join(" ");
+        let ws: Vec<Value> = piece
             .iter()
-            .map(|w| w.text.as_str())
-            .collect::<Vec<_>>()
-            .join(" ");
-        text = tidy_sentence(&text);
-        let ws: Vec<Value> = chunk
-            .iter()
-            .map(|w| {
+            .enumerate()
+            .map(|(k, token)| {
+                let w = &words[marked[seg_start + k].1];
                 json!([
-                    w.text,
+                    token,
                     (w.start * 1000.0).round() as i64,
                     ((w.end - w.start).max(0.02) * 1000.0).round() as i64
                 ])
@@ -410,7 +642,7 @@ fn build_doc(raw: &str) -> Result<Value, String> {
             "text": text,
             "words": ws,
         }));
-        start_idx = i;
+        seg_start = j;
     }
 
     let audio_seconds = words.last().map(|w| w.end).unwrap_or(0.0);
@@ -423,20 +655,6 @@ fn build_doc(raw: &str) -> Result<Value, String> {
     }))
 }
 
-fn tidy_sentence(text: &str) -> String {
-    let mut s = text.trim().to_string();
-    if s.is_empty() {
-        return s;
-    }
-    let first = s.chars().next().unwrap_or(' ');
-    if first.is_ascii_lowercase() {
-        s.replace_range(0..1, &first.to_ascii_uppercase().to_string());
-    }
-    if !s.ends_with(['.', '!', '?', '"', '\'']) {
-        s.push('.');
-    }
-    s
-}
 
 /// 单句精听：只解码 [start_s, end_s] 这段，用指定模型重跑一遍。
 /// 播放页在"听不清"的时候调用，返回带绝对时间的段落，便于直接贴在原句下面。
@@ -557,7 +775,7 @@ pub fn transcribe_clip(
     if std::env::var("MT_TRACE").is_ok() {
         let _ = std::fs::write("C:\\tmp\\localasr-clip-raw.json", raw.as_bytes());
     }
-    let mut doc = build_doc(&raw)?;
+    let mut doc = build_doc(&raw, None)?;
     let offset_ms = (start_s * 1000.0).round() as i64;
     if let Some(segs) = doc.get_mut("segments").and_then(Value::as_array_mut) {
         for seg in segs.iter_mut() {
@@ -580,4 +798,58 @@ pub fn transcribe_clip(
     }
     doc["clip"] = json!({ "start_ms": offset_ms, "end_ms": (end_s * 1000.0).round() as i64 });
     Ok(doc)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn polish_keeps_sentence_case_but_not_mid_sentence_caps() {
+        let mut tokens = vec![
+            "UD,".to_string(),
+            "HOW".to_string(),
+            "OTHER".to_string(),
+            "PEOPLE".to_string(),
+            "MANAGE".to_string(),
+            "THEIR".to_string(),
+            "MONEY.".to_string(),
+            "A".to_string(),
+            "NEW".to_string(),
+            "CAR.".to_string(),
+        ];
+        polish_tokens(&mut tokens);
+        assert_eq!(tokens[0], "Ud,");
+        assert_eq!(tokens[1], "how");
+        assert_eq!(tokens[6], "money.");
+        assert_eq!(tokens[7], "A");
+        assert_eq!(tokens[8], "new");
+        assert_eq!(tokens[9], "car.");
+    }
+
+    #[test]
+    fn repair_demotes_period_after_transitive_verb_before_article() {
+        let mut tokens = vec![
+            "TRYING".to_string(),
+            "TO".to_string(),
+            "FUND.".to_string(),
+            "A".to_string(),
+            "BIG".to_string(),
+            "TRIP.".to_string(),
+        ];
+        repair_punctuation(&mut tokens);
+        polish_tokens(&mut tokens);
+        assert_eq!(tokens[2], "fund,");
+        assert_eq!(tokens[3], "a");
+        assert_eq!(tokens[5], "trip.");
+    }
+
+    #[test]
+    fn build_doc_without_punct_still_splits_and_cases() {
+        let raw = r#"{"tokens":["▁IT","▁IS","▁OK."],"timestamps":[0.0,0.2,0.4]}"#;
+        let doc = build_doc(raw, None).expect("doc");
+        let segs = doc["segments"].as_array().expect("segments");
+        let text = segs[0]["text"].as_str().expect("text");
+        assert_eq!(text, "It is ok.");
+    }
 }

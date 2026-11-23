@@ -39,12 +39,12 @@ const LIVE = {
   engine: null, stream: null, session: 0,
   ctx: null, audioUrl: '', cbr: null, fail: 0, anchorMedia: 0, next: 0, fed: 0, lastTr: 0, pcm: null, pumpTimer: 0, pumpGen: 0, pumping: false, text: '',
   rows: new Map(), order: [], progressText: '', mode: 'idle', activeRow: '', cursor: 0,
-  mse: null, bytePos: 0, byteSec: 0,
+  mse: null, bytePos: 0, byteSec: 0, fseq: 0, net: { bytes: 0, reqs: 0 },
   prefetchWin: null, prefetching: false, prefetchQ: [], prefetchFrom: 0,
 };
 
 const ASR_MODEL_DEFAULT = 'en-mini';
-const prefs = { speed: 1, autoNext: false, remember: true, liveLead: LIVE_LEAD_DEFAULT, liveMse: false, volume: 1, volumeCap: 1, muted: false, asrModel: ASR_MODEL_DEFAULT, queueOrder: 'sequential', skipAds: false, skipLevel: 2, skipSilence: false, loudness: false, skipChapterAds: false, modules: { discover: true, search: true, local: true, inbox: true, queue: true, history: true, stats: true, favorites: true, bookmarks: true, notes: true, listening: true, video: true, transcript: true, liveAsr: true, translate: true, floatWindow: true, chapters: true, offline: true, exportShare: true, study: true } };
+const prefs = { speed: 1, autoNext: false, remember: true, liveLead: LIVE_LEAD_DEFAULT, liveMse: true, volume: 1, volumeCap: 1, muted: false, asrModel: ASR_MODEL_DEFAULT, queueOrder: 'sequential', skipAds: false, skipLevel: 2, skipSilence: false, loudness: false, skipChapterAds: false, modules: { discover: true, search: true, local: true, inbox: true, queue: true, history: true, stats: true, favorites: true, bookmarks: true, notes: true, listening: true, video: true, transcript: true, liveAsr: true, translate: true, floatWindow: true, chapters: true, offline: true, exportShare: true, study: true } };
 function replacePrefs(next) {
   const source = next && typeof next === 'object' ? next : {};
   for (const key of Object.keys(prefs)) delete prefs[key];

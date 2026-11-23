@@ -1,7 +1,7 @@
 import { $, ASR_MODEL_DEFAULT, LIVE_LEAD_DEFAULT, prefs, replacePrefs, setState, state } from './00-runtime.js';
 import { esc, fmt, getJson, loaderHTML, parseFeed, showToast } from './01-theme-reader-shell.js';
 import { CATALOG_TIMEOUT, smallArtwork, subtitlePluginOn } from './04-local-audio-plugin-host.js';
-import { AUTO_DEFAULTS, AUTO_KEY, BOOKMARK_KEY, FAV_KEY, INBOX_KEY, LOCAL_KEY, NOTE_KEY, PLAYED_KEY, PLAYLIST_KEY, PREFS_KEY, QUEUE_KEY, SEEN_KEY, SHOWPREFS_KEY, SUBS_KEY, absoluteFeed, absoluteUrl, app, applyVolume, cleanFeedTitle, findBuiltinByFeed, hash32, hostOf, navigate, normalizeFeedUrl, normalizeSidebarPrefs, plainText, readJSON, saveSubs, showByKey, syncDockSleep } from './05-transport-transcript-nav.js';
+import { AUTO_DEFAULTS, AUTO_KEY, BOOKMARK_KEY, FAV_KEY, INBOX_KEY, LOCAL_KEY, NOTE_KEY, PLAYED_KEY, PLAYLIST_KEY, PREFS_KEY, QUEUE_KEY, SEEN_KEY, SHOWPREFS_KEY, SUBS_KEY, absoluteFeed, absoluteUrl, app, applyVolume, cleanFeedTitle, findBuiltinByFeed, hash32, hostOf, navigate, normalizeFeedUrl, normalizeSidebarPrefs, plainText, readJSON, saveSubs, showByKey, syncDockSleep, writeJSON } from './05-transport-transcript-nav.js';
 
 import { lazyFn, registerLayer } from './00-layers.js';
 const addFeedFromUrl = lazyFn('10-desktop-bridge-tail', 'addFeedFromUrl');
@@ -72,7 +72,13 @@ function loadLocalState() {
   app.seen = readJSON(SEEN_KEY, {}) || {};
   app.showPrefs = readJSON(SHOWPREFS_KEY, {}) || {};
   app.local = readJSON(LOCAL_KEY, []) || [];
-  replacePrefs(Object.assign({ speed: 1, autoNext: false, remember: true, liveLead: LIVE_LEAD_DEFAULT, liveMse: false, volume: 1, muted: false, asrModel: ASR_MODEL_DEFAULT }, readJSON(PREFS_KEY, {}) || {}));
+  replacePrefs(Object.assign({ speed: 1, autoNext: false, remember: true, liveLead: LIVE_LEAD_DEFAULT, liveMse: true, volume: 1, muted: false, asrModel: ASR_MODEL_DEFAULT }, readJSON(PREFS_KEY, {}) || {}));
+  // 「单流播放」原来默认关闭、存在本地是 false。改成默认开启后老配置会一直沿用 false，
+  // 这里做一次性迁移：没写过这个标记就把它打开（之后再手动关掉照样生效）。
+  if (!readJSON('myt-liveMseOn', false)) {
+    prefs.liveMse = true;
+    writeJSON('myt-liveMseOn', true);
+  }
   prefs.modules = Object.assign({
     discover: true, search: true, local: true, inbox: true, queue: true, history: true,
     stats: true, favorites: true, bookmarks: true, notes: true, listening: true,

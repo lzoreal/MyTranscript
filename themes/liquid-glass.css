@@ -40,22 +40,29 @@ html[data-theme] body {
     linear-gradient(170deg, #070d1a 0%, #05080f 45%, #04060d 100%);
   background-attachment: fixed;
 }
-/* 光斑用 body 的两个伪元素铺满全屏：自定义主题不能插 JS，所以不依赖 DOM 层。 */
+/* 光斑用 body 的两个伪元素铺满全屏：自定义主题不能插 JS，所以不依赖 DOM 层。
+   实测（2026-11-22，Win11 + WebView2，10s 采样取中位数）：这层一旦「每帧有变化」——无论
+   是 transform 缩放（原 26s 呼吸，64px 模糊时 33% 单核）还是纯 opacity 呼吸（37%），都会
+   让上面一层层 backdrop-filter 面板逐帧重采背景，空闲 CPU 都吃三成以上；把动画彻底去掉后
+   降到 1.7%。所以这里只保留静态光斑：模糊只栅格一次，之后零成本。想加回呼吸必须先放弃
+   backdrop-filter，二者不能共存。 */
 html[data-theme] body::before {
-  content: ""; position: fixed; inset: -25vw; z-index: 0; pointer-events: none;
+  content: ""; position: fixed; inset: -6vw; z-index: 0; pointer-events: none;
   background:
     radial-gradient(38vw 38vw at 12vw 10vh, rgba(47, 123, 255, 0.42), transparent 62%),
     radial-gradient(34vw 34vw at 88vw 6vh, rgba(163, 92, 255, 0.36), transparent 64%),
     radial-gradient(30vw 30vw at 62vw 100vh, rgba(23, 214, 196, 0.22), transparent 66%);
-  filter: blur(64px); animation: lg-breathe 26s ease-in-out infinite alternate;
+  filter: blur(calc(40px * var(--lg-glass, 1))); opacity: var(--lg-glass, 1);
+  transform: translateZ(0);
 }
 html[data-theme] body::after {
-  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.14; mix-blend-mode: overlay;
+  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: calc(0.14 * var(--lg-glass, 1)); mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='120' height='120' filter='url(%23n)' opacity='0.5'/></svg>");
 }
-@keyframes lg-breathe {
-  from { transform: translate3d(0, 0, 0) scale(1); }
-  to { transform: translate3d(3vw, 2vh, 0) scale(1.08); }
+/* 呼吸动画已停用（见 body::before 注释）；保留关键帧定义给将来不带 backdrop-filter 的主题复用。 */
+@keyframes lg-glow {
+  from { opacity: 1; }
+  to { opacity: 0.72; }
 }
 /* ---------- 3. 外壳：浮岛侧栏 + 药丸顶栏 ---------- */
 html[data-theme] .app { background: transparent; grid-template-columns: 276px minmax(0, 1fr); color: var(--ink); }
@@ -67,7 +74,7 @@ html[data-theme] .sidebar {
   background:
     linear-gradient(152deg, rgba(255, 255, 255, 0.17) 0%, rgba(255, 255, 255, 0.05) 40%, rgba(8, 14, 26, 0.42) 100%),
     radial-gradient(120% 55% at 0% 0%, rgba(143, 227, 255, 0.16), transparent 62%);
-  backdrop-filter: blur(36px) saturate(185%); -webkit-backdrop-filter: blur(36px) saturate(185%);
+  backdrop-filter: blur(calc(36px * var(--lg-glass, 1))) saturate(185%); -webkit-backdrop-filter: blur(calc(36px * var(--lg-glass, 1))) saturate(185%);
   box-shadow: 0 34px 80px -34px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 -1px 0 rgba(255, 255, 255, 0.08);
 }
 
@@ -106,7 +113,7 @@ html[data-theme] .topbar {
   top: 14px; height: 64px; margin: 14px 0 0; padding: 0 12px 0 16px;
   border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 22px;
   background: linear-gradient(150deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.04) 55%, rgba(10, 16, 30, 0.22));
-  backdrop-filter: blur(30px) saturate(180%); -webkit-backdrop-filter: blur(30px) saturate(180%);
+  backdrop-filter: blur(calc(30px * var(--lg-glass, 1))) saturate(180%); -webkit-backdrop-filter: blur(calc(30px * var(--lg-glass, 1))) saturate(180%);
   box-shadow: 0 20px 50px -28px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 html[data-theme] .crumb b { letter-spacing: -0.01em; }
@@ -124,7 +131,7 @@ html[data-theme] .icon-btn:hover, html[data-theme] .rail-toggle:hover { backgrou
 html[data-theme] .theme-pop {
   border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.2);
   background: linear-gradient(160deg, rgba(30, 40, 62, 0.85), rgba(10, 16, 28, 0.92));
-  backdrop-filter: blur(26px) saturate(160%);
+  backdrop-filter: blur(calc(26px * var(--lg-glass, 1))) saturate(160%);
   box-shadow: 0 26px 60px -30px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 html[data-theme] .swatch { border-radius: 12px; }
@@ -141,7 +148,7 @@ html[data-theme] .ledger-mast {
     linear-gradient(150deg, rgba(255, 255, 255, 0.17) 0%, rgba(255, 255, 255, 0.05) 42%, rgba(9, 16, 30, 0.34) 100%),
     radial-gradient(90% 80% at 8% 0%, rgba(143, 227, 255, 0.16), transparent 60%);
   box-shadow: 0 46px 100px -46px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(255, 255, 255, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.55), inset 0 -1px 0 rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(30px) saturate(170%); -webkit-backdrop-filter: blur(30px) saturate(170%);
+  backdrop-filter: blur(calc(30px * var(--lg-glass, 1))) saturate(170%); -webkit-backdrop-filter: blur(calc(30px * var(--lg-glass, 1))) saturate(170%);
 }
 html[data-theme] .ledger-mast::before {
   content: ""; position: absolute; left: -30%; top: -70%; width: 70%; height: 150%;
@@ -173,7 +180,7 @@ html[data-theme] .ledger-search {
   border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 999px;
   background: rgba(5, 10, 20, 0.42);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 12px 30px -22px rgba(0, 0, 0, 0.9);
-  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(calc(14px * var(--lg-glass, 1))); -webkit-backdrop-filter: blur(calc(14px * var(--lg-glass, 1)));
 }
 html[data-theme] .ledger-search button {
   width: 38px; height: 38px; border: 0; border-radius: 50%; color: #06101c;
@@ -204,7 +211,7 @@ html[data-theme] .ledger-home .continue {
   border-radius: 28px;
   background: linear-gradient(145deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03) 60%, rgba(10, 18, 32, 0.3));
   box-shadow: 0 26px 60px -42px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.4);
-  backdrop-filter: blur(22px) saturate(160%); -webkit-backdrop-filter: blur(22px) saturate(160%);
+  backdrop-filter: blur(calc(22px * var(--lg-glass, 1))) saturate(160%); -webkit-backdrop-filter: blur(calc(22px * var(--lg-glass, 1))) saturate(160%);
   transition: transform 0.2s var(--ease), border-color 0.2s, box-shadow 0.2s;
 }
 html[data-theme] .ledger-home .continue:hover {
@@ -238,7 +245,7 @@ html[data-theme] .ledger-home .pod-card {
   border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 24px; padding: 12px;
   background: linear-gradient(160deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.025) 65%, rgba(10, 18, 32, 0.24));
   box-shadow: 0 22px 50px -40px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.28);
-  backdrop-filter: blur(16px) saturate(150%); -webkit-backdrop-filter: blur(16px) saturate(150%);
+  backdrop-filter: blur(calc(16px * var(--lg-glass, 1))) saturate(150%); -webkit-backdrop-filter: blur(calc(16px * var(--lg-glass, 1))) saturate(150%);
   transition: transform 0.18s var(--ease), border-color 0.18s, box-shadow 0.18s;
 }
 html[data-theme] .ledger-home .pod-card:hover {
@@ -265,7 +272,7 @@ html[data-theme] .card {
   border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 26px;
   background: linear-gradient(155deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03) 60%, rgba(10, 18, 32, 0.22));
   box-shadow: 0 30px 70px -50px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.3);
-  backdrop-filter: blur(18px) saturate(150%); -webkit-backdrop-filter: blur(18px) saturate(150%);
+  backdrop-filter: blur(calc(18px * var(--lg-glass, 1))) saturate(150%); -webkit-backdrop-filter: blur(calc(18px * var(--lg-glass, 1))) saturate(150%);
 }
 html[data-theme] .pod-card {
   border: 1px solid rgba(255, 255, 255, 0.13); border-radius: 20px;
@@ -301,7 +308,7 @@ html[data-theme] .mini-player {
   left: 258px; right: 20px; bottom: 14px; border-radius: 26px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: linear-gradient(160deg, rgba(40, 52, 76, 0.52), rgba(9, 14, 26, 0.74));
-  backdrop-filter: blur(30px) saturate(180%); -webkit-backdrop-filter: blur(30px) saturate(180%);
+  backdrop-filter: blur(calc(30px * var(--lg-glass, 1))) saturate(180%); -webkit-backdrop-filter: blur(calc(30px * var(--lg-glass, 1))) saturate(180%);
   box-shadow: 0 30px 74px -30px rgba(0, 4, 14, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 @media (max-width: 1180px) {
@@ -331,7 +338,7 @@ html[data-theme] body .dock {
   padding: 15px 26px 17px;
   border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 30px;
   background: linear-gradient(160deg, rgba(40, 52, 76, 0.58), rgba(10, 16, 28, 0.76));
-  backdrop-filter: blur(34px) saturate(190%); -webkit-backdrop-filter: blur(34px) saturate(190%);
+  backdrop-filter: blur(calc(34px * var(--lg-glass, 1))) saturate(190%); -webkit-backdrop-filter: blur(calc(34px * var(--lg-glass, 1))) saturate(190%);
   box-shadow: 0 40px 90px -30px rgba(0, 4, 14, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.42), inset 0 -1px 0 rgba(255, 255, 255, 0.06);
 }
 /* 字幕页/播放页（停靠态）：内置样式会把整条摊成 left:0/width:100% 贴底满宽，
@@ -361,7 +368,7 @@ html[data-theme] .dockicon, html[data-theme] .dockquickbtn { border-radius: 999p
 html[data-theme] .docksheet {
   border-radius: 24px; border: 1px solid rgba(255, 255, 255, 0.18);
   background: linear-gradient(165deg, rgba(32, 44, 66, 0.82), rgba(10, 16, 28, 0.9));
-  backdrop-filter: blur(30px) saturate(170%);
+  backdrop-filter: blur(calc(30px * var(--lg-glass, 1))) saturate(170%);
 }
 
 /* ---------- 7. 播放页与阅读区 ---------- */
@@ -369,11 +376,11 @@ html[data-theme] .reader { background: transparent; }
 html[data-theme] body.player-open .reader-top-actions {
   background: linear-gradient(150deg, rgba(255, 255, 255, 0.12), rgba(10, 16, 30, 0.5));
   border-bottom: 1px solid rgba(255, 255, 255, 0.14);
-  backdrop-filter: blur(28px) saturate(170%);
+  backdrop-filter: blur(calc(28px * var(--lg-glass, 1))) saturate(170%);
 }
 html[data-theme] .reader-rail {
   background: rgba(9, 14, 26, 0.82); border-color: rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(26px) saturate(160%);
+  backdrop-filter: blur(calc(26px * var(--lg-glass, 1))) saturate(160%);
 }
 html[data-theme] .transcript { background: transparent; }
 html[data-theme] .cue .words, html[data-theme] .cue-line { color: #dce7fb; }
@@ -419,7 +426,7 @@ html[data-theme] #page-stats .page-head {
     radial-gradient(560px 200px at 92% -40%, rgba(201, 180, 255, 0.22), transparent 72%),
     linear-gradient(150deg, rgba(255, 255, 255, 0.1), rgba(9, 15, 27, 0.42));
   box-shadow: 0 34px 80px -54px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.34);
-  backdrop-filter: blur(26px) saturate(170%); -webkit-backdrop-filter: blur(26px) saturate(170%);
+  backdrop-filter: blur(calc(26px * var(--lg-glass, 1))) saturate(170%); -webkit-backdrop-filter: blur(calc(26px * var(--lg-glass, 1))) saturate(170%);
 }
 html[data-theme] #page-stats .page-head .eyebrow { color: var(--accent); letter-spacing: 0.3em; }
 html[data-theme] #page-stats .page-head h1 {
@@ -439,7 +446,7 @@ html[data-theme] #page-stats .stat {
   border: 1px solid rgba(255, 255, 255, 0.16);
   background: linear-gradient(155deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03) 62%, rgba(10, 18, 32, 0.3));
   box-shadow: 0 26px 60px -46px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.32);
-  backdrop-filter: blur(20px) saturate(160%); -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(calc(20px * var(--lg-glass, 1))) saturate(160%); -webkit-backdrop-filter: blur(calc(20px * var(--lg-glass, 1))) saturate(160%);
   transition: transform 0.28s var(--ease), border-color 0.28s var(--ease);
 }
 html[data-theme] #page-stats .stat:before {
@@ -493,7 +500,7 @@ html[data-theme] #page-stats .stats-year-head {
     radial-gradient(620px 240px at 78% -40%, rgba(201, 180, 255, 0.26), transparent 72%),
     linear-gradient(160deg, rgba(255, 255, 255, 0.075), rgba(8, 13, 24, 0.5));
   box-shadow: 0 34px 80px -54px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.28);
-  backdrop-filter: blur(26px) saturate(160%); -webkit-backdrop-filter: blur(26px) saturate(160%);
+  backdrop-filter: blur(calc(26px * var(--lg-glass, 1))) saturate(160%); -webkit-backdrop-filter: blur(calc(26px * var(--lg-glass, 1))) saturate(160%);
 }
 html[data-theme] #page-stats .year-title {
   font-size: 40px; line-height: 1; letter-spacing: -1.6px; margin: 6px 0 8px;
@@ -532,7 +539,7 @@ html[data-theme] .wp-word.past { color: #ffffff; }
 html[data-theme] .wp-word.active { color: rgba(255,255,255,.96); background-image: linear-gradient(180deg, transparent 58%, rgba(143,227,255,.42) 58%, rgba(201,180,255,.22) 94%, transparent 94%); text-shadow: 0 0 26px rgba(143,227,255,.5); border-radius:4px; }
 html[data-theme] .wp-zh { color: rgba(199,214,240,.72); font-weight:400; }
 html[data-theme] .wp-label { color: rgba(199,214,240,.5); }
-html[data-theme] .wpbtn { background: linear-gradient(160deg, rgba(40,52,76,.6), rgba(9,14,26,.78)); border-color: rgba(255,255,255,.2); color: #eef4ff; border-radius:999px;backdrop-filter:blur(26px) saturate(180%);-webkit-backdrop-filter:blur(26px) saturate(180%);box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 20px 46px -24px rgba(0,4,14,.95); }
+html[data-theme] .wpbtn { background: linear-gradient(160deg, rgba(40,52,76,.6), rgba(9,14,26,.78)); border-color: rgba(255,255,255,.2); color: #eef4ff; border-radius:999px;backdrop-filter:blur(calc(26px * var(--lg-glass, 1))) saturate(180%);-webkit-backdrop-filter:blur(calc(26px * var(--lg-glass, 1))) saturate(180%);box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 20px 46px -24px rgba(0,4,14,.95); }
 html[data-theme] .wpbtn:hover { background: linear-gradient(160deg, rgba(60,74,104,.72), rgba(14,22,40,.86)); border-color: rgba(143,227,255,.55); color: #ffffff; }
 html[data-theme] .wp-shade::after { background: radial-gradient(58% 52% at 62% 56%, rgba(143,227,255,.12), transparent 72%); }
 
@@ -542,7 +549,7 @@ html[data-theme] .docksheet { border-radius: 26px; }
 html[data-theme] .dstile {
   background: linear-gradient(165deg, rgba(255,255,255,.1), rgba(255,255,255,.028));
   border: 1px solid rgba(255,255,255,.17); border-radius: 18px;
-  backdrop-filter: blur(20px) saturate(165%); -webkit-backdrop-filter: blur(20px) saturate(165%);
+  backdrop-filter: blur(calc(20px * var(--lg-glass, 1))) saturate(165%); -webkit-backdrop-filter: blur(calc(20px * var(--lg-glass, 1))) saturate(165%);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 16px 34px -26px rgba(0,4,14,.95);
 }
 html[data-theme] .dstile:hover {
@@ -553,8 +560,35 @@ html[data-theme] .dstile[aria-pressed="true"], html[data-theme] .dstile[aria-exp
   border-color: var(--accent); background: linear-gradient(165deg, rgba(143,227,255,.16), rgba(201,180,255,.08));
 }
 html[data-theme] .dspill { border-radius: 999px; background: linear-gradient(165deg, rgba(255,255,255,.08), rgba(255,255,255,.02)); border-color: rgba(255,255,255,.16); }
-html[data-theme] .dsrange::-webkit-slider-runnable-track { height: 6px; border-radius: 999px; background: linear-gradient(90deg, rgba(143,227,255,.55), rgba(201,180,255,.35)); }
-html[data-theme] .dsrange::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #eaf6ff; box-shadow: 0 0 0 6px rgba(143,227,255,.18), 0 0 18px rgba(143,227,255,.5); }
+html[data-theme] .dsrange {
+  /* 自绘轨道只有 6px 高，元素跟着塌到 6px 会让 14px 的拇指大半落在点击区外，
+     拖音量时点不中。只在本主题把命中区撑到 18px，其它主题走原生轨道不动。
+     原生外观必须一起关掉：只画伪元素、留着 appearance 的话，Chromium 会把自己那套
+     凹槽叠在我们自绘的轨道上——100% 时右端露出一截灰底、拇指还会掉到轨道下方。 */
+  -webkit-appearance: none; appearance: none;
+  height: 18px; background: transparent;
+}
+html[data-theme] .dsrange::-webkit-slider-runnable-track {
+  /* 不要给轨道加 margin：Chromium 按轨道盒摆放拇指，一加偏移拇指就跟着掉下去。
+     轨道自己在 18px 的命中区里垂直居中，拇指靠下面的 margin-top 对齐到轨道中心。 */
+  height: 6px; border-radius: 999px;
+  /* 填充按 --vol-fill 走（脚本写的 0%–100%）：静音/0% 时是 0 长，不留一截亮片；
+     100% 时正好铺满整条轨道，不留灰尾巴。中段按比例填、拇指按「(轨宽-拇指宽)×比例」
+     走，两者最多差半个拇指（7px），始终被 14px 的拇指圆盖住，不会露出半截空轨。 */
+  background:
+    linear-gradient(90deg, #9fe8ff, #c9b4ff) left center / var(--vol-fill, 100%) 100% no-repeat,
+    rgba(255,255,255,.1);
+}
+html[data-theme] .dsrange::-webkit-slider-thumb {
+  /* margin-top = (轨道 6px - 拇指 14px)/2：WebKit 默认把拇指的顶边贴着轨道摆放，
+     不补这一格拇指就悬在轨道下面。 */
+  -webkit-appearance: none; appearance: none;
+  width: 14px; height: 14px; margin-top: -4px; border-radius: 50%;
+  background: #eaf6ff; box-shadow: 0 0 0 6px rgba(143,227,255,.18), 0 0 18px rgba(143,227,255,.5);
+}
+html[data-theme] .dsrange::-moz-range-track { height: 6px; border-radius: 999px; background: rgba(255,255,255,.1); }
+html[data-theme] .dsrange::-moz-range-progress { height: 6px; border-radius: 999px; background: linear-gradient(90deg, #9fe8ff, #c9b4ff); }
+html[data-theme] .dsrange::-moz-range-thumb { width: 14px; height: 14px; border: 0; border-radius: 50%; background: #eaf6ff; box-shadow: 0 0 0 6px rgba(143,227,255,.18); }
 
 /* ---------- 15. 细节收尾：数字对齐、按下反馈、键盘焦点 ---------- */
 /* 单集列表里的时长/时间点原来是比例数字，换行后小数点对不齐；等宽数字让 12:04 和
@@ -596,3 +630,10 @@ html[data-theme] :where(button, [role="button"], [role="tab"], a[href]):focus-vi
     transform: none !important;
   }
 }
+
+/* ---------- 12. 失焦降级（decor-idle） ----------
+   降级不靠关属性，而是把「玻璃强度」收敛成一个可插值的比例 --lg-glass：
+   面板的 blur 半径写成 calc(半径 * var(--lg-glass))，光斑的模糊与透明度也乘它。
+   不在前台时宿主把 --lg-glass 置 0（模糊 0 + 光斑透明，等于不采样背景）；回前台
+   它从 0 → 1 过渡 280ms，毛玻璃是「长出来」的，不是硬闪一下——这就是过渡的来源，
+   见 site/player.css 里的 @property 与 transition。 */

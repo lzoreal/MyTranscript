@@ -3,13 +3,14 @@ import { PROGRESS_KEY, applyCustomTheme, applyReader, closeOverlays, epKey, esc,
 import { coreProvider, defineCoreProvider, liveMseStop, liveUpdateMeter } from './02-live-caption-wasm.js';
 import { selectEpisode } from './03-native-asr-service-worker.js';
 import { clearPluginConsent, clipNow, emitPlugin, loadShow, pluginDiagnosticsText, pluginPlayerState, refreshPluginSettings, registerStudyUiHook, reloadPlugins, smallArtwork, startLocalTranscribe, subtitlePluginOn } from './04-local-audio-plugin-host.js';
-import { BOOKMARK_KEY, LOCAL_KEY, NOTE_KEY, PREFS_KEY, absoluteUrl, addInboxItem, addToPlaylistDialog, app, applyLoudness, applyRate, applyVolume, cancelAsrModel, catalogLatest, cleanFeedTitle, cleanWord, closeDockSheet, closeWordPanel, dockSheet, downloadEpisode, ensureAudioGraph, episodesOf, extSlug, findBuiltinByFeed, fmtBytes, formatDate, hash32, hostOf, idxClear, importAsrModel, inboxRemove, indexAllShows, indexCurrentShow, installAsrModel, isFavorite, isPlayed, isSubscribed, navigate, normalizeFeedUrl, offlineEntries, offlineKeyFor, offlineLabel, openAsrDir, paintAsrSoon, pickAsrModel, playOffline, playPlaylist, readAllProgress, refreshAsrModels, refreshOffline, refreshShows, removeAsrModel, removeOffline, removePlaylist, renderAfterStateChange, renderDownloads, renderOfflineList, resolveOfflineRef, routeHash, saveFavorites, saveInbox, savePlayed, saveSeen, saveShowPrefs, saveSubs, seekChapter, setPlayed, setShowPref, showByKey, showPrefFor, subscribeRecord, subscribeShow, syncDockSleep, syncIndexCount, toggleChapterSheet, toggleFavorite, unsubscribeKey, wordCurrentMeaning, writeJSON } from './05-transport-transcript-nav.js';
+import { BOOKMARK_KEY, LOCAL_KEY, NOTE_KEY, PREFS_KEY, absoluteUrl, addInboxItem, addToPlaylistDialog, app, applyLoudness, applyRate, applyVolume, cancelAsrModel, catalogLatest, cleanFeedTitle, cleanWord, closeDockSheet, closeWordPanel, dockSheet, downloadEpisode, ensureAudioGraph, episodesOf, extSlug, findBuiltinByFeed, fmtBytes, formatDate, hash32, hostOf, idxClear, importAsrModel, inboxRemove, indexAllShows, indexCurrentShow, installAsrModel, isFavorite, isPlayed, isSubscribed, navigate, notifyPlayTargetFailure, normalizeFeedUrl, offlineEntries, offlineKeyFor, offlineLabel, openAsrDir, paintAsrSoon, pickAsrModel, playOffline, playPlaylist, playTarget, purgeLocalReferences, readAllProgress, refreshAsrModels, refreshOffline, refreshShows, removeAsrModel, removeOffline, removePlaylist, renderAfterStateChange, renderDownloads, renderOfflineList, resolveOfflineRef, routeHash, saveFavorites, saveInbox, savePlayed, saveSeen, saveShowPrefs, saveSubs, seekChapter, setPlayed, setShowPref, showByKey, showPrefFor, subscribeRecord, subscribeShow, syncDockSleep, syncIndexCount, toggleChapterSheet, toggleFavorite, unsubscribeKey, wordCurrentMeaning, writeJSON } from './05-transport-transcript-nav.js';
 import { ONLINE_PAGE, checkSubscriptions, copyText, coverHTML, downloadFile, ensureShowFeed, exportOpml, exportSubtitle, feedCachePut, fetchFeedText, hasFreshFeed, loadLocalState, openOnlineDetail, parseOpml, rememberFeed, renderOnlineResults, runOnlineSearch, subscribeFromOnline } from './06-catalog-feeds-search.js';
 import { LISTEN_APPEARANCE, LISTEN_CONTINUE, addToQueue, applyRoute, importLocalFolder, openPlayerRoute, renderAutoSettings, renderBookmarks, renderDiscover, renderEcho, renderHistory, renderHome, renderInbox, renderLibrary, renderListening, renderLocal, renderNotes, renderPodcast, renderQueue, renderSearch, saveQueue, searchTab, setSearchTab } from './07-routes-pages.js';
 import { openSettingsPane, renderSidebarSettings, resetSidebarSettings, saveStudyCache, studyAddVocab, studyCache, studyChat, studyClockSeconds, studyCueBounds, studyCurrentCue, studyDueItems, studyExportCsv, studyLangName, studyMarkWord, studyOpenEpisodeSummary, studyParseJson, studyPlayRange, studyReady, studyRenderEpisode, studyRenderPractice, studyStats, studyView, studyVocab, syncThemeSwatches } from './08-study-ai.js';
 import { currentPlaylist, nextTarget, stepEpisode, syncBookmarkBtn, syncMini, toggleBookmarkCue, toggleMiniCaption } from './09-player-integration.js';
 import { registerLayer } from './00-layers.js';
 import { motionCancel, motionEnter, motionLeave } from './11-motion.js';
+import { pause as transportPause, play as transportPlay, rate as transportRate, toggle as transportToggle } from './14-transport.js';
 /* layer: bridge —— MediaSession、托盘、迷你窗、IIFE 收尾
    本片只做该层的事，跨层调用走 kernel / host() / setState。 */
 /* 桌面壳桥：系统媒体控件（MediaSession）、托盘菜单、独立迷你窗。
@@ -30,9 +31,9 @@ import { motionCancel, motionEnter, motionLeave } from './11-motion.js';
   let msKey = '';
   if (ms) {
     const bind = (action, fn) => { try { ms.setActionHandler(action, fn); } catch (e) {} };
-    bind('play', () => { if (state.current) audio.play().catch(() => {}); });
-    bind('pause', () => audio.pause());
-    bind('stop', () => audio.pause());
+    bind('play', () => { if (state.current) transportPlay(); });
+    bind('pause', () => transportPause());
+    bind('stop', () => transportPause());
     bind('seekbackward', (d) => jump(-Math.max(1, (d && d.seekOffset) || 10)));
     bind('seekforward', (d) => jump(Math.max(1, (d && d.seekOffset) || 30)));
     bind('previoustrack', () => stepEpisode(-1));
@@ -96,6 +97,20 @@ import { motionCancel, motionEnter, motionLeave } from './11-motion.js';
     const list = currentPlaylist();
     const index = list.findIndex((item) => item.id === state.current.id);
     const img = state.current.img || state.show?.artwork || '';
+    // 迷你窗跟着主窗主题走：把当前这套令牌原样推过去，那边只赋值。
+    let theme = null;
+    try {
+      const cs = getComputedStyle(document.documentElement);
+      theme = {
+        bg: cs.getPropertyValue('--bg').trim(),
+        panel: cs.getPropertyValue('--panel').trim(),
+        ink: cs.getPropertyValue('--ink').trim(),
+        muted: cs.getPropertyValue('--muted').trim(),
+        accent: cs.getPropertyValue('--accent').trim(),
+        line: cs.getPropertyValue('--line').trim(),
+        scheme: document.documentElement.dataset.scheme || 'dark',
+      };
+    } catch (e) { theme = null; }
     try {
       T.event.emit('myt://mini-state', {
         title: state.current.title || '(无标题)',
@@ -109,12 +124,14 @@ import { motionCancel, motionEnter, motionLeave } from './11-motion.js';
         cap,
         capZh,
         capLive,
+        steps: { back: 15, fwd: 30 },
+        theme,
       });
     } catch (e) {}
   }
   T.event.listen('myt://mini-cmd', (ev) => {
     const p = ev.payload || {};
-    if (p.cmd === 'toggle') { audio.paused ? audio.play().catch(() => {}) : audio.pause(); }
+    if (p.cmd === 'toggle') { transportToggle(); }
     else if (p.cmd === 'prev') stepEpisode(-1);
     else if (p.cmd === 'next') stepEpisode(1);
     else if (p.cmd === 'seekRel') jump(Number(p.value) || 0);
@@ -127,7 +144,7 @@ import { motionCancel, motionEnter, motionLeave } from './11-motion.js';
   // 3) 托盘菜单：播放控制统一交给前端执行，壳层不另存一份状态。
   T.event.listen('myt://tray', (ev) => {
     const cmd = String(ev.payload || '');
-    if (cmd === 'play') { audio.paused ? audio.play().catch(() => {}) : audio.pause(); }
+    if (cmd === 'play') { transportToggle(); }
     else if (cmd === 'prev') stepEpisode(-1);
     else if (cmd === 'next') stepEpisode(1);
     else if (cmd === 'mini') { if (T.core && T.core.invoke) T.core.invoke('open_mini'); }
@@ -135,7 +152,7 @@ import { motionCancel, motionEnter, motionLeave } from './11-motion.js';
   // 键盘媒体键（桌面壳注册全局热键后转发）
   T.event.listen('myt://media', (ev) => {
     const cmd = String(ev.payload || '');
-    if (cmd === 'playpause') { audio.paused ? audio.play().catch(() => {}) : audio.pause(); }
+    if (cmd === 'playpause') { transportToggle(); }
     else if (cmd === 'prev') stepEpisode(-1);
     else if (cmd === 'next') stepEpisode(1);
   });
@@ -154,7 +171,7 @@ function startSleepTimer() {
   app.sleepTimer = setInterval(() => {
     if (dockSheet.classList.contains('on')) syncDockSleep();
     if (app.sleepUntil && Date.now() >= app.sleepUntil) {
-      audio.pause();
+      transportPause();
       app.sleepUntil = 0;
       clearInterval(app.sleepTimer); app.sleepTimer = 0;
       saveSleep(); renderListening();
@@ -256,6 +273,9 @@ function openModal(html) {
     modal.setAttribute('aria-label', '对话框');
   }
   if (!modal.open) modal.showModal();
+  // 打开后焦点落在对话框本身（带 aria-labelledby），而不是右上角那个 28×28 的关闭按钮；
+  // 否则一进来最重的视觉元素就是 ✕ 的焦点环。
+  try { card.setAttribute('tabindex', '-1'); card.focus({ preventScroll: true }); } catch (e) {}
   motionCancel(modal);
 }
 function closeModal() {
@@ -578,23 +598,38 @@ async function autoCleanup() {
 function savePrefs() { writeJSON(PREFS_KEY, prefs); }
 /* 播放接缝：插件可以覆盖 play()（比如换播放器内核），不覆盖时就是原行为。 */
 defineCoreProvider('playback', { play: (key, epId, time) => defaultPlayEpisode(key, epId, time) });
-function playEpisode(key, epId, time) { return coreProvider('playback').play(key, epId, time); }
+function playEpisode(key, epId, time) {
+  const target = playTarget(key, epId);
+  if (!target.ok) {
+    app.autoplay = false;
+    notifyPlayTargetFailure(target);
+    return false;
+  }
+  return coreProvider('playback').play(key, epId, time);
+}
 function defaultPlayEpisode(key, epId, time) {
-  if (!key || !epId) return;
+  if (!key || !epId) { app.autoplay = false; notifyPlayTargetFailure({ reason: 'no-id' }); return false; }
   app.autoplay = true;
   if (Number(time) > 0) { app.pendingSeek = Number(time); app.pendingSeekEp = epId; }
   // 没有字幕插件时保持最原生的列表/单集页：点播放只在原地开始音频，
   // 由迷你播放器接管控制，不强制跳进全屏播放页。
   if (!subtitlePluginOn()) {
     const show = showByKey(key);
-    if (!show) { app.autoplay = false; return; }
+    if (!show) { app.autoplay = false; notifyPlayTargetFailure(playTarget(key, epId)); return false; }
     if (state.show?.slug === show.slug && state.current?.id === epId && (audio.currentSrc || audio.getAttribute('src'))) {
       if (Number(time) > 0) seekTo(Number(time));
       audio.play().catch(() => {});
-      return;
+      return true;
     }
-    loadShow(show.slug, epId).catch(() => { app.autoplay = false; });
-    return;
+    loadShow(show.slug, epId, { strict: true }).then(loaded => {
+      if (loaded) return;
+      app.autoplay = false;
+      notifyPlayTargetFailure({ reason: show.local ? 'local-removed' : 'episode-missing' });
+    }).catch(err => {
+      app.autoplay = false;
+      showToast('这一集打不开：' + (err && err.message ? err.message : err), 7000);
+    });
+    return true;
   }
   if (document.body.classList.contains('player-open')) {
     const wanted = routeHash('player', [key, epId], Number(time) > 0 ? { t: Number(time) } : {});
@@ -603,8 +638,16 @@ function defaultPlayEpisode(key, epId, time) {
   } else {
     navigate('player', [key, epId], Number(time) > 0 ? { t: Number(time) } : {});
   }
+  return true;
 }
 function closeThemePop() { const pop = $('themePop'); if (pop) motionLeave(pop); }
+/* 这些动作都要求 key+ep 真实存在。统一在事件入口校验一次，
+   否则历史/队列/收藏里的孤儿记录会静默失败，用户只看到“点了没反应”。 */
+const PLAY_TARGET_ACTIONS = new Set([
+  'playEpisode', 'resume', 'queueEpisode', 'listEpisode', 'openEpisode',
+  'aiEpisode', 'copyLink', 'offlineEpisode', 'localAsr',
+]);
+function cleanupCount(stats) { return Object.values(stats || {}).reduce((sum, n) => sum + (Number(n) || 0), 0); }
 function bindShell() {
   if (app.initialized) return;
   app.initialized = true;
@@ -624,7 +667,7 @@ function bindShell() {
     if (el.dataset.showSpeed) {
       const value = Number(el.value) || 1;
       setShowPref(el.dataset.showSpeed, { speed: value });
-      if (state.show?.slug === el.dataset.showSpeed) audio.playbackRate = value;
+      if (state.show?.slug === el.dataset.showSpeed) transportRate(value);
       showToast('这档节目的默认速度已设为 ' + value + '×。', 2500);
       return;
     }
@@ -642,21 +685,38 @@ function bindShell() {
   });
 
   document.addEventListener('click', event => {
-    const el = event.target.closest('[data-route],[data-open-podcast],[data-open-episode],[data-play-episode],[data-queue-episode],[data-list-episode],[data-offline-episode],[data-offline-transcript],[data-ai-episode],[data-play-playlist],[data-del-playlist],[data-play-offline],[data-del-offline],[data-chapter],[data-resume],[data-sub-toggle],[data-remove-sub],[data-copy-feed],[data-copy-link],[data-load-full],[data-remove-queue],[data-del-bookmark],[data-del-note],[data-cue-seek],[data-appearance],[data-continue],[data-sleep],[data-asr-pick],[data-asr-install],[data-asr-remove],[data-asr-cancel],[data-asr-open],[data-feed-tab],[data-close-modal],[data-action],[data-online-builtin],[data-online-open],[data-online-subscribe],[data-online-detail],[data-retry-online],[data-online-chip],[data-online-more],[data-ep-filter],[data-fav-episode],[data-played-episode],[data-inbox-remove],[data-inbox-played],[data-show-auto],[data-show-notify],[data-del-local],[data-open-video],[data-index-jump],[data-open-video-ep],[data-export-sub],[data-local-asr],[data-video-resume]');
+    const el = event.target.closest('[data-route],[data-pane],[data-open-podcast],[data-open-episode],[data-play-episode],[data-queue-episode],[data-list-episode],[data-offline-episode],[data-offline-transcript],[data-retry-offline],[data-ai-episode],[data-play-playlist],[data-del-playlist],[data-play-offline],[data-del-offline],[data-chapter],[data-resume],[data-sub-toggle],[data-remove-sub],[data-copy-feed],[data-copy-link],[data-load-full],[data-remove-queue],[data-del-bookmark],[data-del-note],[data-cue-seek],[data-appearance],[data-continue],[data-sleep],[data-asr-pick],[data-asr-install],[data-asr-remove],[data-asr-cancel],[data-asr-open],[data-feed-tab],[data-close-modal],[data-action],[data-online-builtin],[data-online-open],[data-online-subscribe],[data-online-detail],[data-retry-online],[data-online-chip],[data-online-more],[data-ep-filter],[data-fav-episode],[data-played-episode],[data-inbox-remove],[data-inbox-played],[data-show-auto],[data-show-notify],[data-del-local],[data-open-video],[data-index-jump],[data-open-video-ep],[data-export-sub],[data-local-asr],[data-video-resume],[data-onboard-skip]');
     if (!el) return;
+    if (el.dataset.key && el.dataset.ep && [...PLAY_TARGET_ACTIONS].some(attr => el.dataset[attr] !== undefined)) {
+      const target = playTarget(el.dataset.key, el.dataset.ep);
+      if (!target.ok) {
+        event.preventDefault();
+        event.stopPropagation();
+        notifyPlayTargetFailure(target);
+        return;
+      }
+    }
     if (el.dataset.route) { navigate(el.dataset.route); return; }
+    if (el.dataset.onboardSkip !== undefined) {
+      try { localStorage.setItem('myt-onboard-done', '1'); } catch (e) {}
+      const onboard = $('homeOnboard');
+      if (onboard) { onboard.hidden = true; onboard.innerHTML = ''; }
+      showToast('已收起引导，随时可以从左上角继续。');
+      return;
+    }
+    if (el.dataset.pane) { openSettingsPane(el.dataset.pane); return; }
     if (el.dataset.exportSub) { closeModal(); exportSubtitle(el.dataset.exportSub); return; }
     if (el.dataset.videoResume !== undefined) { setState('videoEp', null); navigate('video'); return; }
     if (el.dataset.openVideo) { setState('videoId', el.dataset.openVideo); setState('videoEp', null); navigate('video'); return; }
     if (el.dataset.openVideoEp !== undefined) {
-      const show = showByKey(el.dataset.key);
-      const ep = episodesOf(show).find(item => item.id === el.dataset.ep);
-      if (show && ep && ep.videoUrl) {
-        setState('videoEp', { ...ep, showName: show.name, videoUrl: ep.videoUrl });
-        setState('videoId', '');
-        writeJSON('myt-video-ep', { ...ep, showName: show.name, videoUrl: ep.videoUrl });
-        navigate('video');
-      }
+      const target = playTarget(el.dataset.key, el.dataset.ep);
+      if (!target.ok) { notifyPlayTargetFailure(target); return; }
+      const ep = target.ep || episodesOf(target.show).find(item => item.id === el.dataset.ep);
+      if (!ep || !ep.videoUrl) { showToast('这一集没有可播放的视频。', 6000); return; }
+      setState('videoEp', { ...ep, showName: target.show.name, videoUrl: ep.videoUrl });
+      setState('videoId', '');
+      writeJSON('myt-video-ep', { ...ep, showName: target.show.name, videoUrl: ep.videoUrl });
+      navigate('video');
       return;
     }
     if (el.dataset.indexJump !== undefined) {
@@ -704,9 +764,10 @@ function bindShell() {
     }
     if (el.dataset.queueEpisode !== undefined) {
       event.stopPropagation();
-      const show = showByKey(el.dataset.key);
-      const ep = show ? episodesOf(show).find(item => item.id === el.dataset.ep) : null;
-      if (show && ep) addToQueue(show, ep);
+      const target = playTarget(el.dataset.key, el.dataset.ep);
+      if (!target.ok) { notifyPlayTargetFailure(target); return; }
+      if (!target.ep) { showToast('这一集暂时找不到，无法加入队列。', 6000); return; }
+      addToQueue(target.show, target.ep);
       return;
     }
     if (el.dataset.epFilter) {
@@ -717,6 +778,11 @@ function bindShell() {
     }
     if (el.dataset.favEpisode !== undefined) {
       event.stopPropagation();
+      const wasFavorite = isFavorite(el.dataset.key, el.dataset.ep);
+      if (!wasFavorite) {
+        const target = playTarget(el.dataset.key, el.dataset.ep);
+        if (!target.ok) { notifyPlayTargetFailure(target); return; }
+      }
       const on = toggleFavorite(el.dataset.key, el.dataset.ep);
       showToast(on ? '已收藏这一集。' : '已取消收藏。', 2500);
       renderAfterStateChange();
@@ -724,7 +790,12 @@ function bindShell() {
     }
     if (el.dataset.playedEpisode !== undefined) {
       event.stopPropagation();
-      setPlayed(el.dataset.key, el.dataset.ep, !isPlayed(el.dataset.key, el.dataset.ep));
+      const wasPlayed = isPlayed(el.dataset.key, el.dataset.ep);
+      if (!wasPlayed) {
+        const target = playTarget(el.dataset.key, el.dataset.ep);
+        if (!target.ok) { notifyPlayTargetFailure(target); return; }
+      }
+      setPlayed(el.dataset.key, el.dataset.ep, !wasPlayed);
       return;
     }
     if (el.dataset.inboxRemove !== undefined) {
@@ -762,18 +833,41 @@ function bindShell() {
     }
     if (el.dataset.delLocal !== undefined) {
       event.stopPropagation();
-      app.local = app.local.filter(ep => ep.id !== el.dataset.delLocal);
+      const id = el.dataset.delLocal;
+      const wasCurrent = !!state.show?.local && state.current?.id === id;
+      if (wasCurrent) {
+        app.autoplay = false;
+        setState('current', null);
+        audio.pause();
+        audio.removeAttribute('src');
+        audio.load();
+        syncMini();
+      }
+      const stats = purgeLocalReferences([id]);
+      app.local = app.local.filter(ep => ep.id !== id);
       writeJSON(LOCAL_KEY, app.local);
       refreshShows();
       renderLocal();
+      showToast('已从本地文件列表移除。' + (cleanupCount(stats) ? '清理 ' + cleanupCount(stats) + ' 条关联记录。' : '') + (wasCurrent ? '当前播放已停止。' : ''), 5000);
       return;
     }
     if (el.dataset.listEpisode !== undefined) {
       event.stopPropagation();
-      const show = showByKey(el.dataset.key);
-      const ep = show ? episodesOf(show).find(item => item.id === el.dataset.ep) : null;
-      if (show && ep) addToPlaylistDialog(show, ep);
-      else showToast('找不到这一集。', 'warn');
+      const target = playTarget(el.dataset.key, el.dataset.ep);
+      if (!target.ok) { notifyPlayTargetFailure(target); return; }
+      if (target.ep) addToPlaylistDialog(target.show, target.ep);
+      else showToast('这一集暂时找不到，无法加入列表。', 6000);
+      return;
+    }
+    if (el.dataset.retryOffline !== undefined) {
+      const key = el.dataset.retryOffline;
+      const ref = resolveOfflineRef(key);
+      app.downloadErrors.delete(key);
+      if (ref) downloadEpisode(ref.show, ref.ep);
+      else {
+        renderDownloads();
+        showToast('找不到这一集，无法重试。', 'warn');
+      }
       return;
     }
     if (el.dataset.offlineEpisode !== undefined) {
@@ -805,12 +899,17 @@ function bindShell() {
     }
     if (el.dataset.resume !== undefined) {
       event.stopPropagation();
-      if (el.dataset.key && el.dataset.ep) playEpisode(el.dataset.key, el.dataset.ep, Number(el.dataset.t) || 0);
+      playEpisode(el.dataset.key, el.dataset.ep, Number(el.dataset.t) || 0);
       return;
     }
     if (el.dataset.subToggle) {
       const key = el.dataset.subToggle;
-      if (isSubscribed(key)) { unsubscribeKey(key); showToast('已取消订阅。'); }
+      if (isSubscribed(key)) {
+        const name = showByKey(key)?.name || key;
+        if (!confirm('取消订阅「' + name + '」？\n\n已下载的单集、笔记与收听进度不会删除。')) return;
+        unsubscribeKey(key);
+        showToast('已取消订阅。');
+      }
       else {
         const show = showByKey(key);
         if (show) { subscribeShow(show); showToast('已订阅 ' + show.name); }
@@ -818,7 +917,14 @@ function bindShell() {
       renderAfterStateChange();
       return;
     }
-    if (el.dataset.removeSub) { unsubscribeKey(el.dataset.removeSub); showToast('已移除订阅。'); return; }
+    if (el.dataset.removeSub) {
+      const key = el.dataset.removeSub;
+      const name = showByKey(key)?.name || key;
+      if (!confirm('取消订阅「' + name + '」？\n\n已下载的单集、笔记与收听进度不会删除。')) return;
+      unsubscribeKey(key);
+      showToast('已取消订阅。');
+      return;
+    }
     if (el.dataset.copyFeed) { copyText(el.dataset.copyFeed); return; }
     if (el.dataset.copyLink !== undefined) {
       copyText(location.origin + location.pathname + routeHash('episode', [el.dataset.key, el.dataset.ep]));
@@ -978,6 +1084,7 @@ function bindShell() {
   $('setLiveMse').onclick = () => {
     prefs.liveMse = !prefs.liveMse;
     savePrefs();
+    writeJSON('myt-liveMseOn', true);   // 用户自己选过，就不再被默认值迁移覆盖
     $('setLiveMse').setAttribute('aria-checked', String(!!prefs.liveMse));
     if (LIVE.on && !prefs.liveMse) liveMseStop();   // 中途关掉就把播放还给原生元素
     showToast(prefs.liveMse
@@ -1230,19 +1337,41 @@ function bindShell() {
   $('asrImportBtn').onclick = () => importAsrModel();
   $('localImportBtn').onclick = () => importLocalFolder();
   $('localClearBtn').onclick = () => {
-    if (!app.local.length) return;
+    if (!app.local.length) { showToast('本地文件列表已经是空的。', 3000); return; }
     if (!confirm('清空本地文件列表？不会删除磁盘上的文件。')) return;
+    const wasCurrent = !!state.show?.local && !!state.current;
+    if (wasCurrent) {
+      app.autoplay = false;
+      setState('current', null);
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.load();
+      syncMini();
+    }
+    const stats = purgeLocalReferences(null);
     app.local = [];
     writeJSON(LOCAL_KEY, app.local);
     refreshShows();
     renderLocal();
+    showToast('已清空本地文件列表。' + (cleanupCount(stats) ? '清理 ' + cleanupCount(stats) + ' 条关联记录。' : '') + (wasCurrent ? '当前播放已停止。' : ''), 5000);
   };
   $('dataClear').onclick = () => {
     if (!confirm('清除本机的订阅、进度、书签、笔记与设置？此操作不可撤销。')) return;
     Object.keys(localStorage).filter(key => key.startsWith('myt-')).forEach(key => localStorage.removeItem(key));
     location.reload();
   };
-  $('queueClearBtn').onclick = () => { if (app.queue.length && confirm('清空播放队列？')) { app.queue = []; saveQueue(); renderQueue(); } };
+  $('queueClearBtn').onclick = () => {
+    if (!app.queue.length) { showToast('播放队列已经是空的。', 3000); return; }
+    if (confirm('清空播放队列？')) { app.queue = []; saveQueue(); renderQueue(); showToast('已清空播放队列。', 3000); }
+  };
+  $('inboxClearBtn').onclick = () => {
+    if (!app.inbox.length) { showToast('收件箱已经是空的。', 2500); return; }
+    if (!confirm('清空收件箱？不会取消订阅，也不会标记已听。')) return;
+    app.inbox = [];
+    saveInbox();
+    renderInbox();
+    showToast('收件箱已清空。', 2500);
+  };
   $('historyClearBtn').onclick = () => { if (confirm('清除全部收听历史？')) { localStorage.removeItem(PROGRESS_KEY); invalidateProgressCache(); renderHistory(); showToast('已清除收听历史。'); } };
   $('noteSave').onclick = () => {
     const title = $('noteTitle').value.trim();
@@ -1261,7 +1390,8 @@ function bindShell() {
 
   $('readerBack').onclick = () => navigate(app.lastPage || 'home');
   if ($('clipNowBtn')) $('clipNowBtn').onclick = () => clipNow(15);
-  $('readerInfoBtn').onclick = () => openDetails();
+  const infoBtn = $('readerInfoBtn');
+  if (infoBtn) infoBtn.onclick = () => openDetails();
   $('readerBookmarkBtn').onclick = toggleBookmarkCue;
   $('floatBtn').onclick = () => {
     const host = tauriHost();
@@ -1271,6 +1401,7 @@ function bindShell() {
   };
   if (!(tauriHost() && tauriHost().core)) $('floatBtn').hidden = true;
   $('chapterBtn').onclick = e => { e.stopPropagation(); closeDockSheet(false); toggleChapterSheet(); };
+  $('chapterClose').onclick = e => { e.stopPropagation(); toggleChapterSheet(false); };
   $('wordClose').onclick = closeWordPanel;
   $('miniPlay').onclick = () => $('play').click();
   $('miniPrev').onclick = () => stepEpisode(-1);
@@ -1292,10 +1423,23 @@ function bindShell() {
     tauriHost().event.listen('myt://offline', e => {
       const p = (e && e.payload) || {};
       if (p.done) {
+        app.downloadProgress.delete(p.key);
         refreshOffline();
+        renderDownloads();
         showToast('下载完成：' + (offlineLabel(p.key) || p.key));
-      } else if (typeof p.pct === 'number' && p.pct > 0 && p.pct < 100 && p.pct % 25 === 0) {
-        showToast('下载 ' + p.pct + '%：' + (offlineLabel(p.key) || p.key), 2000);
+      } else if (p.key) {
+        const prev = app.downloadProgress.get(p.key) || { key: p.key, pct: -1, got: 0, total: 0 };
+        app.downloadProgress.set(p.key, {
+          key: p.key,
+          pct: typeof p.pct === 'number' ? p.pct : prev.pct,
+          got: Number(p.got) || prev.got || 0,
+          total: Number(p.total) || prev.total || 0,
+          at: Date.now(),
+        });
+        if (p.pct > 0 && p.pct < 100 && p.pct % 25 === 0) {
+          showToast('下载 ' + p.pct + '%：' + (offlineLabel(p.key) || p.key), 2000);
+        }
+        if (app.route.page === 'downloads') renderDownloads();
       }
     }).catch(() => {});
     // 识别模型的下载/导入/删除进度（壳里推 myt://asr-model）

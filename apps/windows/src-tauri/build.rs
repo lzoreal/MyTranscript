@@ -34,5 +34,9 @@ fn link_sherpa() {
 
 fn main() {
     link_sherpa();
+    // 内置插件与站点资源不是 Rust 源，Tauri 的资源嵌入不会自动跟随改动；
+    // 必须显式声明，否则只改 kernel.js/view.css 时 cargo 会复用旧的打包资源。
+    println!("cargo:rerun-if-changed=../builtin-plugins");
+    println!("cargo:rerun-if-changed=../../../site");
     tauri_build::build();
 }

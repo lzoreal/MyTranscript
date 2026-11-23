@@ -21,6 +21,11 @@ MyTPlugins.define('study', {
           study.registerUi(createStudyUi(api, study.host()));
         }
         document.body.classList.add('study-plugin-on');
+        // 宿主按 claim 的返回值做卸载清理：停用插件后别把 body 的类名留在页面上。
+        return () => {
+          document.body.classList.remove('study-plugin-on');
+          delete document.body.dataset.studyPlugin;
+        };
       },
     },
     'page:study': {
@@ -45,6 +50,9 @@ MyTPlugins.define('study', {
           const warning = !s.subtitles
             ? '<p class="studyx-warn">字幕插件未启用，学习插件现在没有可用的文字稿。</p>'
             : '';
+          const aiOff = !s.configured
+            ? '<p class="studyx-warn">AI 还没配置：句子卡、整集总结、金句和问答需要模型；<strong>复习、生词本、填空和听写可以离线用</strong>。先点「去配置 AI」填 Key 和模型。</p>'
+            : '';
           el.innerHTML =
             '<div class="studyx-card">' +
               '<div class="studyx-kicker">STUDY PLUGIN</div>' +
@@ -52,23 +60,31 @@ MyTPlugins.define('study', {
               '<p class="studyx-sub">生词本 ' + s.vocab + ' 个 · 今日到期 ' + s.due + ' 个 · 已缓存 ' + s.cache + ' 条</p>' +
               '<p class="studyx-ep">' + episodeLine + '</p>' +
               '<p class="studyx-sub">AI 服务：' + s.provider + (s.configured ? ' · 已配置' : ' · 还缺 Key 或模型') + '</p>' +
-              warning +
+              warning + aiOff +
               '<div class="studyx-actions">' +
-                '<button class="btn primary" data-studyx="card">当前句学习卡</button>' +
+                (s.configured
+                  ? '<button class="btn primary" data-studyx="card">当前句学习卡</button>'
+                  : '<button class="btn primary" data-studyx="settings">去配置 AI</button>') +
                 '<button class="btn ghost" data-studyx="episode">整集总结</button>' +
                 '<button class="btn ghost" data-studyx="review">复习</button>' +
                 '<button class="btn ghost" data-studyx="vocab">生词本</button>' +
-                '<button class="btn ghost" data-studyx="settings">学习服务设置</button>' +
+                (s.configured ? '<button class="btn ghost" data-studyx="settings">学习服务设置</button>' : '') +
               '</div>' +
               '<p class="studyx-note">停用这个插件后，播放器里的 AI 学英语入口、句子卡、整集总结、词卡和生词本都会消失，字幕本身不受影响。</p>' +
             '</div>';
+          const needAi = () => {
+            if (s.configured) return false;
+            api.toast('这条功能要先用模型：在「学习服务设置」填 API Key 和模型。复习、生词本、填空和听写不需要 AI。', 'warn');
+            return true;
+          };
           const open = view => {
             if (!s.subtitles) { api.toast('先启用字幕插件，学习功能需要文字稿。', 'warn'); return; }
             study.open(view);
           };
-          el.querySelector('[data-studyx="card"]').onclick = () => open('card');
+          el.querySelector('[data-studyx="card"]')?.addEventListener('click', () => { if (!needAi()) open('card'); });
           el.querySelector('[data-studyx="episode"]').onclick = () => {
             if (!s.subtitles) { api.toast('先启用字幕插件，学习功能需要文字稿。', 'warn'); return; }
+            if (needAi()) return;
             if (!ep.showKey || !ep.episodeId) { api.toast('先在播放器里打开一集。'); return; }
             study.openEpisode(ep.showKey, ep.episodeId);
           };

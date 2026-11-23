@@ -98,7 +98,7 @@ export const CONTEXT_PROFILES = Object.freeze({
 export const SCOPED_API_FIELDS = Object.freeze({
   pages: null,
   slots: Object.freeze(['id', 'version', 'apiVersion', 'host', 'toast', 'navigate',
-    'openEpisode', 'el', 'on', 'command', 'player', 'cues', 'storage', 'media', 'llm']),
+    'openEpisode', 'openSettings', 'el', 'on', 'command', 'player', 'cues', 'storage', 'media', 'llm']),
   settings: Object.freeze(['id', 'version', 'apiVersion', 'host', 'toast', 'navigate',
     'el', 'on', 'command', 'storage', 'media']),
   commands: Object.freeze(['id', 'version', 'apiVersion', 'host', 'toast', 'navigate',

@@ -313,6 +313,10 @@ function liveDecodeAudio(ab, timeoutMs = 10000) {
 
 async function liveFetchRange(from, to, timeoutMs = 15000) {
   const bytes = await liveGetBytes(LIVE.audioUrl, from, to, timeoutMs);
+  // 流量账：MSE 接管后播放用的就是这里取回来的字节，统计它才知道「只播音轨」省了多少。
+  LIVE.net = LIVE.net || { bytes: 0, reqs: 0 };
+  LIVE.net.bytes += bytes.length;
+  LIVE.net.reqs += 1;
   if (!bytes.length) throw new Error('这个音频源不允许分段读取，取不到音频数据');
   return bytes;
 }
@@ -325,7 +329,9 @@ async function liveRetry(fn, times, delayMs) {
     try { return await fn(); } catch (err) {
       last = err;
       // 跨域被拦是确定性的：这个节目的音频源不给我们字节，重试多少次都一样。
-      if (err && err.cors) throw err;
+      // fatal 同理：格式不对（MP4/AAC、WAV…）重试也是在烧时间——探测每轮要拉
+      // 128 KB → 8 MB，慢源上一轮一分多钟，界面上就是「正在重试（第 4 次）」转几分钟。
+      if (err && (err.cors || err.fatal)) throw err;
       if (i < times - 1) liveSetText('取音频数据失败，正在重试（第 ' + (i + 2) + ' 次）…', 'busy');
       if (i < times - 1) await new Promise(r => setTimeout(r, delayMs));
     }
@@ -366,17 +372,388 @@ function liveProbeScan(head) {
   return { offset: i, bps: br / 8, sr, spf };
 }
 
+// 一眼能认出来的非 MP3 容器。命中就说明「这套按字节找 MP3 帧」的管线从原理上用不了，
+// 不该再放大窗口、更不该当网络抖动重试。
+// 实测没这层判断时，Talking Cars 那集（364 MB 的 MP4 视频）会连做 4 轮
+// 128 KB → 2 MB → 8 MB 的探测（本机实测 2.6s / 15.5s / 45.4s，一轮一分多钟），
+// 界面上就是「取音频数据失败，正在重试（第 4 次）」转好几分钟。
+function liveContainerKind(head) {
+  if (!head || head.length < 12) return null;
+  const at = (i) => String.fromCharCode(head[i], head[i + 1], head[i + 2], head[i + 3]);
+  const fourCC = at(4);
+  if (fourCC === 'ftyp') {
+    const brand = at(8);
+    return { kind: 'mp4', label: (brand === 'M4A ' || brand === 'M4B ') ? 'M4A/AAC 音频' : 'MP4 视频（AAC 音轨）' };
+  }
+  if (['moov', 'mdat', 'free', 'skip', 'wide', 'styp', 'sidx', 'moof'].indexOf(fourCC) !== -1) {
+    return { kind: 'mp4', label: 'MP4 容器' };
+  }
+  const first = at(0);
+  if (first === 'RIFF') return { kind: 'wav', label: 'WAV 音频' };
+  if (first === 'OggS') return { kind: 'ogg', label: 'Ogg 音频' };
+  if (first === 'fLaC') return { kind: 'flac', label: 'FLAC 音频' };
+  if (first === 'ADIF') return { kind: 'aac', label: 'AAC（ADIF）音频' };
+  return null;
+}
+
+// ── MP4/M4A：按样本表只读音轨（2026-11-22 起） ────────────────────────────────
+// 以前这集（364 MB 的 MP4 视频）只能快速失败退出，用户要的是「所有视频只播音频时
+// 也能实时识别」。实测（docs/spike-aac-live.md）：同一集取前 60 秒音频只要 144 次
+// range、0.94 MB（放大 1.00×，一字节视频都不读），4 路连接复用下 3.3× 实时。
+// 所以这里不做转码、不下整集：从 moov 的 stbl 拿到样本表，按 chunk 分段取字节，
+// 用 WebCodecs（AudioDecoder + 裸 AAC + ASC 当 description）解成 PCM 喂识别。
+// 播放侧仍是原生 <audio>，流量优化（fMP4+MSE）留到下一期。
+
+function liveU32(u8, i) {
+  return ((u8[i] << 24) | (u8[i + 1] << 16) | (u8[i + 2] << 8) | u8[i + 3]) >>> 0;
+}
+
+function liveFourCCAt(u8, i) {
+  return String.fromCharCode(u8[i], u8[i + 1], u8[i + 2], u8[i + 3]);
+}
+
+// 读一个 box 头。size=1 表示 64 位长度，size=0 表示「一直到父容器末尾」。
+function liveBoxAt(u8, pos, end) {
+  if (pos + 8 > end) return null;
+  let size = liveU32(u8, pos);
+  const type = liveFourCCAt(u8, pos + 4);
+  let hdr = 8;
+  if (size === 1) {
+    if (pos + 16 > end) return null;
+    size = liveU32(u8, pos + 8) * 4294967296 + liveU32(u8, pos + 12);
+    hdr = 16;
+  } else if (size === 0) {
+    size = end - pos;
+  }
+  if (size < hdr || pos + size > end) {
+    // 首窗口是截断的：moov 常常有 1 MB，128 KB 的窗口里它必然「越界」。这时不能当坏 box
+    // 直接丢弃（丢了就误判成「索引在文件尾部」），留一条 truncated 记录，让调用方按
+    // 自己的长度再精确取一次。
+    if (size >= hdr && type && /^[\x20-\x7e]{4}$/.test(type)) {
+      return { type, pos, size, body: pos + hdr, end: pos + size, truncated: true };
+    }
+    return null;
+  }
+  return { type, pos, size, body: pos + hdr, end: pos + size };
+}
+
+// 扫同一层的所有 box；遇到坏长度就停（不猜、不硬恢复）。
+function liveBoxes(u8, start, end) {
+  const out = [];
+  let pos = start;
+  while (pos + 8 <= end) {
+    const b = liveBoxAt(u8, pos, end);
+    if (!b) break;
+    out.push(b);
+    if (b.truncated) break;
+    pos = b.end;
+  }
+  return out;
+}
+
+function liveBoxChild(u8, box, type) {
+  const kids = liveBoxes(u8, box.body, box.end);
+  for (const k of kids) if (k.type === type) return k;
+  return null;
+}
+
+// esds → 音频的 AudioSpecificConfig（WebCodecs 的 description 就它）。
+// 描述符是 tag + 变长 size 的嵌套结构：0x03 ES → 0x04 DecoderConfig → 0x05 ASC。
+function liveEsdsAsc(u8, box) {
+  let asc = null;
+
+  const readSize = (pos, limit) => {
+    let size = 0, q = pos;
+    for (let i = 0; i < 4 && q < limit; i++) {
+      const b = u8[q++];
+      size = (size << 7) | (b & 0x7f);
+      if (!(b & 0x80)) break;
+    }
+    return { size, next: q };
+  };
+
+  const walk = (pos, limit, depth) => {
+    while (pos + 2 <= limit && !asc) {
+      const tag = u8[pos];
+      const { size, next } = readSize(pos + 1, limit);
+      const body = next, bodyEnd = Math.min(limit, next + size);
+      if (body > bodyEnd) return;
+      if (tag === 0x03) {
+        // ES_Descriptor：ES_ID(2) + flags(1) + 可选字段，然后才是子描述符
+        const flags = u8[body + 2];
+        let p = body + 3;
+        if (flags & 0x80) p += 2;
+        if (flags & 0x40) p += 1 + u8[p];
+        if (flags & 0x20) p += 2;
+        if (p < bodyEnd) walk(p, bodyEnd, depth + 1);
+      } else if (tag === 0x04) {
+        // DecoderConfigDescriptor 固定 13 字节头，后面是子描述符
+        walk(body + 13, bodyEnd, depth + 1);
+      } else if (tag === 0x05) {
+        asc = u8.slice(body, bodyEnd);
+        return;
+      }
+      pos = bodyEnd;
+    }
+  };
+
+  // esds 自己的 4 字节 version/flags 之后才是描述符
+  walk(box.body + 4, box.end, 0);
+  return asc;
+}
+
+// mdhd 里的 timescale（每秒多少时间单位），v0 / v1 布局不同。
+function liveMdhdTimescale(u8, box) {
+  const v = u8[box.body];
+  const at = v === 1 ? box.body + 20 : box.body + 12;
+  return liveU32(u8, at) || 0;
+}
+
+// 把 moov 里的 stbl 解释成「第 i 个音频样本在文件里的偏移 / 字节数 / 起始秒」。
+function liveParseMoov(u8, moov) {
+  const fail = (msg) => {
+    const err = new Error(msg);
+    err.fatal = true;
+    throw err;
+  };
+  const traks = liveBoxes(u8, moov.body, moov.end).filter(b => b.type === 'trak');
+  for (const trak of traks) {
+    const mdia = liveBoxChild(u8, trak, 'mdia');
+    if (!mdia) continue;
+    const hdlr = liveBoxChild(u8, mdia, 'hdlr');
+    if (!hdlr || liveFourCCAt(u8, hdlr.body + 8) !== 'soun') continue;
+    const minf = liveBoxChild(u8, mdia, 'minf');
+    if (!minf) continue;
+    const stbl = liveBoxChild(u8, minf, 'stbl');
+    if (!stbl) continue;
+    const mdhd = liveBoxChild(u8, mdia, 'mdhd');
+    const timescale = mdhd ? liveMdhdTimescale(u8, mdhd) : 0;
+    if (!timescale) fail('这个 MP4 的音轨没有时间刻度（mdhd 缺失）');
+
+    const stsd = liveBoxChild(u8, stbl, 'stsd');
+    if (!stsd) fail('这个 MP4 没有样本描述（stsd 缺失）');
+    // stsd: version/flags(4) + entry_count(4)，后面就是 sample entry
+    const entry = liveBoxAt(u8, stsd.body + 8, stsd.end);
+    if (!entry) fail('这个 MP4 的音轨样本描述读不出来');
+    const codec = entry.type;
+    if (codec !== 'mp4a') fail('这集音轨是 ' + codec + '，实时识别目前只支持 AAC（mp4a）');
+    // AudioSampleEntry 的固定头 28 字节，之后才是 esds 之类的子 box
+    const esdsAsc = (() => {
+      const kidsStart = entry.body + 28;
+      if (kidsStart >= entry.end) return null;
+      const esds = liveBoxChild(u8, { body: kidsStart, end: entry.end }, 'esds');
+      return esds ? liveEsdsAsc(u8, esds) : null;
+    })();
+    // 少数封装（QuickTime 的版本、某些 remuxer）把 esds 藏在 wave 里，这里够不着。
+    // 解不了就按 sample entry 里自己带的字段拼一个 LC 的 ASC，不至于整集判死。
+    let asc = esdsAsc;
+    if (!asc || asc.length < 2) {
+      const chField = u8[entry.body + 17] | (u8[entry.body + 16] << 8);
+      const rateRaw = liveU32(u8, entry.body + 24);
+      const srField = Math.round((rateRaw / 65536) * 1000) / 1000;
+      const rates = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050,
+        16000, 12000, 11025, 8000, 7350];
+      const idx = rates.findIndex(r => Math.abs(r - srField) < 1);
+      if (idx < 0) fail('这个 AAC 音轨缺 AudioSpecificConfig，sample entry 里的采样率也读不出来');
+      const bitsAsc = (2 << 11) | (idx << 7) | ((chField || 2) << 3);
+      asc = new Uint8Array([(bitsAsc >> 8) & 0xff, bitsAsc & 0xff]);
+    }
+
+    // ASC 头 5 位是 audioObjectType：2=AAC-LC，5=HE-AAC(SBR)，29=HE-AACv2(PS)
+    const bits = asc[0].toString(2).padStart(8, '0') + asc[1].toString(2).padStart(8, '0');
+    const aot = parseInt(bits.slice(0, 5), 2);
+    const sfIdx = parseInt(bits.slice(5, 9), 2);
+    const chCfg = parseInt(bits.slice(9, 13), 2);
+    const rates = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050,
+      16000, 12000, 11025, 8000, 7350];
+    const sr = rates[sfIdx] || 0;
+    const ch = chCfg || 2;
+    if (aot !== 2 && aot !== 5 && aot !== 29) {
+      fail('这集音轨的 AAC 类型是 ' + aot + '（只支持 AAC-LC / HE-AAC）');
+    }
+    if (!sr) fail('这个 AAC 音轨的采样率读不出来');
+    // WebCodecs 的 codec 串要跟着 ASC 走：HE-AAC 是 mp4a.40.5，硬写 40.2 会被判不支持。
+    const codecStr = 'mp4a.40.' + aot;
+
+    const stsz = liveBoxChild(u8, stbl, 'stsz');
+    if (!stsz) fail('这个 MP4 缺样本大小表（stsz）');
+    const stsc = liveBoxChild(u8, stbl, 'stsc');
+    if (!stsc) fail('这个 MP4 缺 chunk 表（stsc）');
+    const stco = liveBoxChild(u8, stbl, 'stco') || liveBoxChild(u8, stbl, 'co64');
+    if (!stco) fail('这个 MP4 缺 chunk 偏移表（stco）');
+    const stts = liveBoxChild(u8, stbl, 'stts');
+    if (!stts) fail('这个 MP4 缺时间表（stts）');
+
+    // stsz：恒定大小时只给一个值，否则逐样本给
+    const fixedSize = liveU32(u8, stsz.body + 4);
+    const n = liveU32(u8, stsz.body + 8);
+    if (!n) fail('这个 MP4 的音轨里没有音频样本');
+    const sizes = new Uint32Array(n);
+    if (fixedSize) {
+      sizes.fill(fixedSize);
+    } else {
+      let p = stsz.body + 12;
+      for (let i = 0; i < n; i++, p += 4) sizes[i] = liveU32(u8, p);
+    }
+
+    // stsc：chunk → 每个 chunk 里有几个样本（按「首 chunk 序号」分段给）
+    const stscCount = liveU32(u8, stsc.body + 4);
+    const stscRuns = [];
+    for (let i = 0, p = stsc.body + 8; i < stscCount; i++, p += 12) {
+      stscRuns.push({
+        first: liveU32(u8, p),
+        spc: liveU32(u8, p + 4),
+      });
+    }
+    const co64 = stco.type === 'co64';
+    const chunkCount = liveU32(u8, stco.body + 4);
+    const chunkOff = (i) => {
+      const p = stco.body + 8 + i * (co64 ? 8 : 4);
+      return co64 ? liveU32(u8, p) * 4294967296 + liveU32(u8, p + 4) : liveU32(u8, p);
+    };
+
+    // 拼出每个样本的绝对偏移：chunk 起点 + 前面样本的累计大小
+    const offs = new Float64Array(n);
+    let sIdx = 0;
+    for (let ch = 1; ch <= chunkCount && sIdx < n; ch++) {
+      let spc = stscRuns.length ? stscRuns[0].spc : 0;
+      for (let r = 0; r < stscRuns.length; r++) {
+        if (stscRuns[r].first <= ch) spc = stscRuns[r].spc;
+      }
+      let off = chunkOff(ch - 1);
+      for (let k = 0; k < spc && sIdx < n; k++, sIdx++) {
+        offs[sIdx] = off;
+        off += sizes[sIdx];
+      }
+    }
+    if (sIdx < n) fail('这个 MP4 的 chunk 表和样本数对不上（' + sIdx + '/' + n + '）');
+
+    // stts：每个样本的时长（时间单位），累计成秒
+    const sttsCount = liveU32(u8, stts.body + 4);
+    const ticks = new Float64Array(n);
+    let acc = 0, s = 0;
+    for (let i = 0, p = stts.body + 8; i < sttsCount && s < n; i++, p += 8) {
+      const cnt = liveU32(u8, p), delta = liveU32(u8, p + 4);
+      for (let k = 0; k < cnt && s < n; k++, s++) {
+        ticks[s] = acc;
+        acc += delta;
+      }
+    }
+    for (; s < n; s++) ticks[s] = acc;
+    const times = new Float64Array(n);
+    for (let i = 0; i < n; i++) times[i] = ticks[i] / timescale;
+
+    return {
+      kind: 'mp4', sr, ch, asc, n, offs, sizes, times, ticks, timescale, codec: codecStr,
+      mseType: 'audio/mp4; codecs="' + codecStr + '"',
+      durSec: (acc || 0) / timescale,
+      label: 'AAC' + (aot === 2 ? '-LC' : aot === 5 ? '（HE-AAC）' : '（HE-AACv2）') + ' ' + (sr / 1000) + ' kHz',
+    };
+  }
+  return fail('这个 MP4 里没有音频轨（soun）');
+}
+
+// 找 moov。首窗口里没有（索引放在文件尾部，没做 faststart）时不能直接判死：
+// 顶层 box 的长度都写在头部，按长度一跳一跳找就行，mdat 那几个 GB 一字节都不用下。
+async function liveFindMoov(head) {
+  const inHead = liveBoxes(head, 0, head.length).find(b => b.type === 'moov');
+  if (inHead) return inHead;
+  let pos = 0;
+  for (let hop = 0; hop < 64; hop++) {
+    const local = liveBoxAt(head, pos, head.length);
+    if (local && !local.truncated) {
+      if (local.type === 'moov') return local;
+      pos = local.end;
+      continue;
+    }
+    // 这个 box 越出首窗口了：只取它的 16 字节头来读长度/类型
+    const hdr = await liveFetchRange(pos, pos + 15);
+    if (!hdr || hdr.length < 8) return null;
+    let size = liveU32(hdr, 0);
+    const type = liveFourCCAt(hdr, 4);
+    let hdrLen = 8;
+    if (size === 1) {
+      if (hdr.length < 16) return null;
+      size = liveU32(hdr, 8) * 4294967296 + liveU32(hdr, 12);
+      hdrLen = 16;
+    } else if (size === 0) {
+      return null;   // 这个 box 一直铺到文件尾，后面没有 moov
+    }
+    if (size < hdrLen) return null;
+    if (type === 'moov') return { type, pos, size, body: pos + hdrLen, end: pos + size };
+    pos += size;
+  }
+  return null;
+}
+
+// 首窗口里找 moov。moov 常常比首窗口大（本集 1.02 MB），超出就按它自己的位置精确再取一次。
+async function liveProbeMp4(head) {
+  const fail = (msg) => {
+    const err = new Error(msg);
+    err.fatal = true;
+    throw err;
+  };
+  const moov = await liveFindMoov(head);
+  if (!moov) {
+    // 连顶层 box 都跳不到 moov（少见的分段/异常文件），这种只能整集下载后再识别。
+    fail('这个 MP4 的索引（moov）找不到，没法只读音轨；实时识别暂不支持这一集');
+  }
+  let u8 = head, box = moov;
+  if (moov.end > head.length) {
+    u8 = await liveFetchRange(moov.pos, moov.pos + moov.size - 1);
+    box = liveBoxAt(u8, 0, u8.length);
+    if (!box || box.type !== 'moov') fail('这个 MP4 的索引读不出来（分段返回的长度不对）');
+  }
+  const desc = liveParseMoov(u8, box);
+  // 留住原片 moov 字节：MSE 的 init segment 直接从这里「移植」，编码配置与原片一致。
+  desc.moovRaw = u8.slice(box.pos, box.end);
+  desc.trackId = 1;
+  // 原片是「视频 + 音频」两条轨，轨道号不能取第一条 trak（那是视频轨）：
+  // 取音频轨自己的 tkhd track_ID，否则 init 里的 trex 和分片里的 tfhd 会指向不存在的轨。
+  const audioTrak = liveBoxes(u8, box.body, box.end).find(k => {
+    if (k.type !== 'trak') return false;
+    const md = liveBoxChild(u8, k, 'mdia');
+    const hd = md && liveBoxChild(u8, md, 'hdlr');
+    return !!hd && liveFourCCAt(u8, hd.body + 8) === 'soun';
+  });
+  const tkhd = audioTrak && liveBoxChild(u8, audioTrak, 'tkhd');
+  if (tkhd) {
+    const p = tkhd.body - box.pos;
+    desc.trackId = liveU32(desc.moovRaw, p + (desc.moovRaw[p] === 1 ? 20 : 12)) || 1;
+  }
+  if (typeof AudioDecoder === 'undefined') {
+    fail('这个壳没有 WebCodecs 音频解码（AudioDecoder），AAC 音轨没法识别');
+  }
+  let support = null;
+  try {
+    support = await AudioDecoder.isConfigSupported({
+      codec: desc.codec, sampleRate: desc.sr, numberOfChannels: desc.ch,
+      description: desc.asc,
+    });
+  } catch (e) { support = null; }
+  if (!support || !support.supported) fail('这个浏览器解不了 ' + desc.label + '（WebCodecs 不支持该 AAC 配置）');
+  return desc;
+}
+
 // 头部探针：跳 ID3v2，找到第一帧，确认是 CBR（恒定码率）才能用「字节 = 时间 × 码率」定位。
 // 有的节目把 3000×3000 封面塞进 ID3（实测光封面就 ~1.4 MB），128 KB 的窗口根本到不了
 // 第一帧，以前会误报「这个音频不是 MP3」。所以按 128 KB → 2 MB → 8 MB 递进取窗口。
+// MP4/M4A 走另一条路（样本表 + WebCodecs），不再一律判死。
 async function liveProbeAudio() {
-  const sizes = [131072, 2 * 1024 * 1024, 8 * 1024 * 1024];
+  let head = await liveFetchRange(0, 131072 - 1);
+  const container = liveContainerKind(head);
+  if (container && container.kind === 'mp4') return liveProbeMp4(head);
+  if (container) {
+    const err = new Error('这集是 ' + container.label + '，实时识别暂不支持这种封装');
+    err.fatal = true;
+    throw err;
+  }
   let last = null;
-  for (const size of sizes) {
-    const head = await liveFetchRange(0, size - 1);
+  for (const size of [131072, 2 * 1024 * 1024, 8 * 1024 * 1024]) {
+    if (size > head.length) head = await liveFetchRange(0, size - 1);
     try {
       const r = liveProbeScan(head);
-      if (r) return { origin: r.offset, bps: r.bps, sr: r.sr, spf: r.spf };
+      if (r) return { kind: 'mp3', origin: r.offset, bps: r.bps, sr: r.sr, spf: r.spf };
     } catch (err) {
       // 已经认出是 VBR 就没必要再放大窗口了，直接把这个错误交给调用方。
       last = err;
@@ -385,13 +762,434 @@ async function liveProbeAudio() {
     last = null;
   }
   if (last) throw last;
-  throw new Error('这个音频不是 MP3，暂时只支持 MP3 的提前生成');
+  const err = new Error('这集不是 MP3（别的封装），实时识别暂不支持');
+  err.fatal = true;
+  throw err;
+}
+
+// 二分找第一个 times[i] >= sec 的样本序号。
+function liveSampleAt(times, sec) {
+  let lo = 0, hi = times.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (times[mid] < sec) lo = mid + 1; else hi = mid;
+  }
+  return lo;
+}
+
+// 4 路并发取一段段字节。实测 4 路是最好的：8 路中位延迟从 227 ms 涨到 644 ms，
+// 3 路以下又喂不满 3× 实时的余量。
+async function liveFetchRuns(runs, par = 4) {
+  const out = new Array(runs.length);
+  let idx = 0;
+  const worker = async () => {
+    while (idx < runs.length) {
+      const k = idx++;
+      const r = runs[k];
+      out[k] = await liveFetchRange(r.from, r.to - 1);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(par, runs.length)) }, worker));
+  return out;
+}
+
+// 48 kHz → 16 kHz。整数倍就按块平均，否则线性插值。识别模型只在乎 16 k 的内容，
+// 别为了「保真」把重采样做成几百毫秒的卷积。
+function liveResampleMono(mono, sr, rate) {
+  if (sr === rate) return mono;
+  const ratio = sr / rate;
+  const nOut = Math.floor(mono.length / ratio);
+  const out = new Float32Array(nOut);
+  if (Number.isInteger(ratio)) {
+    const k = ratio;
+    for (let i = 0; i < nOut; i++) {
+      let s = 0;
+      for (let j = 0; j < k; j++) s += mono[i * k + j];
+      out[i] = s / k;
+    }
+    return out;
+  }
+  for (let i = 0; i < nOut; i++) {
+    const x = i * ratio, i0 = Math.floor(x), f = x - i0;
+    const a = mono[i0] || 0, b = mono[i0 + 1] === undefined ? a : mono[i0 + 1];
+    out[i] = a + (b - a) * f;
+  }
+  return out;
+}
+
+// 把样本表里第 i0..i1 个样本解成 16 kHz 单声道。裸 AAC 没有 ADTS 头，帧边界全靠 stsz，
+// 时间戳用 stts 算出来的秒，这样 AudioDecoder 输出和播放时间轴对得上。
+async function liveDecodeMp4Window(desc, flat, marks, i0, i1) {
+  if (typeof AudioDecoder === 'undefined') throw new Error('这个浏览器没有 WebCodecs 音频解码');
+  const out = [];
+  let decErr = null;
+  const dec = new AudioDecoder({
+    output: ad => { out.push(ad); },
+    error: e => { decErr = decErr || e; },
+  });
+  dec.configure({
+    codec: desc.codec, sampleRate: desc.sr, numberOfChannels: desc.ch,
+    description: desc.asc,
+  });
+  const nSamples = i1 - i0;
+  for (let j = 0; j < nSamples; j++) {
+    const t0 = desc.times[i0 + j];
+    const t1 = i0 + j + 1 < desc.n ? desc.times[i0 + j + 1] : t0 + 1024 / desc.sr;
+    dec.decode(new EncodedAudioChunk({
+      type: 'key',
+      timestamp: Math.round(t0 * 1e6),
+      duration: Math.max(1, Math.round((t1 - t0) * 1e6)),
+      data: flat.subarray(marks[j], marks[j + 1]),
+    }));
+  }
+  try { await dec.flush(); } catch (e) { decErr = decErr || e; }
+  try { dec.close(); } catch (e) {}
+  if (decErr) throw decErr;
+  if (!out.length) return null;
+
+  let frames = 0;
+  for (const ad of out) frames += ad.numberOfFrames;
+  const mono = new Float32Array(frames);
+  let at = 0;
+  for (const ad of out) {
+    const nf = ad.numberOfFrames;
+    const plane = new Float32Array(nf);
+    ad.copyTo(plane, { planeIndex: 0, format: 'f32-planar' });
+    if (ad.numberOfChannels > 1) {
+      const plane2 = new Float32Array(nf);
+      ad.copyTo(plane2, { planeIndex: 1, format: 'f32-planar' });
+      for (let i = 0; i < nf; i++) plane[i] = (plane[i] + plane2[i]) / 2;
+    }
+    mono.set(plane, at);
+    at += nf;
+    ad.close();
+  }
+  // 起点以样本表为准：解码输出的 timestamp 在有些实现里是相对值，差太多就丢掉不用。
+  let startSec = out[0].timestamp / 1e6;
+  if (!Number.isFinite(startSec) || Math.abs(startSec - desc.times[i0]) > 0.05) {
+    startSec = desc.times[i0];
+  }
+  return { pcm: liveResampleMono(mono, desc.sr, LIVE_RATE), start: startSec };
+}
+
+// 取 MP4 的 [startSec, startSec+seconds)：按样本表把这段样本按「地址连续」合成若干段 range
+// （同一个 chunk 里的样本本来就是连着的），4 路并发取回来，再把裸 AAC 帧按样本边界重排成
+// 一整块带 marks 的字节（marks[j] / marks[j+1] 就是第 j 个样本在 flat 里的起止）。
+async function liveFetchSamplesMp4(startSec, seconds) {
+  const d = LIVE.cbr;
+  const i0 = Math.min(d.n - 1, liveSampleAt(d.times, Math.max(0, startSec)));
+  const i1 = Math.min(d.n, Math.max(i0 + 1, liveSampleAt(d.times, startSec + seconds + 1)));
+  const runs = [];
+  for (let j = i0; j < i1; j++) {
+    const from = d.offs[j], to = d.offs[j] + d.sizes[j];
+    const last = runs[runs.length - 1];
+    if (last && from === last.to) { last.to = to; last.count += 1; } else runs.push({ from, to, count: 1 });
+  }
+  const parts = await liveFetchRuns(runs, 4);
+  // 服务端忽略 Range 时会回整段文件：长度一眼就能看出来，直接判这一轮失败，
+  // 不解错帧（错帧进模型只会吐一堆乱词）。
+  let total = 0;
+  for (let k = 0; k < parts.length; k++) {
+    const want = runs[k].to - runs[k].from;
+    if (parts[k].length !== want) {
+      throw new Error('这个音频源不支持分段读取（返回了 ' + parts[k].length + ' 字节，期望 ' + want + '）');
+    }
+    total += want;
+  }
+  const flat = new Uint8Array(total);
+  const marks = new Int32Array(i1 - i0 + 1);
+  let pos = 0, si = i0;
+  for (let k = 0; k < runs.length; k++) {
+    flat.set(parts[k], pos);
+    marks[si - i0] = pos;
+    let q = 0;
+    for (let m = 0; m < runs[k].count; m++) {
+      q += d.sizes[si + m];
+      marks[si + m + 1 - i0] = pos + q;
+    }
+    pos += parts[k].length;
+    si += runs[k].count;
+  }
+  return { i0, i1, flat, marks };
+}
+
+async function liveFetchWindowMp4(startSec, seconds) {
+  const s = await liveFetchSamplesMp4(startSec, seconds);
+  return liveDecodeMp4Window(LIVE.cbr, s.flat, s.marks, s.i0, s.i1);
+}
+
+/* ---------- fMP4 + MSE：只播音频，流量从 24.5 MB/分钟降到约 1.5 MB/分钟 ----------
+   原生 <audio> 指着整个 MP4 时，浏览器会把视频帧一起下下来（实测一分钟 24.5 MB，
+   而音轨只占 6~8%）。这里把样本表拼成一段 init segment + 一串 moof/mdat 的音频分片，
+   喂给 MediaSource，元素只认 blob，视频字节一个都不用下。
+   同一份取回来的字节照旧喂 WebCodecs → 识别，所以「省流量」和「实时识别」共用一次下载。 */
+
+function liveU8Cat(parts) {
+  let n = 0;
+  for (const p of parts) n += p.length;
+  const out = new Uint8Array(n);
+  let o = 0;
+  for (const p of parts) { out.set(p, o); o += p.length; }
+  return out;
+}
+
+function liveW32(u8, i, v) {
+  u8[i] = (v >>> 24) & 0xff;
+  u8[i + 1] = (v >>> 16) & 0xff;
+  u8[i + 2] = (v >>> 8) & 0xff;
+  u8[i + 3] = v & 0xff;
+}
+
+function liveW16(u8, i, v) {
+  u8[i] = (v >>> 8) & 0xff;
+  u8[i + 1] = v & 0xff;
+}
+
+function liveAscii(s) {
+  const out = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i) & 0xff;
+  return out;
+}
+
+function liveZeros(n) {
+  return new Uint8Array(n);
+}
+
+function liveBoxB(type, ...kids) {
+  const body = kids.length ? liveU8Cat(kids) : new Uint8Array(0);
+  const out = new Uint8Array(8 + body.length);
+  liveW32(out, 0, out.length);
+  out.set(liveAscii(type), 4);
+  out.set(body, 8);
+  return out;
+}
+
+function liveFullB(type, ver, flags, ...kids) {
+  const head = new Uint8Array(4);
+  liveW32(head, 0, ((ver & 0xff) << 24) | (flags & 0xffffff));
+  return liveBoxB(type, head, ...kids);
+}
+
+// init segment 不再手搓字段，而是「移植」原片自己的 moov：
+// tkhd / mdhd / hdlr / smhd / dinf / stsd（含 mp4a + esds + ASC）全部按原字节搬过来，
+// 编码配置因此和能在原生播放器里正常播放的那份逐字节一致（手搓的 esds/stsd 被
+// Chromium 的 MSE 解析器拒过一次，没必要再赌字段细节）。
+// 只做三处改造：stbl 的样本表清空（fragmented 形态）、moov 末尾加 mvex/trex、
+// mvhd/tkhd/mdhd 的 duration 归零。
+function liveAacInitSegment(d) {
+  const src = d.moovRaw;
+  if (!src || !src.length) throw new Error('原片 moov 没有留在内存里');
+  const u8 = src;
+  const moov = liveBoxAt(u8, 0, u8.length);
+  if (!moov || moov.type !== 'moov') throw new Error('原片 moov 读不出来');
+  const raw = (b) => u8.slice(b.pos, b.end);
+  let trackId = 1;
+  // duration 归零：version 0/1 的字段偏移不同，这里按各自的布局改。
+  const noDur = (b) => {
+    const out = raw(b);
+    const p = b.body - b.pos;
+    const v = out[p];
+    const off = b.type === 'tkhd'
+      ? (v === 1 ? 28 : 20)
+      : (v === 1 ? 24 : 16);
+    out.fill(0, p + off, p + off + (v === 1 ? 8 : 4));
+    if (b.type === 'tkhd') trackId = liveU32(out, p + (v === 1 ? 20 : 12));
+    return out;
+  };
+  const kids = (b) => liveBoxes(u8, b.body, b.end);
+  const stbl = (b) => {
+    const stsd = kids(b).filter(k => k.type === 'stsd');
+    if (stsd.length !== 1) throw new Error('原片 stsd 结构不对');
+    return liveBoxB('stbl', raw(stsd[0]),
+      liveFullB('stts', 0, 0, liveZeros(4)),
+      liveFullB('stsc', 0, 0, liveZeros(4)),
+      liveFullB('stsz', 0, 0, liveZeros(8)),
+      liveFullB('stco', 0, 0, liveZeros(4)));
+  };
+  const minf = (b) => liveBoxB('minf', ...kids(b).map(k =>
+    (k.type === 'stbl' ? stbl(k) : raw(k))));
+  const mdia = (b) => liveBoxB('mdia', ...kids(b).map(k =>
+    (k.type === 'minf' ? minf(k) : k.type === 'mdhd' ? noDur(k) : raw(k))));
+  const trak = (b) => {
+    const parts = [];
+    for (const k of kids(b)) {
+      if (k.type === 'edts') continue;                 // 分片模式下编辑列表没有意义
+      parts.push(k.type === 'mdia' ? mdia(k) : k.type === 'tkhd' ? noDur(k) : raw(k));
+    }
+    return liveBoxB('trak', ...parts);
+  };
+  // 原片是「视频+音频」两条轨：MSE 的 mime 只声明音频，init 里再塞一条 avc1 的轨会被
+  // 解析器直接拒掉（track 类型和 mime 对不上）。所以只留 hdlr=soun 的那条。
+  const isAudioTrak = (b) => {
+    const md = liveBoxChild(u8, b, 'mdia');
+    const hd = md && liveBoxChild(u8, md, 'hdlr');
+    return !!hd && liveFourCCAt(u8, hd.body + 8) === 'soun';
+  };
+  const moovKids = kids(moov).filter(k => k.type !== 'mvex' && k.type !== 'free').map(k =>
+    (k.type === 'trak' ? (isAudioTrak(k) ? trak(k) : null) : k.type === 'mvhd' ? noDur(k) : raw(k))
+  ).filter(Boolean);
+  const trex = liveFullB('trex', 0, 0, liveU8Cat([
+    new Uint8Array([0, 0, (trackId >>> 8) & 0xff, trackId & 0xff]), // track_ID（从 tkhd 读到的值）
+    new Uint8Array([0, 0, 0, 1]),              // default_sample_description_index
+    new Uint8Array([0, 0, 0, 0]),              // default_sample_duration
+    new Uint8Array([0, 0, 0, 0]),              // default_sample_size
+    liveZeros(4),                              // default_sample_flags
+  ]));
+  const moovNew = liveBoxB('moov', ...moovKids, liveBoxB('mvex', trex));
+  const ftyp = liveBoxB('ftyp', liveAscii('isom'), liveZeros(4),
+    liveAscii('isom'), liveAscii('iso2'), liveAscii('mp41'));
+  return { ftyp, moov: moovNew, trackId, bytes: liveU8Cat([ftyp, moovNew]) };
+}
+
+// 一个媒体分片：moof(mfhd + traf[tfhd/tfdt/trun]) + mdat。
+// tfdt 用样本表里的 tick 作 baseMediaDecodeTime，时间轴和原片完全一致，播放头/进度条不受影响。
+function liveAacFragment(d, seq, i0, i1, flat, marks) {
+  const n = i1 - i0;
+  const build = (dataOffset) => {
+    const entries = new Uint8Array(n * 8);
+    for (let j = 0; j < n; j++) {
+      const t0 = d.ticks[i0 + j];
+      const t1 = i0 + j + 1 < d.n ? d.ticks[i0 + j + 1] : t0 + (i0 + j > 0 ? d.ticks[i0 + j] - d.ticks[i0 + j - 1] : 1024);
+      liveW32(entries, j * 8, Math.max(1, Math.round(t1 - t0)));
+      liveW32(entries, j * 8 + 4, marks[j + 1] - marks[j]);
+    }
+    const trun = liveFullB('trun', 0, 0x000301, liveU8Cat([
+      new Uint8Array([0, 0, 0, n]),
+      new Uint8Array([(dataOffset >>> 24) & 0xff, (dataOffset >>> 16) & 0xff,
+        (dataOffset >>> 8) & 0xff, dataOffset & 0xff]),
+      entries,
+    ]));
+    const base = Math.round(d.ticks[i0]);
+    // tfdt 用 version 0（32 位 baseMediaDecodeTime）：这一集 1853 秒 × 48000 ≈ 8900 万，
+    // 32 位装得下；version 1 要求 64 位字段，写短了整段 moof 会被解析器丢掉。
+    const tfdt = liveFullB('tfdt', 0, 0,
+      new Uint8Array([(base >>> 24) & 0xff, (base >>> 16) & 0xff, (base >>> 8) & 0xff, base & 0xff]));
+    // 0x020000 = default-base-is-moof，trun 的 data_offset 就相对 moof 起点算
+    const tfhd = liveFullB('tfhd', 0, 0x020000,
+      new Uint8Array([0, 0, (d.trackId >>> 8) & 0xff, d.trackId & 0xff]));
+    const mfhd = liveFullB('mfhd', 0, 0, new Uint8Array([0, 0, 0, seq]));
+    return liveBoxB('moof', mfhd, liveBoxB('traf', tfhd, tfdt, trun));
+  };
+  const moof = build(0);
+  const moof2 = build(moof.length + 8);   // data_offset = moof 长度 + mdat 头
+  const mdat = liveBoxB('mdat', flat);
+  return { bytes: liveU8Cat([moof2, mdat]), start: d.times[i0] };
+}
+
+// 一个窗口切成一串小分片再 append。实测 WebView2 的 MSE 解析器对单次 append 的样本数
+// 很挑：同一个 10 秒窗口（200 KB、610 个样本）整段塞进去，buffered 只长出 2 秒；
+// 切成每片 100 个样本（约 35 KB）就整段落地（12 片连续 append 后有完整 13 秒）。
+// 分片头每个约 (16 + 8×样本数) 字节，相对音轨数据可以忽略。
+function liveAacSplit(d, s, per) {
+  const out = [];
+  const step = per || 100;
+  for (let a = s.i0; a < s.i1; a += step) {
+    const b = Math.min(s.i1, a + step);
+    const base = s.marks[a - s.i0];
+    const data = s.flat.subarray(base, s.marks[b - s.i0]);
+    const marks = new Int32Array(b - a + 1);
+    for (let j = 0; j <= b - a; j++) marks[j] = s.marks[a - s.i0 + j] - base;
+    out.push(liveAacFragment(d, ++LIVE.fseq, a, b, data, marks));
+  }
+  return out;
+}
+
+function liveSbAppend(sb, bytes) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => {
+      sb.removeEventListener('updateend', onEnd);
+      sb.removeEventListener('error', onErr);
+    };
+    const onEnd = () => { if (settled) return; settled = true; cleanup(); resolve(); };
+    const onErr = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      const e = sb.error || {};
+      reject(new Error('MSE append 失败（' + (e.message || e.name || '源数据被拒绝') + '）'));
+    };
+    sb.addEventListener('updateend', onEnd);
+    sb.addEventListener('error', onErr);
+    try { sb.appendBuffer(bytes); } catch (e) {
+      if (!settled) { settled = true; cleanup(); reject(e); }
+    }
+  });
+}
+
+async function liveAacMseBegin(atSec) {
+  const d = LIVE.cbr;
+  if (!d || d.kind !== 'mp4') return false;
+  if (!(window.MediaSource && MediaSource.isTypeSupported && MediaSource.isTypeSupported(d.mseType))) {
+    throw new Error('这个浏览器不支持只播音轨（' + d.mseType + '）');
+  }
+  const anchor = Math.max(0, Number.isFinite(atSec) ? atSec : liveMseAnchor());
+  try { audio.pause(); } catch (e) {}
+  try { audio.removeAttribute('src'); audio.load(); } catch (e) {}
+  await new Promise(r => setTimeout(r, 250));
+  const ms = new MediaSource();
+  const m = {
+    media: ms, sb: null, url: '', first: false, total: d.durSec,
+    seq: 0, pending: [], queuedBytes: 0, base: anchor, playing: false, kind: 'aac',
+  };
+  LIVE.mse = m;
+  m.url = URL.createObjectURL(ms);
+  let opened = false;
+  for (let attempt = 0; attempt < 5 && !opened; attempt++) {
+    try { audio.pause(); } catch (e) {}
+    audio.src = m.url;
+    try { audio.load(); } catch (e) {}
+    opened = await new Promise(resolve => {
+      if (ms.readyState === 'open') { resolve(true); return; }
+      const on = () => { ms.removeEventListener('sourceopen', on); clearTimeout(timer); resolve(true); };
+      ms.addEventListener('sourceopen', on);
+      const timer = setTimeout(() => {
+        ms.removeEventListener('sourceopen', on);
+        resolve(false);
+      }, 3000);
+    });
+  }
+  if (!opened) throw new Error('MediaSource 打不开（不支持只播音轨）');
+  if (audio.src !== m.url) { audio.src = m.url; try { audio.load(); } catch (e) {} }
+  m.sb = ms.addSourceBuffer(d.mseType);
+  // SourceBuffer 进入 error 状态后，后面每次 appendBuffer 都只会抛 InvalidStateError，
+  // 真正的原因（哪一段被解析器拒绝）只在第一次的 error 事件里，所以把它记下来。
+  m.sb.addEventListener('error', () => {
+    const e = m.sb.error || {};
+    m.lastErr = 'sb error: ' + (e.message || e.name || '?') + ' @seq=' + (m.seq || 0)
+      + ' @ready=' + ms.readyState;
+  });
+  // 队列里有下一段就立刻推进：不然要等下一次 pump（约 1 秒）才 append 第二段，
+  // 播放侧多出来的空档会被「等待播放缓冲」判定放大成停顿。
+  m.sb.addEventListener('updateend', () => { if (LIVE.mse === m) liveMseKick(); });
+  const init = liveAacInitSegment(d);
+  m.init = init.bytes;
+  await liveSbAppend(m.sb, init.bytes);
+  try { if (d.durSec > 0) ms.duration = d.durSec; } catch (e) {}
+  try { audio.currentTime = anchor; } catch (e) {}
+  audio.playbackRate = prefs.speed || 1;
+  return true;
+}
+
+// 单流模式下 MP4 的取窗：同一份字节既拼分片喂 MSE，又解成 PCM 喂识别。
+async function liveFetchWindowAacMse(startSec, seconds) {
+  const d = LIVE.cbr;
+  const m = LIVE.mse;
+  const s = await liveFetchSamplesMp4(startSec, seconds);
+  if (!m || !m.sb) return liveDecodeMp4Window(d, s.flat, s.marks, s.i0, s.i1);
+  // 按样本切成小片入队（原因见 liveAacSplit）；播放侧的时间轴由每片的 tfdt 自报。
+  const parts = liveAacSplit(d, s, 100);
+  for (const p of parts) liveMsePush(new Uint8Array(p.bytes), p.start);
+  return liveDecodeMp4Window(d, s.flat, s.marks, s.i0, s.i1);
 }
 
 // 取 [startSec, startSec+seconds) 这段：按码率算出字节范围 → 重同步到帧边界 → 解码成 16k 单声道。
+// MP4 走样本表路径（liveFetchWindowMp4），不再按码率猜字节位置。
 async function liveFetchWindow(startSec, seconds) {
   const c = LIVE.cbr;
-  if (!c || !LIVE.ctx) return null;
+  if (!c) return null;
+  if (c.kind === 'mp4') return liveFetchWindowMp4(startSec, seconds);
+  if (!LIVE.ctx) return null;
   const from = Math.max(0, c.origin + Math.floor(startSec * c.bps) - 8192);
   const to = c.origin + Math.ceil((startSec + seconds) * c.bps) + 16384;
   const bytes = await liveFetchRange(from, to);
@@ -420,11 +1218,11 @@ async function liveFetchWindow(startSec, seconds) {
   return { pcm: buf.getChannelData(0), start };
 }
 
-// ── 单流播放（实验，Chrome/Edge）─────────────────────────────────────────────
-// 同一份字节只下载一次：解析出的 MP3 帧既 append 给 MediaSource 播放，又随
-// decodeAudioData 成 PCM 喂识别，所以识别能真正跑到播放前面，不再受“播放器
-// 只缓冲十几秒”的限制。默认关闭（prefs.liveMse）；Safari 的 MSE 不支持
-// audio/mpeg，会自动退回原生播放 + Range 取音频的老路径。
+// ── 单流播放 ──────────────────────────────────────────────────────────────
+// 同一份字节只下载一次：MP3 走帧解析、MP4/AAC 走样本表，取回来的字节既 append 给
+// MediaSource 播放，又解码成 PCM 喂识别，所以识别能真正跑到播放前面，不再受“播放器
+// 只缓冲十几秒”的限制。默认开启（prefs.liveMse）；MSE 不支持该 mime 时自动退回
+// 原生播放 + Range 取音频的老路径。
 // 等音频拿到元数据；换集后要在这里等新一集的音频，否则锚点会算成 0。
 function liveWaitAudioReady(timeoutMs) {
   return new Promise(resolve => {
@@ -440,7 +1238,10 @@ function liveWaitAudioReady(timeoutMs) {
 
 function liveMseCapable() {
   try {
-    return !!(window.MediaSource && MediaSource.isTypeSupported && MediaSource.isTypeSupported('audio/mpeg'));
+    const c = LIVE.cbr;
+    const mime = c && c.kind === 'mp4' ? (c.mseType || '') : 'audio/mpeg';
+    return !!(window.MediaSource && MediaSource.isTypeSupported && mime
+      && MediaSource.isTypeSupported(mime));
   } catch (e) { return false; }
 }
 
@@ -454,7 +1255,10 @@ function liveMseAnchor() {
 }
 
 async function liveMseBegin(atSec) {
-  if (!liveMseCapable() || !LIVE.cbr) return false;
+  if (!LIVE.cbr) return false;
+  // AAC 走 fMP4 分片（只播音轨，不下视频帧）；MP3 还是原来那套自由字节流。
+  if (LIVE.cbr.kind === 'mp4') return liveAacMseBegin(atSec);
+  if (!liveMseCapable()) return false;
   const c = LIVE.cbr;
   const d0 = liveAudioDuration();
   const total = Number.isFinite(d0) && d0 > 0 ? d0
@@ -525,7 +1329,8 @@ function liveMseKick() {
     m.seq = (m.seq || 0) + 1;
     sb.appendBuffer(item.slice);
   } catch (e) {
-    m.lastErr = e && e.name ? e.name : String(e);
+    m.lastErr = (e && e.name ? e.name : String(e)) + ': ' + (e && e.message ? e.message : '')
+      + ' @ready=' + (m.media ? m.media.readyState : '?');
   }
 }
 
@@ -563,6 +1368,8 @@ function liveMseTrim(head) {
 function liveMseStop(why) {
   const m = LIVE.mse;
   if (!m) return;
+  LIVE.mseWhy = (why || 'call') + ' @' + Math.round(audio.currentTime || 0)
+    + ' src=' + String(audio.src).slice(0, 24) + ' err=' + (m.lastErr || '-');
   LIVE.mse = null;
   const pos = audio.currentTime || 0;
   const wasPlaying = !audio.paused;
@@ -587,7 +1394,9 @@ function liveMseStop(why) {
 
 async function liveFetchWindowMse(startSec, seconds) {
   const c = LIVE.cbr;
-  if (!c || !LIVE.ctx) return null;
+  if (!c) return null;
+  if (c.kind === 'mp4') return liveFetchWindowAacMse(startSec, seconds);
+  if (!LIVE.ctx) return null;
   const from = Math.max(0, LIVE.bytePos);
   const to = from + Math.ceil(seconds * c.bps) + 16384;
   const bytes = await liveFetchRange(from, to);
@@ -681,8 +1490,14 @@ async function livePumpOnce(gen) {
       // 播放头被拖到了缓冲之外（跳转、恢复进度、拖动进度条）。MSE 模式里元素在
       // 拿到新位置的数据**之前不会发 seeked**，靠事件重锚会死锁在这里，所以每轮
       // 自己看一次：播放头不在已 append 的区间里就按新位置重建管线。
+      // b.length 为 0 时也要看：从片尾（缓冲早已清空、只剩一个空 MediaSource）
+      // 往回拖时 buffered 是空的、LIVE.next 还停在旧位置，只按区间判断永远等不到
+      // “跳出去”那一刻，元素就一直 seeking（实测卡在 300 秒不动、也不出句）。
       const m = LIVE.mse, b = m.sb.buffered, head0 = audio.currentTime || 0;
-      if (!m.reanchoring && b.length && (head0 < b.start(0) - 1 || head0 > b.end(b.length - 1) + 1)) {
+      const inside = b.length && head0 >= b.start(0) - 1 && head0 <= b.end(b.length - 1) + 1;
+      const drifted = !inside && head0 > 1
+        && (b.length > 0 || m.seq > 0 || Math.abs(head0 - m.base) > 5);
+      if (!m.reanchoring && drifted) {
         m.reanchoring = true;
         liveMseReanchor(head0).then(ok => { if (LIVE.on && ok) liveRebuildStream(); });
         return;
@@ -847,6 +1662,27 @@ function liveStopPump() {
   if (LIVE.pumpTimer) clearTimeout(LIVE.pumpTimer);
   LIVE.pumpTimer = 0;
 }
+
+/* ---------- 调试钩子：实时识别排障（控制台里 __live 直接调内部函数） ---------- */
+if (typeof window !== 'undefined') {
+  window.__live = {
+    LIVE,
+    prefs,
+    probe: () => liveProbeAudio(),
+    win: (a, b) => liveFetchWindow(a, b),
+    aidx: (sec) => (LIVE.cbr && LIVE.cbr.kind === 'mp4'
+      ? { i: liveSampleAt(LIVE.cbr.times, sec), t: LIVE.cbr.times[liveSampleAt(LIVE.cbr.times, sec)], n: LIVE.cbr.n }
+      : null),
+    init: () => (LIVE.cbr && LIVE.cbr.kind === 'mp4' ? liveAacInitSegment(LIVE.cbr).bytes : null),
+    samples: (a, b) => liveFetchSamplesMp4(a, b),
+    frag: (s) => {
+      LIVE.fseq = (LIVE.fseq || 0) + 1;
+      return liveAacFragment(LIVE.cbr, LIVE.fseq, s.i0, s.i1, s.flat, s.marks).bytes;
+    },
+    fragParts: (s, per) => liveAacSplit(LIVE.cbr, s, per || 100).map(f => f.bytes),
+  };
+}
+
 
 registerTranscriber('native', { load: () => liveNativeLoad() });
 registerTranscriber('sherpa', { load: () => liveSherpaLoad() });
