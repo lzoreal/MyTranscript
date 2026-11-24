@@ -3,7 +3,7 @@ import { emptyLine, esc, fmt, isBracket, isJsonTranscript, loaderHTML, pluginPag
 import { syncLiveLeadSelect } from './02-live-caption-wasm.js';
 import { selectEpisode } from './03-native-asr-service-worker.js';
 import { PLUGIN_PAGES, applySlotMounts, destroyV2Page, emitPlugin, loadShow, pluginPlayerState, pluginReportError, refreshPluginSettings, renderPluginPage, renderV2Page, subtitlePluginOn } from './04-local-audio-plugin-host.js';
-import { LOCAL_KEY, PAGE_NAMES, QUEUE_KEY, THEME_NAMES, absoluteFeed, app, catalogLatest, epStatusBadges, episodeFilterMatch, episodesOf, firstShowKey, fmtBytes, fmtDuration, formatDate, hash32, hostOf, idxGetAll, inboxCount, isFavorite, isPlayed, isSubscribed, moduleOn, navigate, notifyPlayTargetFailure, offlineKeyFor, parseRoute, plainText, playTarget, playTargetLabel, readAllProgress, readJSON, refreshShows, renderAfterStateChange, renderDownloads, renderOfflineList, renderPlaylists, returnToCue, routeHash, routeModuleAllows, showByKey, showPrefFor, syncDockBadge, syncDockSleep, syncIndexCount, syncRateSeg, writeJSON } from './05-transport-transcript-nav.js';
+import { LOCAL_KEY, PAGE_NAMES, QUEUE_KEY, THEME_NAMES, absoluteFeed, app, catalogLatest, epStatusBadges, episodeFilterMatch, episodesOf, firstShowKey, fmtBytes, fmtDuration, formatDate, hash32, hostOf, idxGetAll, inboxCount, isFavorite, isPlayed, isSubscribed, moduleOn, navigate, notifyPlayTargetFailure, offlineKeyFor, parseRoute, plainText, playTarget, playTargetLabel, readAllProgress, readJSON, refreshShows, renderAfterStateChange, refreshOffline, renderDownloads, renderOfflineList, renderPlaylists, returnToCue, routeHash, routeModuleAllows, showByKey, showPrefFor, syncDockBadge, syncDockSleep, syncIndexCount, syncRateSeg, writeJSON } from './05-transport-transcript-nav.js';
 import { coverHTML, ensureShowFeed, episodeCover, hasFreshFeed, memoryFeed, renderOnlineResults } from './06-catalog-feeds-search.js';
 import { motionFlip, motionReduced } from './11-motion.js';
 
@@ -151,6 +151,12 @@ function renderPage(page, route) {
   if (!routeModuleAllows(page)) {
     if (page !== 'home') navigate('home');
     return;
+  }
+  if (page === 'downloads') {
+    /* 进下载页先按磁盘实际内容重读一次。壳推的 myt://offline 事件可能没到
+       （窗口失焦、监听还没挂上、限流），只信事件的话页面就是进应用时的旧快照，
+       表现就是「下载完了，列表里没有，刷新一下才出来」。 */
+    refreshOffline();
   }
   if (renderV2Page(page)) {
     enhanceClickableRows();
@@ -1301,6 +1307,9 @@ function inboxEpisode(item) {
 function renderInbox() {
   const hint = $('inboxHint');
   if (hint) hint.textContent = app.inbox.length ? app.inbox.length + ' 集待处理 · 新单集先放这里' : '新单集先放这里，决定入队、收藏或标记已听。';
+  // 空态里没有可清的内容，清空按钮不该出现（§8.4：不展示无用的支撑操作）
+  const clearBtn = $('inboxClearBtn');
+  if (clearBtn) clearBtn.hidden = !app.inbox.length;
   const inboxBox = $('inboxList');
   motionFlip(inboxBox, '.ep-row', () => {
   inboxBox.innerHTML = app.inbox.length

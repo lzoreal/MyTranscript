@@ -108,7 +108,7 @@ pub fn models_root() -> Result<std::path::PathBuf, String> {
     Ok(root)
 }
 
-pub fn spec_by_id(id: &str) -> Option<&'static ModelSpec> {
+fn spec_by_id(id: &str) -> Option<&'static ModelSpec> {
     MODELS.iter().find(|spec| spec.id == id)
 }
 
@@ -194,7 +194,7 @@ pub fn write_model_json(
 
 /// 缺哪个下哪个，边下边把进度 emit 给设置页。
 /// 支持断点续传（`.part` 留着，下次带 Range 接着下）与取消（页面塞进 `asr_cancel`）。
-pub async fn download_model_file(
+async fn download_model_file(
     app: &tauri::AppHandle,
     state: &AppState,
     client: &reqwest::Client,

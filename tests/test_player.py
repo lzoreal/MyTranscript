@@ -61,6 +61,12 @@ def player_page():
             '<link rel="stylesheet" href="player.css">',
             "<style>\n" + css_path.read_text(encoding="utf-8") + "</style>",
         )
+    # 正文现在归骨架管（src/skeletons/ → site/skeletons-defaults.js），断言要的是运行时的样子。
+    skel_path = SITE / "skeletons-defaults.js"
+    if skel_path.is_file():
+        text = skel_path.read_text(encoding="utf-8")
+        packs = json.loads(text[text.index("{"): text.rindex("}") + 1])
+        page = page.replace('<div id="shellMount"></div>', packs.get("base", ""))
     js_dir = SITE / "player"
     if js_dir.is_dir():
         chunks = []
@@ -837,7 +843,7 @@ class PlayerPrototypeThemeTests(unittest.TestCase):
         page = player_page()
         self.assertIn('[data-theme="prototype"]{', page)
         self.assertIn("prototype: '原型'", page)
-        self.assertIn("LIGHT_THEMES = new Set(['paper', 'mist', 'prototype', 'ledger', 'apple'])", page)
+        self.assertIn("LIGHT_THEMES = new Set(['mist', 'prototype', 'ledger', 'apple', 'news'])", page)
         self.assertIn('data-theme="prototype"', page)
         self.assertIn('[data-theme="ledger"]{', page)
         self.assertIn("ledger: '编辑部'", page)
@@ -926,13 +932,14 @@ assert.strictEqual(playTarget('ext', 'e1').ok, true);
 
 
 class PlayerThemeContrastTests(unittest.TestCase):
-    THEMES = ["brass", "midnight", "forest", "oxblood", "celadon", "paper", "mist", "prototype", "ledger", "apple", "spotify"]
+    THEMES = ["brass", "forest", "oxblood", "celadon", "mist", "prototype", "ledger", "apple", "spotify"]
 
     def _block(self, page, name):
         if name == "brass":
             match = re.search(r":root\{\s*color-scheme:dark;(.*?)\n\}", page, re.S)
         else:
-            match = re.search(r'\[data-theme="' + name + r'"\]\{(.*?)\n\}', page, re.S)
+            # 锚到行首：`.swatch[data-theme="x"]{…}` 这类一行规则不能当成调色板
+            match = re.search(r'(?m)^\[data-theme="' + name + r'"\]\{(.*?)\n\}', page, re.S)
         self.assertIsNotNone(match, name)
         return dict(re.findall(r"--([A-Za-z0-9-]+):([^;]+);", match.group(1)))
 
@@ -1504,16 +1511,25 @@ class PlayerStudyShortcutTests(unittest.TestCase):
     def test_extension_module_shares_main_iife_scope(self):
         """扩展模块必须写在主 IIFE 内：另起 <script> 拿不到 state / studyRender* 等私有绑定，
         包装会静默失效（缓存徽标、前情回顾、练习扩展按钮曾经整块消失）。
-        唯一允许的 inline <script> 是 data-theme-prewarm（首帧主题预热，只在 <head> 里读
-        localStorage 并挂 <style id="ctStyle">，不碰任何模块私有变量）；其余两个是
-        themes-defaults.js（纯数据）与 player.js（module）。"""
-        scripts = re.findall(r"<script[^>]*>", self.html)
-        self.assertEqual(len(scripts), 3)
+        允许的 inline <script> 只有两个：data-theme-prewarm（首帧主题预热，只在 <head> 里读
+        localStorage 并挂 <style id="ctStyle">，不碰任何模块私有变量）与骨架引导
+        （2026-11-23 起把 base 骨架贴进 #shellMount，也必须在 player.js 之前、且只碰 wndow.MYT_SKELETONS）；
+        其余是 skeletons-defaults.js / themes-defaults.js（纯数据）与 player.js（module）。"""
+        # 数脚本要数「发到浏览器的页面」本身：player_page() 会把模块分片内联成一个额外 <script>，
+        # 那是测试装置的产物，不是页面的形状。
+        raw = (SITE / "player.html").read_text(encoding="utf-8")
+        scripts = re.findall(r"<script[^>]*>", raw)
+        inline = [s for s in scripts if "src=" not in s]
+        self.assertEqual(len(scripts), 5)
+        self.assertEqual(len(inline), 2, "多出了第三个 inline 脚本，模块私有绑定会拿不到")
         self.assertEqual(len([s for s in scripts if "data-theme-prewarm" in s]), 1,
                          "首帧主题预热脚本缺 data-theme-prewarm 标记，或出现了第二个 inline 脚本")
         self.assertEqual([s for s in scripts if 'type="module"' in s], [s for s in scripts if "player.js" in s])
-        self.assertIn('src="themes-defaults.js"', scripts[1])
-        self.assertNotIn("</script>\n<script", self.html)
+        self.assertIn('src="themes-defaults.js"', raw)
+        self.assertIn('src="skeletons-defaults.js"', raw)
+        # 骨架引导只能紧跟在 skeletons-defaults.js 之后（player.js 之前），不能插进别的脚本中间。
+        self.assertIn('src="skeletons-defaults.js"></script>\n<script>\n/* 骨架引导', raw,
+                      "骨架引导脚本必须紧跟 skeletons-defaults.js，且排在 player.js 之前")
         self.assertIn("window.__xai", self.html)
 
 
@@ -1618,7 +1634,8 @@ class PlayerSeamTests(unittest.TestCase):
 
     def test_onboarding_coverage_and_intensive(self):
         """首启三步、搜索覆盖率、精听四步三个入口都要有真实挂载点。"""
-        html = (ROOT / "site" / "player.html").read_text(encoding="utf-8")
+        # 首页与阅读页的结构现在归骨架（src/skeletons/base.html）管，断言要看内联后的运行时形态。
+        html = player_page()
         pages = (self.parts / "07-routes-pages.js").read_text(encoding="utf-8")
         integration = (self.parts / "09-player-integration.js").read_text(encoding="utf-8")
         css = (ROOT / "site" / "player.css").read_text(encoding="utf-8")

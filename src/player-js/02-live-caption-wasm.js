@@ -940,11 +940,6 @@ function liveW32(u8, i, v) {
   u8[i + 3] = v & 0xff;
 }
 
-function liveW16(u8, i, v) {
-  u8[i] = (v >>> 8) & 0xff;
-  u8[i + 1] = v & 0xff;
-}
-
 function liveAscii(s) {
   const out = new Uint8Array(s.length);
   for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i) & 0xff;

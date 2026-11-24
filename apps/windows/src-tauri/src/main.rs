@@ -41,7 +41,7 @@ pub(crate) struct AppState {
 use crate::models::{model_dir_for, models_root};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{Emitter, Manager, State};
+use tauri::{Emitter, Manager};
 
 pub(crate) fn dbg_log(line: &str) {
     if std::env::var("MYT_DEBUG").is_err() {

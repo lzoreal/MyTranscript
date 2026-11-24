@@ -274,7 +274,7 @@ impl Asr {
     /// 整集转写必须用这个，不然一次 `result()` 只解 32 帧，
     /// 长音频会越积越多，最后只出开头几秒。
     pub fn drain(&self) -> Result<String, String> {
-        let mut last = String::from("{}");
+        let mut last;
         loop {
             last = self.result()?;
             if !self.ready() {

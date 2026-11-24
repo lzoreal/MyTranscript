@@ -8,7 +8,6 @@ use std::ptr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use windows::core as windows_core;
 use windows::core::{implement, Interface, Ref, PWSTR};
 use windows::Win32::Foundation::CloseHandle;
 use windows::Win32::Media::Audio::{
@@ -146,7 +145,6 @@ pub struct Capture {
     client: IAudioClient,
     capture: IAudioCaptureClient,
     pub device_id: String,
-    pub src_rate: u32,
     pub channels: usize,
     pub is_float: bool,
     pub bits: u16,
@@ -252,7 +250,6 @@ impl Capture {
                 client,
                 capture,
                 device_id,
-                src_rate,
                 channels,
                 is_float,
                 bits,
@@ -399,7 +396,6 @@ impl Capture {
                 client,
                 capture,
                 device_id: format!("pid:{pid}"),
-                src_rate,
                 channels,
                 is_float,
                 bits,

@@ -143,7 +143,8 @@ function studyPlayItem(item) { const r = studyRuntime(); if (r) r.playItem(item)
 function studyAudioTick() { const r = studyRuntime(); if (r) r.audioTick(); }
 
 function syncThemeSwatches() {
-  const current = document.documentElement.dataset.theme;
+  /* 当前主题只有一个真源：data-theme 就是内置档 id 或包卡 id，不再有 data-theme-id 这层。 */
+  const current = document.documentElement.dataset.theme || '';
   themeBtns().forEach(button => button.setAttribute('aria-checked', String(button.dataset.theme === current)));
 }
 function renderSidebarSettings() {

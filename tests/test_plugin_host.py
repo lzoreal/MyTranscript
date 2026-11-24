@@ -11,6 +11,20 @@ from pathlib import Path
 ROOT = Path(__file__).parents[1]
 PART = ROOT / "src" / "player-js" / "04-local-audio-plugin-host.js"
 
+
+def page_markup() -> str:
+    """页面 DOM 归骨架管（src/skeletons/base.html → site/skeletons-defaults.js），
+    贡献点锚点要按运行时的样子断，不能直接读 site/player.html 的空挂载点。"""
+    import json
+
+    page = (ROOT / "site" / "player.html").read_text(encoding="utf-8")
+    skel = ROOT / "site" / "skeletons-defaults.js"
+    if skel.is_file():
+        text = skel.read_text(encoding="utf-8")
+        packs = json.loads(text[text.index("{"): text.rindex("}") + 1])
+        page = page.replace('<div id="shellMount"></div>', packs.get("base", ""))
+    return page
+
 PRELUDE = """
 const app = { capabilities: {}, plugins: [], pluginErrors: new Map() };
 const document = { body: { dataset: {} } };
@@ -351,7 +365,7 @@ class PluginHostTests(unittest.TestCase):
                    "function renderPluginSearchSources", "function renderPluginThemes",
                    "function applyPluginExtensions"):
             self.assertIn(fn, text, "缺少贡献点消费入口：" + fn)
-        page = (ROOT / "site" / "player.html").read_text(encoding="utf-8")
+        page = page_markup()
         for anchor in ("pluginMenuBtn", "pluginMenuPop", "pluginImporters", "pluginSearchSources"):
             self.assertIn('id="' + anchor + '"', page, "页面缺少插件贡献点锚点：" + anchor)
 
@@ -539,7 +553,7 @@ guarded('/json/x.json').then(() => {
         block = contract.split("export const FIXED_SLOTS", 1)[1].split("]);", 1)[0]
         slots = re.findall(r"'([a-z][a-z.]+)'", block)
         self.assertTrue(slots, "固定槽位表解析失败")
-        page = (ROOT / "site" / "player.html").read_text(encoding="utf-8")
+        page = page_markup()
         routes = (ROOT / "src" / "player-js" / "07-routes-pages.js").read_text(encoding="utf-8")
         anchors = re.findall(r'data-plugin-slot="([^"]+)"', page) + re.findall(r'data-plugin-slot="([^"]+)"', routes)
         self.assertEqual(sorted(set(anchors)), sorted(slots), "页面锚点与固定槽位表必须一一对应")

@@ -61,7 +61,7 @@ class PlayerJsBuildTests(unittest.TestCase):
         bridge = (PARTS / "10-desktop-bridge-tail.js").read_text(encoding="utf-8")
         self.assertIn("if (!subtitlePluginOn())", bridge,
                       "没有插件时播放要走原生驻留分支")
-        self.assertIn("loadShow(show.slug, epId)", bridge,
+        self.assertIn("loadShow(show.slug, epId, { strict: true })", bridge,
                       "没有插件时应在原页面加载并播放，而不是跳播放页")
 
 

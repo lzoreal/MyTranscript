@@ -36,7 +36,7 @@ MyTPlugins.define('ask', {
             '<div class="ask-box">' +
               '<input class="ask-input" type="search" placeholder="问这一集：他为什么这么说？/ 这集提过哪些车？" aria-label="对本集文字稿提问">' +
               '<button class="btn ghost ask-search" type="button">检索原话</button>' +
-              '<button class="btn primary ask-ask" type="button">AI 回答</button>' +
+              '<button class="btn ghost ask-ask" type="button">AI 回答</button>' +
             '</div>' +
             '<div class="ask-answer" hidden></div>' +
             '<div class="ask-results"></div>' +

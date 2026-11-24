@@ -65,7 +65,15 @@ class MediaHostTest(unittest.TestCase):
         routes = (PLAYER / "07-routes-pages.js").read_text(encoding="utf-8")
         self.assertIn("myt-video-progress:", routes)
         self.assertIn("bindVideoExtras(video, ep)", routes)
+        # 正文归骨架管，锚点要按运行时（base 已内联）的样子断。
         html = (ROOT / "site" / "player.html").read_text(encoding="utf-8")
+        skel = ROOT / "site" / "skeletons-defaults.js"
+        if skel.is_file():
+            import json
+
+            text = skel.read_text(encoding="utf-8")
+            packs = json.loads(text[text.index("{"): text.rindex("}") + 1])
+            html = html.replace('<div id="shellMount"></div>', packs.get("base", ""))
         self.assertIn('id="videoCues"', html)
 
     def test_new_plugin_manifests(self):

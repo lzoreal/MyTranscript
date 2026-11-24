@@ -63,6 +63,19 @@ C:\ProgramData\MyTranscript\plugins\
 
 `home/library/downloads/settings` 的页面代码通过按域拆开的只读服务复用宿主数据：`ctx.ui` 只放纯展示原语，订阅/节目数据在 `ctx.catalog`，进度在 `ctx.progress`，离线数据在 `ctx.downloads`，偏好与设置动作在 `ctx.settings`。`subtitles/study` 仍通过 `ctx.api` 使用各自的能力 API；实时识别与桌面字幕的会话生命周期都在字幕插件里。
 
+**主题查询**：`data-theme` 现在是唯一真源，它的值可能是内置档 id（`ledger`），也可能是一张随包卡的 id（`ct-pack-<slug>`）——插件**不要**自己比字符串判断深浅或骨架，统一问 `ctx.settings`：
+
+| 方法 | 返回 |
+| --- | --- |
+| `themeNames()` | 七档内置色板 `{id: 显示名}`，用来画设置页色板 |
+| `themeId()` | 当前主题 id（内置档或卡） |
+| `themeBase()` | 卡上点「停用」会回到的内置档 |
+| `themeIsLight()` | 当前主题是否浅色（读 `html[data-scheme]`） |
+| `themeSkeleton()` | 当前骨架：`rail / strip / print / grid`（读 `html[data-skel]`） |
+| `themePacks()` | 随包卡清单 `{id, name, skeleton, light, active}`，`active` 只标当前那张 |
+
+配色不要写死：插件页面的颜色全用宿主变量（`--panel / --panel2 / --line / --ink / --muted / --bright / --accent`，`--card` 由 `--panel` 派生），随包主题切过去时变量会跟着换，插件面板自动适配深浅。
+
 另有四个 2.2 的实验包，贴在既有槽位上、不改播放内核：
 
 | 目录 | 贡献 | 说明 |

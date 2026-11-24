@@ -77,12 +77,17 @@ MyTPlugins.define('subtitles', {
                 '<button class="btn ghost" data-subsx="settings">字幕与阅读设置</button>' +
                 '<button class="btn ghost" data-subsx="lang">切换双语/英文</button>' +
                 '<button class="btn ghost" data-subsx="live">' + (s.live ? '停止实时识别' : '开启实时识别') + '</button>' +
-                '<button class="btn ghost" data-subsx="clip">精听刚才 15 秒</button>' +
-                '<button class="btn ghost" data-subsx="export">导出当前字幕</button>' +
-                (desktop && desktop.available()
-                  ? '<button class="btn ghost" data-subsx="desktop">' + (desktop.status().on ? '停止桌面字幕' : '开始桌面字幕') + '</button>' +
-                    '<button class="btn ghost" data-subsx="pick">选择应用</button>'
-                  : '') +
+                '<details class="more-menu subsx-more">' +
+                  '<summary class="btn ghost">更多</summary>' +
+                  '<div class="more-list">' +
+                    '<button class="btn ghost" data-subsx="clip">精听刚才 15 秒</button>' +
+                    '<button class="btn ghost" data-subsx="export">导出当前字幕</button>' +
+                    (desktop && desktop.available()
+                      ? '<button class="btn ghost" data-subsx="desktop">' + (desktop.status().on ? '停止桌面字幕' : '开始桌面字幕') + '</button>' +
+                        '<button class="btn ghost" data-subsx="pick">选择应用</button>'
+                      : '') +
+                  '</div>' +
+                '</details>' +
               '</div>' +
               (desktop && desktop.available()
                 ? '<p class="subsx-ep">桌面字幕：' + (desktop.status().on ? '采集中' : '未开始') + (desktop.status().error ? ' · ' + desktop.status().error : '') + '</p>'

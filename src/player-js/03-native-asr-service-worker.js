@@ -687,7 +687,7 @@ audio.addEventListener('ended', () => {
       kid.setAttribute('data-tauri-drag-region', '');
     });
   };
-  markDrag(document.querySelector('.topbar'));
+  markDrag(document.querySelector('[data-anchor="drag-top"]') || document.querySelector('.topbar'));
   markDrag(document.querySelector('.brand'));
   // 播放页自己的 58px 顶栏也要能拖；按钮/窗口控件在 markDrag 里已经排除。
   markDrag(document.getElementById('readerTop') || document.querySelector('.reader-top-actions'));
@@ -756,9 +756,11 @@ audio.addEventListener('ended', () => {
     });
     return box;
   };
-  const topActions = document.querySelector('.top-actions');
+  // 骨架锚点优先：主题自带骨架时，窗口控件挂在骨架留出的那个位置上；
+  // 没有锚点（老骨架）才回落到 .top-actions，两套骨架都能用。
+  const topActions = document.querySelector('[data-anchor="window-controls"]') || document.querySelector('.top-actions');
   if (topActions) { const c = makeCtl(); c.classList.add('win-ctl-app'); topActions.appendChild(c); }
-  const readerRight = document.querySelector('.reader-top-right');
+  const readerRight = document.querySelector('[data-anchor="reader-controls"]') || document.querySelector('.reader-top-right');
   if (readerRight) readerRight.appendChild(makeCtl());
 })();
 

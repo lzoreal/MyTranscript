@@ -1998,3 +1998,733 @@ MP3 集（how-we-made-your-mother）回归正常：MSE 接管、10 秒/10 秒地
 `{i0,i1,flat,marks}`，`__live.frag(s)` / `__live.fragParts(s, 每片样本数)` 看分片字节；
 `LIVE.net` 记着实时识别一共取了多少字节/多少次请求，`LIVE.mseWhy` 记最近一次 `liveMseStop`
 的原因（`detach` = 页面把 src 换回原始地址）。
+
+## 内置主题档新增「报纸 / 影集」（2026-11-23）
+
+在原有六档（midnight / paper / prototype / ledger / apple / spotify）之后新增两档，**默认档仍是 ledger**，
+其余档没有改动一行 CSS。
+
+- `[data-theme="news"]`（报纸头版）：浅纸 `#faf8f3` + 墨黑 + 赭红。首页 `.ledger-home` 变 1.62fr / 1fr / 1fr
+  三栏：报头行（`Listen. Read.` 单行 Georgia）+ 双线 rule，左栏「继续收听」做成头条（整宽灰度图 + 32px 衬线标题），
+  中栏「最近更新」只取前 6 条（`nth-child(n+7)` 隐藏），右栏「推荐播客」压成文字行 + 订阅链接，
+  底部 `#homeStats` 变成带双线的数字条。
+- `[data-theme="plate"]`（影集）：深炭 `#15140f` + 米色字。首页变 716px / 1fr 两列：左列整幅图版
+  （`#homeContinue` 撑满 `grid-row:2/span 4`，`.pod-art` 用 `flex:1 1 0;height:0` 吃掉剩余高度，
+  灰度 + 底部渐变），图注做成实底色块（34px 衬线集名 + 等宽元信息 + 圆形播放键）；右列是 34px 缩略图
+  的「图版索引」和 4 张封面的「推荐」条。
+- 两档的令牌块都补齐了 `--shell-nav*`，否则侧栏沿用深色导航字色，纸底上等于看不见。
+- `13-theme.js` 的 `LIGHT_THEMES` 加上 `news`（影响状态栏/深色判定），`plate` 属深色，不加。
+- `base.html` 两处色卡组都加了新按钮：顶栏 `.theme-pop` 加 news + plate；设置页「浅色」加 news、
+  「深色」加 plate。`.swatch[data-theme="news"|"plate"]` 的色卡预览色写在 `player.css` 末尾。
+- 这两档是纯 CSS 版式覆盖，不改骨架、不加挂载点；自定义主题（`myt-theme-custom`）启用时仍会按
+  `html[data-theme]` 规则盖在上面，与既有行为一致。
+
+### 壳体也归主题管（2026-11-23 同批补）
+
+首页排完之后又补了「除首页外的表面」：侧栏、顶栏、底栏、阅读页、库页卡片、设置页控件都不是另写一套，
+而是用 `html[data-theme="news"]` / `html[data-theme="plate"]` 前缀接同一套印刷语言：
+
+- 侧栏：报纸是窄纸（3px 双线报头、栏目名小号大写带细线、选中项反白成墨块），影集是装订边
+  （一道细米线、栏目名 dim、选中项米色底 + 2px 米色左线）。两档都补了 `--shell-navmuted` / `--shell-navline`。
+- 顶栏：64px、底部双细线（报纸）/ 单细线（影集），面包屑改大写大字距，图标按钮切成方形或圆线框。
+- 底栏（`.dock`）：切直角、去投影、去毛玻璃，顶部一道双线/细线，播放键实心（报纸墨黑、影集米金）。
+- 库页/详情页：`.pod-art` 一律切直角，`.pod-card strong` 换衬线，`.pill` 方角描边，`.detail-hero` 去渐变改
+  左侧 3px 色条，`.`mini-player` 切直角。
+- 设置页：`.settings-menu button` 接侧栏语言（衬线 / 2px 左线），下拉与输入框收成 2px 直角，主题卡切 2px。
+
+`THEME_NAMES`（`05-transport-transcript-nav.js`）补了 `news: '报纸'`、`plate: '影集'`，否则**设置页的外观网格**
+（`07-routes-pages.js` 按 `THEME_NAMES` 渲染）只有 6 张卡，顶栏弹层有 8 张，两边对不上。
+
+CSS 全部追加在 `site/player.css` 末尾（`C2`–`C7` / `D2`–`D7` 段），旧规则一行没改。
+
+**响应式修正（2026-11-23 当晚）**：影集首版图版写死 716px，侧栏展开后 1280 窗口的右栏只剩
+264px、1120 只剩约 100px（标题整列折行、时长贴边、推荐条被裁）。改成
+`grid-template-columns: minmax(0,1.36fr) minmax(300px,1fr)` 的流式两栏，图版按宽度缩且固定 1:1
+（不再用 flex 拉高，否则 300×300 的封面会被放大 1.8 倍再左右切边），最近更新只留 6 行并给标题两行截断。
+报纸档同理：三栏在 ≤1340px 收成「头条 + 最近更新」两栏，推荐播客挪到底部四张封面横条，数字条最后一行；
+头条封面改 `object-fit:contain`，不再裁掉封面上的字。
+
+## 内置主题第三档「播控台」（console，2026-11-23 深夜）
+
+用户要「写个完全颠覆现在结构的主题」，`console` 就按播控台做：把网站从「左栏导航 + 首页卡片流」
+翻成一个**播出控制台**——横向频道条、监看屏、播出单、通栏控制台。
+
+- 骨架变了形状但不改骨架文件：`.app` 改 `flex-direction:column`，`.sidebar` 变成 62px 高的横向
+  频道条（`counter-reset:ch` + `::before: "CH " counter(ch,decimal-leading-zero)`，选中项反白为琥珀底），
+  `.topbar` 压到 44px，`.dock` 变通栏直角控制条。**15 个频道在 1440 宽度排不进一条**，所以频道条是
+  `overflow-x:auto` + 隐藏滚动条的单行横滚带，`＋ 添加 RSS` 用 `margin-left:auto` 钉在右端。
+- 首页 `.ledger-home` 是显式栅格：`minmax(0,1fr) 392px` × `48px 34px auto 34px auto 96px`；
+  用 `.ledger-section:has(+ #homeContinue)` 这类兄弟选择器把四个 section 标题各自钉到对应列/行。
+  布局是「左：监看屏 + 推荐墙」「右：播出单（8 条）」「底：通栏数字带」。
+- 监看屏 `.continue`：`grid-template-columns:minmax(0,1fr) 302px`，左 16:9 画面、右图注栏；
+  封面用 `object-fit:contain`（方封面在 16:9 里 letterbox，不会像 `cover` 那样把 300×300 放大 2.3 倍再裁掉字），
+  `NOW PLAYING` 与 `▶` 都在图注栏。**`.round-play` 是 `.continue` 的直接子元素，不是 `.continue-main` 的**，
+  定位要按 `.continue` 排，否则会跑到窗口右上角。
+- 播出单 `#homeRecent .ep-row`：两列 `minmax(0,1fr) auto`，时长在琥珀色右对齐（原来多留了一个 62px 空列，
+  标题被挤成「Episode 312: The…」）。推荐墙 `#homeRecommended`：四列方封套 + 大写小字名，
+  必须显式 `display:block` 覆盖，因为 E 段最初把它 `display:none` 掉过。
+- 字体口径：标题不给衬线，`h1`/卡片名统一 `var(--sans)`；小字、栏目名、时间码统一 `var(--mono)` + 大字距。
+  注意 `.ledger-mast-copy h1` 是**报头那行小字**，不是页面大标题，别拿它当 h1 统一改字号。
+- `THEME_NAMES` 补 `console: '播控台'`，`base.html` 顶栏弹层（9 个）与 dock sheet（深色组 3 个）各加一个
+  `.swatch[data-theme="console"]`；`tests/test_custom_themes.py` 的色板期望同步加 `console`。
+- 全部规则仍以 `html[data-theme="console"]` 前缀追加在 `site/player.css` 末尾（`E`–`E10` 段），旧档不受影响。
+
+### 播控台：阅读页 / 走带 / 迷你条（2026-11-24 补）
+
+外壳都接了之后，单集页整个是按「演播间」做的，跟首页不是一套栅格：
+
+- `body.player-open` 时顶栏（44px 面包屑条）直接不收，`.reader` 从频道条下沿（62px）开始，
+  阅读页自己的 52px 头条（← 主页 / 剧集 / 笔记 + 右侧 NOW PLAYING）在 `top:62px` 通栏铺开。
+- **坑：侧栏（剧集/笔记）展开时 `.reader` 会被 base 的 `body.player-open.reader-series-open` 规则挤窄**
+  （`left:220px right:250px`，宽 970），而 `console` 是把 `.reader-rail` 隐藏的，结果两侧留出两条黑沟。
+  必须用同级特异度重写：`html[data-theme="console"] body.player-open.reader-series-open .reader{left:0;right:0}`，
+  光写 `html[data-theme="console"] .reader{...}` 压不住。`reader-top-actions` 同理（base 是 `position:fixed;left:220`）。
+- 正文不铺满：760px 竖排监视柱，左右各一条 `--line2` 竖线用 `.transcript::before/::after` 画在
+  `calc(50% ± 380px)`；空态（网页版没有词级字幕）收成一块 520px 的「NO TRANSCRIPT」监视牌，不再是一句话漂在黑底上。
+- 走带：`.dock` 通栏、`--mono` 时间码、标题 `--sans` 600 14.5px、封面 38px 方角、进度线 3px 琥珀。
+- 迷你条（`#miniPlayer`，非播放页起播时出现）从浮起来的圆卡片改成**贴底通栏走带**：`left/right:0;bottom:0`、无圆角、
+  顶部一道线；`body.playing` 时 `.page` 补 74px 下边距，避免压住推荐墙的标签。
+- 频道条右端 `＋ 添加 RSS` 改 `position:absolute;right:0`（`sidebar` 加 `padding-right:132px`），
+  窄窗横滚时它不会跟着滚出视野；1120 下实测频道条 `scrollWidth 1237 > 1120`，靠左侧渐隐遮罩交代还有内容。
+### 播控台：留白与紧凑度修正（2026-11-24 追补）
+
+用户拿壳里的「收听模式」截图说「所有画面都紧紧贴边」。根因不是主题自己加的边距，而是 base 的
+`.page{padding:26px 0 46px}`——**左右本来就是 0**，其它档靠内部容器（`.ledger-home` 的 `max-width` / `margin:auto`）
+撑出留白，而播控台为了让首页通栏，把 `.ledger-home` 写成 `max-width:none;margin:0;padding:0`，于是所有页面统一贴边。
+
+- 留白落到 `.page` 这一层：`html[data-theme="console"] .page{padding:26px 26px 46px}`，`.ledger-home` 的 padding 归零。
+  这样首页、节目页、库页、设置页、收听模式页共用同一条 26px 边沟。
+- 频道条被「压扁」是另一个坑：`.nav button` 原本 `width:100%`，在横排里 15 个都被抻成整条宽度、
+  互相挤成两行。改成 `flex:0 0 auto;width:auto;min-width:74px`，宽度不足就靠频道条自己横滚
+  （1200 窗口下 `scrollWidth 1423 > 1200`，右侧渐隐 + 钉住的 `＋ 添加 RSS` 交代还有频道）。
+- 栏目头右侧的小字（`上次停在这里` / `来自 X 个节目`）会和相邻栏题撞在一起，播控台下统一隐藏，只留标题。
+- 单集列表的真实结构是 `.ep-row > .ep-art + .ep-body(.ep-title/.ep-sub) + .ep-dur`（不是 `.ledger-rows`），
+  之前用错选择器导致标题一直是 24px 衬线。现在是 44px 方封套 + 14px 无衬线单行标题 + 等宽时长，行高 64。
+补充：窄窗（≤1260px）频道号 `CH nn` 隐藏、字号与内边距收一档，15 个频道能在 1200 窗口一条带里排完
+（实测 `scrollWidth == clientWidth == 1200`，`收录模式/设置` 不再被横滚藏掉）。宽窗仍是 `CH 01…` 两行式频道钮。
+
+### 播控台：阅读页抽屉与精听条（2026-11-23，E24–E26）
+
+- **抽屉必须恢复成 flex**：E 段早期给 `.reader-rail` 写了 `display:none`，而 base 的抽屉是
+  `position:fixed;visibility:hidden;transform:translateX(±100%)`，靠
+  `body.player-open.reader-series-open #seriesRail{visibility:visible;transform:none}` 打开。
+  `display:none` 把这条链路整段废掉 → 头条上的「剧集 / 笔记」点了没反应。现在
+  `html[data-theme="console"] .reader-rail{display:flex;top:114px;bottom:96px;...}`，
+  两侧各加一条 `--line2` 边线，集标题/集号改无衬线 + 等宽。
+- **抽屉打开时正文让开**：`body.player-open.reader-series-open .reader{left:220px}`、
+  `...reader-notes-open .reader{right:250px}`，`.reader-top-actions` 同步。早期为了让掉
+  两条黑边把 `left/right` 压成 0，那时抽屉其实是隐藏的；抽屉恢复后必须让位，否则抽屉压在
+  正文上，精听四步的左半截被盖住。
+- **精听条不再有 58px 空档**：base 有 `body.player-open .intensive{margin-top:58px}`（为了躲
+  base 的 58px 头条）。console 的头条已经在 `.reader` 外面（`top:62px`，高 52px），`.reader`
+  从 114 起，58px 就变成纯黑缝。改成 `margin:10px 26px 12px`、直角、左侧 3px 琥珀、`--panel` 底。
+- **坑：`--rail-bottom` 在阅读页会被解析成视口高**。base 用 `bottom:var(--rail-bottom,104px)`
+  定 `.reader` 与 `.reader-rail` 的下边界；这个变量运行期是 inline 的 `--rail-bottom:86px`，
+  但实测 `getComputedStyle(reader).bottom` 拿到 `860px`（= 视口高），于是 `.reader` 高度算成 0，
+  整个阅读页（抽屉、精听、文字稿）全黑一片，看起来像「CSS 没生效」。console 里改成写死的
+  `bottom:96px`（`@media(max-height:640px)` 再降到 78px），不再依赖该变量。
+  排查时先用 `getBoundingClientRect()` 看 `.reader` 高度：0 就说明是这条，不是配色问题。
+
+### 播控台：折叠态吃掉频道名 / 抽屉上方黑边（2026-11-23，E27–E28）
+
+- **折叠态（`body.nav-collapsed`）在横向频道条里没有意义**。早期为迁就 base 的竖栏折叠，写了
+  `.nav button{font-size:0}` 只留 `CH nn` 伪元素；但 ≤1260px 那条媒体查询又把 `CH nn` 隐掉，
+  结果整条只剩分隔线：用户截图里「点一下首页，所有文字消失」就是它。现在折叠态保持
+  9px 频道名、只去掉 `CH nn`，品牌名与「＋ 添加 RSS」也不再隐藏。
+  另外给 `.sidebar` 补了 `overflow-y:hidden;align-items:center`，防止焦点把整条竖向滚出去。
+- **抽屉上方黑边**：`.reader-rail` 原来从 114px 起，而频道条（62）与头条（62–114）在左 220px
+  范围里是空的，于是抽屉头顶一截纯黑。改成 `body.player-open #seriesRail/#notesRail{top:62px;
+  padding-top:64px}`，抽屉直接从频道条下沿开始，标题落在 126px 左右与精听条齐平。
+  注意 E26 里带 `readers-*-open` 的 `top:114px` 特异度更高（4 个类），必须用带 `#id` 的
+  选择器（3 类 + id）才压得住——这是本轮第二次踩「同类选择器被后写的 open 类规则反压」。
+
+### 影集首页：题注与图版左边缘对齐（2026-11-23，E30）
+
+症状：影集首页「继续收听」卡里，标题/副行/进度条比封面左边缘缩进约 55px，看起来像居中，
+和原型 s4（图版满宽、题注贴着图版左边起排）不一致。
+
+根因不是 padding：plate 的 `.continue` 只重置了 `display/flex-direction/gap/padding`，
+**没重置 base `.continue{align-items:center}`**，于是 `flex-direction:column` 下两个子项
+（.pod-art、.continue-main）都被横向居中，各自宽度不同 → 左边缘对不上。
+修法：`html[data-theme="plate"] #homeContinue .continue{align-items:stretch}`，
+并把 `.continue-main` 的左右 padding 改成 `20px 64px 22px 0`（右侧 64px 是给圆角播放键留位），
+标题/副行 `text-align:left`。1440 / 1280 / 1120 三档实测 `art.x === title.x`。
+
+同类坑：改写一个 flex 容器时，只要没显式重置 `align-items`，base 的居中就会漏下来。
+
+### 各档播放条按主题重做（2026-11-23，F / F10）
+
+底栏 `.dock` 以前只跟着令牌换色，九档看起来都是「同一个圆角卡片 + 换个强调色」。现在按各档
+自己的语言重做（全部写在 `player.css` 末尾 F 段，`html[data-theme=...]` 覆盖）：
+
+| 档 | 播放条形态 |
+| --- | --- |
+| midnight 午夜蓝 | 深蓝玻璃卡、青白细高光、圆形蓝色播放键、4px 冷光进度 |
+| paper 纸张 | 通栏页脚、顶部一道墨线、直角、实心墨色方键、2px 墨色进度、衬线时间码 |
+| prototype 原型 | 漂浮方卡、1px 实线描边 + 4px 环形留白、直角紫色方键、6px 实心进度、全大写等宽 |
+| ledger 编辑部 | 通栏页脚、3px 双线压顶、圆形赭色键、3px 实心进度、衬线时间码 |
+| apple 苹果播客 | 磨砂白 24px 圆卡、圆形紫键、胶囊进度 + 圆形拖点、无衬线标题 |
+| spotify | 炭黑 16px 卡、荧光绿圆键、4px 绿进度 + 圆拖点、粗体无衬线标题 |
+| news 报纸 | 通栏页脚、双线压顶、黑色方键、2px 墨色进度、衬线大字标题 |
+| plate 影集 | 通栏页脚、细线压顶、空心圆键（悬停才填色）、3px 奶白进度、等宽大写副行 |
+| console 播控台 | 通栏、琥珀方键、等宽时间码（E 段已定） |
+
+印刷/放映四档（paper/news/ledger/plate）额外把 dock 从「漂浮的 1040px 卡片」改成通栏页脚
+（`left:0;right:0;bottom:0;translate:none;width:100%`），迷你条同步贴底，这样才像版面页脚而不是
+浮窗。媒体卡三档（midnight/apple/spotify）保留漂浮卡，prototype 保留方卡。
+
+坑：`.dock` 基线是 `translate:-50% 0` 居中，改通栏时只写 `left:0` 不够，必须同时
+`translate:none`，否则整条会往左偏半屏。
+
+### 影集首页「最近更新」标题与列表之间的大空白（2026-11-23，G1）
+
+症状：右栏「最近更新」标题贴顶，列表第一行却在 300px 之下，中间一大片空白。
+
+根因：`.ledger-home`（plate）只写了列，**没写 `grid-template-rows`**，行全是隐式 auto；
+而左栏 `#homeContinue` 是 `grid-row:2 / span 4`，它 600 多像素的身高按网格算法**平均摊给
+它跨的四行**，于是「最近更新」标题所在那行被撑到两百多，标题和列表被撕开。
+
+修法：给行定死 `auto 36px minmax(0,1fr) 36px auto`（报头 / 栏题 / 列表吃剩余 / 推荐栏题 /
+推荐条），并让两个栏题 `align-self:stretch`、`#homeRecent` `align-self:start`。
+现在列表第一行紧贴标题下沿（170px 处），空白挪到列表末尾与「推荐播客」之间——那是右栏比
+左栏图版短的正常余量，不再是标题与列表之间的断裂。
+
+同类坑：任何「跨多行的大图 + 旁边小列表」的网格，都必须显式声明 `grid-template-rows`，
+否则跨行元素的高度会被平均分给各隐式行。
+
+### 影集右栏再收口：列表与「推荐播客」之间的空隙（2026-11-23，G2）
+
+G1 把空白从「标题与列表之间」挪到了「列表与推荐之间」——因为列表行是 `minmax(0,1fr)`，
+把跨行图版多出来的高度全吃了。改成把剩余高度交给最后一行：
+
+`grid-template-rows: auto 36px auto 36px minmax(0,1fr)`，并给 `#homeRecommended` 加
+`align-self:start`。列表行回到 content 高度（实测 6 条 = 352px），列表底 522 → 推荐栏题 534，
+只隔一条栏题；多出来的高度留在推荐条下方，读起来是「右栏到此结束」而不是中间裂口。
+
+### 影集首页左基准统一：报头 / 封面 / 顶栏（2026-23，G3–G4）
+
+症状：影集首页的「PERSONAL PODCAST LEDGER」报头比封面右缩一截，顶栏的折叠键 + 「首页」
+也在更靠右的一条线上，整页左右两套基准。
+
+两个来源：
+1. `.ledger-mast` 自带 `padding:10px 20px`，而图版（`#homeContinue .pod-art`）贴着
+   `.ledger-home` 左缘 → 报头文字比封面缩进 20px（高 DPI 下看起来 30px+）。
+2. `.ledger-home` 是 `max-width:1180;margin:0 auto` 居中，而顶栏 crumb 在最左边
+   （还叠了 topbar 自己的 34px 内边距）→ 宽窗或侧栏折叠时两者差上百像素。
+
+修法：影集档把页面收成**单一左基准**——`.ledger-home{margin:0;max-width:none}`、
+`.topbar{padding-left:0}`、`.crumb{padding-left:0}`、`.ledger-mast{padding:10px 0}`。
+现在 1500（折叠）/1200（展开）两档实测 `toggle = mast = ledger-home = page = 32/268`。
+「首页」两个字因为跟在折叠键右侧，自然再右移一个按钮宽（40px）——这是按钮占位，不是错位。
+
+九档横向审计（报头文字 x / 首块内容 x）：midnight、paper、prototype、ledger、apple、
+spotify 全部相等（268 = 268）；news 312 = 312（该档页面内边距本来就是 44）；console 报头在
+26 起的带边框面板里、再内缩 22（有意的框内排版），右栏栏题比列表再缩 4px 也是该档既有规则。
+
+### 内置色板砍到七档：删掉「午夜蓝 / 纸张」（2026-11-23，H）
+
+两档默认配色（`midnight` 午夜蓝、`paper` 纸张）从主题体系里摘掉，不在选择器里出现、也不能被选。
+
+改动四处：
+
+1. `src/player-js/05-transport-transcript-nav.js` 的 `THEME_NAMES` 只剩 7 项
+   （原型 / 编辑部 / 苹果播客 / Spotify / 报纸 / 影集 / 播控台）。设置页外观网格按它渲染，自动跟随。
+2. `src/skeletons/base.html`：顶栏 `.theme-pop` 与 dock sheet 的色卡各删两张（9 → 7）。
+   同时把 Spotify 从「浅色」组挪进「深色」组——它本来就是深底，之前归错组了。
+   深色 = 影集 / Spotify / 播控台，浅色 = 原型 / 编辑部 / 苹果播客 / 报纸。
+3. `13-theme.js`：`LIGHT_THEMES` 去掉 `paper`；`REMOVED_THEME_FALLBACK` 改成
+   `midnight → spotify`、`paper → ledger`（原有 brass/forest/oxblood 也一起落到 spotify，
+   它们以前指向已删的 midnight）；`lastDark` 初值从 `midnight` 换成 `spotify`。
+4. 启动时把 `myt-theme-dark` / `myt-theme-light` 也按同一张迁移表洗一遍再写回——
+   否则老 profile 里存的深色档是 midnight，切换键会把页面落到一个选择器里已不存在的档。
+
+老存档路径：`myt-theme='midnight'` → `spotify`，`'paper'` → `ledger`，都写回 localStorage 后按现有
+「存档不在色板里就兜底编辑部」的规则再判一次，实测 7 张色卡、无重复、无空缺。
+
+**CSS 里的两档也一并清干净了**（`site/player.css`，共 33 处 `data-theme="midnight"` / `paper`）：
+
+- 两套整档令牌块（L50 起 `[data-theme="midnight"]{...}`、L126 起 `[data-theme="paper"]{...}`，
+  各 19 行变量）；
+- 色卡两行 `.swatch[data-theme=...]`、侧栏 token 两行 `--shell-nav*`；
+- F1「午夜蓝」整段 + F2「纸张」整段播放条规则（含 dock 阴影/圆键/墨线进度），
+  以及 F9 迷你条的两行；
+- F10 通栏页脚选择器组里 `paper` 的那一行（`news/ledger/plate` 继续共用同一条规则）。
+
+删后 `grep midnight|data-theme="paper"` 在 site 下只命中 `wallpaper`（无关词）。
+`tests/test_player.py` 的对比度列表同步去掉这两档。想回滚就得连配色一起写回来——
+`git revert` 比手改更稳妥。
+### 光学居中：图标与字形（2026-11-23，H·图标）
+
+症状由用户在壳内发现：首页报头的提交键（`→` 圆形按钮）里，箭头偏上约 4px；延伸排查到全站其它「单符号」控件。
+
+**根因不是 flex/place-items 没居中，而是字形墨迹中心与行盒中心不重合。**
+单个符号的 ink 坐在基线上方，行盒却按 ascent/descent 对称分配；`align-items:center`
+把行盒居中后，图案仍然看起来偏高。各档还各自换 serif/mono/sans，偏移量随字体漂移。
+
+修法：把装饰性符号换成**内联 SVG**，图案外框就是盒子，两条轴线天然落中心，也不再受字体影响。
+
+- `src/skeletons/base.html`：`→`（`#heroSearchBtn`）→ 16×16 箭头 SVG；7 处 `<span>⌕</span>`
+  （顶栏 `.search-global`、首页 `.ledger-search`、4 个 `.search-box`、移动底栏）→ 放大镜 SVG。
+  `.ficon`（空态大图标）与「名称 A→Z」这类正文里的箭头保持字符。
+- `site/player.css` 新增 H 段：`.ledger-search/.search-global/.search-box/.mobile-bottom` 的 span
+  统一 `display:flex` + `line-height:0`，svg 14×14 `stroke:currentColor`（颜色仍由各档 `color` 决定）；
+  `.ledger-search button` 改 `display:grid;place-items:center;padding:0`。
+- `.search-box button`（「搜索」两字键）原来是 block + `padding:8px 12px`，行盒贴顶 → 文字低 3.3px；
+  改 inline-flex 居中 + 33px 固定盒高 + `line-height:1`。
+- `.home-onboard .onb-step b`（三步引导的 22px 圆形序号）加 `line-height:1`，数字从偏上 2.7px 回到 −0.3px。
+
+**复核结论（逐项实测，坐标取像素墨迹框中心 vs 盒中心）**
+
+| 控件 | 修前 | 修后 |
+| --- | --- | --- |
+| 报头 `→`（spotify/ledger/apple/prototype） | 偏上 3.8px | 0.0 |
+| 顶栏/各搜索框放大镜 | 偏下 1.7–2.7px | 0.0 |
+| `搜索` 键 | 偏下 3.3px | 0.0（横向 0.7 是汉字墨迹本身重心） |
+| 三步计划序号 | 偏上 2.3–3.0px | −0.3 |
+
+**扫描范围**：7 档 × 15 个页面（首页、播客库、收听模式、设置、搜索，外加本地文件/下载/发现/收件箱/队列/历史/统计/收藏/书签/笔记），
+共 269 个「单符号」控件逐个量行盒中心与盒中心之差；后十页 70 个组合 0 命中，
+只有七档搜索页的 .tabs button 统一偏上 6px（下划线留位，属 tab 语言）。
+左右内边距另扫 7 档 × 4 页：除报纸档推荐栏「封面左出血 + 右 14px」与其统计卡「数字齐栏线」两处版式，无系统性不对称。
+
+**判为「不是 bug」的三处**（未改）：
+
+- `.tabs button`（搜索页 全部/单集/…）：文字比盒中心高 5–9px，因为盒子含 `padding-bottom:10px`
+  给下划线留位，标签贴着下划线是正常 tab 语言。
+- `#settingsTopBtn`（播控台）：图标墨迹重心左偏 5px，是「推子」图形本身右重左轻，盒子已居中。
+- 封面占位字母（`.pod-art span`）、报纸档「订阅」小键：像素测出的偏移来自 `text-shadow` 与相邻
+  边框混进墨迹框，用行盒复核分别为 0 / −0.2px，实际居中。
+
+### 壳内三条实测缺陷的修复（2026-11-23，I）
+
+用户在壳里报的三条，都已修，并按七档横向核过一遍。
+
+**1「＋ 添加 RSS」悬停文字消失（播控台）**
+
+根因是同一状态写了两遍：§E2 的 `html[data-theme="console"] .sidebar-add:hover` 给
+`background:var(--accent);color:var(--accentText)`，§E5 那条又写 `color:var(--accent);border-color`。
+后者按源序覆盖颜色、却没重置底色 → 金字压金底，按钮 hover 时成一块纯金空块。删掉后一条的 `color`，
+悬停配色只留一处（金底 + 深字），实测 8.32:1。
+
+横向：七档 × `.sidebar-add / .mini-btn / .round-play / .btn.primary / 搜索键 / 抽屉钮`，常态与
+`:hover` 各取一次计算色，按「逐层合成后的实际底色」算对比度，全部 ≥ 5.0，没有第二处同型 bug。
+两个测量坑：切换 `data-theme` 后必须同 tick 触发一次 reflow 再读样式，否则读到上一档的值；
+`.btn` 有 background/color 过渡，不先注入 `transition:none` 会读成过渡中间色（影集档一度误报 1.05）。
+悬停态势用 `CSS.forcePseudoState(nodeId, ['hover'])` 强制。
+
+**2 继续收听卡的播放键压住进度条（播控台）**
+
+两处叠加：① `.continue-main` 继承基础档 `.continue{align-items:center}`，图注栏在行里垂直居中、
+高度等于内容高，`.progress{margin-top:auto}` 没有自由空间可推，进度条漂在卡片中部；② 播放键是
+`position:absolute;right:20px;bottom:20px`，而进度条横贯图注栏直到右缘，标题一旦两行，两者就叠上。
+
+修法：图注栏加 `align-self:stretch`（撑满行高，内容顶对齐、进度条靠 `margin-top:auto` 钉到底线）；
+底线那条规则加 `margin-right:52px`，让进度条在播放键左侧 12px 收尾。实测进度条底边与播放键底边同线
+（562 = 562），横向 gap 12px，矩形相交面积 0。
+
+横向：七档同构卡片量矩形相交——原型/编辑部/苹果播客/Spotify 天然 gap 26px；报纸档
+`.round-play{display:none}`；影集档原来进度条从圆键底下穿过 4px，补 `#homeContinue .progress{margin-right:14px}`
+后 gap 10px、无相交。
+
+**3 下载完成后「下载管理」要手动刷新才出现新条目**
+
+三个原因叠在一起：① 该页正文由内置插件 `downloads/main.js` 的 `page:downloads.render` 画，
+`renderV2Page` 命中即让宿主 `renderDownloads` 早退，而插件只画「已完成」条目、不画「下载中」行；
+② 页面只在路由命中时渲染一次，进页用的是 `app.offline` 的旧快照；③ 壳推的 `myt://offline` 是唯一的
+实时更新触发源，窗口失焦/监听未挂/限流时一丢就永远差一条。
+
+修法都在宿主侧，不依赖插件版本：
+
+- `07-routes-pages.js`：进 `downloads` 页先 `refreshOffline()` 再渲染，页面永远按磁盘实际内容开；
+- `05`：新增 `startDownloadsTicker()`，下载期间 800ms 一轮 `refreshOffline()`，队列清空后自停；
+- `04` 的 `v2DownloadsKit` 追加 `refresh()` / `active()`；内置插件 `downloads/main.js` 的页面贡献点改成
+  「先 `refresh()` 让宿主画全（含下载中行），再补视频徽标」，不再自己画一份。
+
+内置插件装在 `C:\ProgramData\MyTranscript\plugins\downloads`（11/20 旧版），仓库改动不会自动进壳；
+宿主那两条对旧插件同样生效，「视频徽标在宿主重绘后不掉」需要重新导入内置插件。
+
+**横向复查（七档 × 十五页，1440 / 1024 / 760 三个宽度）**
+
+- 横向溢出：三个宽度下都没有元素越出视口（排除 topbar/dock/sidebar/mini 这些自有贴边层的元素）；
+  窗宽压到 632 时设置页的分区按钮会越界 ~40px，但壳的 `minWidth` 是 720，实际到不了。
+- 左右内边距对称：各档页面壳 `padding-left == padding-right`（console 26/26、news 44/44、其余 32/32）；
+  只有报纸档两处**故意**不对称——推荐栏封面左出血右 14px、统计/历史卡的「数字齐栏线」左 0 右 12。
+- 标题左缘 vs 首个内容块左缘：除播控台「框内再看缩 21px」的既有框式排版，余者相等。
+- 栅格行内间距：首页/播客库/发现/统计四页，同一行相邻卡片的 gap 极差全部 ≤ 6px。
+- 竖向留白：只有统计页「最近 7 天」下面空出 260–274px，那是空数据柱状图塌成 0 高造成的，
+  七档一致，不是版式 bug。
+- 悬停配色：见上面第 1 条，七档全部 ≥ 5.0:1，没有第二处「改 color 不改 background」。
+
+### 自定义主题包与结构档互斥（2026-11-24，J）
+
+壳里出现整片空白：`.sidebar` 量出来 1166×852、`.page` 从 y=958 起（被挤到视口外）。
+
+根因不是主题 CSS，而是 **自定义主题包「液态玻璃」和播控台结构档同时生效**。包是 37KB 的整包重排
+（侧栏变浮岛、顶栏变药丸、首页变玻璃便当），规则按老骨架写的；播控台把 `.sidebar` 改成 62px
+横条后，包里的尺寸/定位规则把这条横条拉成整窗浮岛，正文顺延到视口之外。`enabled` 存在
+localStorage 里，开机时先落 `myt-theme`（console）、再注入包，所以一启动就是空白。
+
+修法：`13-theme.js` 里新增 `STRUCTURAL_THEMES = new Set(['news','plate','console'])`，
+`applyCustomTheme` 在结构档下把 `enabled` 视为 false（与既有的 `__MYT_SKIP_CUSTOM_THEME` 同一条
+短路），不注入样式、不加 `body.custom-theme-on`；**不改存储里的 enabled**，切回 prototype / ledger
+等非结构档包会自己回来。设置页「自定义主题」状态行会显示「已启用 · 当前内置主题是结构档，整包重排暂停」。
+
+排查手段（以后壳内问题都用这条）：WebView2 支持 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9223`，
+用它启动 `mytranscript-desktop.exe`，然后 `http://127.0.0.1:9223/json` 拿 `webSocketDebuggerUrl`，
+直接 `Runtime.evaluate` / `Page.captureScreenshot` 量壳内真实 DOM——比对着浏览器猜准得多。
+验完记得重启一次**不带**这个环境变量，别把调试口留给日常使用。
+
+### 自定义主题改成「每档一份」（2026-11-24，K）
+
+上一节那个「暂停」只是止血。真正的问题是自定义主题的 schema 只有一份全局 CSS + 一个 `activeId`，
+它和「九档内置主题」这个维度根本没关系，所以任何一档都会被同一份包压住。改成按档存以后，
+每档各用各的：播控台可以用自己的玻璃版，编辑部继续用原来那套，互不影响。
+
+数据（`myt-theme-custom`，仍是同一个键）：
+
+- `presets[]`：每张卡多一个 `scope` —— `rail`（竖栏四档：原型 / 编辑部 / 苹果播客 / Spotify）、
+  某档 id（`console` / `plate` / `news`），或 `all`。老卡片一律按 `rail` 兜底，因为它们的 CSS
+  都是照竖栏骨架写的；随包七套也是 `rail`。
+- `activeByTheme: { 主题id: 卡片id }`：某一档当前用哪张卡。老数据的 `enabled + activeId`
+  读入时自动补进竖栏四档，结构档留空（所以播控台不会再被玻璃包压坏）。
+- `perTheme: { 主题id: {css, html} }`：编辑器里直接写、还没存成卡的那份稿子，也只属于那一档。
+
+行为上的变化：
+
+- `themeStyle(cfg, theme)` 是唯一的取值入口：先看本档的卡，再看本档草稿，都没有就是空——
+  **绝不会借别的档的样式**。
+- `setTheme` 切档后重新取一次（`applyCustomTheme()` + 重绘卡片 + 重排弹层包色块），不再像以前
+  那样「点内置色板就把自定义主题全局停用」。
+- `applyCustomThemePreset` 只应用 `scope` 匹配当前档的卡，不匹配就提示「只用于播控台，切到那一档再用」。
+- 设置页主题卡多了角标（`.custom-card-scope`），不是本档的卡压暗（`.custom-card-other`）；
+  弹层里只列本档的包。
+- 「保存并应用」写的是**当前这一档**的草稿；「停用」也只停当前这一档，其它档的包不受牵连。
+- 测试：`tests/test_custom_themes.py` 新增 scope 判定 / 按档取值 / 老数据迁移的纯函数用例，
+  并把原来的「切档必须全局停用自定义主题」改成「切档后按新档重取」。
+
+### 播控台专属包：试过又撤掉，以及两个必须记住的坑（2026-11-24，L）
+
+给播控台写过一套 `themes/glass-console.{css,json}`（scope `console`，9KB 纯材质版：深空背底 +
+两片漂移光斑、频道条磨砂、首页三区玻璃便当、琥珀勾边走带）。壳内实测后**按用户要求整包回退**：
+`themes/glass-console.*` 已删，`scripts/build_theme_packs.py` 的 `ORDER` 里也没有它，
+随包清单回到 13 套（`liquid-glass / glass2 / minimal-maxi / mono-tech / neubrutalism /
+riso-print / surveillance / cyber / dopamine / frutiger-aero / naive-craft / soft-touch / y3k`），
+全部 `rail`。撤包后壳里 `ctStyle` 为空、播控台回到内置样式，实测正常（`_shell-after-revert.png`）。
+
+**坑 1：这个 WebView2 里，流内面板挂 `backdrop-filter` 会让面板连同文字一起不绘制。**
+玻璃包第一版给 `.ledger-mast / #homeContinue / #homeRecent / #homeRecommended` 加了
+`backdrop-filter: blur(16px)`，结果整条报头和区块里所有文字全消失（`getComputedStyle` 一切正常：
+`opacity:1`、`visibility:visible`、`color:#edf2fb`，`Page.captureScreenshot` 里就是一片黑）。
+二分到那一条规则，删掉即恢复。判断办法：先 `ctStyle.textContent=''` 看基线，再逐条 `deleteRule`
+二分；只留 `backdrop-filter` 一条也会复现。**以后做玻璃效果一律「多层半透明渐变 + 1px 内高光」，
+不要在这台机器的壳里用 backdrop-filter。** 同理，`--app` 那层实心底色会盖掉 `body` 上的光斑，
+要出光斑得把 `#app` 的 background 让成 transparent。
+
+**坑 2：随包清单里删掉的包，用户机器上会留一张幽灵卡。**
+`seedDefaultThemePacks` 原来只补不删，撤掉 `glass-console` 后壳里仍留着一个 9KB 的
+`ct-pack-glass-console`，`activeByTheme.console` 还指着它。现在在同一函数里加了收尾：
+清单里不存在的**随包**卡撤掉，指向它们的 `activeByTheme` 指针一并清空（用户自己做的卡不动），
+同时把随包卡按清单顺序重排（后加的包不再排在老卡后面）。实测壳里 `presets` 13 套、
+`hasGlass:false`、`ctStyle` 长度 0。
+
+**其他顺带改动**
+
+- `scripts/build_theme_packs.py`：CSS 以同名 `.css` 文件为准（json 里那份内嵌副本会自动同步写回），
+  这样改 `.css` 不会因为忘了同步 json 而生成旧样式。
+- 弹层（`#themePop`）改成**列出全部随包**，非本档的包压暗（`.sw-pack.sw-other`）；
+  设置页卡片仍带档位角标、非本档压暗。这是「为什么图片里主题那么少」的直接修复——
+  以前弹层按当前档过滤，播控台/报纸/影集三档下所有 rail 包都被滤没了。
+- 回退不是把功能删掉：按档存包（K 节）、档位角标（H 节）、弹层压暗（I 节）都还在，
+  只是播控台目前没有自己的包，需要时再照上面的「坑 1」重做一套。
+
+### 「随时能自由换」：跨骨架套包降级成强调色（2026-11-24，M）
+
+用户要「随时可以自由换」，所以不再按 scope 拦人：**任何一档都能套任何一张卡**。
+拦是必须的（整包重排照竖栏骨架写死，压到播控台会把 62px 横条拉成整窗浮岛），
+所以改成「自动降级」：
+
+- 骨架同一族（原型 / 编辑部 / 苹果播客 / Spotify 之间，或包本来就标了本档、`all`）→ 整包上用。
+- 骨架不同族 → 只取**强调色那一层**：从包的根规则里筛 `--accent / --accent2 / --accentText /
+  --glow* / --track / --hover / --tick / --edge* / --wordactive / --scroll`，其余（重排规则、
+  `body` 背景、`--bg / --ink / --muted / --panel / --shell-*` 这些底色与文字令牌）全部丢掉。
+
+为什么连底色都不取：先试过「只丢重排、保留整套配色」，影集档套亮色包（dopamine）时
+导航文字白字压浅底、几乎看不见（包的 `--shell-nav` 换了底色，`--shell-navin` 却没跟着变）。
+只换强调色则永远不会糊——底色和文字色始终是当前内置档自己的。
+
+界面上的配套：
+
+- 设置页主题卡的角标：同骨架写「竖栏档」，跨骨架写「仅配色」（`.custom-card-scope.only-tokens`），
+  不再压暗整张卡，也不再拦点击。
+- 弹层里的包全部可点，工具提示写「本档只取配色」；`#themePop .sw-pack.sw-other` 那两条压暗规则删了。
+- 状态行会写成「已启用 · 液态玻璃 · 仅配色」，点卡时的提示也直说是套用配色。
+- 降级时**不注入包里的自定义 HTML**（那段也是照别的骨架写的）。
+
+实测（壳内，1180×880，2026-11-24）：播控台套液态玻璃 = 频道条仍是 1180×62、正文页顶 106、
+`ctStyle` 307–1891 字且不含 `.sidebar` 规则，琥珀变青；报纸套复古印刷 = 报纸版式不动、红色强调；
+影集套多巴胺 = 版式不动、粉紫强调、文字清晰。截图 `_free-console2.png` / `_free-news.png` /
+`_free-plate2.png`。
+
+测试：`tests/test_custom_themes.py` 新增 `tokensOnlyCss` 的用例（强调色保留、`--bg`/`--ink`/
+`.sidebar`/`body` 背景必须丢掉、降级不注入 HTML、同骨架 `mode==='full'`）。
+
+### 几何不再硬套：包按「材质 / 几何」拆开，几何跟着骨架走（2026-11-24，N）
+
+用户要「写包让几何不写死」。落地方式是**在装载时按骨架拆包**，而不是逼 13 套包各写三份：
+
+- `setTheme` 现在把骨架种类写到 `html[data-skel]`：`rail`（原型 / 编辑部 / 苹果播客 / Spotify）、
+  `strip`（播控台）、`print`（报纸）、`grid`（影集）。
+- `themeStyle` 取包时分两档：**同一骨架族** → 整包原样注入（`mode:'full'`）；
+  **不同骨架族** → `materialOnlyCss(css)`，把规则按声明拆开：颜色、边框、圆角、阴影、字排、
+  过渡、滤镜留下；`width/height/position/top/left/right/bottom/min-max/flex/grid-template/
+  transform/display/float/order` 这类几何声明逐条剔掉（`mode:'material'`）。
+  同一条规则里既有材质又有几何时只留材质（`.sidebar{width:262px;background:…}` →
+  `.sidebar{background:…}`），所以「整套材质」在哪个骨架上都吃得到，只有重排不跟着走。
+- 补一层对比度兜底：包换了侧栏底色（定义了 `--shell-nav` / `--shell-nav2`）时，附一条
+  `html[data-theme]{--shell-navin:var(--ink);--shell-navmuted:var(--muted);--shell-navline:var(--line)}`。
+  影集档套多巴胺那次的「浅字压浅底」「导航字几乎看不见」就是这么修掉的（侧栏文字改跟包的 ink 走）。
+- 界面文案跟着改：卡角标从「仅配色」改成「材质版」，tooltip「本档只上材质，不含重排」，
+  状态行「已启用 · 某某 · 材质版」。仍然没有任何一档会被拦。
+
+实测（壳内 1180×880，2026-11-24）：播控台套液态玻璃 → `ctStyle` 30,855 字、频道条仍
+1180×62、正文页顶 106；影集套多巴胺 → 侧栏变粉紫浮岛且文字清晰、正文页顶 80；报纸套复古印刷 →
+奶油纸 + 红蓝强调、版式不动；编辑部套赛博 → 整包重排照旧（侧栏 222×852）。
+截图 `_mat-console.png` / `_mat-plate.png` / `_mat-news.png` / `_mat-ledger.png`。
+
+已知边界：材质版只是「颜色 + 材质」，重排（浮岛侧栏、玻璃便当栅格）不会跟着换骨架——
+想在结构档也拿到那套重排，只能为那一档单独设计几何（见 M 节末尾的三条路）。
+
+> M、N 记录的是被用户否掉的两条折中路线（只取强调色 / 只上材质），**现行实现见 O 节 packskin**。
+
+### 整套切换：让内置档的版面规则整体让位（packskin，2026-11-24，O）
+
+用户第三次明确：**不要材质版，要点击后完全切换**。做了三组壳内实验后，唯一真正可行的做法
+不是提权、不是复位基线，而是**让内置档的版面规则一条都不命中**：
+
+1. 先证伪两条错路。① 只 reload 无效：把液态玻璃整套写进 `plate` 的 `perTheme` 再整页刷新，
+   `.sidebar` 仍是 1166×852、`.page` 顶到 958（冲突在 CSS 规则本身，不随运行时状态变）。
+   ② 选择器提权 + 骨架基线复位不够：`.app{display:flex}`、`.nav`、`.continue` 这些**内在**
+   布局规则还在，结果是导航被压成横排、继续收听卡片重叠（`_fullswitch-console.png`）。
+2. 正解：内置档的版面规则全部挂在 `html[data-theme="console"]` 这类选择器上，把 `data-theme`
+   换成一个**不存在的值** `packskin`，它们就整体失效，只剩基础骨架 + 包自己的 CSS，包原样生效。
+   壳内先手工验证（`data-theme='packprobe'` + 液态玻璃全量 = 浮岛侧栏 262×852 @ (14,14)、
+   `.page` 从 322px 起、导航竖排，见 `_probe-console.png`），再落成机制。
+
+实现（都在 `src/player-js/13-theme.js`）：
+
+- `themeId()` = `dataset.themeId || dataset.theme`，**主题读取得走它**（本轮 `13-theme.js` 内 14 处
+  已统一；`08-study-ai.js` 的 `current` 同步改）。`setTheme` 里写 `dataset.theme` 并删 `dataset.themeId`。
+- `themeStyle()` 跨骨架不再剪裁，直接返回 `{css: pack.css, html: pack.html, mode:'skin'}`。
+- `applyCustomTheme()`：`live && mode==='skin'` 时 `dataset.themeId = 真实档`、`dataset.theme='packskin'`；
+  退出（停用 / 换档 / 换卡）时 `dataset.theme = dataset.themeId` 再删 `themeId`。
+- 文案：卡角标跨骨架写「整套」（`.custom-card-scope.only-skin`，原 `only-tokens` 已改名），
+  tooltip「本档整套切换（用包的骨架）」，状态行「已启用 · 名称 · 整套」。
+- `materialOnlyCss` / `GEOMETRY_DECL` / `tokensOnlyCss` 全部删除；`packFitsTheme` 只用来定角标。
+
+壳内实测（1180×880，走真实入口，非手工注入）：播控台点 `#themePop` 里的液态玻璃 →
+`data-theme=packskin`/`data-theme-id=console`、`ctStyle` 37,502 字、侧栏 262×852 @ x=14、正文 x=302；
+影集配赛博 → 侧栏 222×852、正文 268；报纸配监控 → 侧栏 236、扫描线 + REC 全套生效；
+在弹层点内置「播控台」色球 → `themeId=console` 且包立刻整套上来；设置页点「停用」→
+`data-theme` 回到 `plate`、`themeId` 清空、`ctStyle` 归零。截图 `_full-console.png` /
+`_full-plate.png` / `_live-switch-console.png` / `_full-news.png`。
+
+两个必须记住的坑：
+
+- **`perTheme` 旧草稿会抢在随包卡前面**：`perTheme[档]` 里有内容且该档没选卡时，状态行是
+  「已启用 · 本档草稿」，注入的是那份全量 CSS。把别的档的包 CSS 粘进 `perTheme` 就会复现
+  整套错骨架的崩版，而且「停用」也回不到内置档。调试时先把 `perTheme` 清干净。
+- **`data-theme` 变 `packskin` 后，任何按 `data-theme` 分支的代码都会读到假值**：除了上面两处，
+  `site/player/*` 之外的内置插件（`C:\ProgramData\MyTranscript\plugins\*`）还没排查；新增代码一律用
+  `themeId()`，别再读 `dataset.theme`。
+
+已知边界：`packskin` 下基础 `:root` 令牌兜底色来自基础骨架（偏亮）。包若没定义全量令牌，
+零星元素可能略不协调；要更稳就让包把 `--bg/--ink/--muted/--line/--panel` 都写全。
+
+> O 节的 `packskin` + `data-theme-id` 是过渡形态（还是「内置档 + 覆盖层」两层账），
+> **现行实现见 Q 节：主题只剩一个 id，点谁就是谁**。
+
+### 主题模型收成一层：点一个就是换整套（2026-11-24，Q）
+
+> **现行模型已单独成文：[themes.md](themes.md)。** 这一节保留的是「为什么这么定」的来路，
+> 读现状请先看 themes.md；这里的句子如果和 themes.md 冲突，以 themes.md 为准。
+
+用户的原话是「我想要自由切换，每次点击切换立即换到另一套主题的全部样式」，并且明确
+不要「让位」这类提示。上一版（O）虽然做到了整套切换，但状态还是三份账：当前内置档、
+每档配的那张卡（`activeByTheme`）、当前卡。于是切档会「自动戴上某张卡」，删卡/停用又会
+把卡 CSS 变成草稿——看起来就是「点了但没换全」「有时换不了」。
+
+现在只留**一份账**：
+
+- `localStorage.myt-theme` 存当前主题 id：内置档（`ledger`）或一张卡（`ct-pack-<slug>`）。
+  `html[data-theme]` 直接写这个 id，不再有 `data-theme-id` / `packskin` 这层中转。
+- 因为内置档的版面规则全挂在 `html[data-theme="某一档"]` 上，写卡 id 时它们一条都不命中，
+  页面上只剩基础骨架 + 这张卡自己的完整设计——「点一下换到另一套的全部样式」就是这么来的。
+- `setTheme(id)` 是**唯一入口**，内置色球和包色块都调它；`themeStyle(cfg, theme)` 只判断
+  「这个 id 本身是不是一张卡」：是 → `mode:'pack'`，整份 CSS/HTML 原样注入；不是 → 内置档，
+  可选叠 `perTheme[档]` 的手写稿（`mode:'draft'`）。
+- `activeByTheme` 已整段删除（不是置空）：读入时直接丢掉这个字段，写回时配置里不再出现；
+  种卡也不再「第一次顺手把竖栏四档指向第一套」。`packFitsTheme` 删除，`scope` 只用来标这张卡自带哪种骨架。
+- 文案：状态行「已切换到「X」」、toast「已切换到「X」。」、卡角标只写骨架（竖栏 / 横条 /
+  报纸 / 栅格），弹层 tooltip「整套主题 · 竖栏骨架」——不再有「本档整套切换」「让位」。
+- 「停用」在卡上是**回最近用过的内置档**（`myt-theme-base` 记着，`data-theme-base` 同步）；
+  在内置档上手写稿仍是「删掉这档草稿、回内置样子」。
+- 「存为自定义主题」「导入」：存完直接切到新卡（`setTheme(newId)`），scope 沿用当前卡的
+  骨架或当前内置档的骨架。
+
+壳内实测（1180×880，走真实入口）：播控台 → 点「技术单色」= `data-theme=ct-pack-mono-tech`、
+`ctStyle` 13 566 字、侧栏 236、mono 硬边全套；影集 → 点「液态玻璃」= `data-theme=ct-pack-liquid-glass`、
+侧栏浮岛 262×852、正文 302、玻璃便当整套；点「影集」色球回到内置影集（`ctStyle` 归零、
+`skel=grid`）；设置页点「停用」= 回 `plate`、`ctStyle` 归零、状态「当前是内置主题」；
+整页 reload 后仍停在卡上且样式在（`themeBase=plate`）。截图 `_unified-pack-console.png` /
+`_unified-glass-plate.png` / `_unified-appearance.png` / `_unified-disable-plate.png`。
+
+两个必须记住的坑：
+
+- **启动顺序**：模块顶层那个 `setTheme(savedTheme, false)` 跑在 `readJSON` 注册之前，
+  `readCustomTheme()` 会读到空配置。所以 `setTheme` 里加了 `rawPackById()`：id 是包卡时直接从
+  `localStorage.myt-theme-custom` 捞。否则上次停在卡上会被当成内置档，`lastBuiltin` 也被写坏。
+- **删掉正在用的卡**：`removeCustomThemePreset` 里若 `themeId()` 正是它，先 `setTheme(lastBuiltin)`
+  再渲染；不这么做页面会停在一张已经不存在的卡上（全空白）。
+
+测试：`tests/test_custom_themes.py` 的 4 / 4.5 段改成新语义（当前是卡 → `mode:'pack'`、原样注入、
+`skeleton` 跟着卡；内置档不再借卡的样式；配置里已没有 `activeByTheme` 字段）。
+
+卡上还暴露过两处「包自己缺几何」的缺陷（用户截图：「左上角图标扁扁的 / 推荐播客文字和按钮贴边」）：
+
+- **Logo 被压扁**：`.brand` 是 `flex; nowrap`，`.brand-mark` 却没锁 flex 尺寸。极简放大把品牌名
+  拉到 `15px/0.22em`，行宽超了，38px 的方标被 `flex-shrink` 压成 24×38（看着像拉扁的胶囊）。
+  修法在底座：`player.css` 的 `.brand-mark` 加 `flex:0 0 auto`（任何主题都压不扁），主题侧再把
+  `.brand-name` 收到 `14px/0.14em`，实测 38×38、`.brand` 无溢出。
+- **卡片贴边**：底座 `.ledger-home .pod-card{padding:0}` 是给「无框、封面出血」的设计用的；包给卡片
+  加了 1px 描边后，`pod-card-main` 内距还是 0，标题/描述/胶囊按钮就直接贴到边线上；同时 `.page`
+  左右 padding 本来就是 0，侧沟是各内置档自己给的（plate 用 `margin:0 20px`），包不写就齐边。
+  修法在包：`html[data-theme] .ledger-home{padding:0 30px}`、`.ledger-mast{padding:40px 0 44px}`、
+  `.ledger-section{margin:26px 0 10px}`、`.pod-card{padding:0 0 14px;overflow:hidden}`、
+  `.pod-card-main>:not(.pod-art){margin:0 16px}`、`.pod-actions{margin:12px 16px 0}`，
+  并让 `pod-card-main{flex:1 1 auto}` 把四张卡的「订阅」按钮对齐到同一基线（实测 736/736/736/736）。
+- **结论**：卡要能被当成完整主题，除了配色/骨架，还得自带**页边距与卡片内衬**这三类几何——
+  否则底座那套「内置档专用」的零内距会原样露出来。新写包时照这条自查。
+- 截图：`_mm-fixed-top.png`（方标 + 侧沟）、`_mm-fixed-rec.png`（四卡内衬、按钮同基线）。
+
+七套包一次性自查（1180×880，量 `pod-card` 内距 / 首个文字元素到卡左边 / 按钮到右、下边 / 四卡按钮底边）：
+
+| 包 | 自查前 | 自查后 |
+| --- | --- | --- |
+| liquid-glass | 卡内距 12、文字 13、按钮 13，四按钮同底边 | 本来就没问题 |
+| glass2 | 内距 0、文字 1、按钮 1 | 内衬 18（文字 19、按钮 19/15） |
+| mono-tech | 内距 0、文字 1、按钮 1，且第四张卡按钮低 26px | 内衬 14（15/15/15）、四按钮 1816 对齐 |
+| neubrutalism | 内距 0、文字 3、按钮 3 | 内衬 16（19/19/17） |
+| riso-print | 内距 0、文字 2、按钮 2 | 内衬 14（16/16/16） |
+| surveillance | 内距 0、文字 1、按钮 1 | 内衬 14（15/15/15） |
+| minimal-maxi | 内距 0、文字 1、按钮 1 | 页沟 30 + 内衬 16（17/17） |
+
+五套包统一补同一段几何（各按自己的边框粗细选 14–18）：`pod-card{padding:0 0 14px;overflow:hidden}`、
+`pod-card-main{flex:1 1 auto}`、`pod-card-main>:not(.pod-art){margin:0 Npx}`、`pod-actions{margin:12px Npx 0}`。
+图标比例七套都正常（38–40 的方标，含 `flex:0 0 auto` 后不再被压）；`page` 左右 padding 仍是 0，
+但这五个包都有 `mast`/`card` 描边贴着同一基线，视觉上自成边距，不另加页沟。
+
+插件目录与单 id 模型（`C:\ProgramData\MyTranscript\plugins`,2026-11-24 排查）：**没有一个插件读 `data-theme`**。
+`data-theme` 只被 `settings/main.js` 写在自己渲染的内置色板按钮上（当 id 用，不是读当前主题），
+点它仍走 `setTheme(内置档 id)`：实测点「影集」→ `theme=plate`、`ctStyle` 归零、`aria-checked` 落在 plate、
+状态行「当前是内置主题」。插件页面自己的样式全部用宿主变量（`--panel/--panel2/--line/--ink/--muted/
+--bright/--accent/--sans/--mono`，且带浅色兜底），`--card` 由 `:root` 的 `--card:var(--panel)` 派生，
+所以随包主题切过去时插件面板自动换色：监控美学（深）下 `--panel=#101513`、`--ink=#d5ddd8`；
+复古印刷（浅）下 `--panel=#f8f1e1`、`--ink=#17150f`，字幕中心页两种配色都正常（`_plugin-surveillance.png`、
+`_plugin-riso.png`）。`#themeGrid` 由插件按 `THEME_NAMES` 重渲染（只七档内置），包卡在另一个网格里，
+互不覆盖——单 id 模型下这层重复渲染不用改。
+
+因此给 `ctx.settings` 补了主题查询，插件不必再猜 `data-theme`：`themeId()` / `themeBase()` /
+`themeIsLight()` / `themeSkeleton()` / `themePacks()`（清单带 `{id,name,skeleton,light,active}`）。
+前四个直接读 `data-theme`、`data-theme-base`、`data-scheme`、`data-skel` 这四个数据集，
+`themePacks()` 从 `myt-theme-custom` 的卡算骨架与深浅。测试两条：静态断言导出与 kit 挂载，
+外加一条 node 单测（伪造 `document.documentElement.dataset`，覆盖浅卡/深档/空值三态与清单的 active）。
+插件侧文档见 [plugins.md](plugins.md) 的「主题查询」小节；口径是「插件只问 API，不比字面值」。
+
+### 随包主题精简到 7 套（2026-11-24，P）
+
+用户要「删掉这些主题」，先删了设置页那五张亮色卡：`dopamine`（多巴胺糖果）、
+`frutiger-aero`、`naive-craft`（丑萌手作）、`soft-touch`（轻量动态拟物）、`y3k`（Y3K 复古未来），
+随后又删一套 `cyber`（赛博渐变）。做法是删 `themes/<slug>.{css,json}` 并从
+`scripts/build_theme_packs.py` 的 ORDER 移除，重新生成 `site/themes-defaults.js`
+（7 套：`liquid-glass, glass2, minimal-maxi, mono-tech, neubrutalism, riso-print, surveillance`），
+`tests/test_custom_themes.py` 的期望清单同步收窄。
+
+老用户的卡片不用手工清：`seedDefaultThemePacks` 会把「清单里已不存在的随包卡」连同它的陈旧字段一起撤掉，
+所以壳里刷新后 `presets` 自然变 7 张。
+被删的文件都在 git 历史里（提交 `9d406f71`）随时可以 `git show` 取回，不是永久删除。
+
+同一天再删一套「赛博渐变」（`cyber`），剩 7 套。这次删包暴露了一个**必须修的真 bug**：
+
+- 症状：删掉正在用的包之后，页面变成导航横排、报头被卡片压住（壳内 `_after-cyber-del.png`）。
+- 根因：老版本「套卡」时会把包的 CSS 抄一份进 `perTheme[档]`；包一消失、或用户点「停用」，
+  这份副本就以「本档草稿」的身份顶上来。草稿走的是 `mode:'full'`（`data-theme` 还是内置档、
+  不会切到 `packskin`），跨骨架于是直接崩。`bindCustomThemeEditor` 里「应用」也做同样的事：
+  编辑器里那串就是卡的副本，一拼写就落成草稿。
+- 修法（`13-theme.js`）：① `applyCustomThemePreset` 不再写 `perTheme`；② 「应用 / 停用」时
+  若当前正在用某张卡，`delete perTheme[theme]`（卡本身才是真源）；③ `seedDefaultThemePacks`
+  加两道清理：与当前任一随包 CSS 逐字相同（长度 + 头 24 字 + 尾 24 字指纹）的草稿直接删；
+  撤下过的包把指纹记进 `localStorage['myt-theme-retired']`，下次再遇到同名同内容的草稿也删掉。
+- 壳内复验：播控台点「技术单色」→ `packskin`/`themeId=console`、侧栏 236、整包齐全；
+  点「停用」→ `data-theme` 回 `console`、`ctStyle` 归零、`perTheme` 为空、状态「未启用」，
+  不再留草稿、也不崩（`_console-skin.png` / `_disable-restores.png`）。
+
+### 冗余代码清理与剩余技术债（2026-11-24，R）
+
+删掉的（每一条都做过 case-sensitive 全仓检索：源码、`site/`、插件目录、`themes/*.css` 零命中）：
+
+- JS：`02 liveW16`（全仓只用 `liveW32`，16 位写入是死分支）；`04 applyPluginTheme` / `clearPluginTheme`
+  （单 id 模型下插件不再能顶主题，插件改问 `ctx.settings`，这两个入口已无调用方）；`13 RAIL_THEMES`；
+  `13` 的 `activeByTheme` 全链路（归一化输出、种卡时的指针清理、编辑器写回、恢复默认、删卡）；
+  `applyCustomTheme` 里「兼容 `data-theme-id`」的整块与顺带留下的未用变量。
+- CSS（`site/player.css`）：`.anim-control`、`.anim-press`（含 `:active`）、`.anim-page-in`、
+  `.dsseg`（含 `:hover` / `[aria-checked]`）、`.hero-copy`、`.hero-search`、`.hero-note`（含媒体查询里的
+  `display:none`）、`.ls-head`（console 两条组合选择器里的那一段）、`.reader-top-icon`（组合选择器、
+  自身两条、以及 news / plate / console 三条覆写）、`.typebtn`（DOM 实际是 `#typeBtn`，大小写从未命中）、
+  `.win-drag`（`display:none` 且无元素）。`@keyframes fadein` 保留（`.page`、`.settings-pane.active` 仍在用）。
+- 测试：`tests/test_custom_themes.py` 里三条 `activeByTheme` 断言改成「配置里不存在该字段」；
+  源码里只留一条说明注释，指向这段历史。
+
+验证：全仓 41 个测试 `bad=0`；`check_layers.py` 通过（826 个顶层函数无跨片重名、27 模块可达）；
+`player.js` 重建后 27 模块；壳内重编后首页与切主题正常（`_clean-home.png`：minimal-maxi 方标 38×38、
+四卡「订阅」右距 17、同底边）。
+
+剩下的技术债与处置（2026-11-24 第二轮「修补技术债」）：
+
+1. **`player.css` 同选择器重复定义（122 组 / 171 块）——本轮试过三次机械合并，全部回滚。**
+   这些重复不是「写重了」，而是**跨断点的迭代补丁**，顺序本身在承重：
+   - 整条规则合并（合 56 组、跳 67 组）：把 11 条媒体块里的 padding 覆盖换掉，
+     `html[data-theme="plate"] #homeRecommended` 在 1180 下从 14/20/20 变成 16/28/26，
+     `.pod-card` 77.22×115.13 → 73.22×122.72。**首屏截图看不出来**（推荐区在折叠线下方），
+     只有逐属性量几何或滚到该区才发现。
+   - 逐条声明搬迁（删 163 条同名重复 + 搬 130 条无撞车声明）：同名删除本身安全，
+     但搬家漏了逻辑属性别名（`left` ↔ `inset-inline-start`，`.mini-player` 在 prototype/apple/spotify
+     从 220px 变 258px），以及媒体块里主体写法不同的同元素规则。
+   - 只合并「紧邻同选择器」（中间只有空白/注释）：全仓只找到 1 组，收益≈0。
+   **结论：这份 CSS 不能机械收，只能按档（每套内置档一段）人工重排，并同时核两档断点。**
+   本轮把 `player.css` 恢复成原样（275574 字节 / 3872 行），回归工具链留在 agent 侧：
+   新旧全文双 `<style>` 注入、冻结动画、7 内置 + 7 包的整页截图比对（仅覆盖视口，
+   不足以替代几何量测——`plate .pod-card` 必须量 77.22×115.13）。
+   已顺手修的一处测试脆弱点：`tests/test_player.py` 取 `[data-theme="x"]{…}` 的正则会先命中
+   一行写完的 `.swatch[data-theme="x"]{…}`，已改成行首锚定（`(?m)^\[data-theme=…`）。
+2. **`perTheme` 草稿——已删除这条路径。** 配置里不再有 `perTheme`；老数据读入时把每个非空草稿折成
+   一张卡（`ct-draft-<档>`，名字「<档名>自写稿」，scope 记原档），`themeStyle` 的 `mode:'draft'` 一并去掉。
+   编辑器新语义：在卡上「保存并应用」写回这张卡；在内置档上点它 = 存成一张新卡再整套切过去；
+   「停用」在卡上回最近内置档，在内置档上只清编辑区。`RETIRED_PACKS_KEY` 指纹清理随草稿一起退役。
+3. **`#themeGrid` 的“双写”其实是插件 native 页的整页拷贝。** settings 插件声明
+   `pages:[{id:'settings', native:true}]`，`04` 检测到 `page-settings` 已存在就把插件挂上去；
+   插件 `main.js` 里有一份 `renderSettings` 的完整副本（150 行，含 `themeGrid`/订阅/开关）。
+   `07` 的 `renderSettings` 仍然会在路由切换时跑，两份写同一份 DOM、结果相同。
+   这是「谁拥有设置页」的所有权问题，不是一行能修的重复；要么插件只做增量、要么 `07` 停写。
+   本轮不动，改设置项时记得两边都要改。
+4. **`01-theme-reader-shell.js` 1070 行 / 60+ 个 `lazyFn` 转发别名**：这些别名是跨片懒加载的
+   必要句柄（`01` 不直接 import `05/07/08`），删了会变成到处都是 `layerValue(...)` 长串或引入
+   循环依赖。真正的债是 `01` 同时承担外壳与阅读器，拆分属于结构性重构，留待单独一轮。
+5. **永久迁移代码**：`REMOVED_THEME_FALLBACK`、`data-theme-base` 回退保留（老用户数据要自愈）；
+   `myt-theme-retired` 指纹已随 `perTheme` 退役删除。
+6. **现行模型已抽到 [themes.md](themes.md)**（数据键、`setTheme`/`themeStyle` 语义、七套包、
+   卡必须自带的三类几何、四个坑）。本文件 Q 节只留来路，开头加了指向 themes.md 的说明。
+7. **小项已清**：`cargo build` 的 9 条 warning 全部修掉（未用 import ×3、`drain()` 里未读的初值、
+   `models.rs` 两个 `pub fn` 返回私有类型改为模块内 `fn`、`wasapi.rs` 未读的 `src_rate` 字段、
+   `plugins.rs` 对 `&str` 多写的 `.clone()` ×2），`cargo test --bin mytranscript-desktop` 37 通过；
+   签名摘要的 `digest_meta` 键值不变（去 clone 不改产物）。`--ctl-h-lg` 仍无人用，留着当尺度 token。
+

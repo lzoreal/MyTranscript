@@ -376,8 +376,8 @@ fn plugin_view(dir_name: &str, dir: &std::path::Path, enabled_map: &HashMap<Stri
         // 签名和授权钉扎都要覆盖“真正生效的清单字段”，否则改 requires / apiVersion /
         // permissions 不会让旧签名或旧授权失效。to_string 的键序由 serde_json 的 BTreeMap 保证。
         let digest_meta = serde_json::json!({
-            "main": main_name.clone(),
-            "style": css_name.clone(),
+            "main": main_name,
+            "style": css_name,
             "scripts": script_names.clone(),
             "requires": manifest.get("requires").cloned().unwrap_or_else(|| serde_json::json!([])),
             "permissions": permissions.clone().unwrap_or_else(|| serde_json::json!([])),

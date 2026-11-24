@@ -36,6 +36,7 @@ const inboxCount = lazyFn('05-transport-transcript-nav', 'inboxCount');
 const isSubscribed = lazyFn('05-transport-transcript-nav', 'isSubscribed');
 const localAsrModelId = lazyFn('05-transport-transcript-nav', 'localAsrModelId');
 const moduleOn = lazyFn('05-transport-transcript-nav', 'moduleOn');
+const renderDownloads = lazyFn('05-transport-transcript-nav', 'renderDownloads');
 const navigate = lazyFn('05-transport-transcript-nav', 'navigate');
 const offlineEntries = lazyFn('05-transport-transcript-nav', 'offlineEntries');
 const offlineKeyFor = lazyFn('05-transport-transcript-nav', 'offlineKeyFor');
@@ -94,6 +95,11 @@ const studyDueItems = lazyFn('08-study-ai', 'studyDueItems');
 const studyOpenEpisodeSummary = lazyFn('08-study-ai', 'studyOpenEpisodeSummary');
 const syncStudySettings = lazyFn('08-study-ai', 'syncStudySettings');
 const syncThemeSwatches = lazyFn('08-study-ai', 'syncThemeSwatches');
+const themeId = lazyFn('13-theme', 'themeId');
+const themeBase = lazyFn('13-theme', 'themeBase');
+const themeIsLight = lazyFn('13-theme', 'themeIsLight');
+const themeSkeleton = lazyFn('13-theme', 'themeSkeleton');
+const themePacks = lazyFn('13-theme', 'themePacks');
 const bindLedgerUI = lazyFn('09-player-integration', 'bindLedgerUI');
 const syncMiniCaption = lazyFn('09-player-integration', 'syncMiniCaption');
 const syncReaderTop = lazyFn('09-player-integration', 'syncReaderTop');
@@ -613,6 +619,11 @@ function v2DownloadsKit() {
     html: (entries, query) => downloadsHTML(entries, query),
     info: rec => downloadInfo(rec),
     fmtBytes: n => fmtBytes(n),
+    /* 下载页的所有权在宿主：插件的 page:downloads 只做「补装饰」，
+       正文一律由宿主 renderDownloads 画——它带「下载中」行、也带动手势。
+       插件自己画一份的话，下载中的条目看不见，就会变成「要刷新才有」。 */
+    refresh: () => renderDownloads(),
+    active: () => (app.downloadProgress ? app.downloadProgress.size : 0),
   });
 }
 function v2SettingsKit() {
@@ -622,6 +633,12 @@ function v2SettingsKit() {
     auto: () => app.auto,
     cont: () => app.cont,
     themeNames: () => THEME_NAMES,
+    /* 主题查询：data-theme 现在可能是内置档 id，也可能是 ct-pack-<slug>，插件不要自己比字符串 */
+    themeId: () => themeId(),
+    themeBase: () => themeBase(),
+    themeIsLight: () => themeIsLight(),
+    themeSkeleton: () => themeSkeleton(),
+    themePacks: () => themePacks(),
     inboxCount: () => inboxCount(),
     syncCustomThemeEditor, refreshPluginSettings, syncRateSeg, syncDockBadge,
     syncDockSleep, syncStudySettings, syncThemeSwatches, syncTranslateSettings,
@@ -1039,11 +1056,6 @@ function renderPluginImporters() { return PLUGIN_EXTENSIONS.renderImporters(); }
 function renderPluginSearchSources() { return PLUGIN_EXTENSIONS.renderSearchSources(); }
 function renderPluginThemes() { return PLUGIN_EXTENSIONS.renderThemes(); }
 function applyPluginExtensions() { return PLUGIN_EXTENSIONS.applyAll(); }
-function applyPluginTheme(pluginId, id, silent = false) {
-  const rec = contributionRecord('themes', pluginId, id);
-  return rec ? PLUGIN_EXTENSIONS.applyTheme(rec, silent) : false;
-}
-function clearPluginTheme() { return PLUGIN_EXTENSIONS.clearTheme(); }
 function addPluginListener(pluginId, event, fn) {
   if (typeof fn !== 'function') throw new Error('事件回调必须是函数');
   if (!PLUGIN_HOOKS.has(event)) PLUGIN_HOOKS.set(event, new Set());
@@ -2178,4 +2190,4 @@ function refreshCatalogPages() {
 export { CATALOG_TIMEOUT, HOST_V2, HOST_V2_PAGES, PLUGIN_API_VERSION, PLUGIN_CLEANUP, PLUGIN_COMMANDS, PLUGIN_CONSENT_PREFIX, PLUGIN_GRANTS, PLUGIN_HASH_PREFIX, PLUGIN_HOOKS, PLUGIN_PAGES, PLUGIN_PERMISSIONS, PLUGIN_PERMISSION_ALL, PLUGIN_PERMS_KEY_PREFIX, PLUGIN_REGISTRY, PluginHost, SHELL_TIMEOUT, STUDY_ENGINE, STUDY_ENGINE_OWNER, STUDY_RUNTIME, STUDY_RUNTIME_OWNER, STUDY_UI, STUDY_UI_HOOKS, STUDY_UI_OWNER, abortPluginStart, addPluginListener, applyCspNonce, applyLocalDoc, applyStudyAvailability, applySubtitleAvailability, askPluginConsent, clearPluginConsent, clipListen, clipNow, clipPanelHost, clipRun, clipTargetInfo, cspNonceValue, cuesSnapshot, definitionStarted, destroyV2Page, disposeStudyUi, emitPlugin, ensurePluginApi, guardedEventsourceFor, guardedFetchFor, guardedSocketFor, guardedXhrFor, initPlayer, loadPlugins, loadShow, localAsrAvailable, openLocalTranscript, apiCompatible, pluginApiFor, pluginApiReady, pluginConsentChanged, pluginConsentState, pluginHostFacade, pluginHostFacadeCache, pluginManifestFor, pluginPermissionChanged, pluginPermissionLabels, pluginPermissionSignature, pluginPermissions, pluginPinnedHash, pluginPlayerState, pluginReportError, pluginRequire, pluginUrlIsLocal, refreshCatalogPages, refreshPluginSettings, registerPluginPage, registerStudyEngine, registerStudyRuntime, registerStudyUi, registerStudyUiHook, releasePluginCapabilities, reloadPlugins, renderList, renderPluginNav, renderPluginPage, renderV2Page, runPluginCleanup, runStudyUiHook, setPluginConsent, setPluginPermissionSignature, setPluginPinnedHash, smallArtwork, startLocalTranscribe, startV2Plugin, stopPlugin, studyEngine, studyHostBridge, studyPluginOn, studyRuntime, studyUi, subtitlePluginOn, syncStudySettingsVisibility, syncSubtitleSettingsVisibility, trackPlugin, v2UiKit };
 registerLayer('04-local-audio-plugin-host', { CATALOG_TIMEOUT, HOST_V2, HOST_V2_PAGES, PLUGIN_API_VERSION, PLUGIN_CLEANUP, PLUGIN_COMMANDS, PLUGIN_CONSENT_PREFIX, PLUGIN_GRANTS, PLUGIN_HASH_PREFIX, PLUGIN_HOOKS, PLUGIN_PAGES, PLUGIN_PERMISSIONS, PLUGIN_PERMISSION_ALL, PLUGIN_PERMS_KEY_PREFIX, PLUGIN_REGISTRY, PluginHost, SHELL_TIMEOUT, STUDY_ENGINE, STUDY_ENGINE_OWNER, STUDY_RUNTIME, STUDY_RUNTIME_OWNER, STUDY_UI, STUDY_UI_HOOKS, STUDY_UI_OWNER, abortPluginStart, addPluginListener, applyCspNonce, applyLocalDoc, applySettingsPanes, applySlotMounts, applyStudyAvailability, applySubtitleAvailability, askPluginConsent, clearPluginConsent, clipListen, clipNow, clipPanelHost, clipRun, clipTargetInfo, cspNonceValue, cuesSnapshot, definitionStarted, destroyV2Page, disposeStudyUi, emitPlugin, ensurePluginApi, guardedEventsourceFor, guardedFetchFor, guardedSocketFor, guardedXhrFor, initPlayer, loadPlugins, loadShow, localAsrAvailable, openLocalTranscript, apiCompatible, pluginApiFor, pluginApiReady, pluginConsentChanged, pluginConsentState, pluginHostFacade, pluginHostFacadeCache, pluginManifestFor, pluginPermissionChanged, pluginPermissionLabels, pluginPermissionSignature, pluginPermissions, pluginPinnedHash, pluginPlayerState, pluginReportError, pluginRequire, pluginUrlIsLocal, refreshCatalogPages, refreshPluginSettings, refreshSurfaces, registerPluginPage, registerStudyEngine, registerStudyRuntime, registerStudyUi, registerStudyUiHook, releasePluginCapabilities, releaseSurfaces, reloadPlugins, renderList, renderPluginNav, renderPluginPage, renderV2Page, runPluginCleanup, runStudyUiHook, setPluginConsent, setPluginPermissionSignature, setPluginPinnedHash, smallArtwork, startLocalTranscribe, startV2Plugin, stopPlugin, studyEngine, studyHostBridge, studyPluginOn, studyRuntime, studyUi, subtitlePluginOn, syncStudySettingsVisibility, syncSubtitleSettingsVisibility, trackPlugin, v2UiKit });
 export { applySettingsPanes, applySlotMounts, refreshSurfaces, releaseSurfaces };
-export { PLUGIN_DIAGNOSTICS, applyPluginExtensions, clearPluginTheme, pluginDiagnosticsText, renderPluginImporters, renderPluginMenu, renderPluginSearchSources, renderPluginThemes, runPluginContribution, studyAudioView, studyStateView, studyTranslateCacheView, studyTranslateView };
+export { PLUGIN_DIAGNOSTICS, applyPluginExtensions, pluginDiagnosticsText, renderPluginImporters, renderPluginMenu, renderPluginSearchSources, renderPluginThemes, runPluginContribution, studyAudioView, studyStateView, studyTranslateCacheView, studyTranslateView };

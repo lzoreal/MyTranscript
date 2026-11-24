@@ -6,7 +6,7 @@ use std::path::Path;
 
 use tauri::{Emitter, Manager};
 
-use crate::{asr, http_long, localasr, model_dir_for};
+use crate::{http_long, localasr, model_dir_for};
 
 pub fn offline_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     let base = app

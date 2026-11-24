@@ -1347,6 +1347,7 @@ async function defaultDownloadEpisode(show, ep, opts = {}) {
   app.downloadErrors.delete(key);
   app.downloadProgress.set(key, { key, pct: -1, got: 0, total: 0, at: Date.now() });
   renderDownloads();
+  startDownloadsTicker();
   let transcriptErr = '';
   try {
     let audioPath = existing && existing.path ? existing.path : '';
@@ -1601,6 +1602,21 @@ function downloadsHTML(entries, query) {
       '<div class="dl-rows">' + rows + '</div></div>';
   }).join('');
 }
+/* 下载队列的兜底心跳：壳推 myt://offline 的事件偶尔会丢（限流、窗口失焦、切页时监听器还没挂上），
+   只靠事件就会出现「下载完了但列表里没有，得刷新一下」。下载期间每次按键都重读一次目录，
+   800ms 一轮，队列空了再收尾一次，开销是一条 readdir。 */
+let dlTickTimer = 0;
+function startDownloadsTicker() {
+  if (dlTickTimer) return;
+  dlTickTimer = setInterval(() => {
+    const busy = (app.downloading && app.downloading.size) || (app.downloadProgress && app.downloadProgress.size);
+    if (!busy) {
+      clearInterval(dlTickTimer);
+      dlTickTimer = 0;
+    }
+    refreshOffline();
+  }, 800);
+}
 function renderDownloads() {
   const box = $('downloadsGroups');
   if (!box) return;
@@ -1821,10 +1837,11 @@ const SIDEBAR_META = {
   inbox: ['◫', '收件箱'], queue: ['☷', '播放队列'], history: ['◷', '收听历史'], stats: ['▥', '统计与回顾'],
   favorites: ['★', '收藏'], bookmarks: ['☆', '书签'], notes: ['▤', '笔记'], listening: ['♫', '收听模式'], settings: ['⚙', '设置'],
 };
-/* 内置色板：午夜蓝/纸张/原型/编辑部/苹果播客/Spotify。档案/墨绿/酒红/青瓷/雾白已撤掉（老存档由 01 的 REMOVED_THEME_FALLBACK 迁走），
-   视觉主题另有随包的七套自定义主题卡，不占内置色板位。 */
+/* 内置色板：原型/编辑部/苹果播客/Spotify/报纸/影集/播控台。档案/墨绿/酒红/青瓷/雾白、午夜蓝/纸张已撤掉
+   （老存档由 13 的 REMOVED_THEME_FALLBACK 迁走），视觉主题另有随包的七套自定义主题卡，不占内置色板位。 */
 const THEME_NAMES = {
-  midnight: '午夜蓝', paper: '纸张', prototype: '原型', ledger: '编辑部', apple: '苹果播客', spotify: 'Spotify',
+  prototype: '原型', ledger: '编辑部', apple: '苹果播客', spotify: 'Spotify',
+  news: '报纸', plate: '影集', console: '播控台',
 };
 
 function whenIdle(fn, timeout = 1200) {
