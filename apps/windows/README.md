@@ -123,3 +123,18 @@ cargo build --release
 - speaking-of-psychology 集：原生命中识别跑通，逐词高亮跟随正常。
 - 99% Invisible（CORS 受限、ID3 大封面）：壳里取字节成功、探针自适应后识别跑通（实测 38 句）。
 - Android 端未动工（计划是原生 Kotlin + WebView，推理仍走同一套 C API 的 JNI 包）。
+
+## CI 打包（.github/workflows/app-build.yml）
+
+两条入口：
+
+- **手动 run**（Actions → Build Windows App）：只产出 Actions 产物，不建 Release。
+- **推 pp-v* 标签**：自动发 Release，附件同样是安装包 + 便携 zip（标签得人推，workflow 不建 tag）。
+
+流程固定为：etch-deps.ps1 抓 sherpa DLL → 重建 player.js/主题包/骨架 → 41 个 Python 测试 +
+cargo test → 
+px @tauri-apps/cli build（NSIS）→ 打 MyTranscript-portable.zip（exe + 3 个 DLL）。
+
+本地等价验证（2026-11-24 实跑）：release 编译 4m24s，产出
+undle/nsis/MyTranscript_0.1.0_x64-setup.exe（10.8 MB）、便携 zip 13.3 MB。
+安装包未签名，首次运行仍会弹 SmartScreen。

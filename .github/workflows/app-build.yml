@@ -1,0 +1,130 @@
+name: Build Windows App
+
+# 桌面壳打包：Tauri 2 + NSIS，产物 = 安装包 + 便携 zip。
+# - 手动触发：只上传 Actions 产物；填了 tag 才顺手发一个 Release。
+# - 推 app-v* 标签：自动发 Release（标签由人推，workflow 不建 tag）。
+# - 不碰 main 的站点/字幕数据，只读仓库、写 Actions 产物。
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "发布到 Release 的标签（留空=只上传 Actions 产物）"
+        default: ""
+  push:
+    tags: ["app-v*"]
+
+permissions:
+  contents: write
+
+# 同一分支/标签只留最新一次：装 NSIS、编译 release 都不便宜。
+concurrency:
+  group: app-build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: "utf-8"
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "apps/windows/src-tauri -> target"
+          key: "tauri-windows"
+
+      # sherpa-onnx 的 DLL/.lib 不入库，必须先抓再编译，否则 build.rs 链接就断。
+      - name: 抓 sherpa-onnx 二进制（13 MB）
+        shell: pwsh
+        run: ./apps/windows/fetch-deps.ps1
+
+      # 壳把 site/ 编译期内嵌（frontendDist），生成物必须在这之前重建。
+      - name: 重建生成物
+        shell: pwsh
+        run: |
+          python scripts/build_player_js.py
+          python scripts/build_theme_packs.py
+          python scripts/build_skeletons.py
+
+      - name: 装脚本依赖
+        shell: pwsh
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+
+      - name: 层边界与 YAML 检查
+        shell: pwsh
+        run: |
+          python scripts/check_layers.py
+          python -c "import yaml,pathlib;yaml.safe_load(pathlib.Path('.github/workflows/app-build.yml').read_text(encoding='utf-8'));print('yaml ok')"
+
+      - name: 跑单测
+        shell: pwsh
+        run: |
+          $bad = @()
+          Get-ChildItem tests/test_*.py | ForEach-Object {
+            python $_.FullName
+            if ($LASTEXITCODE -ne 0) { $bad += $_.Name }
+          }
+          if ($bad.Count -gt 0) { "失败：$($bad -join ', ')"; exit 1 }
+          "41 个测试文件全绿"
+
+      - name: 壳单测
+        shell: pwsh
+        working-directory: apps/windows/src-tauri
+        run: cargo test --bin mytranscript-desktop
+
+      - name: 打安装包（NSIS）
+        shell: pwsh
+        working-directory: apps/windows/src-tauri
+        run: npx --yes @tauri-apps/cli@2 build --target x86_64-pc-windows-msvc
+
+      - name: 做便携包（exe + 3 个 DLL）
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path apps/windows/dist | Out-Null
+          $exe = "apps/windows/src-tauri/target/x86_64-pc-windows-msvc/release/mytranscript-desktop.exe"
+          $lib = "apps/windows/src-tauri/vendor/sherpa/lib"
+          if (-not (Test-Path $exe)) { throw "没有 release exe：$exe" }
+          $files = @($exe,
+            (Join-Path $lib "sherpa-onnx-c-api.dll"),
+            (Join-Path $lib "onnxruntime.dll"),
+            (Join-Path $lib "onnxruntime_providers_shared.dll"))
+          Compress-Archive -Force -Path $files -DestinationPath apps/windows/dist/MyTranscript-portable.zip
+          Get-ChildItem apps/windows/dist, apps/windows/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis -ErrorAction SilentlyContinue |
+            Select-Object Name, @{n = "MB"; e = { [math]::Round($_.Length / 1MB, 1) } }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mytranscript-windows
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            apps/windows/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+            apps/windows/dist/MyTranscript-portable.zip
+
+      - name: 发 Release（仅 tag 触发或手动填了 tag）
+        if: startsWith(github.ref, 'refs/tags/app-v') || inputs.tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag != '' && inputs.tag || github.ref_name }}
+          name: MyTranscript ${{ inputs.tag != '' && inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          files: |
+            apps/windows/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+            apps/windows/dist/MyTranscript-portable.zip
