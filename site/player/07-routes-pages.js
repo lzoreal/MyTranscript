@@ -1,8 +1,8 @@
-import { $, ASR_MODEL_DEFAULT, box, host, prefs, setState, state, tauriHost } from './00-runtime.js';
-import { emptyLine, esc, fmt, isBracket, isJsonTranscript, loaderHTML, pluginPageKey, reader, seekTo, showToast, statHTML, syncCustomThemeEditor } from './01-theme-reader-shell.js';
+import { $, ASR_MODEL_DEFAULT, audio, box, host, prefs, setState, state, tauriHost } from './00-runtime.js';
+import { closeOverlays, closeTypeSheet, emptyLine, esc, fmt, isBracket, isJsonTranscript, loaderHTML, pluginPageKey, reader, seekTo, setImmersive, setWallpaper, showToast, splitLabel, statHTML, syncCustomThemeEditor } from './01-theme-reader-shell.js';
 import { syncLiveLeadSelect } from './02-live-caption-wasm.js';
 import { selectEpisode } from './03-native-asr-service-worker.js';
-import { PLUGIN_PAGES, applySlotMounts, destroyV2Page, emitPlugin, loadShow, pluginPlayerState, pluginReportError, refreshPluginSettings, renderPluginPage, renderV2Page, subtitlePluginOn } from './04-local-audio-plugin-host.js';
+import { PLUGIN_PAGES, applySlotMounts, destroyV2Page, emitPlugin, loadShow, pluginPlayerState, pluginReportError, refreshPluginSettings, renderPluginPage, renderV2Page, smallArtwork, subtitlePluginOn } from './04-local-audio-plugin-host.js';
 import { LOCAL_KEY, PAGE_NAMES, QUEUE_KEY, THEME_NAMES, absoluteFeed, app, catalogLatest, epStatusBadges, episodeFilterMatch, episodesOf, firstShowKey, fmtBytes, fmtDuration, formatDate, hash32, hostOf, idxGetAll, inboxCount, isFavorite, isPlayed, isSubscribed, moduleOn, navigate, notifyPlayTargetFailure, offlineKeyFor, parseRoute, plainText, playTarget, playTargetLabel, readAllProgress, readJSON, refreshShows, renderAfterStateChange, refreshOffline, renderDownloads, renderOfflineList, renderPlaylists, returnToCue, routeHash, routeModuleAllows, showByKey, showPrefFor, syncDockBadge, syncDockSleep, syncIndexCount, syncRateSeg, writeJSON } from './05-transport-transcript-nav.js';
 import { coverHTML, ensureShowFeed, episodeCover, hasFreshFeed, memoryFeed, renderOnlineResults } from './06-catalog-feeds-search.js';
 import { motionFlip, motionReduced } from './11-motion.js';
@@ -15,6 +15,7 @@ const syncThemeSwatches = lazyFn('08-study-ai', 'syncThemeSwatches');
 const asrModelName = lazyFn('05-transport-transcript-nav', 'asrModelName');
 const syncBookmarkBtn = lazyFn('09-player-integration', 'syncBookmarkBtn');
 const syncMini = lazyFn('09-player-integration', 'syncMini');
+const setRailOpen = lazyFn('09-player-integration', 'setRailOpen');
 const syncMiniCaption = lazyFn('09-player-integration', 'syncMiniCaption');
 const syncReaderTop = lazyFn('09-player-integration', 'syncReaderTop');
 const closeThemePop = lazyFn('10-desktop-bridge-tail', 'closeThemePop');
@@ -63,9 +64,43 @@ function applyRoute() {
 }
 function applyRouteNow(route) {
   app.route = route;
-  // 离开视频页就一起收：画面停、旁路转写停（进度已由 timeupdate 落盘，回来自动接上）。
-  if (app.lastPage === 'video' && route.page !== 'video') leaveVideoPage();
+  /* routePage 是此刻真正打开的页面，lastPage 只留给返回按钮用「上一页」。
+     两者混用会让播放器/视频页把自己的页面记成上一页，返回按钮就原地跳。 */
+  const currentPage = app.routePage || '';
+  /* 先排除别名与未知路由，别让一次无效跳转先保存/清零首页位置。 */
   if (route.page === 'echo') { navigate('stats'); return; }
+  if (!PAGE_NAMES[route.page]) { navigate('home'); return; }
+  /* 全屏封面是原生 dialog，盖在整个应用上；换页（尤其 Alt+左键/历史返回）时
+     不关它，就会回到首页后仍被一整屏封面糊住，而且 Esc 之外没有任何出口。 */
+  if ($('coverStage')?.open) closeCoverStage();
+  /* 首页和别的页共用一个滚动容器：离开首页时把墙的位置记下来，回来时还原。
+     任何别的页面切换也一并归零，否则播客库滚到一半再切发现页，会从半截开始。 */
+  const sc = document.querySelector('.main');
+  const jumpTop = top => {
+    if (!sc) return;
+    try { sc.scrollTo({ top, behavior: 'instant' }); }
+    catch (e) { sc.scrollTop = top; }
+  };
+  if (sc && currentPage) {
+    if (currentPage === 'home') app.homeScroll = sc.scrollTop;
+    if (route.page !== 'home') jumpTop(0);
+  }
+  // 离开视频页就一起收：画面停、旁路转写停（进度已由 timeupdate 落盘，回来自动接上）。
+  if (currentPage === 'video' && route.page !== 'video') leaveVideoPage();
+  /* 播放器的沉浸/壁纸/侧栏是播放页专属，离开后必须退回普通外壳，
+     否则首页会带着 body.immersive 把底栏藏掉，或者整屏壁纸盖住应用。 */
+  if (currentPage === 'player' && route.page !== 'player') {
+    if (state.wallpaper) setWallpaper(false).catch(() => {});
+    if (state.immersive) setImmersive(false);
+    closeOverlays(false);
+    closeTypeSheet(false);
+    if (typeof setRailOpen === 'function') {
+      setRailOpen('series', false, false);
+      setRailOpen('notes', false, false);
+    }
+  }
+  app.routePage = route.page;
+  if (currentPage && currentPage !== route.page) app.lastPage = currentPage;
   const isPlayer = route.page === 'player';
   document.body.classList.toggle('player-open', isPlayer);
   // 首页自己的 hero 已经有搜索框，顶栏那个不再重复出现。
@@ -93,9 +128,12 @@ function applyRouteNow(route) {
   updateDocumentTitle();
   closeThemePop();
   if (isPlayer) { destroyV2Page(); openPlayerRoute(route); return; }
-  if (!PAGE_NAMES[route.page]) { navigate('home'); return; }
-  app.lastPage = route.page;
   renderPage(route.page, route);  emitPlugin('route:change', { page: route.page, args: route.args });
+  if (route.page === 'home' && currentPage && currentPage !== 'home') {
+    const top = app.homeScroll || 0;
+    if (sc) requestAnimationFrame(() => { if (app.routePage === 'home') jumpTop(top); });
+  }
+  if (route.page === 'home' && !audio.paused) startTileLyricLoop();
   updateDocumentTitle();
   syncMini();
 }
@@ -179,7 +217,13 @@ function renderPage(page, route) {
   else if (page === 'video') renderVideo();
   else if (page === 'discover') renderDiscover();
   else if (page === 'search') renderSearch(route.args[0] || '');
-  else if (page === 'podcast') renderPodcast(route.args[0] || '');
+  else if (page === 'podcast') {
+    /* #/podcast 不带 slug 是「回主页」的入口（顶栏的 ← 主页），不是某一档节目：
+       以前按空 key 去查节目，查不到就弹「找不到这档节目」再跳回家，每次回主页都闪一个假错误。 */
+    const showKey = route.args[0] || '';
+    if (!showKey) { navigate('home'); return; }
+    renderPodcast(showKey); afterPodcastRender();
+  }
   else if (page === 'episode') renderEpisode(route.args[0] || '', route.args[1] || '');
   else if (page === 'inbox') renderInbox();
   else if (page === 'queue') renderQueue();
@@ -280,18 +324,20 @@ function coverageHTML(show) {
 }
 function podCardHTML(show) {
   const count = show.episode_count || catalogLatest(show).length || 0;
-  const subscribed = isSubscribed(show.slug);
   const meta = [showCategoryText(show), showLanguageLabel(show)].filter(Boolean).join(' · ');
   const desc = plainText(show.description || '');
   const latest = catalogLatest(show)[0] || null;
   const badge = show.builtin
     ? '<span class="pill' + (subtitleCapability() === 'on' ? '' : ' dim') + '">' + subtitleCardBadge(show) + '</span>'
     : '<span class="pill dim">站外 · 仅音频</span>';
+  // 内置订阅→进节目页管理；内置未订阅→订阅；站外订阅→进节目页（不把“＋”做成退订）
+  const subscribed = isSubscribed(show.slug);
+  const actionLabel = show.builtin ? (subscribed ? '管理中' : '订阅') : '打开';
   const action = show.builtin
     ? (subscribed
-      ? '<button class="btn small ghost" data-open-podcast="' + esc(show.slug) + '">管理中</button>'
-      : '<button class="btn small primary" data-sub-toggle="' + esc(show.slug) + '">订阅</button>')
-    : '<button class="btn small ghost" data-remove-sub="' + esc(show.slug) + '">移除</button>';
+      ? '<button class="btn small ghost" data-open-podcast="' + esc(show.slug) + '" data-quick="manage" title="管理中" aria-label="管理中">管理中</button>'
+      : '<button class="btn small primary" data-sub-toggle="' + esc(show.slug) + '" data-quick="add" title="订阅" aria-label="订阅">订阅</button>')
+    : '<button class="btn small ghost" data-open-podcast="' + esc(show.slug) + '" data-quick="open" title="打开节目" aria-label="打开节目">打开</button>';
   const latestLine = latest
     ? '<span class="pod-latest">最新：' + esc(latest.title || '(无标题)') +
       (latest.date ? ' · ' + formatDate(latest.date) : '') + '</span>'
@@ -305,6 +351,683 @@ function podCardHTML(show) {
     '<span class="pill dim">' + (count ? count + ' 集' : '—') + '</span></div>' + latestLine +
     '</a><div class="pod-actions">' + action + '</div></div>';
 }
+/* ---- 主题动效钩子：瓦片 → 节目页封面延续；正在播放的单集行标记 ---- */
+let coverFeFrom = null;
+document.addEventListener('pointerdown', (e) => {
+  const card = e.target && e.target.closest ? e.target.closest('.pod-card') : null;
+  if (!card) return;
+  const r = card.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  coverFeFrom = { x: r.left, y: r.top, w: r.width, h: r.height, at: Date.now() };
+}, true);
+
+function afterPodcastRender() {
+  bindPlayingRowSync();
+  applyCoverFe();
+  syncPlayingRows();
+}
+
+/* 把瓦片的位置写成 CSS 变量喂给封面：主题用它能做“从这块瓦片原位放大成通栏封面”。 */
+function applyCoverFe() {
+  const hero = document.querySelector('#page-podcast .show-hero');
+  const from = coverFeFrom;
+  coverFeFrom = null;
+  if (!hero || !from || Date.now() - from.at > 1200 || motionReduced()) return;
+  const r = hero.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  const top = Math.max(0, Math.round(from.y - r.top));
+  const left = Math.max(0, Math.round(from.x - r.left));
+  const right = Math.max(0, Math.round(r.right - (from.x + from.w)));
+  const bottom = Math.max(0, Math.round(r.bottom - (from.y + from.h)));
+  hero.style.setProperty('--fe-inset', top + 'px ' + right + 'px ' + bottom + 'px ' + left + 'px');
+  hero.style.setProperty('--fe-radius', Math.max(2, Math.min(14, Math.round(from.w * 0.03))) + 'px');
+  hero.classList.add('is-fe');
+  const clear = () => {
+    hero.classList.add('is-fe-done');
+    hero.classList.remove('is-fe');
+    hero.style.removeProperty('--fe-inset');
+    hero.style.removeProperty('--fe-radius');
+  };
+  hero.addEventListener('animationend', clear, { once: true });
+  setTimeout(clear, 900);
+}
+
+function syncPlayingRows() {
+  const cur = state.current;
+  const key = (cur && cur.showKey) || '';
+  const id = (cur && cur.id) || '';
+  const el = document.querySelector('audio');
+  const live = el ? !el.paused : false;
+  document.querySelectorAll('.ep-row').forEach(row => {
+    const on = !!key && row.dataset.key === key && row.dataset.ep === id;
+    row.classList.toggle('is-playing', on);
+    if (on) row.classList.toggle('is-playing-live', live);
+    else row.classList.remove('is-playing-live');
+  });
+}
+/* 播放器 <audio> 由 00-runtime 建好挂到 body 上，这里只能到运行时再取，不能在模块顶层引用。 */
+function bindPlayingRowSync() {
+  const el = document.querySelector('audio');
+  if (!el || el.dataset.mytPlayingSync) return;
+  el.dataset.mytPlayingSync = '1';
+  el.addEventListener('play', () => { syncPlayingRows(); syncPlayingTiles(); startTileLyricLoop(); });
+  el.addEventListener('pause', () => { syncPlayingRows(); syncPlayingTiles(); stopTileLyricLoop(); });
+  let lyricQueued = 0;
+  el.addEventListener('timeupdate', () => {
+    if (lyricQueued) return;
+    lyricQueued = requestAnimationFrame(() => { lyricQueued = 0; updateTileLyric(); });
+  });
+  el.addEventListener('seeked', () => tileWordPaint());
+}
+/* 首页瓦片：正在播放的那个节目的瓦片亮起珊瑚描边（Folia 的“正在播放”标记） */
+function syncPlayingTiles() {
+  const folia = document.documentElement.dataset.theme === FOLIA_THEME_ID;
+  const key = (state.current && state.current.showKey) || '';
+  const el = document.querySelector('audio');
+  const live = el ? !el.paused : false;
+  let marked = false;   // 墙会克隆同一档节目：只在第一块上标记/展开，别让整墙同时长出好几块
+  let grew = false;
+  document.querySelectorAll('#homeRecommended .pod-card').forEach(card => {
+    const link = card.querySelector('[data-open-podcast]');
+    const slug = link ? link.getAttribute('data-open-podcast') : '';
+    const on = folia && !!key && slug === key && !marked;
+    if (on) marked = true;
+    const was = card.classList.contains('is-playing-tile');
+    const apply = () => {
+      card.classList.toggle('is-playing-tile', on);
+      card.classList.toggle('is-playing-tile-live', on && live);
+      if (on) {
+        clearTileSpan(card);
+        ensureTileLyric(card);
+      } else {
+        paintTileArt(card, false);
+        const full = card.querySelector('.tile-full');
+        if (full) full.remove();
+        if (!folia) clearTileSpan(card);
+        else if (!card.classList.contains('is-peek')) {
+          // 手动撑开的瓦片别被“恢复槽位”压回小格
+          restoreTileSpan(card);
+        }
+      }
+    };
+    // 播放状态变化会让瓦片从小格长成大格：和点开一样走 FLIP，别让整墙硬跳
+    if (on !== was) { flipTile(card, apply); if (on) grew = true; } else apply();
+  });
+  // 瓦片撑成 6×6 会多占两行，密排会留下一个洞；补一套把洞填掉
+  if (grew) setTimeout(() => { const w = foliaWall(); if (w && homeActive()) extendWall(w); }, 520);
+  updateLocateBtn();
+}
+
+/* 墙页右下角的「回到正在播放」：点了就把正在播放的瓦片滚到视口正中并闪一圈珊瑚边 */
+function updateLocateBtn() {
+  let btn = document.querySelector('.folia-locate');
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'folia-locate';
+    btn.setAttribute('aria-label', '定位到正在播放');
+    btn.innerHTML = '<span class="folia-locate-bars"><i></i><i></i><i></i></span>' +
+      '<span class="folia-locate-label">正在播放</span>';
+    btn.addEventListener('click', () => {
+      syncPlayingTiles();
+      const key = (state.current && state.current.showKey) || '';
+      const card = document.querySelector('#homeRecommended .pod-card.is-playing-tile') ||
+        [...document.querySelectorAll('#homeRecommended .pod-card')].find(c => tileSlugOf(c) === key);
+      if (!card) return;
+      centerTile(card);
+      card.classList.remove('locate-flash');
+      void card.offsetWidth;
+      card.classList.add('locate-flash');
+      setTimeout(() => card.classList.remove('locate-flash'), 1000);
+    });
+    document.body.appendChild(btn);
+  }
+  const playing = !!(state.current && state.current.showKey);
+  const onHome = location.hash.indexOf('#/home') === 0 || location.hash === '' || location.hash === '#/';
+  btn.classList.toggle('on', playing && onHome && document.documentElement.dataset.theme === FOLIA_THEME_ID);
+}
+document.addEventListener('hashchange', () => updateLocateBtn());
+/* 切主题不会走 hashchange：Folia 的定位钮要立刻收掉，切回 Folia 时再按当前页状态恢复 */
+document.addEventListener('myt:theme-change', () => updateLocateBtn());
+/* 首页由 home 插件渲染，宿主只挂一个观察器：墙重画完就把描边补回去 */
+function watchHomeTiles() {
+  const host = document.getElementById('homeRecommended');
+  if (!host || host.dataset.mytTileSync) return;
+  host.dataset.mytTileSync = '1';
+  new MutationObserver(() => { syncPlayingTiles(); ensureWallDepth(); }).observe(host, { childList: true });
+  syncPlayingTiles();
+}
+document.addEventListener('DOMContentLoaded', () => { bindPlayingRowSync(); watchHomeTiles(); bindCoverStage(); });
+
+/* ---- Folia「海报墙」主题的三件交互：瓦片原地展开 / 墙无限补块 / 播放瓦片压歌词 ---- */
+const FOLIA_THEME_ID = 'ct-pack-folia-poster';
+const foliaWall = () => (document.documentElement.dataset.theme === FOLIA_THEME_ID
+  ? document.getElementById('homeRecommended') : null);
+const homeActive = () => !!$('page-home')?.classList.contains('active');
+const TILE_SET_SIZE = 14;   // 与主题 14n 的铺满周期一致：12 席整块 + 两块 6×4
+const TILE_MAX = 400;       // Folia MAX_RENDERED_INSTANCES
+
+function tileSlugOf(card) {
+  const link = card && card.querySelector('[data-open-podcast]');
+  return link ? link.getAttribute('data-open-podcast') : '';
+}
+
+function ensureTilePeek(card) {
+  let peek = card.querySelector('.tile-peek');
+  if (peek) return peek;
+  const slug = tileSlugOf(card);
+  if (!slug) return null;
+  const count = card.querySelector('.pod-badges .pill.dim');
+  peek = document.createElement('div');
+  peek.className = 'tile-peek';
+  peek.innerHTML = '<span class="tile-peek-kicker">' + esc((count ? count.textContent : '').trim() || '节目') +
+    '</span><div class="tile-peek-actions"><a class="tile-peek-btn primary" href="' +
+    esc(routeHash('podcast', [slug])) + '" data-open-podcast="' + esc(slug) + '">进入节目页</a>' +
+    '<button type="button" class="tile-peek-btn" data-tile-full>全屏</button>' +
+    '<button type="button" class="tile-peek-btn" data-tile-collapse>收起</button></div>';
+  card.appendChild(peek);
+  return peek;
+}
+
+function collapseTiles(except) {
+  document.querySelectorAll('#homeRecommended .pod-card.is-peek').forEach(card => {
+    if (card !== except) flipTile(card, () => { card.classList.remove('is-peek'); restoreTileSpan(card); });
+  });
+}
+
+/* ---------- 封面全屏：把瓦片里正在看的那张封面铺满窗口 ---------- */
+let coverLyricRaf = 0;
+let coverLoadToken = 0;
+function updateCoverLyric() {
+  const layer = $('coverStage');
+  const box = $('csLyric');
+  if (!layer || !layer.open || !box || !layer.classList.contains('lyric-on')) return;
+  const html = tileLyricHTML();
+  if (box.dataset.signature !== html) {
+    box.innerHTML = html;
+    box.dataset.signature = html;
+  }
+  paintCueWordEl(box.querySelector('.tl-cur'));
+}
+function startCoverLyricLoop() {
+  const layer = $('coverStage');
+  if (!layer || !layer.open || !layer.classList.contains('lyric-on') || coverLyricRaf) return;
+  const step = () => {
+    if (!layer.open || !layer.classList.contains('on')) {
+      coverLyricRaf = 0;
+      return;
+    }
+    updateCoverLyric();
+    coverLyricRaf = requestAnimationFrame(step);
+  };
+  coverLyricRaf = requestAnimationFrame(step);
+}
+function stopCoverLyricLoop() {
+  if (coverLyricRaf) cancelAnimationFrame(coverLyricRaf);
+  coverLyricRaf = 0;
+}
+function closeCoverStage() {
+  const layer = $('coverStage');
+  if (!layer || !layer.open || layer.dataset.closing === '1') return;
+  layer.dataset.closing = '1';
+  coverLoadToken++;
+  stopCoverLyricLoop();
+  layer.classList.remove('on', 'lyric-on');
+  setTimeout(() => { if (layer.open) layer.close(); }, motionReduced() ? 0 : 240);
+}
+function openCoverStage(card) {
+  const layer = $('coverStage');
+  if (!layer || !card || layer.open) return;
+  const playing = card.classList.contains('is-playing-tile');
+  const artImg = card.querySelector('.pod-art img');
+  const epImg = playing && state.current && state.current.img ? state.current.img : '';
+  const show = showByKey(tileSlugOf(card));
+  const showArt = show && show.artwork ? show.artwork : '';
+  /* 分集封面优先，但外站封面经常 403 / 超时：候选按顺序退，最后一张也失败时
+     落到 CSS 生成的深色底，不再把整块窗口留成纯黑。 */
+  const candidates = [...new Set([epImg, showArt, artImg ? artImg.getAttribute('src') : ''].filter(Boolean))];
+  if (!candidates.length) { showToast('这张封面还没有图。', 'warn'); return; }
+  const titleEl = card.querySelector('.pod-card-main > strong');
+  const title = (playing && state.current && state.current.title) ? state.current.title : (titleEl ? titleEl.textContent.trim() : '');
+  const showName = (playing && state.show && state.show.name) ? state.show.name : (card.querySelector('.pod-meta') ? card.querySelector('.pod-meta').textContent.trim() : '');
+  const img = $('csImg'), bg = $('csBg');
+  const token = ++coverLoadToken;
+  layer.classList.add('cover-empty');
+  const paintCover = (src) => {
+    if (token !== coverLoadToken) return;
+    if (img) { img.src = src; img.alt = title || '节目封面'; }
+    if (bg) bg.style.backgroundImage = 'url(' + JSON.stringify(src) + ')';
+    if (img && img.complete && img.naturalWidth) layer.classList.remove('cover-empty');
+  };
+  const coverLoaded = () => {
+    if (token !== coverLoadToken) return;
+    layer.classList.remove('cover-empty');
+  };
+  const coverFailed = () => {
+    if (token !== coverLoadToken) return;
+    const src = candidates.shift();
+    if (src) paintCover(src);
+    else {
+      if (bg) bg.style.backgroundImage = 'none';
+      layer.classList.add('cover-empty');
+    }
+  };
+  if (img) {
+    img.onload = coverLoaded;
+    img.onerror = coverFailed;
+  }
+  paintCover(candidates.shift());
+  const k = $('csKicker'), t = $('csTitle'), s = $('csSub');
+  if (k) k.textContent = playing ? '正在播放' : '节目封面';
+  if (t) t.textContent = title || '未命名节目';
+  if (s) s.textContent = showName || '';
+  const hasLyric = !!(playing && state.cues && state.cues.length);
+  delete layer.dataset.closing;
+  layer.classList.toggle('lyric-on', hasLyric);
+  layer.showModal();
+  if (hasLyric) updateCoverLyric();
+  const lyricBox = $('csLyric');
+  if (lyricBox && !hasLyric) { lyricBox.replaceChildren(); lyricBox.dataset.signature = ''; }
+  requestAnimationFrame(() => layer.classList.add('on'));
+  if (hasLyric) startCoverLyricLoop();
+}
+function bindCoverStage() {
+  const layer = $('coverStage');
+  if (!layer || layer.dataset.bound) return;
+  layer.dataset.bound = '1';
+  const close = $('csClose');
+  if (close) close.addEventListener('click', closeCoverStage);
+  const backdrop = $('csBackdrop');
+  if (backdrop) backdrop.addEventListener('click', closeCoverStage);
+  layer.addEventListener('cancel', (e) => {
+    e.preventDefault();
+    closeCoverStage();
+  });
+  layer.addEventListener('close', () => {
+    stopCoverLyricLoop();
+    layer.classList.remove('on', 'lyric-on');
+    const box = $('csLyric');
+    if (box) { box.replaceChildren(); box.dataset.signature = ''; }
+    delete layer.dataset.closing;
+  });
+  document.addEventListener('play', () => {
+    if (layer.open && layer.classList.contains('lyric-on')) startCoverLyricLoop();
+  }, true);
+  document.addEventListener('pause', stopCoverLyricLoop, true);
+  document.addEventListener('timeupdate', () => {
+    if (layer.open) updateCoverLyric();
+  }, true);
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindCoverStage);
+else bindCoverStage();
+
+/* Folia 的手感：格子尺寸变化本身不能过渡，用 FLIP 把“旧矩形”先画出来再收回新矩形；
+   旁边被挤动的瓦片只做位移，避免整墙一起缩放。 */
+function flipTile(card, mutate) {
+  if (typeof motionReduced === 'function' && motionReduced()) { mutate(); return; }
+  const wall = card.closest('#homeRecommended');
+  const cards = wall ? [...wall.querySelectorAll('.pod-card')].filter(c => {
+    const r = c.getBoundingClientRect();
+    return r.width > 0 && r.bottom > 0 && r.top < window.innerHeight * 1.6;
+  }) : [card];
+  const before = new Map(cards.map(c => [c, c.getBoundingClientRect()]));
+  mutate();
+  cards.forEach(c => {
+    const a = before.get(c);
+    const b = c.getBoundingClientRect();
+    if (!a || !b.width || !a.width) return;
+    const dx = a.left - b.left;
+    const dy = a.top - b.top;
+    const sx = a.width / b.width;
+    const sy = a.height / b.height;
+    const scaled = Math.abs(sx - 1) > 0.02 || Math.abs(sy - 1) > 0.02;
+    if (!scaled && Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+    c.animate([
+      { transformOrigin: 'top left', transform: 'translate(' + dx + 'px,' + dy + 'px) scale(' + (scaled ? sx : 1) + ',' + (scaled ? sy : 1) + ')' },
+      { transformOrigin: 'top left', transform: 'translate(0,0) scale(1,1)' }
+    ], {
+      duration: c === card ? 440 : 360,
+      easing: c === card ? 'cubic-bezier(0.2, 0.9, 0.2, 1)' : 'cubic-bezier(0.25, 0.9, 0.2, 1)'
+    });
+  });
+}
+
+function bindTilePeek() {
+  // 捕获阶段拦：宿主自己的 data-open-podcast 路由监听比 bubble 更早跑，晚了就压不住跳转
+  document.addEventListener('click', (e) => {
+    const wall = foliaWall();
+    if (!wall) return;
+    /* 底栏 / 播放工具面板 / 任何浮层都是控件，不是“点空白”：不要顺手把展开的播放封面收掉。 */
+    if (e.target.closest('.dock, .mini-player, #dockSheet, dialog, .anim-sheet, .drawer, .details')) return;
+    const collapse = e.target.closest('[data-tile-collapse]');
+    if (collapse) { e.preventDefault(); e.stopPropagation(); collapseTiles(); return; }
+    const full = e.target.closest('[data-tile-full]');
+    if (full) {
+      e.preventDefault();
+      e.stopPropagation();
+      openCoverStage(full.closest('.pod-card'));
+      return;
+    }
+    const card = e.target.closest('.pod-card');
+    if (!card || !wall.contains(card)) { collapseTiles(); return; }
+    if (e.target.closest('.tile-peek-actions a, .pod-actions')) return;   // 让链接与快钮各自干活
+    const main = e.target.closest('.pod-card-main');
+    if (!main) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (card.classList.contains('is-peek')) {
+      flipTile(card, () => { card.classList.remove('is-peek'); restoreTileSpan(card); });
+      return;
+    }
+    collapseTiles(card);
+    flipTile(card, () => { card.classList.add('is-peek'); clearTileSpan(card); ensureTilePeek(card); });
+    // Folia 的镜头：瓦片撑开后把它挪到视口正中，别让放大后的封面一半在屏幕外
+    setTimeout(() => centerTile(card), 440);
+    // 撑开占了两行，密排可能留洞：补一套让后面的瓦片把洞填上
+    setTimeout(() => { const w = foliaWall(); if (w && homeActive()) extendWall(w); }, 520);
+  }, true);
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    /* 有真正的弹层在前台时，Escape 先归弹层，别顺手把瓦片动作层也收掉。 */
+    if (document.querySelector('dialog[open], .details.on, .drawer.on, .docksheet.on, .typesheet.on')) return;
+    const open = document.querySelectorAll('#homeRecommended .pod-card.is-peek');
+    if (!open.length) return;
+    e.preventDefault();
+    collapseTiles();
+  }, true);
+}
+
+/* 当前句压到正在播放的瓦片上：Folia 播放态瓦片显示上一句 / 当前句 / 下一句三行 */
+function tileLyricLines() {
+  const cues = state.cues || [];
+  const i = state.activeCue;
+  if (i < 0 || !cues[i]) return [];
+  const out = [];
+  for (const rel of [-1, 0, 1]) {
+    const cue = cues[i + rel];
+    const text = cue ? String(cue.text || '').trim() : '';
+    if (text) out.push({ rel, text, cue });
+  }
+  return out;
+}
+/* 当前句拆成词级 span：首页封面上也要看得到“现在读到哪个词”，
+   不再只换整句（整句切换会让播放中的封面像一块静态海报）。 */
+function tileCueMarkup(cue, text) {
+  if (!cue || !cue.hasWords || !Array.isArray(cue.words) || !cue.words.length) return esc(text);
+  const parts = splitLabel(text, cue.words);
+  if (parts.mismatch) return esc(text);
+  const label = parts.label ? '<span class="tl-label">' + esc(parts.label) + ' </span>' : '';
+  return label + parts.words.map(w =>
+    '<span class="tl-word" data-s="' + (Number(w.s) || 0) + '">' + esc(w.t) + '</span>').join(' ');
+}
+function tileLyricHTML() {
+  return tileLyricLines().map(l => '<span class="tl-line tl-' +
+    (l.rel < 0 ? 'prev' : l.rel > 0 ? 'next' : 'cur') + '">' +
+    (l.rel === 0 ? tileCueMarkup(l.cue, l.text) : esc(l.text)) + '</span>').join('');
+}
+/* 按音频时钟给当前句的词上色；首页瓦片和全屏封面共用同一套词级状态。 */
+function paintCueWordEl(el) {
+  if (!el) return;
+  const words = el.querySelectorAll('.tl-word');
+  if (!words.length) return;
+  const t = (Number(audio.currentTime) || 0) + (Number(state.offset) || 0);
+  let idx = -1;
+  for (let i = 0; i < words.length; i++) {
+    if (t >= (Number(words[i].dataset.s) || 0)) idx = i;
+    else break;
+  }
+  for (let i = 0; i < words.length; i++) {
+    words[i].classList.toggle('on', i === idx);
+    words[i].classList.toggle('past', i >= 0 && i < idx);
+  }
+}
+function tileWordPaint() {
+  paintCueWordEl(document.querySelector('#homeRecommended .pod-card.is-playing-tile .tile-live-lyric .tl-cur'));
+}
+let tileLyricRaf = 0;
+function startTileLyricLoop() {
+  const el = document.querySelector('audio');
+  if (!el || el.paused || tileLyricRaf) return;
+  if (!homeActive() || !foliaWall()) return;
+  const step = () => {
+    if (!el || el.paused || !homeActive() || !foliaWall()) { tileLyricRaf = 0; return; }
+    tileWordPaint();
+    tileLyricRaf = requestAnimationFrame(step);
+  };
+  tileLyricRaf = requestAnimationFrame(step);
+}
+function stopTileLyricLoop() {
+  if (tileLyricRaf) cancelAnimationFrame(tileLyricRaf);
+  tileLyricRaf = 0;
+}
+function updateTileLyric() {
+  const html = tileLyricHTML();
+  document.querySelectorAll('#homeRecommended .pod-card.is-playing-tile .tile-live-lyric').forEach(el => {
+    if (el.dataset.signature === html) return;
+    el.innerHTML = html;
+    el.dataset.signature = html;
+  });
+  tileWordPaint();
+}
+/* 有分集封面就优先用分集封面；没有才沿用节目封面。 */
+function paintTileArt(card, on) {
+  const art = card && card.querySelector('.pod-art');
+  if (!art) return;
+  if (!card.dataset.baseArtHtml) card.dataset.baseArtHtml = art.innerHTML;
+  const ep = on ? state.current : null;
+  const epImg = ep && ep.img ? (smallArtwork(ep.img) || ep.img) : '';
+  if (epImg) {
+    let img = art.querySelector('img[data-ep-art]');
+    if (!img) {
+      img = document.createElement('img');
+      img.alt = '';
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      img.referrerPolicy = 'no-referrer';
+      img.dataset.epArt = '1';
+      img.onerror = () => img.remove();
+      art.insertBefore(img, art.firstChild);
+    }
+    if (img.getAttribute('src') !== epImg) img.src = epImg;
+    art.classList.add('has-ep-art');
+  } else if (card.dataset.baseArtHtml) {
+    art.innerHTML = card.dataset.baseArtHtml;
+    art.classList.remove('has-ep-art');
+  }
+}
+function ensureTileLyric(card) {
+  let el = card.querySelector('.tile-live-lyric');
+  if (!el) { el = document.createElement('span'); el.className = 'tile-live-lyric'; card.appendChild(el); }
+  let full = card.querySelector('.tile-full');
+  if (!full) {
+    full = document.createElement('button');
+    full.type = 'button';
+    full.className = 'tile-full';
+    full.setAttribute('data-tile-full', '');
+    full.setAttribute('aria-label', '全屏显示封面');
+    full.title = '全屏显示封面';
+    full.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5"/></svg>';
+    card.appendChild(full);
+  }
+  paintTileArt(card, true);
+  const html = tileLyricHTML();
+  if (html && el.dataset.signature !== html) {
+    el.innerHTML = html;
+    el.dataset.signature = html;
+  }
+  tileWordPaint();
+  return el;
+}
+
+/* 无限墙：墙底快到了就再铺一整套（14 块 = 12 席 + 两块 6×4，正好接上）。
+   每一套换一个块模板（源码 blockTemplates 的 4 个变体），并把节目打乱后重新分槽，
+   所以往下滚不会看到同一幅墙在原地复制。 */
+const SLOT_VARIANTS = [
+  [[3, 2], [6, 4], [3, 2], [3, 2], [3, 4], [4, 4], [2, 2], [3, 2], [2, 2], [2, 2], [2, 2], [2, 2]],
+  [[2, 3], [2, 3], [2, 3], [6, 4], [6, 2], [2, 4], [2, 4], [2, 2], [2, 3], [2, 3], [2, 3], [2, 2]],
+  [[6, 4], [6, 3], [4, 3], [2, 2], [4, 2], [2, 2], [2, 3], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2]],
+  [[2, 2], [2, 2], [4, 3], [2, 4], [2, 4], [2, 3], [2, 2], [4, 3], [2, 2], [4, 4], [2, 3], [6, 2]]
+];
+const SET_FILLERS = [[6, 4], [6, 4]];
+function shuffle(list) {
+  const a = list.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = a[i]; a[i] = a[j]; a[j] = t;
+  }
+  return a;
+}
+function slotsOf(variantIndex) {
+  return SLOT_VARIANTS[variantIndex % SLOT_VARIANTS.length].concat(SET_FILLERS);
+}
+/* 按“整墙绝对序号”分槽：第 i 块永远落在第 floor(i/14) 套模板的第 i%14 席。
+   订阅节目少于 14 个时，一套模板里会有重复节目，但槽位是齐的，墙上不会留洞。 */
+function applyWallPattern(wall) {
+  const seed = Number(wall.dataset.wallVariant || 0);
+  const cards = [...wall.querySelectorAll('.pod-card')];
+  cards.forEach((card, i) => {
+    const slot = slotsOf(seed + Math.floor(i / TILE_SET_SIZE))[i % TILE_SET_SIZE];
+    card.dataset.span = slot[0] + '/' + slot[1];
+    card.dataset.tile = (slot[0] >= 4 || slot[0] * slot[1] >= 12) ? 'big' : 'small';
+    // 正撑开的瓦片由展开态自己占 6×6，别被槽位覆盖
+    if (card.classList.contains('is-peek') || card.classList.contains('is-playing-tile')) return;
+    card.style.gridColumn = 'span ' + slot[0];
+    card.style.gridRow = 'span ' + slot[1];
+  });
+}
+/* 展开态要盖过每块自己的内联槽位，否则 inline 的 span 会把 6×6 压回去 */
+function clearTileSpan(card) {
+  card.style.removeProperty('grid-column');
+  card.style.removeProperty('grid-row');
+}
+function restoreTileSpan(card) {
+  /* 播放态由主题固定占 6×6；收起动作层时不能把内联槽位写回去，否则播放封面会缩回一格。 */
+  if (card.classList.contains('is-playing-tile')) { clearTileSpan(card); return; }
+  const span = (card.dataset.span || '').split('/');
+  if (span.length === 2 && span[0]) {
+    card.style.gridColumn = 'span ' + span[0];
+    card.style.gridRow = 'span ' + span[1];
+  }
+}
+function extendWall(wall) {
+  const cards = [...wall.querySelectorAll('.pod-card')];
+  if (cards.length >= TILE_MAX) return;
+  const srcs = cards.filter(c => !c.dataset.wallClone);
+  if (!srcs.length) return;
+  // 只补到“下一整套”的边界：首屏不足 14 块时先把当前这套补满，之后每次 +14
+  const need = TILE_SET_SIZE - (cards.length % TILE_SET_SIZE);
+  const pool = [];
+  while (pool.length < need) pool.push(...shuffle(srcs));
+  const clones = pool.slice(0, need).map((src, index) => {
+    const clone = src.cloneNode(true);
+    clone.removeAttribute('id');
+    clone.classList.remove('is-peek', 'is-playing-tile', 'is-playing-tile-live');
+    clone.dataset.wallClone = '1';
+    clone.dataset.wallFresh = '1';
+    clone.style.setProperty('--i', String(index));   // 新补的这批瓦片按序号轻微错峰淡入
+    clone.querySelectorAll('.tile-peek, .tile-live-lyric').forEach(n => n.remove());
+    return clone;
+  });
+  const frag = document.createDocumentFragment();
+  clones.forEach(c => frag.appendChild(c));
+  wall.appendChild(frag);
+  applyWallPattern(wall);
+  syncPlayingTiles();
+}
+function ensureWallDepth() {
+  const wall = foliaWall();
+  if (!wall) return;
+  if (!wall.querySelectorAll('.pod-card').length) return;
+  if (!wall.dataset.wallVariant) wall.dataset.wallVariant = String(Math.floor(Math.random() * SLOT_VARIANTS.length));
+  applyWallPattern(wall);
+  // 不足两整套就补齐，够两整套就随滚动继续长
+  let guard = 0;
+  while (wall.querySelectorAll('.pod-card').length < TILE_SET_SIZE * 2 && guard++ < 8) extendWall(wall);
+}
+/* 切出 Folia 时把这张墙还给普通主题：补块、展开态、内联网格槽位和歌词层都是 Folia 专属，
+   留着会在 4 列基础网格里撑出隐式列，或者把歌词当普通文本塞回卡片。 */
+function resetWallForTheme() {
+  const wall = document.getElementById('homeRecommended');
+  if (!wall) return;
+  wall.querySelectorAll('.pod-card[data-wall-clone]').forEach(card => card.remove());
+  wall.querySelectorAll('.pod-card').forEach(card => {
+    card.classList.remove('is-peek', 'is-playing-tile', 'is-playing-tile-live');
+    card.querySelectorAll('.tile-full, .tile-peek, .tile-live-lyric').forEach(node => node.remove());
+    card.removeAttribute('data-span');
+    card.removeAttribute('data-tile');
+    clearTileSpan(card);
+  });
+}
+function syncWallTheme() {
+  if (!document.body) return;
+  if (foliaWall()) {
+    ensureWallDepth();
+    syncPlayingTiles();
+    if (!audio.paused) startTileLyricLoop();
+  } else {
+    resetWallForTheme();
+    syncPlayingTiles();
+  }
+}
+new MutationObserver(syncWallTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+function wallScroller(wall) {
+  if (!wall) return null;   // 路由切换时墙可能还没挂载：拿不到墙就别猜滚动容器，否则整次跳转会被异常打断
+  let el = wall.parentElement;
+  while (el && el !== document.documentElement) {
+    const cs = getComputedStyle(el);
+    if (cs.overflowY === 'auto' || cs.overflowY === 'scroll') return el;
+    el = el.parentElement;
+  }
+  return null;
+}
+/* 把某块瓦片推到滚动视口的正中（Folia 的镜头跟随） */
+function centerTile(card) {
+  if (!card || !card.isConnected || (typeof motionReduced === 'function' && motionReduced())) return;
+  if (!homeActive()) return;
+  const sc = wallScroller(foliaWall() || card.closest('#homeRecommended'));
+  if (!sc) return;
+  const r = card.getBoundingClientRect();
+  const sr = sc.getBoundingClientRect();
+  const top = sc.scrollTop + (r.top - sr.top) - Math.max(0, (sc.clientHeight - r.height) / 2);
+  sc.scrollTo({ top, behavior: 'smooth' });
+}
+function nearWallBottom(wall) {
+  const sc = wallScroller(wall);
+  if (!sc) return window.scrollY + window.innerHeight + 1000 >= document.documentElement.scrollHeight;
+  return sc.scrollTop + sc.clientHeight + 1000 >= sc.scrollHeight;
+}
+function bindInfiniteWall() {
+  let queued = 0;
+  let lastAt = 0;
+  const onScroll = () => {
+    if (queued) return;
+    queued = requestAnimationFrame(() => {
+      queued = 0;
+      const wall = foliaWall();
+      if (!wall) return;
+      if (!homeActive()) return;
+      if (Date.now() - lastAt < 900) return;   // 平滑滚动会连续触发 scroll，别一口气补几十套
+      if (nearWallBottom(wall)) { lastAt = Date.now(); extendWall(wall); }
+    });
+  };
+  window.addEventListener('scroll', onScroll, { passive: true, capture: true });
+  const wall = foliaWall();
+  const sc = wall ? wallScroller(wall) : null;
+  if (sc) sc.addEventListener('scroll', onScroll, { passive: true });
+  ensureWallDepth();
+}
+
+/* 侧栏只剩图标，标签转成悬停提示（Folia 的 rail 也是图标 + 浮出名字） */
+function labelSidebarNav() {
+  document.querySelectorAll('.sidebar .nav button, .sidebar .nav a').forEach(el => {
+    const text = (el.textContent || '').trim();
+    if (text && text.length <= 12) el.setAttribute('data-label', text);
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => { bindTilePeek(); bindInfiniteWall(); labelSidebarNav(); });
+
+
 function episodeRowHTML(ep, show, actions) {
   const key = show?.slug || ep.showKey || '';
   const acts = actions === false ? '' :
@@ -351,7 +1074,7 @@ function renderHomeContinue() {
       esc(epId) + '" data-t="' + Number(rec.t || 0) + '">▶</button></div>';
     $('continueHint').textContent = staleCount ? '上次停在这里 · ' + staleCount + ' 条失效记录' : '上次停在这里';
   } else if (hasVideo) {
-    $('homeContinue').innerHTML = '';
+    $('homeContinue').replaceChildren();
     $('continueHint').textContent = '上次看到这里';
   } else if (staleCount) {
     $('homeContinue').innerHTML = emptyLine('上次收听的内容已经失效了。',
@@ -386,7 +1109,10 @@ function renderHome() {
     : emptyLine('订阅节目的最近更新会出现在这里。');
   $('homeRecentCount').textContent = recent.length ? '来自 ' + subs.length + ' 个节目' : '';
 
-  const recommended = app.builtinShows.filter(show => show.feed && !isSubscribed(show.slug)).slice(0, 4);
+  // 海报墙要“无限”：全部有 feed 的内置节目都上墙，不再截断成 4 张
+  const recommended = app.builtinShows
+    .filter(show => show.feed)
+    .toSorted((a, b) => String(a.slug).localeCompare(String(b.slug)));
   $('homeRecommended').innerHTML = recommended.length
     ? recommended.map(podCardHTML).join('')
     : emptyLine('所有内置节目都已订阅。');
@@ -402,7 +1128,7 @@ function renderHomeOnboard(subs, entries) {
   if (!entries) entries = Object.entries(readAllProgress()).filter(([, rec]) => Number(rec.t) > 5);
   let done = false;
   try { done = localStorage.getItem('myt-onboard-done') === '1'; } catch (e) {}
-  if (done) { host.hidden = true; host.innerHTML = ''; return; }
+  if (done) { host.hidden = true; host.replaceChildren(); return; }
   let openedReader = false;
   try { openedReader = localStorage.getItem('myt-reader-opened') === '1'; } catch (e) {}
   const steps = [
@@ -414,7 +1140,7 @@ function renderHomeOnboard(subs, entries) {
   if (finished >= steps.length) {
     try { localStorage.setItem('myt-onboard-done', '1'); } catch (e) {}
     host.hidden = true;
-    host.innerHTML = '';
+    host.replaceChildren();
     return;
   }
   const route = !subs.length ? 'discover' : (!entries.length ? 'discover' : 'listening');
@@ -493,9 +1219,9 @@ function filterCatalogShows(shows, options) {
   if (d.sub === 'sub') list = list.filter(show => isSubscribed(show.slug));
   else if (d.sub === 'unsub') list = list.filter(show => !isSubscribed(show.slug));
   const latestAt = show => Date.parse(show.latest_published_at || catalogLatest(show)[0]?.date || '') || 0;
-  if (d.sort === 'latest') list = [...list].sort((a, b) => latestAt(b) - latestAt(a));
-  else if (d.sort === 'episodes') list = [...list].sort((a, b) => (Number(b.episode_count) || 0) - (Number(a.episode_count) || 0));
-  else if (d.sort === 'name') list = [...list].sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'zh-CN'));
+  if (d.sort === 'latest') list = list.toSorted((a, b) => latestAt(b) - latestAt(a));
+  else if (d.sort === 'episodes') list = list.toSorted((a, b) => (Number(b.episode_count) || 0) - (Number(a.episode_count) || 0));
+  else if (d.sort === 'name') list = list.toSorted((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'zh-CN'));
   return list;
 }
 function syncDiscoverControls(shows) {

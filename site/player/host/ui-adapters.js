@@ -67,7 +67,7 @@ export function createPluginExtensionAdapters(port = {}) {
     const stale = activeKey && !list.some(rec => rec.pluginId + ':' + rec.id === activeKey);
     if ((!list.length || stale) && results) {
       port.searchGate.invalidate();
-      results.innerHTML = '';
+      results.replaceChildren();
       results.hidden = true;
       results.style.display = 'none';
     }
@@ -97,7 +97,7 @@ export function createPluginExtensionAdapters(port = {}) {
     if (!body.childNodes.length) body.textContent = '这个搜索源没有返回结果。';
     panel.append(title);
     panel.append(body);
-    box.innerHTML = '';
+    box.replaceChildren();
     box.append(panel);
   }
 

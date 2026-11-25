@@ -78,18 +78,15 @@ function coreProviderOwner(name) {
 const LIVE_ARCH = (() => {
   // ModelArch：2=TinyStreaming（默认）、3=BaseStreaming、4=SmallStreaming、5=MediumStreaming。
   // 加 ?arch=3 这类参数可以临时换成更大的模型做对比，不用改代码再刷一遍。
-  const m = /[?&]arch=(\d+)/.exec(location.search);
-  const v = m ? Number(m[1]) : 2;
+  const raw = new URLSearchParams(location.search).get('arch');
+  const v = raw ? Number(raw) : 2;
   return [2, 3, 4, 5].includes(v) ? v : 2;
 })();
 // 识别引擎：默认 sherpa-onnx 流式 zipformer（带逐 token 时间戳）。
 // 桌面壳（Tauri）里优先走「原生推理」：ASR 在 Rust 侧跑 sherpa-onnx 的 DLL，
 // 不占 WebView 的 JS 线程，也不依赖 COOP/COEP。没有壳时退回 WASM 版 sherpa；
 // 加 ?engine=moonshine 退回 Moonshine 流式（它基本不给词时间，逐词高亮只能均分）。
-const LIVE_ENGINE_ARG = (() => {
-  const m = /[?&]engine=(\w+)/.exec(location.search);
-  return m ? m[1] : '';
-})();
+const LIVE_ENGINE_ARG = new URLSearchParams(location.search).get('engine') || '';
 const LIVE_ENGINE_KIND = LIVE_ENGINE_ARG === 'moonshine' ? 'moonshine'
   : LIVE_ENGINE_ARG === 'wasm' ? 'sherpa'
   : (tauriHost() && tauriHost().core ? 'native' : 'sherpa');
@@ -1714,7 +1711,7 @@ async function liveMoonshineLoad() {
       (group.files || []).forEach(f => { if (f && f.name && f.url) files[f.name] = f.url; });
     });
   } catch (err) {
-    throw new Error('读不出模型清单：' + (err && err.message ? err.message : err));
+    throw new Error('读不出模型清单：' + (err && err.message ? err.message : err), { cause: err });
   }
   if (!Object.keys(files).length) throw new Error('模型清单为空');
   if (baseUrl) files['decoder_kv_with_attention.ort'] = baseUrl + '/decoder_kv_with_attention.ort';

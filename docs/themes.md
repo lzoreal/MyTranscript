@@ -31,9 +31,10 @@
 - 插件不猜字面值，问 `ctx.settings`：`themeId()` / `themeBase()` / `themeIsLight()` /
   `themeSkeleton()` / `themePacks()`（见 [plugins.md](plugins.md)）。
 
-## 七套随包主题
+## 六套随包主题
 
-`liquid-glass, glass2, minimal-maxi, mono-tech, neubrutalism, riso-print, surveillance`，
+`liquid-glass, glass2, minimal-maxi, mono-tech, surveillance, folia-poster`（后者是「海报墙」，
+元素取自 Folia 播放器的无缝海报瓦片墙：近黑底 + 双色光晕 + 2px 暗缝 + 角标编号 + 底部渐变压字），
 卡 id 为 `ct-pack-<slug>`。源文件 `themes/<slug>.{css,json}`，`scripts/build_theme_packs.py`
 以同名 `.css` 为唯一真源生成 `site/themes-defaults.js` 并回写 json。随包卡删不掉；
 清单里撤掉的包，启动时 `seedDefaultThemePacks` 会把机器上的卡一起撤掉。

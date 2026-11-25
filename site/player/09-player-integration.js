@@ -13,7 +13,7 @@ function setNavCollapsed(collapsed, persist = true) {
   const btn = $('sidebarToggle');
   if (btn) {
     btn.setAttribute('aria-expanded', String(!collapsed));
-    btn.title = collapsed ? '展开侧栏' : '收起侧栏';
+    btn.title = '页面导航';
   }
   if (persist) try { localStorage.setItem('myt-nav-collapsed', collapsed ? '1' : '0'); } catch (e) {}
 }
@@ -34,8 +34,16 @@ function setRailOpen(name, open, persist = true) {
   document.body.classList.toggle('reader-' + name + '-open', !!open);
   if (persist) try { localStorage.setItem('myt-rail-' + name, open ? '1' : '0'); } catch (e) {}
   syncRailButtons();
-  if (open) renderReaderRails();
+  if (open) {
+    /* 右侧抽屉和菜单都压在笔记栏上面；先让读屏浮层让位，避免两个面板互相遮 */
+    document.dispatchEvent(new CustomEvent('myt:reader-rail-open'));
+    renderReaderRails();
+  }
 }
+/* 菜单/详情/全屏浮层打开时收起笔记栏；它们都锚在右边，叠在一起会把笔记内容盖住 */
+document.addEventListener('myt:reader-overlay-open', () => {
+  if (document.body.classList.contains('reader-notes-open')) setRailOpen('notes', false, false);
+});
 
 function railCoverHTML(ep, show) {
   const art = ep?.img || show?.artwork || '';
@@ -375,7 +383,9 @@ function syncReaderTop() {
   const pill = $('readerShowPill');
   if (pill) pill.textContent = state.show ? 'NOW PLAYING · ' + String(state.show.name || '').toUpperCase() : 'NOW PLAYING';
   const back = $('readerBack');
-  if (back) back.title = '返回' + (PAGE_NAMES[app.lastPage] || '首页');
+  if (back) {
+    back.title = /主页/.test(back.textContent) ? '返回首页' : '返回' + (PAGE_NAMES[app.lastPage] || '首页');
+  }
   renderReaderRails();
   syncRailButtons();
   if (state.wallpaper) { invalidateWordPanelKey(); wallpaperRefresh(); }
@@ -499,13 +509,25 @@ function syncMiniCaption() {
   miniCaptionKey = key;
   out.innerHTML = miniCaptionMarkup(cue, wi);
 }
-let miniCoverKey = '', miniPlayOn = null, miniTimeText = '', miniPctBucket = -1;
+let miniCoverKey = '', miniPlayOn = null, miniTimeText = '', miniPctBucket = -1, miniEpKey = '';
 function syncMini() {
   const el = $('miniPlayer');
   if (!el) return;
   const has = !!state.current;
   el.hidden = !has || document.body.classList.contains('player-open');
   if (!has) return;
+  // 换集时让标题/副标题做一次极短的“翻页”淡入，而不是原地把字换掉
+  const epKey = (state.show?.slug || '') + '|' + (state.current.id || '');
+  if (epKey !== miniEpKey) {
+    miniEpKey = epKey;
+    ['miniTitle', 'miniMeta'].forEach(id => {
+      const node = $(id);
+      if (!node) return;
+      node.classList.remove('is-swapping');
+      void node.offsetWidth;
+      node.classList.add('is-swapping');
+    });
+  }
   $('miniTitle').textContent = state.current.title || '(无标题)';
   $('miniMeta').textContent = (state.show?.name || '') + (state.current.date ? ' · ' + formatDate(state.current.date) : '');
   const img = state.current.img || state.show?.artwork || '';

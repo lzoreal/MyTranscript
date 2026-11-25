@@ -563,21 +563,16 @@ function subscribedShowForFeed(url) {
     .find(show => show && show.feed && feedKey(absoluteFeed(show.feed)) === key) || null;
 }
 async function fetchJson(url, options = {}, timeoutMs = 7000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, { ...options, signal: controller.signal });
-    if (!response.ok) throw new Error('HTTP ' + response.status);
-    return await response.json();
-  } finally {
-    clearTimeout(timer);
-  }
+  const response = await fetch(url, { ...options, signal: AbortSignal.timeout(timeoutMs) });
+  if (!response.ok) throw new Error('HTTP ' + response.status);
+  return await response.json();
 }
 async function searchApple(query) {
   try {
     return mapAppleResults(await fetchJson(appleSearchUrl(query), {}, 9000));
   } catch (err) {
-    throw new Error('Apple Podcasts：' + (err.name === 'AbortError' ? '请求超时' : err.message));
+    const timedOut = err.name === 'TimeoutError' || err.name === 'AbortError';
+    throw new Error('Apple Podcasts：' + (timedOut ? '请求超时' : err.message), { cause: err });
   }
 }
 async function searchPodcastIndex(query) {
@@ -586,7 +581,8 @@ async function searchPodcastIndex(query) {
   try {
     return mapPodcastIndexResults(await fetchJson(podcastIndexSearchUrl(query), { headers }, 6000));
   } catch (err) {
-    throw new Error('Podcast Index：' + (err.name === 'AbortError' ? '请求超时' : err.message));
+    const timedOut = err.name === 'TimeoutError' || err.name === 'AbortError';
+    throw new Error('Podcast Index：' + (timedOut ? '请求超时' : err.message), { cause: err });
   }
 }
 async function runOnlineSearch(query) {
@@ -718,7 +714,7 @@ function renderOnlineResults() {
       '<div style="margin-top:10px"><button class="btn ghost small" data-retry-online>重试</button></div></div>';
     return;
   }
-  if (!online.query) { box.innerHTML = ''; return; }
+  if (!online.query) { box.replaceChildren(); return; }
   if (!online.results.length) {
     box.innerHTML = '<div class="online-state">没有找到“' + esc(online.query) + '”相关的播客。</div>';
     return;

@@ -216,7 +216,7 @@ class CustomThemeTests(unittest.TestCase):
         import json
 
         packs = sorted((ROOT / "themes").glob("*.json"))
-        self.assertGreaterEqual(len(packs), 7, "主题包数量不对：" + str(len(packs)))
+        self.assertGreaterEqual(len(packs), 6, "主题包数量不对：" + str(len(packs)))
         seen = set()
         for pack in packs:
             data = json.loads(pack.read_text(encoding="utf-8"))
@@ -249,7 +249,7 @@ class CustomThemeTests(unittest.TestCase):
         packs = json.loads(defaults[defaults.index("["):defaults.rindex("]") + 1])
         slugs = [pack["slug"] for pack in packs]
         self.assertEqual(slugs, ["liquid-glass", "glass2", "minimal-maxi", "mono-tech",
-                                 "neubrutalism", "riso-print", "surveillance", "broadcast-archive"],
+                                 "surveillance", "folia-poster"],
                          "随包主题顺序/数量不对")
         for pack in packs:
             self.assertGreater(len(pack["css"]), 5000, pack["slug"] + " CSS 太短")
@@ -273,6 +273,8 @@ class CustomThemeTests(unittest.TestCase):
         self.assertIn("preset.builtin", source, "删除卡片时没有拦住默认主题")
         self.assertIn("默认主题，不能删除", source, "默认主题缺少拒绝删除的提示")
         self.assertIn("filter(item => item.builtin)", source, "恢复默认会把默认主题一起清掉")
+        self.assertIn("if (dropped.includes(themeId())) setTheme(lastBuiltin, true)", source,
+                      "撤掉当前正在用的随包卡时没有回退内置档")
         # 每次启动补齐缺的默认主题卡，而不是“只种一次”；当前主题由用户点，不再自动切档
         self.assertIn("if (known.has('ct-pack-' + slug)) return;", source,
                       "种卡要每次补齐缺少的默认主题")

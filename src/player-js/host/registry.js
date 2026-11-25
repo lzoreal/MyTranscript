@@ -132,7 +132,7 @@ export function createContributionRegistry(options = {}) {
     const key = String(pluginId);
     const records = pluginRecords.get(key);
     if (!records) return false;
-    [...records].reverse().forEach(record => {
+    Array.from(records).reverse().forEach(record => {
       const table = tables.get(record.type);
       if (record.type === 'providers') {
         const stack = providers.get(record.id) || [];

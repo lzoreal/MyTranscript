@@ -336,7 +336,7 @@ function renderList(filter = '') {
   motionFlip(listBox, '.ep', () => {
   const q = filter.trim().toLowerCase();
   const items = state.episodes.filter(e => !q || String(e.num).includes(q) || (e.title || '').toLowerCase().includes(q));
-  listBox.innerHTML = '';
+  listBox.replaceChildren();
   $('epCount').textContent = items.length + ' / ' + state.episodes.length;
   if (!items.length) { listBox.innerHTML = '<div class="empty">没有匹配的剧集。</div>'; return; }
   for (const e of items) {
@@ -924,7 +924,7 @@ function applySubtitleAvailability() {
   if (typeSheet && typeSheet.classList.contains('on')) closeTypeSheet(false);
   setState('cues', []); setState('nodes', []); setState('activeCue', -1); setState('wordIdx', -1);
   setState('vtt', null); setState('sidecar', null); setState('zhVtt', null); setState('base', null);
-  box.innerHTML = '';
+  box.replaceChildren();
   syncMiniCaption();
   syncJumpPill();
 }
@@ -1760,7 +1760,7 @@ const PLUGIN_PERMISSION_ALL = Object.keys(PLUGIN_PERMISSIONS);
 const PLUGIN_GRANTS = new Map();
 const PLUGIN_PERMS_KEY_PREFIX = 'myt-plugin-perms:';
 function pluginPermissionSignature(plugin) {
-  return [...pluginPermissions(plugin)].sort().join(',');
+  return Array.from(pluginPermissions(plugin)).toSorted().join(',');
 }
 function pluginPermissionChanged(plugin) {
   if (!plugin || plugin.builtin) return false;
@@ -2059,7 +2059,7 @@ function renderPluginPage(pluginId, pageId) {
   const crumb = $('crumbName');
   if (crumb) crumb.textContent = def.title;
   document.title = def.title + ' · MyTranscript';
-  body.innerHTML = '';
+  body.replaceChildren();
   if (def.render) {
     try {
       const ret = def.render(body, pluginApiFor(def.pluginId));

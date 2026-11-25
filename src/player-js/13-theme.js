@@ -16,6 +16,7 @@ import { $ } from './00-runtime.js';
 
 const esc = lazyFn('01-theme-reader-shell', 'esc');
 const showToast = lazyFn('01-theme-reader-shell', 'showToast');
+const setNavCollapsed = lazyFn('09-player-integration', 'setNavCollapsed');
 const closeThemePop = lazyFn('10-desktop-bridge-tail', 'closeThemePop');
 const whenIdle = lazyFn('05-transport-transcript-nav', 'whenIdle');
 
@@ -23,33 +24,6 @@ const readJSON = lazyFn('15-store', 'readJSON');
 const writeJSON = lazyFn('15-store', 'writeJSON');
 
 const CUSTOM_THEME_KEY = 'myt-theme-custom';
-
-/* 「广播档案室」那档把房间当成一个实体空间：墙、招牌、卡片都读 --ba-px/--ba-py。
-   指针在窗口里移，这里只写两个变量，CSS 自己转 —— 没有逐帧动画，窄屏和「减少动态」直接不挂。 */
-(function trackRoomParallax() {
-  if (typeof window === 'undefined' || !window.addEventListener) return;
-  const root = document.documentElement;
-  const wants = () => root.dataset.theme === 'ct-pack-broadcast-archive';
-  const skip = () => {
-    if (typeof window.matchMedia !== 'function') return false;
-    return window.matchMedia('(max-width: 900px)').matches
-      || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  };
-  let px = 0, py = 0, queued = false;
-  const flush = () => {
-    queued = false;
-    root.style.setProperty('--ba-px', px.toFixed(3));
-    root.style.setProperty('--ba-py', py.toFixed(3));
-  };
-  window.addEventListener('pointermove', e => {
-    if (!wants() || skip()) return;
-    px = (e.clientX / Math.max(window.innerWidth, 1) - 0.5) * 2;
-    py = (e.clientY / Math.max(window.innerHeight, 1) - 0.5) * 2;
-    if (queued) return;
-    queued = true;
-    requestAnimationFrame(flush);
-  }, { passive: true });
-}());
 
 /* 自定义主题的数据层：主题只有一个当前值（存在 myt-theme 里，内置档 id 或卡 id）。
    - scope：这张卡照哪种骨架写的（rail / strip / print / grid，或旧的某档 id）；
@@ -156,8 +130,22 @@ function themeStyle(cfg, theme) {
   return { css: '', html: '', name: '', from: '', mode: 'none', skeleton: '' };
 }
 
-function readCustomTheme() { return normalizeCustomTheme(readJSON(CUSTOM_THEME_KEY, null)); }
-function writeCustomTheme(cfg) { writeJSON(CUSTOM_THEME_KEY, normalizeCustomTheme(cfg)); }
+/* 这两处读写只碰 localStorage：启动微任务时 15-store 可能还没 registerLayer，
+   lazyFn 会返回 undefined，种子主题就写不进去（表现为弹层里一张包卡都没有）。 */
+function readCustomTheme() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(CUSTOM_THEME_KEY) || 'null');
+    return normalizeCustomTheme(raw);
+  } catch (e) { return normalizeCustomTheme(null); }
+}
+function writeCustomTheme(cfg) {
+  try {
+    localStorage.setItem(CUSTOM_THEME_KEY, JSON.stringify(normalizeCustomTheme(cfg)));
+    return true;
+  } catch (e) {
+    try { return !!writeJSON(CUSTOM_THEME_KEY, normalizeCustomTheme(cfg)); } catch (err) { return false; }
+  }
+}
 
 function sanitizeCustomHtml(text) {
   const tpl = document.createElement('template');
@@ -276,6 +264,16 @@ function setTheme(id, persist = true) {
   const el = document.documentElement;
   el.dataset.theme = id;
   el.dataset.scheme = light ? 'light' : 'dark';
+  /* Folia 的侧栏只靠自动隐藏/左缘唤回，进来时把上一套主题留下的手动收起状态清掉。 */
+  if (id === 'ct-pack-folia-poster') {
+    if (typeof setNavCollapsed === 'function') setNavCollapsed(false, true);
+    else {
+      document.body.classList.remove('nav-collapsed');
+      const navBtn = $('sidebarToggle');
+      if (navBtn) navBtn.setAttribute('aria-expanded', 'true');
+      try { localStorage.setItem('myt-nav-collapsed', '0'); } catch (e) {}
+    }
+  }
   el.dataset.skel = pack
     ? (SKELETON_OF[String(pack.scope || 'rail')] || 'rail')
     : (SKELETON_OF[id] || 'rail');
@@ -613,8 +611,8 @@ function importCustomTheme(text, filename) {
   showToast('已导入「' + preset.name + '」并切了过去。');
   return preset;
 }
-/* 随包主题：themes-defaults.js 带来七套设计师主题（液态玻璃、玻璃拟态 2.0、极简放大、
-   技术单色、新粗野主义、复古印刷、监控美学）。随包主题是默认主题，删不掉也不该缺：
+/* 随包主题：themes-defaults.js 带来当前这批设计师主题（液态玻璃、玻璃拟态 2.0、极简放大、
+   技术单色、监控美学、海报墙）。随包主题是默认主题，删不掉也不该缺：
    每次启动都补齐缺的卡（幂等），**不再顺手把某几档切过去**——当前主题只有一个，由用户点。 */
 function seedDefaultThemePacks() {
   const packs = Array.isArray(window.MYT_THEME_DEFAULTS) ? window.MYT_THEME_DEFAULTS : [];
@@ -666,6 +664,9 @@ function seedDefaultThemePacks() {
   const liveIds = new Set(packs.map(pack => 'ct-pack-' + String(pack.slug || '').trim()));
   const dropped = cfg.presets.filter(preset => preset.builtin && !liveIds.has(preset.id)).map(preset => preset.id);
   const keptPresets = cfg.presets.filter(preset => preset.builtin ? liveIds.has(preset.id) : true);
+  /* 当前主题正好是撤掉的随包卡：先回最近的内置档，再保存收窄后的清单。
+     否则 data-theme 还挂着 ct-pack-xxx，卡没了、内置档的规则也一条不命中，会直接变成裸页面。 */
+  if (dropped.includes(themeId())) setTheme(lastBuiltin, true);
   /* 清单里后加的包会排在老卡后面，随包卡片一律按清单顺序排，
      用户自己做的卡保持原顺序跟在后面。 */
   const orderIdx = new Map(packs.map((pack, i) => ['ct-pack-' + String(pack.slug || '').trim(), i]));
@@ -802,14 +803,29 @@ function bindCustomThemeEditor() {
 /* 启动时 05 里的 readJSON 可能还没注册（lazy 版会直接返回 undefined，看起来像“没有配置”），
    所以把「种随包主题 + 应用自定义主题」压到微任务里，等各层都 registerLayer 完再读。 */
 function bootCustomTheme() {
-  seedDefaultThemePacks();
-  renderThemePopPacks();
-  applyCustomTheme();
+  /* 每一步单独兜住：种子那步一旦抛异常，弹层和实际应用都会跟着跳过，
+     用户看到的就是「随包主题一张都点不到」。 */
+  try { seedDefaultThemePacks(); } catch (e) { console.warn('seed theme packs failed', e); }
+  try { renderThemePopPacks(); } catch (e) { console.warn('render theme packs failed', e); }
+  /* 启动早期解析时随包卡片可能还没种下，存着的包 id 会被当成「卡已删」退回内置档。
+     种完之后按存储里的原意补一次，否则包卡每次都被随便一个内置档顶掉。 */
+  try {
+    const saved = String(localStorage.getItem('myt-theme') || '');
+    if (saved.indexOf('ct-pack-') === 0 && themeId() !== saved) {
+      const cfg = readCustomTheme();
+      if (cfg.presets.some(item => item.id === saved && item.css)) setTheme(saved, false);
+    }
+  } catch (e) { console.warn('restore theme pack failed', e); }
+  try { applyCustomTheme(); } catch (e) { console.warn('apply custom theme failed', e); }
   /* 其它层启动时还会 setTheme 一次同步内置色球，空闲时再刷一遍，保证弹层只亮当前主题。 */
-  whenIdle(() => applyCustomTheme());
+  whenIdle(() => { try { applyCustomTheme(); } catch (e) {} });
 }
 if (typeof queueMicrotask === 'function') queueMicrotask(bootCustomTheme);
 else setTimeout(bootCustomTheme, 0);
+/* 微任务时层可能还没注册完；DOM 就绪 / 整页加载完 / 启动 1s 后各补一次（幂等）。 */
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootCustomTheme, { once: true });
+window.addEventListener('load', bootCustomTheme, { once: true });
+setTimeout(bootCustomTheme, 1000);
 bindCustomThemeEditor();
 function isDegraded() { return document.hidden || !document.hasFocus(); }
 
@@ -821,6 +837,127 @@ document.addEventListener('visibilitychange', sync);
 window.addEventListener('blur', sync);
 window.addEventListener('focus', sync);
 sync();
+
+/* Folia 的“无人值守”规则：侧栏和搜索条只在手靠近时露面。
+   计时只认“贴着侧栏/搜索条”的活动，不和别处的鼠标移动混在一起；
+   所以用户滑动墙面时，两条浮层不会假装还在工作。 */
+(function bindFoliaQuietChrome() {
+  const IDLE = 4000;
+  let timer = 0;
+  let navHover = false;
+  let searchHover = false;
+  let seenFolia = false;
+  const isFolia = () => document.documentElement.dataset.theme === 'ct-pack-folia-poster';
+  const sideEl = () => document.querySelector('.sidebar');
+  const searchEl = () => document.querySelector('#page-home .ledger-search');
+  const inside = (el, e, px, py) => {
+    if (!el || !e) return false;
+    const r = el.getBoundingClientRect();
+    return e.clientX >= r.left - px && e.clientX <= r.right + px
+      && e.clientY >= r.top - py && e.clientY <= r.bottom + py;
+  };
+  const searchFocused = () => {
+    const el = searchEl();
+    const active = document.activeElement;
+    return !!(el && active && el.contains(active) && active.matches(':focus-visible'));
+  };
+  /* 鼠标点过的按钮仍会保持 document.activeElement，但不再有 :focus-visible；
+     若只判断 activeElement，点完侧栏标签后侧栏会永久挂在屏幕上，自动隐藏失效。
+     键盘 Tab 进来的焦点仍保留侧栏，避免把正在操作的控件藏掉。 */
+  const navFocused = () => {
+    const el = sideEl();
+    const active = document.activeElement;
+    return !!(el && active && el.contains(active) && active.matches(':focus-visible'));
+  };
+  const showNav = () => document.body.classList.remove('nav-auto-idle');
+  const showSearch = () => document.body.classList.remove('search-auto-idle');
+  const arm = () => {
+    if (timer) clearTimeout(timer);
+    timer = 0;
+    if (!isFolia()) {
+      document.body.classList.remove('nav-auto-idle', 'search-auto-idle');
+      navHover = false;
+      searchHover = false;
+      return;
+    }
+    timer = setTimeout(() => {
+      timer = 0;
+      if (!isFolia()) return;
+      if (!navHover && !navFocused() && !document.body.classList.contains('nav-collapsed')) {
+        document.body.classList.add('nav-auto-idle');
+      }
+      if (!searchHover && !searchFocused()) document.body.classList.add('search-auto-idle');
+    }, IDLE);
+  };
+  const onMove = (e) => {
+    if (!isFolia()) return;
+    /* 只要还在动，就重置一次空闲计时。之前只在靠近侧栏/搜索条时才起表：
+       光标停在栏上超过 4 秒后再移走，表已经烧完又没人重启，侧栏会一直挂着。 */
+    arm();
+    const side = sideEl();
+    const search = searchEl();
+    const edgeRail = e.clientX <= 8;
+    const onSide = inside(side, e, 8, 8);
+    const onSearch = inside(search, e, 18, 18);
+    const onHome = document.body.classList.contains('on-home');
+    const railVisible = !document.body.classList.contains('nav-auto-idle');
+    /* 首页的墙面从 x=0 开始，侧栏收起时它的矩形正压在左边封面/歌词上；
+       如果按 onSide 就唤出，用户一碰左侧歌词侧栏就会跳出来把它盖住。
+       首页只在真正的左缘（x<=8）唤出，已经展开后再允许在侧栏内部保持。 */
+    const wantRail = edgeRail || (onSide && (!onHome || railVisible));
+    if (!document.body.classList.contains('nav-collapsed') && wantRail) {
+      showNav();
+      navHover = true;
+      arm();
+    } else {
+      navHover = false;
+    }
+    if (onSearch) {
+      showSearch();
+      searchHover = true;
+      arm();
+    } else {
+      searchHover = false;
+    }
+  };
+  document.addEventListener('pointermove', onMove, { passive: true });
+  document.addEventListener('pointerdown', (e) => {
+    if (!isFolia()) return;
+    const onHome = document.body.classList.contains('on-home');
+    const railVisible = !document.body.classList.contains('nav-auto-idle');
+    const railHit = e.clientX <= 8 || (inside(sideEl(), e, 8, 8) && (!onHome || railVisible));
+    /* capture 阶段把侧栏叫出来会改变 pointerup 的命中目标：首页点左侧封面时
+       不能用内缩的侧栏矩形抢点击，只有真左缘或侧栏已展开时才接管。 */
+    if (!document.body.classList.contains('nav-collapsed') && railHit) { showNav(); navHover = true; arm(); }
+    if (inside(searchEl(), e, 18, 18)) { showSearch(); searchHover = true; arm(); }
+  }, true);
+  document.addEventListener('focusin', (e) => {
+    if (!isFolia()) return;
+    if (sideEl()?.contains(e.target)) { showNav(); arm(); }
+    if (searchEl()?.contains(e.target)) { showSearch(); arm(); }
+  }, true);
+  document.addEventListener('keydown', () => {
+    if (!isFolia()) return;
+    showNav();
+    showSearch();
+    arm();
+  }, true);
+  /* 主题是异步落的：监听 <html data-theme>，只在切进/切出 Folia 时起表或收表。 */
+  const syncTheme = () => {
+    if (isFolia()) {
+      if (!seenFolia) { seenFolia = true; arm(); }
+    } else if (seenFolia) {
+      seenFolia = false;
+      if (timer) clearTimeout(timer);
+      timer = 0;
+      navHover = false;
+      searchHover = false;
+      document.body.classList.remove('nav-auto-idle', 'search-auto-idle');
+    }
+  };
+  new MutationObserver(syncTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  syncTheme();
+})();
 
 export {
   CUSTOM_THEME_KEY, LIGHT_THEMES, REMOVED_THEME_FALLBACK, applyCustomTheme, applyCustomThemePreset,

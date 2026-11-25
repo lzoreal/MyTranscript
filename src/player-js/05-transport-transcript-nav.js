@@ -190,6 +190,7 @@ function openDockSheet() {
   if (dockSheet.classList.contains('on')) return;
   rememberOverlayTrigger('dockSheet', dockSheet);
   closeDrawer(false); closeDetails(false); closeTypeSheet(false);
+  document.dispatchEvent(new CustomEvent('myt:reader-overlay-open'));
   dockSheet.removeAttribute('inert');
   dockSheet.classList.add('on');
   dockSheet.setAttribute('aria-hidden', 'false');
@@ -209,6 +210,8 @@ function closeDockSheet(restore = true) {
   dockToolsBtn.setAttribute('aria-expanded', 'false');
   if (restore && had && hadFocus) restoreOverlayFocus('dockSheet');
 }
+/* 打开剧集/笔记栏时，先收起底栏菜单；否则菜单会压住右侧笔记栏 */
+document.addEventListener('myt:reader-rail-open', () => closeDockSheet(false));
 dockToolsBtn.onclick = e => {
   e.stopPropagation();
   dockSheet.classList.contains('on') ? closeDockSheet() : openDockSheet();
@@ -1158,7 +1161,7 @@ function renderAsrModels() {
     savePrefs();
     active = ASR_MODEL_DEFAULT;
   }
-  boxEl.innerHTML = '';
+  boxEl.replaceChildren();
   list.forEach(model => {
     const busy = app.asrBusy.get(model.id);
     const row = document.createElement('div');
@@ -1686,6 +1689,7 @@ findInput.addEventListener('input', () => runFind(findInput.value));
 findInput.addEventListener('keydown', e => {
   if (e.key === 'Enter') {
     e.preventDefault();
+    if (e.isComposing || e.keyCode === 229) return;
     showFindAt(findAt + (e.shiftKey ? -1 : 1), true);
   } else if (e.key === 'Escape') {
     e.preventDefault();
@@ -1816,7 +1820,7 @@ const app = {
   builtinShows: [], catalog: null, catalogBySlug: new Map(), subs: [], queue: [], bookmarks: [], notes: [],
   playlists: [], offline: new Map(), feedCache: new Map(), route: { page: 'home', args: [], params: new URLSearchParams() },
   plugins: [], pluginErrors: new Map(), pluginPageActive: null, subtitleOwner: '', studyOwner: '', capabilities: Object.create(null),
-  lastPage: 'home', lastShowKey: '', appearance: 'default', cont: 'single', sleepUntil: 0, sleepEnd: false,
+  routePage: '', lastPage: 'home', lastShowKey: '', appearance: 'default', cont: 'single', sleepUntil: 0, sleepEnd: false,
   sleepTimer: 0, pendingSeek: 0, pendingSeekEp: '', autoplay: false, feedErrors: null, initialized: false,
   catalogPending: true, catalogFailed: false, catalogPromise: null,
   discover: { query: '', category: '', sort: 'default', sub: 'all', transcripts: false },

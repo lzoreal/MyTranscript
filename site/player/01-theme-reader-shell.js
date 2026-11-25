@@ -11,6 +11,7 @@ import { layerObject, layerValue, lazyFn, registerLayer } from './00-layers.js';
 const liveAdvance = lazyFn('03-native-asr-service-worker', 'liveAdvance');
 const clipListen = lazyFn('04-local-audio-plugin-host', 'clipListen');
 const emitPlugin = lazyFn('04-local-audio-plugin-host', 'emitPlugin');
+const syncRailBottom = lazyFn('10-desktop-bridge-tail', 'syncRailBottom');
 const localAsrAvailable = lazyFn('04-local-audio-plugin-host', 'localAsrAvailable');
 const subtitlePluginOn = lazyFn('04-local-audio-plugin-host', 'subtitlePluginOn');
 const alignToCue = lazyFn('05-transport-transcript-nav', 'alignToCue');
@@ -159,6 +160,7 @@ window.addEventListener('resize', () => applyReader(false));
 function openTypeSheet() {
   rememberOverlayTrigger('typeSheet', $('typeSheet'));
   closeDetails(false); closeDockSheet(false);
+  document.dispatchEvent(new CustomEvent('myt:reader-overlay-open'));
   const sheet = $('typeSheet');
   sheet.removeAttribute('inert');
   sheet.classList.add('on');
@@ -273,7 +275,7 @@ function importExperimentFile(file) {
   file.text().then(txt => {
     if (isVtt) { applyVttExperiment(txt, file.name); return; }
     let obj;
-    try { obj = JSON.parse(txt); } catch (e) { throw new Error('JSON 解析失败：' + e.message); }
+    try { obj = JSON.parse(txt); } catch (e) { throw new Error('JSON 解析失败：' + e.message, { cause: e }); }
     applyExperiment(obj, file.name);
   }).catch(err => {
     setImportNote(err.message, 'err');
@@ -300,12 +302,29 @@ document.addEventListener('click', e => {
 const { fmt, isBracket, esc, loaderHTML, findNorm, epKey, studyRegexEscape, studyNormText, emptyLine, statHTML, pluginPageKey, isJsonTranscript } = MYTK;
 function status(t, cls='') { $('status').textContent = t; $('status').className = 'status ' + cls; }
 let toastTimer = 0;
-function showToast(text, ms = 6000) {
+function showToast(text, ms = 6000, action = null) {
   if (typeof ms !== 'number') ms = 6500;
   const el = $('toast');
-  el.textContent = text;
-  el.classList.add('on');
+  if (!el) return;
   clearTimeout(toastTimer);
+  el.textContent = '';
+  const line = document.createElement('span');
+  line.className = 'toast-text';
+  line.textContent = text;
+  el.appendChild(line);
+  if (action && action.label && typeof action.run === 'function') {
+    const act = document.createElement('button');
+    act.type = 'button';
+    act.className = 'toast-act';
+    act.textContent = action.label;
+    act.addEventListener('click', event => {
+      event.stopPropagation();
+      hideToast();
+      action.run();
+    });
+    el.appendChild(act);
+  }
+  el.classList.add('on');
   toastTimer = setTimeout(() => el.classList.remove('on'), ms);
 }
 function hideToast() { clearTimeout(toastTimer); $('toast').classList.remove('on'); }
@@ -467,6 +486,7 @@ $('toast').onclick = () => { hideToast(); retryCurrentAudio(); };
 function openDrawer() {
   rememberOverlayTrigger('drawer', $('drawer'));
   closeDetails(false); closeDockSheet(false); closeTypeSheet(false);
+  document.dispatchEvent(new CustomEvent('myt:reader-overlay-open'));
   const drawer = $('drawer');
   drawer.removeAttribute('inert');
   drawer.classList.add('on');
@@ -490,6 +510,7 @@ function closeDrawer(restore = true) {
 function openDetails() {
   rememberOverlayTrigger('details', $('details'));
   closeDrawer(false); closeDockSheet(false); closeTypeSheet(false);
+  document.dispatchEvent(new CustomEvent('myt:reader-overlay-open'));
   const details = $('details');
   details.removeAttribute('inert');
   details.classList.add('on');
@@ -507,6 +528,8 @@ function closeDetails(restore = true) {
   if (restore && hadFocus) restoreOverlayFocus('details');
 }
 function closeOverlays(restore = true) { closeDockSheet(restore); closeDrawer(restore); closeDetails(restore); }
+/* 打开剧集/笔记栏时，右侧的菜单、详情、抽屉先收掉，别让两层浮层叠在一起 */
+document.addEventListener('myt:reader-rail-open', () => { closeOverlays(false); closeTypeSheet(false); });
 function setImmersive(on) {
   // 驾驶界面把正文整块藏掉，阅读沉浸又把底栏藏掉，两个叠起来就是一块空屏；进沉浸前先退回默认界面。
   if (on && app.appearance === 'car') {
@@ -517,14 +540,24 @@ function setImmersive(on) {
   }
   setState('immersive', on);
   document.body.classList.toggle('immersive', on);
+  syncRailBottom();
+  /* 底栏有位移过渡，立即量到的是过渡起点；等过渡完再对齐一次。 */
+  setTimeout(syncRailBottom, 380);
+  /* 先收起浮层再设 inert：closeDockSheet 会把 .dock / .reader 的 inert 还原成 false，
+     放在后面会把沉浸刚设上的 dock inert 又撤掉，键盘焦点仍能钻进隐藏底栏。 */
+  if (on) { closeOverlays(false); closeDockSheet(false); closeTypeSheet(false); }
   document.querySelector('.dock').toggleAttribute('inert', on);
   $('frameBtn').toggleAttribute('inert', !on);
+  const topActions = document.querySelector('.reader-top-actions');
+  if (topActions) topActions.toggleAttribute('inert', on);
   const immersiveBtn = $('immersiveBtn');
   if (immersiveBtn) immersiveBtn.setAttribute('aria-pressed', String(on));
-  if (on) { closeOverlays(false); closeDockSheet(false); closeTypeSheet(false); }
   const framePos = layerValue('05-transport-transcript-nav', 'framePos');
   if (on && framePos) placeFrame(framePos.x, framePos.y);
   setTimeout(() => {
+    /* 离开播放页时会顺带退出沉浸；这时播放器已不在前台，别再抓字幕句把别的页面滚走。
+       骨架里播放器是覆盖层，base 骨架没有 #page-player，只能看 body.player-open。 */
+    if (!document.body.classList.contains('player-open')) return;
     if (state.activeCue >= 0 && state.nodes[state.activeCue]) { stopScroll(); scrollCue(state.nodes[state.activeCue].el, true); }
     syncJumpPill();
   }, 340);
@@ -592,6 +625,90 @@ function syncWallpaperPlay() {
   if (label) label.textContent = playing ? '暂停' : '播放';
 }
 
+/* 壁纸歌词样式：Folia 的歌词模式不是固定一张版式，字号 / 行数 / 对齐 / 背景都要能自己调。
+   偏好只存在本机，不写进主题包；进壁纸模式时直接套用。 */
+const WP_STYLE_KEY = 'myt-wallpaper-style';
+const WP_STYLE_DEFAULT = { size: 'm', lines: 7, align: 'left', shade: 'cover', title: 'on' };
+let wpStyle = (() => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(WP_STYLE_KEY) || '{}');
+    return {
+      size: ['s', 'm', 'l'].includes(raw.size) ? raw.size : WP_STYLE_DEFAULT.size,
+      lines: [3, 5, 7].includes(Number(raw.lines)) ? Number(raw.lines) : WP_STYLE_DEFAULT.lines,
+      align: ['left', 'center'].includes(raw.align) ? raw.align : WP_STYLE_DEFAULT.align,
+      shade: ['cover', 'deep', 'plain'].includes(raw.shade) ? raw.shade : WP_STYLE_DEFAULT.shade,
+      title: ['on', 'off'].includes(raw.title) ? raw.title : WP_STYLE_DEFAULT.title,
+    };
+  } catch (e) { return { ...WP_STYLE_DEFAULT }; }
+})();
+function saveWallpaperStyle() {
+  try { localStorage.setItem(WP_STYLE_KEY, JSON.stringify(wpStyle)); } catch (e) {}
+}
+function pinWallpaperStyle() {
+  const layer = $('wallpaper');
+  if (!layer) return;
+  layer.dataset.wpsize = wpStyle.size;
+  layer.dataset.wpalign = wpStyle.align;
+  layer.dataset.wpshade = wpStyle.shade;
+  layer.dataset.wptitle = wpStyle.title;
+  document.querySelectorAll('#wpStylePanel .wps-seg').forEach(seg => {
+    const key = seg.getAttribute('data-wp-key');
+    seg.querySelectorAll('button').forEach(btn => {
+      btn.classList.toggle('is-on', String(wpStyle[key]) === btn.getAttribute('data-wp-val'));
+    });
+  });
+}
+function setWallpaperStyle(key, val) {
+  if (!(key in WP_STYLE_DEFAULT)) return;
+  wpStyle[key] = key === 'lines' ? Number(val) : val;
+  saveWallpaperStyle();
+  pinWallpaperStyle();
+  wpLastKey = '';
+  if (state.wallpaper) wallpaperRefresh(false);
+  const panel = $('wpStylePanel');
+  if (panel) panel.hidden = false;
+}
+function toggleWallpaperStyle(open) {
+  const panel = $('wpStylePanel');
+  const btn = $('wpStyle');
+  if (!panel || !btn) return;
+  const next = typeof open === 'boolean' ? open : panel.hidden;
+  panel.hidden = !next;
+  btn.setAttribute('aria-expanded', String(next));
+  if (next) pinWallpaperStyle();
+}
+function bindWallpaperStyle() {
+  const btn = $('wpStyle');
+  if (!btn || btn.dataset.bound) return;
+  btn.dataset.bound = '1';
+  btn.addEventListener('click', (e) => { e.stopPropagation(); toggleWallpaperStyle(); });
+  const panel = $('wpStylePanel');
+  if (panel) {
+    panel.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const seg = e.target.closest('[data-wp-key]');
+      const val = e.target.closest('[data-wp-val]');
+      if (seg && val) setWallpaperStyle(seg.getAttribute('data-wp-key'), val.getAttribute('data-wp-val'));
+    });
+    document.addEventListener('click', () => toggleWallpaperStyle(false));
+  }
+  const reset = $('wpStyleReset');
+  if (reset) reset.addEventListener('click', () => {
+    wpStyle = { ...WP_STYLE_DEFAULT };
+    saveWallpaperStyle();
+    pinWallpaperStyle();
+    wpLastKey = '';
+    if (state.wallpaper) wallpaperRefresh(false);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && panel && !panel.hidden) { e.preventDefault(); toggleWallpaperStyle(false); }
+  });
+  pinWallpaperStyle();
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindWallpaperStyle);
+else bindWallpaperStyle();
+
+
 async function toggleWallpaperPlay() {
   try {
     if (audio.paused) await audio.play();
@@ -654,9 +771,13 @@ function wallpaperRefresh(animate = true) {
     }
 
     const total = cues.length;
-    const windowSize = 7;
+    let windowSize = 7;   // 默认七句；样式面板把它改成 3 / 5 / 7
+    windowSize = Number(wpStyle.lines) || windowSize;
     let start = 0;
-    if (total > windowSize && ci >= 0) start = Math.max(0, Math.min(ci - 3, total - windowSize));
+    if (total > windowSize && ci >= 0) {
+      const half = Math.floor(windowSize / 2);
+      start = Math.max(0, Math.min(ci - half, total - windowSize));
+    }
     const end = Math.min(total, start + windowSize);
     const html = [];
     for (let i = start; i < end; i++) {
@@ -737,9 +858,12 @@ async function setWallpaper(on) {
   if (btn) btn.setAttribute('aria-pressed', String(on));
   wpLastKey = '';
   if (on) {
+    pinWallpaperStyle();
     wpPrevIndex = -1;
     wallpaperRefresh();
     syncWallpaperPlay();
+  } else {
+    toggleWallpaperStyle(false);
   }
   await wallpaperFullscreen(on);
 }

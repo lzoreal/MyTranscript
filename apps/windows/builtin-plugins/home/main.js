@@ -6,7 +6,7 @@ MyTPlugins.define('home', {
     'page:home': {
       render(el, ctx) {
         const { $, esc, fmt, emptyLine, statHTML, coverHTML, episodeRowHTML, podCardHTML } = ctx.ui;
-        const { subs: subsOf, show: showByKey, episodes: episodesOf, builtinShows, isSubscribed } = ctx.catalog;
+        const { subs: subsOf, show: showByKey, episodes: episodesOf } = ctx.catalog;
         const subs = subsOf().map(s => showByKey(s.key)).filter(Boolean);
         $('heroSubCount').textContent = subs.length;
         const dateEl = $('ledgerDate');
@@ -35,9 +35,13 @@ MyTPlugins.define('home', {
           $('homeContinue').innerHTML = emptyLine('还没有收听记录。', '<button class="btn primary" data-route="discover">去发现节目</button>');
           $('continueHint').textContent = '';
         }
-        $('homeStats').innerHTML = statHTML('订阅节目', subs.length, '含内置与站外')
+        const statsEl = $('homeStats');
+        const statCards = statHTML('订阅节目', subs.length, '含内置与站外')
           + statHTML('开始收听', entries.length, '有播放位置的单集')
           + statHTML('收藏片段', ctx.catalog.bookmarks().length, '播放器里点 ☆');
+        // 三个数都是 0 时，这排统计没有任何信息量：收起来，让首页只留“下一步”
+        statsEl.innerHTML = statCards;
+        statsEl.hidden = !(subs.length || entries.length || ctx.catalog.bookmarks().length);
 
         const recent = [];
         for (const show of subs) {
@@ -49,10 +53,12 @@ MyTPlugins.define('home', {
           : emptyLine('订阅节目的最近更新会出现在这里。');
         $('homeRecentCount').textContent = recent.length ? '来自 ' + subs.length + ' 个节目' : '';
 
-        const recommended = builtinShows().filter(show => show.feed && !isSubscribed(show.slug)).slice(0, 4);
+        // 海报墙要“无限”：所有已订阅节目都上墙（含站外 RSS），整页跟着滚
+        const recommended = [...new Map(subs.map(show => [show.slug, show])).values()]
+          .sort((a, b) => String(a.slug).localeCompare(String(b.slug)));
         $('homeRecommended').innerHTML = recommended.length
           ? recommended.map(podCardHTML).join('')
-          : emptyLine('所有内置节目都已订阅。');
+          : emptyLine('还没有订阅节目。', '<button class="btn primary" data-route="discover">去发现节目</button>');
       },
     },
   },

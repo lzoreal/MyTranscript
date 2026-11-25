@@ -20,10 +20,8 @@ ORDER = [
     "glass2",
     "minimal-maxi",
     "mono-tech",
-    "neubrutalism",
-    "riso-print",
     "surveillance",
-    "broadcast-archive",
+    "folia-poster",
 ]
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")

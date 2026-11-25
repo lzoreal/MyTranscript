@@ -352,7 +352,12 @@ function openAddFeed() {
     '<div class="modal-pane" data-feed-pane="opml"><div class="modal-note">选择一个 OPML 文件，批量导入订阅；站外 feed 导入后会逐个读取。</div>' +
     '<div class="modal-actions"><button class="btn ghost" data-close-modal>取消</button><button class="btn primary" id="opmlPick">选择 OPML 文件</button></div></div>');
   $('feedAdd').onclick = () => addFeedFromUrl($('feedUrl').value);
-  $('feedUrl').addEventListener('keydown', event => { if (event.key === 'Enter') addFeedFromUrl($('feedUrl').value); });
+  $('feedUrl').addEventListener('keydown', event => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    if (event.isComposing || event.keyCode === 229) return;
+    addFeedFromUrl($('feedUrl').value);
+  });
   $('pasteAdd').onclick = () => addFeedFromPaste($('pasteXml').value, $('pasteUrl').value);
   $('opmlPick').onclick = () => { closeModal(); $('opmlFile').click(); };
   setTimeout(() => $('feedUrl')?.focus(), 30);
@@ -700,7 +705,7 @@ function bindShell() {
     if (el.dataset.onboardSkip !== undefined) {
       try { localStorage.setItem('myt-onboard-done', '1'); } catch (e) {}
       const onboard = $('homeOnboard');
-      if (onboard) { onboard.hidden = true; onboard.innerHTML = ''; }
+      if (onboard) { onboard.hidden = true; onboard.replaceChildren(); }
       showToast('已收起引导，随时可以从左上角继续。');
       return;
     }
@@ -907,8 +912,17 @@ function bindShell() {
       if (isSubscribed(key)) {
         const name = showByKey(key)?.name || key;
         if (!confirm('取消订阅「' + name + '」？\n\n已下载的单集、笔记与收听进度不会删除。')) return;
+        const removed = app.subs.find(item => item.key === key) || null;
         unsubscribeKey(key);
-        showToast('已取消订阅。');
+        showToast('已取消订阅「' + name + '」', 8000, {
+          label: '撤销',
+          run() {
+            if (!removed) return;
+            subscribeRecord(removed);
+            renderAfterStateChange();
+            showToast('已恢复订阅「' + name + '」', 3000);
+          },
+        });
       }
       else {
         const show = showByKey(key);
@@ -921,8 +935,17 @@ function bindShell() {
       const key = el.dataset.removeSub;
       const name = showByKey(key)?.name || key;
       if (!confirm('取消订阅「' + name + '」？\n\n已下载的单集、笔记与收听进度不会删除。')) return;
+      const removed = app.subs.find(item => item.key === key) || null;
       unsubscribeKey(key);
-      showToast('已取消订阅。');
+      showToast('已取消订阅「' + name + '」', 8000, {
+        label: '撤销',
+        run() {
+          if (!removed) return;
+          subscribeRecord(removed);
+          renderAfterStateChange();
+          showToast('已恢复订阅「' + name + '」', 3000);
+        },
+      });
       return;
     }
     if (el.dataset.copyFeed) { copyText(el.dataset.copyFeed); return; }
@@ -997,12 +1020,18 @@ function bindShell() {
   $('modal').addEventListener('click', event => { if (event.target.id === 'modal') closeModal(); });
 
   const runSearch = query => { if (String(query || '').trim()) navigate('search', [String(query).trim()]); };
-  $('globalSearch').addEventListener('keydown', event => { if (event.key === 'Enter') runSearch(event.target.value); });
-  $('heroSearch').addEventListener('keydown', event => { if (event.key === 'Enter') runSearch(event.target.value); });
+  const searchOnEnter = event => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    if (event.isComposing || event.keyCode === 229) return;
+    runSearch(event.target.value);
+  };
+  $('globalSearch').addEventListener('keydown', searchOnEnter);
+  $('heroSearch').addEventListener('keydown', searchOnEnter);
   $('heroSearchBtn').onclick = () => runSearch($('heroSearch').value);
   $('searchBtn').onclick = () => runSearch($('searchInput').value);
   $('searchInput').addEventListener('input', event => renderSearch(event.target.value));
-  $('searchInput').addEventListener('keydown', event => { if (event.key === 'Enter') runSearch(event.target.value); });
+  $('searchInput').addEventListener('keydown', searchOnEnter);
   document.querySelectorAll('[data-search-tab]').forEach(button => {
     button.onclick = () => {
       setSearchTab(button.dataset.searchTab);
@@ -1388,7 +1417,12 @@ function bindShell() {
     renderNotes(); showToast('笔记已保存。');
   };
 
-  $('readerBack').onclick = () => navigate(app.lastPage || 'home');
+  /* base / a 骨架的左上角写的是「主页」，就必须回首页；b / c 写「返回/回到列表」才回上一页。 */
+  $('readerBack').onclick = () => {
+    const back = $('readerBack');
+    const saysHome = /主页/.test(back ? back.textContent : '');
+    navigate(saysHome ? 'home' : (app.lastPage || 'home'));
+  };
   if ($('clipNowBtn')) $('clipNowBtn').onclick = () => clipNow(15);
   const infoBtn = $('readerInfoBtn');
   if (infoBtn) infoBtn.onclick = () => openDetails();
@@ -1535,7 +1569,10 @@ function bindShell() {
   const onlineSearchInput = $('onlineSearchInput');
   $('onlineSearchBtn').onclick = () => runOnlineSearch(onlineSearchInput.value);
   onlineSearchInput.addEventListener('keydown', event => {
-    if (event.key === 'Enter') runOnlineSearch(event.target.value);
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    if (event.isComposing || event.keyCode === 229) return;
+    runOnlineSearch(event.target.value);
   });
   syncThemeSwatches();
 }
@@ -1844,7 +1881,7 @@ function initXai() {
         return { word: w, at: idx };
       }).filter(function (b) { return b.at >= 0; });
       var masked = sentence;
-      blanks.slice().sort(function (a, b) { return b.at - a.at; }).forEach(function (b) {
+      blanks.toSorted(function (a, b) { return b.at - a.at; }).forEach(function (b) {
         masked = masked.slice(0, b.at) + '____' + masked.slice(b.at + b.word.length);
       });
       drill = { kind: 'multi', cue: cue, sentence: masked, blanks: blanks.map(function (b) { return b.word; }), input: '', checked: false, pct: 0 };
@@ -1901,7 +1938,12 @@ function initXai() {
     var input = document.getElementById('xaiDrillInput');
     if (input) {
       input.oninput = function () { drill.input = input.value; };
-      input.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); checkDrill(); } };
+      input.onkeydown = function (e) {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        if (e.isComposing || e.keyCode === 229) return;
+        checkDrill();
+      };
       input.focus();
     }
     body.querySelectorAll('[data-xai-drill]').forEach(function (btn) {
@@ -2141,7 +2183,12 @@ function initXai() {
       };
       go.onclick = run;
       var input = document.getElementById('xaiTlInput');
-      if (input) input.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); run(); } };
+      if (input) input.onkeydown = function (e) {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        if (e.isComposing || e.keyCode === 229) return;
+        run();
+      };
     }
     if (tlResult.length) bindTimeline(tlResult);
   }
@@ -2242,19 +2289,21 @@ function initXai() {
   };
 }
 /* 左右两栏底边对齐浮动 dock 顶边：dock 高度随内容变化，用实测值而不是固定值 */
+function syncRailBottom() {
+  var root = document.documentElement, dock = document.querySelector('.dock');
+  if (!dock) return;
+  if (document.body.classList.contains('immersive')) { root.style.setProperty('--rail-bottom', '16px'); return; }
+  var top = dock.getBoundingClientRect().top;
+  var v = Math.max(0, Math.round(window.innerHeight - top));
+  root.style.setProperty('--rail-bottom', v + 'px');
+}
 (function(){
-  var root=document.documentElement, dock=document.querySelector('.dock');
+  var dock=document.querySelector('.dock');
   if(!dock) return;
-  function sync(){
-    if(document.body.classList.contains('immersive')){ root.style.setProperty('--rail-bottom','16px'); return; }
-    var top=dock.getBoundingClientRect().top;
-    var v=Math.max(0,Math.round(window.innerHeight-top));
-    root.style.setProperty('--rail-bottom',v+'px');
-  }
-  sync();
-  window.addEventListener('resize',sync);
-  if(window.ResizeObserver){ new ResizeObserver(sync).observe(dock); }
+  syncRailBottom();
+  window.addEventListener('resize', syncRailBottom);
+  if(window.ResizeObserver){ new ResizeObserver(syncRailBottom).observe(dock); }
 })();
-export { addFeedFromPaste, addFeedFromUrl, applyAppearance, autoCleanup, autoDelay, autoDownloadNew, bindShell, closeModal, closeThemePop, defaultPlayEpisode, defaultPlayNextAuto, deleteOfflineQuiet, desktopNotify, importOpmlText, lazyLoadExternal, openAddFeed, openBuiltinImport, openModal, playEpisode, playNextAuto, queueHasEpisode, refreshSubscriptions, savePrefs, saveSleep, setAppearance, setContinueMode, setSleep, startAutoRefresh, startSleepTimer, syncAutoNextSwitch };
+export { addFeedFromPaste, addFeedFromUrl, applyAppearance, autoCleanup, autoDelay, autoDownloadNew, bindShell, closeModal, closeThemePop, defaultPlayEpisode, defaultPlayNextAuto, deleteOfflineQuiet, desktopNotify, importOpmlText, lazyLoadExternal, openAddFeed, openBuiltinImport, openModal, playEpisode, playNextAuto, queueHasEpisode, refreshSubscriptions, savePrefs, saveSleep, setAppearance, setContinueMode, setSleep, startAutoRefresh, startSleepTimer, syncAutoNextSwitch, syncRailBottom };
 export { initXai };
-registerLayer('10-desktop-bridge-tail', { addFeedFromPaste, addFeedFromUrl, applyAppearance, autoCleanup, autoDelay, autoDownloadNew, bindShell, closeModal, closeThemePop, defaultPlayEpisode, defaultPlayNextAuto, deleteOfflineQuiet, desktopNotify, importOpmlText, lazyLoadExternal, openAddFeed, openBuiltinImport, openModal, playEpisode, playNextAuto, queueHasEpisode, refreshSubscriptions, savePrefs, saveSleep, setAppearance, setContinueMode, setSleep, startAutoRefresh, startSleepTimer, syncAutoNextSwitch });
+registerLayer('10-desktop-bridge-tail', { addFeedFromPaste, addFeedFromUrl, applyAppearance, autoCleanup, autoDelay, autoDownloadNew, bindShell, closeModal, closeThemePop, defaultPlayEpisode, defaultPlayNextAuto, deleteOfflineQuiet, desktopNotify, importOpmlText, lazyLoadExternal, openAddFeed, openBuiltinImport, openModal, playEpisode, playNextAuto, queueHasEpisode, refreshSubscriptions, savePrefs, saveSleep, setAppearance, setContinueMode, setSleep, startAutoRefresh, startSleepTimer, syncAutoNextSwitch, syncRailBottom });

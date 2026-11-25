@@ -1483,14 +1483,15 @@ model / endpoint 存在 study 引擎设置里，宿主读 `studyEngine().setting
   两处色板 DOM + `05` 的 `THEME_NAMES` + `07` 设置页网格三处同源）；老存档由 `01` 的
   `REMOVED_THEME_FALLBACK` 迁到最近的现存色板（brass/forest/oxblood→midnight，celadon→ledger，mist→paper）。
   三处必须同时改，漏一处设置页就会重新长出旧色板。
-- 七套视觉主题改成了**随包**（`themes/<slug>.json` → `site/themes-defaults.js` 的 `window.MYT_THEME_DEFAULTS`）：
-  液态玻璃、玻璃拟态 2.0、极简放大、技术单色、新粗野主义、复古印刷、监控美学，首次启动自动种成自定义主题卡
+- 六套视觉主题改成了**随包**（`themes/<slug>.json` → `site/themes-defaults.js` 的 `window.MYT_THEME_DEFAULTS`）：
+  液态玻璃、玻璃拟态 2.0、极简放大、技术单色、监控美学、海报墙，首次启动自动种成自定义主题卡
   并启用第一套；种卡是**每次启动补齐缺卡**（幂等），`localStorage['myt-theme-packs-seeded']` 只用来判断
   “是不是第一次”——第一次才顺手把液态玻璃设为当前，之后只补卡、不抢用户已选的主题。
   改主题请改 `themes/` 的源文件后重新生成 `site/themes-defaults.js`，不要手改这个生成文件。
   随包卡带 `builtin: true`（老数据按 `ct-pack-` 前缀识别），是**默认主题**：卡片右上角只显示不可点的「默认」标，
   没有删除按钮，`removeCustomThemePreset` 也直接拒删；`ctReset`（恢复默认）只清用户自己存的卡和 CSS/HTML，
-  七套随包主题保留。所以“恢复默认”不等于“清空自定义主题网格”。
+  六套随包主题保留。所以“恢复默认”不等于“清空自定义主题网格”。
+  清单里撤掉的包，下次启动由 `seedDefaultThemePacks` 撤卡；如果当前主题正好是它，会先退回最近的内置档。
 - 启动顺序坑：`applyCustomTheme()` 原先在 01 的顶层直接跑，此时 05 还没 `registerLayer`，
   `lazyFn` 版 `readJSON` 会返回 `undefined`，被 normalize 成“没有配置”——结果自定义主题重启后永远不生效。
   现在改成 `queueMicrotask(bootCustomTheme)`（种包 + 应用）压到微任务，等 registry 齐了再读。
@@ -1506,18 +1507,17 @@ model / endpoint 存在 study 引擎设置里，宿主读 `studyEngine().setting
   实测：`<head>` 子元素顺序为 `… link | script | style#ctStyle | style …`，说明 `ctStyle` 由内联脚本创建、
   早于模块；重启后第一帧就是液态玻璃。
 
-- 七套默认主题 2026-11-21 统一做了一轮可访问性收尾，只加 CSS、不动各自骨架：
+- 六套默认主题 2026-11-21 统一做了一轮可访问性收尾，只加 CSS、不动各自骨架：
   时码/时长加 `font-variant-numeric: tabular-nums`（12:04 与 1:02:04 冒号能竖着对齐）、
   大标题/副标题 `text-wrap: balance` 防孤字、`::selection` 跟 `--accent` 走（`color-mix` 26%）、
   `:focus-visible` 的 `outline-offset` 收到 1px（基础样式本来就有 2px 描边，只是被圆角切）。
   新增 `@media (prefers-reduced-motion: reduce)`：漂移/闪烁动画归零、悬停位移（nav 的 translateX、
   卡片 translateY）全关，只保留颜色与描边这类状态反馈。
-  按下态分两种：玻璃拟态 2.0 / 极简放大 / 技术单色 / 监控美学 原来只有 hover，补 `:active` 下沉 1px + 压暗；
-  **新粗野主义与复古印刷本来就有自己的按下态（沿硬阴影陷 2–3px）**，所以这两套刻意不追加位移，
-  否则会叠成双重位移。玻璃拟态 2.0 额外给 `.search-global` 加了 `:focus-within` 外壳高亮。
+  按下态：玻璃拟态 2.0 / 极简放大 / 技术单色 / 监控美学 原来只有 hover，补 `:active` 下沉 1px + 压暗；
+  海报墙保持自己的瓦片按压反馈。玻璃拟态 2.0 额外给 `.search-global` 加了 `:focus-within` 外壳高亮。
   对比度实测液态玻璃：`--dim #7788a8` 在玻璃面板上 5.0:1、`--muted` 8.84:1，都过 AA，所以没改色板。
   改任何一套都要把 `themes/<slug>.json` 的 `css` 字段和 `site/themes-defaults.js` 一起重新生成
-  （测试逐字比对 site 版与 themes 版，并锁定 7 个 slug 的顺序）。
+  （测试逐字比对 site 版与 themes 版，并锁定 6 个 slug 的顺序）。
 
 ## 桌面壳：插件接口与字幕插件（2026-11-20）
 

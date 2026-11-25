@@ -259,7 +259,7 @@ function liveTranslateRow(row, text) {
 }
 
 function liveRenderLine(session, line) {  if (session !== LIVE.session || !line) return;
-  if (box.querySelector('.empty')) box.innerHTML = '';
+  if (box.querySelector('.empty')) box.replaceChildren();
   // 每次重建流 line.id 都会从头开始，带上 session 才不会把旧行覆盖掉。
   const key = session + ':' + line.id;
   let row = LIVE.rows.get(key);
