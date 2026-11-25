@@ -3,7 +3,7 @@
 ## 目标
 
 在桌面版的「发现」页里加一个**排行榜** tab：用户能按地区看 Apple Podcasts 总榜，
-按分类看 Podcast Index 趋势榜，点节目先预览、再订阅。榜单只是「发现→订阅」的入口，
+按分类看 Apple Podcasts 分类榜，点节目先预览、再订阅。榜单只是「发现→订阅」的入口，
 不改变播放、订阅、目录的既有机制。
 
 ## 范围
@@ -11,10 +11,10 @@
 **做**
 
 - 发现页顶部增加 `排行榜` tab，与现有「目录 / 在线搜索」并列。
-- 地区：完整 storefront 下拉（默认 `cn`），记住上次选择。
+- 地区：22 个常用 storefront 下拉（默认 `cn`），记住上次选择。
 - 总榜：Apple Marketing RSS，取前 50，展示名次、封面、节目名、作者、分类。
-- 分类榜：Podcast Index `podcasts/trending`，按分类过滤，取前 50。
-- 分类入口：常用 10 类横排 chips，其余收进「更多」。
+- 分类榜：Apple Podcasts 分类榜（iTunes 旧版 `toppodcasts` RSS 的 `genre=` 过滤），取前 50。
+- 分类入口：常用 10 类横排 chips（科技/商业/喜剧/新闻/社会与文化/科学/健康/历史/真实犯罪/艺术）。
 - 点卡片：走现有在线预览（简介 / 最近单集），预览里点订阅。
 - 已订阅的节目保留在榜内，卡片显示「已订阅」，点击进已订阅详情。
 - 刷新：进入读缓存（1 小时），过期自动重取；提供手动刷新按钮。
@@ -52,16 +52,19 @@ GET https://itunes.apple.com/lookup?id={id1,id2,...}&entity=podcast&country={sto
 - 该域带 `Access-Control-Allow-Origin: *`，浏览器可直连。
 - 榜单 50 条一次批量换回；失败的单条不阻塞其余条目。
 
-### 分类榜（Podcast Index）
+### 分类榜（Apple）
 
 ```
-GET https://api.podcastindex.org/api/1.0/podcasts/trending?max=50&cat={category}
+GET https://itunes.apple.com/{storefront}/rss/toppodcasts/limit=50/genre={genreId}/json
 ```
 
-- 复用现有 `PODCAST_INDEX` 内置凭据与 `podcastIndexAuth` 签名（`06-catalog-feeds-search.js`）。
-- 返回自带 `feedUrl`，不需要再 lookup。
-- **语义是「趋势」，不是「名次」**：名次按返回顺序展示，文档与 UI 不宣称它是听众排名。
-- 分类 id 使用 Podcast Index 的分类体系；常用 10 类固定映射，其余从分类列表取。
+- 旧版 iTunes `toppodcasts` RSS 支持 `genre=` 过滤，返回 50 条 `feed.entry`，含 `im:name`、`im:artist`、
+  `im:image`、`summary`、`id.attributes.im:id`。
+- 与总榜一样用 iTunes Lookup 换 `feedUrl`；换不到的条跳过并在页脚标注数量。
+- 分类 id 用 Apple 播客的固定 genre id：科技 1318、商业 1321、喜剧 1303、新闻 1489、
+  社会与文化 1324、科学 1533、健康 1512、历史 1487、真实犯罪 1488、艺术 1301。
+- 为什么不用 Podcast Index：`api.podcastindex.org` 在目标网络不可达（TCP 443 超时），
+  而 iTunes 旧版 RSS 可用；分类榜因此统一走 Apple，总榜/分类榜同一套取数与 lookup 逻辑。
 
 ## 交互
 
@@ -74,8 +77,8 @@ GET https://api.podcastindex.org/api/1.0/podcasts/trending?max=50&cat={category}
 
 ## 缓存
 
-- 榜单：`localStorage`，按 `{source}|{storefront}|{category}` 分键，TTL 1 小时。
-- lookup：按 `storefront + id` 缓存 24 小时，跟随 iTunes 的 `Cache-Control`。
+- 榜单与 lookup：同一份 rows 缓存，`localStorage` 键 `myt-chart-rows:{storefront}:{category|top}`，TTL 1 小时；
+  lookup 换到的 `feedUrl` 跟着 rows 一起缓存，不单独再存一份。
 - 预览用的 feed 内容继续走现有 feed 缓存，不额外加一层。
 
 ## 跨主题约束
@@ -84,8 +87,8 @@ GET https://api.podcastindex.org/api/1.0/podcasts/trending?max=50&cat={category}
 
 - **只复用现有原语**：tab 用 `.tabs`，分类 chips 用 `.online-chips`，节目行用 `.online-row` /
   `.online-art` / `.online-body` / `.online-actions`，按钮用 `.btn`，徽标用 `.pill`。
-  这些类在 `site/player.css` 里已有完整样式，9 套随包主题全部继承。
-- **不新建主题私有样式**：不往 9 个 `themes/*.css` 里加榜单规则；需要新增的只有基础层
+  这些类在 `site/player.css` 里已有完整样式，6 套随包主题全部继承。
+- **不新建主题私有样式**：不往 6 个随包主题的 CSS 里加榜单规则；需要新增的只有基础层
   一个 `.chart-rank`（名次数字），颜色只用 `var(--ink) / var(--muted) / var(--line) / var(--accent)`，
   禁止写死 `#fff` / `#000` / 固定背景。
 - **布局不假设侧栏形态**：Folia 的侧栏是窄 rail，档案室是纸张底，编辑部是浅色；
@@ -94,7 +97,7 @@ GET https://api.podcastindex.org/api/1.0/podcasts/trending?max=50&cat={category}
   不能靠深色背景反白。
 - **主题切换不重载**：榜单与主题同属一个 skeleton，切主题只换 CSS，榜单状态必须保留。
 
-验收主题矩阵（共 16 档）：
+验收主题矩阵（共 13 档）：
 
 - 内置深色：`plate / spotify / console`
 - 内置浅色：`prototype / ledger / apple / news`
@@ -105,9 +108,9 @@ GET https://api.podcastindex.org/api/1.0/podcasts/trending?max=50&cat={category}
 ## 技术落点
 
 - 页面与交互：`src/player-js/07-routes-pages.js` 的 `renderDiscover()` / `renderOnlineResults()` 旁新增排行榜分支。
-- 取数：`src/player-js/06-catalog-feeds-search.js` 复用 `fetchJson`、`mapAppleResults`、`subscribeFromOnline`；新增 `fetchChart`、`resolveFeedUrls`、`fetchCategoryTrending`。
-- Apple 总榜：桌面壳调 `http_text`（`00-runtime.js` 已暴露），网页版不执行。
-- 分类榜：沿用现有 Web Crypto 签名与内置凭据。
+- 取数：`src/player-js/06-catalog-feeds-search.js` 复用 `fetchJson`、`mapAppleResults`、`subscribeFromOnline`；新增 `fetchAppleChart`、`fetchAppleGenreChart`、`resolveAppleFeeds`。
+- Apple 总榜/分类榜：桌面壳调 `http_text`（`00-runtime.js` 已暴露），网页版不执行、也不显示入口。
+- feedUrl：两种榜都走 iTunes Lookup 批量换 `feedUrl`，复用现有 `fetchJson` 与 CORS 能力。
 - 不需要新增路由，也不需要新增插件。
 
 ## 验收
@@ -117,9 +120,9 @@ GET https://api.podcastindex.org/api/1.0/podcasts/trending?max=50&cat={category}
 - 分类榜切换 10 个常用分类都能出结果；空结果有明确空态。
 - 断网后重进：显示缓存榜单 + 错误条；手动刷新可恢复。
 - 网页版：没有排行榜 tab，DOM 中不出现死入口。
-- 16 档主题逐档切换：榜单 tab 可点、名次可读、行不溢出、订阅按钮不被裁；
+- 13 档主题逐档切换：榜单 tab 可点、名次可读、行不溢出、订阅按钮不被裁；
   浅色档对比度正常；切换主题后榜单状态不丢。
-- 9 套随包主题的 CSS 文件零改动（`git diff themes/` 为空）。
+- 6 套随包主题的 CSS 文件零改动（`git diff themes/` 为空）。
 - 缓存过期后自动重取，不重复打两次相同请求。
 
 ## 风险与已知缺口

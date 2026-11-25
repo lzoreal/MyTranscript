@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="player.css">
 <script data-theme-prewarm>
 /* 主题预热：主题选择都存在 localStorage，等 01 模块加载完再套，第一帧会先把默认主题画出来（看起来像「闪一下」）。
-   这里在首次绘制前就把 data-theme 和自定义主题（液态玻璃这类卡片）的 CSS 挂上，后面 01 里再套一次是幂等的。 */
+   这里在首次绘制前就按当前主题卡把对应的 CSS 挂上；后面 01 里再套一次是幂等的。 */
 (function () {
   try {
     var FALLBACK = { brass: 'midnight', forest: 'midnight', oxblood: 'midnight', celadon: 'ledger', mist: 'paper' };
@@ -21,10 +21,14 @@
     var raw = localStorage.getItem('myt-theme-custom');
     if (!raw) return;
     var cfg = JSON.parse(raw);
-    if (!cfg || !cfg.enabled || typeof cfg.css !== 'string') return;
+    if (!cfg || !cfg.enabled || !Array.isArray(cfg.presets)) return;
+    /* 首帧注入的必须是「当前这张主题卡」的 CSS。旧逻辑注入编辑器里上一次的草稿，
+       切到海报墙这类包卡时，第一帧会先把别的主题画出来，就是启动闪一下的来源。 */
+    var preset = cfg.presets.find(function (item) { return item && item.id === saved; });
+    if (!preset || typeof preset.css !== 'string' || !preset.css.trim()) return;
     var style = document.createElement('style');
     style.id = 'ctStyle';
-    style.textContent = cfg.css;
+    style.textContent = preset.css;
     (document.head || document.documentElement).appendChild(style);
   } catch (e) {}
 })();

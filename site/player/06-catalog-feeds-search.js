@@ -1,4 +1,4 @@
-import { $, ASR_MODEL_DEFAULT, LIVE_LEAD_DEFAULT, prefs, replacePrefs, setState, state } from './00-runtime.js';
+import { $, ASR_MODEL_DEFAULT, LIVE_LEAD_DEFAULT, host, prefs, replacePrefs, setState, state } from './00-runtime.js';
 import { esc, fmt, getJson, loaderHTML, parseFeed, showToast } from './01-theme-reader-shell.js';
 import { CATALOG_TIMEOUT, smallArtwork, subtitlePluginOn } from './04-local-audio-plugin-host.js';
 import { AUTO_DEFAULTS, AUTO_KEY, BOOKMARK_KEY, FAV_KEY, INBOX_KEY, LOCAL_KEY, NOTE_KEY, PLAYED_KEY, PLAYLIST_KEY, PREFS_KEY, QUEUE_KEY, SEEN_KEY, SHOWPREFS_KEY, SUBS_KEY, absoluteFeed, absoluteUrl, app, applyVolume, cleanFeedTitle, findBuiltinByFeed, hash32, hostOf, navigate, normalizeFeedUrl, normalizeSidebarPrefs, plainText, readJSON, saveSubs, showByKey, syncDockSleep, writeJSON } from './05-transport-transcript-nav.js';
@@ -195,8 +195,22 @@ async function fetchFeedText(url, options = {}) {
   const sameOrigin = abs.startsWith(location.origin);
   const cached = sameOrigin ? null : await feedCacheGet(abs);
   if (!options.force && feedCacheFresh(cached)) return cached.xml;
+  /* 桌面版先用原生命令直取：远端 RSS 的 CORS 经常直接失败，浏览器 fetch 在坏网络上还会
+     挂很久；http_text 走主进程，既绕 CORS，也不会把「在线预览」卡死。 */
+  if (!sameOrigin) {
+    const bridge = host();
+    if (bridge && typeof bridge.httpText === 'function') {
+      try {
+        const text = await nativeText(abs, 15000);
+        if (text) {
+          await feedCachePut(abs, text);
+          return text;
+        }
+      } catch (e) {}
+    }
+  }
   try {
-    const response = await fetch(abs, { cache: 'no-cache' });
+    const response = await fetch(abs, { cache: 'no-cache', signal: AbortSignal.timeout(9000) });
     if (response.ok) {
       const text = await response.text();
       if (!sameOrigin) await feedCachePut(abs, text);
@@ -625,7 +639,7 @@ async function runOnlineSearch(query) {
   });
   renderOnlineResults();
 }
-function onlineRowHTML(result) {
+function onlineRowHTML(result, rank) {
   const builtin = findBuiltinForTitle(result.title, app.builtinShows);
   const subscribed = subscribedShowForFeed(result.feedUrl);
   const show = { key: result.feedUrl, name: result.title, artwork: result.image };
@@ -639,7 +653,10 @@ function onlineRowHTML(result) {
   }
   const meta = [result.author, result.genre, result.episodeCount ? result.episodeCount + ' 集' : '',
     hostOf(result.feedUrl)].filter(Boolean).join(' · ');
-  return '<div class="online-row" data-online-detail="' + esc(result.feedUrl) + '" role="link" tabindex="0">' + coverHTML(show, 'online-art') +
+  const rankHTML = rank === undefined || rank === null ? ''
+    : '<span class="chart-rank' + (Number(rank) <= 3 ? ' top' : '') + '">' + esc(String(rank)) + '</span>';
+  return '<div class="online-row" data-online-detail="' + esc(result.feedUrl) + '" role="link" tabindex="0">' + rankHTML +
+    coverHTML(show, 'online-art') +
     '<div class="online-body"><span class="online-title">' + esc(result.title) + '</span>' +
     '<span class="online-sub">' + esc(meta) + '</span>' +
     (builtin ? '<div class="online-badge"><span class="pill">本站增强版</span></div>' : '') +
@@ -683,7 +700,8 @@ async function openOnlinePreview(result) {
   }
 }
 function openOnlineDetail(feedUrl) {
-  const result = (app.online.results || []).find(item => feedKey(item.feedUrl) === feedKey(feedUrl));
+  const result = [...(app.online.results || []), ...(app.chart?.rows || [])]
+    .find(item => item && item.feedUrl && feedKey(item.feedUrl) === feedKey(feedUrl));
   if (!result) return;
   const builtin = findBuiltinForTitle(result.title, app.builtinShows) || findBuiltinByFeed(result.feedUrl);
   if (builtin) { navigate('podcast', [builtin.slug]); return; }
@@ -734,5 +752,336 @@ function subscribeFromOnline(feedUrl) {
   if (subscribed) { navigate('podcast', [subscribed.slug]); return; }
   addFeedFromUrl(feedUrl);
 }
-export { COVER_GRADS, FEED_CACHE_TTL, ONLINE_PAGE, PODCAST_INDEX, appleSearchUrl, buildOpml, catalogFields, checkSubscriptions, copyText, coverGrad, coverHTML, decodeXml, downloadFile, ensureShowFeed, episodeCover, exportOpml, exportSubtitle, feedCacheFresh, feedCacheGet, feedCachePut, feedDb, feedDbPromise, feedKey, fetchFeedText, fetchJson, findBuiltinForTitle, hasFreshFeed, initialsOf, loadCatalog, loadLocalState, mapAppleResults, mapPodcastIndexResults, memoryFeed, mergeCatalog, mergeSearchMeta, mergeSearchResults, onlineDetailHTML, onlinePreviewSeq, onlineRowHTML, openOnlineDetail, openOnlinePreview, parseOpml, podcastIndexAuth, podcastIndexSearchUrl, rememberFeed, renderOnlineResults, runOnlineSearch, searchApple, searchPodcastIndex, searchTitleKey, sha1Hex, shareCurrentCue, stamp, subscribeFromOnline, subscribedShowForFeed };
-registerLayer('06-catalog-feeds-search', { COVER_GRADS, FEED_CACHE_TTL, ONLINE_PAGE, PODCAST_INDEX, appleSearchUrl, buildOpml, catalogFields, checkSubscriptions, copyText, coverGrad, coverHTML, decodeXml, downloadFile, ensureShowFeed, episodeCover, exportOpml, exportSubtitle, feedCacheFresh, feedCacheGet, feedCachePut, feedDb, feedDbPromise, feedKey, fetchFeedText, fetchJson, findBuiltinForTitle, hasFreshFeed, initialsOf, loadCatalog, loadLocalState, mapAppleResults, mapPodcastIndexResults, memoryFeed, mergeCatalog, mergeSearchMeta, mergeSearchResults, onlineDetailHTML, onlinePreviewSeq, onlineRowHTML, openOnlineDetail, openOnlinePreview, parseOpml, podcastIndexAuth, podcastIndexSearchUrl, rememberFeed, renderOnlineResults, runOnlineSearch, searchApple, searchPodcastIndex, searchTitleKey, sha1Hex, shareCurrentCue, stamp, subscribeFromOnline, subscribedShowForFeed });
+
+/* ---------- rankings（桌面版发现页） ---------- */
+const CHART_TTL = 60 * 60 * 1000;
+const CHART_PREFS_KEY = 'myt-chart-prefs';
+const CHART_ROWS_PREFIX = 'myt-chart-rows:';
+const CHART_STORES = [
+  ['cn', '中国大陆'], ['us', '美国'], ['gb', '英国'], ['jp', '日本'], ['kr', '韩国'],
+  ['hk', '中国香港'], ['tw', '中国台湾'], ['sg', '新加坡'], ['ca', '加拿大'], ['au', '澳大利亚'],
+  ['de', '德国'], ['fr', '法国'], ['es', '西班牙'], ['it', '意大利'], ['nl', '荷兰'],
+  ['se', '瑞典'], ['br', '巴西'], ['mx', '墨西哥'], ['in', '印度'], ['ae', '阿联酋'],
+  ['za', '南非'], ['nz', '新西兰'],
+];
+const CHART_CATEGORIES = [
+  { id: '1318', name: '科技' }, { id: '1321', name: '商业' }, { id: '1303', name: '喜剧' },
+  { id: '1489', name: '新闻' }, { id: '1324', name: '社会与文化' }, { id: '1533', name: '科学' },
+  { id: '1512', name: '健康' }, { id: '1487', name: '历史' }, { id: '1488', name: '真实犯罪' },
+  { id: '1301', name: '艺术' },
+];
+let chartPrefsLoaded = false;
+function chartSupported() {
+  const bridge = host();
+  return !!(bridge && typeof bridge.httpText === 'function');
+}
+function ensureChartState() {
+  if (!app.chart.categories.length) app.chart.categories = CHART_CATEGORIES;
+  if (chartPrefsLoaded) return;
+  chartPrefsLoaded = true;
+  const saved = readJSON(CHART_PREFS_KEY, null);
+  if (!saved || typeof saved !== 'object') return;
+  if (['charts', 'online', 'catalog'].includes(saved.tab)) app.chart.tab = saved.tab;
+  if (CHART_STORES.some(([id]) => id === saved.storefront)) app.chart.storefront = saved.storefront;
+  if (typeof saved.category === 'string') app.chart.category = saved.category;
+  if (!chartSupported() && app.chart.tab === 'charts') app.chart.tab = 'online';
+}
+function saveChartPrefs() {
+  writeJSON(CHART_PREFS_KEY, {
+    tab: app.chart.tab, storefront: app.chart.storefront, category: app.chart.category,
+  });
+}
+function chartStoreName(id) {
+  return (CHART_STORES.find(([key]) => key === id) || [id, id])[1];
+}
+function chartCategoryName(id) {
+  return (app.chart.categories.find(cat => cat.id === id) || {}).name || '';
+}
+function chartRowsKey(storefront, category) {
+  return CHART_ROWS_PREFIX + storefront + ':' + (category || 'top');
+}
+function chartUpdatedAt(at) {
+  if (!at) return '';
+  try {
+    return new Date(at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  } catch (e) { return ''; }
+}
+function nativeText(url, timeoutMs = 12000) {
+  const bridge = host();
+  if (!bridge || typeof bridge.httpText !== 'function') {
+    return Promise.reject(new Error('排行榜仅在桌面版可用'));
+  }
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('请求超时')), timeoutMs);
+    bridge.httpText(url).then(value => { clearTimeout(timer); resolve(value); },
+      err => { clearTimeout(timer); reject(err instanceof Error ? err : new Error(String(err))); });
+  });
+}
+function appleChartUrl(storefront) {
+  return 'https://rss.applemarketingtools.com/api/v2/' + encodeURIComponent(storefront) +
+    '/podcasts/top/50/podcasts.json';
+}
+async function fetchAppleChart(storefront) {
+  let text;
+  try {
+    text = await nativeText(appleChartUrl(storefront), 20000);
+  } catch (err) {
+    throw new Error('Apple 榜单：' + (err.message || '请求失败'), { cause: err });
+  }
+  let doc;
+  try { doc = JSON.parse(text); } catch (e) { throw new Error('Apple 榜单：返回格式无法解析'); }
+  const items = Array.isArray(doc?.feed?.results) ? doc.feed.results : [];
+  return items.filter(item => item && item.id).map((item, index) => ({
+    rank: index + 1,
+    title: item.name || 'Unknown',
+    author: item.artistName || '',
+    feedUrl: '',
+    image: item.artworkUrl100 || '',
+    imageSmall: item.artworkUrl100 || '',
+    genre: Array.isArray(item.genres) ? (item.genres[0]?.name || '') : '',
+    episodeCount: 0,
+    description: '',
+    source: 'apple',
+    appleId: String(item.id),
+    appleUrl: item.url || '',
+  }));
+}
+async function resolveAppleFeeds(rows, storefront) {
+  const ids = rows.map(row => row.appleId).filter(Boolean);
+  const found = new Map();
+  for (let start = 0; start < ids.length; start += 50) {
+    const chunk = ids.slice(start, start + 50);
+    try {
+      const doc = await fetchJson('https://itunes.apple.com/lookup?id=' + chunk.join(',') +
+        '&entity=podcast&country=' + encodeURIComponent(storefront), {}, 10000);
+      (Array.isArray(doc?.results) ? doc.results : []).forEach(item => {
+        if (item?.feedUrl) found.set(String(item.collectionId), item);
+      });
+    } catch (e) { /* 单批失败继续，最后按解析结果计数 */ }
+  }
+  const resolved = rows.map(row => {
+    const item = found.get(row.appleId);
+    if (!item) return row;
+    return {
+      ...row,
+      feedUrl: item.feedUrl,
+      title: item.collectionName || row.title,
+      author: item.artistName || row.author,
+      image: item.artworkUrl600 || item.artworkUrl100 || row.image,
+      imageSmall: item.artworkUrl100 || row.imageSmall,
+      genre: item.primaryGenreName || row.genre,
+      episodeCount: Number(item.trackCount) || 0,
+    };
+  }).filter(row => row.feedUrl);
+  return { rows: resolved, skipped: rows.length - resolved.length };
+}
+function appleGenreChartUrl(storefront, genreId) {
+  return 'https://itunes.apple.com/' + encodeURIComponent(storefront) +
+    '/rss/toppodcasts/limit=50/genre=' + encodeURIComponent(genreId) + '/json';
+}
+async function fetchAppleGenreChart(storefront, genreId) {
+  let text;
+  try {
+    text = await nativeText(appleGenreChartUrl(storefront, genreId), 20000);
+  } catch (err) {
+    throw new Error('Apple 分类榜：' + (err.message || '请求失败'), { cause: err });
+  }
+  let doc;
+  try { doc = JSON.parse(text); } catch (e) { throw new Error('Apple 分类榜：返回格式无法解析'); }
+  const entries = Array.isArray(doc?.feed?.entry) ? doc.feed.entry : [];
+  return entries.filter(entry => entry?.['im:name']?.label).map((entry, index) => {
+    const images = Array.isArray(entry['im:image']) ? entry['im:image'] : [];
+    const art = (images[images.length - 1] || {}).label || '';
+    const appleId = String(entry.id?.attributes?.['im:id'] || '');
+    return {
+      rank: index + 1,
+      title: entry['im:name'].label,
+      author: entry['im:artist']?.label || '',
+      feedUrl: '',
+      image: art,
+      imageSmall: art,
+      genre: entry.category?.attributes?.label || entry.category?.attributes?.term || '',
+      episodeCount: 0,
+      description: entry.summary?.label || '',
+      source: 'apple',
+      appleId,
+      appleUrl: entry.link?.attributes?.href || '',
+    };
+  }).filter(row => row.appleId);
+}
+function ensureChartCategories() {
+  const chart = app.chart;
+  if (!chart.categories.length) chart.categories = CHART_CATEGORIES;
+  return chart.categories;
+}
+async function loadChart(force = false) {
+  ensureChartState();
+  if (!chartSupported()) return;
+  const chart = app.chart;
+  if (chart.loading && !force) return;
+  const key = chartRowsKey(chart.storefront, chart.category);
+  const cached = readJSON(key, null);
+  if (!force && Array.isArray(cached?.rows) && cached.rows.length && Date.now() - (Number(cached.at) || 0) < CHART_TTL) {
+    Object.assign(chart, { rows: cached.rows, at: Number(cached.at) || 0, loading: false, error: '', note: '' });
+    renderChartPanel();
+    return;
+  }
+  const seq = ++chart.seq;
+  Object.assign(chart, { loading: true, error: '', note: '' });
+  renderChartPanel();
+  if (!chart.categories.length) ensureChartCategories();
+  try {
+    let rows;
+    let note = '';
+    if (chart.category) {
+      ensureChartCategories();
+      if (!chart.categories.some(cat => cat.id === chart.category)) throw new Error('分类榜暂不可用');
+      const storefront = chart.storefront;
+      const result = await resolveAppleFeeds(
+        await fetchAppleGenreChart(storefront, chart.category), storefront);
+      rows = result.rows;
+      if (result.skipped) note = result.skipped + ' 条未能解析订阅地址，已跳过';
+    } else {
+      const storefront = chart.storefront;
+      const result = await resolveAppleFeeds(await fetchAppleChart(storefront), storefront);
+      rows = result.rows;
+      if (result.skipped) note = result.skipped + ' 条未能解析订阅地址，已跳过';
+    }
+    if (seq !== chart.seq) return;
+    if (!rows.length) throw new Error('榜单暂无数据');
+    Object.assign(chart, { rows, at: Date.now(), loading: false, error: '', note });
+    writeJSON(key, { at: chart.at, rows });
+  } catch (err) {
+    if (seq !== chart.seq) return;
+    const fallback = readJSON(key, null);
+    const hasFallback = Array.isArray(fallback?.rows) && fallback.rows.length;
+    Object.assign(chart, {
+      loading: false,
+      rows: hasFallback ? fallback.rows : [],
+      at: hasFallback ? (Number(fallback.at) || 0) : 0,
+      error: (err?.message || '榜单加载失败') + (hasFallback ? '（显示上次缓存）' : ''),
+    });
+  }
+  renderChartPanel();
+}
+function syncDiscoverTabs() {
+  ensureChartState();
+  const tabs = $('discoverTabs');
+  if (!tabs) return;
+  const supported = chartSupported();
+  if (!supported) {
+    /* 网页版没有排行榜：不显示 tab 条，恢复原来的「在线搜索 + 本站目录」两段式。 */
+    tabs.hidden = true;
+    const chart = $('discoverChartCard');
+    if (chart) chart.hidden = true;
+    const online = $('discoverOnlineCard');
+    if (online) online.hidden = false;
+    const catalog = $('discoverCatalogCard');
+    if (catalog) catalog.hidden = false;
+    const grid = $('discoverGrid');
+    if (grid) grid.hidden = false;
+    const ext = $('discoverExt');
+    if (ext) ext.hidden = false;
+    return;
+  }
+  tabs.hidden = false;
+  const chartTab = tabs.querySelector('[data-discover-tab="charts"]');
+  if (chartTab) chartTab.hidden = false;
+  [...tabs.querySelectorAll('[data-discover-tab]')].forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.discoverTab === app.chart.tab);
+  });
+  const online = $('discoverOnlineCard');
+  if (online) online.hidden = app.chart.tab !== 'online';
+  const catalog = $('discoverCatalogCard');
+  if (catalog) catalog.hidden = app.chart.tab !== 'catalog';
+  const grid = $('discoverGrid');
+  if (grid) grid.hidden = app.chart.tab !== 'catalog';
+  const ext = $('discoverExt');
+  if (ext) ext.hidden = app.chart.tab !== 'catalog';
+}
+function renderChartPanel() {
+  syncDiscoverTabs();
+  if (!chartSupported()) return;
+  const card = $('discoverChartCard');
+  if (!card) return;
+  card.hidden = app.chart.tab !== 'charts';
+  if (card.hidden) return;
+  const chart = app.chart;
+  const select = $('chartStorefront');
+  if (select) {
+    if (!select.options.length) {
+      select.innerHTML = CHART_STORES.map(([id, name]) =>
+        '<option value="' + esc(id) + '">' + esc(name) + '</option>').join('');
+    }
+    select.value = chart.storefront;
+  }
+  const chips = $('chartChips');
+  if (chips) {
+    chips.innerHTML = chart.categories.length
+      ? chart.categories.map(cat => '<button class="' + (cat.id === chart.category ? 'active' : '') +
+        '" data-chart-chip="' + esc(cat.id) + '">' + esc(cat.name) + '</button>').join('')
+      : '<span class="smalltext">分类榜暂不可用，先看总榜。</span>';
+  }
+  const meta = $('chartMeta');
+  if (meta) {
+    const parts = [];
+    parts.push(chart.category
+      ? 'Apple Podcasts 分类榜 · ' + (chartCategoryName(chart.category) || '分类') + ' · 前 50'
+      : 'Apple Podcasts 总榜 · ' + chartStoreName(chart.storefront) + ' · 前 50');
+    if (chart.at) parts.push('更新于 ' + chartUpdatedAt(chart.at));
+    if (chart.note) parts.push(chart.note);
+    meta.textContent = parts.join(' · ');
+  }
+  const errBox = $('chartError');
+  if (errBox) {
+    if (chart.error) {
+      errBox.hidden = false;
+      errBox.innerHTML = '<div class="online-state err">' + esc(chart.error) +
+        '<div style="margin-top:10px"><button class="btn ghost small" data-retry-chart>重试</button></div></div>';
+    } else {
+      errBox.hidden = true;
+      errBox.replaceChildren();
+    }
+  }
+  const box = $('chartResults');
+  if (!box) return;
+  if (chart.loading) {
+    box.innerHTML = '<div class="online-state">' + loaderHTML('正在读取榜单…') + '</div>';
+    return;
+  }
+  if (!chart.rows.length) {
+    if (!chart.error) setTimeout(() => loadChart(false), 0);
+    box.innerHTML = '<div class="online-state">还没有榜单数据。' +
+      '<div style="margin-top:10px"><button class="btn ghost small" data-retry-chart>重试</button></div></div>';
+    return;
+  }
+  box.innerHTML = chart.rows.map(row => onlineRowHTML(row, row.rank)).join('');
+}
+function setDiscoverTab(tab) {
+  if (!['charts', 'online', 'catalog'].includes(tab)) return;
+  if (tab === 'charts' && !chartSupported()) tab = 'online';
+  app.chart.tab = tab;
+  saveChartPrefs();
+  renderChartPanel();
+  if (tab === 'charts' && !app.chart.rows.length && !app.chart.loading) loadChart(false);
+}
+function setChartStorefront(storefront) {
+  if (!CHART_STORES.some(([id]) => id === storefront)) return;
+  app.chart.storefront = storefront;
+  app.chart.category = '';
+  app.chart.rows = [];
+  app.chart.at = 0;
+  app.chart.error = '';
+  saveChartPrefs();
+  loadChart(true);
+}
+function setChartCategory(category) {
+  app.chart.category = app.chart.category === category ? '' : category;
+  app.chart.rows = [];
+  app.chart.at = 0;
+  app.chart.error = '';
+  saveChartPrefs();
+  loadChart(true);
+}
+export { COVER_GRADS, CHART_STORES, CHART_TTL, FEED_CACHE_TTL, ONLINE_PAGE, PODCAST_INDEX, appleChartUrl, appleGenreChartUrl, appleSearchUrl, buildOpml, catalogFields, chartSupported, checkSubscriptions, copyText, coverGrad, coverHTML, decodeXml, downloadFile, ensureChartCategories, ensureShowFeed, episodeCover, exportOpml, exportSubtitle, feedCacheFresh, feedCacheGet, feedCachePut, feedDb, feedDbPromise, feedKey, fetchAppleChart, fetchAppleGenreChart, fetchFeedText, fetchJson, findBuiltinForTitle, hasFreshFeed, initialsOf, loadCatalog, loadChart, loadLocalState, mapAppleResults, mapPodcastIndexResults, memoryFeed, mergeCatalog, mergeSearchMeta, mergeSearchResults, onlineDetailHTML, onlinePreviewSeq, onlineRowHTML, openOnlineDetail, openOnlinePreview, parseOpml, podcastIndexAuth, podcastIndexSearchUrl, rememberFeed, renderChartPanel, renderOnlineResults, resolveAppleFeeds, runOnlineSearch, searchApple, searchPodcastIndex, searchTitleKey, setChartCategory, setChartStorefront, setDiscoverTab, sha1Hex, shareCurrentCue, stamp, subscribeFromOnline, subscribedShowForFeed, syncDiscoverTabs };
+registerLayer('06-catalog-feeds-search', { COVER_GRADS, CHART_STORES, CHART_TTL, FEED_CACHE_TTL, ONLINE_PAGE, PODCAST_INDEX, appleChartUrl, appleGenreChartUrl, appleSearchUrl, buildOpml, catalogFields, chartSupported, checkSubscriptions, copyText, coverGrad, coverHTML, decodeXml, downloadFile, ensureChartCategories, ensureShowFeed, episodeCover, exportOpml, exportSubtitle, feedCacheFresh, feedCacheGet, feedCachePut, feedDb, feedDbPromise, feedKey, fetchAppleChart, fetchAppleGenreChart, fetchFeedText, fetchJson, findBuiltinForTitle, hasFreshFeed, initialsOf, loadCatalog, loadChart, loadLocalState, mapAppleResults, mapPodcastIndexResults, memoryFeed, mergeCatalog, mergeSearchMeta, mergeSearchResults, onlineDetailHTML, onlinePreviewSeq, onlineRowHTML, openOnlineDetail, openOnlinePreview, parseOpml, podcastIndexAuth, podcastIndexSearchUrl, rememberFeed, renderChartPanel, renderOnlineResults, resolveAppleFeeds, runOnlineSearch, searchApple, searchPodcastIndex, searchTitleKey, setChartCategory, setChartStorefront, setDiscoverTab, sha1Hex, shareCurrentCue, stamp, subscribeFromOnline, subscribedShowForFeed, syncDiscoverTabs });

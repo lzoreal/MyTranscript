@@ -1088,6 +1088,14 @@ globalThis.fetch = (url, options) => new Promise((resolve, reject) => {
         proc = run_node(self, "get_json_timeout.js", source)
         self.assertEqual(proc.returncode, 0, proc.stderr)
 
+    def test_theme_prewarm_applies_active_card_not_editor_draft(self):
+        """首帧只能注入当前主题卡；注入 cfg.css 会让启动先闪出编辑器里的旧主题。"""
+        raw = (SITE / "player.html").read_text(encoding="utf-8")
+        prewarm = raw[raw.index("data-theme-prewarm"):raw.index("</script>", raw.index("data-theme-prewarm"))]
+        self.assertIn("cfg.presets.find", prewarm)
+        self.assertIn("preset.css", prewarm)
+        self.assertNotIn("cfg.css", prewarm)
+
 
 class PlayerMemoryFeedCacheTests(unittest.TestCase):
     HARNESS = """
@@ -1264,6 +1272,37 @@ assert.strictEqual(coverageHTML({ builtin: false, episode_count: 1, transcript_c
 
 
 class PlayerCardSemanticsTests(unittest.TestCase):
+    def test_folia_wall_arrow_navigation_covers_both_axes(self):
+        """箭头在墙上是二维空间选格，不是只管上下；四个方向都得有候选。"""
+        src = (ROOT / "src" / "player-js" / "07-routes-pages.js").read_text(encoding="utf-8")
+        self.assertIn("function moveWallCursor(dir)", src)
+        for direction in ("right", "left", "down", "up"):
+            self.assertIn("'" + direction + "'", src)
+
+    def test_folia_wall_neighbor_uses_layout_step_costs(self):
+        """Folia 的左右不是“中心点最近”，而是候选整块在前方、再按横轴重叠与绕行代价挑。"""
+        src = (ROOT / "src" / "player-js" / "07-routes-pages.js").read_text(encoding="utf-8")
+        body = src[src.index("const WALL_AXIS"):src.index("function nearestWallCard")]
+        case = """
+const R = (left, top, width, height) => ({ left, top, width, height });
+const cards = [
+  R(0, 0, 195, 195), R(197, 0, 195, 195), R(394, 0, 392, 293.5),
+  R(788, 0, 195, 392), R(985, 0, 195, 392), R(0, 197, 195, 293.5),
+  R(197, 197, 195, 195), R(394, 295.5, 392, 293.5), R(197, 394, 195, 195),
+  R(788, 394, 392, 392), R(0, 492.5, 195, 293.5), R(197, 591, 589, 195),
+];
+const pick = (dir, i) => pickWallNeighbor(dir, cards[i],
+  cards.map((rect, value) => ({ rect, value })).filter(it => it.value !== i));
+const assert = require('node:assert');
+assert.strictEqual(pick('right', 7), 9, '从 7 往右要落到同一带的 9，不是上方贴边的 3');
+assert.strictEqual(pick('left', 9), 11, '从 9 往左要落到左下方同带的大卡 11');
+assert.strictEqual(pick('down', 0), 5, '从 0 往下要落到正下方的 5，不是斜下方的 6');
+assert.strictEqual(pick('up', 2), null, '顶行再往上没有整块在前方的候选');
+"""
+        proc = run_node(self, "wall-neighbor.js", body + case)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("nearestWallCard(wall, cards)", src)
+
     def test_card_link_and_subscribe_button_are_siblings(self):
         page = player_page()
         card = page[page.index("function podCardHTML"):page.index("function episodeRowHTML")]

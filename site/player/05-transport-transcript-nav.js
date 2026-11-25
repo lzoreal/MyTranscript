@@ -1824,6 +1824,7 @@ const app = {
   sleepTimer: 0, pendingSeek: 0, pendingSeekEp: '', autoplay: false, feedErrors: null, initialized: false,
   catalogPending: true, catalogFailed: false, catalogPromise: null,
   discover: { query: '', category: '', sort: 'default', sub: 'all', transcripts: false },
+  chart: { tab: 'charts', storefront: 'cn', category: '', rows: [], at: 0, loading: false, error: '', note: '', seq: 0, categories: [], catAt: 0 },
   online: { query: '', loading: false, results: [], sources: [], piError: '', error: '', seq: 0, cache: new Map(), visible: 20 },
   asrModels: [], asrBusy: new Map(), asrModelsErr: '', chaptersCache: new Map(),
   auto: { ...AUTO_DEFAULTS }, favorites: new Set(), played: {}, inbox: [], seen: {}, showPrefs: {},

@@ -1,9 +1,9 @@
 # 排行榜只在桌面壳里提供，走原生取数
 
 发现页排行榜（`docs/rankings.md`）的数据源里，Apple 榜单域对带 `Origin` 的请求返回 403，
-而桌面壳已经有原生命令 `http_text`，因此 v1 决定：排行榜只在桌面版出现，总榜与 lookup
-由 Rust 侧请求 + 本地缓存；网页版不放入口。分类榜走 Podcast Index，复用现有内置凭据与
-Web Crypto 签名。
+而桌面壳已经有原生命令 `http_text`，因此 v1 决定：排行榜只在桌面版出现，总榜、分类榜与 lookup
+由 Rust 侧请求 + 本地缓存；网页版不放入口。分类榜走 Apple 旧版 `toppodcasts` 的 `genre=` 过滤，
+不再依赖 Podcast Index：实测 `api.podcastindex.org` 在目标网络 TCP 443 超时，而 Apple 分类榜可达。
 
 ## Considered Options
 
@@ -14,5 +14,6 @@ Web Crypto 签名。
 ## Consequences
 
 - 网页版没有排行榜；这是明确的功能差异，不是遗漏。
-- Podcast Index 的 secret 继续留在客户端（沿用现有在线搜索的做法），后续若迁移到原生签名，会同时影响搜索与榜单两条链路。
-- 总榜是「名次」，分类榜是「趋势」，两者在 UI 文案上必须分开表述。
+- 分类榜与总榜同源同形：都返回 Apple 的 50 条，再用 iTunes Lookup 换 `feedUrl`；换不到的条跳过并在页脚标注。
+- Podcast Index 的凭据与签名仍服务在线搜索；排行榜不再新增对它的运行时依赖。
+- 总榜与分类榜都是「名次」，UI 都按返回顺序标 1–50，不再出现「趋势」措辞。

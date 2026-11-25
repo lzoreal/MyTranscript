@@ -4,7 +4,7 @@ import { coreProvider, defineCoreProvider, liveMseStop, liveUpdateMeter } from '
 import { selectEpisode } from './03-native-asr-service-worker.js';
 import { clearPluginConsent, clipNow, emitPlugin, loadShow, pluginDiagnosticsText, pluginPlayerState, refreshPluginSettings, registerStudyUiHook, reloadPlugins, smallArtwork, startLocalTranscribe, subtitlePluginOn } from './04-local-audio-plugin-host.js';
 import { BOOKMARK_KEY, LOCAL_KEY, NOTE_KEY, PREFS_KEY, absoluteUrl, addInboxItem, addToPlaylistDialog, app, applyLoudness, applyRate, applyVolume, cancelAsrModel, catalogLatest, cleanFeedTitle, cleanWord, closeDockSheet, closeWordPanel, dockSheet, downloadEpisode, ensureAudioGraph, episodesOf, extSlug, findBuiltinByFeed, fmtBytes, formatDate, hash32, hostOf, idxClear, importAsrModel, inboxRemove, indexAllShows, indexCurrentShow, installAsrModel, isFavorite, isPlayed, isSubscribed, navigate, notifyPlayTargetFailure, normalizeFeedUrl, offlineEntries, offlineKeyFor, offlineLabel, openAsrDir, paintAsrSoon, pickAsrModel, playOffline, playPlaylist, playTarget, purgeLocalReferences, readAllProgress, refreshAsrModels, refreshOffline, refreshShows, removeAsrModel, removeOffline, removePlaylist, renderAfterStateChange, renderDownloads, renderOfflineList, resolveOfflineRef, routeHash, saveFavorites, saveInbox, savePlayed, saveSeen, saveShowPrefs, saveSubs, seekChapter, setPlayed, setShowPref, showByKey, showPrefFor, subscribeRecord, subscribeShow, syncDockSleep, syncIndexCount, toggleChapterSheet, toggleFavorite, unsubscribeKey, wordCurrentMeaning, writeJSON } from './05-transport-transcript-nav.js';
-import { ONLINE_PAGE, checkSubscriptions, copyText, coverHTML, downloadFile, ensureShowFeed, exportOpml, exportSubtitle, feedCachePut, fetchFeedText, hasFreshFeed, loadLocalState, openOnlineDetail, parseOpml, rememberFeed, renderOnlineResults, runOnlineSearch, subscribeFromOnline } from './06-catalog-feeds-search.js';
+import { ONLINE_PAGE, checkSubscriptions, copyText, coverHTML, downloadFile, ensureShowFeed, exportOpml, exportSubtitle, feedCachePut, fetchFeedText, hasFreshFeed, loadChart, loadLocalState, openOnlineDetail, parseOpml, rememberFeed, renderChartPanel, renderOnlineResults, runOnlineSearch, setChartCategory, setChartStorefront, setDiscoverTab, subscribeFromOnline } from './06-catalog-feeds-search.js';
 import { LISTEN_APPEARANCE, LISTEN_CONTINUE, addToQueue, applyRoute, importLocalFolder, openPlayerRoute, renderAutoSettings, renderBookmarks, renderDiscover, renderEcho, renderHistory, renderHome, renderInbox, renderLibrary, renderListening, renderLocal, renderNotes, renderPodcast, renderQueue, renderSearch, saveQueue, searchTab, setSearchTab } from './07-routes-pages.js';
 import { openSettingsPane, renderSidebarSettings, resetSidebarSettings, saveStudyCache, studyAddVocab, studyCache, studyChat, studyClockSeconds, studyCueBounds, studyCurrentCue, studyDueItems, studyExportCsv, studyLangName, studyMarkWord, studyOpenEpisodeSummary, studyParseJson, studyPlayRange, studyReady, studyRenderEpisode, studyRenderPractice, studyStats, studyView, studyVocab, syncThemeSwatches } from './08-study-ai.js';
 import { currentPlaylist, nextTarget, stepEpisode, syncBookmarkBtn, syncMini, toggleBookmarkCue, toggleMiniCaption } from './09-player-integration.js';
@@ -690,7 +690,7 @@ function bindShell() {
   });
 
   document.addEventListener('click', event => {
-    const el = event.target.closest('[data-route],[data-pane],[data-open-podcast],[data-open-episode],[data-play-episode],[data-queue-episode],[data-list-episode],[data-offline-episode],[data-offline-transcript],[data-retry-offline],[data-ai-episode],[data-play-playlist],[data-del-playlist],[data-play-offline],[data-del-offline],[data-chapter],[data-resume],[data-sub-toggle],[data-remove-sub],[data-copy-feed],[data-copy-link],[data-load-full],[data-remove-queue],[data-del-bookmark],[data-del-note],[data-cue-seek],[data-appearance],[data-continue],[data-sleep],[data-asr-pick],[data-asr-install],[data-asr-remove],[data-asr-cancel],[data-asr-open],[data-feed-tab],[data-close-modal],[data-action],[data-online-builtin],[data-online-open],[data-online-subscribe],[data-online-detail],[data-retry-online],[data-online-chip],[data-online-more],[data-ep-filter],[data-fav-episode],[data-played-episode],[data-inbox-remove],[data-inbox-played],[data-show-auto],[data-show-notify],[data-del-local],[data-open-video],[data-index-jump],[data-open-video-ep],[data-export-sub],[data-local-asr],[data-video-resume],[data-onboard-skip]');
+    const el = event.target.closest('[data-route],[data-pane],[data-open-podcast],[data-open-episode],[data-play-episode],[data-queue-episode],[data-list-episode],[data-offline-episode],[data-offline-transcript],[data-retry-offline],[data-ai-episode],[data-play-playlist],[data-del-playlist],[data-play-offline],[data-del-offline],[data-chapter],[data-resume],[data-sub-toggle],[data-remove-sub],[data-copy-feed],[data-copy-link],[data-load-full],[data-remove-queue],[data-del-bookmark],[data-del-note],[data-cue-seek],[data-appearance],[data-continue],[data-sleep],[data-asr-pick],[data-asr-install],[data-asr-remove],[data-asr-cancel],[data-asr-open],[data-feed-tab],[data-close-modal],[data-action],[data-online-builtin],[data-online-open],[data-online-subscribe],[data-online-detail],[data-retry-online],[data-online-chip],[data-online-more],[data-discover-tab],[data-chart-chip],[data-retry-chart],[data-ep-filter],[data-fav-episode],[data-played-episode],[data-inbox-remove],[data-inbox-played],[data-show-auto],[data-show-notify],[data-del-local],[data-open-video],[data-index-jump],[data-open-video-ep],[data-export-sub],[data-local-asr],[data-video-resume],[data-onboard-skip]');
     if (!el) return;
     if (el.dataset.key && el.dataset.ep && [...PLAY_TARGET_ACTIONS].some(attr => el.dataset[attr] !== undefined)) {
       const target = playTarget(el.dataset.key, el.dataset.ep);
@@ -735,7 +735,11 @@ function bindShell() {
     }
     if (el.dataset.onlineBuiltin) { navigate('podcast', [el.dataset.onlineBuiltin]); return; }
     if (el.dataset.onlineOpen) { navigate('podcast', [el.dataset.onlineOpen]); return; }
-    if (el.dataset.onlineSubscribe) { subscribeFromOnline(el.dataset.onlineSubscribe); return; }
+    if (el.dataset.onlineSubscribe) {
+      subscribeFromOnline(el.dataset.onlineSubscribe);
+      setTimeout(() => { if (app.chart?.rows?.length) renderChartPanel(); }, 1800);
+      return;
+    }
     if (el.dataset.onlineDetail) { openOnlineDetail(el.dataset.onlineDetail); return; }
     if (el.dataset.retryOnline !== undefined) { runOnlineSearch(app.online.query); return; }
     if (el.dataset.onlineMore !== undefined) {
@@ -743,6 +747,9 @@ function bindShell() {
       renderOnlineResults();
       return;
     }
+    if (el.dataset.discoverTab) { setDiscoverTab(el.dataset.discoverTab); return; }
+    if (el.dataset.chartChip) { setChartCategory(el.dataset.chartChip); return; }
+    if (el.dataset.retryChart !== undefined) { loadChart(true); return; }
     if (el.dataset.onlineChip) {
       const input = $('onlineSearchInput');
       if (input) input.value = el.dataset.onlineChip;
@@ -1568,6 +1575,10 @@ function bindShell() {
   });
   const onlineSearchInput = $('onlineSearchInput');
   $('onlineSearchBtn').onclick = () => runOnlineSearch(onlineSearchInput.value);
+  const chartStorefront = $('chartStorefront');
+  if (chartStorefront) chartStorefront.onchange = () => setChartStorefront(chartStorefront.value);
+  const chartRefreshBtn = $('chartRefreshBtn');
+  if (chartRefreshBtn) chartRefreshBtn.onclick = () => loadChart(true);
   onlineSearchInput.addEventListener('keydown', event => {
     if (event.key !== 'Enter') return;
     event.preventDefault();

@@ -108,6 +108,10 @@ async fn read_range(
 async fn http_text(url: String) -> Result<String, String> {
     let res = http()
         .get(&url)
+        .header(
+            reqwest::header::USER_AGENT,
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
+        )
         .send()
         .await
         .map_err(|e| format!("请求失败：{e}"))?;

@@ -24,6 +24,14 @@ html[data-theme] {
   --sans: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   --mono: ui-monospace, "SF Mono", Consolas, monospace;
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  /* 侧栏 / 搜索胶囊 / 悬浮底栏共用一层烟熏玻璃：同色、同模糊、同描边。 */
+  --folia-glass: rgba(18, 18, 20, 0.62);
+  --folia-glass-line: rgba(255, 255, 255, 0.10);
+  --folia-glass-blur: blur(18px) saturate(1.1);
+  --folia-glass-shadow: 0 24px 60px rgba(0, 0, 0, 0.52);
+  /* 字幕页不再用纯黑：暖炭底 + 顶部一点专辑色余温，和珊瑚主色同一族 */
+  --folia-player-bg: #0d0b09;
+  --folia-player-glow: #2a1a12;
 }
 
 /* ---------- 0. 画布：底色 + 两团光晕 + 噪点 + 暗角 ---------- */
@@ -78,17 +86,21 @@ html[data-theme] .sidebar {
   max-height: 82vh;
   z-index: 70;
   padding: 10px 7px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--folia-glass-line);
   border-radius: 22px;
-  background: linear-gradient(180deg, rgba(18, 18, 21, 0.97), rgba(8, 8, 10, 0.95));
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.62), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(18px) saturate(1.1);
+  background: var(--folia-glass);
+  box-shadow: var(--folia-glass-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: var(--folia-glass-blur);
+  -webkit-backdrop-filter: var(--folia-glass-blur);
   overflow: auto;
   scrollbar-width: none;
   transform: translate(-120%, -50%);
   opacity: 0;
   pointer-events: none;
-  transition: transform var(--motion-slow) var(--ease), opacity var(--motion-slow) var(--ease);
+  transition: width var(--motion-slow) var(--ease), height var(--motion-slow) var(--ease),
+    left var(--motion-slow) var(--ease), padding var(--motion-slow) var(--ease),
+    border-radius var(--motion-slow) var(--ease), transform var(--motion-slow) var(--ease),
+    opacity var(--motion-slow) var(--ease);
 }
 html[data-theme] .sidebar::-webkit-scrollbar { width: 0; height: 0; }
 /* 默认收起；点悬浮钮展开（body 去掉 nav-collapsed）就滑出这支浮条 */
@@ -321,14 +333,18 @@ html[data-theme] .ledger-search {
   height: 42px;
   padding: 0 6px 0 16px;
   gap: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  border: 1px solid var(--folia-glass-line);
   border-radius: 999px;
-  background: rgba(18, 18, 20, 0.62);
-  backdrop-filter: blur(18px) saturate(1.1);
-  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.42);
+  background: var(--folia-glass);
+  backdrop-filter: var(--folia-glass-blur);
+  -webkit-backdrop-filter: var(--folia-glass-blur);
+  box-shadow: var(--folia-glass-shadow);
   opacity: 1;
   translate: 0 0;
-  transition: opacity var(--motion-normal) var(--ease), translate var(--motion-normal) var(--ease), background-color var(--motion-fast) var(--ease);
+  transition: opacity var(--motion-normal) var(--ease), translate var(--motion-normal) var(--ease),
+    top var(--motion-slow) var(--ease),
+    width var(--motion-slow) var(--ease), height var(--motion-slow) var(--ease),
+    padding var(--motion-slow) var(--ease), background-color var(--motion-fast) var(--ease);
 }
 html[data-theme] .ledger-search span { color: rgba(247, 244, 238, 0.5); display: grid; place-items: center; }
 html[data-theme] .ledger-search input {
@@ -350,6 +366,21 @@ html[data-theme] .ledger-search button:hover { background: var(--accent); color:
 /* ---------- 4. 海报墙：大小混排、无缝、无边框 ---------- */
 /* 首页整页就是墙：不留左右白，瓦片一路铺到屏幕边缘，往下滚不完 */
 html[data-theme] #page-home { padding: 0; }
+
+/* 二维墙：三块同宽 12 栏块并排；横向位置由 JS 的 --folia-block-w / left 控制，
+   镜头用 .main 的 scrollLeft，走到边上时整列倒到另一头，实现 Folia 的横向无限。 */
+html[data-theme] .folia-wall-plane {
+  position: relative;
+  width: calc(var(--folia-block-w, 100vw) * 3);
+  margin: 0;
+  padding: 0;
+}
+html[data-theme] .folia-wall-plane > #homeRecommended {
+  position: absolute;
+  top: 0;
+  width: var(--folia-block-w, 100vw);
+  margin: 0;
+}
 
 html[data-theme] #homeRecommended {
   counter-reset: folia-poster;
@@ -488,10 +519,10 @@ html[data-theme] .pod-card .pod-name {
   text-transform: uppercase;
   color: var(--accent);
 }
-html[data-theme] .pod-card .pod-desc,
 html[data-theme] .pod-card .pod-latest,
 html[data-theme] .pod-card .pod-badges,
 html[data-theme] .pod-card .pod-actions { display: none !important; }
+html[data-theme] .pod-card .pod-desc { display: none !important; }
 
 /* 角标编号 */
 html[data-theme] .pod-card::before {
@@ -552,9 +583,10 @@ html[data-theme] .pod-card.is-playing-tile-live::before { animation: foliaBadgeP
   50% { opacity: 0.62; }
 }
 
-/* 每格字号按格子大小定，小方格不顶字（尺寸来自 Folia 12×8 格子） */
+/* 每格字号按格子大小定，小方格不顶字（尺寸来自 Folia 12×8 格子）。
+   Folia 的 201px 小瓦片标题约 23.6px，这里不再压到 14–19px。 */
 html[data-theme] #homeRecommended .pod-card .pod-card-main { padding: 14px 14px 15px; }
-html[data-theme] #homeRecommended .pod-card .pod-card-main > strong { font-size: clamp(18px, 1.8vw, 26px); -webkit-line-clamp: 2; }
+html[data-theme] #homeRecommended .pod-card .pod-card-main > strong { font-size: clamp(26px, 2.6vw, 46px); -webkit-line-clamp: 2; }
 html[data-theme] #homeRecommended .pod-card .pod-meta { font-size: 11.5px; }
 
 /* 2×2 小方格：字再收一号 */
@@ -567,7 +599,7 @@ html[data-theme] #homeRecommended .pod-card:nth-child(14n + 7) .pod-card-main > 
 html[data-theme] #homeRecommended .pod-card:nth-child(14n + 9) .pod-card-main > strong,
 html[data-theme] #homeRecommended .pod-card:nth-child(14n + 10) .pod-card-main > strong,
 html[data-theme] #homeRecommended .pod-card:nth-child(14n + 11) .pod-card-main > strong,
-html[data-theme] #homeRecommended .pod-card:nth-child(14n + 12) .pod-card-main > strong { font-size: clamp(14px, 1.35vw, 19px); }
+html[data-theme] #homeRecommended .pod-card:nth-child(14n + 12) .pod-card-main > strong { font-size: clamp(21px, 1.7vw, 24px); }
 html[data-theme] #homeRecommended .pod-card:nth-child(14n + 7) .pod-meta,
 html[data-theme] #homeRecommended .pod-card:nth-child(14n + 9) .pod-meta,
 html[data-theme] #homeRecommended .pod-card:nth-child(14n + 10) .pod-meta,
@@ -589,7 +621,7 @@ html[data-theme] #page-home #homeRecommended .pod-card[data-tile="small"] .pod-c
   padding: 10px 10px 11px;
 }
 html[data-theme] #page-home #homeRecommended .pod-card[data-tile="small"] .pod-card-main > strong {
-  font-size: clamp(14px, 1.35vw, 19px);
+  font-size: clamp(21px, 1.7vw, 24px);
   -webkit-line-clamp: 2;
 }
 html[data-theme] #page-home #homeRecommended .pod-card[data-tile="small"] .pod-meta { font-size: 10px; }
@@ -788,6 +820,14 @@ html[data-theme] .pod-card:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
+/* 方向键选中的瓦片：和鼠标悬停分开，键盘在墙上走位时始终有一个明确的落点。 */
+html[data-theme] #homeRecommended .pod-card.is-cursor {
+  z-index: 4;
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+html[data-theme] #homeRecommended .pod-card.is-cursor .pod-card-main > strong { color: var(--bright); }
 
 /* ---------- 5. 播放条：悬浮胶囊 ---------- */
 /* ---------- 5. 播放条：默认缩成小胶囊，悬停或播放页才展开 ---------- */
@@ -802,7 +842,7 @@ html[data-theme] body.player-open .dock {
   bottom: 18px;
   width: min(760px, calc(100vw - 48px));
   max-width: none;
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  border: 1px solid var(--folia-glass-line);
   border-radius: 26px;
   translate: -50% 0;
 }
@@ -813,11 +853,13 @@ html[data-theme] .dock {
   translate: -50% 0;
   width: min(760px, calc(100vw - 140px));
   padding: 10px 16px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--folia-glass-line);
   border-radius: 24px;
-  /* 展开时只动宽度；不挂 backdrop-filter（大范围实时模糊 + 宽度动画是掉帧主因） */
-  background: linear-gradient(180deg, rgba(21, 21, 24, 0.96), rgba(9, 9, 11, 0.96));
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.66), 0 0 0 1px rgba(253, 92, 71, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  /* 和搜索胶囊、侧栏同一层烟熏玻璃；展开只动宽度，模糊层跟着几何自适应。 */
+  background: var(--folia-glass);
+  backdrop-filter: var(--folia-glass-blur);
+  -webkit-backdrop-filter: var(--folia-glass-blur);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.60), 0 0 0 1px rgba(253, 92, 71, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.09);
   overflow: hidden;
   will-change: width;
   transition: width var(--motion-slow) cubic-bezier(0.2, 0.9, 0.2, 1),
@@ -829,8 +871,8 @@ html[data-theme] body:not(.player-open) .dock:not(:hover):not(:focus-within) {
   width: 260px;
   padding: 7px 9px 7px 7px;
   border-radius: 26px;
-  background: linear-gradient(180deg, rgba(23, 23, 26, 0.90), rgba(11, 11, 13, 0.90));
-  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.58), 0 0 0 1px rgba(253, 92, 71, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  background: var(--folia-glass);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.54), 0 0 0 1px rgba(253, 92, 71, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.07);
 }
 html[data-theme] body:not(.player-open) .dock:hover,
 html[data-theme] body:not(.player-open) .dock:focus-within {
@@ -1285,14 +1327,81 @@ html[data-theme] #page-podcast .ep-row.is-playing-live .mini-btn[data-play-episo
 }
 
 /* ---------- 9. 响应式 ---------- */
-/* 侧栏是浮层，任何宽度都不占列，窗口变窄只缩瓦片 */
+/* 侧栏是浮层，任何宽度都不占列。宽屏不把瓦片一起放大：Folia 的一格始终约 100px，
+   窗口变宽就加列（12 → 14 → 16 → 18 → 20 → 24），这样 1180/1440/1600 的瓦片
+   仍落在 200/300/400/600 这组尺寸上；变窄只减列、不缩字号。 */
+@media (min-width: 1360px) {
+  html[data-theme] #homeRecommended {
+    grid-template-columns: repeat(14, minmax(0, 1fr));
+    grid-auto-rows: calc((100cqw - 26px) / 14);
+  }
+}
+@media (min-width: 1600px) {
+  html[data-theme] #homeRecommended {
+    grid-template-columns: repeat(16, minmax(0, 1fr));
+    grid-auto-rows: calc((100cqw - 30px) / 16);
+  }
+}
+@media (min-width: 1880px) {
+  html[data-theme] #homeRecommended {
+    grid-template-columns: repeat(18, minmax(0, 1fr));
+    grid-auto-rows: calc((100cqw - 34px) / 18);
+  }
+}
+@media (min-width: 2100px) {
+  html[data-theme] #homeRecommended {
+    grid-template-columns: repeat(20, minmax(0, 1fr));
+    grid-auto-rows: calc((100cqw - 38px) / 20);
+  }
+}
+@media (min-width: 2400px) {
+  html[data-theme] #homeRecommended {
+    grid-template-columns: repeat(24, minmax(0, 1fr));
+    grid-auto-rows: calc((100cqw - 46px) / 24);
+  }
+}
 @media (max-width: 1100px) {
   html[data-theme] .nav button { width: 32px; height: 32px; }
-  html[data-theme] #homeRecommended { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
+/* 820 以下不再让 12 列槽位挤进 4 列（那会变成一条条全宽横带）：
+   改成真正的两栏/三栏海报流，按卡片宽度给 3:4 或 16:9，行高交给内容自己算。 */
 @media (max-width: 820px) {
   html[data-theme] .ledger-search { width: calc(100vw - 100px); }
   html[data-theme] .dock { width: calc(100vw - 32px); left: 50%; }
+  html[data-theme] #homeRecommended {
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-auto-rows: auto;
+    grid-auto-flow: dense;
+    align-items: start;
+  }
+  html[data-theme] #homeRecommended .pod-card:not(.is-peek):not(.is-playing-tile) {
+    grid-column: span 1 !important;
+    grid-row: auto !important;
+    height: auto !important;
+    aspect-ratio: 3 / 4;
+  }
+  html[data-theme] #homeRecommended .pod-card:not(.is-peek):not(.is-playing-tile):nth-child(7n + 1) {
+    grid-column: span 2 !important;
+    aspect-ratio: 16 / 9;
+  }
+  html[data-theme] #homeRecommended .pod-card.is-peek,
+  html[data-theme] #homeRecommended .pod-card.is-playing-tile {
+    grid-column: span 2 !important;
+    grid-row: auto !important;
+    height: auto !important;
+    aspect-ratio: 1 / 1;
+  }
+  html[data-theme] #homeRecommended .pod-card .pod-card-main { padding: 12px 12px 13px; gap: 4px; }
+  html[data-theme] #homeRecommended .pod-card .pod-card-main > strong {
+    font-size: clamp(17px, 5vw, 24px);
+    -webkit-line-clamp: 2;
+  }
+  html[data-theme] #homeRecommended .pod-card:nth-child(7n + 1) .pod-card-main > strong {
+    font-size: clamp(22px, 6.4vw, 34px);
+  }
+}
+@media (max-width: 600px) {
+  html[data-theme] #homeRecommended { grid-template-columns: 1fr 1fr !important; }
 }
 
 /* 窗口在后台时应用的动效是暂停的，暂停在 from 帧等于内容透明/裁没。
@@ -1356,14 +1465,55 @@ html[data-theme] .brand { display: none; }
 /* 无人使用就退场：侧栏缩回左缘外，搜索条上浮淡出；两者都保留一块感应区，
    鼠标回到原位置时再原路出现。手动收起侧栏（nav-collapsed）不受影响。 */
 html[data-theme] body.nav-auto-idle:not(.nav-collapsed) .sidebar {
-  transform: translate(-120%, -50%);
-  opacity: 0;
+  /* 静置时整条撤掉；不用 transform 移出屏幕，避免 backdrop 层在 WebView2 里留影 */
+  display: none;
+}
+html[data-theme] body.nav-auto-idle:not(.nav-collapsed).on-home #page-home::after {
+  /* 墙页左缘的回归锚点：6×72 烟熏玻璃钉，中心一道珊瑚刻线 */
+  content: "";
+  position: fixed;
+  left: 0;
+  top: 50%;
+  z-index: 69;
+  width: 8px;
+  height: 80px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-left: 0;
+  border-radius: 0 14px 14px 0;
+  background: rgba(18, 18, 20, 0.82);
+  box-shadow: 8px 0 26px -10px rgba(0, 0, 0, 0.8),
+    inset 2px 0 0 rgba(253, 92, 71, 0.75);
+  translate: 0 -50%;
+  opacity: 0.78;
   pointer-events: none;
 }
 html[data-theme] body.search-auto-idle #page-home .ledger-search {
-  opacity: 0;
-  translate: 0 -8px;
+  /* 搜索条收成顶部边缘的一枚小挂片，不再整条消失 */
+  top: 0;
+  width: 80px;
+  height: 12px;
+  padding: 0;
+  border-top: 0;
+  border-radius: 0 0 16px 16px;
+  opacity: 0.8;
+  translate: 0 0;
+  overflow: hidden;
   pointer-events: none;
+}
+html[data-theme] body.search-auto-idle #page-home .ledger-search > * {
+  opacity: 0;
+  pointer-events: none;
+}
+html[data-theme] body.search-auto-idle #page-home .ledger-search::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 26px;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.4);
+  translate: -50% -50%;
 }
 html[data-theme] .brand-mark {
   width: 34px;
@@ -1379,18 +1529,18 @@ html[data-theme] .nav {
   width: 38px;
   padding: 2px;
   gap: 2px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--folia-glass-line);
   border-radius: 13px;
-  background: linear-gradient(180deg, rgba(26, 26, 30, 0.66), rgba(9, 9, 12, 0.80));
+  background: var(--folia-glass);
   box-shadow: 0 20px 44px -22px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.075);
-  backdrop-filter: blur(22px) saturate(1.12);
-  -webkit-backdrop-filter: blur(22px) saturate(1.12);
+  backdrop-filter: var(--folia-glass-blur);
+  -webkit-backdrop-filter: var(--folia-glass-blur);
 }
 /* 第二组不再靠一条贴边细线断开，它本身就是第二块胶囊 */
 html[data-theme] #sideNav2 {
   margin-top: 0;
   padding: 2px;
-  border: 1px solid rgba(255, 255, 255, 0.055);
+  border: 1px solid var(--folia-glass-line);
   border-radius: 13px;
 }
 html[data-theme] .nav button {
@@ -1449,9 +1599,9 @@ html[data-theme] body.player-open .dock {
   width: min(700px, calc(100vw - 140px));
   max-width: none;
   padding: 14px 16px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--folia-glass-line);
   border-radius: 26px;
-  background: linear-gradient(180deg, #1c1c20 0%, #121215 52%, #0b0b0e 100%);
+  background: var(--folia-glass);
   box-shadow: 0 26px 70px -28px rgba(0, 0, 0, 0.92), 0 2px 10px rgba(0, 0, 0, 0.26),
     inset 0 1px 0 rgba(255, 255, 255, 0.09);
   translate: -50% 0;
@@ -1466,7 +1616,7 @@ html[data-theme] body:not(.player-open) .dock:not(:hover):not(:focus-within) {
   width: 300px;
   padding: 7px 10px 7px 8px;
   border-radius: 29px;
-  background: linear-gradient(180deg, #202024 0%, #131316 62%, #0c0c0f 100%);
+  background: var(--folia-glass);
   box-shadow: 0 16px 40px -18px rgba(0, 0, 0, 0.92), 0 1px 4px rgba(0, 0, 0, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.10);
 }
@@ -1658,24 +1808,37 @@ html[data-theme] body:not(.player-open) .dock:has(.nowplay .cover[hidden]) .skip
 html[data-theme] body:not(.player-open) .dock:has(.nowplay .cover[hidden]) .dockquick,
 html[data-theme] body:not(.player-open) .dock:has(.nowplay .cover[hidden]) .docktools { display: none; }
 
+/* 字幕页底栏比墙页收窄一档：播放页两侧要留给歌词和封面，不要横贯整屏 */
+html[data-theme] body.player-open .dock { width: min(580px, calc(100vw - 32px)); }
+
 @media (max-width: 900px) {
-  html[data-theme] .dock, html[data-theme] body.player-open .dock { width: min(700px, calc(100vw - 32px)); }
+  html[data-theme] .dock { width: min(700px, calc(100vw - 32px)); }
+  html[data-theme] body.player-open .dock { width: min(580px, calc(100vw - 32px)); }
 }
 
-/* ---------- 11. 字幕页：整页纯黑，去掉行间横线 ---------- */
+/* ---------- 11. 字幕页：暖炭底，去掉行间横线 ---------- */
 html[data-theme] body.player-open,
 html[data-theme] body.player-open .app {
-  background: #000 !important;
-  background-image: none !important;
+  background:
+    radial-gradient(110% 68% at 50% 0%,
+      color-mix(in srgb, var(--folia-player-glow) 62%, transparent) 0%,
+      transparent 62%),
+    var(--folia-player-bg) !important;
+  background-image:
+    radial-gradient(110% 68% at 50% 0%,
+      color-mix(in srgb, var(--folia-player-glow) 62%, transparent) 0%,
+      transparent 62%) !important;
 }
-/* 墙页的双色光晕和颗粒属于海报墙；阅读页要的是一块干净的黑 */
+/* 墙页的双色光晕和颗粒属于海报墙；阅读页要的是一块干净的暖炭底 */
 html[data-theme] body.player-open::before,
 html[data-theme] body.player-open::after { display: none !important; }
+/* 字幕页不摆侧栏：整页留给封面/歌词，左缘不留导航轨 */
+html[data-theme] body.player-open .sidebar { display: none !important; }
 html[data-theme] body.player-open .reader,
-html[data-theme] body.player-open .reader-rail { background: #000; }
+html[data-theme] body.player-open .reader-rail { background: transparent !important; }
 html[data-theme] body.player-open .reader-top-actions {
-  background: #000 !important;
-  background-image: none !important;
+  background: linear-gradient(180deg, var(--folia-player-bg) 0%, color-mix(in srgb, var(--folia-player-bg) 82%, transparent) 56%, transparent 100%) !important;
+  background-image: linear-gradient(180deg, var(--folia-player-bg) 0%, color-mix(in srgb, var(--folia-player-bg) 82%, transparent) 56%, transparent 100%) !important;
   border-bottom-color: transparent;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -1761,20 +1924,12 @@ html[data-theme] .cover-stage:modal { overscroll-behavior: contain; }
 html[data-theme] .cover-stage::backdrop {
   overflow: hidden;
   overscroll-behavior: contain;
-  background: #040406;
+  background: transparent;
 }
 html[data-theme] .cover-stage.on { opacity: 1; }
 html[data-theme] .cs-backdrop { position: absolute; inset: 0; z-index: 0; }
-html[data-theme] .cs-bg {
-  position: absolute;
-  inset: -12%;
-  z-index: 0;
-  background-position: center;
-  background-size: cover;
-  filter: blur(60px) brightness(0.30) saturate(1.08);
-  transform: scale(1.06);
-  opacity: 0.92;
-}
+/* 封面已经 object-fit:cover 铺满整屏，底下那层 60px 模糊等于白算一整屏；直接不画 */
+html[data-theme] .cs-bg { display: none; }
 html[data-theme] .cover-stage::after {
   content: "";
   position: absolute;
@@ -1796,8 +1951,8 @@ html[data-theme] .cs-img {
   border-radius: 0;
   box-shadow: none;
   opacity: 0;
-  transform: scale(1.025);
-  transition: opacity 0.32s var(--ease), transform 0.6s cubic-bezier(0.2, 0.9, 0.2, 1);
+  transform: scale(1.02);
+  transition: opacity 0.3s var(--ease), transform 0.42s cubic-bezier(0.2, 0.9, 0.2, 1);
 }
 html[data-theme] .cover-stage.on .cs-img { opacity: 1; transform: none; }
 html[data-theme] .cs-close {

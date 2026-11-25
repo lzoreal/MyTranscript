@@ -4,7 +4,7 @@ import { syncLiveLeadSelect } from './02-live-caption-wasm.js';
 import { selectEpisode } from './03-native-asr-service-worker.js';
 import { PLUGIN_PAGES, applySlotMounts, destroyV2Page, emitPlugin, loadShow, pluginPlayerState, pluginReportError, refreshPluginSettings, renderPluginPage, renderV2Page, smallArtwork, subtitlePluginOn } from './04-local-audio-plugin-host.js';
 import { LOCAL_KEY, PAGE_NAMES, QUEUE_KEY, THEME_NAMES, absoluteFeed, app, catalogLatest, epStatusBadges, episodeFilterMatch, episodesOf, firstShowKey, fmtBytes, fmtDuration, formatDate, hash32, hostOf, idxGetAll, inboxCount, isFavorite, isPlayed, isSubscribed, moduleOn, navigate, notifyPlayTargetFailure, offlineKeyFor, parseRoute, plainText, playTarget, playTargetLabel, readAllProgress, readJSON, refreshShows, renderAfterStateChange, refreshOffline, renderDownloads, renderOfflineList, renderPlaylists, returnToCue, routeHash, routeModuleAllows, showByKey, showPrefFor, syncDockBadge, syncDockSleep, syncIndexCount, syncRateSeg, writeJSON } from './05-transport-transcript-nav.js';
-import { coverHTML, ensureShowFeed, episodeCover, hasFreshFeed, memoryFeed, renderOnlineResults } from './06-catalog-feeds-search.js';
+import { coverHTML, ensureShowFeed, episodeCover, hasFreshFeed, memoryFeed, renderChartPanel, renderOnlineResults } from './06-catalog-feeds-search.js';
 import { motionFlip, motionReduced } from './11-motion.js';
 
 
@@ -82,7 +82,11 @@ function applyRouteNow(route) {
     catch (e) { sc.scrollTop = top; }
   };
   if (sc && currentPage) {
-    if (currentPage === 'home') app.homeScroll = sc.scrollTop;
+    if (currentPage === 'home') {
+      app.homeScroll = sc.scrollTop;
+      app.homeScrollX = sc.scrollLeft;
+      app.homeWallCount = document.getElementById('homeRecommended')?.querySelectorAll('.pod-card').length || 0;
+    }
     if (route.page !== 'home') jumpTop(0);
   }
   // 离开视频页就一起收：画面停、旁路转写停（进度已由 timeupdate 落盘，回来自动接上）。
@@ -129,9 +133,35 @@ function applyRouteNow(route) {
   closeThemePop();
   if (isPlayer) { destroyV2Page(); openPlayerRoute(route); return; }
   renderPage(route.page, route);  emitPlugin('route:change', { page: route.page, args: route.args });
+  // 新页面渲染时焦点/滚动锚点会把 .main 顶到半截；渲染完再归零，别让统计页从首页的几百像素处开始
+  if (route.page !== 'home' && sc) {
+    const zero = () => {
+      if (app.routePage !== route.page) return;
+      sc.scrollTop = 0;
+      sc.scrollLeft = 0;
+    };
+    requestAnimationFrame(zero);
+    setTimeout(zero, 90);
+  }
   if (route.page === 'home' && currentPage && currentPage !== 'home') {
     const top = app.homeScroll || 0;
-    if (sc) requestAnimationFrame(() => { if (app.routePage === 'home') jumpTop(top); });
+    const left = app.homeScrollX != null ? app.homeScrollX : Number(foliaPlane()?.dataset.blockW || 0);
+    if (sc) {
+      // 墙会先补回上次的纵深再能滚到底；高度不够时多试几次，别把位置截在旧墙底
+      let tries = 0;
+      const restore = () => {
+        if (app.routePage !== 'home') return;
+        jumpTop(top);
+        if (left) {
+          const prev = sc.style.scrollBehavior;
+          sc.style.scrollBehavior = 'auto';
+          sc.scrollLeft = left;
+          sc.style.scrollBehavior = prev;
+        }
+        if (sc.scrollHeight < top + sc.clientHeight && tries++ < 8) setTimeout(restore, 120);
+      };
+      requestAnimationFrame(restore);
+    }
   }
   if (route.page === 'home' && !audio.paused) startTileLyricLoop();
   updateDocumentTitle();
@@ -425,13 +455,14 @@ function syncPlayingTiles() {
   const key = (state.current && state.current.showKey) || '';
   const el = document.querySelector('audio');
   const live = el ? !el.paused : false;
-  let marked = false;   // 墙会克隆同一档节目：只在第一块上标记/展开，别让整墙同时长出好几块
+  const markedCols = new Set();   // 二维墙每列各标一块；单列墙仍然只标一块，别让整墙同时长出好几个
   let grew = false;
   document.querySelectorAll('#homeRecommended .pod-card').forEach(card => {
     const link = card.querySelector('[data-open-podcast]');
     const slug = link ? link.getAttribute('data-open-podcast') : '';
-    const on = folia && !!key && slug === key && !marked;
-    if (on) marked = true;
+    const col = card.closest('#homeRecommended') || card;
+    const on = folia && !!key && slug === key && !markedCols.has(col);
+    if (on) markedCols.add(col);
     const was = card.classList.contains('is-playing-tile');
     const apply = () => {
       card.classList.toggle('is-playing-tile', on);
@@ -471,8 +502,14 @@ function updateLocateBtn() {
     btn.addEventListener('click', () => {
       syncPlayingTiles();
       const key = (state.current && state.current.showKey) || '';
-      const card = document.querySelector('#homeRecommended .pod-card.is-playing-tile') ||
-        [...document.querySelectorAll('#homeRecommended .pod-card')].find(c => tileSlugOf(c) === key);
+      const cards = [...document.querySelectorAll('#homeRecommended .pod-card')];
+      const sc = document.querySelector('.main');
+      const cx = sc ? sc.getBoundingClientRect().left + sc.clientWidth / 2 : 0;
+      const cy = sc ? sc.getBoundingClientRect().top + sc.clientHeight / 2 : 0;
+      const dist = c => { const r = c.getBoundingClientRect(); return (r.left + r.width / 2 - cx) ** 2 + (r.top + r.height / 2 - cy) ** 2; };
+      // 二维墙同一档节目每列各有一块：定位到离视口中心最近的那块，不要跨两列回左上
+      const card = cards.filter(c => c.classList.contains('is-playing-tile')).sort((a, b) => dist(a) - dist(b))[0] ||
+        cards.find(c => tileSlugOf(c) === key);
       if (!card) return;
       centerTile(card);
       card.classList.remove('locate-flash');
@@ -494,7 +531,7 @@ function watchHomeTiles() {
   const host = document.getElementById('homeRecommended');
   if (!host || host.dataset.mytTileSync) return;
   host.dataset.mytTileSync = '1';
-  new MutationObserver(() => { syncPlayingTiles(); ensureWallDepth(); }).observe(host, { childList: true });
+  new MutationObserver(() => { syncPlayingTiles(); ensureWallDepth(); syncFoliaPlane(); }).observe(host, { childList: true });
   syncPlayingTiles();
 }
 document.addEventListener('DOMContentLoaded', () => { bindPlayingRowSync(); watchHomeTiles(); bindCoverStage(); });
@@ -506,6 +543,7 @@ const foliaWall = () => (document.documentElement.dataset.theme === FOLIA_THEME_
 const homeActive = () => !!$('page-home')?.classList.contains('active');
 const TILE_SET_SIZE = 14;   // 与主题 14n 的铺满周期一致：12 席整块 + 两块 6×4
 const TILE_MAX = 400;       // Folia MAX_RENDERED_INSTANCES
+const FOLIA_COLUMNS = 3;    // 二维墙：三列 12 栏块并排，左右各留一块，走到边上就原地倒块
 
 function tileSlugOf(card) {
   const link = card && card.querySelector('[data-open-podcast]');
@@ -573,7 +611,7 @@ function closeCoverStage() {
   coverLoadToken++;
   stopCoverLyricLoop();
   layer.classList.remove('on', 'lyric-on');
-  setTimeout(() => { if (layer.open) layer.close(); }, motionReduced() ? 0 : 240);
+  setTimeout(() => { if (layer.open) layer.close(); }, motionReduced() ? 0 : 440);
 }
 function openCoverStage(card) {
   const layer = $('coverStage');
@@ -592,6 +630,11 @@ function openCoverStage(card) {
   const showName = (playing && state.show && state.show.name) ? state.show.name : (card.querySelector('.pod-meta') ? card.querySelector('.pod-meta').textContent.trim() : '');
   const img = $('csImg'), bg = $('csBg');
   const token = ++coverLoadToken;
+  /* 共享元素：全屏封面从卡片里那块封面长出来，而不是先黑一下再原地淡入。
+     只有 Folia 的封面是全屏铺满的，其它主题的封面是小卡片，硬套裁切会算错边。 */
+  const srcRect = artImg ? artImg.getBoundingClientRect() : card.getBoundingClientRect();
+  const clipFromRect = /folia-poster/.test(document.documentElement.getAttribute('data-theme') || '')
+    && !!(img && srcRect && srcRect.width > 40 && srcRect.height > 40);
   layer.classList.add('cover-empty');
   const paintCover = (src) => {
     if (token !== coverLoadToken) return;
@@ -616,20 +659,53 @@ function openCoverStage(card) {
     img.onload = coverLoaded;
     img.onerror = coverFailed;
   }
-  paintCover(candidates.shift());
-  const k = $('csKicker'), t = $('csTitle'), s = $('csSub');
-  if (k) k.textContent = playing ? '正在播放' : '节目封面';
-  if (t) t.textContent = title || '未命名节目';
-  if (s) s.textContent = showName || '';
-  const hasLyric = !!(playing && state.cues && state.cues.length);
-  delete layer.dataset.closing;
-  layer.classList.toggle('lyric-on', hasLyric);
-  layer.showModal();
-  if (hasLyric) updateCoverLyric();
-  const lyricBox = $('csLyric');
-  if (lyricBox && !hasLyric) { lyricBox.replaceChildren(); lyricBox.dataset.signature = ''; }
-  requestAnimationFrame(() => layer.classList.add('on'));
-  if (hasLyric) startCoverLyricLoop();
+  const first = candidates.shift();
+  paintCover(first);
+  const startStage = () => {
+    if (token !== coverLoadToken) return;
+    const k = $('csKicker'), t = $('csTitle'), s = $('csSub');
+    if (k) k.textContent = playing ? '正在播放' : '节目封面';
+    if (t) t.textContent = title || '未命名节目';
+    if (s) s.textContent = showName || '';
+    const hasLyric = !!(playing && state.cues && state.cues.length);
+    delete layer.dataset.closing;
+    layer.classList.toggle('lyric-on', hasLyric);
+    if (clipFromRect) {
+      const top = Math.max(0, srcRect.top), left = Math.max(0, srcRect.left);
+      const right = Math.max(0, window.innerWidth - srcRect.right);
+      const bottom = Math.max(0, window.innerHeight - srcRect.bottom);
+      img.style.transition = 'none';
+      img.style.opacity = '1';
+      img.style.transform = 'none';
+      img.style.clipPath = 'inset(' + top + 'px ' + right + 'px ' + bottom + 'px ' + left + 'px)';
+      void img.offsetWidth;   // 先把起始裁切提交一帧，否则和终点同帧写入会被压成瞬移
+    }
+    layer.showModal();
+    if (hasLyric) updateCoverLyric();
+    const lyricBox = $('csLyric');
+    if (lyricBox && !hasLyric) { lyricBox.replaceChildren(); lyricBox.dataset.signature = ''; }
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (layer.open && layer.dataset.closing !== '1') {
+        layer.classList.add('on');
+        if (clipFromRect) {
+          const fromClip = img.style.clipPath || 'inset(0px)';
+          img.style.clipPath = 'inset(0px 0px 0px 0px)';
+          if (img.animate) {
+            img.animate(
+              [{ clipPath: fromClip }, { clipPath: 'inset(0px 0px 0px 0px)' }],
+              { duration: 460, easing: 'cubic-bezier(.22,.9,.2,1)' }
+            );
+          }
+        }
+      }
+    }));
+    if (hasLyric) startCoverLyricLoop();
+  };
+  // 3k 封面解码/首帧光栅化会顶掉一整帧；先把图解码好再开 dialog，过渡里只做合成层动画
+  const ready = (img && first && img.decode)
+    ? Promise.race([img.decode().catch(() => {}), new Promise(r => setTimeout(r, 140))])
+    : Promise.resolve();
+  ready.then(startStage);
 }
 function bindCoverStage() {
   const layer = $('coverStage');
@@ -646,6 +722,8 @@ function bindCoverStage() {
   layer.addEventListener('close', () => {
     stopCoverLyricLoop();
     layer.classList.remove('on', 'lyric-on');
+    const ci = $('csImg');
+    if (ci) { ci.style.transition = ''; ci.style.clipPath = ''; ci.style.opacity = ''; ci.style.transform = ''; }
     const box = $('csLyric');
     if (box) { box.replaceChildren(); box.dataset.signature = ''; }
     delete layer.dataset.closing;
@@ -664,23 +742,52 @@ else bindCoverStage();
 /* Folia 的手感：格子尺寸变化本身不能过渡，用 FLIP 把“旧矩形”先画出来再收回新矩形；
    旁边被挤动的瓦片只做位移，避免整墙一起缩放。 */
 function flipTile(card, mutate) {
-  if (typeof motionReduced === 'function' && motionReduced()) { mutate(); return; }
+  if (typeof motionReduced === 'function' && motionReduced()) { mutate(); return card.getBoundingClientRect(); }
   const wall = card.closest('#homeRecommended');
   const cards = wall ? [...wall.querySelectorAll('.pod-card')].filter(c => {
     const r = c.getBoundingClientRect();
-    return r.width > 0 && r.bottom > 0 && r.top < window.innerHeight * 1.6;
+    // 只动视口内（含一点预看）的瓦片；1.6 屏外的也做 FLIP 会把整列几十块一起拉起
+    return r.width > 0 && r.bottom > -40 && r.top < window.innerHeight + 40;
   }) : [card];
   const before = new Map(cards.map(c => [c, c.getBoundingClientRect()]));
   mutate();
+  let finalRect = null;
   cards.forEach(c => {
     const a = before.get(c);
     const b = c.getBoundingClientRect();
+    if (c === card) finalRect = b;
     if (!a || !b.width || !a.width) return;
     const dx = a.left - b.left;
     const dy = a.top - b.top;
     const sx = a.width / b.width;
     const sy = a.height / b.height;
     const scaled = Math.abs(sx - 1) > 0.02 || Math.abs(sy - 1) > 0.02;
+    /* 槽位变化时宽高比也会变（4×6 方卡 → 6×6 播放卡、展开的 6×6 等）。
+       对宽高比差异大的瓦片不再用 scale(sx, sy) 硬拉：非等比缩放会把封面里的斜线、人像
+       暂时拉歪，看着就是“封面斜了一下”。这类只做位移 + 淡入，保持画面比例不畸变。 */
+    const distorted = Math.abs(sx / sy - 1) > 0.08;
+    if (distorted) {
+      // 被点开的这一块：直接补间它自己的宽高（border-box），让封面按 object-fit 重新裁切，
+      // 不做非等比缩放，也不会把人物/斜线拉歪；旁边被挤动的只做位移+淡入。
+      if (c === card && a.width > 0 && b.width > 0) {
+        c.animate([
+          { width: a.width + 'px', height: a.height + 'px', opacity: 0.86, transform: 'translate(' + dx + 'px,' + dy + 'px)' },
+          { width: b.width + 'px', height: b.height + 'px', opacity: 1, transform: 'translate(0,0)' }
+        ], {
+          duration: 400,
+          easing: 'cubic-bezier(0.22, 0.9, 0.2, 1)'
+        });
+        return;
+      }
+      c.animate([
+        { opacity: 0.78, transform: 'translate(' + dx + 'px,' + dy + 'px)' },
+        { opacity: 1, transform: 'translate(0,0)' }
+      ], {
+        duration: 260,
+        easing: 'cubic-bezier(0.22, 0.9, 0.2, 1)'
+      });
+      return;
+    }
     if (!scaled && Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
     c.animate([
       { transformOrigin: 'top left', transform: 'translate(' + dx + 'px,' + dy + 'px) scale(' + (scaled ? sx : 1) + ',' + (scaled ? sy : 1) + ')' },
@@ -690,12 +797,14 @@ function flipTile(card, mutate) {
       easing: c === card ? 'cubic-bezier(0.2, 0.9, 0.2, 1)' : 'cubic-bezier(0.25, 0.9, 0.2, 1)'
     });
   });
+  return finalRect;
 }
 
 function bindTilePeek() {
   // 捕获阶段拦：宿主自己的 data-open-podcast 路由监听比 bubble 更早跑，晚了就压不住跳转
   document.addEventListener('click', (e) => {
-    const wall = foliaWall();
+    // 二维墙里镜头可能正对着复制列；容器要用整块平面，不能只认原始的那一列
+    const wall = foliaPlane() || foliaWall();
     if (!wall) return;
     /* 底栏 / 播放工具面板 / 任何浮层都是控件，不是“点空白”：不要顺手把展开的播放封面收掉。 */
     if (e.target.closest('.dock, .mini-player, #dockSheet, dialog, .anim-sheet, .drawer, .details')) return;
@@ -709,31 +818,66 @@ function bindTilePeek() {
       return;
     }
     const card = e.target.closest('.pod-card');
-    if (!card || !wall.contains(card)) { collapseTiles(); return; }
+    if (!card || !wall.contains(card)) { collapseTiles(); clearWallCursor(); return; }
     if (e.target.closest('.tile-peek-actions a, .pod-actions')) return;   // 让链接与快钮各自干活
     const main = e.target.closest('.pod-card-main');
     if (!main) return;
+    // 屏幕两侧的列是“墙外”的下一块：点封面直接进节目页，别只翻成描述层让人以为没反应
+    const plane = foliaPlane();
+    const cols = plane ? [...plane.querySelectorAll('#homeRecommended')] : [];
+    // 镜头可能停在左/中/右任意一列：以“视口中心落在哪一列”判主列，不能拿固定 left=0
+    const sc = wallScroller(wall);
+    const vc = sc ? sc.getBoundingClientRect().left + sc.clientWidth / 2 : window.innerWidth / 2;
+    const centerCol = cols.find(c => {
+      const r = c.getBoundingClientRect();
+      return r.left <= vc && r.right >= vc;
+    }) || cols[1];
+    if (cols.length === 3 && card.closest('#homeRecommended') !== centerCol) return;
     e.preventDefault();
     e.stopPropagation();
+    setWallCursor(card, { pan: false });
     if (card.classList.contains('is-peek')) {
       flipTile(card, () => { card.classList.remove('is-peek'); restoreTileSpan(card); });
       return;
     }
     collapseTiles(card);
-    flipTile(card, () => { card.classList.add('is-peek'); clearTileSpan(card); ensureTilePeek(card); });
-    // Folia 的镜头：瓦片撑开后把它挪到视口正中，别让放大后的封面一半在屏幕外
-    setTimeout(() => centerTile(card), 440);
-    // 撑开占了两行，密排可能留洞：补一套让后面的瓦片把洞填上
-    setTimeout(() => { const w = foliaWall(); if (w && homeActive()) extendWall(w); }, 520);
+    const final = flipTile(card, () => { card.classList.add('is-peek'); clearTileSpan(card); ensureTilePeek(card); });
+    // 用“撑开后的最终矩形”算镜头目标；动画中途量到的是补间宽高，会把大卡推偏
+    if (final) centerTile(card, final);
+    // 二维墙本身有几十块纵深，撑开不会把墙走到底；单列短墙才需要补块填洞
+    if (!foliaPlane()) setTimeout(() => { const w = foliaWall(); if (w && homeActive()) extendWall(w); }, 520);
   }, true);
   document.addEventListener('keydown', (e) => {
+    const arrow = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key);
+    if (arrow) {
+      if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+      if (!homeActive() || !foliaWall()) return;
+      const target = e.target;
+      if (target.closest('input, select, textarea, [contenteditable="true"], .dock, .docksheet.on')) return;
+      if (document.querySelector('dialog[open], .details.on, .drawer.on, .typesheet.on')) return;
+      if ($('modal')?.open) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (document.querySelectorAll('#homeRecommended .pod-card.is-peek').length) collapseTiles();
+      moveWallCursor({ ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' }[e.key]);
+      return;
+    }
     if (e.key !== 'Escape') return;
     /* 有真正的弹层在前台时，Escape 先归弹层，别顺手把瓦片动作层也收掉。 */
     if (document.querySelector('dialog[open], .details.on, .drawer.on, .docksheet.on, .typesheet.on')) return;
     const open = document.querySelectorAll('#homeRecommended .pod-card.is-peek');
-    if (!open.length) return;
+    if (!open.length) {
+      if (wallCursorCard()) {
+        e.preventDefault();
+        clearWallCursor();
+        const active = document.activeElement;
+        if (active && active.closest && active.closest('.pod-card-main')) active.blur();
+      }
+      return;
+    }
     e.preventDefault();
     collapseTiles();
+    clearWallCursor();
   }, true);
 }
 
@@ -782,7 +926,8 @@ function paintCueWordEl(el) {
   }
 }
 function tileWordPaint() {
-  paintCueWordEl(document.querySelector('#homeRecommended .pod-card.is-playing-tile .tile-live-lyric .tl-cur'));
+  document.querySelectorAll('#homeRecommended .pod-card.is-playing-tile .tile-live-lyric .tl-cur')
+    .forEach(el => paintCueWordEl(el));
 }
 let tileLyricRaf = 0;
 function startTileLyricLoop() {
@@ -909,9 +1054,10 @@ function restoreTileSpan(card) {
     card.style.gridRow = 'span ' + span[1];
   }
 }
-function extendWall(wall) {
+function extendWallOne(wall) {
   const cards = [...wall.querySelectorAll('.pod-card')];
-  if (cards.length >= TILE_MAX) return;
+  const cap = wall.closest('.folia-wall-plane') ? 84 : TILE_MAX;
+  if (cards.length >= cap) return;
   const srcs = cards.filter(c => !c.dataset.wallClone);
   if (!srcs.length) return;
   // 只补到“下一整套”的边界：首屏不足 14 块时先把当前这套补满，之后每次 +14
@@ -932,6 +1078,12 @@ function extendWall(wall) {
   clones.forEach(c => frag.appendChild(c));
   wall.appendChild(frag);
   applyWallPattern(wall);
+}
+/* 二维墙里三列必须一起长，否则左右平移时会看到某一列提前到底。 */
+function extendWall(wall) {
+  const cols = wall && wall.closest('.folia-wall-plane') ? wallColumns() : [wall];
+  cols.forEach(extendWallOne);
+  layoutFoliaPlane();
   syncPlayingTiles();
 }
 function ensureWallDepth() {
@@ -958,13 +1110,174 @@ function resetWallForTheme() {
     clearTileSpan(card);
   });
 }
+/* ---- Folia 二维画布：三列 12 栏块并排 ----
+   Folia 的墙是横向无限重复的块；这里用三列同宽块做环：镜头走到最右列时，
+   把最左列整列搬到右边，再把三列和 scrollLeft 一起左移一格，画面像素不变，
+   但右边又长出一整块。列里的瓦片都是真实节点，不做镜像，播放态和歌词跟着节点走。 */
+const foliaPlane = () => document.querySelector('.folia-wall-plane');
+function wallColumns() {
+  const plane = foliaPlane();
+  return plane ? [...plane.querySelectorAll(':scope > #homeRecommended')] : [];
+}
+function wallColumnOf(card) {
+  return card && card.closest ? card.closest('#homeRecommended') : null;
+}
+function layoutFoliaPlane() {
+  const plane = foliaPlane();
+  if (!plane) return;
+  const cols = wallColumns();
+  if (!cols.length) return;
+  const W = Math.round(plane.parentElement ? plane.parentElement.clientWidth : 0) || Number(plane.dataset.blockW);
+  if (!W) return;
+  plane.dataset.blockW = String(W);
+  plane.style.setProperty('--folia-block-w', W + 'px');
+  let height = 0;
+  cols.forEach((col, index) => {
+    if (col.dataset.foliaX == null) col.dataset.foliaX = String(index * W);
+    col.style.width = W + 'px';
+    col.style.left = Number(col.dataset.foliaX) + 'px';
+    height = Math.max(height, col.offsetHeight);
+  });
+  plane.style.height = height + 'px';
+}
+function rebuildFoliaSides() {
+  const plane = foliaPlane();
+  const host = document.getElementById('homeRecommended');
+  if (!plane || !host) return;
+  const W = Number(plane.dataset.blockW) || Math.round(plane.parentElement.clientWidth);
+  if (!W) return;
+  wallColumns().forEach(col => { if (col !== host) col.remove(); });
+  host.dataset.foliaCol = '0';
+  host.dataset.foliaX = '0';
+  for (let i = 1; i < FOLIA_COLUMNS; i++) {
+    const col = host.cloneNode(true);
+    col.dataset.foliaCol = String(i);
+    col.dataset.foliaX = String(i * W);
+    col.style.width = W + 'px';
+    col.style.left = (i * W) + 'px';
+    col.removeAttribute('data-myt-tile-sync');
+    // 左右两列换一个节目顺序，避免三列同一位置都是同一张封面
+    const cards = [...col.querySelectorAll('.pod-card')];
+    col.querySelectorAll('.pod-card').forEach(card => {
+      card.classList.remove('is-cursor', 'is-peek', 'is-playing-tile', 'is-playing-tile-live');
+      card.querySelectorAll('.tile-peek, .tile-live-lyric').forEach(node => node.remove());
+    });
+    shuffle(cards).forEach(card => col.appendChild(card));
+    applyWallPattern(col);
+    plane.appendChild(col);
+  }
+  plane.dataset.render = host.dataset.foliaRender || '';
+  syncPlayingTiles();
+}
+function setupFoliaPlane() {
+  if (!foliaWall()) return;
+  const host = document.getElementById('homeRecommended');
+  if (!host || !host.querySelectorAll('.pod-card').length) return;
+  let plane = foliaPlane();
+  if (!plane) {
+    plane = document.createElement('div');
+    plane.className = 'folia-wall-plane';
+    host.parentNode.insertBefore(plane, host);
+    plane.appendChild(host);
+  }
+  const W = Math.round(plane.parentElement ? plane.parentElement.clientWidth : host.getBoundingClientRect().width);
+  if (!W) return;
+  plane.dataset.blockW = String(W);
+  plane.style.setProperty('--folia-block-w', W + 'px');
+  rebuildFoliaSides();
+  applyWallPattern(host);
+  layoutFoliaPlane();
+  const sc = wallScroller(host);
+  if (sc) {
+    // 首屏落在中间那一列，左右都有整整一块可以走
+    sc.style.scrollBehavior = 'auto';
+    sc.scrollLeft = W;
+    sc.style.scrollBehavior = '';
+    sc.dataset.foliaCamera = '1';
+  }
+}
+function syncFoliaPlane() {
+  if (!foliaWall()) return;
+  const plane = foliaPlane();
+  if (!plane) { setupFoliaPlane(); return; }
+  const cols = wallColumns();
+  if (cols.length !== FOLIA_COLUMNS) { setupFoliaPlane(); return; }
+  const host = document.getElementById('homeRecommended');
+  if (!host) return;
+  const n = host.querySelectorAll('.pod-card').length;
+  if (!n) return;
+  const counts = cols.map(col => col.querySelectorAll('.pod-card').length);
+  const target = Math.max(n, ...counts, Number(app.homeWallCount) || 0);
+  // 页面重画会把主列换回 15 块；按上次离开首页时的纵深把缺的列补回来，别让滚动位置被截断
+  if (Math.min(...counts) < target) {
+    let guard = 0;
+    while (Math.min(...cols.map(col => col.querySelectorAll('.pod-card').length)) < target && guard++ < 8) {
+      cols.forEach(col => {
+        if (col.querySelectorAll('.pod-card').length < target) extendWallOne(col);
+      });
+    }
+  }
+  layoutFoliaPlane();
+}
+/* 镜头走到最右 / 最左列时，把最远那一列搬到另一头，再整世界平移一格。
+   三列内容不同，但同宽同高；平移后选中卡在屏幕上的位置不变。 */
+function rotateWallWorld(dir) {
+  const plane = foliaPlane();
+  const sc = wallScroller(foliaWall());
+  if (!plane || !sc) return false;
+  const W = Number(plane.dataset.blockW);
+  const cols = wallColumns();
+  if (!W || cols.length !== FOLIA_COLUMNS) return false;
+  const sorted = cols.slice().sort((a, b) => Number(a.dataset.foliaX) - Number(b.dataset.foliaX));
+  const prevBehavior = sc.style.scrollBehavior;
+  sc.style.scrollBehavior = 'auto';
+  if (dir === 'right') {
+    sorted.forEach(col => { col.dataset.foliaX = String(Number(col.dataset.foliaX) - W); });
+    sorted[0].dataset.foliaX = String((FOLIA_COLUMNS - 1) * W);
+    sc.scrollLeft -= W;
+  } else if (dir === 'left') {
+    sorted.forEach(col => { col.dataset.foliaX = String(Number(col.dataset.foliaX) + W); });
+    sorted[FOLIA_COLUMNS - 1].dataset.foliaX = '0';
+    sc.scrollLeft += W;
+  } else {
+    sc.style.scrollBehavior = prevBehavior;
+    return false;
+  }
+  sorted.forEach(col => { col.style.left = Number(col.dataset.foliaX) + 'px'; });
+  sc.style.scrollBehavior = prevBehavior;
+  return true;
+}
+function teardownFoliaPlane() {
+  const plane = foliaPlane();
+  if (!plane) return;
+  const host = document.getElementById('homeRecommended');
+  wallColumns().forEach(col => { if (col !== host) col.remove(); });
+  if (host && plane.parentNode) plane.parentNode.insertBefore(host, plane);
+  if (host) {
+    host.removeAttribute('data-folia-col');
+    host.removeAttribute('data-folia-x');
+    host.style.left = '';
+    host.style.width = '';
+  }
+  plane.remove();
+  const sc = document.querySelector('.main');
+  if (sc) {
+    sc.style.scrollBehavior = 'auto';
+    sc.scrollLeft = 0;
+    sc.style.scrollBehavior = '';
+    delete sc.dataset.foliaCamera;
+  }
+}
+
 function syncWallTheme() {
   if (!document.body) return;
   if (foliaWall()) {
+    setupFoliaPlane();
     ensureWallDepth();
     syncPlayingTiles();
     if (!audio.paused) startTileLyricLoop();
   } else {
+    teardownFoliaPlane();
     resetWallForTheme();
     syncPlayingTiles();
   }
@@ -981,21 +1294,150 @@ function wallScroller(wall) {
   return null;
 }
 /* 把某块瓦片推到滚动视口的正中（Folia 的镜头跟随） */
-function centerTile(card) {
-  if (!card || !card.isConnected || (typeof motionReduced === 'function' && motionReduced())) return;
+function centerTile(card, rect) {
+  if (!card || !card.isConnected) return;
   if (!homeActive()) return;
   const sc = wallScroller(foliaWall() || card.closest('#homeRecommended'));
   if (!sc) return;
-  const r = card.getBoundingClientRect();
+  const reduced = typeof motionReduced === 'function' && motionReduced();
+  const r = rect || card.getBoundingClientRect();
   const sr = sc.getBoundingClientRect();
   const top = sc.scrollTop + (r.top - sr.top) - Math.max(0, (sc.clientHeight - r.height) / 2);
-  sc.scrollTo({ top, behavior: 'smooth' });
+  // 二维墙还要横向跟随；普通单列墙 scrollWidth == clientWidth，left 会自然夹到 0
+  const left = sc.scrollLeft + (r.left - sr.left) - Math.max(0, (sc.clientWidth - r.width) / 2);
+  const maxLeft = Math.max(0, sc.scrollWidth - sc.clientWidth);
+  sc.scrollTo({
+    top,
+    left: Math.min(maxLeft, Math.max(0, left)),
+    behavior: reduced ? 'auto' : 'smooth'
+  });
 }
 function nearWallBottom(wall) {
   const sc = wallScroller(wall);
   if (!sc) return window.scrollY + window.innerHeight + 1000 >= document.documentElement.scrollHeight;
-  return sc.scrollTop + sc.clientHeight + 1000 >= sc.scrollHeight;
+  return sc.scrollTop + sc.clientHeight + 320 >= sc.scrollHeight;
 }
+/* ---- 方向键选瓦片：照 Folia 的布局候选模型走，不是“中心点最近邻” ----
+   Folia 的墙先把当前瓦片周围一块的槽位都当候选，再按前进代价挑：
+   候选必须整个落在当前瓦片的前进方向之外；横轴有重叠就只比前进距离，
+   没有重叠才按绕行代价（横轴间距 ×2 + 一格）计。所以左右也能顺着同一行走。 */
+const WALL_AXIS = {
+  right: { along: 'left', cross: 'top', alongSize: 'width', crossSize: 'height', sign: 1 },
+  left: { along: 'left', cross: 'top', alongSize: 'width', crossSize: 'height', sign: -1 },
+  down: { along: 'top', cross: 'left', alongSize: 'height', crossSize: 'width', sign: 1 },
+  up: { along: 'top', cross: 'left', alongSize: 'height', crossSize: 'width', sign: -1 },
+};
+function pickWallNeighbor(dir, cur, items) {
+  const axis = WALL_AXIS[dir];
+  if (!axis || !cur || !items || !items.length) return null;
+  const sizes = items.map(item => Math.min(item.rect.width, item.rect.height)).filter(n => n > 1);
+  const cell = (sizes.length ? Math.min(...sizes) : 96) / 2;
+  let best = null;
+  let bestCost = Infinity;
+  let bestCross = Infinity;
+  items.forEach(item => {
+    const box = item.rect;
+    if (!box || box.width < 1 || box.height < 1) return;
+    const gap = axis.sign === 1
+      ? box[axis.along] - (cur[axis.along] + cur[axis.alongSize])
+      : cur[axis.along] - (box[axis.along] + box[axis.alongSize]);
+    if (gap < -0.5) return;   // 还压在当前瓦片身上：Folia 直接跳过，不拿它当右边/下边
+    const overlap = Math.min(cur[axis.cross] + cur[axis.crossSize], box[axis.cross] + box[axis.crossSize]) -
+      Math.max(cur[axis.cross], box[axis.cross]);
+    const crossGap = Math.abs(
+      (box[axis.cross] + box[axis.crossSize] / 2) - (cur[axis.cross] + cur[axis.crossSize] / 2)
+    );
+    const cost = gap + (overlap > 0 ? 0 : -overlap * 2 + cell) + crossGap * 1.6;
+    if (cost < bestCost - 0.01 || (Math.abs(cost - bestCost) <= 0.01 && crossGap < bestCross)) {
+      best = item.value;
+      bestCost = cost;
+      bestCross = crossGap;
+    }
+  });
+  return best;
+}
+/* 还没选中时 Folia 落的不是左上第一张，而是离视口中心最近的那张（nearest + viewportCenter）。 */
+function nearestWallCard(wall, cards) {
+  const sc = wallScroller(wall);
+  const sr = sc ? sc.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+  const cx = sr.left + sr.width / 2;
+  const cy = sr.top + sr.height / 2;
+  const near = cards.filter(card => {
+    const r = card.getBoundingClientRect();
+    return r.bottom > sr.top - 500 && r.top < sr.bottom + 500;
+  });
+  let best = null;
+  let bestD = Infinity;
+  (near.length ? near : cards).forEach(card => {
+    const r = card.getBoundingClientRect();
+    const dx = r.left + r.width / 2 - cx;
+    const dy = r.top + r.height / 2 - cy;
+    const d = dx * dx + dy * dy;
+    if (d < bestD) { bestD = d; best = card; }
+  });
+  return best;
+}
+function wallCursorCard() {
+  return document.querySelector('#homeRecommended .pod-card.is-cursor');
+}
+function clearWallCursor() {
+  document.querySelectorAll('#homeRecommended .pod-card.is-cursor')
+    .forEach(card => card.classList.remove('is-cursor'));
+}
+function setWallCursor(card, opts) {
+  if (!card) return;
+  clearWallCursor();
+  card.classList.add('is-cursor');
+  const main = card.querySelector('.pod-card-main');
+  if (main && typeof main.focus === 'function') main.focus({ preventScroll: true });
+  /* Folia 每走一步都把选中卡滑到视口正中（panTo）。点击路径先不抢跑，
+     等瓦片撑开后再由 centerTile 推一次，避免连推两下。 */
+  if (!opts || opts.pan !== false) centerTile(card);
+}
+function moveWallCursor(dir) {
+  const wall = foliaWall();
+  if (!wall) return false;
+  const plane = foliaPlane();
+  const collect = () => (plane || wall).querySelectorAll('.pod-card');
+  let cards = [...collect()].filter(card => {
+    const r = card.getBoundingClientRect();
+    return r.width > 1 && r.height > 1;
+  });
+  if (!cards.length) return false;
+  const cur = wallCursorCard();
+  if (!cur || !cards.includes(cur)) {
+    /* 第一下方向键：落在视口中心最近的瓦片上，跟 Folia 的首次 nearest 一样。 */
+    const first = nearestWallCard(wall, cards);
+    setWallCursor(first);
+    return true;
+  }
+  if (plane) {
+    // 走到最右 / 最左列：先把另一列搬到前方，画面不变但右边/左边又有一整块
+    const cols = wallColumns().slice().sort((a, b) => Number(a.dataset.foliaX) - Number(b.dataset.foliaX));
+    const index = cols.indexOf(wallColumnOf(cur));
+    if (dir === 'right' && index === FOLIA_COLUMNS - 1) {
+      if (!rotateWallWorld('right')) return false;
+      cards = [...collect()].filter(card => {
+        const r = card.getBoundingClientRect();
+        return r.width > 1 && r.height > 1;
+      });
+    } else if (dir === 'left' && index === 0) {
+      if (!rotateWallWorld('left')) return false;
+      cards = [...collect()].filter(card => {
+        const r = card.getBoundingClientRect();
+        return r.width > 1 && r.height > 1;
+      });
+    }
+  }
+  const a = cur.getBoundingClientRect();
+  const best = pickWallNeighbor(dir, a, cards
+    .filter(card => card !== cur)
+    .map(card => ({ value: card, rect: card.getBoundingClientRect() })));
+  if (!best) return false;
+  setWallCursor(best);
+  return true;
+}
+
 function bindInfiniteWall() {
   let queued = 0;
   let lastAt = 0;
@@ -1026,6 +1468,8 @@ function labelSidebarNav() {
 }
 
 document.addEventListener('DOMContentLoaded', () => { bindTilePeek(); bindInfiniteWall(); labelSidebarNav(); });
+document.addEventListener('hashchange', clearWallCursor);
+document.addEventListener('myt:theme-change', clearWallCursor);
 
 
 function episodeRowHTML(ep, show, actions) {
@@ -1116,6 +1560,8 @@ function renderHome() {
   $('homeRecommended').innerHTML = recommended.length
     ? recommended.map(podCardHTML).join('')
     : emptyLine('所有内置节目都已订阅。');
+  const wallHost = $('homeRecommended');
+  if (wallHost) wallHost.dataset.foliaRender = String(Date.now());   // 二维墙据此重建两侧列
   renderHomeOnboard(subs, entries);
 }
 
@@ -1275,6 +1721,7 @@ function renderDiscover() {
         esc(show.slug) + '" title="移除">✕</button></div>').join('') + '</div>'
       : emptyLine('还没有站外订阅。', '<button class="btn ghost" data-action="add-feed">＋ 添加 RSS</button>'));
   renderOnlineResults();
+  renderChartPanel();
 }
 
 /* ---------- search ---------- */
