@@ -2,7 +2,7 @@ import { $, ASR_MODEL_DEFAULT, LIVE, audio, box, host, prefs, setState, state, t
 import { alignZhLines, applyReader, clearProgress, closeDetails, closeDrawer, closeOverlays, closeTypeSheet, cuesFromJson, directAudioUrl, emptyLine, epKey, esc, findNorm, fmt, getJson, isJsonTranscript, onAudioError, openDetails, openDrawer, paint, parseFeed, progressAll, rawSeek, reader, rebuildCues, rememberOverlayTrigger, renderCueWindow, renderCues, restoreOverlayFocus, saveProgress, scrollCue, seekTo, setImmersive, setWallpaper, showToast, status, stopScroll, syncJumpPill, syncWallpaperPlay, toggleWallpaperPlay, transcriptMirror, updateTimeScale, writeProgressAll } from './01-theme-reader-shell.js';
 import { coreProvider, defineCoreProvider } from './02-live-caption-wasm.js';
 import { findSkipRange, liveDisable, skipUrlOf } from './03-native-asr-service-worker.js';
-import { loadShow, renderList, studyPluginOn, subtitlePluginOn } from './04-local-audio-plugin-host.js';
+import { loadShow, localAsrAvailable, renderList, studyPluginOn, subtitlePluginOn } from './04-local-audio-plugin-host.js';
 import { motionEnter, motionFlip, motionLeave } from './11-motion.js';
 import { pause as transportPause, rate as transportRate, toggle as transportToggle } from './14-transport.js';
 
@@ -1397,66 +1397,32 @@ async function defaultDownloadEpisode(show, ep, opts = {}) {
     renderDownloads();
   }
 }
-/* 下载后的整集转写：复用 Rust 的 localasr 批处理（稿子写在音频旁边），
+/* 下载后的整集转写：走下载管理那条统一队列（Rust 的 localasr 单槽，不能并发开两集），
    完成后把离线记录标成 localTranscript，选集时直接走本地稿。 */
 async function transcribeDownloadedEpisode(show, ep, audioPath, key) {
   if (!tauriHost() || !tauriHost().core || typeof tauriHost().core.invoke !== 'function') {
     showToast('整集转写只在桌面版可用。', 'warn');
     return false;
   }
-  const model = localAsrModelId();
-  try {
-    await tauriHost().core.invoke('local_transcribe_start', { path: audioPath, model });
-  } catch (err) {
-    const msg = err && err.message ? err.message : String(err);
-    showToast('转写启动失败：' + msg + (String(msg).includes('还没下载') ? '（去「设置 → 模型管理」下载后再试）' : ''), 9000);
+  showToast('已开始整集转写，可以继续听别的；完成后会提示。', 6000);
+  const ok = await new Promise(resolve => {
+    enqueueTranscribe(key, audioPath, resolve);
+    pumpTranscribe();
+    renderDownloads();
+  });
+  if (!ok) {
+    const why = app.transcribeErrors.get(key);
+    app.transcribeErrors.delete(key);
+    if (why) showToast(why, 9000);
     return false;
   }
-  showToast('已开始整集转写，可以继续听别的；完成后会提示。', 6000);
-  return await new Promise(resolve => {
-    let lastPct = -10;
-    const timer = setInterval(async () => {
-      let st;
-      try { st = await tauriHost().core.invoke('local_transcribe_status', {}); } catch (e) { return; }
-      if (st.running) {
-        const pct = Math.max(0, Math.min(99, Math.round(Number(st.pct) || 0)));
-        app.downloadProgress.set(key, { key, pct, phase: 'asr', got: 0, total: 0, at: Date.now() });
-        renderDownloads();
-        if (pct - lastPct >= 10) { lastPct = pct; showToast('整集转写 ' + pct + '%…', 3500); }
-        return;
-      }
-      clearInterval(timer);
-      app.downloadProgress.delete(key);
-      renderDownloads();
-      if (st.error) {
-        app.downloadErrors.set(key, '转写失败：' + st.error);
-        renderDownloads();
-        showToast('转写失败：' + st.error, 9000);
-        resolve(false);
-        return;
-      }
-      try {
-        const raw = await tauriHost().core.invoke('local_transcript_load', { path: audioPath });
-        JSON.parse(raw);
-      } catch (e) {
-        showToast('转写完成但读取失败：' + ((e && e.message) || e), 9000);
-        resolve(false);
-        return;
-      }
-      const prev = app.offline.get(key) || {};
-      app.offline.set(key, Object.assign({}, prev, {
-        key, path: audioPath, hasTranscript: true, localTranscript: true,
-        transcriptSize: Number(prev.transcriptSize) || 0,
-      }));
-      ep.localPath = audioPath;
-      ep.transcript = { type: 'application/json', url: 'local-asr', local: true };
-      await refreshOffline();
-      renderAfterStateChange();
-      renderDownloads();
-      showToast('音频与转写都已就绪，这一集可以离线逐词跟读了。', 6000);
-      resolve(true);
-    }, 1200);
-  });
+  if (ep) {
+    ep.localPath = audioPath;
+    ep.transcript = { type: 'application/json', url: 'local-asr', local: true };
+  }
+  renderDownloads();
+  showToast('音频与转写都已就绪，这一集可以离线逐词跟读了。', 6000);
+  return true;
 }
 async function removeOffline(key) {
   if (!host() || typeof host().offlineRemove !== 'function') return;
@@ -1578,6 +1544,230 @@ function activeDownloadsHTML(query) {
   });
   return rows.join('');
 }
+function transcribePct(key) {
+  const p = app.downloadProgress.get(key);
+  if (!p || p.phase !== 'asr') return null;
+  return Math.max(0, Math.min(99, Math.round(Number(p.pct) || 0)));
+}
+function transcribeQueued(key) {
+  return app.transcribeQueue.some(item => item.key === key);
+}
+/* 剩余时间：拿「已跑多久 / 已跑百分比」外推。刚开始 2% 以内不外推，误差太大。 */
+function transcribeEta(key) {
+  const job = app.transcribeJob;
+  if (!job || job.key !== key || !job.startedAt) return '';
+  const pct = transcribePct(key);
+  if (pct === null || pct < 2) return '';
+  const elapsed = Math.max(0, (Date.now() - job.startedAt) / 1000);
+  const remain = Math.round(elapsed * (100 - pct) / pct);
+  if (!Number.isFinite(remain) || remain <= 0) return '';
+  const text = fmtDuration(remain);
+  return text ? '约剩 ' + text : '';
+}
+function localTranscribeUsable(rec) {
+  return !!(rec && rec.path && subtitlePluginOn() && localAsrAvailable());
+}
+/* 下载管理与离线列表共用同一套行内状态：进度条、失败原因、转写/排队按钮。 */
+function transcribeRowBits(rec) {
+  const pct = transcribePct(rec.key);
+  const queued = transcribeQueued(rec.key);
+  const asrErr = app.transcribeErrors.get(rec.key);
+  const canLocal = !rec.hasTranscript && localTranscribeUsable(rec);
+  const eta = pct !== null ? transcribeEta(rec.key) : '';
+  const bar = pct !== null ? '<div class="progress" style="height:4px;margin-top:6px"><i style="width:' + pct + '%"></i></div>' : '';
+  const errLine = asrErr ? '<div class="smalltext">' + esc(asrErr) + '</div>' : '';
+  let btn = '';
+  if (canLocal) {
+    if (pct !== null) btn = '<span class="dl-state">转写中 ' + pct + '%' + (eta ? ' · ' + eta : '') + '</span>';
+    else if (queued) btn = '<span class="dl-state">排队中</span>';
+    else btn = '<button class="mini-btn" data-transcribe-offline="' + esc(rec.key) + '">' + (asrErr ? '↻ 转写' : '✎ 转写') + '</button>';
+  }
+  return { bar, errLine, btn, canLocal };
+}
+/* 已下载但没文字稿的单集：本机模型整集转写。Rust 侧 localasr 是单槽任务，
+   一次只能跑一集，所以这里只排一条队列、串行喂它；下载时那次「要转写吗」也走同一条队列。 */
+function enqueueTranscribe(key, path, resolve) {
+  const item = { key, path, resolve: resolve || null, attempt: 0 };
+  app.transcribeErrors.delete(key);
+  app.transcribeQueue.push(item);
+  app.transcribeStats.total += 1;
+}
+function transcribeOffline(key) {
+  const rec = app.offline.get(key);
+  if (!rec || !rec.path) { showToast('本地文件不见了。', 'warn'); return; }
+  if (rec.hasTranscript) { showToast('这一集已经有文字稿了。'); return; }
+  if (transcribeQueued(key) || (app.transcribeJob && app.transcribeJob.key === key)) { showToast('这一集已经在转写队列里了。'); return; }
+  enqueueTranscribe(key, rec.path);
+  pumpTranscribe();
+  renderDownloads();
+  renderOfflineList();
+}
+function transcribeMissingOffline() {
+  const todo = offlineEntries().filter(rec => !rec.hasTranscript && rec.path);
+  if (!todo.length) { showToast('已下载的单集都有文字稿了。'); return; }
+  let added = 0;
+  todo.forEach(rec => {
+    if (transcribeQueued(rec.key) || (app.transcribeJob && app.transcribeJob.key === rec.key)) return;
+    enqueueTranscribe(rec.key, rec.path);
+    added += 1;
+  });
+  if (added) showToast('已加入转写队列：' + added + ' 集，跑完会逐集标上文字稿。', 6000);
+  pumpTranscribe();
+  renderDownloads();
+  renderOfflineList();
+}
+let transcribeCancelled = false;
+/* 转写进度每 1.1 秒刷一次：只刷新当前看得见的那份列表，别让隐藏页跟着重排。 */
+function renderTranscribeLists() {
+  renderDownloads();
+  const listening = $('page-listening');
+  if (listening && listening.classList.contains('active')) renderOfflineList();
+}
+function stopTranscribeAll() {
+  app.transcribeQueue.length = 0;
+  transcribeCancelled = true;
+  if (app.transcribeJob && tauriHost() && tauriHost().core) {
+    try { tauriHost().core.invoke('local_transcribe_stop', {}); } catch (e) {}
+  }
+  showToast('已停止整集转写。');
+  renderDownloads();
+  renderOfflineList();
+}
+let transcribePumping = false;
+/* 队列串行跑；失败自动重试最多 3 次（模型没下载、桌面壳不可用这类不可恢复的错误不重试）。 */
+async function pumpTranscribe() {
+  if (transcribePumping || app.transcribeJob) return;
+  transcribePumping = true;
+  try {
+    while (app.transcribeQueue.length) {
+      if (!subtitlePluginOn()) { app.transcribeQueue.length = 0; break; }
+      const item = app.transcribeQueue.shift();
+      item.attempt = (item.attempt || 0) + 1;
+      transcribeCancelled = false;
+      app.transcribeRetry = null;
+      const res = await runTranscribeItem(item);
+      const canRetry = !res.ok && res.retryable !== false && !transcribeCancelled && item.attempt < 3;
+      if (canRetry) {
+        app.transcribeRetry = { key: item.key, attempt: item.attempt + 1 };
+        renderTranscribeLists();
+        await new Promise(r => setTimeout(r, 2000));
+        app.transcribeRetry = null;
+        if (!transcribeCancelled) app.transcribeQueue.unshift(item);
+        else await settleTranscribe(item, res);
+        continue;
+      }
+      await settleTranscribe(item, res);
+    }
+  } finally {
+    transcribePumping = false;
+    app.transcribeJob = null;
+    app.transcribeRetry = null;
+    if (!app.transcribeQueue.length) {
+      app.transcribeStats = { done: 0, total: 0 };
+      transcribeCancelled = false;
+    }
+    renderDownloads();
+    renderOfflineList();
+  }
+}
+async function settleTranscribe(item, res) {
+  const key = item.key;
+  app.downloadProgress.delete(key);
+  app.transcribeStats.done += 1;
+  if (!res.ok) {
+    if (res.error !== null) app.transcribeErrors.set(key, res.error || '转写失败');
+  } else {
+    app.transcribeErrors.delete(key);
+    const prev = app.offline.get(key) || {};
+    app.offline.set(key, Object.assign({}, prev, { key, path: item.path, hasTranscript: true, localTranscript: true }));
+    const ref = resolveOfflineRef(key);
+    if (ref) {
+      ref.ep.localPath = item.path;
+      ref.ep.transcript = { type: 'application/json', url: 'local-asr', local: true };
+    }
+  }
+  if (item.resolve) item.resolve(!!res.ok);
+  renderDownloads();
+  renderOfflineList();
+  if (res.ok) {
+    await refreshOffline();
+    renderAfterStateChange();
+    renderOfflineList();
+  }
+}
+async function runTranscribeItem(item) {
+  const key = item.key, path = item.path;
+  if (!tauriHost() || !tauriHost().core) return { ok: false, error: '整集转写只在桌面版可用', retryable: false };
+  app.transcribeJob = { key, path, startedAt: Date.now() };
+  app.transcribeErrors.delete(key);
+  app.downloadProgress.set(key, { key, phase: 'asr', pct: 0, got: 0, total: 0, at: Date.now() });
+  renderTranscribeLists();
+  try {
+    await tauriHost().core.invoke('local_transcribe_start', { path, model: localAsrModelId() });
+  } catch (err) {
+    const msg = err && err.message ? err.message : String(err);
+    const fatal = String(msg).includes('还没下载') || String(msg).includes('找不到音频文件');
+    return { ok: false, error: String(msg).includes('还没下载') ? '模型还没下载（设置 → 模型管理）' : msg, retryable: !fatal };
+  }
+  let failMsg = '';
+  const ok = await new Promise(resolve => {
+    const timer = setInterval(async () => {
+      let st;
+      try { st = await tauriHost().core.invoke('local_transcribe_status', {}); } catch (e) { return; }
+      if (st.running) {
+        // 别的任务占了槽位（例如播放页预转写）就别把它的进度算到这一集头上
+        if (st.path && String(st.path) !== String(path)) return;
+        app.downloadProgress.set(key, { key, phase: 'asr', pct: Math.max(0, Math.min(99, Math.round(Number(st.pct) || 0))), got: 0, total: 0, at: Date.now() });
+        renderTranscribeLists();
+        return;
+      }
+      clearInterval(timer);
+      if (transcribeCancelled) { failMsg = null; resolve(false); return; }
+      if (st.error) { failMsg = '转写失败：' + st.error; resolve(false); return; }
+      try {
+        const raw = await tauriHost().core.invoke('local_transcript_load', { path });
+        JSON.parse(raw);
+      } catch (e) { failMsg = '转写完成但读取失败'; resolve(false); return; }
+      resolve(true);
+    }, 1100);
+  });
+  if (!ok) return { ok: false, error: failMsg, retryable: !transcribeCancelled };
+  return { ok: true };
+}
+function downloadsBatchHTML(entries) {
+  if (!subtitlePluginOn() || !localAsrAvailable()) return '';
+  const missing = entries.filter(rec => !rec.hasTranscript && rec.path).length;
+  const queued = app.transcribeQueue.length;
+  const job = app.transcribeJob;
+  const retry = app.transcribeRetry;
+  const stats = app.transcribeStats || { done: 0, total: 0 };
+  const errors = [...app.transcribeErrors.values()].length;
+  if (!missing && !queued && !job && !errors) return '';
+  const jobPct = job ? transcribePct(job.key) : null;
+  const info = job ? downloadInfo({ key: job.key }) : null;
+  const eta = job ? transcribeEta(job.key) : '';
+  let text;
+  if (retry) {
+    const rInfo = downloadInfo({ key: retry.key });
+    text = '转写失败，2 秒后重试（第 ' + retry.attempt + '/3 次）· ' + rInfo.title;
+  } else if (job) {
+    text = '转写中 ' + info.title + ' · ' + (jobPct === null ? 0 : jobPct) + '%' + (eta ? ' · ' + eta : '') +
+      '（已完成 ' + stats.done + '/' + Math.max(stats.total, stats.done + queued + 1) + '）';
+  } else if (queued) {
+    text = '转写队列 ' + queued + ' 集 · 已完成 ' + stats.done + '/' + Math.max(stats.total, stats.done + queued) + '，稍后自动开始';
+  } else {
+    text = missing + ' 集已下载但没有文字稿，可用本机模型整集转写';
+  }
+  if (errors && !job && !queued && !retry) text += ' · ' + errors + ' 集失败，可点行内「↻ 转写」重试';
+  return '<div class="dl-batch" style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin:2px 0 10px">' +
+    '<div style="flex:1;min-width:220px"><div class="smalltext">' + esc(text) + '</div>' +
+    ((job || retry) ? '<div class="progress" style="height:5px;margin-top:6px"><i style="width:' + (jobPct || 0) + '%"></i></div>' : '') +
+    '</div><div style="display:flex;gap:6px">' +
+    ((job || queued)
+      ? '<button class="mini-btn" data-transcribe-stop="1">■ 停止</button>'
+      : (missing ? '<button class="mini-btn" data-transcribe-all="1">⚡ 批量转写缺稿 ' + missing + ' 集</button>' : '')) +
+    '</div></div>';
+}
 function downloadsHTML(entries, query) {
   const q = String(query || '').trim().toLowerCase();
   const groups = new Map();
@@ -1591,11 +1781,14 @@ function downloadsHTML(entries, query) {
     const total = group.items.reduce((n, x) => n + (Number(x.rec.size) || 0) + (Number(x.rec.transcriptSize) || 0), 0);
     const rows = group.items.sort((a, b) => String(a.info.title).localeCompare(String(b.info.title), 'zh')).map(({ rec, info }) => {
       const canAddTranscript = !rec.hasTranscript && info.ep && isJsonTranscript(info.ep.transcript);
-      const transcript = rec.hasTranscript ? '文字稿 ' + fmtBytes(Number(rec.transcriptSize) || 0) : '仅音频';
+      const bits = transcribeRowBits(rec);
+      const transcript = rec.hasTranscript ? '文字稿 ' + fmtBytes(Number(rec.transcriptSize) || 0)
+        : (bits.canLocal || canAddTranscript ? '仅音频 · 可补字幕' : '仅音频');
       return '<div class="qrow"><div class="qmain"><strong>' + esc(info.title) + '</strong><span>' +
-        fmtBytes(Number(rec.size) || 0) + ' · ' + transcript + '</span></div>' +
+        fmtBytes(Number(rec.size) || 0) + ' · ' + transcript + '</span>' + bits.bar + bits.errLine + '</div>' +
         '<div style="display:flex;gap:6px">' +
         (canAddTranscript ? '<button class="mini-btn" data-offline-transcript="' + esc(rec.key) + '">＋ 字幕</button>' : '') +
+        bits.btn +
         '<button class="mini-btn" data-play-offline="' + esc(rec.key) + '">▶ 播放</button>' +
         '<button class="mini-btn" data-del-offline="' + esc(rec.key) + '">✕ 删除</button></div></div>';
     }).join('');
@@ -1637,6 +1830,12 @@ function renderDownloads() {
     hint.textContent = parts.length ? parts.join(' · ') : '还没有下载到本机的单集。';
   }
   const q = $('downloadsFilter') ? $('downloadsFilter').value : '';
+  const batchBox = $('downloadsBatch');
+  if (batchBox) {
+    const batchHTML = downloadsBatchHTML(entries);
+    batchBox.innerHTML = batchHTML;
+    batchBox.hidden = !batchHTML;
+  }
   const activeHTML = activeDownloadsHTML(q);
   const html = entries.length ? downloadsHTML(entries, q) : '';
   motionFlip(box, '.dl-pod', () => {
@@ -1654,20 +1853,28 @@ function renderOfflineList() {
   if (hint) hint.textContent = entries.length
     ? entries.length + ' 集 · ' + fmtBytes(totalBytes) + ' · ' + entries.filter(e => e.hasTranscript).length + ' 集含字幕'
     : '断网也能听';
+  const batchBox = $('offlineBatch');
+  if (batchBox) {
+    const batchHTML = downloadsBatchHTML(entries);
+    batchBox.innerHTML = batchHTML;
+    batchBox.hidden = !batchHTML;
+  }
   motionFlip(box, '.qrow', () => {
   box.innerHTML = entries.length
     ? entries.map(rec => {
       const ref = resolveOfflineRef(rec.key);
       const ep = ref && ref.ep;
       const size = fmtBytes(Number(rec.size) || 0);
+      const bits = transcribeRowBits(rec);
+      const canAddTranscript = !rec.hasTranscript && ep && isJsonTranscript(ep.transcript);
       const transcript = rec.hasTranscript
         ? '文字稿 ' + fmtBytes(Number(rec.transcriptSize) || 0)
-        : (ep && isJsonTranscript(ep.transcript) ? '仅音频 · 可补字幕' : '仅音频');
-      const canAddTranscript = !rec.hasTranscript && ep && isJsonTranscript(ep.transcript);
+        : (canAddTranscript || bits.canLocal ? '仅音频 · 可补字幕' : '仅音频');
       return '<div class="qrow" data-motion-key="' + esc(rec.key) + '"><div class="qmain"><strong>' + esc(offlineLabel(rec.key)) +
-        '</strong><span>' + size + ' · ' + transcript + ' · 存在本机</span></div>' +
+        '</strong><span>' + size + ' · ' + transcript + ' · 存在本机</span>' + bits.bar + bits.errLine + '</div>' +
         '<div style="display:flex;gap:6px">' +
         (canAddTranscript ? '<button class="mini-btn" data-offline-transcript="' + esc(rec.key) + '">＋ 字幕</button>' : '') +
+        bits.btn +
         '<button class="mini-btn" data-play-offline="' + esc(rec.key) + '">▶ 播放</button>' +
         '<button class="mini-btn" data-del-offline="' + esc(rec.key) + '">✕</button></div></div>';
     }).join('')
@@ -1829,6 +2036,7 @@ const app = {
   asrModels: [], asrBusy: new Map(), asrModelsErr: '', chaptersCache: new Map(),
   auto: { ...AUTO_DEFAULTS }, favorites: new Set(), played: {}, inbox: [], seen: {}, showPrefs: {},
   downloading: new Set(), transcriptDownloads: new Set(), downloadProgress: new Map(), downloadErrors: new Map(), autoTimer: 0, refreshBusy: false, epFilter: 'all', local: [],
+  transcribeQueue: [], transcribeJob: null, transcribeRetry: null, transcribeStats: { done: 0, total: 0 }, transcribeErrors: new Map(),
 };
 const PAGE_NAMES = {
   home: '首页', library: '播客库', local: '本地文件', downloads: '下载管理', video: '视频播放', discover: '发现', search: '搜索', podcast: '节目详情',
@@ -2382,5 +2590,5 @@ function renderAfterStateChange() {
   renderPage(r.page, r);
   syncMini();
 }
-export { AUTO_DEFAULTS, AUTO_KEY, BOOKMARK_KEY, DL_META_KEY, DOCK_RATES, FAV_KEY, IDLE_TICK_MS, IDX_DB, IDX_STORE, INBOX_KEY, LOCAL_KEY, MODULE_ROUTES, NOTE_KEY, PAGE_NAMES, PLAYED_KEY, PLAYLIST_KEY, PLAY_TICK_MS, PREFS_KEY, QUEUE_KEY, SEEN_KEY, SHOWPREFS_KEY, SIDEBAR_BOTTOM, SIDEBAR_META, SIDEBAR_TOP, SUBS_KEY, THEME_NAMES, absoluteFeed, absoluteUrl, addInboxItem, addToPlaylist, addToPlaylistDialog, alignToCue, app, applyLoudness, applyModules, applyRate, applySidebarCustomization, applySkipRules, applyVolume, asrModelName, bindModuleSwitches, buffering, canAnalyseAudio, cancelAsrModel, cardFor, cardLink, catalogLatest, clampFrame, cleanFeedTitle, cleanWord, cleanWordCache, clearFindMarks, closeDockSheet, closeFind, closeWordPanel, copyPlain, defaultDownloadEpisode, defaultPlaylist, desiredPlayTick, dockSheet, dockToolsBtn, downloadEpisode, downloadInfo, downloadMetaStore, downloadsHTML, endFrameDrag, endSeekPreview, ensureAudioGraph, epStatusBadges, episodeFilterMatch, episodeRef, episodesOf, extSlug, externalShow, fetchTextAny, findAt, findBar, findBuiltinByFeed, findCount, findHits, findInput, findPlaylist, firstShowKey, fmtBytes, fmtDuration, formatDate, frameDrag, frameEl, frameMoved, framePos, hash32, hideSelTools, hostOf, idxClear, idxCount, idxDb, idxDbPromise, idxGet, idxGetAll, idxPut, importAsrModel, inboxCount, inboxRemove, indexAllShows, indexCurrentEpisode, indexCurrentShow, indexEpisode, installAsrModel, isFavorite, isPlayed, isSubscribed, jumpCue, loadChapters, localAsrModelId, localShowRecord, lookupWord, markCurrentPlayed, modeSegEl, moduleOn, navigate, normalizeFeedUrl, normalizeSidebarPrefs, offlineEntries, offlineKeyFor, offlineKeyOf, offlineLabel, onFrameMove, openAsrDir, openDockSheet, openFind, paintAsrSoon, parseRoute, pickAsrModel, pickedCue, pillRAF, placeFrame, placeSelTools, plainText, playOffline, playPlaylist, playTarget, playTargetLabel, playTargetText, notifyPlayTargetFailure, purgeLocalReferences, playTick, playTickMs, queueJumpPill, rateSegEl, readAllProgress, readJSON, readTranscriptDoc, refreshAsrModels, refreshOffline, refreshShows, rememberDownloadMeta, removalLeavesCurrentShow, removeAsrModel, removeOffline, removePlaylist, renderAfterStateChange, renderAsrModels, renderChapters, renderDownloads, renderLocalAsrModelHint, renderOfflineList, renderPlaylists, resolveOfflineRef, returnToCue, routeHash, routeModuleAllows, runFind, saveFavorites, saveInbox, saveOfflineTranscript, savePlayed, savePlaylists, saveSeen, saveShowPrefs, saveSubs, seekBy, seekChapter, seekDur, seekPreviewAt, seekTip, selCueIdx, selText, selTools, setAlignMode, setBuffering, setNodeVisible, setPlayed, setReadMode, setShowPref, showByKey, showFindAt, showForOfflineKey, showPrefFor, sidebarOrder, skipSilenceTick, sleepSegEl, startPlayTick, stopPlayTick, subscribeRecord, subscribeShow, syncChapterNow, syncDockBadge, syncDockLang, syncDockSleep, syncIndexCount, syncRateSeg, syncShowSelect, syncVolUI, toggleAlignMode, toggleChapterSheet, toggleFavorite, toggleMute, toggleStudySheet, trackEl, unsubscribeKey, webAudioGraph, whenIdle, wordCache, wordCurrent, wordCurrentMeaning, wordSeq, writeJSON };
-registerLayer('05-transport-transcript-nav', { AUTO_DEFAULTS, AUTO_KEY, BOOKMARK_KEY, DL_META_KEY, DOCK_RATES, FAV_KEY, IDLE_TICK_MS, IDX_DB, IDX_STORE, INBOX_KEY, LOCAL_KEY, MODULE_ROUTES, NOTE_KEY, PAGE_NAMES, PLAYED_KEY, PLAYLIST_KEY, PLAY_TICK_MS, PREFS_KEY, QUEUE_KEY, SEEN_KEY, SHOWPREFS_KEY, SIDEBAR_BOTTOM, SIDEBAR_META, SIDEBAR_TOP, SUBS_KEY, THEME_NAMES, absoluteFeed, absoluteUrl, addInboxItem, addToPlaylist, addToPlaylistDialog, alignToCue, app, applyLoudness, applyModules, applyRate, applySidebarCustomization, applySkipRules, applyVolume, asrModelName, bindModuleSwitches, buffering, canAnalyseAudio, cancelAsrModel, cardFor, cardLink, catalogLatest, clampFrame, cleanFeedTitle, cleanWord, cleanWordCache, clearFindMarks, closeDockSheet, closeFind, closeWordPanel, copyPlain, defaultDownloadEpisode, defaultPlaylist, desiredPlayTick, dockSheet, dockToolsBtn, downloadEpisode, downloadInfo, downloadMetaStore, downloadsHTML, endFrameDrag, endSeekPreview, ensureAudioGraph, epStatusBadges, episodeFilterMatch, episodeRef, episodesOf, extSlug, externalShow, fetchTextAny, findAt, findBar, findBuiltinByFeed, findCount, findHits, findInput, findPlaylist, firstShowKey, fmtBytes, fmtDuration, formatDate, frameDrag, frameEl, frameMoved, framePos, hash32, hideSelTools, hostOf, idxClear, idxCount, idxDb, idxDbPromise, idxGet, idxGetAll, idxPut, importAsrModel, inboxCount, inboxRemove, indexAllShows, indexCurrentEpisode, indexCurrentShow, indexEpisode, installAsrModel, isFavorite, isPlayed, isSubscribed, jumpCue, loadChapters, localAsrModelId, localShowRecord, lookupWord, markCurrentPlayed, modeSegEl, moduleOn, navigate, normalizeFeedUrl, normalizeSidebarPrefs, offlineEntries, offlineKeyFor, offlineKeyOf, offlineLabel, onFrameMove, openAsrDir, openDockSheet, openFind, paintAsrSoon, parseRoute, pickAsrModel, pickedCue, pillRAF, placeFrame, placeSelTools, plainText, playOffline, playPlaylist, playTarget, playTargetLabel, playTargetText, notifyPlayTargetFailure, purgeLocalReferences, playTick, playTickMs, queueJumpPill, rateSegEl, readAllProgress, readJSON, readTranscriptDoc, refreshAsrModels, refreshOffline, refreshShows, rememberDownloadMeta, removalLeavesCurrentShow, removeAsrModel, removeOffline, removePlaylist, renderAfterStateChange, renderAsrModels, renderChapters, renderDownloads, renderLocalAsrModelHint, renderOfflineList, renderPlaylists, resolveOfflineRef, returnToCue, routeHash, routeModuleAllows, runFind, saveFavorites, saveInbox, saveOfflineTranscript, savePlayed, savePlaylists, saveSeen, saveShowPrefs, saveSubs, seekBy, seekChapter, seekDur, seekPreviewAt, seekTip, selCueIdx, selText, selTools, setAlignMode, setBuffering, setNodeVisible, setPlayed, setReadMode, setShowPref, showByKey, showFindAt, showForOfflineKey, showPrefFor, sidebarOrder, skipSilenceTick, sleepSegEl, startPlayTick, stopPlayTick, subscribeRecord, subscribeShow, syncChapterNow, syncDockBadge, syncDockLang, syncDockSleep, syncIndexCount, syncRateSeg, syncShowSelect, syncVolUI, toggleAlignMode, toggleChapterSheet, toggleFavorite, toggleMute, toggleStudySheet, trackEl, unsubscribeKey, webAudioGraph, whenIdle, wordCache, wordCurrent, wordCurrentMeaning, wordSeq, writeJSON });
+export { AUTO_DEFAULTS, AUTO_KEY, BOOKMARK_KEY, DL_META_KEY, DOCK_RATES, FAV_KEY, IDLE_TICK_MS, IDX_DB, IDX_STORE, INBOX_KEY, LOCAL_KEY, MODULE_ROUTES, NOTE_KEY, PAGE_NAMES, PLAYED_KEY, PLAYLIST_KEY, PLAY_TICK_MS, PREFS_KEY, QUEUE_KEY, SEEN_KEY, SHOWPREFS_KEY, SIDEBAR_BOTTOM, SIDEBAR_META, SIDEBAR_TOP, SUBS_KEY, THEME_NAMES, absoluteFeed, absoluteUrl, addInboxItem, addToPlaylist, addToPlaylistDialog, alignToCue, app, applyLoudness, applyModules, applyRate, applySidebarCustomization, applySkipRules, applyVolume, asrModelName, bindModuleSwitches, buffering, canAnalyseAudio, cancelAsrModel, cardFor, cardLink, catalogLatest, clampFrame, cleanFeedTitle, cleanWord, cleanWordCache, clearFindMarks, closeDockSheet, closeFind, closeWordPanel, copyPlain, defaultDownloadEpisode, defaultPlaylist, desiredPlayTick, dockSheet, dockToolsBtn, downloadEpisode, downloadInfo, downloadMetaStore, downloadsHTML, endFrameDrag, endSeekPreview, ensureAudioGraph, epStatusBadges, episodeFilterMatch, episodeRef, episodesOf, extSlug, externalShow, fetchTextAny, findAt, findBar, findBuiltinByFeed, findCount, findHits, findInput, findPlaylist, firstShowKey, fmtBytes, fmtDuration, formatDate, frameDrag, frameEl, frameMoved, framePos, hash32, hideSelTools, hostOf, idxClear, idxCount, idxDb, idxDbPromise, idxGet, idxGetAll, idxPut, importAsrModel, inboxCount, inboxRemove, indexAllShows, indexCurrentEpisode, indexCurrentShow, indexEpisode, installAsrModel, isFavorite, isPlayed, isSubscribed, jumpCue, loadChapters, localAsrModelId, localShowRecord, lookupWord, markCurrentPlayed, modeSegEl, moduleOn, navigate, normalizeFeedUrl, normalizeSidebarPrefs, offlineEntries, offlineKeyFor, offlineKeyOf, offlineLabel, onFrameMove, openAsrDir, openDockSheet, openFind, paintAsrSoon, parseRoute, pickAsrModel, pickedCue, pillRAF, placeFrame, placeSelTools, plainText, playOffline, playPlaylist, playTarget, playTargetLabel, playTargetText, notifyPlayTargetFailure, purgeLocalReferences, playTick, playTickMs, queueJumpPill, rateSegEl, readAllProgress, readJSON, readTranscriptDoc, refreshAsrModels, refreshOffline, refreshShows, rememberDownloadMeta, removalLeavesCurrentShow, removeAsrModel, removeOffline, removePlaylist, renderAfterStateChange, renderAsrModels, renderChapters, renderDownloads, renderLocalAsrModelHint, renderOfflineList, renderPlaylists, resolveOfflineRef, returnToCue, routeHash, routeModuleAllows, runFind, saveFavorites, saveInbox, saveOfflineTranscript, savePlayed, savePlaylists, saveSeen, saveShowPrefs, saveSubs, seekBy, seekChapter, seekDur, seekPreviewAt, seekTip, selCueIdx, selText, selTools, setAlignMode, setBuffering, setNodeVisible, setPlayed, setReadMode, setShowPref, showByKey, showFindAt, showForOfflineKey, showPrefFor, sidebarOrder, skipSilenceTick, sleepSegEl, startPlayTick, stopPlayTick, subscribeRecord, subscribeShow, syncChapterNow, syncDockBadge, syncDockLang, syncDockSleep, syncIndexCount, syncRateSeg, syncShowSelect, syncVolUI, stopTranscribeAll, toggleAlignMode, transcribeMissingOffline, transcribeOffline, toggleChapterSheet, toggleFavorite, toggleMute, toggleStudySheet, trackEl, unsubscribeKey, webAudioGraph, whenIdle, wordCache, wordCurrent, wordCurrentMeaning, wordSeq, writeJSON };
+registerLayer('05-transport-transcript-nav', { AUTO_DEFAULTS, AUTO_KEY, BOOKMARK_KEY, DL_META_KEY, DOCK_RATES, FAV_KEY, IDLE_TICK_MS, IDX_DB, IDX_STORE, INBOX_KEY, LOCAL_KEY, MODULE_ROUTES, NOTE_KEY, PAGE_NAMES, PLAYED_KEY, PLAYLIST_KEY, PLAY_TICK_MS, PREFS_KEY, QUEUE_KEY, SEEN_KEY, SHOWPREFS_KEY, SIDEBAR_BOTTOM, SIDEBAR_META, SIDEBAR_TOP, SUBS_KEY, THEME_NAMES, absoluteFeed, absoluteUrl, addInboxItem, addToPlaylist, addToPlaylistDialog, alignToCue, app, applyLoudness, applyModules, applyRate, applySidebarCustomization, applySkipRules, applyVolume, asrModelName, bindModuleSwitches, buffering, canAnalyseAudio, cancelAsrModel, cardFor, cardLink, catalogLatest, clampFrame, cleanFeedTitle, cleanWord, cleanWordCache, clearFindMarks, closeDockSheet, closeFind, closeWordPanel, copyPlain, defaultDownloadEpisode, defaultPlaylist, desiredPlayTick, dockSheet, dockToolsBtn, downloadEpisode, downloadInfo, downloadMetaStore, downloadsHTML, endFrameDrag, endSeekPreview, ensureAudioGraph, epStatusBadges, episodeFilterMatch, episodeRef, episodesOf, extSlug, externalShow, fetchTextAny, findAt, findBar, findBuiltinByFeed, findCount, findHits, findInput, findPlaylist, firstShowKey, fmtBytes, fmtDuration, formatDate, frameDrag, frameEl, frameMoved, framePos, hash32, hideSelTools, hostOf, idxClear, idxCount, idxDb, idxDbPromise, idxGet, idxGetAll, idxPut, importAsrModel, inboxCount, inboxRemove, indexAllShows, indexCurrentEpisode, indexCurrentShow, indexEpisode, installAsrModel, isFavorite, isPlayed, isSubscribed, jumpCue, loadChapters, localAsrModelId, localShowRecord, lookupWord, markCurrentPlayed, modeSegEl, moduleOn, navigate, normalizeFeedUrl, normalizeSidebarPrefs, offlineEntries, offlineKeyFor, offlineKeyOf, offlineLabel, onFrameMove, openAsrDir, openDockSheet, openFind, paintAsrSoon, parseRoute, pickAsrModel, pickedCue, pillRAF, placeFrame, placeSelTools, plainText, playOffline, playPlaylist, playTarget, playTargetLabel, playTargetText, notifyPlayTargetFailure, purgeLocalReferences, playTick, playTickMs, queueJumpPill, rateSegEl, readAllProgress, readJSON, readTranscriptDoc, refreshAsrModels, refreshOffline, refreshShows, rememberDownloadMeta, removalLeavesCurrentShow, removeAsrModel, removeOffline, removePlaylist, renderAfterStateChange, renderAsrModels, renderChapters, renderDownloads, renderLocalAsrModelHint, renderOfflineList, renderPlaylists, resolveOfflineRef, returnToCue, routeHash, routeModuleAllows, runFind, saveFavorites, saveInbox, saveOfflineTranscript, savePlayed, savePlaylists, saveSeen, saveShowPrefs, saveSubs, seekBy, seekChapter, seekDur, seekPreviewAt, seekTip, selCueIdx, selText, selTools, setAlignMode, setBuffering, setNodeVisible, setPlayed, setReadMode, setShowPref, showByKey, showFindAt, showForOfflineKey, showPrefFor, sidebarOrder, skipSilenceTick, sleepSegEl, startPlayTick, stopPlayTick, subscribeRecord, subscribeShow, syncChapterNow, syncDockBadge, syncDockLang, syncDockSleep, syncIndexCount, syncRateSeg, syncShowSelect, syncVolUI, stopTranscribeAll, toggleAlignMode, transcribeMissingOffline, transcribeOffline, toggleChapterSheet, toggleFavorite, toggleMute, toggleStudySheet, trackEl, unsubscribeKey, webAudioGraph, whenIdle, wordCache, wordCurrent, wordCurrentMeaning, wordSeq, writeJSON });
