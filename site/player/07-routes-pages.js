@@ -604,18 +604,104 @@ function stopCoverLyricLoop() {
   if (coverLyricRaf) cancelAnimationFrame(coverLyricRaf);
   coverLyricRaf = 0;
 }
+/* 共享元素转场：先在页面上放一张和卡片封面同位置同裁切的克隆图，让它长到整屏，
+   长满后再在它下面 showModal 真舞台；对话框创建那一下的卡顿被克隆图挡掉。 */
+let coverMorph = null;
+let coverSourceCard = null;
+let coverMorphReverse = false;
+function ensureCoverMorph() {
+  if (coverMorph) return coverMorph;
+  const wrap = document.createElement('div');
+  wrap.id = 'coverMorph';
+  wrap.setAttribute('aria-hidden', 'true');
+  wrap.style.cssText = 'position:fixed;inset:0;z-index:120;display:none;pointer-events:none;';
+  const scrim = document.createElement('div');
+  scrim.style.cssText = 'position:absolute;inset:0;background:#040406;opacity:0;transition:opacity .26s linear;';
+  const im = document.createElement('img');
+  im.alt = '';
+  im.style.cssText = 'position:absolute;object-fit:cover;object-position:center;border:0;border-radius:0;box-shadow:none;margin:0;max-width:none;max-height:none;opacity:1;will-change:left,top,width,height;';
+  wrap.append(scrim, im);
+  document.body.appendChild(wrap);
+  coverMorph = { wrap: wrap, scrim: scrim, img: im };
+  return coverMorph;
+}
+function abortCoverMorph() {
+  if (!coverMorph) return;
+  coverMorph.wrap.style.display = 'none';
+  coverMorph.wrap.style.pointerEvents = 'none';
+  coverMorph.img.removeAttribute('src');
+}
+function startCoverMorph(src, rect, done, reverse) {
+  const m = ensureCoverMorph();
+  const wrap = m.wrap, scrim = m.scrim, im = m.img;
+  im.src = src;
+  im.style.transition = 'none';
+  if (reverse) {
+    im.style.left = '0px';
+    im.style.top = '0px';
+    im.style.width = window.innerWidth + 'px';
+    im.style.height = window.innerHeight + 'px';
+    scrim.style.opacity = '1';
+  } else {
+    im.style.left = rect.left + 'px';
+    im.style.top = rect.top + 'px';
+    im.style.width = rect.width + 'px';
+    im.style.height = rect.height + 'px';
+    scrim.style.opacity = '0';
+  }
+  wrap.style.display = 'block';
+  wrap.style.pointerEvents = 'auto';
+  void im.offsetWidth;
+  requestAnimationFrame(() => {
+    const ease = 'cubic-bezier(.22,.9,.2,1)';
+    im.style.transition = 'left .46s ' + ease + ', top .46s ' + ease + ', width .46s ' + ease + ', height .46s ' + ease;
+    if (reverse) {
+      im.style.left = rect.left + 'px';
+      im.style.top = rect.top + 'px';
+      im.style.width = rect.width + 'px';
+      im.style.height = rect.height + 'px';
+      scrim.style.opacity = '0';
+    } else {
+      im.style.left = '0px';
+      im.style.top = '0px';
+      im.style.width = window.innerWidth + 'px';
+      im.style.height = window.innerHeight + 'px';
+      scrim.style.opacity = '1';
+    }
+  });
+  setTimeout(done, 470);
+}
 function closeCoverStage() {
   const layer = $('coverStage');
   if (!layer || !layer.open || layer.dataset.closing === '1') return;
   layer.dataset.closing = '1';
   coverLoadToken++;
   stopCoverLyricLoop();
+  const card = coverSourceCard;
+  const box = card && card.isConnected ? (card.querySelector('.pod-art') || card) : null;
+  const r = box ? box.getBoundingClientRect() : null;
+  const canReverse = !motionReduced() && r && r.width > 40 && r.height > 40
+    && r.bottom > 0 && r.top < window.innerHeight && r.right > 0 && r.left < window.innerWidth
+    && /folia-poster/.test(document.documentElement.getAttribute('data-theme') || '');
+  const im = $('csImg');
+  if (canReverse) {
+    /* 反向共享元素：先把整屏克隆图盖上去，再在它下面关 dialog（关闭那一下卡顿被同图挡住），
+       然后让克隆图缩回卡片原位。舞台不做淡出，少一次整屏重绘。 */
+    coverMorphReverse = true;
+    startCoverMorph(im && im.src ? im.src : '', r, () => {
+      coverMorphReverse = false;
+      abortCoverMorph();
+    }, true);
+    requestAnimationFrame(() => { if (layer.open) layer.close(); });
+    return;
+  }
   layer.classList.remove('on', 'lyric-on');
   setTimeout(() => { if (layer.open) layer.close(); }, motionReduced() ? 0 : 440);
 }
 function openCoverStage(card) {
   const layer = $('coverStage');
   if (!layer || !card || layer.open) return;
+  coverSourceCard = card;
   const playing = card.classList.contains('is-playing-tile');
   const artImg = card.querySelector('.pod-art img');
   const epImg = playing && state.current && state.current.img ? state.current.img : '';
@@ -632,7 +718,8 @@ function openCoverStage(card) {
   const token = ++coverLoadToken;
   /* 共享元素：全屏封面从卡片里那块封面长出来，而不是先黑一下再原地淡入。
      只有 Folia 的封面是全屏铺满的，其它主题的封面是小卡片，硬套裁切会算错边。 */
-  const srcRect = artImg ? artImg.getBoundingClientRect() : card.getBoundingClientRect();
+  const artBox = artImg || card.querySelector('.pod-art');
+  const srcRect = artBox ? artBox.getBoundingClientRect() : card.getBoundingClientRect();
   const clipFromRect = /folia-poster/.test(document.documentElement.getAttribute('data-theme') || '')
     && !!(img && srcRect && srcRect.width > 40 && srcRect.height > 40);
   layer.classList.add('cover-empty');
@@ -661,7 +748,7 @@ function openCoverStage(card) {
   }
   const first = candidates.shift();
   paintCover(first);
-  const startStage = () => {
+  const startStage = (instant) => {
     if (token !== coverLoadToken) return;
     const k = $('csKicker'), t = $('csTitle'), s = $('csSub');
     if (k) k.textContent = playing ? '正在播放' : '节目封面';
@@ -670,42 +757,66 @@ function openCoverStage(card) {
     const hasLyric = !!(playing && state.cues && state.cues.length);
     delete layer.dataset.closing;
     layer.classList.toggle('lyric-on', hasLyric);
-    if (clipFromRect) {
-      const top = Math.max(0, srcRect.top), left = Math.max(0, srcRect.left);
-      const right = Math.max(0, window.innerWidth - srcRect.right);
-      const bottom = Math.max(0, window.innerHeight - srcRect.bottom);
+    if (instant) {
+      /* 克隆图已经长满整屏：真舞台必须一帧到位，不能再走 0→1 的淡入 */
+      layer.style.transition = 'none';
+      if (img) {
+        img.style.transition = 'none';
+        img.style.opacity = '1';
+        img.style.transform = 'none';
+        img.style.inset = '0';
+        img.style.left = '';
+        img.style.top = '';
+        img.style.width = '';
+        img.style.height = '';
+      }
+    } else if (clipFromRect) {
       img.style.transition = 'none';
       img.style.opacity = '1';
       img.style.transform = 'none';
-      img.style.clipPath = 'inset(' + top + 'px ' + right + 'px ' + bottom + 'px ' + left + 'px)';
-      void img.offsetWidth;   // 先把起始裁切提交一帧，否则和终点同帧写入会被压成瞬移
+      img.style.inset = 'auto';
+      img.style.left = srcRect.left + 'px';
+      img.style.top = srcRect.top + 'px';
+      img.style.width = srcRect.width + 'px';
+      img.style.height = srcRect.height + 'px';
+      void img.offsetWidth;   // 先把起始盒提交一帧，否则和终点同帧写入会被压成瞬移
     }
     layer.showModal();
     if (hasLyric) updateCoverLyric();
     const lyricBox = $('csLyric');
     if (lyricBox && !hasLyric) { lyricBox.replaceChildren(); lyricBox.dataset.signature = ''; }
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      if (layer.open && layer.dataset.closing !== '1') {
-        layer.classList.add('on');
-        if (clipFromRect) {
-          const fromClip = img.style.clipPath || 'inset(0px)';
-          img.style.clipPath = 'inset(0px 0px 0px 0px)';
-          if (img.animate) {
-            img.animate(
-              [{ clipPath: fromClip }, { clipPath: 'inset(0px 0px 0px 0px)' }],
-              { duration: 460, easing: 'cubic-bezier(.22,.9,.2,1)' }
-            );
+    if (instant) {
+      layer.classList.add('on');
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        abortCoverMorph();
+        layer.style.transition = '';
+      }));
+    } else {
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (layer.open && layer.dataset.closing !== '1') {
+          layer.classList.add('on');
+          if (clipFromRect) {
+            const ease = 'cubic-bezier(.22,.9,.2,1)';
+            img.style.transition = 'left .46s ' + ease + ', top .46s ' + ease + ', width .46s ' + ease + ', height .46s ' + ease;
+            img.style.left = '0px';
+            img.style.top = '0px';
+            img.style.width = window.innerWidth + 'px';
+            img.style.height = window.innerHeight + 'px';
           }
         }
-      }
-    }));
+      }));
+    }
     if (hasLyric) startCoverLyricLoop();
   };
   // 3k 封面解码/首帧光栅化会顶掉一整帧；先把图解码好再开 dialog，过渡里只做合成层动画
   const ready = (img && first && img.decode)
     ? Promise.race([img.decode().catch(() => {}), new Promise(r => setTimeout(r, 140))])
     : Promise.resolve();
-  ready.then(startStage);
+  ready.then(() => {
+    if (!clipFromRect || !img || motionReduced()) { startStage(false); return; }
+    // 先在页面上长克隆图，长满后再换真舞台：模态层那一下的卡顿被同图挡掉
+    startCoverMorph(img.src, srcRect, () => startStage(true));
+  });
 }
 function bindCoverStage() {
   const layer = $('coverStage');
@@ -715,6 +826,16 @@ function bindCoverStage() {
   if (close) close.addEventListener('click', closeCoverStage);
   const backdrop = $('csBackdrop');
   if (backdrop) backdrop.addEventListener('click', closeCoverStage);
+  /* 窗口全屏/改尺寸时，已经铺满的封面要跟着长，不能被钉在打开那一刻的像素尺寸上 */
+  window.addEventListener('resize', () => {
+    const stage = $('coverStage');
+    if (!stage || !stage.open) return;
+    const im = $('csImg');
+    if (!im || !im.style.width) return;
+    im.style.transition = 'none';
+    im.style.width = window.innerWidth + 'px';
+    im.style.height = window.innerHeight + 'px';
+  });
   layer.addEventListener('cancel', (e) => {
     e.preventDefault();
     closeCoverStage();
@@ -723,9 +844,13 @@ function bindCoverStage() {
     stopCoverLyricLoop();
     layer.classList.remove('on', 'lyric-on');
     const ci = $('csImg');
-    if (ci) { ci.style.transition = ''; ci.style.clipPath = ''; ci.style.opacity = ''; ci.style.transform = ''; }
+    if (ci) {
+      ci.style.transition = ''; ci.style.clipPath = ''; ci.style.opacity = ''; ci.style.transform = '';
+      ci.style.inset = ''; ci.style.left = ''; ci.style.top = ''; ci.style.width = ''; ci.style.height = '';
+    }
     const box = $('csLyric');
     if (box) { box.replaceChildren(); box.dataset.signature = ''; }
+    if (!coverMorphReverse) abortCoverMorph();
     delete layer.dataset.closing;
   });
   document.addEventListener('play', () => {
@@ -2355,9 +2480,14 @@ function renderPodcast(key) {
   const filterChips = '<div class="ep-filter-row">' + [
     ['all', '全部'], ['unplayed', '未听'], ['played', '已听'], ['favorite', '收藏'], ['offline', '离线'],
   ].map(([id, label]) => '<button data-ep-filter="' + id + '" class="' + (filter === id ? 'on' : '') + '">' + label + '</button>').join('') + '</div>';
+  /* 返回按钮跟来源走：从首页/搜索/发现/播客库进来就回那一页；带参数的路由（单集/播放器）无法裸跳，退回播客库。 */
+  const BACK_PAGES = ['home', 'library', 'search', 'discover', 'local', 'downloads', 'inbox', 'queue', 'history',
+    'stats', 'favorites', 'bookmarks', 'notes', 'listening', 'settings'];
+  const backPage = (app.lastPage && BACK_PAGES.includes(app.lastPage)) ? app.lastPage : 'library';
+  const backLabel = PAGE_NAMES[backPage] || '播客库';
   view.innerHTML = '<div class="page-head"><div><div class="eyebrow">' + (show.builtin ? 'BUILT-IN SHOW' : 'EXTERNAL FEED') +
     '</div><h1>' + esc(show.name) + '</h1><div class="subtitle">' + (count ? count + ' 集' : '') +
-    subtitleShowSuffix(show) + '</div></div><button class="btn ghost" data-route="library">← 返回播客库</button></div>' +
+    subtitleShowSuffix(show) + '</div></div><button class="btn ghost" data-route="' + backPage + '">← 返回' + backLabel + '</button></div>' +
     '<div class="detail-hero show-hero">' + coverHTML(show, 'pod-art') + '<div style="min-width:0;flex:1"><div class="detail-meta"><span>' +
     (show.builtin ? '内置增强 Feed' : '站外订阅') + '</span><span>' + esc(show.builtin ? '本站' : hostOf(show.feed || '')) + '</span><span>' +
     (count ? count + ' 集' : '—') + '</span></div><div class="show-desc-wrap">' + '<p class="show-desc">' + esc(desc || '暂无简介。') + '</p>' + (desc && desc.length > 260 ? '<button class="textbtn show-desc-toggle" type="button">展开简介</button>' : '') + '</div><div class="detail-actions">' +
