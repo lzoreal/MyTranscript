@@ -300,6 +300,11 @@ class PluginHostTests(unittest.TestCase):
         page = text[text.index("function renderPluginPage"):text.index("async function refreshPluginSettings")]
         self.assertIn("guardedPluginCall(previousPage.pluginId, 'page:destroy'", page,
                       "异步页面销毁必须被隔离")
+        # 走「插件页面不存在」分支时也要先拆掉上一页：那张页面的 render 可能是异步的，
+        # 只清 DOM 不 destroy，下一个 tick 会把旧卡片（如字幕中心）写回来。
+        missing = page[page.index("if (!def)"):page.index("return;\n  }")]
+        self.assertIn("app.pluginPageActive = null", missing, "不存在页要断开上一页的引用")
+        self.assertIn("'page:destroy'", missing, "不存在页也要销毁上一页，否则旧内容会回填")
 
     def test_search_generation_and_theme_exclusion_are_wired(self):
         text = PART.read_text(encoding="utf-8")

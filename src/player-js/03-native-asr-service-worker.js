@@ -448,7 +448,7 @@ async function liveEnsureIsolation() {
 }
 
 async function liveEnable() {
-  if (!subtitlePluginOn()) { showToast('字幕插件未启用，实时识别不可用。', 'warn'); return; }
+  if (!subtitlePluginOn()) { showToast('这一集没有可识别的文字稿。', 'warn'); return; }
   if (LIVE.busy || LIVE.on) return;
   if (!state.current) { showToast('先选一集，再开启实时识别。'); return; }
   const src = audio.currentSrc || audio.getAttribute('src') || '';
@@ -983,7 +983,7 @@ function selectEpisode(item, keepDrawer = false) {
   $('dTitle').textContent = item.title || (state.show.name || '');
   $('epMeta').textContent = item.date ? new Date(item.date).toLocaleDateString('zh-CN') : '';
   $('dMeta').textContent = [item.date ? new Date(item.date).toLocaleDateString('zh-CN') : '',
-    item.transcript ? '字幕' : '无字幕', state.show.name].filter(Boolean).join(' · ');
+    subtitlePluginOn() ? (item.transcript ? '字幕' : '无字幕') : '', state.show.name].filter(Boolean).join(' · ');
   const cover = $('cover');
   const themeCss = getComputedStyle(document.documentElement);
   const tAccent = themeCss.getPropertyValue('--accent').trim() || '#d8b277';
@@ -1046,12 +1046,9 @@ function selectEpisode(item, keepDrawer = false) {
   if (!keepDrawer) closeDrawer();
   const seq = ++state.transcriptSeq;
   if (!subtitlePluginOn()) {
-    // 没有字幕插件时保持最原生状态：只播放音频，不加载/解析/渲染任何文字稿。
-    // 网页版要把能力边界说清楚，别让用户以为“字幕坏了”；桌面版指向插件设置。
-    const hint = host()
-      ? '字幕插件未启用。到「设置 → 插件」启用 subtitles 后再打开本集。'
-      : '网页版仅播放音频；双语词级字幕在桌面版可用。';
-    box.innerHTML = '<div class="empty">音频播放模式<br><span style="font-size:12px">' + hint + '</span></div>';
+    // 没有字幕能力时保持最原生状态：只播放音频，不加载/解析/渲染任何文字稿。
+    // 文案不解释“为什么没有字幕”——这个开关一关，应用本来就只做音频。
+    box.innerHTML = '<div class="empty">音频播放模式<br><span style="font-size:12px">本集只播放音频，播放、进度和倍速照常可用。</span></div>';
     box.dataset.nativeAudio = '1';
     setState('cues', []); setState('nodes', []); setState('activeCue', -1); setState('vtt', null); setState('sidecar', null); setState('zhVtt', null); setState('base', null);
     status('音频播放模式。');

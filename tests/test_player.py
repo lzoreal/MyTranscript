@@ -1042,7 +1042,7 @@ class PlayerAccessibilityTests(unittest.TestCase):
         # 字幕视图已搬到 subtitles 插件，无障碍标记分散在宿主和插件两处。
         page += (BUILTIN / "subtitles" / "view.js").read_text(encoding="utf-8")
         for needle in ['<dialog class="modal"', 'showModal()', 'aria-modal="true"',
-                       'aria-labelledby="drawerTitle"', 'role="region" aria-label="文字稿"',
+                       'aria-labelledby="drawerTitle"', 'role="region" aria-label="阅读区"',
                        "wrap.lang = 'en'", "z.lang = 'zh-CN'", 'function updateDocumentTitle',
                        "el.setAttribute('role', 'link')",
                        'aria-valuetext', 'aria-label="搜索我的播客和单集"',
@@ -1528,11 +1528,16 @@ class PlayerStudyShortcutTests(unittest.TestCase):
     def test_toggle_respects_module_switch(self):
         body = self.html.split("function toggleStudySheet()", 1)[1].split("\n}", 1)[0]
         self.assertIn("moduleOn('study')", body)
-        self.assertIn("AI 学英语模块已关闭", body)
+        # 关掉学习插件就当快捷键不存在：不再弹「模块已关闭」这类插件字样。
+        self.assertIn("!moduleOn('study')) return", body)
+        self.assertNotIn("showToast", body)
 
     def test_dock_hint_mentions_shortcut(self):
-        hint = re.search(r'id="dockHint">([^<]+)<', self.html).group(1)
+        # 插件关掉时对应提示由 .subs-off-hide / .study-off-hide 收起，标签本身仍要在。
+        hint = re.search(r'id="dockHint">(.*?)</p>', self.html, re.S).group(1)
         self.assertIn("S AI 学英语", hint)
+        self.assertIn('class="study-off-hide"', hint)
+        self.assertIn('class="subs-off-hide"', hint)
 
     def test_study_sheet_waits_for_late_cues(self):
         """S 键可能抢在字幕 fetch 之前打开面板，空态必须能自愈而不是停在「没有文字稿」。"""

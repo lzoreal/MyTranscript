@@ -829,8 +829,27 @@ setTimeout(bootCustomTheme, 1000);
 bindCustomThemeEditor();
 function isDegraded() { return document.hidden || !document.hasFocus(); }
 
+/* 应用进后台时把入场动画推进到终态，而不是靠 CSS 的 animation:none 取消。
+   取消掉的动画在回前台时会被重新挂上，等于从 opacity:0 重播一遍，
+   整页/整面墙会黑一下再淡回来（Folia 那种全屏入场动效最明显）。finish() 不会重启，
+   回来时画面直接是静止的终态。无限动效（脉冲、进度条）跳过，finish 对它们会抛错。 */
+function settleAnimations() {
+  if (typeof document.getAnimations !== 'function') return;
+  document.getAnimations().forEach((a) => {
+    try {
+      const timing = a.effect && a.effect.getComputedTiming && a.effect.getComputedTiming();
+      if (!timing || timing.iterations === Infinity || !isFinite(timing.iterations)) return;
+      if (a.playState === 'finished' || a.playState === 'idle') return;
+      a.finish();
+    } catch (e) {}
+  });
+}
+
 function sync() {
-  document.documentElement.classList.toggle('decor-idle', isDegraded());
+  const idle = isDegraded();
+  const wasIdle = document.documentElement.classList.contains('decor-idle');
+  document.documentElement.classList.toggle('decor-idle', idle);
+  if (idle && !wasIdle) settleAnimations();
 }
 
 document.addEventListener('visibilitychange', sync);
@@ -838,11 +857,23 @@ window.addEventListener('blur', sync);
 window.addEventListener('focus', sync);
 sync();
 
+/* 一次性入场闸门：.motion-intro 只在启动后短暂挂着，之后摘掉。
+   像 Folia 底栏 `body:not(.player-open) .dock` 这种按状态选择器挂的入场动画，
+   每次开关播放页都会重新命中并被重播（右下角空一下再浮回来）；
+   挂闸门后动画只可能被挂上这一次，摘掉时动画已跑完，回前台/切页都不会再重播。 */
+(function motionIntro() {
+  const root = document.documentElement;
+  root.classList.add('motion-intro');
+  setTimeout(() => root.classList.remove('motion-intro'), 1200);
+})();
+
 /* Folia 的“无人值守”规则：侧栏和搜索条只在手靠近时露面。
    计时只认“贴着侧栏/搜索条”的活动，不和别处的鼠标移动混在一起；
    所以用户滑动墙面时，两条浮层不会假装还在工作。 */
 (function bindFoliaQuietChrome() {
-  const IDLE = 4000;
+  /* 原来 4 秒就收，回看/挑集时总在“刚想看就被抽走”的节奏上；放宽到 10 秒：
+     侧栏只要求“手不在那儿”才退场，10 秒足够读完一列标签再挪鼠标。 */
+  const IDLE = 10000;
   let timer = 0;
   let navHover = false;
   let searchHover = false;

@@ -127,7 +127,7 @@ function studyNative() { const r = studyRuntime(); return r ? r.native() : false
 function studyReady() { const r = studyRuntime(); return r ? r.ready() : false; }
 async function studyChat(system, user) {
   const r = studyRuntime();
-  if (!r) throw new Error('学英语插件未启用，AI 功能不可用。');
+  if (!r) throw new Error('AI 服务未配置。');
   return await r.chat(system, user);
 }
 function studyParseJson(text) { const r = studyRuntime(); return r ? r.parseJson(text) : { raw: String(text || '').trim() }; }

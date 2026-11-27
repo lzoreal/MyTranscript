@@ -38,7 +38,8 @@ MyTPlugins.define('home', {
         const statsEl = $('homeStats');
         const statCards = statHTML('订阅节目', subs.length, '含内置与站外')
           + statHTML('开始收听', entries.length, '有播放位置的单集')
-          + statHTML('收藏片段', ctx.catalog.bookmarks().length, '播放器里点 ☆');
+          // 书签是「按句收藏」，字幕能力关掉后由 .subs-off-hide 收掉这一格
+          + statHTML('收藏片段', ctx.catalog.bookmarks().length, '播放器里点 ☆', 'subs-off-hide');
         // 三个数都是 0 时，这排统计没有任何信息量：收起来，让首页只留“下一步”
         statsEl.innerHTML = statCards;
         statsEl.hidden = !(subs.length || entries.length || ctx.catalog.bookmarks().length);

@@ -319,7 +319,7 @@ function openBuiltinImport() {
     '<div class="builtin-pick-list">' + available.map(show => {
       const count = show.episode_count || catalogLatest(show).length || 0;
       return '<label class="ep-row" style="cursor:pointer"><input class="import-pick" type="checkbox" value="' +
-        esc(show.slug) + '" data-builtin-pick>' + coverHTML(show, 'ep-art') +
+        esc(show.slug) + '" data-builtin-pick>' + coverHTML(show, 'ep-art', 300) +
         '<div class="ep-body"><span class="ep-title">' + esc(show.name) + '</span><span class="ep-sub">' +
         (count ? count + ' 集 · ' : '') + '双语文字稿</span></div></label>';
     }).join('') + '</div>' +
@@ -1766,7 +1766,7 @@ function initXai() {
     var box = document.getElementById('xaiWordAiBox');
     if (!box) return;
     if (wordAiStore[word.toLowerCase()]) { renderWordAi(box, wordAiStore[word.toLowerCase()]); return; }
-    if (!studyReady()) { box.innerHTML = '<div class="word-note">先在「设置 → AI 学英语」配好 Key 和模型。</div>'; return; }
+    if (!studyReady()) { box.innerHTML = '<div class="word-note">先在「设置 → AI 接口」配好 Key 和模型。</div>'; return; }
     box.innerHTML = '<div class="word-note">AI 正在查这个词…</div>';
     var system = 'You are a bilingual dictionary for Chinese learners. Return ONLY a JSON object, no markdown fences, ' +
       'with keys: phonetic (IPA wrapped in slashes), meaning (Chinese definition, <=40 characters), ' +
@@ -2061,7 +2061,7 @@ function initXai() {
     if (recapBusy) return;
     var box = document.getElementById('xaiRecapBox');
     if (!box) return;
-    if (!studyReady()) { box.innerHTML = '<p class="study-empty">先在「设置 → AI 学英语」配好 Key 和模型。</p>'; return; }
+    if (!studyReady()) { box.innerHTML = '<p class="study-empty">先在「设置 → AI 接口」配好 Key 和模型。</p>'; return; }
     var data = (studyCache[epCacheKey()] || {}).data || {};
     if (!data.summary && !(data.topics || []).length) {
       box.innerHTML = '<p class="study-empty">先给这一集生成整集摘要，再生成前情。</p>';

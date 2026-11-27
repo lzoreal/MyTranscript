@@ -843,7 +843,7 @@ async function wallpaperFullscreen(on) {
 
 async function setWallpaper(on) {
   on = !!on;
-  if (on && !subtitlePluginOn()) { showToast('字幕插件未启用，壁纸字幕不可用。', 'warn'); return; }
+  if (on && !subtitlePluginOn()) { showToast('没有可显示的字幕。', 'warn'); return; }
   if (on === state.wallpaper) return;
   if (on && state.immersive) setImmersive(false);
   if (on) { closeOverlays(false); closeDockSheet(false); closeTypeSheet(false); if (typeof closeStudySheet === 'function') closeStudySheet(); }

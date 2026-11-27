@@ -1922,6 +1922,89 @@ removeKey / listKeys / migrateKey`）；05 的 `readJSON / writeJSON` 只是转�
 注意：改这两个文件里的 blur 半径必须保持 `calc(Npx * var(--lg-glass, 1))` 的写法，
 写死像素会让该面板在失焦时不降级、回前台时硬闪。
 
+**失焦不再取消入场动画（2026-11-27 修「只有海报墙主题点别的窗口会闪」）**：`themes/folia-poster.css`
+原来在 `.decor-idle` 下对 `.page.active`、`#homeRecommended .pod-card`、`.dock`、`.reader`、`.cue`、
+`#page-podcast` 的 hero/ep-row 等 12 个选择器写 `animation: none !important`，本意是让后台窗口
+不要停在 from 帧（透明）。但取消掉的动画在**摘掉 `.decor-idle` 回前台时会被重新挂上**，CSS 动画
+从头重播：`.page.active` 从 `opacity:0`、84 张瓦片各自从 `opacity:0` 淡入，整窗先黑一帧再 0.34~0.56s
+淡回来——所以点任务栏别的应用最大化/最小化，本应用就闪一次，且只有 Folia 有这条规则。
+现在改为 `13-theme.js` 的 `settleAnimations()`（`sync()` 进入 idle 时调用）：对**有限时长**的动画
+`getAnimation().finish()` 直接推到终态，动画对象不销毁，回前台不会重启；无限动效（`foliaBadgePulse`、
+`eq` 等）按 `iterations === Infinity` 跳过（对它们 `finish()` 会抛错）。实测回焦 500ms 内
+`.page.active` / `.pod-card` / `.dock` 透明度恒为 1.00（修前 t=3ms 全 0.00、126ms 才 0.42/0.17/0.35、
+677ms 回 1.00）。
+
+**点右下角「正在播放」胶囊时大瓦片闪（2026-11-27 修）**：`.folia-locate` 的点击原来先跑一遍
+`syncPlayingTiles()`（会 FLIP 放大播放瓦片、520ms 后再 `extendWall` 补墙），紧接着
+`centerTile()` 用 smooth 把 4K 宽的墙滑 ~460ms，同时立刻给那块 6×6 大瓦片挂 `locate-flash`
+（逐帧动画 inset `box-shadow`）。三件事叠在一起，整块大瓦片在动 + 整块重绘，WebView2 上就是
+"大瓦片闪一下"。现在：① 已经有 `.is-playing-tile` 时不再重复 `syncPlayingTiles()`；
+② 描边闪烁改成等 `scrollend`（没有就 620ms 兜底）之后再打。实测滚动期间 `locate-flash` 恒为
+false，`scrollLeft` 停住的那一帧（441ms）才挂上。
+
+**点瓦片"左右闪来闪去"和播放瓦片闪烁（2026-11-27 修）**：三处改动，都在 `07-routes-pages.js`。
+
+- `flipTile` 的 distorted 分支原来补间 `width/height` + `opacity 0.86→1`。宽高不是合成属性，
+  4K 宽的墙上每帧整块重排重绘；相邻瓦片还一起做 `opacity` 淡入，几十块一起闪。现在宽高直接落
+  到新值，只补一段 `transform` 位移（被点开的 320ms，其余 260ms）。
+- 撑开瓦片的"镜头跟拍"原来挂 500/950/1500 三个定时器，每个都走 `centerTileAnywhere`
+  （smooth 460ms）；加上滚动后 `schedulePlayingSync` 又重排一次播放瓦片，一次点击能滚三四趟。
+  现在改成 `scheduleSettle()`：第一趟滑停（520ms）后守 1.1s，最多补两次，偏差 <24px 不动，
+  补正走 `nudgeCenter()`（`behavior:'auto'`，只改 scrollLeft/Top，不重排世界）。
+  另外撑开期间 `schedulePlayingSync` 直接跳过（`is-peek` 存在就不重排），收起后 320ms 补一次。
+  实测点开一块 195×195 的瓦片：`scrollLeft` 1180 → 885 单向走完就停（修前 1180→1278→1231→
+  1230→1272→1279 来回跳），2s 内后 10 帧画面差异为 0。
+- 播放瓦片的逐词上色原本是 rAF 每帧写 class。滚动期间整块 589×589 的瓦片被合成器平移、同时又
+  每帧重绘带 text-shadow 的歌词，就是"带字幕的瓦片会闪"。现在 `bindFoliaCamera` 滚动时给
+  `<html>` 挂 `.wall-scrolling`（停 180ms 摘掉），`startTileLyricLoop` 在这个区间只续帧不上色。
+
+**海报墙改成 Folia 的 12×8 方块格：块内 reflow + 纵向无限（2026-11-27 落地）**：`07-routes-pages.js`
+的铺墙方式从「14 块一套（12 席 + 两块 6×4）」改成**一块 = 12 栏 × 8 行 = 96 格、正好 12 席铺满**，
+四套图样（`BLOCK_TEMPLATES`，含 6×4 / 4×4 / 6×2 / 3×2 混排）按 `blockTemplateOf` 的坐标哈希轮换 +
+左右镜像。块高因此恒定（1180×880 下 8×(96.5+2)=788px），这是后面三件事的前提：
+
+- **块内重排**：`applyBlockLayout(col)` 按块写死每一席的 `grid-column/row`（CSS 的 `dense` 不再参与
+  决策，`nth-child(14n…)` 那套跨度和字号规则已删，字号只看 `data-tile`）。展开/播放时把 6×6 钉在
+  原槽位（夹到 0/2 行、避开 1 栏宽的竖带），另外 11 席在 60 格里按面积分配、`partitionRect()`
+  回溯切成长方形——整块仍是 96 格，**块底不动、后面的块一格不挪**，也不再 `extendWall` 补新块。
+- **纵向无限**：`rotateWallRows('down'/'up')` 把首/末 12 块搬到另一端，`applyBlockLayout` 重排后
+  `scrollTop ∓ 一块高`；块高恒定所以补偿精确。触发挂在 `bindFoliaCamera` 的滚动 rAF（离块边界
+  0.72 块时，`is-peek` 期间不动）。`FOLIA_COL_CAP` 42→48（四整块，上下各留一块缓冲）。
+- **重复封面**：`arrangeWallCycle` 直接铺满四整块，并按「最近 11 块」滑窗去重（撞了就换本周期里
+  没出现过的一档）；以前剩下的纵深靠 `extendWallOne` 随机克隆，不看最近出现谁，块里会并排两张同款。
+- **宽窄切换**：`resize` 处理器在 plane 已被拆掉时改走 `setupFoliaPlane()`，否则窗口从窄拉回宽会停在
+  普通网格里（48 块全无内联坐标）。
+
+实测（CDP，1180×880 与 1400×900）：每列 48 块、块顶 0/788/1576/2364、占用格子 0 重叠 0 空格；撑开
+一张贴右边缘的 3×2 → 6×6 后块高仍 3278、`left 885→295` 居中；纵向搬块前后同一张卡 `top`
+不变（`scrollTop 2500→1712`、`2364→1576` 各差 788）；窄屏（860）拆 plane 后 3 栏瀑布、内联坐标清空，
+拉回 1180 重新搭好。`blockReflows` 不是“每席尺寸固定”：Folia 的 `blockReflows.ts` 是**每个被展开
+槽位一张预生成的精确覆盖表**（展开那张拿 6×6，其余十一席缩成 2×2 / 2×4 / 3×2 等更小齿轮，
+求解器按“搬动现有卡最少”选），尺寸本来就随展开变。本仓库的 `reflowBlockRects` 做的是同一件事，
+区别只在运行时回溯切分、不预存 48 张表；因此**不照搬表**，只承认两条语义：展开卡固定 6×6、
+整块面积不变。Folia 源码只读参考（`Temp\folia-src`，未复制代码）。
+
+**全屏舞台双段压暗 / 内置档小字 / 侧栏 10 秒 / 无字幕兜底（2026-11-27 第二轮）**
+
+- **全屏舞台底幕**：`themes/folia-poster.css` 的 `.cover-stage::after` 从一条 `180deg`
+  竖渐变（底部 84%）换成 Folia `.lattice-poster-shade::after` 那种复合写法——`0deg`
+  底下 88%→62%(@14%)→26%(@30%)→0(@46%)，叠一条 `90deg` 左边 72%→38%(@34%)→8%(@68%)，
+  再补 13% 高的顶部浅条给关闭按钮垫底。实测亮封面（白纸 + 珊瑚）采样：右上 `(226,224,216)`
+  （几乎原图）、正中 `(161,159,153)`、右下 `(68,67,65)`，标题区可读、封面本身不再被整屏压黑。
+- **影集 / 播控台小字**：`site/player.css` 尾部加一段覆盖（只改字号，不动网格与间距）。
+  影集的卡片标题原来 11px（比元信息还小）→ 13px，元信息 / 最近更新副行 / 时长 / 分区小标
+  11px → 12px；播控台的 `.pod-meta`、`ep-sub`、`ep-dur`、统计标签、设置菜单与 `.btn` 同样 12px。
+  注意播控台有一条 `.page.active .ledger-home .pod-card .pod-meta{font-size:11px}` 特异性更高，
+  覆盖必须带 `#homeRecommended` 才压得住（实测 12px）。
+- **侧栏自动收起**：`13-theme.js` 的 `IDLE` 4s → 10s。`pointermove` 到墙面中部只是重置计时，
+  实测边缘唤出后挪到中部：6s 仍在（`display:flex`）、11s 收起（`nav-auto-idle`）。
+- **没有字幕的播放瓦片**：`ensureTileLyric` / `updateTileLyric` 统一走新的 `syncTileLyric(card)`
+  —— 有句子才建 `.tile-live-lyric` 并挂 `has-tile-lyric`，没句子就把块摘掉、类也摘掉；
+  CSS 的底部留白改成 `.is-playing-tile .pod-card-main{padding-bottom:34px}` +
+  `.is-playing-tile.has-tile-lyric` 才 112px。实测无句子时 `padding-bottom` 34px，
+  播放瓦片是干净的封面 + 标题，不再留一条 112px 的空 band。全屏舞台原本的 `hasLyric`
+  分支保持（没有 cue 时清空 `lyricBox` 并摘 `lyric-on`）。
+
 **AAC 音轨的视频集也能实时识别了（2026-11-22 落地）**
 
 以前 `liveProbeAudio` 认出 `ftyp` 就抛 fatal（「实时识别只支持 MP3」）。现在 MP4/M4A 走
@@ -2728,3 +2811,138 @@ riso-print / surveillance / cyber / dopamine / frutiger-aero / naive-craft / sof
    `plugins.rs` 对 `&str` 多写的 `.clone()` ×2），`cargo test --bin mytranscript-desktop` 37 通过；
    签名摘要的 `digest_meta` 键值不变（去 clone 不改产物）。`--ctl-h-lg` 仍无人用，留着当尺度 token。
 
+
+## 2026-11-27 插件「关一个/关多个」实测 + 软重载丢文字稿
+
+结论：内置 11 个插件关掉任意组合都不会崩（41 个测试、层边界校验、壳内 8 组场景全程
+除既有 CSP 内联事件噪声外 0 条报错），但有两条真实边界和两个 bug：
+
+- **依赖是真依赖**：`subtitles` 是 `study / adscan / ask / distill` 的硬依赖。只关字幕，
+  这 4 个会一起被跳过（设置页各挂一条「需要先启用：subtitles」），插件导航从
+  字幕中心/片段库/摘录本只剩片段库，播放页转「音频播放模式」提示，节目页标
+  「字幕插件未启用，仅音频」。Rust 侧 `plugin_set_enabled` 对 subtitles 还会顺手收掉
+  正在跑的全局字幕会话。
+- **全部关掉也不锁死**：内置 18 条路由仍在（首页/播客库走 07 的回落渲染），设置页
+  11 个开关原样在，能原地开回来；`settings` 插件本身是「整页副本」，关掉它设置页毫无变化
+  （见 Q 节第 3 条）。
+- **home 插件关掉后首页改走 07 的回落版**：144 张卡片仍在，但区块顺序/文案与插件版不同，
+  属于两套实现并存，不是故障。
+
+两个 bug（本轮已修，未提交）：
+
+1. **软重载把播放页文字稿清空且不恢复**（最要命）。`reloadPlugins()` 先 `stopPlugin` 全部
+   插件，字幕能力短暂失守 → `applySubtitleAvailability()` 里 `box.replaceChildren()` +
+   清 `cues/vtt` 状态；重新 claim 之后没有一处会重绘，`openPlayerRoute` 又因为
+   `state.show/current` 没变而跳过 `loadShow`，于是「只停用了片段收藏，播放页字幕也没了，
+   必须整页刷新」。修法：`app.pluginReloading` 期间跳过这段清洗，重载结束再按最终状态
+   收尾（`applySubtitleAvailability(true)`）；真要关字幕时把阅读区改成一条可读提示，
+   不留空白。
+2. **插件页不存在时页头串味**：`renderPluginPage` 的 `!def` 分支只写 body，页头还是上一个
+   插件页写的标题（出现「摘录本」标题配「插件页面不存在：study/study」）。修法：该分支把
+   `pluginPageTitle/pluginPageSub/crumb/document.title` 收回默认值。
+   附带修第三处：字幕插件重新启用后回到同一集，阅读区还挂着「音频播放模式」——`07`
+   `openPlayerRoute` 补一个分支，`subtitlePluginOn()` 为真且 `box.dataset.nativeAudio==='1'`
+   时重跑一次 `selectEpisode`。
+
+实测（壳内 CDP，端口 9333，The Daily 那集）：冷启动 cues=240 / transcript=16454；
+播放中停用片段收藏 + 重新加载后仍是 240/16454（修前 0/0）；停用字幕得到提示文案而不是空白；
+不存在的插件页页头为「插件 · 由本机插件提供的页面。」；重新启用字幕后回本集恢复 240/16454。
+脚本：`.tmp-ui-audit/plugin_toggle2.py`（场景矩阵）、`plugin_softreload.py`（软重载取证）、
+`verify_fix.py`（修复验证）、`final_shots.py`（截图）。
+
+## 2026-11-27 关插件后「去痕」：关掉字幕/学英语，界面不再提这两个插件
+
+用户口径：关掉插件等于这个应用本来就没有这个能力，不许再出现「字幕插件未启用」
+「去插件设置启用 subtitles」「AI 学英语模块已关闭」这类提示与入口文字。
+
+做法统一为「结构性隐藏 + 文案中性化」，不新增开关、不改数据层：
+
+- 骨架（`src/skeletons/base.html`，经 `scripts/build_skeletons.py` 生成
+  `site/skeletons-defaults.js`）用已有两套钩子：`body.subs-off .subs-off-hide`
+  与 `body.study-off .study-off-hide`。首页英雄区副标题、今日编辑选择说明、视频页转写说明、
+  发现页「只看有增强文字稿」、收藏页副标题、搜索页副标题与两个文字稿 tab、`#idx-bar`、
+  设置页副标题与「默认文字稿语言 / 实时字幕提前量 / 单流播放 / 自动跳过广告 / 本机识别模型 /
+  整集预转写」六行、模块开关的「文字稿 / 实时识别 / 自动翻译 / 悬浮窗 / 导出与分享 / AI 学英语」
+  六行、插件面板说明里的「字幕、学习」举例、`#dockHint` 的「逐句 / 搜本集 / S AI 学英语」
+  三段，全部只在对应能力存在时出现。
+- 设置菜单「AI 学英语」改名「AI 接口」（Key/模型配置被 `ask` 复用，整块留着），
+  「讲解语言」行与整集总结说明按 `study-off` 收起。字幕插件关掉时连带隐藏
+  「AI 接口 / 模型管理 / 文字稿与字幕」三个分栏（它们都依赖 subtitles）。
+- JS 侧文案：播放页空态从「字幕插件未启用。到设置启用 subtitles」改成
+  「音频播放模式 / 本集只播放音频，播放、进度和倍速照常可用。」（03、04、12 三处同一句，
+  软重载收尾也走它）；各 toast 改成「这一集没有文字稿。」「没有可导出的字幕。」这类事实陈述；
+  `07` 的 `subtitleCardBadge/ShowSuffix/KvLabel/EpisodeLabel` 在 `desktop-off` 返回空串，
+  配套三处渲染点空值不渲染（卡片 pill、节目页「文字稿」kv 行、单集 meta）；
+  `09` 的「✎ 学英语」「☆ 收藏当前句」两个 rail 动作按 body class 直接不渲染；
+  `05` 的下载行不再拼「文字稿 26 KB」也不渲染「＋ 字幕」按钮；`S` 快捷键在 study 关闭时静默
+  返回（原来会弹「AI 学英语模块已关闭」）；`08`/`04`/`10` 里「去设置 → AI 学英语」统一改口
+  「AI 接口」。
+- `site/player.css` 的 `body.subs-off` 隐藏清单补 `#intensiveShowBtn`、`#intensiveBar`。
+
+测试随之更新（`tests/test_player.py`）：阅读区 `aria-label` 由「文字稿」改为「阅读区」；
+dockHint 断言改为校验 `study-off-hide / subs-off-hide` 两段包裹；`toggleStudySheet` 断言改为
+「静默返回、不弹 toast」。41 个测试全绿：`build_player_js.py` → `build_skeletons.py` →
+`check_layers.py` → 41 个 `tests/test_*.py` 逐个 0 失败 → `cargo build`（src-tauri，
+`CARGO_TARGET_DIR` 指到 Temp）→ 覆盖安装目录 exe。
+
+复扫（`.tmp-ui-audit/trace_text.py`，subtitles=False + study=False，9 条路由正则
+`字幕|插件|学英语|文字稿|精听|双语`）：home/library/downloads/podcast/episode/settings(含插件面板)/search/
+discover/stats 命中 0；播放页仅两集英文标题里的 “Study” 误命中；设置页只剩菜单项「插件」本身。
+截图：`.tmp-ui-audit/shots/plugin/t1~t9`（首页、节目页、单集页、播放页、下载、搜索、设置两栏、插件面板、
+字幕打开后的播放页对照）。
+
+唯一保留的插件字样：设置 →「插件」分栏里的 11 个开关必须列出「字幕」「学英语」，
+这是重新启用的唯一入口，属于插件系统本身而不是播放器文案。
+
+## 2026-11-27 全量测试（去痕改造之后）+ 修一个矩阵里暴露的新 bug
+
+**新 bug（矩阵测出来的）**：插件页的 `renderPluginPage` 在「页面不存在」分支只清 DOM、
+不拆上一页。上一页（如「字幕中心」）的 render 是异步的，卡片会晚一拍再写回容器，
+于是停在 `#/plugin/soundbite/soundbite` 时页头是「插件」，正文却还是字幕中心的内容。
+多关一组插件（multi-off：adscan/ask/distill/soundbite/podcast20 关、subtitles 开）必现。
+修法：该分支先 `app.pluginPageActive = null` 并对上一页走 `guardedPluginCall(..., 'page:destroy')`，
+再清容器写「插件页面不存在」；`tests/test_plugin_host.py` 补断言锁住这两件事。
+
+**全量结果**
+
+- 单元测试：41 个 `tests/test_*.py` 全部 0 失败（`test_player` 97、`test_plugin_host` 20、
+  `test_transcribe_utils` 165 等）。
+- 插件开关矩阵（8 组：baseline / soundbite-off / subtitles-off / home-off / settings-off /
+  multi-off / all-off / all-on，每组 9 条路由）：除 CSP inline handler 噪声外 console 0 error，
+  multi-off 的插件页残留已修（现在都是「插件页面不存在：…」）；全关仍可操作，全开 11 个插件齐活。
+- 回归：软重载 4 种时序下播放页恒为 cues=240 / transcript=16454；关字幕是中性文案
+  （无「字幕插件未启用」）；重新启用字幕后回本集 240/16454；播放页空态、节目页、单集页、
+  下载页均无插件字样。
+- 去痕复扫：9 条路由命中 0（仅剩两集英文标题里的 “Study” 与设置菜单项「插件」）。
+- 闪烁复测（PIL 逐帧差分）：点库里的海报瓦片 66.0 → 0.3 → 0.1 → 0；点右下角正在播放封面
+  3.7 → 0，dock 高度全程 296/589 不跳；详情面板只开一次（anim-sheet on，opacity 1）；
+  hero 落位后 steady=1，无 pageerror。
+- 主题×页面全量扫描（`sweep.py --sheets`，13 套主题 × 18 页 × 1440/390 两档）：468 张截图 +
+  26 张联系表，产物 `shots/audit.json` 与 `shots/1440|390-*-*.png`。指标里的 clipped / tinyText /
+  smallTarget 是主题层面的既有排版现象（卡片副标题省略号、25px 的 tab、隐藏态 fs=0），
+  与本次文案改造无关；唯一一处真实横向溢出是 folia-poster 首页海报墙（设计上是横向长墙）。
+
+**待定（未动）**：字幕关掉后「书签」页与模块行仍在（页面文案是「点 ☆ 收藏当前句」，
+而该动作在子关后已隐藏）；「笔记」是单集笔记，与字幕无关，保留。要不要把书签一并收起，等用户拍。
+
+## 2026-11-27 按用户口径收尾：书签一并收起（插件面板保留）
+
+用户拍板：插件面板里的「字幕 / 学英语」开关**保留**（重新启用的唯一入口）；
+侧栏与模块行的「书签」在字幕关掉时**一起收起**。
+
+改动：
+
+- `base.html` 侧栏「书签」按钮加 `subs-off-hide`；`模块开关` 里「书签 / 按句收藏与跳回」整行加同类；
+  「导出本地数据」说明里的「书签、」用 span 收掉。
+- `07`：`#/bookmarks` 在 `!subtitlePluginOn()` 时改道 `favorites`（手打 hash 也不留死页）。
+- 首页统计里的「收藏片段」格：`statHTML(...)` 增可选 `cls` 参数（`00-kernel.js`），
+  内置 `home` 插件（`apps/windows/builtin-plugins/home/main.js`）把这一格标成 `subs-off-hide`。
+  之所以不写成 `subtitlePluginOn() ? … : ''`：首页在插件加载完成前就可能渲染，按状态判断会把这一格漏在关字幕的页面上；
+  改成 class 由 body 状态收，时机无关。
+- 改内置插件后要把 `apps/windows/builtin-plugins/home/main.js` 同步到
+  `C:\ProgramData\MyTranscript\plugins\home\main.js`（安装目录跑的是这份副本），再重启。
+
+实测（壳内 CDP）：字幕关时侧栏只剩 收件箱/播放队列/收听历史/统计与回顾/笔记/收听模式/设置，
+手打 `#/bookmarks` 落到 `#/favorites`；模块行里没有「书签」；首页第三格 `display:none`；
+字幕打开后书签行、书签页、统计格全部回来。41 个测试 0 失败，8 组插件矩阵 console 0 error。
+截图：`shots/plugin/w1-home-subs-off.png`、`w2-settings-modules-subs-off.png`、`w3-bookmarks-redirect.png`、`w4-home-subs-on.png`。

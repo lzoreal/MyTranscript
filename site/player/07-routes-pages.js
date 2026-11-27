@@ -2,8 +2,8 @@ import { $, ASR_MODEL_DEFAULT, audio, box, host, prefs, setState, state, tauriHo
 import { closeOverlays, closeTypeSheet, emptyLine, esc, fmt, isBracket, isJsonTranscript, loaderHTML, pluginPageKey, reader, seekTo, setImmersive, setWallpaper, showToast, splitLabel, statHTML, syncCustomThemeEditor } from './01-theme-reader-shell.js';
 import { syncLiveLeadSelect } from './02-live-caption-wasm.js';
 import { selectEpisode } from './03-native-asr-service-worker.js';
-import { PLUGIN_PAGES, applySlotMounts, destroyV2Page, emitPlugin, loadShow, pluginPlayerState, pluginReportError, refreshPluginSettings, renderPluginPage, renderV2Page, smallArtwork, subtitlePluginOn } from './04-local-audio-plugin-host.js';
-import { LOCAL_KEY, PAGE_NAMES, QUEUE_KEY, THEME_NAMES, absoluteFeed, app, catalogLatest, epStatusBadges, episodeFilterMatch, episodesOf, firstShowKey, fmtBytes, fmtDuration, formatDate, hash32, hostOf, idxGetAll, inboxCount, isFavorite, isPlayed, isSubscribed, moduleOn, navigate, notifyPlayTargetFailure, offlineKeyFor, parseRoute, plainText, playTarget, playTargetLabel, readAllProgress, readJSON, refreshShows, renderAfterStateChange, refreshOffline, renderDownloads, renderOfflineList, renderPlaylists, returnToCue, routeHash, routeModuleAllows, showByKey, showPrefFor, syncDockBadge, syncDockSleep, syncIndexCount, syncRateSeg, writeJSON } from './05-transport-transcript-nav.js';
+import { PLUGIN_PAGES, applySlotMounts, backfillWallArt, coverSrc, destroyV2Page, emitPlugin, loadShow, pluginPlayerState, pluginReportError, refreshPluginSettings, renderPluginPage, renderV2Page, smallArtwork, subtitlePluginOn } from './04-local-audio-plugin-host.js';
+import { BACK_PAGES, LOCAL_KEY, PAGE_NAMES, QUEUE_KEY, THEME_NAMES, absoluteFeed, app, catalogLatest, epStatusBadges, episodeFilterMatch, episodesOf, firstShowKey, fmtBytes, fmtDuration, formatDate, hash32, hostOf, idxGetAll, inboxCount, isFavorite, isPlayed, isSubscribed, moduleOn, navigate, notifyPlayTargetFailure, offlineKeyFor, parseRoute, plainText, playTarget, playTargetLabel, readAllProgress, readJSON, refreshShows, renderAfterStateChange, refreshOffline, renderDownloads, renderOfflineList, renderPlaylists, returnToCue, routeHash, routeModuleAllows, showByKey, showPrefFor, syncDockBadge, syncDockSleep, syncIndexCount, syncRateSeg, writeJSON } from './05-transport-transcript-nav.js';
 import { coverHTML, ensureShowFeed, episodeCover, hasFreshFeed, memoryFeed, renderChartPanel, renderOnlineResults } from './06-catalog-feeds-search.js';
 import { motionFlip, motionReduced } from './11-motion.js';
 
@@ -86,6 +86,10 @@ function applyRouteNow(route) {
       app.homeScroll = sc.scrollTop;
       app.homeScrollX = sc.scrollLeft;
       app.homeWallCount = document.getElementById('homeRecommended')?.querySelectorAll('.pod-card').length || 0;
+      /* 连“当时选中的是哪一块”一起记下来：从详情页退回来只还原滚动位置的话，
+         墙停在原地但没有选中框，看不出自己刚点的是哪一档。 */
+      const cur = document.querySelector('#homeRecommended .pod-card.is-cursor');
+      app.homeCursorSlug = cur ? tileSlugOf(cur) : '';
     }
     if (route.page !== 'home') jumpTop(0);
   }
@@ -105,6 +109,16 @@ function applyRouteNow(route) {
   }
   app.routePage = route.page;
   if (currentPage && currentPage !== route.page) app.lastPage = currentPage;
+  /* 返回按钮要「从哪来回哪去」：只有无参页面进栈，单集/播放器不占位。
+     否则首页 → 节目 → 单集 →（历史返回）节目的路径会把 lastPage 落成 episode，
+     按钮退化成「返回播客库」，回不到首页。 */
+  if (BACK_PAGES.includes(route.page)) {
+    const trail = app.pageTrail = Array.isArray(app.pageTrail) ? app.pageTrail : [];
+    if (trail[trail.length - 1] !== route.page) {
+      trail.push(route.page);
+      if (trail.length > 8) trail.shift();
+    }
+  }
   const isPlayer = route.page === 'player';
   document.body.classList.toggle('player-open', isPlayer);
   // 首页自己的 hero 已经有搜索框，顶栏那个不再重复出现。
@@ -145,8 +159,29 @@ function applyRouteNow(route) {
   }
   if (route.page === 'home' && currentPage && currentPage !== 'home') {
     const top = app.homeScroll || 0;
-    const left = app.homeScrollX != null ? app.homeScrollX : Number(foliaPlane()?.dataset.blockW || 0);
+    const plane = foliaPlane();
+    const left = app.homeScrollX != null ? app.homeScrollX : Number(plane?.dataset.blockW || 0);
     if (sc) {
+      /* 正在播放时回首页：镜头直接追到播放的那块（Folia 的 locate 也是这个含义），
+         不再“还原上次滚到哪儿”——两者一起做会互相拉扯，镜头刚追过去又被拉回原位。
+         没有播放才回落到上次的滚动位置 / 选中的那块。 */
+      const playing = state.current ? (() => {
+        syncPlayingTiles();
+        return document.querySelector('#homeRecommended .pod-card.is-playing-tile');
+      })() : null;
+      if (playing) {
+        requestAnimationFrame(() => {
+          if (app.routePage !== 'home') return;
+          const r = playing.getBoundingClientRect();
+          const offX = Math.abs((r.left + r.width / 2) - sc.clientWidth / 2);
+          const offY = Math.abs((r.top + r.height / 2) - sc.clientHeight / 2);
+          if (r.width < 1 || offX > 40 || offY > 40) centerTileAnywhere(playing);
+        });
+        if (!audio.paused) startTileLyricLoop();
+        updateDocumentTitle();
+        syncMini();
+        return;
+      }
       // 墙会先补回上次的纵深再能滚到底；高度不够时多试几次，别把位置截在旧墙底
       let tries = 0;
       const restore = () => {
@@ -158,7 +193,19 @@ function applyRouteNow(route) {
           sc.scrollLeft = left;
           sc.style.scrollBehavior = prev;
         }
-        if (sc.scrollHeight < top + sc.clientHeight && tries++ < 8) setTimeout(restore, 120);
+        const slug = app.homeCursorSlug;
+        if (slug) {
+          const card = [...document.querySelectorAll('#homeRecommended .pod-card')].find(c => tileSlugOf(c) === slug);
+          if (card) {
+            setWallCursor(card, { pan: false });
+            const r = card.getBoundingClientRect();
+            const offX = Math.abs((r.left + r.width / 2) - sc.clientWidth / 2);
+            const offY = Math.abs((r.top + r.height / 2) - sc.clientHeight / 2);
+            if (r.width < 1 || offX > 80 || offY > 80) centerTileAnywhere(card);
+          }
+        }
+        // 墙在这一屏还没铺够时滚动会被截住，多试几轮，直到位置真的落回原处
+        if ((Math.abs(sc.scrollTop - top) > 4 || sc.scrollHeight < top + sc.clientHeight) && tries++ < 8) setTimeout(restore, 150);
       };
       requestAnimationFrame(restore);
     }
@@ -200,6 +247,11 @@ async function openPlayerRoute(route) {
   } else if (!state.current) {
     const episodes = state.episodes.length ? state.episodes : episodesOf(show);
     if (episodes.length) selectEpisode(episodes[0], true);
+  } else if (subtitlePluginOn() && box && box.dataset.nativeAudio === '1') {
+    /* 之前在「字幕插件未启用」的音频模式下停过这一集：插件刚被重新启用，
+       阅读区还挂着那条旧说明，cue 数据也是空的。回到本集时补载一次文字稿，
+       否则用户只能去点别的单集再点回来才会恢复。 */
+    selectEpisode(state.current, true);
   }
   if (t > 0 && state.current?.id === ep && state.show?.slug === show.slug) {
     setState('resumeAt', 0);
@@ -260,7 +312,12 @@ function renderPage(page, route) {
   else if (page === 'history') renderHistory();
   else if (page === 'stats') renderStats();
   else if (page === 'favorites') renderFavorites();
-  else if (page === 'bookmarks') renderBookmarks();
+  else if (page === 'bookmarks') {
+    /* 书签是「按句收藏」，字幕能力关掉后连入口都收起了：直接的手打 hash 也改道收藏页，
+       不留在空页面上。 */
+    if (!subtitlePluginOn()) { navigate('favorites'); return; }
+    renderBookmarks();
+  }
   else if (page === 'notes') renderNotes();
   else if (page === 'listening') renderListening();
   else if (page === 'settings') renderSettings();
@@ -324,23 +381,25 @@ function subtitleCapability() {
 function subtitleCardBadge(show) {
   const cap = subtitleCapability();
   if (cap === 'on') return show?.transcript_count ? '双语词级文字稿' : '增强文字稿';
-  return cap === 'web' ? '网页版仅音频' : '字幕插件未启用';
+  /* 插件关掉就当作“这个应用没有字幕”，卡片上不再挂任何相关徽章。 */
+  return cap === 'web' ? '网页版仅音频' : '';
 }
 function subtitleShowSuffix(show) {
   const cap = subtitleCapability();
   if (cap === 'on') return show?.builtin ? ' · 双语词级文字稿' : ' · 站外节目仅音频';
   if (cap === 'web') return show?.builtin ? ' · 网页版仅音频（桌面版支持字幕）' : ' · 站外节目仅音频';
-  return ' · 字幕插件未启用，仅音频';
+  return '';
 }
 function subtitleKvLabel(show) {
   const cap = subtitleCapability();
   if (cap === 'on') return show?.builtin ? '双语词级' : '无';
-  return cap === 'web' ? '网页版仅音频' : '字幕插件未启用';
+  /* 空串＝这一行整行不渲染，节目资料里不再出现“文字稿”一栏。 */
+  return cap === 'web' ? '网页版仅音频' : '';
 }
 function subtitleEpisodeLabel(show, ep) {
   const cap = subtitleCapability();
   if (cap === 'web') return '网页版仅音频';
-  if (cap === 'desktop-off') return '字幕插件未启用';
+  if (cap === 'desktop-off') return '';
   if (ep?.transcript) return '含双语文字稿';
   return show?.builtin ? '无字幕' : '仅音频';
 }
@@ -357,9 +416,10 @@ function podCardHTML(show) {
   const meta = [showCategoryText(show), showLanguageLabel(show)].filter(Boolean).join(' · ');
   const desc = plainText(show.description || '');
   const latest = catalogLatest(show)[0] || null;
-  const badge = show.builtin
-    ? '<span class="pill' + (subtitleCapability() === 'on' ? '' : ' dim') + '">' + subtitleCardBadge(show) + '</span>'
-    : '<span class="pill dim">站外 · 仅音频</span>';
+  const badgeLabel = show.builtin ? subtitleCardBadge(show) : '站外 · 仅音频';
+  const badge = badgeLabel
+    ? '<span class="pill' + (show.builtin && subtitleCapability() === 'on' ? '' : ' dim') + '">' + badgeLabel + '</span>'
+    : '';
   // 内置订阅→进节目页管理；内置未订阅→订阅；站外订阅→进节目页（不把“＋”做成退订）
   const subscribed = isSubscribed(show.slug);
   const actionLabel = show.builtin ? (subscribed ? '管理中' : '订阅') : '打开';
@@ -373,7 +433,7 @@ function podCardHTML(show) {
       (latest.date ? ' · ' + formatDate(latest.date) : '') + '</span>'
     : '';
   return '<div class="pod-card"><a class="pod-card-main" href="' + esc(routeHash('podcast', [show.slug])) +
-    '" data-open-podcast="' + esc(show.slug) + '">' + coverHTML(show) +
+    '" data-open-podcast="' + esc(show.slug) + '">' + coverHTML(show, null, 640) +
     '<strong>' + esc(show.name || show.slug) + '</strong>' +
     (meta ? '<span class="pod-meta">' + esc(meta) + '</span>' : '') +
     (desc ? '<span class="pod-desc">' + esc(desc) + '</span>' : '') +
@@ -449,44 +509,98 @@ function bindPlayingRowSync() {
   });
   el.addEventListener('seeked', () => tileWordPaint());
 }
-/* 首页瓦片：正在播放的那个节目的瓦片亮起珊瑚描边（Folia 的“正在播放”标记） */
+/* 首页瓦片：正在播放的那个节目的瓦片亮起珊瑚描边（Folia 的“正在播放”标记）。
+   二维墙里同一档节目每列各有一块，"正在播放"却只该有一块——以前是每列各标一块，
+   两列同框时就会看到两块一模一样的封面同时挂着字幕。现在全墙只挑一块：
+   优先保留已经露着大半的，其次挑离镜头中心最近的那块；墙一平移就跟着搬过去。 */
 function syncPlayingTiles() {
   const folia = document.documentElement.dataset.theme === FOLIA_THEME_ID;
   const key = (state.current && state.current.showKey) || '';
   const el = document.querySelector('audio');
   const live = el ? !el.paused : false;
-  const markedCols = new Set();   // 二维墙每列各标一块；单列墙仍然只标一块，别让整墙同时长出好几个
+  const cards = [...document.querySelectorAll('#homeRecommended .pod-card')];
+  let target = null;
+  if (folia && key) {
+    const sc = document.querySelector('.main');
+    const sr = (sc || document.documentElement).getBoundingClientRect();
+    const score = (card) => {
+      const r = card.getBoundingClientRect();
+      const ix = Math.max(0, Math.min(r.right, sr.right) - Math.max(r.left, sr.left));
+      const iy = Math.max(0, Math.min(r.bottom, sr.bottom) - Math.max(r.top, sr.top));
+      const area = (ix * iy) / Math.max(1, r.width * r.height);
+      const dx = r.left + r.width / 2 - (sr.left + sr.width / 2);
+      const dy = r.top + r.height / 2 - (sr.top + sr.height / 2);
+      return { area, d: Math.hypot(dx, dy) };
+    };
+    // 迟滞：现在这块还露着 45% 以上就别搬——搬一次要 FLIP + 重建字幕，不能每滚一点都搬
+    const keep = cards.find(c => c.classList.contains('is-playing-tile') && tileSlugOf(c) === key && score(c).area > 0.45);
+    const cands = cards.filter(c => tileSlugOf(c) === key);
+    target = keep || cands.sort((a, b) => {
+      const sa = score(a), sb = score(b);
+      if ((sa.area > 0) !== (sb.area > 0)) return sa.area > 0 ? -1 : 1;
+      return sa.d - sb.d;
+    })[0] || null;
+  }
   let grew = false;
-  document.querySelectorAll('#homeRecommended .pod-card').forEach(card => {
-    const link = card.querySelector('[data-open-podcast]');
-    const slug = link ? link.getAttribute('data-open-podcast') : '';
-    const col = card.closest('#homeRecommended') || card;
-    const on = folia && !!key && slug === key && !markedCols.has(col);
-    if (on) markedCols.add(col);
+  cards.forEach(card => {
+    const on = card === target;
     const was = card.classList.contains('is-playing-tile');
+    const changed = on !== was;
     const apply = () => {
       card.classList.toggle('is-playing-tile', on);
       card.classList.toggle('is-playing-tile-live', on && live);
       if (on) {
-        clearTileSpan(card);
+        // 播放态接管这一块的重排（6×6 钉在原槽位）：手动展开的卡已经钉好了，别重算
+        if (changed && !card.classList.contains('is-peek')) applyBlockLayout(card.closest('#homeRecommended'));
         ensureTileLyric(card);
       } else {
         paintTileArt(card, false);
         const full = card.querySelector('.tile-full');
         if (full) full.remove();
+        const lyric = card.querySelector('.tile-live-lyric');
+        if (lyric) lyric.remove();
+        card.classList.remove('has-tile-lyric');
         if (!folia) clearTileSpan(card);
-        else if (!card.classList.contains('is-peek')) {
-          // 手动撑开的瓦片别被“恢复槽位”压回小格
+        else if (changed && foliaPlane()) {
+          // 退出播放态：这一块要还原成图样（手动展开的那张此时已经不是 is-playing，同样按块重排）
+          applyBlockLayout(card.closest('#homeRecommended'));
+        } else if (!card.classList.contains('is-peek')) {
           restoreTileSpan(card);
         }
       }
     };
     // 播放状态变化会让瓦片从小格长成大格：和点开一样走 FLIP，别让整墙硬跳
-    if (on !== was) { flipTile(card, apply); if (on) grew = true; } else apply();
+    if (changed) { flipTile(card, apply); if (on) grew = true; } else apply();
   });
-  // 瓦片撑成 6×6 会多占两行，密排会留下一个洞；补一套把洞填掉
-  if (grew) setTimeout(() => { const w = foliaWall(); if (w && homeActive()) extendWall(w); }, 520);
+  // 瓦片撑成 6×6 会多占两行，密排会留下一个洞；二维墙靠块内重排吸收，单列墙才补块
+  if (grew) setTimeout(() => { const w = foliaWall(); if (w && homeActive() && !foliaPlane()) extendWall(w); }, 520);
   updateLocateBtn();
+  if (target) warmTileLyric();
+}
+/* 字幕数据是异步到的：播放态瓦片先被标出来，cue 还在路上时字幕块是空的，
+   如果这时按了暂停（没有 timeupdate）就会一直空着。这里短轮询几次把它填上。 */
+let tileLyricWarm = 0;
+function warmTileLyric() {
+  if (tileLyricWarm) return;
+  let tries = 0;
+  tileLyricWarm = setInterval(() => {
+    tries += 1;
+    updateTileLyric();
+    const box = document.querySelector('#homeRecommended .pod-card.is-playing-tile .tile-live-lyric');
+    if ((box && box.innerHTML) || tries >= 40) { clearInterval(tileLyricWarm); tileLyricWarm = 0; }
+  }, 400);
+}
+/* 墙平移时换"正在播放"那块：滚完 160ms 再算一次，别拖成每帧一次 FLIP。
+   有瓦片正撑开（is-peek）时不算：这时它 neighbourhood 的槽位正在变，
+   重排一次就把撑开的卡挤走，镜头去追、再挤，就是"左右来回闪"。 */
+let playingSyncTimer = 0;
+function schedulePlayingSync() {
+  if (playingSyncTimer) return;
+  playingSyncTimer = setTimeout(() => {
+    playingSyncTimer = 0;
+    if (document.querySelector('#homeRecommended .pod-card.is-peek')) return;
+    if (homeActive() && state.current) syncPlayingTiles();
+  }, 160);
 }
 
 /* 墙页右下角的「回到正在播放」：点了就把正在播放的瓦片滚到视口正中并闪一圈珊瑚边 */
@@ -500,7 +614,9 @@ function updateLocateBtn() {
     btn.innerHTML = '<span class="folia-locate-bars"><i></i><i></i><i></i></span>' +
       '<span class="folia-locate-label">正在播放</span>';
     btn.addEventListener('click', () => {
-      syncPlayingTiles();
+      // 已经标好播放瓦片就别再算一遍：syncPlayingTiles 会顺手 FLIP 放大/补墙，
+      // 和紧接着的整墙滑动叠在一起，看起来就是"大瓦片在闪"。
+      if (!document.querySelector('#homeRecommended .pod-card.is-playing-tile')) syncPlayingTiles();
       const key = (state.current && state.current.showKey) || '';
       const cards = [...document.querySelectorAll('#homeRecommended .pod-card')];
       const sc = document.querySelector('.main');
@@ -512,10 +628,29 @@ function updateLocateBtn() {
         cards.find(c => tileSlugOf(c) === key);
       if (!card) return;
       centerTile(card);
-      card.classList.remove('locate-flash');
-      void card.offsetWidth;
-      card.classList.add('locate-flash');
-      setTimeout(() => card.classList.remove('locate-flash'), 1000);
+      /* 描边闪烁必须等墙面滑稳再打。原来是一边 smooth 滑 460ms、一边给 6×6 的大瓦片
+         逐帧动画 box-shadow，整块在动 + 整块重绘叠在一起，WebView2 上就是"大瓦片闪"。
+         有 scrollend 就等它，没有就按实测的 520ms 兜底。 */
+      const flash = () => {
+        card.classList.remove('locate-flash');
+        void card.offsetWidth;
+        card.classList.add('locate-flash');
+        setTimeout(() => card.classList.remove('locate-flash'), 900);
+      };
+      const scroller = sc && sc.closest('.main');
+      if (scroller && typeof scroller.addEventListener === 'function') {
+        let fired = false;
+        const once = () => {
+          if (fired) return;
+          fired = true;
+          scroller.removeEventListener('scrollend', once);
+          flash();
+        };
+        scroller.addEventListener('scrollend', once);
+        setTimeout(once, 620);
+      } else {
+        flash();
+      }
     });
     document.body.appendChild(btn);
   }
@@ -541,9 +676,14 @@ const FOLIA_THEME_ID = 'ct-pack-folia-poster';
 const foliaWall = () => (document.documentElement.dataset.theme === FOLIA_THEME_ID
   ? document.getElementById('homeRecommended') : null);
 const homeActive = () => !!$('page-home')?.classList.contains('active');
-const TILE_SET_SIZE = 14;   // 与主题 14n 的铺满周期一致：12 席整块 + 两块 6×4
-const TILE_MAX = 400;       // Folia MAX_RENDERED_INSTANCES
+const TILE_SET_SIZE = 12;   // 一块 = 12 席，12 栏 × 8 行严格铺满（BLOCK_TEMPLATES）
+const TILE_MAX = 120;       // 单列瀑布的硬上限：120 块 ≈ 10 屏，再往后全是重复节目，白白占内存
+/* Folia 的二维墙按列算：48 = 12×4，四整块；纵向搬块要上下各留一块缓冲，三列合计 144 块。
+   原来 84/列（三列 252 块）在 1180×880 的窗口里根本没有一屏能同时看到，只贡献 DOM 和合成层。 */
+const FOLIA_COL_CAP = 48;
 const FOLIA_COLUMNS = 3;    // 二维墙：三列 12 栏块并排，左右各留一块，走到边上就原地倒块
+/* 窄屏（<=900，与 CSS 的移动端断点一致：这个宽度起底栏导航已经接管）不铺二维墙，退回单页瀑布 */
+const foliaNarrow = () => !!(window.matchMedia && window.matchMedia('(max-width: 900px)').matches);
 
 function tileSlugOf(card) {
   const link = card && card.querySelector('[data-open-podcast]');
@@ -568,9 +708,15 @@ function ensureTilePeek(card) {
 }
 
 function collapseTiles(except) {
+  let closed = false;
   document.querySelectorAll('#homeRecommended .pod-card.is-peek').forEach(card => {
-    if (card !== except) flipTile(card, () => { card.classList.remove('is-peek'); restoreTileSpan(card); });
+    if (card !== except) {
+      closed = true;
+      flipTile(card, () => { card.classList.remove('is-peek'); restoreTileSpan(card); });
+    }
   });
+  // 收起后槽位又变了，补一次播放瓦片的同步（撑开期间是被主动跳过的）
+  if (closed) setTimeout(schedulePlayingSync, 320);
 }
 
 /* ---------- 封面全屏：把瓦片里正在看的那张封面铺满窗口 ---------- */
@@ -584,6 +730,8 @@ function updateCoverLyric() {
   if (box.dataset.signature !== html) {
     box.innerHTML = html;
     box.dataset.signature = html;
+    fitLyricBox(box, 34);
+    refreshLyricPalette(box, null);
   }
   paintCueWordEl(box.querySelector('.tl-cur'));
 }
@@ -709,7 +857,9 @@ function openCoverStage(card) {
   const showArt = show && show.artwork ? show.artwork : '';
   /* 分集封面优先，但外站封面经常 403 / 超时：候选按顺序退，最后一张也失败时
      落到 CSS 生成的深色底，不再把整块窗口留成纯黑。 */
-  const candidates = [...new Set([epImg, showArt, artImg ? artImg.getAttribute('src') : ''].filter(Boolean))];
+  const candidates = [...new Set([epImg, showArt, artImg ? artImg.getAttribute('src') : '']
+    .filter(Boolean)
+    .filter(src => !/^http:\/\/mytmedia\.localhost/i.test(src)))];
   if (!candidates.length) { showToast('这张封面还没有图。', 'warn'); return; }
   const titleEl = card.querySelector('.pod-card-main > strong');
   const title = (playing && state.current && state.current.title) ? state.current.title : (titleEl ? titleEl.textContent.trim() : '');
@@ -725,8 +875,10 @@ function openCoverStage(card) {
   layer.classList.add('cover-empty');
   const paintCover = (src) => {
     if (token !== coverLoadToken) return;
-    if (img) { img.src = src; img.alt = title || '节目封面'; }
-    if (bg) bg.style.backgroundImage = 'url(' + JSON.stringify(src) + ')';
+    /* 舞台/底图都走同一条代理链路：命中本地缓存时开全屏不用再等远端。 */
+    const real = coverSrc(src);
+    if (img) { img.src = real; img.alt = title || '节目封面'; }
+    if (bg) bg.style.backgroundImage = 'url(' + JSON.stringify(real) + ')';
     if (img && img.complete && img.naturalWidth) layer.classList.remove('cover-empty');
   };
   const coverLoaded = () => {
@@ -892,21 +1044,24 @@ function flipTile(card, mutate) {
        暂时拉歪，看着就是“封面斜了一下”。这类只做位移 + 淡入，保持画面比例不畸变。 */
     const distorted = Math.abs(sx / sy - 1) > 0.08;
     if (distorted) {
-      // 被点开的这一块：直接补间它自己的宽高（border-box），让封面按 object-fit 重新裁切，
-      // 不做非等比缩放，也不会把人物/斜线拉歪；旁边被挤动的只做位移+淡入。
-      if (c === card && a.width > 0 && b.width > 0) {
+      /* 被点开的这一块只做位移。以前这里补间 width/height（border-box）+ opacity 0.86→1：
+         宽高不是合成属性，4K 宽的墙上每帧都要整块重排重绘，带字幕/大封面的播放瓦片最明显，
+         看上去就是"点一下这块闪一下"。宽高直接落到新值，只补一段位移。
+         旁边被挤动的也只位移，不做 opacity 一闪（几十块一起闪比不动更刺眼）。 */
+      if (c === card && a.width > 0 && b.width > 0 && (Math.abs(dx) > 1 || Math.abs(dy) > 1)) {
         c.animate([
-          { width: a.width + 'px', height: a.height + 'px', opacity: 0.86, transform: 'translate(' + dx + 'px,' + dy + 'px)' },
-          { width: b.width + 'px', height: b.height + 'px', opacity: 1, transform: 'translate(0,0)' }
+          { transform: 'translate(' + dx + 'px,' + dy + 'px)' },
+          { transform: 'translate(0,0)' }
         ], {
-          duration: 400,
+          duration: 320,
           easing: 'cubic-bezier(0.22, 0.9, 0.2, 1)'
         });
         return;
       }
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
       c.animate([
-        { opacity: 0.78, transform: 'translate(' + dx + 'px,' + dy + 'px)' },
-        { opacity: 1, transform: 'translate(0,0)' }
+        { transform: 'translate(' + dx + 'px,' + dy + 'px)' },
+        { transform: 'translate(0,0)' }
       ], {
         duration: 260,
         easing: 'cubic-bezier(0.22, 0.9, 0.2, 1)'
@@ -947,30 +1102,35 @@ function bindTilePeek() {
     if (e.target.closest('.tile-peek-actions a, .pod-actions')) return;   // 让链接与快钮各自干活
     const main = e.target.closest('.pod-card-main');
     if (!main) return;
-    // 屏幕两侧的列是“墙外”的下一块：点封面直接进节目页，别只翻成描述层让人以为没反应
-    const plane = foliaPlane();
-    const cols = plane ? [...plane.querySelectorAll('#homeRecommended')] : [];
-    // 镜头可能停在左/中/右任意一列：以“视口中心落在哪一列”判主列，不能拿固定 left=0
-    const sc = wallScroller(wall);
-    const vc = sc ? sc.getBoundingClientRect().left + sc.clientWidth / 2 : window.innerWidth / 2;
-    const centerCol = cols.find(c => {
-      const r = c.getBoundingClientRect();
-      return r.left <= vc && r.right >= vc;
-    }) || cols[1];
-    if (cols.length === 3 && card.closest('#homeRecommended') !== centerCol) return;
+    // 左右两列也是墙的一部分：点击同样「放大居中」，不再直跳节目页——
+    // 想进详情就点展开后描述层里的「进入节目页」。
     e.preventDefault();
     e.stopPropagation();
     setWallCursor(card, { pan: false });
     if (card.classList.contains('is-peek')) {
       flipTile(card, () => { card.classList.remove('is-peek'); restoreTileSpan(card); });
+      setTimeout(schedulePlayingSync, 320);
       return;
     }
     collapseTiles(card);
-    const final = flipTile(card, () => { card.classList.add('is-peek'); clearTileSpan(card); ensureTilePeek(card); });
+    const final = flipTile(card, () => {
+      card.classList.add('is-peek');
+      applyBlockLayout(card.closest('#homeRecommended'));
+      ensureTilePeek(card);
+    });
     // 用“撑开后的最终矩形”算镜头目标；动画中途量到的是补间宽高，会把大卡推偏
-    if (final) centerTile(card, final);
+    if (final) centerTileAnywhere(card, final);
+    /* 撑开之后封面/描述/字号还在陆续落位，瓦片会被再挤一两次。
+       以前挂 500/950/1500 三个定时器、每个都走 centerTileAnywhere（smooth 460ms），
+       一次点击能滚三四趟，看上去就是“这块瓦片在左右闪来闪去最后才停”。
+       现在只留一个观察器：等第一趟滑停（520ms）后再守 1.1s，最多修两次，
+       偏差不到 24px 一律不动，修正用 auto（几十像素的位移肉眼看不出来）。 */
+    scheduleSettle(card);
     // 二维墙本身有几十块纵深，撑开不会把墙走到底；单列短墙才需要补块填洞
-    if (!foliaPlane()) setTimeout(() => { const w = foliaWall(); if (w && homeActive()) extendWall(w); }, 520);
+    // 展开改成块内重排（anchorExpandedTile）后，二维墙不再往墙尾补新块
+    if (!foliaPlane() && !card.classList.contains('is-playing-tile')) {
+      setTimeout(() => { const w = foliaWall(); if (w && homeActive()) extendWall(w); }, 520);
+    }
   }, true);
   document.addEventListener('keydown', (e) => {
     const arrow = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key);
@@ -1006,11 +1166,24 @@ function bindTilePeek() {
   }, true);
 }
 
-/* 当前句压到正在播放的瓦片上：Folia 播放态瓦片显示上一句 / 当前句 / 下一句三行 */
+/* 当前句压到正在播放的瓦片上：Folia 播放态瓦片显示上一句 / 当前句 / 下一句三行。
+   句间停顿（`state.activeCue` 变 -1）不是"没字幕"，是"这句话还在屏幕上"：
+   停在刚读完的那句上，直到下一句开口再换——壁纸早就这么做了（wpCueIndex），
+   瓦片和全屏舞台跟着来，不然每句话之间字幕整块闪一下。 */
+let tileCueHold = -1;
+let tileCueTag = '';
 function tileLyricLines() {
   const cues = state.cues || [];
-  const i = state.activeCue;
+  if (!cues.length) return [];
+  const tag = [state.current && state.current.id, cues.length, cues[0] && cues[0].start].join('|');
+  if (tag !== tileCueTag) { tileCueTag = tag; tileCueHold = -1; }
+  let i = state.activeCue;
+  if (i >= 0 && cues[i]) tileCueHold = i;
+  else if (tileCueHold >= 0 && cues[tileCueHold]) i = tileCueHold;
   if (i < 0 || !cues[i]) return [];
+  /* 往回拖进度：留住的那句如果还没轮到，就先别顶上来 */
+  const now = (Number(audio.currentTime) || 0) + (Number(state.offset) || 0);
+  if ((Number(cues[i].start) || 0) > now + 0.25) return [];
   const out = [];
   for (const rel of [-1, 0, 1]) {
     const cue = cues[i + rel];
@@ -1034,6 +1207,179 @@ function tileLyricHTML() {
     (l.rel < 0 ? 'prev' : l.rel > 0 ? 'next' : 'cur') + '">' +
     (l.rel === 0 ? tileCueMarkup(l.cue, l.text) : esc(l.text)) + '</span>').join('');
 }
+/* ---------- 封面字幕：不丢词 + 按封面亮度自动取色 ----------
+   两件事一起治：
+   1) 字幕行原来是「两行 clamp + flex 收缩」，三行抢高度时每行被压成一行，
+      浏览器直接吐省略号，句尾半截消失。现在行不再裁，字号按可用高度逐档下调
+      （fitLyricBox），三句都完整放下为止。
+   2) 逐词高亮原来是固定的「30% 主题色 + 白字」，压在 SmartLess 那种米色海报上
+      就是一块看不清的糊色。现在把封面缩成 32×32 亮度网格（缓存），
+      字幕带按平均亮度选深/浅字色，高亮词按它自己身后的亮度选
+      「深底白字」还是「主题色深字」。封面走 mytmedia 代理（带 CORS），
+      canvas 不会被污染；拿不到像素时自动退回原来的配色。
+   低亮度 → 白字；高亮度 → 近黑字。阈值 0.6/0.52 是拿深浅两类海报实测的折中。 */
+const LYRIC_LUMA = new Map();
+function lyricLumaMap(src) {
+  if (!src) return null;
+  const hit = LYRIC_LUMA.get(src);
+  if (hit) return hit;
+  const entry = { ready: false, failed: false, N: 32, grid: null, waiters: [] };
+  LYRIC_LUMA.set(src, entry);
+  const flush = () => entry.waiters.splice(0).forEach(fn => { try { fn(); } catch (e) {} });
+  const im = new Image();
+  im.crossOrigin = 'anonymous';
+  im.onload = () => {
+    try {
+      const N = entry.N;
+      const cv = document.createElement('canvas');
+      cv.width = N; cv.height = N;
+      const cx = cv.getContext('2d', { willReadFrequently: true });
+      cx.drawImage(im, 0, 0, N, N);
+      const px = cx.getImageData(0, 0, N, N).data;
+      const grid = new Float32Array(N * N);
+      for (let i = 0, j = 0; i < px.length; i += 4, j++) {
+        grid[j] = (0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2]) / 255;
+      }
+      entry.grid = grid; entry.ready = true;
+    } catch (e) { entry.failed = true; }
+    flush();
+  };
+  im.onerror = () => { entry.failed = true; flush(); };
+  im.src = src;
+  return entry;
+}
+function lyricLumaAt(entry, nx, ny) {
+  if (!entry || !entry.ready) return -1;
+  const N = entry.N, g = entry.grid;
+  const cx = Math.min(N - 1, Math.max(0, Math.floor(nx * N)));
+  const cy = Math.min(N - 1, Math.max(0, Math.floor(ny * N)));
+  let sum = 0, n = 0;
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const x = cx + dx, y = cy + dy;
+      if (x < 0 || y < 0 || x >= N || y >= N) continue;
+      sum += g[y * N + x]; n++;
+    }
+  }
+  return n ? sum / n : -1;
+}
+/* 一条字幕常常横跨亮暗两块（SmartLess 的米色名字压着深色底），
+   只看中心点会漏掉最亮的那一段。取字幕框内 3×3 个采样里的峰值，
+   按「最亮处」决定要不要垫底板——宁可多垫一点，也不让半句话看不清。 */
+function lyricBandPeak(entry, br, hr) {
+  let peak = -1;
+  for (let iy = 0; iy < 3; iy++) {
+    for (let ix = 0; ix < 3; ix++) {
+      const nx = (br.left + br.width * (0.12 + 0.38 * ix) - hr.left) / hr.width;
+      const ny = (br.top + br.height * (0.12 + 0.38 * iy) - hr.top) / hr.height;
+      peak = Math.max(peak, lyricLumaAt(entry, nx, ny));
+    }
+  }
+  return peak;
+}
+/* 字幕只保留一种字色（白字 + 双层黑阴影）：封面是照片/插画，一条字幕往往
+   一半压在亮色、一半压在暗色上，整行翻成深字必然有一截看不清。
+   真正需要动态处理的是「底板」和「高亮块」——见下面两处。 */
+function lyricHostOf(box) {
+  return box ? (box.closest('.cover-stage') || box.closest('.pod-card')) : null;
+}
+function lyricCoverSrcOf(box) {
+  const host = lyricHostOf(box);
+  if (!host) return '';
+  const img = host.querySelector('.cs-img, .pod-art img');
+  return img ? (img.currentSrc || img.src || '') : '';
+}
+/* 主题色有时带 alpha（Folia 的 --accent 就是半透明的），
+   直接拿来铺高亮底会在浅海报上二次混色。这里把它还原成实色再铺。 */
+const LYRIC_SOLID = new Map();
+function lyricSolid(host, varName) {
+  const raw = getComputedStyle(host).getPropertyValue(varName).trim();
+  if (!raw) return '';
+  if (LYRIC_SOLID.has(raw)) return LYRIC_SOLID.get(raw);
+  const probe = document.createElement('span');
+  probe.style.color = raw;
+  probe.style.position = 'absolute';
+  probe.style.opacity = '0';
+  probe.style.pointerEvents = 'none';
+  document.body.appendChild(probe);
+  const rgb = getComputedStyle(probe).color;
+  probe.remove();
+  const solid = /^rgb\(/.test(rgb) ? rgb : '';
+  LYRIC_SOLID.set(raw, solid);
+  return solid;
+}
+function refreshLyricPalette(box, wordEl) {
+  if (!box) return;
+  const host = lyricHostOf(box);
+  if (!host) return;
+  const entry = lyricLumaMap(lyricCoverSrcOf(box));
+  if (!entry || entry.failed) return;
+  if (!entry.ready) {
+    if (!box.dataset.lumaWait) {
+      box.dataset.lumaWait = '1';
+      entry.waiters.push(() => {
+        delete box.dataset.lumaWait;
+        refreshLyricPalette(box, box.querySelector('.tl-cur .tl-word.on'));
+      });
+    }
+    return;
+  }
+  const hr = host.getBoundingClientRect();
+  const br = box.getBoundingClientRect();
+  if (hr.width < 8 || hr.height < 8 || br.width < 8) return;
+  /* 字幕不再需要"看底色换字色"：Folia 的展开海报是先给整块瓦片压一层
+     底+左的两段黑幕（`.lattice-poster.is-expanded .lattice-poster-shade`），
+     字永远用主题的近白色，靠字形自带的描边/辉光读。这里同理，字色交给 CSS。 */
+  if (!wordEl) return;
+  const wr = wordEl.getBoundingClientRect();
+  if (wr.width < 1) return;
+  const wordLuma = lyricLumaAt(entry, (wr.left + wr.width / 2 - hr.left) / hr.width,
+    (wr.top + wr.height / 2 - hr.top) / hr.height);
+  if (wordLuma < 0) return;
+  /* 高亮块：底幕已经把字幕区压暗，固定用主题色实心块 + 近黑字，
+     不再按局部亮度切深色块（深块压在黑幕上等于消失）。 */
+  const key = 'hl-accent';
+  if (box.dataset.hlKey === key) return;
+  box.dataset.hlKey = key;
+  box.style.setProperty('--tl-hl-bg', lyricSolid(host, '--accent') || 'var(--accent)');
+  box.style.setProperty('--tl-hl-ink', '#0a0a0b');
+  box.style.setProperty('--tl-hl-ring', 'transparent');
+  box.style.setProperty('--tl-hl-glow', '0 0 18px color-mix(in srgb, var(--accent) 55%, transparent)');
+}
+/* 字号阶梯：从设计上限往下试，第一个能完整放下的档位留下。
+   一屏最多 14 次重排，且只在换句时跑，不在每帧跑。 */
+/* 字号只按「固定预算」算，不跟当前这句的长短走。Folia 的 resolveLatticeTypography
+   就是这么定的（"Fits a fixed lyric budget, never the current sentence, so line changes
+   cannot pump the font size"）。按句量高度的话，长句压到 18px、短句又弹回 26px，
+   播放时整块字幕像在呼吸。 */
+const LYRIC_FS_CACHE = new Map();
+function lyricBudgetPx(avail, maxPx) {
+  const cap = Number(maxPx) || 26;
+  const key = Math.round(avail) + ':' + cap;
+  const hit = LYRIC_FS_CACHE.get(key);
+  if (hit) return hit;
+  /* 预算 = 3 行 × 1.3 行高 + 两处 0.55em 行距 + 余量 ≈ 5.5em，按 6.2em 反推字号 */
+  const px = Math.max(13, Math.min(cap, Math.floor(avail / 6.2)));
+  LYRIC_FS_CACHE.set(key, px);
+  return px;
+}
+function fitLyricBox(box, maxPx) {
+  if (!box) return;
+  const host = lyricHostOf(box);
+  if (!host) return;
+  const h = host.getBoundingClientRect().height;
+  if (!h) return;
+  const avail = host.classList.contains('cover-stage') ? h * 0.44 : h * 0.62;
+  box.style.setProperty('--tl-fs', lyricBudgetPx(avail, maxPx) + 'px');
+  /* 固定字号之后，超长的一句会顶出预算。Folia 的处理是把整块上移、让正在读的那一行
+     留在框里（resolveLatticeLongLineOffset），既不缩字号也不吃字。 */
+  const cur = box.querySelector('.tl-cur');
+  const overflow = box.scrollHeight - avail;
+  const shift = overflow > 3 && cur
+    ? Math.max(0, Math.min(overflow, cur.getBoundingClientRect().bottom - box.getBoundingClientRect().top - avail))
+    : 0;
+  box.style.setProperty('--tl-shift', Math.round(shift) + 'px');
+}
 /* 按音频时钟给当前句的词上色；首页瓦片和全屏封面共用同一套词级状态。 */
 function paintCueWordEl(el) {
   if (!el) return;
@@ -1049,6 +1395,8 @@ function paintCueWordEl(el) {
     words[i].classList.toggle('on', i === idx);
     words[i].classList.toggle('past', i >= 0 && i < idx);
   }
+  /* 高亮块的颜色跟着「这个词身后的封面亮度」走，换词就换配色键，但同一键不重复写样式 */
+  refreshLyricPalette(el.closest('.tile-live-lyric, .cs-lyric'), idx >= 0 ? words[idx] : null);
 }
 function tileWordPaint() {
   document.querySelectorAll('#homeRecommended .pod-card.is-playing-tile .tile-live-lyric .tl-cur')
@@ -1061,22 +1409,21 @@ function startTileLyricLoop() {
   if (!homeActive() || !foliaWall()) return;
   const step = () => {
     if (!el || el.paused || !homeActive() || !foliaWall()) { tileLyricRaf = 0; return; }
-    tileWordPaint();
+    /* 墙面正在滚（bindFoliaCamera 挂的 wall-scrolling）就只续帧、不上色：
+       这块播放瓦片 589×589、歌词还带四向 text-shadow，滚动时每帧改一次 class
+       等于每帧把整块重绘一遍，WebView2 上就是"带字幕的瓦片在闪"。停稳 180ms 后补画一次。 */
+    if (!document.documentElement.classList.contains('wall-scrolling')) tileWordPaint();
     tileLyricRaf = requestAnimationFrame(step);
   };
   tileLyricRaf = requestAnimationFrame(step);
+  document.documentElement.classList.remove('wall-scrolling');
 }
 function stopTileLyricLoop() {
   if (tileLyricRaf) cancelAnimationFrame(tileLyricRaf);
   tileLyricRaf = 0;
 }
 function updateTileLyric() {
-  const html = tileLyricHTML();
-  document.querySelectorAll('#homeRecommended .pod-card.is-playing-tile .tile-live-lyric').forEach(el => {
-    if (el.dataset.signature === html) return;
-    el.innerHTML = html;
-    el.dataset.signature = html;
-  });
+  document.querySelectorAll('#homeRecommended .pod-card.is-playing-tile').forEach(syncTileLyric);
   tileWordPaint();
 }
 /* 有分集封面就优先用分集封面；没有才沿用节目封面。 */
@@ -1085,8 +1432,8 @@ function paintTileArt(card, on) {
   if (!art) return;
   if (!card.dataset.baseArtHtml) card.dataset.baseArtHtml = art.innerHTML;
   const ep = on ? state.current : null;
-  const epImg = ep && ep.img ? (smallArtwork(ep.img) || ep.img) : '';
-  if (epImg) {
+  const epRaw = ep && ep.img ? (smallArtwork(ep.img) || ep.img) : '';
+  if (epRaw) {
     let img = art.querySelector('img[data-ep-art]');
     if (!img) {
       img = document.createElement('img');
@@ -1095,19 +1442,46 @@ function paintTileArt(card, on) {
       img.decoding = 'async';
       img.referrerPolicy = 'no-referrer';
       img.dataset.epArt = '1';
-      img.onerror = () => img.remove();
+      img.onerror = () => {
+        if (img.dataset.raw && img.getAttribute('src') !== img.dataset.raw) { img.setAttribute('src', img.dataset.raw); return; }
+        img.remove();
+      };
       art.insertBefore(img, art.firstChild);
     }
-    if (img.getAttribute('src') !== epImg) img.src = epImg;
+    img.dataset.raw = epRaw;
+    const src = coverSrc(ep.img, 640);
+    if (img.getAttribute('src') !== src) img.setAttribute('src', src);
     art.classList.add('has-ep-art');
   } else if (card.dataset.baseArtHtml) {
     art.innerHTML = card.dataset.baseArtHtml;
     art.classList.remove('has-ep-art');
   }
 }
-function ensureTileLyric(card) {
+/* 有句子才留字幕位：没有字幕的集子不该在播放瓦片底部空出 112px（Folia 遇到无歌词
+   就是一张干净的封面 + 标题，不会留一条空band）。`has-tile-lyric` 同时驱动 CSS 留白。 */
+function syncTileLyric(card) {
+  const html = tileLyricHTML();
   let el = card.querySelector('.tile-live-lyric');
-  if (!el) { el = document.createElement('span'); el.className = 'tile-live-lyric'; card.appendChild(el); }
+  if (!html) {
+    if (el) { el.remove(); el = null; }
+    card.classList.remove('has-tile-lyric');
+    return null;
+  }
+  if (!el) {
+    el = document.createElement('span');
+    el.className = 'tile-live-lyric';
+    card.appendChild(el);
+  }
+  card.classList.add('has-tile-lyric');
+  if (el.dataset.signature !== html) {
+    el.innerHTML = html;
+    el.dataset.signature = html;
+    fitLyricBox(el, 26);
+    refreshLyricPalette(el, null);
+  }
+  return el;
+}
+function ensureTileLyric(card) {
   let full = card.querySelector('.tile-full');
   if (!full) {
     full = document.createElement('button');
@@ -1120,25 +1494,28 @@ function ensureTileLyric(card) {
     card.appendChild(full);
   }
   paintTileArt(card, true);
-  const html = tileLyricHTML();
-  if (html && el.dataset.signature !== html) {
-    el.innerHTML = html;
-    el.dataset.signature = html;
-  }
+  const el = syncTileLyric(card);
   tileWordPaint();
   return el;
 }
 
-/* 无限墙：墙底快到了就再铺一整套（14 块 = 12 席 + 两块 6×4，正好接上）。
-   每一套换一个块模板（源码 blockTemplates 的 4 个变体），并把节目打乱后重新分槽，
-   所以往下滚不会看到同一幅墙在原地复制。 */
-const SLOT_VARIANTS = [
-  [[3, 2], [6, 4], [3, 2], [3, 2], [3, 4], [4, 4], [2, 2], [3, 2], [2, 2], [2, 2], [2, 2], [2, 2]],
-  [[2, 3], [2, 3], [2, 3], [6, 4], [6, 2], [2, 4], [2, 4], [2, 2], [2, 3], [2, 3], [2, 3], [2, 2]],
-  [[6, 4], [6, 3], [4, 3], [2, 2], [4, 2], [2, 2], [2, 3], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2]],
-  [[2, 2], [2, 2], [4, 3], [2, 4], [2, 4], [2, 3], [2, 2], [4, 3], [2, 2], [4, 4], [2, 3], [6, 2]]
+/* ---- 模板块（对照 Folia 的 blockTemplates）----
+   一块 = 12 栏 × 8 行 = 96 格，正好 12 席铺满，不留空格。块高恒定是后面两件事的前提：
+   ① 展开时只在这一块里重切，块底不动，下面的瓦片一格都不挪；
+   ② 纵向搬块时位移是整数块高，补偿量精确，不会整屏抖。
+   以前是 14 块一套，变体 2 只有 140 格（有 4 格空缺），整块搬行总高就变，补偿对不上——
+   这正是之前纵向无限试一版又撤掉的原因。 */
+const BLOCK_COLS = 12;
+const BLOCK_ROWS = 8;
+const BLOCK_SLOTS = 12;
+/* 四套 12 席图样，每套都精确 96 格。尺寸组合故意做得不一样（6×4 / 4×4 / 6×2 / 3×4 / 2×2 混排），
+   块与块按坐标哈希换图样、再按哈希做左右镜像，往下滚就不会看到同一幅墙在原地复制。 */
+const BLOCK_TEMPLATES = [
+  [[0, 0, 6, 4], [6, 0, 3, 2], [9, 0, 3, 2], [6, 2, 3, 2], [9, 2, 3, 2], [0, 4, 3, 2], [3, 4, 3, 2], [6, 4, 3, 4], [9, 4, 3, 2], [9, 6, 3, 2], [0, 6, 4, 2], [4, 6, 2, 2]],
+  [[0, 0, 3, 2], [3, 0, 3, 2], [6, 0, 6, 4], [0, 2, 3, 2], [3, 2, 3, 2], [0, 4, 3, 2], [3, 4, 3, 2], [0, 6, 2, 2], [2, 6, 2, 2], [4, 6, 2, 2], [6, 4, 6, 2], [6, 6, 6, 2]],
+  [[0, 0, 6, 2], [6, 0, 3, 4], [9, 0, 3, 4], [0, 2, 3, 2], [3, 2, 3, 2], [0, 4, 6, 4], [6, 4, 2, 2], [8, 4, 2, 2], [10, 4, 2, 2], [6, 6, 2, 2], [8, 6, 2, 2], [10, 6, 2, 2]],
+  [[0, 0, 4, 4], [4, 0, 4, 4], [8, 0, 2, 2], [10, 0, 2, 2], [8, 2, 2, 2], [10, 2, 2, 2], [0, 4, 6, 2], [6, 4, 6, 2], [0, 6, 3, 2], [3, 6, 3, 2], [6, 6, 3, 2], [9, 6, 3, 2]]
 ];
-const SET_FILLERS = [[6, 4], [6, 4]];
 function shuffle(list) {
   const a = list.slice();
   for (let i = a.length - 1; i > 0; i--) {
@@ -1147,48 +1524,160 @@ function shuffle(list) {
   }
   return a;
 }
-function slotsOf(variantIndex) {
-  return SLOT_VARIANTS[variantIndex % SLOT_VARIANTS.length].concat(SET_FILLERS);
+/* 块用哪一套图样：坐标哈希（Folia 里是 hash 选朝向），相邻块基本不会同款。 */
+function blockTemplateOf(col, block) {
+  const seed = ((Number(col.dataset.wallVariant || 0) * 2654435761) + block * 40503) >>> 0;
+  let h = (seed ^ (seed >>> 15)) * 2246822519; h >>>= 0;
+  h = (h ^ (h >>> 13)) * 3266489917; h >>>= 0;
+  const tpl = BLOCK_TEMPLATES[h % BLOCK_TEMPLATES.length];
+  const mirror = (h & 16) !== 0;
+  return tpl.map(([x, y, w, hh]) => ({ x: mirror ? BLOCK_COLS - x - w : x, y, w, h: hh }));
 }
-/* 按“整墙绝对序号”分槽：第 i 块永远落在第 floor(i/14) 套模板的第 i%14 席。
-   订阅节目少于 14 个时，一套模板里会有重复节目，但槽位是齐的，墙上不会留洞。 */
-function applyWallPattern(wall) {
-  const seed = Number(wall.dataset.wallVariant || 0);
-  const cards = [...wall.querySelectorAll('.pod-card')];
-  cards.forEach((card, i) => {
-    const slot = slotsOf(seed + Math.floor(i / TILE_SET_SIZE))[i % TILE_SET_SIZE];
-    card.dataset.span = slot[0] + '/' + slot[1];
-    card.dataset.tile = (slot[0] >= 4 || slot[0] * slot[1] >= 12) ? 'big' : 'small';
-    // 正撑开的瓦片由展开态自己占 6×6，别被槽位覆盖
-    if (card.classList.contains('is-peek') || card.classList.contains('is-playing-tile')) return;
-    card.style.gridColumn = 'span ' + slot[0];
-    card.style.gridRow = 'span ' + slot[1];
-  });
+/* 把一块矩形切成 k 份，份数/面积都要满足（每份至少 2×2）；回溯挑最匀的切法，切不出来就回退。 */
+function partitionRect(x, y, w, h, k, out) {
+  if (k === 1) { out.push({ x, y, w, h }); return true; }
+  if (w < 2 || h < 2 || w * h < 4 * k) return false;
+  const cuts = [];
+  for (let cut = 2; cut <= w - 2; cut++) {
+    const a1 = cut * h, a2 = (w - cut) * h;
+    for (let k1 = 1; k1 < k; k1++) {
+      if (a1 >= 4 * k1 && a2 >= 4 * (k - k1)) cuts.push({ axis: 0, cut, k1, skew: Math.abs(a1 / k1 - a2 / (k - k1)) });
+    }
+  }
+  for (let cut = 2; cut <= h - 2; cut++) {
+    const a1 = w * cut, a2 = w * (h - cut);
+    for (let k1 = 1; k1 < k; k1++) {
+      if (a1 >= 4 * k1 && a2 >= 4 * (k - k1)) cuts.push({ axis: 1, cut, k1, skew: Math.abs(a1 / k1 - a2 / (k - k1)) });
+    }
+  }
+  cuts.sort((a, b) => a.skew - b.skew);
+  for (const c of cuts) {
+    const mark = out.length;
+    const ok = c.axis === 0
+      ? partitionRect(x, y, c.cut, h, c.k1, out) && partitionRect(x + c.cut, y, w - c.cut, h, k - c.k1, out)
+      : partitionRect(x, y, w, c.cut, c.k1, out) && partitionRect(x, y + c.cut, w, h - c.cut, k - c.k1, out);
+    if (ok) return true;
+    out.length = mark;
+  }
+  return false;
 }
-/* 展开态要盖过每块自己的内联槽位，否则 inline 的 span 会把 6×6 压回去 */
+/* 展开态：6×6 钉在原槽位（夹进能放下的范围），剩下 60 格按面积比例分给另外 11 席，
+   每份重新切成长方形。整块还是 96 格，所以块高不变、后面的块一格都不动。 */
+function reflowBlockRects(ax, ay) {
+  const free = [];
+  if (ay > 0) free.push({ x: 0, y: 0, w: BLOCK_COLS, h: ay });
+  if (ay + 6 < BLOCK_ROWS) free.push({ x: 0, y: ay + 6, w: BLOCK_COLS, h: BLOCK_ROWS - ay - 6 });
+  if (ax > 0) free.push({ x: 0, y: ay, w: ax, h: 6 });
+  if (ax + 6 < BLOCK_COLS) free.push({ x: ax + 6, y: ay, w: BLOCK_COLS - ax - 6, h: 6 });
+  const K = BLOCK_SLOTS - 1;
+  const counts = free.map(() => 1);
+  let assigned = free.length;
+  while (assigned < K) {
+    let pick = -1, best = -1;
+    free.forEach((r, i) => {
+      if (counts[i] >= Math.floor((r.w * r.h) / 4)) return;
+      const per = (r.w * r.h) / counts[i];
+      if (per > best) { best = per; pick = i; }
+    });
+    if (pick < 0) break;
+    counts[pick] += 1;
+    assigned += 1;
+  }
+  const out = [];
+  const ok = free.every((r, i) => partitionRect(r.x, r.y, r.w, r.h, counts[i], out));
+  if (!ok || out.length !== K) return null;
+  return [{ x: ax, y: ay, w: 6, h: 6 }].concat(out);
+}
+function placeCardSlot(card, x, y, w, h, rowOffset) {
+  card.dataset.span = w + '/' + h;
+  card.dataset.tile = (w >= 4 || w * h >= 12) ? 'big' : 'small';
+  card.style.gridColumn = (x + 1) + ' / span ' + w;
+  card.style.gridRow = (rowOffset + y + 1) + ' / span ' + h;
+}
+/* 一列按块重排：没有展开的块照图样铺；有展开的块把 6×6 钉回原槽位、其余 11 席在块内重新切。
+   坐标全部显式写死，CSS 的 dense 不再参与决策——这才是 Folia 的“块 footprint 不变”。 */
+function applyBlockLayout(col) {
+  if (!col || !foliaPlane()) return;   // 窄屏退回单列瀑布时由 CSS 的普通跨度接管
+  const cards = [...col.querySelectorAll('.pod-card')];
+  if (!cards.length) return;
+  for (let b = 0; b * BLOCK_SLOTS < cards.length; b++) {
+    const from = b * BLOCK_SLOTS;
+    const block = cards.slice(from, from + BLOCK_SLOTS);
+    const tpl = blockTemplateOf(col, b);
+    const off = b * BLOCK_ROWS;
+    tpl.forEach((s, i) => {
+      const card = block[i];
+      if (!card) return;
+      card.dataset.baseX = String(s.x);
+      card.dataset.baseY = String(s.y);
+    });
+    const ex = block.find(c => c.classList.contains('is-peek') || c.classList.contains('is-playing-tile'));
+    if (!ex || block.length < BLOCK_SLOTS) {
+      block.forEach((card, i) => {
+        const s = tpl[i % tpl.length];
+        placeCardSlot(card, s.x, s.y, s.w, s.h, off);
+      });
+      continue;
+    }
+    const bx = Number(ex.dataset.baseX || 0), by = Number(ex.dataset.baseY || 0);
+    /* 6×6 只能落在 0/2 行上：落在中间会剩两条 1 行高的横带，2×2 的邻居塞不进去。
+       左右同理，避开 1 栏宽的竖带（那一条没法切出 2×2）。 */
+    const ax = Math.max(0, Math.min(BLOCK_COLS - 6, bx === 1 ? 2 : (bx === 5 ? 4 : bx)));
+    const ay = by <= 1 ? 0 : 2;
+    const rects = reflowBlockRects(ax, ay) || [{ x: ax, y: ay, w: 6, h: 6 }].concat(
+      tpl.filter((s, i) => block[i] !== ex).map(s => ({ x: s.x, y: s.y, w: s.w, h: s.h })));
+    /* 11 个空位按“离自己原槽位中心最近”分配，重排后邻居关系尽量不变，FLIP 才不像洗牌 */
+    const pool = rects.slice(1).map(r => ({ r, cx: r.x + r.w / 2, cy: r.y + r.h / 2 }));
+    block.filter(card => card !== ex).forEach(card => {
+      const ox = Number(card.dataset.baseX || 0) + 0.5, oy = Number(card.dataset.baseY || 0) + 0.5;
+      let pick = 0, best = Infinity;
+      pool.forEach((p, i) => {
+        const d = (p.cx - ox) * (p.cx - ox) + (p.cy - oy) * (p.cy - oy);
+        if (d < best) { best = d; pick = i; }
+      });
+      const item = pool.splice(pick, 1)[0];
+      placeCardSlot(card, item.r.x, item.r.y, item.r.w, item.r.h, off);
+    });
+    placeCardSlot(ex, ax, ay, 6, 6, off);
+    ex.dataset.expX = String(ax);
+    ex.dataset.expY = String(ay);
+  }
+  if (foliaPlane()) layoutFoliaPlane();
+}
+/* 单列墙没有块图样，按 data-span 还回去；二维墙整块重排（展开时邻居尺寸被改过）。 */
 function clearTileSpan(card) {
   card.style.removeProperty('grid-column');
   card.style.removeProperty('grid-row');
 }
 function restoreTileSpan(card) {
-  /* 播放态由主题固定占 6×6；收起动作层时不能把内联槽位写回去，否则播放封面会缩回一格。 */
-  if (card.classList.contains('is-playing-tile')) { clearTileSpan(card); return; }
+  const col = card && card.closest('#homeRecommended');
+  if (col && foliaPlane()) { applyBlockLayout(col); return; }
   const span = (card.dataset.span || '').split('/');
   if (span.length === 2 && span[0]) {
     card.style.gridColumn = 'span ' + span[0];
     card.style.gridRow = 'span ' + span[1];
   }
 }
-function extendWallOne(wall) {
+/* 一块瓦片对应哪档节目；补块和“别撞同一档”都靠它认人。 */
+function extendWallOne(wall, exclude) {
   const cards = [...wall.querySelectorAll('.pod-card')];
-  const cap = wall.closest('.folia-wall-plane') ? 84 : TILE_MAX;
+  const plane = wall.closest('.folia-wall-plane');
+  const cap = plane ? FOLIA_COL_CAP : TILE_MAX;
   if (cards.length >= cap) return;
-  const srcs = cards.filter(c => !c.dataset.wallClone);
-  if (!srcs.length) return;
   // 只补到“下一整套”的边界：首屏不足 14 块时先把当前这套补满，之后每次 +14
-  const need = TILE_SET_SIZE - (cards.length % TILE_SET_SIZE);
+  const need = Math.min(TILE_SET_SIZE - (cards.length % TILE_SET_SIZE), cap - cards.length);
+  if (need <= 0) return;
   const pool = [];
-  while (pool.length < need) pool.push(...shuffle(srcs));
+  {
+    const srcs = cards.filter(c => !c.dataset.wallClone);
+    /* 侧列整列都是复制出来的（没有“原型”卡），不能因此停止生长，否则三列深浅不一，
+       左右平移时某一列先到底。 */
+    const all = srcs.length ? srcs : cards;
+    if (!all.length) return;
+    const fresh = exclude && exclude.size ? all.filter(c => !exclude.has(tileSlugOf(c))) : all;
+    const pick = fresh.length >= need ? fresh : all;
+    while (pool.length < need) pool.push(...shuffle(pick.slice()));
+  }
   const clones = pool.slice(0, need).map((src, index) => {
     const clone = src.cloneNode(true);
     clone.removeAttribute('id');
@@ -1202,12 +1691,22 @@ function extendWallOne(wall) {
   const frag = document.createDocumentFragment();
   clones.forEach(c => frag.appendChild(c));
   wall.appendChild(frag);
-  applyWallPattern(wall);
+  /* 一次补一整段可能越过上限（之前实测长到 89/列，84 的硬上限没拦住），补完再削一次。 */
+  const grown = [...wall.querySelectorAll('.pod-card')];
+  if (grown.length > cap) grown.slice(cap).forEach(c => c.remove());
+  applyBlockLayout(wall);
 }
 /* 二维墙里三列必须一起长，否则左右平移时会看到某一列提前到底。 */
 function extendWall(wall) {
   const cols = wall && wall.closest('.folia-wall-plane') ? wallColumns() : [wall];
-  cols.forEach(extendWallOne);
+  /* 三列一起长时共用同一份“刚出现过”的名单：新补的瓦片落在现有内容下面，
+     紧挨着的左右两格要是同一档节目，一滚就露出来。 */
+  const exclude = new Set();
+  cols.forEach(col => {
+    [...col.querySelectorAll('.pod-card')].slice(-TILE_SET_SIZE * 2)
+      .forEach(card => { const slug = tileSlugOf(card); if (slug) exclude.add(slug); });
+  });
+  cols.forEach(col => extendWallOne(col, exclude));
   layoutFoliaPlane();
   syncPlayingTiles();
 }
@@ -1215,11 +1714,12 @@ function ensureWallDepth() {
   const wall = foliaWall();
   if (!wall) return;
   if (!wall.querySelectorAll('.pod-card').length) return;
-  if (!wall.dataset.wallVariant) wall.dataset.wallVariant = String(Math.floor(Math.random() * SLOT_VARIANTS.length));
-  applyWallPattern(wall);
-  // 不足两整套就补齐，够两整套就随滚动继续长
+  if (!wall.dataset.wallVariant) wall.dataset.wallVariant = String(Math.floor(Math.random() * BLOCK_TEMPLATES.length));
+  applyBlockLayout(wall);
+  // 二维墙铺满四整块（纵向搬块上下各留一块缓冲）；单列墙两套够用
+  const target = foliaPlane() ? TILE_SET_SIZE * 4 : TILE_SET_SIZE * 2;
   let guard = 0;
-  while (wall.querySelectorAll('.pod-card').length < TILE_SET_SIZE * 2 && guard++ < 8) extendWall(wall);
+  while (wall.querySelectorAll('.pod-card').length < target && guard++ < 8) extendWall(wall);
 }
 /* 切出 Folia 时把这张墙还给普通主题：补块、展开态、内联网格槽位和歌词层都是 Folia 专属，
    留着会在 4 列基础网格里撑出隐式列，或者把歌词当普通文本塞回卡片。 */
@@ -1247,6 +1747,7 @@ function wallColumns() {
 function wallColumnOf(card) {
   return card && card.closest ? card.closest('#homeRecommended') : null;
 }
+
 function layoutFoliaPlane() {
   const plane = foliaPlane();
   if (!plane) return;
@@ -1263,7 +1764,46 @@ function layoutFoliaPlane() {
     col.style.left = Number(col.dataset.foliaX) + 'px';
     height = Math.max(height, col.offsetHeight);
   });
+  plane.style.width = (cols.length * W) + 'px';
   plane.style.height = height + 'px';
+}
+/* 一块的宽度就是“一屏宽”，列位置是块的整数倍。窗口改尺寸后不同步这块宽度的话，
+   列还停在旧尺寸上，镜头算出来的目标全对不准——表现就是“点哪块都可能滑到别处去”。 */
+function resizeFoliaPlane() {
+  if (foliaNarrow()) { teardownFoliaPlane(); return; }
+  const plane = foliaPlane();
+  const sc = wallScroller(foliaWall());
+  if (!plane || !sc) return;
+  const oldW = Number(plane.dataset.blockW);
+  const newW = Math.round(sc.clientWidth || (plane.parentElement && plane.parentElement.clientWidth) || 0);
+  if (!newW || Math.abs(newW - oldW) < 2) return;
+  const cols = wallColumns().slice().sort((a, b) => Number(a.dataset.foliaX) - Number(b.dataset.foliaX));
+  const prevBehavior = sc.style.scrollBehavior;
+  const prevLeft = sc.scrollLeft;
+  sc.style.scrollBehavior = 'auto';
+  plane.dataset.blockW = String(newW);
+  plane.style.setProperty('--folia-block-w', newW + 'px');
+  cols.forEach((col, i) => {
+    col.dataset.foliaX = String(i * newW);
+    col.style.width = newW + 'px';
+    col.style.left = (i * newW) + 'px';
+  });
+  layoutFoliaPlane();
+  const maxLeft = Math.max(0, sc.scrollWidth - sc.clientWidth);
+  sc.scrollLeft = Math.min(maxLeft, Math.max(0, Math.round(prevLeft * (oldW ? newW / oldW : 1))));
+  /* 宽度换了，块宽也换了，但纵向没跟着动：把窗口改矮时展开的卡会留在原来的纵向位置，
+     直接从画面上方飞出去（实测 h 880→680 后卡顶在 -455）。所以重排完按新视口再对准一次。 */
+  const focus = sc.querySelector('.pod-card.is-peek, .pod-card.is-playing-tile');
+  if (focus) {
+    const r = focus.getBoundingClientRect();
+    const sr = sc.getBoundingClientRect();
+    const top = sc.scrollTop + (r.top - sr.top) - Math.max(0, (sc.clientHeight - r.height) / 2);
+    const left = sc.scrollLeft + (r.left - sr.left) - Math.max(0, (sc.clientWidth - r.width) / 2);
+    foliaRecycleLock = Date.now() + 900;
+    sc.scrollTo({ top, left: Math.min(maxLeft, Math.max(0, left)), behavior: 'auto' });
+  }
+  sc.style.scrollBehavior = prevBehavior;
+  syncPlayingTiles();
 }
 function rebuildFoliaSides() {
   const plane = foliaPlane();
@@ -1274,6 +1814,8 @@ function rebuildFoliaSides() {
   wallColumns().forEach(col => { if (col !== host) col.remove(); });
   host.dataset.foliaCol = '0';
   host.dataset.foliaX = '0';
+  /* 三列的节目顺序统一由 arrangeWallCycle 排（侧列先按同一份内容克隆出来）：
+     每列各自打乱同一套的话，相邻两格随时会撞同一档节目。 */
   for (let i = 1; i < FOLIA_COLUMNS; i++) {
     const col = host.cloneNode(true);
     col.dataset.foliaCol = String(i);
@@ -1281,21 +1823,91 @@ function rebuildFoliaSides() {
     col.style.width = W + 'px';
     col.style.left = (i * W) + 'px';
     col.removeAttribute('data-myt-tile-sync');
-    // 左右两列换一个节目顺序，避免三列同一位置都是同一张封面
-    const cards = [...col.querySelectorAll('.pod-card')];
-    col.querySelectorAll('.pod-card').forEach(card => {
-      card.classList.remove('is-cursor', 'is-peek', 'is-playing-tile', 'is-playing-tile-live');
-      card.querySelectorAll('.tile-peek, .tile-live-lyric').forEach(node => node.remove());
-    });
-    shuffle(cards).forEach(card => col.appendChild(card));
-    applyWallPattern(col);
     plane.appendChild(col);
   }
   plane.dataset.render = host.dataset.foliaRender || '';
+  arrangeWallCycle(host);
+  syncPlayingTiles();
+}
+/* 三列的节目顺序排成同一条循环序列，按列错开一个步长：订阅节目少的时候
+   每列本来就只能循环播放那十几档，各自打乱必然并排撞同一档；统一排成
+   S[i + k*stride] 之后，同一横排三列永远是三个不同的节目（stride = N/列数）。 */
+function arrangeWallCycle(host) {
+  if (!foliaWall()) return;
+  const cols = wallColumns();
+  if (!cols.length) return;
+  const all = [...host.querySelectorAll('.pod-card')];
+  if (!all.length) return;
+  const slugs = [...new Set(all.map(tileSlugOf).filter(Boolean))];
+  if (slugs.length < 2) return;
+  const S = shuffle(slugs.slice());
+  const N = S.length;
+  const stride = Math.max(1, Math.floor(N / cols.length));
+  /* 直接把一列铺到四整块（48）：以前只按当前 15 块铺，剩下的靠 extendWallOne 随机克隆，
+     克隆不看“最近出现过谁”，块里就会冒出两张同款封面。铺满之后再补块也不会走到 48 以上。 */
+  const depth = Math.max(all.length, TILE_SET_SIZE * 4);
+  // 每档节目留一张“原型”卡，所有列都从它克隆，保证内容一致、顺序可控
+  const proto = new Map();
+  all.forEach(card => { const slug = tileSlugOf(card); if (slug && !proto.has(slug)) proto.set(slug, card); });
+  /* 一列 42 块、只有 14 档节目，等于同一份顺序每 14 块原样重来一次：上下隔一屏就会
+     撞回同一批封面。Folia 的格子靠「模板 + 朝向」按坐标哈希来打散，这里等价地给每个
+     周期（每 N 块）换一份顺序，而同一周期内三列仍按 stride 错开。 */
+  const permOf = (cycle) => {
+    if (!cycle) return S;
+    const arr = S.slice();
+    let seed = (0x9e3779b1 ^ (cycle * 0x85ebca6b)) >>> 0;
+    const rnd = () => { seed ^= seed << 13; seed >>>= 0; seed ^= seed >>> 17; seed ^= seed << 5; seed >>>= 0; return seed / 4294967296; };
+    for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; }
+    return arr;
+  };
+  const perms = new Map();
+  cols.forEach((col, k) => {
+    const offset = k * stride;
+    [...col.querySelectorAll('.pod-card')].forEach(card => card.remove());
+    let localPerm = null, localCycle = -1;
+    /* 一列只有 14 档节目、48 块，块里 12 席要是撞上最近出现过的同一档，
+       并排就会看到两张一样的封面。留一个 11 块的滑动窗口，撞了就往后换一席。 */
+    const recent = [];
+    for (let i = 0; i < depth; i++) {
+      const cycle = Math.floor(i / N);
+      if (cycle !== localCycle) {
+        localCycle = cycle;
+        let perm = perms.get(cycle);
+        if (!perm) { perm = permOf(cycle); perms.set(cycle, perm); }
+        localPerm = perm.slice();   // 每列单独调序，别把别的列的顺序也改了
+      }
+      let at = (i % N + offset) % N;
+      if (recent.indexOf(localPerm[at]) >= 0) {
+        /* 这一席撞上最近 11 块里的同一档：在本周期里挑一档没出现过的换上。
+           14 档节目、窗口 11，永远挑得到，不会换回原样 */
+        for (let j = 0; j < N; j++) {
+          if (recent.indexOf(localPerm[j]) < 0) {
+            [localPerm[at], localPerm[j]] = [localPerm[j], localPerm[at]];
+            break;
+          }
+        }
+      }
+      const slug = localPerm[at];
+      recent.push(slug);
+      if (recent.length > 11) recent.shift();
+      const src = proto.get(slug);
+      if (!src) continue;
+      const node = src.cloneNode(true);
+      node.removeAttribute('id');
+      node.classList.remove('is-cursor', 'is-peek', 'is-playing-tile', 'is-playing-tile-live');
+      node.querySelectorAll('.tile-peek, .tile-live-lyric').forEach(n => n.remove());
+      if (k > 0) node.dataset.wallClone = '1';   // 侧列仍算补块来的，补块时不会把它当原型
+      col.appendChild(node);
+    }
+    applyBlockLayout(col);
+  });
   syncPlayingTiles();
 }
 function setupFoliaPlane() {
   if (!foliaWall()) return;
+  /* 窄屏不做二维墙：一块 = 一屏宽，三列加起来三屏，切到手机尺寸就只剩半张海报，
+     左右邻居还会从边上插进来。窄屏退回普通瀑布（主题的移动端规则接管列数）。 */
+  if (foliaNarrow()) { teardownFoliaPlane(); return; }
   const host = document.getElementById('homeRecommended');
   if (!host || !host.querySelectorAll('.pod-card').length) return;
   let plane = foliaPlane();
@@ -1310,7 +1922,7 @@ function setupFoliaPlane() {
   plane.dataset.blockW = String(W);
   plane.style.setProperty('--folia-block-w', W + 'px');
   rebuildFoliaSides();
-  applyWallPattern(host);
+  applyBlockLayout(host);
   layoutFoliaPlane();
   const sc = wallScroller(host);
   if (sc) {
@@ -1319,10 +1931,22 @@ function setupFoliaPlane() {
     sc.scrollLeft = W;
     sc.style.scrollBehavior = '';
     sc.dataset.foliaCamera = '1';
+    bindFoliaCamera(sc);
+    bindWallDragPan(sc);
+  }
+  if (!setupFoliaPlane.boundResize) {
+    setupFoliaPlane.boundResize = true;
+    let timer = 0;
+    window.addEventListener('resize', () => {
+      clearTimeout(timer);
+      // 变窄时 plane 会被拆掉；再拉宽回来要重新搭，否则墙停在拆掉后的普通网格里
+      timer = setTimeout(() => { if (foliaPlane()) resizeFoliaPlane(); else setupFoliaPlane(); }, 140);
+    });
   }
 }
 function syncFoliaPlane() {
   if (!foliaWall()) return;
+  if (foliaNarrow()) { teardownFoliaPlane(); return; }
   const plane = foliaPlane();
   if (!plane) { setupFoliaPlane(); return; }
   const cols = wallColumns();
@@ -1332,7 +1956,9 @@ function syncFoliaPlane() {
   const n = host.querySelectorAll('.pod-card').length;
   if (!n) return;
   const counts = cols.map(col => col.querySelectorAll('.pod-card').length);
-  const target = Math.max(n, ...counts, Number(app.homeWallCount) || 0);
+  // 块内布局要求块是完整的：目标深度取整到 12 的倍数
+  const target = Math.max(TILE_SET_SIZE * 4,
+    Math.ceil(Math.max(n, ...counts, Number(app.homeWallCount) || 0) / TILE_SET_SIZE) * TILE_SET_SIZE);
   // 页面重画会把主列换回 15 块；按上次离开首页时的纵深把缺的列补回来，别让滚动位置被截断
   if (Math.min(...counts) < target) {
     let guard = 0;
@@ -1372,6 +1998,52 @@ function rotateWallWorld(dir) {
   sc.style.scrollBehavior = prevBehavior;
   return true;
 }
+/* 纵向无限：块高恒定（12 栏 × 8 行），所以整块上下搬的位移是精确的一块高。
+   往下滚快到底时把第一块搬到末尾、scrollTop 减一块高；往上滚快到顶时反过来。
+   因为块的 footprint 一样，搬完重排的行号只差整数块，补偿量对得上，画面一像素不抖。 */
+function blockHeightOf(col) {
+  if (!col) return 0;
+  const cs = getComputedStyle(col);
+  const row = parseFloat(cs.gridAutoRows);
+  const gap = parseFloat(cs.rowGap) || 0;
+  if (!row || !Number.isFinite(row)) return 0;
+  return Math.round((row + gap) * BLOCK_ROWS);
+}
+function rotateWallRows(dir) {
+  const sc = wallScroller(foliaWall());
+  if (!sc || !homeActive()) return false;
+  const cols = wallColumns();
+  if (!cols.length) return false;
+  /* 正在手动撑开时不动：那一块里有 6×6，整块搬走会把镜头里的卡换掉 */
+  if (sc.querySelector('#homeRecommended .pod-card.is-peek')) return false;
+  const bh = blockHeightOf(cols[0]);
+  if (!bh) return false;
+  const cards = [...cols[0].querySelectorAll('.pod-card')];
+  if (cards.length <= TILE_SET_SIZE * 2) return false;
+  const prevBehavior = sc.style.scrollBehavior;
+  sc.style.scrollBehavior = 'auto';
+  if (dir === 'down') {
+    cols.forEach(col => {
+      [...col.querySelectorAll('.pod-card')].slice(0, TILE_SET_SIZE)
+        .forEach(card => col.appendChild(card));
+    });
+  } else if (dir === 'up') {
+    cols.forEach(col => {
+      const anchor = col.firstElementChild;
+      [...col.querySelectorAll('.pod-card')].slice(-TILE_SET_SIZE)
+        .forEach(card => col.insertBefore(card, anchor));
+    });
+  } else {
+    sc.style.scrollBehavior = prevBehavior;
+    return false;
+  }
+  cols.forEach(col => applyBlockLayout(col));
+  // 内容整体挪了一块高：滚动量反向补回去，画面留在原地
+  sc.scrollTop = Math.max(0, sc.scrollTop + (dir === 'down' ? -bh : bh));
+  sc.style.scrollBehavior = prevBehavior;
+  foliaRecycleLock = Date.now() + 300;
+  return true;
+}
 function teardownFoliaPlane() {
   const plane = foliaPlane();
   if (!plane) return;
@@ -1383,6 +2055,8 @@ function teardownFoliaPlane() {
     host.removeAttribute('data-folia-x');
     host.style.left = '';
     host.style.width = '';
+    // 块图样的显式坐标只在二维墙里成立，拆掉 plane 就还给 CSS 的普通跨度
+    host.querySelectorAll('.pod-card').forEach(clearTileSpan);
   }
   plane.remove();
   const sc = document.querySelector('.main');
@@ -1419,6 +2093,45 @@ function wallScroller(wall) {
   return null;
 }
 /* 把某块瓦片推到滚动视口的正中（Folia 的镜头跟随） */
+/* 撑开后过几拍才画干净：只有真的偏了才再推一次，避免“看着已经对正还抖一下”。 */
+function settleCenter(card) {
+  if (!card || !card.isConnected || !card.classList.contains('is-peek')) return;
+  const sc = wallScroller(card.closest('#homeRecommended'));
+  if (!sc) return;
+  nudgeCenter(card, sc);
+}
+/* 只做“补正”：按当前偏差改 scrollLeft/Top，不重排世界、不做 smooth。
+   偏差在 tol 以内直接返回 false（撑开时的尺寸抖动不该再触发一次镜头移动）。 */
+function nudgeCenter(card, sc, tol = 24) {
+  if (!sc) sc = wallScroller(card.closest('#homeRecommended'));
+  if (!sc) return false;
+  const r = card.getBoundingClientRect(), sr = sc.getBoundingClientRect();
+  const dx = (r.left + r.width / 2) - (sr.left + sc.clientWidth / 2);
+  const dy = (r.top + r.height / 2) - (sr.top + sc.clientHeight / 2);
+  if (Math.abs(dx) <= tol && Math.abs(dy) <= tol) return false;
+  const maxLeft = Math.max(0, sc.scrollWidth - sc.clientWidth);
+  const maxTop = Math.max(0, sc.scrollHeight - sc.clientHeight);
+  foliaRecycleLock = Date.now() + 900;
+  sc.scrollTo({
+    left: Math.min(maxLeft, Math.max(0, sc.scrollLeft + dx)),
+    top: Math.min(maxTop, Math.max(0, sc.scrollTop + dy)),
+    behavior: 'auto'
+  });
+  return true;
+}
+function scheduleSettle(card) {
+  if (!card) return;
+  const t0 = performance.now();
+  let corrections = 0;
+  const tick = () => {
+    if (!card.isConnected || !card.classList.contains('is-peek')) return;
+    if (performance.now() - t0 > 1400 || corrections >= 2) return;
+    const sc = wallScroller(card.closest('#homeRecommended'));
+    if (sc && nudgeCenter(card, sc)) corrections += 1;
+    setTimeout(tick, 140);
+  };
+  setTimeout(tick, 520);
+}
 function centerTile(card, rect) {
   if (!card || !card.isConnected) return;
   if (!homeActive()) return;
@@ -1431,10 +2144,191 @@ function centerTile(card, rect) {
   // 二维墙还要横向跟随；普通单列墙 scrollWidth == clientWidth，left 会自然夹到 0
   const left = sc.scrollLeft + (r.left - sr.left) - Math.max(0, (sc.clientWidth - r.width) / 2);
   const maxLeft = Math.max(0, sc.scrollWidth - sc.clientWidth);
+  foliaRecycleLock = Date.now() + 900;
   sc.scrollTo({
     top,
     left: Math.min(maxLeft, Math.max(0, left)),
     behavior: reduced ? 'auto' : 'smooth'
+  });
+}
+/* 把点开的瓦片推到镜头正中。推得动就推；推到墙边会被夹住时，先看夹住之后卡还能不能
+   整个露出来——能露就贴着边算了（不动世界，旁边的东西一点不换）；连整块都露不全，
+   才“接一块”（rotateWallWorld 只换画面外的列、并同步平移滚动量，这一屏像素不变）。 */
+function centerTileAnywhere(card, rect) {
+  if (!card || !card.isConnected || !homeActive()) return;
+  const sc = wallScroller(foliaWall() || card.closest('#homeRecommended'));
+  if (!sc) { centerTile(card, rect); return; }
+  const reduced = typeof motionReduced === 'function' && motionReduced();
+  foliaRecycleLock = Date.now() + 900;
+  let r = rect || card.getBoundingClientRect();
+  const margin = 8;
+  for (let pass = 0; pass < 3; pass++) {
+    const sr = sc.getBoundingClientRect();
+    const maxLeft = Math.max(0, sc.scrollWidth - sc.clientWidth);
+    const vLeft = r.left - sr.left;
+    const wantLeft = sc.scrollLeft + vLeft - Math.max(0, (sc.clientWidth - r.width) / 2);
+    const wantTop = sc.scrollTop + (r.top - sr.top) - Math.max(0, (sc.clientHeight - r.height) / 2);
+    const bounded = Math.min(maxLeft, Math.max(0, wantLeft));
+    const restLeft = vLeft + (bounded - sc.scrollLeft);
+    if (wantLeft >= 0 && wantLeft <= maxLeft) {
+      sc.scrollTo({ top: wantTop, left: wantLeft, behavior: reduced ? 'auto' : 'smooth' });
+      return;
+    }
+    if (restLeft >= margin && restLeft + r.width <= sc.clientWidth - margin) {
+      sc.scrollTo({ top: wantTop, left: bounded, behavior: reduced ? 'auto' : 'smooth' });
+      return;
+    }
+    if (!rotateWallWorld(wantLeft < 0 ? 'left' : 'right')) break;
+    r = card.getBoundingClientRect();   // 接完一块，卡在屏幕上的位置跟着平移，重新量
+  }
+  /* 真的没有余量（比如列被锁死）：只做把它整个推进画面的最小位移，别再动世界。 */
+  const sr = sc.getBoundingClientRect();
+  const maxLeft = Math.max(0, sc.scrollWidth - sc.clientWidth);
+  const vLeft = r.left - sr.left;
+  const vRight = vLeft + r.width;
+  const wantTop = sc.scrollTop + (r.top - sr.top) - Math.max(0, (sc.clientHeight - r.height) / 2);
+  const cap = Math.max(320, Number(foliaPlane()?.dataset.blockW) || sc.clientWidth);
+  let dLeft = 0;
+  if (vLeft < 24) dLeft = Math.max(-cap, vLeft - 24);
+  else if (vRight > sc.clientWidth - 24) dLeft = Math.min(cap, vRight - (sc.clientWidth - 24));
+  foliaRecycleLock = Date.now() + 900;
+  sc.scrollTo({
+    top: wantTop,
+    left: Math.min(maxLeft, Math.max(0, sc.scrollLeft + dLeft)),
+    behavior: reduced ? 'auto' : 'smooth'
+  });
+}
+/* 镜头快走到墙头/墙尾时，把最远那一列搬到另一头并同步平移滚动量：画面像素完全不变，
+   但左右永远还剩一整块可以走。这样贴边瓦片撑开后总能推到正中，也不会露出空白条。 */
+let foliaRecycleLock = 0;
+function bindFoliaCamera(sc) {
+  if (!sc || sc.dataset.foliaRecycle === '1') return;
+  sc.dataset.foliaRecycle = '1';
+  let raf = 0;
+  let idle = 0;
+  sc.addEventListener('scroll', () => {
+    /* 滚动期间给 <html> 挂 wall-scrolling：播放瓦片的逐词上色在这个区间里让路，
+       免得整块大瓦片一边被合成器平移、一边每帧重绘文字。停 180ms 后自动摘掉。 */
+    document.documentElement.classList.add('wall-scrolling');
+    if (idle) clearTimeout(idle);
+    idle = setTimeout(() => {
+      idle = 0;
+      document.documentElement.classList.remove('wall-scrolling');
+    }, 180);
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      raf = 0;
+      const plane = foliaPlane();
+      if (!plane || !homeActive()) return;
+      schedulePlayingSync();
+      if (Date.now() < foliaRecycleLock) return;
+      const W = Number(plane.dataset.blockW);
+      if (!W) return;
+      /* 纵向也无限：镜头贴近块边界时整块搬行（块高恒定，位移精确补偿） */
+      const bh = blockHeightOf(sc.querySelector('#homeRecommended'));
+      if (bh && sc.scrollHeight > sc.clientHeight + bh * 2) {
+        const maxTop = sc.scrollHeight - sc.clientHeight;
+        if (sc.scrollTop > maxTop - bh * 0.72) {
+          foliaRecycleLock = Date.now() + 320;
+          rotateWallRows('down');
+          return;
+        }
+        if (sc.scrollTop > 0 && sc.scrollTop < bh * 0.72) {
+          foliaRecycleLock = Date.now() + 320;
+          rotateWallRows('up');
+          return;
+        }
+      }
+      const max = sc.scrollWidth - sc.clientWidth;
+      if (sc.scrollLeft < W * 0.55) { foliaRecycleLock = Date.now() + 300; rotateWallWorld('left'); }
+      else if (sc.scrollLeft > max - W * 0.55) { foliaRecycleLock = Date.now() + 300; rotateWallWorld('right'); }
+    });
+  });
+}
+/* ---- 墙的拖拽平移 ----
+   Folia 的墙是一台相机：指针按下拖 7px 才算拖动，松手带惯性；我们的墙是原生滚动容器，
+   等价地改 scrollLeft/Top。之前鼠标用户横不动这块墙（只能 Shift+滚轮或点右下角定位）。 */
+let wallDragSuppressUntil = 0;
+let wallDragClickBound = false;
+function bindWallDragPan(sc) {
+  if (!sc || sc.dataset.wallDrag === '1') return;
+  sc.dataset.wallDrag = '1';
+  if (!wallDragClickBound) {
+    wallDragClickBound = true;
+    // 拖完松手会补一个 click：吃掉它，免得手一滑就把瓦片点开/进节目页
+    document.addEventListener('click', (e) => {
+      if (Date.now() > wallDragSuppressUntil) return;
+      wallDragSuppressUntil = 0;
+      e.preventDefault();
+      e.stopPropagation();
+    }, true);
+  }
+  let drag = null, inertia = 0, vx = 0, vy = 0;
+  let savedBehavior = null;   // 拖动前 .main 的 inline scroll-behavior，拖完还原
+  const restoreBehavior = () => {
+    if (savedBehavior === null) return;
+    sc.style.scrollBehavior = savedBehavior;
+    savedBehavior = null;
+  };
+  const stopInertia = () => { if (inertia) cancelAnimationFrame(inertia); inertia = 0; restoreBehavior(); };
+  sc.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || !e.isPrimary) return;
+    if (!(e.target instanceof Element)) return;
+    if (e.target.closest('button, input, select, textarea, [role="slider"], .tile-peek-actions')) return;
+    stopInertia();
+    vx = vy = 0;
+    // .main 挂着 scroll-behavior: smooth：拖动时每帧改 scrollLeft 会被它变成补间，
+    // 跟手变成拖泥带水。拖动期间强制 auto，松手/取消后还原。
+    drag = { id: e.pointerId, x: e.clientX, y: e.clientY, left: sc.scrollLeft, top: sc.scrollTop,
+      lastX: e.clientX, lastY: e.clientY, lastT: e.timeStamp, moved: false };
+    savedBehavior = sc.style.scrollBehavior || '';
+    sc.style.scrollBehavior = 'auto';
+  });
+  sc.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!drag.moved && Math.hypot(dx, dy) < 7) return;
+    if (!drag.moved) {
+      drag.moved = true;
+      sc.setPointerCapture(e.pointerId);
+      sc.classList.add('is-panning');
+    }
+    const dt = Math.max(1, e.timeStamp - drag.lastT);
+    vx = (e.clientX - drag.lastX) / dt * 1000;
+    vy = (e.clientY - drag.lastY) / dt * 1000;
+    drag.lastX = e.clientX; drag.lastY = e.clientY; drag.lastT = e.timeStamp;
+    sc.scrollLeft = drag.left - dx;
+    sc.scrollTop = drag.top - dy;
+    e.preventDefault();
+  });
+  const end = (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const moved = drag.moved;
+    const stale = e.timeStamp - drag.lastT;
+    drag = null;
+    sc.classList.remove('is-panning');
+    if (sc.hasPointerCapture && sc.hasPointerCapture(e.pointerId)) sc.releasePointerCapture(e.pointerId);
+    if (!moved) { restoreBehavior(); return; }
+    wallDragSuppressUntil = Date.now() + 400;
+    if (stale > 100) { restoreBehavior(); return; }   // 停手一会儿才松：不惯性
+    if (Math.hypot(vx, vy) < 60) { restoreBehavior(); return; }  // 慢拖不惯性
+    let px = vx, py = vy, last = performance.now();
+    const step = (now) => {
+      const dt = Math.min(50, now - last);
+      last = now;
+      sc.scrollLeft += px * dt / 1000;
+      sc.scrollTop += py * dt / 1000;
+      px *= 0.94; py *= 0.94;
+      if (Math.hypot(px, py) < 40) { inertia = 0; restoreBehavior(); return; }
+      inertia = requestAnimationFrame(step);
+    };
+    inertia = requestAnimationFrame(step);
+  };
+  sc.addEventListener('pointerup', end);
+  sc.addEventListener('pointercancel', end);
+  // 封面图是 <img>，原生拖拽会把指针手势抢走（拖出半张图）；卡内一律禁掉
+  sc.addEventListener('dragstart', (e) => {
+    if (e.target instanceof Element && e.target.closest('.pod-card')) e.preventDefault();
   });
 }
 function nearWallBottom(wall) {
@@ -1573,6 +2467,7 @@ function bindInfiniteWall() {
       const wall = foliaWall();
       if (!wall) return;
       if (!homeActive()) return;
+      if (foliaPlane()) return;   // 二维墙的纵向靠块搬行，不再往墙尾补块
       if (Date.now() - lastAt < 900) return;   // 平滑滚动会连续触发 scroll，别一口气补几十套
       if (nearWallBottom(wall)) { lastAt = Date.now(); extendWall(wall); }
     });
@@ -1666,7 +2561,9 @@ function renderHome() {
   appendHomeVideoCard();
   $('homeStats').innerHTML = statHTML('订阅节目', subs.length, '含内置与站外')
     + statHTML('开始收听', entries.length, '有播放位置的单集')
-    + statHTML('收藏片段', app.bookmarks.length, '播放器里点 ☆');
+    /* 书签是「按句收藏」，靠 .subs-off-hide 由 body class 收掉——不在渲染时判断插件状态，
+       否则首页在插件加载完成前渲染会把这一格留下。 */
+    + statHTML('收藏片段', app.bookmarks.length, '播放器里点 ☆', 'subs-off-hide');
 
   const recent = [];
   for (const show of subs) {
@@ -1687,6 +2584,7 @@ function renderHome() {
     : emptyLine('所有内置节目都已订阅。');
   const wallHost = $('homeRecommended');
   if (wallHost) wallHost.dataset.foliaRender = String(Date.now());   // 二维墙据此重建两侧列
+  backfillWallArt();
   renderHomeOnboard(subs, entries);
 }
 
@@ -1841,7 +2739,7 @@ function renderDiscover() {
   $('discoverExt').innerHTML = '<h3 class="section-title">站外订阅 <small>' + external.length + ' 个 · 仅音频</small></h3>' +
     (external.length
       ? '<div class="card card-pad">' + external.map(show => '<div class="ep-row" data-open-podcast="' + esc(show.slug) + '">' +
-        coverHTML(show, 'ep-art') + '<div class="ep-body"><span class="ep-title">' + esc(show.name) +
+        coverHTML(show, 'ep-art', 300) + '<div class="ep-body"><span class="ep-title">' + esc(show.name) +
         '</span><span class="ep-sub">' + esc(hostOf(show.feed)) + '</span></div><button class="mini-btn" data-remove-sub="' +
         esc(show.slug) + '" title="移除">✕</button></div>').join('') + '</div>'
       : emptyLine('还没有站外订阅。', '<button class="btn ghost" data-action="add-feed">＋ 添加 RSS</button>'));
@@ -1863,6 +2761,8 @@ function searchIndex() {
   return { shows, catalog, episodes };
 }
 async function idxSearch(q, limit = 60) {
+  /* 字幕能力关掉后没有「文字稿库」这项能力：索引与搜索一起停，不再读旧索引。 */
+  if (!subtitlePluginOn()) return [];
   const records = await idxGetAll();
   const hits = [];
   for (const rec of records) {
@@ -1875,6 +2775,8 @@ async function idxSearch(q, limit = 60) {
   return hits;
 }
 async function renderSearch(query) {
+  /* 字幕能力关掉后没有「当前文字稿 / 文字稿库」两档，残留的标签值回落到全部。 */
+  if (!subtitlePluginOn() && (searchTab === 'library' || searchTab === 'transcripts')) searchTab = 'all';
   const input = $('searchInput');
   if (input && input.value !== query) input.value = query || '';
   const q = String(query || '').trim().toLowerCase();
@@ -1885,12 +2787,12 @@ async function renderSearch(query) {
   if (searchTab === 'all' || searchTab === 'podcasts') {
     const matched = shows.filter(matchShow);
     const matchedCatalog = catalog.filter(matchShow);
-    html += matched.map(show => '<div class="ep-row" data-open-podcast="' + esc(show.slug) + '">' + coverHTML(show, 'ep-art') +
+    html += matched.map(show => '<div class="ep-row" data-open-podcast="' + esc(show.slug) + '">' + coverHTML(show, 'ep-art', 300) +
       '<div class="ep-body"><span class="ep-title">' + esc(show.name) + '</span><span class="ep-sub">播客 · ' +
       esc(show.builtin ? '内置增强文字稿' : '站外') + '</span></div><span class="pill">播客</span></div>').join('');
     if (matchedCatalog.length) {
       html += '<div class="smalltext" style="margin:14px 0 2px">本站目录 · 未订阅</div>' +
-        matchedCatalog.map(show => '<div class="ep-row" data-open-podcast="' + esc(show.slug) + '">' + coverHTML(show, 'ep-art') +
+        matchedCatalog.map(show => '<div class="ep-row" data-open-podcast="' + esc(show.slug) + '">' + coverHTML(show, 'ep-art', 300) +
           '<div class="ep-body"><span class="ep-title">' + esc(show.name) + '</span><span class="ep-sub">' +
           esc([showCategoryText(show), showLanguageLabel(show)].filter(Boolean).join(' · ') || '内置增强文字稿') +
           '</span></div><span class="pill dim">本站目录</span></div>').join('');
@@ -2481,9 +3383,13 @@ function renderPodcast(key) {
     ['all', '全部'], ['unplayed', '未听'], ['played', '已听'], ['favorite', '收藏'], ['offline', '离线'],
   ].map(([id, label]) => '<button data-ep-filter="' + id + '" class="' + (filter === id ? 'on' : '') + '">' + label + '</button>').join('') + '</div>';
   /* 返回按钮跟来源走：从首页/搜索/发现/播客库进来就回那一页；带参数的路由（单集/播放器）无法裸跳，退回播客库。 */
-  const BACK_PAGES = ['home', 'library', 'search', 'discover', 'local', 'downloads', 'inbox', 'queue', 'history',
-    'stats', 'favorites', 'bookmarks', 'notes', 'listening', 'settings'];
-  const backPage = (app.lastPage && BACK_PAGES.includes(app.lastPage)) ? app.lastPage : 'library';
+  const trail = app.pageTrail || [];
+  let backPage = '';
+  for (let i = trail.length - 1; i >= 0 && !backPage; i--) {
+    const p = trail[i];
+    if (p !== 'podcast' && BACK_PAGES.includes(p)) backPage = p;
+  }
+  if (!backPage) backPage = (app.lastPage && BACK_PAGES.includes(app.lastPage)) ? app.lastPage : 'library';
   const backLabel = PAGE_NAMES[backPage] || '播客库';
   view.innerHTML = '<div class="page-head"><div><div class="eyebrow">' + (show.builtin ? 'BUILT-IN SHOW' : 'EXTERNAL FEED') +
     '</div><h1>' + esc(show.name) + '</h1><div class="subtitle">' + (count ? count + ' 集' : '') +
@@ -2505,7 +3411,7 @@ function renderPodcast(key) {
       : emptyLine(episodes.length ? '这个筛选下没有单集。' : (feed ? '该 feed 没有单集。' : '还没有读取单集。'))) + '</div><div class="card card-pad"><h3 class="section-title">节目资料</h3>' +
     '<div class="kv"><span>类型</span><b>' + (show.builtin ? '内置' : '站外') + '</b></div>' +
     '<div class="kv"><span>Feed</span><b>' + (show.feed ? '增强 RSS' : '—') + '</b></div>' +
-    '<div class="kv"><span>文字稿</span><b>' + subtitleKvLabel(show) + '</b></div>' +
+    (subtitleKvLabel(show) ? '<div class="kv"><span>文字稿</span><b>' + subtitleKvLabel(show) + '</b></div>' : '') +
     '<div class="kv"><span>宿主</span><b>' + esc(show.builtin ? '本站 GitHub Pages' : hostOf(show.feed || '')) + '</b></div>' +
     '<div style="margin-top:14px;display:flex;gap:7px;flex-wrap:wrap">' +
     (show.feed ? '<button class="btn ghost small" data-copy-feed="' + esc(feedUrl) + '">复制 Feed 地址</button>' : '') +
@@ -2584,7 +3490,8 @@ async function renderEpisode(key, epId) {
     (fmtDuration(ep.duration) ? ' · ' + esc(fmtDuration(ep.duration)) : '') + '</span></div>' +
     '<div class="detail-hero ep-hero">' + episodeCover(ep, show) + '<div class="ep-hero-body">' +
     '<div class="eyebrow">EPISODE</div><h1 class="ep-title">' + esc(ep.title || '(无标题)') + '</h1>' +
-    '<div class="detail-meta"><span>' + esc(show.name) + '</span><span>' + subtitleEpisodeLabel(show, ep) + '</span></div>' +
+    '<div class="detail-meta"><span>' + esc(show.name) + '</span>' +
+    (subtitleEpisodeLabel(show, ep) ? '<span>' + subtitleEpisodeLabel(show, ep) + '</span>' : '') + '</div>' +
     '<div class="detail-actions">' +
     '<button class="btn primary" data-play-episode data-key="' + esc(show.slug) + '" data-ep="' + esc(ep.id) + '">▶ 播放单集</button>' +
     (host() ? '<button class="btn ghost" data-offline-episode data-key="' + esc(show.slug) + '" data-ep="' + esc(ep.id) + '" title="整集下载会同时保存文字稿">' +

@@ -187,7 +187,7 @@ function renderCues() {
     // 原生播放器：没有字幕插件时阅读区只保留一条中性说明，不反复清空成空白，
     // 也不提示用户去启用插件。
     if (box.dataset.nativeAudio !== '1') {
-      box.innerHTML = '<div class="empty">音频播放模式<br><span style="font-size:12px">本集只播放音频，未加载字幕。</span></div>';
+      box.innerHTML = '<div class="empty">音频播放模式<br><span style="font-size:12px">本集只播放音频，播放、进度和倍速照常可用。</span></div>';
       box.dataset.nativeAudio = '1';
     }
     syncMiniCaption(); return;

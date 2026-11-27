@@ -1,7 +1,7 @@
 import { $, audio, prefs, state } from './00-runtime.js';
 import { esc, fmt, invalidateWordPanelKey, reader, seekTo, showToast, splitLabel, wallpaperRefresh } from './01-theme-reader-shell.js';
 import { selectEpisode } from './03-native-asr-service-worker.js';
-import { smallArtwork, subtitlePluginOn } from './04-local-audio-plugin-host.js';
+import { coverSrc, smallArtwork, subtitlePluginOn } from './04-local-audio-plugin-host.js';
 import { BOOKMARK_KEY, NOTE_KEY, PAGE_NAMES, app, episodesOf, formatDate, isPlayed, writeJSON } from './05-transport-transcript-nav.js';
 import { coverGrad, initialsOf } from './06-catalog-feeds-search.js';
 import { registerLayer } from './00-layers.js';
@@ -47,7 +47,7 @@ document.addEventListener('myt:reader-overlay-open', () => {
 
 function railCoverHTML(ep, show) {
   const art = ep?.img || show?.artwork || '';
-  const img = art ? '<img src="' + esc(smallArtwork(art) || art) + '" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove()">' : '';
+  const img = art ? '<img src="' + esc(coverSrc(art, 200)) + '" data-raw="' + esc(smallArtwork(art) || art) + '" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="__coverErr(this)">' : '';
   return '<div class="rail-art" style="' + coverGrad(show?.key || show?.slug || ep?.title || 'podcast') + '"><span>' +
     esc(initialsOf(show?.name || show?.slug || 'Podcast')) + '</span>' + img + '</div>';
 }
@@ -87,13 +87,16 @@ function renderReaderRails() {
     '</strong><span>' + esc(String(note.body || '').slice(0, 120)) +
     (note.t ? ' · ' + fmt(Number(note.t)) : '') + '</span></div>'
   ).join('') : '<div class="rail-empty">还没有这集的笔记。点上面的“记笔记”或在下方正文里选中一句。</div>';
+  /* 学习与“收藏当前句”都依赖插件；关掉就当这两个动作不存在。 */
+  const studyOff = document.body.classList.contains('study-off');
+  const subsOff = document.body.classList.contains('subs-off');
   notesBody.innerHTML =
     '<div class="rail-current">' + railCoverHTML(state.current, state.show) +
       '<div><strong>' + esc(state.current.title || '(无标题)') + '</strong><span>' + esc(state.show.name || '') +
       (state.current.date ? ' · ' + esc(formatDate(state.current.date)) : '') + '</span></div></div>' +
     '<div class="rail-actions">' +
-      '<button class="rail-action" type="button" data-rail-action="study">✎ 学英语</button>' +
-      '<button class="rail-action" type="button" data-rail-action="bookmark">☆ 收藏当前句</button>' +
+      (studyOff ? '' : '<button class="rail-action" type="button" data-rail-action="study">✎ 学英语</button>') +
+      (subsOff ? '' : '<button class="rail-action" type="button" data-rail-action="bookmark">☆ 收藏当前句</button>') +
       '<button class="rail-action" type="button" data-rail-action="chapter">☰ 章节</button>' +
       '<button class="rail-action" type="button" data-rail-action="info">ⓘ 单集信息</button>' +
     '</div>' +
@@ -536,7 +539,7 @@ function syncMini() {
   const coverKey = (state.show?.slug || '') + '|' + img;
   if (coverKey !== miniCoverKey) {
     miniCoverKey = coverKey;
-    $('miniCover').innerHTML = (img ? '<img src="' + esc(smallArtwork(img) || img) + '" alt="" referrerpolicy="no-referrer" onerror="this.remove()">' : '') +
+    $('miniCover').innerHTML = (img ? '<img src="' + esc(coverSrc(img)) + '" data-raw="' + esc(smallArtwork(img) || img) + '" alt="" referrerpolicy="no-referrer" onerror="__coverErr(this)">' : '') +
       '<span>' + esc(initialsOf(state.show?.name || '')) + '</span>';
   }
   const duration = audio.duration || 0;

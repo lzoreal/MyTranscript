@@ -222,7 +222,7 @@ function clipTargetInfo() {
   return { item, offKey, path, remoteUrl };
 }
 async function clipRun(startSec, endSec, panel, btn, onRetry) {
-  if (!subtitlePluginOn()) { showToast('字幕插件未启用，精听不可用。', 'warn'); return; }
+  if (!subtitlePluginOn()) { showToast('这一集没有文字稿，无法精听。', 'warn'); return; }
   const target = clipTargetInfo();
   const note = text => {
     const b = panel.querySelector('.cue-clip-text');
@@ -331,6 +331,60 @@ function smallArtwork(url) {  try {
   } catch (e) {}
   return '';
 }
+/* 封面一律走本进程代理（`mytmedia` + 落盘缓存）：慢 CDN、防盗链、混合内容都在壳里解决，
+   同一个 URL 第二次只读磁盘不出网。网页版没有代理，直接回原地址。
+   `px` 是"这张图最多显示多宽"：壳会按宽度缩一次再给浏览器，海报墙/列表用小尺寸、
+   全屏封面舞台不传（要原图），避免 3000px 原图在 195px 的瓦片上解码 + 传纹理。 */
+function coverSrc(url, px) {
+  if (!url) return '';
+  const base = smallArtwork(url) || url;
+  if (location.hostname !== 'tauri.localhost') return base;
+  try {
+    const u = new URL(base);
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return base;
+    return 'http://mytmedia.localhost/?img=1&u=' + encodeURIComponent(base) + (px ? '&w=' + px : '');
+  } catch (e) {}
+  return base;
+}
+/* 代理这次没拿到（首次落盘失败之类）：先回落到直连原图，再失败才让占位顶上。
+   绝不第一次 erro 就把 img 摘掉——海报墙会 cloneNode 复制这张卡，空白会跟着扩散。 */
+function coverOnError(img) {  if (!img) return;
+  const raw = img.dataset ? img.dataset.raw : '';
+  if (raw && img.getAttribute('src') !== raw) { img.setAttribute('src', raw); return; }
+  if (typeof img.remove === 'function') img.remove();
+}
+if (typeof window !== 'undefined') window.__coverErr = coverOnError;
+/* 铺墙那一刻 catalog 还没回来，节目还没有 artwork 字段：目录到了要把这些瓦片补上图，
+   否则它们永远是字母底；墙靠 cloneNode 续页，空白还会跟着扩散。 */
+function backfillWallArt() {
+  // 二维墙是三列同名容器（`#homeRecommended` 被复制到左/中/右），getElementById 只会拿到第一列，
+  // 这里必须按 document 里的全部瓦片扫。
+  const cards = document.querySelectorAll('.pod-card');
+  if (!cards.length) return;
+  const shows = app.builtinShows || [];
+  cards.forEach(card => {
+    const art = card.querySelector('.pod-art');
+    if (!art || art.querySelector('img')) return;
+    const link = card.querySelector('.pod-card-main');
+    const slug = link ? link.getAttribute('data-open-podcast') : '';
+    if (!slug) return;
+    const show = shows.find(s => s && s.slug === slug);
+    const url = show && show.artwork;
+    if (!url) return;
+    const img = document.createElement('img');
+    img.alt = '';
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    img.referrerPolicy = 'no-referrer';
+    img.dataset.raw = smallArtwork(url) || url;
+    img.onerror = () => coverOnError(img);
+    img.setAttribute('src', coverSrc(url, 640));
+    art.appendChild(img);
+    // 瓦片的「原始封面快照」是早于目录到达时抓的：不一起刷新，
+    // paintTileArt 收回播放态时会把刚补上的图还原没。
+    card.dataset.baseArtHtml = art.innerHTML;
+  });
+}
 function renderList(filter = '') {
   /* 过滤/排序只做位置过渡；首次渲染与后台刷新不触发，因为没有可比对的旧位置。 */
   motionFlip(listBox, '.ep', () => {
@@ -347,9 +401,12 @@ function renderList(filter = '') {
     const artFallback = () => { const ph = document.createElement('div'); ph.className = 'epArt noart'; art.replaceWith(ph); };
     if (e.img) {
       art.hidden = false;
-      const small = smallArtwork(e.img);
-      art.onerror = small ? () => { art.onerror = artFallback; art.src = e.img; } : artFallback;
-      art.src = small || e.img;
+      art.dataset.raw = smallArtwork(e.img) || e.img;
+      art.onerror = () => {
+        if (art.dataset.raw && art.getAttribute('src') !== art.dataset.raw) { art.setAttribute('src', art.dataset.raw); return; }
+        artFallback();
+      };
+      art.src = coverSrc(e.img);
     } else artFallback();
     el.querySelector('.num').textContent = e.num ? '#' + e.num : '';
     el.querySelector('.t').textContent = e.title || '(无标题)';
@@ -914,17 +971,26 @@ function syncSubtitleSettingsVisibility() {
     if (row) row.classList.toggle('subs-off-hide', off);
   });
 }
-function applySubtitleAvailability() {
+function applySubtitleAvailability(force = false) {
   const on = subtitlePluginOn();
   document.body.classList.toggle('subs-off', !on);
   syncSubtitleSettingsVisibility();
   if (on) return;
-  if (LIVE.on) liveDisable('字幕插件未启用，实时识别已停止。');
+  /* 「重新加载」插件会先把字幕能力收掉、再让插件重新 claim。这个窗口里要是把文字稿清掉，
+     重新 claim 之后没有任何一处会重绘它，就成了「只关掉片段收藏，播放页字幕也跟着没了，
+     得整页刷新才回来」。重载途中先不动 DOM，等重载结束再按最终状态收尾。 */
+  if (app.pluginReloading && !force) return;
+  if (LIVE.on) liveDisable('实时识别已停止。');
   const typeSheet = $('typeSheet');
   if (typeSheet && typeSheet.classList.contains('on')) closeTypeSheet(false);
   setState('cues', []); setState('nodes', []); setState('activeCue', -1); setState('wordIdx', -1);
   setState('vtt', null); setState('sidecar', null); setState('zhVtt', null); setState('base', null);
-  box.replaceChildren();
+  /* 别留一块空白，也不提插件：只描述“这一集只有音频”。 */
+  if (box) {
+    box.dataset.nativeAudio = '1';
+    box.innerHTML = '<div class="empty">音频播放模式<br><span style="font-size:12px">' +
+      '本集只播放音频，播放、进度和倍速照常可用。</span></div>';
+  }
   syncMiniCaption();
   syncJumpPill();
 }
@@ -1232,7 +1298,7 @@ function llmConfigSummary() {
 }
 async function llmChat(system, user) {
   if (!llmReady()) {
-    throw new Error('还没配置 AI：先在「设置 → AI 学英语」里填 Key 与模型（问答复用同一份配置）。');
+    throw new Error('还没配置 AI：先在「设置 → AI 接口」里填 Key 与模型（问答复用同一份配置）。');
   }
   const s = llmSettings() || {};
   return tauriHost().core.invoke('llm_chat', {
@@ -2033,19 +2099,43 @@ async function loadPlugins() {
 }
 /* 软重载：按插件回收注册物后重新加载，不刷新整页。 */
 async function reloadPlugins() {
-  (app.pluginStartedIds || []).forEach(id => stopPlugin(id));
-  (app.plugins || []).forEach(plugin => PLUGIN_DIAGNOSTICS.clear(plugin.id));
-  app.pluginStartedIds = [];
-  app.pluginErrors = new Map();
-  await loadPlugins();
+  app.pluginReloading = true;
+  try {
+    (app.pluginStartedIds || []).forEach(id => stopPlugin(id));
+    (app.plugins || []).forEach(plugin => PLUGIN_DIAGNOSTICS.clear(plugin.id));
+    app.pluginStartedIds = [];
+    app.pluginErrors = new Map();
+    await loadPlugins();
+  } finally {
+    app.pluginReloading = false;
+  }
   renderPluginNav();
   if (typeof applyStudyAvailability === 'function') applyStudyAvailability();
+  /* 重载结束后按最终状态收尾：字幕真的被关掉才收文字稿，并留一条「去哪儿打开」的提示。 */
+  applySubtitleAvailability(true);
 }
 function renderPluginPage(pluginId, pageId) {
   const body = $('pluginPageBody');
   if (!body) return;
   const def = PLUGIN_PAGES.get(pluginPageKey(pluginId, pageId));
   if (!def) {
+    /* 先拆掉上一张插件页：它的 render 可能是异步的（返回 Promise 后继续往容器里写），
+       只清 DOM 不 destroy，下一个 tick 又把旧卡片插回来——表现就是「插件页面不存在」
+       的页面上残留着「字幕中心」的内容。 */
+    const previousPage = app.pluginPageActive;
+    app.pluginPageActive = null;
+    if (previousPage && typeof previousPage.destroy === 'function') {
+      guardedPluginCall(previousPage.pluginId, 'page:destroy', () => previousPage.destroy());
+    }
+    /* 页头是上一页渲染时写进去的，插件页没了得收回默认值，否则会显示
+       「摘录本」的标题配「插件页面不存在：study/study」这种串味的组合。 */
+    const title = $('pluginPageTitle');
+    if (title) title.textContent = '插件';
+    const sub = $('pluginPageSub');
+    if (sub) sub.textContent = '由本机插件提供的页面。';
+    const crumb = $('crumbName');
+    if (crumb) crumb.textContent = '插件';
+    document.title = '插件 · MyTranscript';
     body.innerHTML = '<div class="empty">插件页面不存在：' + esc(pluginId + '/' + pageId) + '</div>';
     return;
   }
@@ -2174,6 +2264,7 @@ async function initPlayer() {
     app.catalogPending = false;
     if (!ready) { app.catalogFailed = true; refreshCatalogPages(); return; }
     mergeCatalog();
+    backfillWallArt();
     refreshShows();
     refreshCatalogPages();
   });
@@ -2187,7 +2278,7 @@ function refreshCatalogPages() {
   }
   if (['home', 'discover', 'library'].includes(route.page)) renderPage(route.page, route);
 }
-export { CATALOG_TIMEOUT, HOST_V2, HOST_V2_PAGES, PLUGIN_API_VERSION, PLUGIN_CLEANUP, PLUGIN_COMMANDS, PLUGIN_CONSENT_PREFIX, PLUGIN_GRANTS, PLUGIN_HASH_PREFIX, PLUGIN_HOOKS, PLUGIN_PAGES, PLUGIN_PERMISSIONS, PLUGIN_PERMISSION_ALL, PLUGIN_PERMS_KEY_PREFIX, PLUGIN_REGISTRY, PluginHost, SHELL_TIMEOUT, STUDY_ENGINE, STUDY_ENGINE_OWNER, STUDY_RUNTIME, STUDY_RUNTIME_OWNER, STUDY_UI, STUDY_UI_HOOKS, STUDY_UI_OWNER, abortPluginStart, addPluginListener, applyCspNonce, applyLocalDoc, applyStudyAvailability, applySubtitleAvailability, askPluginConsent, clearPluginConsent, clipListen, clipNow, clipPanelHost, clipRun, clipTargetInfo, cspNonceValue, cuesSnapshot, definitionStarted, destroyV2Page, disposeStudyUi, emitPlugin, ensurePluginApi, guardedEventsourceFor, guardedFetchFor, guardedSocketFor, guardedXhrFor, initPlayer, loadPlugins, loadShow, localAsrAvailable, openLocalTranscript, apiCompatible, pluginApiFor, pluginApiReady, pluginConsentChanged, pluginConsentState, pluginHostFacade, pluginHostFacadeCache, pluginManifestFor, pluginPermissionChanged, pluginPermissionLabels, pluginPermissionSignature, pluginPermissions, pluginPinnedHash, pluginPlayerState, pluginReportError, pluginRequire, pluginUrlIsLocal, refreshCatalogPages, refreshPluginSettings, registerPluginPage, registerStudyEngine, registerStudyRuntime, registerStudyUi, registerStudyUiHook, releasePluginCapabilities, reloadPlugins, renderList, renderPluginNav, renderPluginPage, renderV2Page, runPluginCleanup, runStudyUiHook, setPluginConsent, setPluginPermissionSignature, setPluginPinnedHash, smallArtwork, startLocalTranscribe, startV2Plugin, stopPlugin, studyEngine, studyHostBridge, studyPluginOn, studyRuntime, studyUi, subtitlePluginOn, syncStudySettingsVisibility, syncSubtitleSettingsVisibility, trackPlugin, v2UiKit };
-registerLayer('04-local-audio-plugin-host', { CATALOG_TIMEOUT, HOST_V2, HOST_V2_PAGES, PLUGIN_API_VERSION, PLUGIN_CLEANUP, PLUGIN_COMMANDS, PLUGIN_CONSENT_PREFIX, PLUGIN_GRANTS, PLUGIN_HASH_PREFIX, PLUGIN_HOOKS, PLUGIN_PAGES, PLUGIN_PERMISSIONS, PLUGIN_PERMISSION_ALL, PLUGIN_PERMS_KEY_PREFIX, PLUGIN_REGISTRY, PluginHost, SHELL_TIMEOUT, STUDY_ENGINE, STUDY_ENGINE_OWNER, STUDY_RUNTIME, STUDY_RUNTIME_OWNER, STUDY_UI, STUDY_UI_HOOKS, STUDY_UI_OWNER, abortPluginStart, addPluginListener, applyCspNonce, applyLocalDoc, applySettingsPanes, applySlotMounts, applyStudyAvailability, applySubtitleAvailability, askPluginConsent, clearPluginConsent, clipListen, clipNow, clipPanelHost, clipRun, clipTargetInfo, cspNonceValue, cuesSnapshot, definitionStarted, destroyV2Page, disposeStudyUi, emitPlugin, ensurePluginApi, guardedEventsourceFor, guardedFetchFor, guardedSocketFor, guardedXhrFor, initPlayer, loadPlugins, loadShow, localAsrAvailable, openLocalTranscript, apiCompatible, pluginApiFor, pluginApiReady, pluginConsentChanged, pluginConsentState, pluginHostFacade, pluginHostFacadeCache, pluginManifestFor, pluginPermissionChanged, pluginPermissionLabels, pluginPermissionSignature, pluginPermissions, pluginPinnedHash, pluginPlayerState, pluginReportError, pluginRequire, pluginUrlIsLocal, refreshCatalogPages, refreshPluginSettings, refreshSurfaces, registerPluginPage, registerStudyEngine, registerStudyRuntime, registerStudyUi, registerStudyUiHook, releasePluginCapabilities, releaseSurfaces, reloadPlugins, renderList, renderPluginNav, renderPluginPage, renderV2Page, runPluginCleanup, runStudyUiHook, setPluginConsent, setPluginPermissionSignature, setPluginPinnedHash, smallArtwork, startLocalTranscribe, startV2Plugin, stopPlugin, studyEngine, studyHostBridge, studyPluginOn, studyRuntime, studyUi, subtitlePluginOn, syncStudySettingsVisibility, syncSubtitleSettingsVisibility, trackPlugin, v2UiKit });
+export { CATALOG_TIMEOUT, HOST_V2, HOST_V2_PAGES, PLUGIN_API_VERSION, PLUGIN_CLEANUP, PLUGIN_COMMANDS, PLUGIN_CONSENT_PREFIX, PLUGIN_GRANTS, PLUGIN_HASH_PREFIX, PLUGIN_HOOKS, PLUGIN_PAGES, PLUGIN_PERMISSIONS, PLUGIN_PERMISSION_ALL, PLUGIN_PERMS_KEY_PREFIX, PLUGIN_REGISTRY, PluginHost, SHELL_TIMEOUT, STUDY_ENGINE, STUDY_ENGINE_OWNER, STUDY_RUNTIME, STUDY_RUNTIME_OWNER, STUDY_UI, STUDY_UI_HOOKS, STUDY_UI_OWNER, abortPluginStart, addPluginListener, applyCspNonce, applyLocalDoc, applyStudyAvailability, applySubtitleAvailability, askPluginConsent, backfillWallArt, clearPluginConsent, clipListen, clipNow, clipPanelHost, clipRun, clipTargetInfo, coverOnError, coverSrc, cspNonceValue, cuesSnapshot, definitionStarted, destroyV2Page, disposeStudyUi, emitPlugin, ensurePluginApi, guardedEventsourceFor, guardedFetchFor, guardedSocketFor, guardedXhrFor, initPlayer, loadPlugins, loadShow, localAsrAvailable, openLocalTranscript, apiCompatible, pluginApiFor, pluginApiReady, pluginConsentChanged, pluginConsentState, pluginHostFacade, pluginHostFacadeCache, pluginManifestFor, pluginPermissionChanged, pluginPermissionLabels, pluginPermissionSignature, pluginPermissions, pluginPinnedHash, pluginPlayerState, pluginReportError, pluginRequire, pluginUrlIsLocal, refreshCatalogPages, refreshPluginSettings, registerPluginPage, registerStudyEngine, registerStudyRuntime, registerStudyUi, registerStudyUiHook, releasePluginCapabilities, reloadPlugins, renderList, renderPluginNav, renderPluginPage, renderV2Page, runPluginCleanup, runStudyUiHook, setPluginConsent, setPluginPermissionSignature, setPluginPinnedHash, smallArtwork, startLocalTranscribe, startV2Plugin, stopPlugin, studyEngine, studyHostBridge, studyPluginOn, studyRuntime, studyUi, subtitlePluginOn, syncStudySettingsVisibility, syncSubtitleSettingsVisibility, trackPlugin, v2UiKit };
+registerLayer('04-local-audio-plugin-host', { CATALOG_TIMEOUT, HOST_V2, HOST_V2_PAGES, PLUGIN_API_VERSION, PLUGIN_CLEANUP, PLUGIN_COMMANDS, PLUGIN_CONSENT_PREFIX, PLUGIN_GRANTS, PLUGIN_HASH_PREFIX, PLUGIN_HOOKS, PLUGIN_PAGES, PLUGIN_PERMISSIONS, PLUGIN_PERMISSION_ALL, PLUGIN_PERMS_KEY_PREFIX, PLUGIN_REGISTRY, PluginHost, SHELL_TIMEOUT, STUDY_ENGINE, STUDY_ENGINE_OWNER, STUDY_RUNTIME, STUDY_RUNTIME_OWNER, STUDY_UI, STUDY_UI_HOOKS, STUDY_UI_OWNER, abortPluginStart, addPluginListener, applyCspNonce, applyLocalDoc, applySettingsPanes, applySlotMounts, applyStudyAvailability, applySubtitleAvailability, askPluginConsent, backfillWallArt, clearPluginConsent, clipListen, clipNow, clipPanelHost, clipRun, clipTargetInfo, coverOnError, coverSrc, cspNonceValue, cuesSnapshot, definitionStarted, destroyV2Page, disposeStudyUi, emitPlugin, ensurePluginApi, guardedEventsourceFor, guardedFetchFor, guardedSocketFor, guardedXhrFor, initPlayer, loadPlugins, loadShow, localAsrAvailable, openLocalTranscript, apiCompatible, pluginApiFor, pluginApiReady, pluginConsentChanged, pluginConsentState, pluginHostFacade, pluginHostFacadeCache, pluginManifestFor, pluginPermissionChanged, pluginPermissionLabels, pluginPermissionSignature, pluginPermissions, pluginPinnedHash, pluginPlayerState, pluginReportError, pluginRequire, pluginUrlIsLocal, refreshCatalogPages, refreshPluginSettings, refreshSurfaces, registerPluginPage, registerStudyEngine, registerStudyRuntime, registerStudyUi, registerStudyUiHook, releasePluginCapabilities, releaseSurfaces, reloadPlugins, renderList, renderPluginNav, renderPluginPage, renderV2Page, runPluginCleanup, runStudyUiHook, setPluginConsent, setPluginPermissionSignature, setPluginPinnedHash, smallArtwork, startLocalTranscribe, startV2Plugin, stopPlugin, studyEngine, studyHostBridge, studyPluginOn, studyRuntime, studyUi, subtitlePluginOn, syncStudySettingsVisibility, syncSubtitleSettingsVisibility, trackPlugin, v2UiKit });
 export { applySettingsPanes, applySlotMounts, refreshSurfaces, releaseSurfaces };
 export { PLUGIN_DIAGNOSTICS, applyPluginExtensions, pluginDiagnosticsText, renderPluginImporters, renderPluginMenu, renderPluginSearchSources, renderPluginThemes, runPluginContribution, studyAudioView, studyStateView, studyTranslateCacheView, studyTranslateView };

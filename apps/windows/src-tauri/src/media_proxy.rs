@@ -17,16 +17,23 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use reqwest::header::{
-    ACCEPT_RANGES, ACCESS_CONTROL_ALLOW_ORIGIN, ACCESS_CONTROL_ALLOW_HEADERS,
+    ACCEPT, ACCEPT_RANGES, ACCESS_CONTROL_ALLOW_ORIGIN, ACCESS_CONTROL_ALLOW_HEADERS,
     ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_EXPOSE_HEADERS, CACHE_CONTROL, CONTENT_LENGTH,
-    CONTENT_RANGE, CONTENT_TYPE, RANGE,
+    CONTENT_RANGE, CONTENT_TYPE, RANGE, USER_AGENT,
 };
 use sha2::{Digest, Sha256};
+use std::time::Duration;
 use tauri::http::{Request, Response, StatusCode};
 use tauri::{Manager, Runtime, UriSchemeContext, UriSchemeResponder};
+use tokio::time::sleep;
 
 /// 单次响应的上限：8MB 够浏览器播好几秒，也不会把内存顶起来。
 const MAX_SLICE: u64 = 8 * 1024 * 1024;
+/// 封面整张进内存的上限：再大就不该整张缓存，退回直连。
+const IMG_MAX: u64 = 16 * 1024 * 1024;
+/// 封面请求用浏览器 UA：不少播客 CDN 对非浏览器 UA 直接回 403。
+const IMG_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \
+     (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
 static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
 
@@ -62,6 +69,13 @@ async fn serve<R: Runtime>(app: tauri::AppHandle<R>, request: Request<Vec<u8>>) 
     };
     if !(target.starts_with("http://") || target.starts_with("https://")) {
         return text(StatusCode::BAD_REQUEST, "只代理 http(s) 地址");
+    }
+    // 封面模式：整张取回并按 URL 落盘，命中就不出网（二次启动零远端请求）。
+    // `w=320` 让壳把封面按宽度缩一次再进浏览器：海报墙上 3000×3000 的原图
+    // 显示出来只有 195px，却要占 ~34MB 位图 + 同样大的纹理，几十张就是几百 MB。
+    if query_flag(request.uri().query(), "img") {
+        let want_w = query_num(request.uri().query(), "w").filter(|w| (16..=1600).contains(w));
+        return serve_image(app, target, want_w).await;
     }
     let meta_dir = match cache_dir(&app) {
         Some(dir) => dir,
@@ -121,6 +135,118 @@ async fn serve<R: Runtime>(app: tauri::AppHandle<R>, request: Request<Vec<u8>>) 
 struct Meta {
     total: u64,
     ctype: String,
+}
+
+/// 封面：一次取整张，同一 URL 之后只读磁盘。缓存键与切片缓存同一套哈希，
+/// `<key>.bin` 里就是完整图片、`<key>.json` 里是长度与 Content-Type。
+async fn serve_image<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    target: String,
+    want_w: Option<u32>,
+) -> Response<Vec<u8>> {
+    let dir = match cache_dir(&app) {
+        Some(dir) => dir,
+        None => return text(StatusCode::INTERNAL_SERVER_ERROR, "拿不到缓存目录"),
+    };
+    // 缩放结果要有自己的缓存键，否则第二次要原图时会拿到缩略版（全屏封面糊成一片）。
+    let key = match want_w {
+        Some(w) => cache_key(&format!("{target}#w={w}")),
+        None => cache_key(&target),
+    };
+    let path = dir.join(format!("{key}.bin"));
+    if let Some(meta) = read_meta(&dir, &key) {
+        if meta.total > 0 {
+            if let Ok(bytes) = fs::read(&path) {
+                if bytes.len() as u64 == meta.total {
+                    return image_ok(bytes, &meta.ctype);
+                }
+            }
+        }
+    }
+    // 没命中（首次或缓存残片）：抓整张，连接被掐这类瞬时失败给两次重试。
+    let mut last = String::new();
+    for attempt in 0..3u32 {
+        match fetch_image(&target).await {
+            Ok((bytes, ctype)) => {
+                let mut body = bytes;
+                let mut kind = ctype;
+                if let Some(w) = want_w {
+                    if let Some((small, small_kind)) = shrink_image(&body, w) {
+                        body = small;
+                        kind = small_kind;
+                    }
+                }
+                let meta = Meta { total: body.len() as u64, ctype: kind.clone() };
+                let _ = fs::write(&path, &body);
+                let _ = write_meta(&dir, &key, &meta);
+                return image_ok(body, &kind);
+            }
+            Err(err) => {
+                last = err;
+                if attempt < 2 {
+                    sleep(Duration::from_millis(300 * (attempt as u64 + 1))).await;
+                }
+            }
+        }
+    }
+    // 让前端 onerror 回落到直连地址，而不是把封面永久丢掉。
+    text(StatusCode::BAD_GATEWAY, &last)
+}
+
+/// 按宽度缩封面。解码失败（avif/webp 之类的少见编码）就返回 `None`，
+/// 调用方照旧发原图——缩略是优化，不是正确性依赖。
+fn shrink_image(bytes: &[u8], want: u32) -> Option<(Vec<u8>, String)> {
+    use image::imageops::FilterType;
+    let img = image::load_from_memory(bytes).ok()?;
+    if img.width() <= want {
+        return None;
+    }
+    let w = want;
+    let h = ((img.height() as f64) * (w as f64) / (img.width() as f64)).round().max(1.0) as u32;
+    let small = img.resize_exact(w, h.max(1), FilterType::Triangle);
+    let alpha = small.color().has_alpha();
+    let fmt = if alpha { image::ImageFormat::Png } else { image::ImageFormat::Jpeg };
+    let mut out = Vec::new();
+    small.write_to(&mut std::io::Cursor::new(&mut out), fmt).ok()?;
+    if out.is_empty() {
+        return None;
+    }
+    let kind = if alpha { "image/png" } else { "image/jpeg" };
+    Some((out, kind.to_string()))
+}
+
+async fn fetch_image(url: &str) -> Result<(Vec<u8>, String), String> {
+    let resp = client()
+        .get(url)
+        .header(USER_AGENT, IMG_UA)
+        .header(ACCEPT, "image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8,*/*;q=0.5")
+        .timeout(Duration::from_secs(12))
+        .send()
+        .await
+        .map_err(|e| format!("下载失败：{e}"))?;
+    if !resp.status().is_success() {
+        return Err(format!("远端返回 {}", resp.status()));
+    }
+    let ctype = header_str(&resp, CONTENT_TYPE, "image/jpeg");
+    let bytes = resp.bytes().await.map_err(|e| format!("读取失败：{e}"))?;
+    if bytes.is_empty() {
+        return Err("远端返回空内容".into());
+    }
+    if bytes.len() as u64 > IMG_MAX {
+        return Err(format!("封面过大（{} 字节）", bytes.len()));
+    }
+    Ok((bytes.to_vec(), ctype))
+}
+
+fn image_ok(bytes: Vec<u8>, ctype: &str) -> Response<Vec<u8>> {
+    cors(Response::builder()
+        .status(StatusCode::OK)
+        .header(CONTENT_TYPE, ctype.to_string())
+        .header(CONTENT_LENGTH, bytes.len().to_string())
+        // 本地缓存已经命中过一次，浏览器这层再长缓存就没有意义地重复读盘。
+        .header(CACHE_CONTROL, "public, max-age=2592000"))
+        .body(bytes)
+        .unwrap_or_else(|_| text(StatusCode::INTERNAL_SERVER_ERROR, "响应构建失败"))
 }
 
 fn cache_dir<R: Runtime>(app: &tauri::AppHandle<R>) -> Option<PathBuf> {
@@ -308,6 +434,25 @@ fn query_url(query: Option<&str>) -> Option<String> {
         let (name, value) = pair.split_once('=')?;
         if name == "u" {
             return Some(percent_decode(value));
+        }
+    }
+    None
+}
+
+fn query_flag(query: Option<&str>, flag: &str) -> bool {
+    let Some(query) = query else { return false };
+    query.split('&').any(|pair| {
+        let (name, value) = pair.split_once('=').unwrap_or((pair, ""));
+        name == flag && !value.is_empty() && value != "0"
+    })
+}
+
+fn query_num(query: Option<&str>, key: &str) -> Option<u32> {
+    let query = query?;
+    for pair in query.split('&') {
+        let Some((name, value)) = pair.split_once('=') else { continue };
+        if name == key {
+            return value.parse::<u32>().ok();
         }
     }
     None

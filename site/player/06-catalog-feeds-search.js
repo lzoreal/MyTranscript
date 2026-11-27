@@ -1,6 +1,6 @@
 import { $, ASR_MODEL_DEFAULT, LIVE_LEAD_DEFAULT, host, prefs, replacePrefs, setState, state } from './00-runtime.js';
 import { esc, fmt, getJson, loaderHTML, parseFeed, showToast } from './01-theme-reader-shell.js';
-import { CATALOG_TIMEOUT, smallArtwork, subtitlePluginOn } from './04-local-audio-plugin-host.js';
+import { CATALOG_TIMEOUT, coverSrc, smallArtwork, subtitlePluginOn } from './04-local-audio-plugin-host.js';
 import { AUTO_DEFAULTS, AUTO_KEY, BOOKMARK_KEY, FAV_KEY, INBOX_KEY, LOCAL_KEY, NOTE_KEY, PLAYED_KEY, PLAYLIST_KEY, PREFS_KEY, QUEUE_KEY, SEEN_KEY, SHOWPREFS_KEY, SUBS_KEY, absoluteFeed, absoluteUrl, app, applyVolume, cleanFeedTitle, findBuiltinByFeed, hash32, hostOf, navigate, normalizeFeedUrl, normalizeSidebarPrefs, plainText, readJSON, saveSubs, showByKey, syncDockSleep, writeJSON } from './05-transport-transcript-nav.js';
 
 import { lazyFn, registerLayer } from './00-layers.js';
@@ -350,7 +350,7 @@ function stamp(seconds, comma) {
   return [h, m, s].map(n => String(n).padStart(2, '0')).join(':') + (comma ? ',' : '.') + String(r).padStart(3, '0');
 }
 function exportSubtitle(kind) {
-  if (!subtitlePluginOn()) { showToast('字幕插件未启用，没有可导出的字幕。', 'warn'); return; }
+  if (!subtitlePluginOn()) { showToast('没有可导出的字幕。', 'warn'); return; }
   if (!state.cues.length) { showToast('当前单集没有可导出的文字稿。', 'warn'); return; }
   const cues = state.cues.filter(cue => (cue.text || '').trim());
   const safe = (state.current?.title || 'transcript').replace(/[\\/:*?"<>|]+/g, '_').slice(0, 60);
@@ -445,19 +445,20 @@ function initialsOf(name) {
   if (/[\u3400-\u9fff]/.test(words[0])) return words[0].slice(0, 2);
   return words.slice(0, 2).map(word => word[0]).join('').toUpperCase();
 }
-function coverHTML(show, cls) {
+/* `px` = 这张封面在页面上最多显示多宽（走壳的缩略）；不传就是原图。 */
+function coverHTML(show, cls, px) {
   const name = show?.name || show?.slug || 'Podcast';
   const art = show?.artwork || '';
   const img = art
-    ? '<img src="' + esc(smallArtwork(art) || art) + '" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove()">'
+    ? '<img src="' + esc(coverSrc(art, px)) + '" data-raw="' + esc(smallArtwork(art) || art) + '" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="__coverErr(this)">'
     : '';
   return '<div class="' + (cls || 'pod-art') + '" style="' + coverGrad(show?.key || show?.slug || name) + '"><span>' +
     esc(initialsOf(name)) + '</span>' + img + '</div>';
 }
-function episodeCover(ep, show) {
+function episodeCover(ep, show, px) {
   const art = ep?.img || show?.artwork || '';
   const img = art
-    ? '<img src="' + esc(smallArtwork(art) || art) + '" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove()">'
+    ? '<img src="' + esc(coverSrc(art, px)) + '" data-raw="' + esc(smallArtwork(art) || art) + '" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="__coverErr(this)">'
     : '';
   return '<div class="ep-art" style="' + coverGrad(show?.key || show?.slug || ep?.id) + '"><span>' +
     esc(initialsOf(show?.name || '')) + '</span>' + img + '</div>';
@@ -656,7 +657,7 @@ function onlineRowHTML(result, rank) {
   const rankHTML = rank === undefined || rank === null ? ''
     : '<span class="chart-rank' + (Number(rank) <= 3 ? ' top' : '') + '">' + esc(String(rank)) + '</span>';
   return '<div class="online-row" data-online-detail="' + esc(result.feedUrl) + '" role="link" tabindex="0">' + rankHTML +
-    coverHTML(show, 'online-art') +
+    coverHTML(show, 'online-art', 300) +
     '<div class="online-body"><span class="online-title">' + esc(result.title) + '</span>' +
     '<span class="online-sub">' + esc(meta) + '</span>' +
     (builtin ? '<div class="online-badge"><span class="pill">本站增强版</span></div>' : '') +
@@ -674,7 +675,7 @@ function onlineDetailHTML(result, feed, note) {
     : '<p class="online-detail-desc">' + esc(desc || '该节目没有提供简介。') + '</p>' +
       (note ? '<div class="modal-note err" style="margin-bottom:12px">' + esc(note) + '</div>' : '');
   return '<div class="modal-head"><h3>节目详情</h3><button class="mini-btn" data-close-modal aria-label="关闭">✕</button></div>' +
-    '<div class="online-detail"><div class="online-detail-hero">' + coverHTML(show, 'online-art') +
+    '<div class="online-detail"><div class="online-detail-hero">' + coverHTML(show, 'online-art', 300) +
     '<div style="min-width:0"><div class="online-detail-title">' + esc(title) + '</div>' +
     '<div class="online-sub">' + esc(meta) + '</div></div></div>' + body +
     '<div class="modal-actions"><button class="btn primary" data-online-subscribe="' + esc(result.feedUrl) + '">订阅</button>' +

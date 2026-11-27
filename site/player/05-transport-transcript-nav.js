@@ -2,7 +2,7 @@ import { $, ASR_MODEL_DEFAULT, LIVE, audio, box, host, prefs, setState, state, t
 import { alignZhLines, applyReader, clearProgress, closeDetails, closeDrawer, closeOverlays, closeTypeSheet, cuesFromJson, directAudioUrl, emptyLine, epKey, esc, findNorm, fmt, getJson, isJsonTranscript, onAudioError, openDetails, openDrawer, paint, parseFeed, progressAll, rawSeek, reader, rebuildCues, rememberOverlayTrigger, renderCueWindow, renderCues, restoreOverlayFocus, saveProgress, scrollCue, seekTo, setImmersive, setWallpaper, showToast, status, stopScroll, syncJumpPill, syncWallpaperPlay, toggleWallpaperPlay, transcriptMirror, updateTimeScale, writeProgressAll } from './01-theme-reader-shell.js';
 import { coreProvider, defineCoreProvider } from './02-live-caption-wasm.js';
 import { findSkipRange, liveDisable, skipUrlOf } from './03-native-asr-service-worker.js';
-import { loadShow, localAsrAvailable, renderList, studyPluginOn, subtitlePluginOn } from './04-local-audio-plugin-host.js';
+import { coverSrc, loadShow, localAsrAvailable, renderList, studyPluginOn, subtitlePluginOn } from './04-local-audio-plugin-host.js';
 import { motionEnter, motionFlip, motionLeave } from './11-motion.js';
 import { pause as transportPause, rate as transportRate, toggle as transportToggle } from './14-transport.js';
 
@@ -657,7 +657,7 @@ function runFind(query) {
 }
 
 function openFind() {
-  if (!subtitlePluginOn()) { showToast('字幕插件未启用，本集搜索不可用。', 'warn'); return; }
+  if (!subtitlePluginOn()) { showToast('这一集没有文字稿，无法搜索。', 'warn'); return; }
   if (!state.cues.length) { showToast('这集还没有文字稿。'); return; }
   motionEnter(findBar);
   findInput.value = '';
@@ -1782,18 +1782,19 @@ function downloadsHTML(entries, query) {
     const rows = group.items.sort((a, b) => String(a.info.title).localeCompare(String(b.info.title), 'zh')).map(({ rec, info }) => {
       const canAddTranscript = !rec.hasTranscript && info.ep && isJsonTranscript(info.ep.transcript);
       const bits = transcribeRowBits(rec);
-      const transcript = rec.hasTranscript ? '文字稿 ' + fmtBytes(Number(rec.transcriptSize) || 0)
-        : (bits.canLocal || canAddTranscript ? '仅音频 · 可补字幕' : '仅音频');
+      const transcript = rec.hasTranscript
+        ? (subtitlePluginOn() ? '文字稿 ' + fmtBytes(Number(rec.transcriptSize) || 0) : '')
+        : (bits.canLocal || canAddTranscript ? (subtitlePluginOn() ? '仅音频 · 可补字幕' : '仅音频') : '仅音频');
       return '<div class="qrow"><div class="qmain"><strong>' + esc(info.title) + '</strong><span>' +
-        fmtBytes(Number(rec.size) || 0) + ' · ' + transcript + '</span>' + bits.bar + bits.errLine + '</div>' +
+        fmtBytes(Number(rec.size) || 0) + (transcript ? ' · ' + transcript : '') + '</span>' + bits.bar + bits.errLine + '</div>' +
         '<div style="display:flex;gap:6px">' +
-        (canAddTranscript ? '<button class="mini-btn" data-offline-transcript="' + esc(rec.key) + '">＋ 字幕</button>' : '') +
+        (canAddTranscript && subtitlePluginOn() ? '<button class="mini-btn" data-offline-transcript="' + esc(rec.key) + '">＋ 字幕</button>' : '') +
         bits.btn +
         '<button class="mini-btn" data-play-offline="' + esc(rec.key) + '">▶ 播放</button>' +
         '<button class="mini-btn" data-del-offline="' + esc(rec.key) + '">✕ 删除</button></div></div>';
     }).join('');
     return '<div class="dl-pod" data-motion-key="' + esc(group.key) + '"><div class="dl-pod-head">' +
-      (group.artwork ? '<img class="dl-art" src="' + esc(group.artwork) + '" alt="" loading="lazy" referrerpolicy="no-referrer">' : '<div class="dl-art"></div>') +
+      (group.artwork ? '<img class="dl-art" src="' + esc(coverSrc(group.artwork, 200)) + '" data-raw="' + esc(group.artwork) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="__coverErr(this)">' : '<div class="dl-art"></div>') +
       '<div><strong>' + esc(group.name) + '</strong><span class="dl-pod-meta">' + group.items.length + ' 集 · ' + fmtBytes(total) + '</span></div></div>' +
       '<div class="dl-rows">' + rows + '</div></div>';
   }).join('');
@@ -1868,10 +1869,10 @@ function renderOfflineList() {
       const bits = transcribeRowBits(rec);
       const canAddTranscript = !rec.hasTranscript && ep && isJsonTranscript(ep.transcript);
       const transcript = rec.hasTranscript
-        ? '文字稿 ' + fmtBytes(Number(rec.transcriptSize) || 0)
-        : (canAddTranscript || bits.canLocal ? '仅音频 · 可补字幕' : '仅音频');
+        ? (subtitlePluginOn() ? '文字稿 ' + fmtBytes(Number(rec.transcriptSize) || 0) : '')
+        : (canAddTranscript || bits.canLocal ? (subtitlePluginOn() ? '仅音频 · 可补字幕' : '仅音频') : '仅音频');
       return '<div class="qrow" data-motion-key="' + esc(rec.key) + '"><div class="qmain"><strong>' + esc(offlineLabel(rec.key)) +
-        '</strong><span>' + size + ' · ' + transcript + ' · 存在本机</span>' + bits.bar + bits.errLine + '</div>' +
+        '</strong><span>' + size + (transcript ? ' · ' + transcript : '') + ' · 存在本机</span>' + bits.bar + bits.errLine + '</div>' +
         '<div style="display:flex;gap:6px">' +
         (canAddTranscript ? '<button class="mini-btn" data-offline-transcript="' + esc(rec.key) + '">＋ 字幕</button>' : '') +
         bits.btn +
@@ -1973,7 +1974,7 @@ document.addEventListener('keydown', e => {
 /* S = 打开/收起 AI 学英语面板。原来只能点右下角「⋯ → AI 学英语」，
    鼠标点不到或纯键盘场景就没入口；面板里已有 Tab/Enter/Escape 通道，补齐这个开关即可。 */
 function toggleStudySheet() {
-  if (typeof moduleOn === 'function' && !moduleOn('study')) { showToast('AI 学英语模块已关闭。', 5000); return; }
+  if (typeof moduleOn === 'function' && !moduleOn('study')) return;  // 模块关掉就当快捷键不存在，不再提示
   if ($('studySheet')?.classList.contains('on')) { closeStudySheet(); return; }
   openStudySheet();
 }
@@ -2043,6 +2044,10 @@ const PAGE_NAMES = {
   episode: '单集详情', player: '播放器', inbox: '收件箱', queue: '播放队列', history: '收听历史',
   favorites: '收藏', bookmarks: '书签', notes: '笔记', listening: '收听模式', settings: '设置', stats: '统计与回顾', plugin: '插件',
 };
+/* 返回按钮的合法落点：只有这些「无参页面」能被裸跳回去。单集/播放器/插件都带参数，
+   回去了也复现不出原来那一屏，所以不进这张表——返回按钮只在这几个页面之间找来源。 */
+const BACK_PAGES = ['home', 'library', 'search', 'discover', 'local', 'downloads', 'inbox', 'queue', 'history',
+  'stats', 'favorites', 'bookmarks', 'notes', 'listening', 'settings'];
 const SIDEBAR_TOP = ['home', 'library', 'local', 'downloads', 'discover', 'search'];
 const SIDEBAR_BOTTOM = ['inbox', 'queue', 'history', 'stats', 'favorites', 'bookmarks', 'notes', 'listening', 'settings'];
 const SIDEBAR_META = {
@@ -2590,5 +2595,5 @@ function renderAfterStateChange() {
   renderPage(r.page, r);
   syncMini();
 }
-export { AUTO_DEFAULTS, AUTO_KEY, BOOKMARK_KEY, DL_META_KEY, DOCK_RATES, FAV_KEY, IDLE_TICK_MS, IDX_DB, IDX_STORE, INBOX_KEY, LOCAL_KEY, MODULE_ROUTES, NOTE_KEY, PAGE_NAMES, PLAYED_KEY, PLAYLIST_KEY, PLAY_TICK_MS, PREFS_KEY, QUEUE_KEY, SEEN_KEY, SHOWPREFS_KEY, SIDEBAR_BOTTOM, SIDEBAR_META, SIDEBAR_TOP, SUBS_KEY, THEME_NAMES, absoluteFeed, absoluteUrl, addInboxItem, addToPlaylist, addToPlaylistDialog, alignToCue, app, applyLoudness, applyModules, applyRate, applySidebarCustomization, applySkipRules, applyVolume, asrModelName, bindModuleSwitches, buffering, canAnalyseAudio, cancelAsrModel, cardFor, cardLink, catalogLatest, clampFrame, cleanFeedTitle, cleanWord, cleanWordCache, clearFindMarks, closeDockSheet, closeFind, closeWordPanel, copyPlain, defaultDownloadEpisode, defaultPlaylist, desiredPlayTick, dockSheet, dockToolsBtn, downloadEpisode, downloadInfo, downloadMetaStore, downloadsHTML, endFrameDrag, endSeekPreview, ensureAudioGraph, epStatusBadges, episodeFilterMatch, episodeRef, episodesOf, extSlug, externalShow, fetchTextAny, findAt, findBar, findBuiltinByFeed, findCount, findHits, findInput, findPlaylist, firstShowKey, fmtBytes, fmtDuration, formatDate, frameDrag, frameEl, frameMoved, framePos, hash32, hideSelTools, hostOf, idxClear, idxCount, idxDb, idxDbPromise, idxGet, idxGetAll, idxPut, importAsrModel, inboxCount, inboxRemove, indexAllShows, indexCurrentEpisode, indexCurrentShow, indexEpisode, installAsrModel, isFavorite, isPlayed, isSubscribed, jumpCue, loadChapters, localAsrModelId, localShowRecord, lookupWord, markCurrentPlayed, modeSegEl, moduleOn, navigate, normalizeFeedUrl, normalizeSidebarPrefs, offlineEntries, offlineKeyFor, offlineKeyOf, offlineLabel, onFrameMove, openAsrDir, openDockSheet, openFind, paintAsrSoon, parseRoute, pickAsrModel, pickedCue, pillRAF, placeFrame, placeSelTools, plainText, playOffline, playPlaylist, playTarget, playTargetLabel, playTargetText, notifyPlayTargetFailure, purgeLocalReferences, playTick, playTickMs, queueJumpPill, rateSegEl, readAllProgress, readJSON, readTranscriptDoc, refreshAsrModels, refreshOffline, refreshShows, rememberDownloadMeta, removalLeavesCurrentShow, removeAsrModel, removeOffline, removePlaylist, renderAfterStateChange, renderAsrModels, renderChapters, renderDownloads, renderLocalAsrModelHint, renderOfflineList, renderPlaylists, resolveOfflineRef, returnToCue, routeHash, routeModuleAllows, runFind, saveFavorites, saveInbox, saveOfflineTranscript, savePlayed, savePlaylists, saveSeen, saveShowPrefs, saveSubs, seekBy, seekChapter, seekDur, seekPreviewAt, seekTip, selCueIdx, selText, selTools, setAlignMode, setBuffering, setNodeVisible, setPlayed, setReadMode, setShowPref, showByKey, showFindAt, showForOfflineKey, showPrefFor, sidebarOrder, skipSilenceTick, sleepSegEl, startPlayTick, stopPlayTick, subscribeRecord, subscribeShow, syncChapterNow, syncDockBadge, syncDockLang, syncDockSleep, syncIndexCount, syncRateSeg, syncShowSelect, syncVolUI, stopTranscribeAll, toggleAlignMode, transcribeMissingOffline, transcribeOffline, toggleChapterSheet, toggleFavorite, toggleMute, toggleStudySheet, trackEl, unsubscribeKey, webAudioGraph, whenIdle, wordCache, wordCurrent, wordCurrentMeaning, wordSeq, writeJSON };
+export { AUTO_DEFAULTS, AUTO_KEY, BACK_PAGES, BOOKMARK_KEY, DL_META_KEY, DOCK_RATES, FAV_KEY, IDLE_TICK_MS, IDX_DB, IDX_STORE, INBOX_KEY, LOCAL_KEY, MODULE_ROUTES, NOTE_KEY, PAGE_NAMES, PLAYED_KEY, PLAYLIST_KEY, PLAY_TICK_MS, PREFS_KEY, QUEUE_KEY, SEEN_KEY, SHOWPREFS_KEY, SIDEBAR_BOTTOM, SIDEBAR_META, SIDEBAR_TOP, SUBS_KEY, THEME_NAMES, absoluteFeed, absoluteUrl, addInboxItem, addToPlaylist, addToPlaylistDialog, alignToCue, app, applyLoudness, applyModules, applyRate, applySidebarCustomization, applySkipRules, applyVolume, asrModelName, bindModuleSwitches, buffering, canAnalyseAudio, cancelAsrModel, cardFor, cardLink, catalogLatest, clampFrame, cleanFeedTitle, cleanWord, cleanWordCache, clearFindMarks, closeDockSheet, closeFind, closeWordPanel, copyPlain, defaultDownloadEpisode, defaultPlaylist, desiredPlayTick, dockSheet, dockToolsBtn, downloadEpisode, downloadInfo, downloadMetaStore, downloadsHTML, endFrameDrag, endSeekPreview, ensureAudioGraph, epStatusBadges, episodeFilterMatch, episodeRef, episodesOf, extSlug, externalShow, fetchTextAny, findAt, findBar, findBuiltinByFeed, findCount, findHits, findInput, findPlaylist, firstShowKey, fmtBytes, fmtDuration, formatDate, frameDrag, frameEl, frameMoved, framePos, hash32, hideSelTools, hostOf, idxClear, idxCount, idxDb, idxDbPromise, idxGet, idxGetAll, idxPut, importAsrModel, inboxCount, inboxRemove, indexAllShows, indexCurrentEpisode, indexCurrentShow, indexEpisode, installAsrModel, isFavorite, isPlayed, isSubscribed, jumpCue, loadChapters, localAsrModelId, localShowRecord, lookupWord, markCurrentPlayed, modeSegEl, moduleOn, navigate, normalizeFeedUrl, normalizeSidebarPrefs, offlineEntries, offlineKeyFor, offlineKeyOf, offlineLabel, onFrameMove, openAsrDir, openDockSheet, openFind, paintAsrSoon, parseRoute, pickAsrModel, pickedCue, pillRAF, placeFrame, placeSelTools, plainText, playOffline, playPlaylist, playTarget, playTargetLabel, playTargetText, notifyPlayTargetFailure, purgeLocalReferences, playTick, playTickMs, queueJumpPill, rateSegEl, readAllProgress, readJSON, readTranscriptDoc, refreshAsrModels, refreshOffline, refreshShows, rememberDownloadMeta, removalLeavesCurrentShow, removeAsrModel, removeOffline, removePlaylist, renderAfterStateChange, renderAsrModels, renderChapters, renderDownloads, renderLocalAsrModelHint, renderOfflineList, renderPlaylists, resolveOfflineRef, returnToCue, routeHash, routeModuleAllows, runFind, saveFavorites, saveInbox, saveOfflineTranscript, savePlayed, savePlaylists, saveSeen, saveShowPrefs, saveSubs, seekBy, seekChapter, seekDur, seekPreviewAt, seekTip, selCueIdx, selText, selTools, setAlignMode, setBuffering, setNodeVisible, setPlayed, setReadMode, setShowPref, showByKey, showFindAt, showForOfflineKey, showPrefFor, sidebarOrder, skipSilenceTick, sleepSegEl, startPlayTick, stopPlayTick, subscribeRecord, subscribeShow, syncChapterNow, syncDockBadge, syncDockLang, syncDockSleep, syncIndexCount, syncRateSeg, syncShowSelect, syncVolUI, stopTranscribeAll, toggleAlignMode, transcribeMissingOffline, transcribeOffline, toggleChapterSheet, toggleFavorite, toggleMute, toggleStudySheet, trackEl, unsubscribeKey, webAudioGraph, whenIdle, wordCache, wordCurrent, wordCurrentMeaning, wordSeq, writeJSON };
 registerLayer('05-transport-transcript-nav', { AUTO_DEFAULTS, AUTO_KEY, BOOKMARK_KEY, DL_META_KEY, DOCK_RATES, FAV_KEY, IDLE_TICK_MS, IDX_DB, IDX_STORE, INBOX_KEY, LOCAL_KEY, MODULE_ROUTES, NOTE_KEY, PAGE_NAMES, PLAYED_KEY, PLAYLIST_KEY, PLAY_TICK_MS, PREFS_KEY, QUEUE_KEY, SEEN_KEY, SHOWPREFS_KEY, SIDEBAR_BOTTOM, SIDEBAR_META, SIDEBAR_TOP, SUBS_KEY, THEME_NAMES, absoluteFeed, absoluteUrl, addInboxItem, addToPlaylist, addToPlaylistDialog, alignToCue, app, applyLoudness, applyModules, applyRate, applySidebarCustomization, applySkipRules, applyVolume, asrModelName, bindModuleSwitches, buffering, canAnalyseAudio, cancelAsrModel, cardFor, cardLink, catalogLatest, clampFrame, cleanFeedTitle, cleanWord, cleanWordCache, clearFindMarks, closeDockSheet, closeFind, closeWordPanel, copyPlain, defaultDownloadEpisode, defaultPlaylist, desiredPlayTick, dockSheet, dockToolsBtn, downloadEpisode, downloadInfo, downloadMetaStore, downloadsHTML, endFrameDrag, endSeekPreview, ensureAudioGraph, epStatusBadges, episodeFilterMatch, episodeRef, episodesOf, extSlug, externalShow, fetchTextAny, findAt, findBar, findBuiltinByFeed, findCount, findHits, findInput, findPlaylist, firstShowKey, fmtBytes, fmtDuration, formatDate, frameDrag, frameEl, frameMoved, framePos, hash32, hideSelTools, hostOf, idxClear, idxCount, idxDb, idxDbPromise, idxGet, idxGetAll, idxPut, importAsrModel, inboxCount, inboxRemove, indexAllShows, indexCurrentEpisode, indexCurrentShow, indexEpisode, installAsrModel, isFavorite, isPlayed, isSubscribed, jumpCue, loadChapters, localAsrModelId, localShowRecord, lookupWord, markCurrentPlayed, modeSegEl, moduleOn, navigate, normalizeFeedUrl, normalizeSidebarPrefs, offlineEntries, offlineKeyFor, offlineKeyOf, offlineLabel, onFrameMove, openAsrDir, openDockSheet, openFind, paintAsrSoon, parseRoute, pickAsrModel, pickedCue, pillRAF, placeFrame, placeSelTools, plainText, playOffline, playPlaylist, playTarget, playTargetLabel, playTargetText, notifyPlayTargetFailure, purgeLocalReferences, playTick, playTickMs, queueJumpPill, rateSegEl, readAllProgress, readJSON, readTranscriptDoc, refreshAsrModels, refreshOffline, refreshShows, rememberDownloadMeta, removalLeavesCurrentShow, removeAsrModel, removeOffline, removePlaylist, renderAfterStateChange, renderAsrModels, renderChapters, renderDownloads, renderLocalAsrModelHint, renderOfflineList, renderPlaylists, resolveOfflineRef, returnToCue, routeHash, routeModuleAllows, runFind, saveFavorites, saveInbox, saveOfflineTranscript, savePlayed, savePlaylists, saveSeen, saveShowPrefs, saveSubs, seekBy, seekChapter, seekDur, seekPreviewAt, seekTip, selCueIdx, selText, selTools, setAlignMode, setBuffering, setNodeVisible, setPlayed, setReadMode, setShowPref, showByKey, showFindAt, showForOfflineKey, showPrefFor, sidebarOrder, skipSilenceTick, sleepSegEl, startPlayTick, stopPlayTick, subscribeRecord, subscribeShow, syncChapterNow, syncDockBadge, syncDockLang, syncDockSleep, syncIndexCount, syncRateSeg, syncShowSelect, syncVolUI, stopTranscribeAll, toggleAlignMode, transcribeMissingOffline, transcribeOffline, toggleChapterSheet, toggleFavorite, toggleMute, toggleStudySheet, trackEl, unsubscribeKey, webAudioGraph, whenIdle, wordCache, wordCurrent, wordCurrentMeaning, wordSeq, writeJSON });

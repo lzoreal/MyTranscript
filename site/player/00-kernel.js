@@ -17,8 +17,8 @@ function studyNormText(text) {
 function emptyLine(text, action) {
   return '<div class="empty-line">' + esc(text) + (action ? '<div style="margin-top:10px">' + action + '</div>' : '') + '</div>';
 }
-function statHTML(label, value, note) {
-  return '<div class="stat"><label>' + esc(label) + '</label><strong>' + esc(value) + '</strong><em>' + esc(note || '') + '</em></div>';
+function statHTML(label, value, note, cls) {
+  return '<div class="stat' + (cls ? ' ' + cls : '') + '"><label>' + esc(label) + '</label><strong>' + esc(value) + '</strong><em>' + esc(note || '') + '</em></div>';
 }
 function pluginPageKey(pluginId, pageId) { return String(pluginId) + ':' + String(pageId); }
 function isJsonTranscript(transcript) {
